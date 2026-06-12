@@ -5822,7 +5822,7 @@
     "es-module/test-disable-require-module-with-detection.js": {},
     "es-module/test-esm-assertionless-json-import.js": { "category": "known-gap", "reason": "custom ESM loader hooks (--experimental-loader) and assertionless JSON import behavior are not implemented" },
     "es-module/test-esm-cjs-builtins.js": {},
-    "es-module/test-esm-cjs-exports.js": { "category": "known-gap", "reason": "ESM<->CJS export interop semantics (including __esModule/default/named export behavior and related errors) are not Node-compatible yet" },
+    "es-module/test-esm-cjs-exports.js": { "category": "known-gap", "reason": "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js" },
     "es-module/test-esm-cjs-main.js": {},
     "es-module/test-esm-data-urls.js": {},
     "es-module/test-esm-dynamic-import-attribute.js": {},
@@ -5928,8 +5928,8 @@
     "es-module/test-require-module-detect-entry-point-aou.js": {},
     "es-module/test-require-module-detect-entry-point.js": {},
     "es-module/test-require-module-dont-detect-cjs.js": {},
-    "es-module/test-require-module-dynamic-import-1.js": { "category": "known-gap", "reason": "requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules" },
-    "es-module/test-require-module-dynamic-import-2.js": { "category": "known-gap", "reason": "requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules" },
+    "es-module/test-require-module-dynamic-import-1.js": {},
+    "es-module/test-require-module-dynamic-import-2.js": {},
     "es-module/test-require-module-dynamic-import-3.js": {},
     "es-module/test-require-module-dynamic-import-4.js": {},
     "es-module/test-require-module-error-catching.js": { "category": "known-gap", "reason": "QuickJS require(esm) bridge reports async-module semantics before surfacing synchronous ESM evaluation errors" },
@@ -5951,7 +5951,7 @@
       }
     },
     "es-module/test-require-module-transpiled.js": {},
-    "es-module/test-require-module-twice.js": { "category": "known-gap", "reason": "CJS named export analysis for ESM/CJS interop is incomplete (missing named exports like π)" },
+    "es-module/test-require-module-twice.js": {},
     "es-module/test-require-module-warning.js": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --trace-require-module warning output" },
     "es-module/test-require-module-with-detection.js": {
       "category": "known-gap",
@@ -5969,7 +5969,7 @@
       "subtests": {
         "block_00_test_named_exports": { "category": "runnable" },
         "block_01_test_esm_that_import_esm": { "category": "runnable" },
-        "block_02_test_esm_that_import_cjs": { "category": "known-gap", "reason": "CJS named export analysis for ESM/CJS interop is incomplete (missing named exports like π)" },
+        "block_02_test_esm_that_import_cjs": { "category": "runnable" },
         "block_03_test_esm_that_require_cjs": { "category": "runnable" },
         "block_04_also_test_default_export": { "category": "runnable" },
         "block_05_test_data_import": { "category": "runnable" }

@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-11 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-12 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3089/4295 (71.9%)
+**Primary compatibility (CI-enforced):** 3093/4295 (72.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3089 | 71.9% | 55.1% | 45.9% |
-| 🧩 known gap | 1206 | 28.1% | 21.5% | 17.9% |
+| ✅ passing (runnable) | 3093 | 72.0% | 55.1% | 46.0% |
+| 🧩 known gap | 1202 | 28.0% | 21.4% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1153 | — | 20.6% | 17.1% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
 | **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3089/5610 (55.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3093/5610 (55.1%)**.
 
 ## Inventory by Module
 
@@ -53,7 +53,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | http | 898 | 243 | 306 | 267 | 2 | 0 | 80 | 44.3% | 29.7% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 184 | 107 | 57 | 7 | 1 | 0 | 12 | 65.2% | 62.2% |
+| module | 184 | 111 | 53 | 7 | 1 | 0 | 12 | 67.7% | 64.5% |
 | net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
@@ -101,7 +101,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-require-module-defined-esmodule.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module-tla.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-require-module-with-detection.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-require-module.js` | 6 | 5 | 1 | 0 | 0 | 0 | 0 |
+| `test-require-module.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-abortcontroller.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-aborted-util.js` | 5 | 4 | 0 | 1 | 0 | 0 | 0 |
 | `test-abortsignal-cloneable.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -680,7 +680,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1206)
+### known gap (1202)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -761,7 +761,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | setUncaughtExceptionCaptureCallback does not fully intercept thrown uncaught exceptions | 3 | `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`, `parallel/test-process-exception-capture-should-abort-on-uncaught.js`, `parallel/test-process-exception-capture.js` |
 | spawn() stdio validation/pipe semantics are not Node-compatible in WASM emulation | 3 | `parallel/test-child-process-stdio.js#block_00_test_stdio_piping`, `parallel/test-child-process-stdio.js#block_02_asset_options_invariance`, `parallel/test-child-process-stdio.js#block_03_test_stdout_buffering` |
 | test runner edge case | 3 | `parallel/test-runner-filetest-location.js`, `parallel/test-runner-root-after-with-refed-handles.js`, `parallel/test-runner-todo-skip-tests.js` |
-| CJS named export analysis for ESM/CJS interop is incomplete (missing named exports like π) | 2 | `es-module/test-require-module-twice.js`, `es-module/test-require-module.js#block_02_test_esm_that_import_cjs` |
 | CLI/NODE_OPTIONS max-http-header-size propagation in child process emulation is incomplete | 2 | `parallel/test-set-http-max-http-headers.js#test_01_test_01`, `parallel/test-set-http-max-http-headers.js#test_02_same_checks_using_node_options_if_it_is_supported` |
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
 | ESM loader does not correctly recover/reuse cached module state after require() ERR_REQUIRE_ASYNC_MODULE | 2 | `es-module/test-require-module-tla-retry-import-2.js`, `es-module/test-require-module-tla-retry-import.js` |
@@ -802,7 +801,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.permission worker-thread restrictions are incomplete | 2 | `parallel/test-permission-dc-worker-threads.js`, `parallel/test-permission-worker-threads-cli.js` |
 | process.report.writeReport and permission-model integration are missing | 2 | `parallel/test-permission-fs-write-report.js#block_00_block_00`, `parallel/test-permission-fs-write-report.js#block_01_block_01` |
 | promisified exec()/execFile() rejection errors miss stdout/stderr fields | 2 | `parallel/test-child-process-promisified.js#block_04_block_04`, `parallel/test-child-process-promisified.js#block_05_block_05` |
-| requires CJS named export analysis (cjs-module-lexer) for ESM import of CJS modules | 2 | `es-module/test-require-module-dynamic-import-1.js`, `es-module/test-require-module-dynamic-import-2.js` |
 | spawn() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01` |
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
@@ -864,7 +862,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented | 1 | `parallel/test-vm-dynamic-import-callback-missing-flag.js` |
 | ESM diagnostics for require/exports globals and package type=module .js error messaging do not match Node yet | 1 | `es-module/test-esm-undefined-cjs-global-like-variables.js` |
 | ESM directory import errors do not match Node ERR_UNSUPPORTED_DIR_IMPORT behavior | 1 | `parallel/test-directory-import.js` |
-| ESM<->CJS export interop semantics (including __esModule/default/named export behavior and related errors) are not Node-compatible yet | 1 | `es-module/test-esm-cjs-exports.js` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
 | Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |
 | EventEmitter captureRejections option validation/behavior is incomplete | 1 | `parallel/test-event-capture-rejections.js` |
@@ -1015,6 +1012,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process execPath emulation does not implement --completion-bash output | 1 | `parallel/test-bash-completion.js` |
 | child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output | 1 | `es-module/test-require-module-tla.js#block_01_block_01` |
 | child_process execPath emulation does not yet match Node CLI argument validation/exit codes | 1 | `parallel/test-cli-bad-options.js` |
+| child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js | 1 | `es-module/test-esm-cjs-exports.js` |
 | child_process execPath emulation has incomplete --require preload/argv handling | 1 | `parallel/test-preload-print-process-argv.js` |
 | child_process execPath emulation lacks full --import/--require preload semantics | 1 | `es-module/test-require-module-preload.js` |
 | child_process execPath emulation lacks full NODE_OPTIONS and CLI flag semantics | 1 | `parallel/test-cli-node-options.js` |

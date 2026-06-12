@@ -1549,6 +1549,1001 @@ impl Resolver for NodeModulesResolver {
 /// This enables ESM modules to import CJS packages from `node_modules`.
 struct CjsCompatLoader;
 
+#[derive(Default)]
+struct CjsExportAnalysis {
+    exports: Vec<String>,
+    reexports: Vec<String>,
+    is_cjs: bool,
+}
+
+fn add_unique(items: &mut Vec<String>, item: String) {
+    if !items.iter().any(|existing| existing == &item) {
+        items.push(item);
+    }
+}
+
+fn is_ident_start(byte: u8) -> bool {
+    byte == b'_' || byte == b'$' || byte.is_ascii_alphabetic() || byte >= 0x80
+}
+
+fn is_ident_continue(byte: u8) -> bool {
+    is_ident_start(byte) || byte.is_ascii_digit()
+}
+
+fn is_ident_boundary(source: &[u8], pos: usize) -> bool {
+    pos >= source.len() || !is_ident_continue(source[pos])
+}
+
+fn is_ident_start_boundary(source: &[u8], pos: usize) -> bool {
+    pos == 0 || !is_ident_continue(source[pos - 1])
+}
+
+fn is_free_ident_start(source: &[u8], pos: usize) -> bool {
+    is_ident_start_boundary(source, pos) && (pos == 0 || source[pos - 1] != b'.')
+}
+
+fn skip_ws_comments(source: &str, mut pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    loop {
+        while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+            pos += 1;
+        }
+        if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'/' {
+            pos += 2;
+            while pos < bytes.len() && !matches!(bytes[pos], b'\n' | b'\r') {
+                pos += 1;
+            }
+            continue;
+        }
+        if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'*' {
+            pos += 2;
+            while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
+                pos += 1;
+            }
+            pos = (pos + 2).min(bytes.len());
+            continue;
+        }
+        return pos;
+    }
+}
+
+fn read_ident(source: &str, mut pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if pos >= bytes.len() || !is_ident_start(bytes[pos]) {
+        return None;
+    }
+    let start = pos;
+    pos += 1;
+    while pos < bytes.len() && is_ident_continue(bytes[pos]) {
+        pos += 1;
+    }
+    Some((source[start..pos].to_string(), pos))
+}
+
+fn read_js_string(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if pos >= bytes.len() || !matches!(bytes[pos], b'\'' | b'"') {
+        return None;
+    }
+    let quote = bytes[pos];
+    let mut units = Vec::<u16>::new();
+    let mut i = pos + 1;
+    while i < bytes.len() {
+        let byte = bytes[i];
+        if byte == quote {
+            return String::from_utf16(&units).ok().map(|s| (s, i + 1));
+        }
+        if byte == b'\\' {
+            i += 1;
+            if i >= bytes.len() {
+                return None;
+            }
+            match bytes[i] {
+                b'n' => units.push(b'\n' as u16),
+                b'r' => units.push(b'\r' as u16),
+                b't' => units.push(b'\t' as u16),
+                b'b' => units.push(8),
+                b'f' => units.push(12),
+                b'v' => units.push(11),
+                b'x' if i + 2 < bytes.len()
+                    && bytes[i + 1].is_ascii_hexdigit()
+                    && bytes[i + 2].is_ascii_hexdigit() =>
+                {
+                    let value = hex_byte(bytes[i + 1])? * 16 + hex_byte(bytes[i + 2])?;
+                    units.push(value as u16);
+                    i += 2;
+                }
+                b'x' => return None,
+                b'u' if i + 1 < bytes.len() && bytes[i + 1] == b'{' => {
+                    let start = i + 2;
+                    let end = source[start..].find('}')? + start;
+                    let code = u32::from_str_radix(&source[start..end], 16).ok()?;
+                    if code <= 0xFFFF {
+                        units.push(code as u16);
+                    } else {
+                        let code = code - 0x1_0000;
+                        units.push(0xD800 | ((code >> 10) as u16));
+                        units.push(0xDC00 | ((code & 0x3FF) as u16));
+                    }
+                    i = end;
+                }
+                b'u' if i + 4 < bytes.len()
+                    && bytes[i + 1].is_ascii_hexdigit()
+                    && bytes[i + 2].is_ascii_hexdigit()
+                    && bytes[i + 3].is_ascii_hexdigit()
+                    && bytes[i + 4].is_ascii_hexdigit() =>
+                {
+                    let value = u16::from(hex_byte(bytes[i + 1])?) << 12
+                        | u16::from(hex_byte(bytes[i + 2])?) << 8
+                        | u16::from(hex_byte(bytes[i + 3])?) << 4
+                        | u16::from(hex_byte(bytes[i + 4])?);
+                    units.push(value);
+                    i += 4;
+                }
+                b'u' => return None,
+                other => units.push(other as u16),
+            }
+            i += 1;
+            continue;
+        }
+        if byte == b'\n' || byte == b'\r' {
+            return None;
+        }
+        let ch = source[i..].chars().next()?;
+        let mut buf = [0u16; 2];
+        units.extend_from_slice(ch.encode_utf16(&mut buf));
+        i += ch.len_utf8();
+    }
+    None
+}
+
+fn hex_byte(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn skip_string_or_template(source: &str, pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    if pos >= bytes.len() {
+        return pos;
+    }
+    let quote = bytes[pos];
+    let mut i = pos + 1;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' {
+            i += 2;
+        } else if bytes[i] == quote {
+            return i + 1;
+        } else {
+            i += 1;
+        }
+    }
+    i
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CjsExportTarget {
+    Exports,
+    ModuleExports,
+}
+
+fn parse_exports_target(source: &str, pos: usize) -> Option<(CjsExportTarget, usize)> {
+    let bytes = source.as_bytes();
+    if is_free_ident_start(bytes, pos)
+        && source[pos..].starts_with("exports")
+        && is_ident_boundary(bytes, pos + 7)
+    {
+        return Some((CjsExportTarget::Exports, pos + 7));
+    }
+    if is_free_ident_start(bytes, pos)
+        && source[pos..].starts_with("module")
+        && is_ident_boundary(bytes, pos + 6)
+    {
+        let mut i = skip_ws_comments(source, pos + 6);
+        if i < bytes.len() && bytes[i] == b'.' {
+            i = skip_ws_comments(source, i + 1);
+            if source[i..].starts_with("exports") && is_ident_boundary(bytes, i + 7) {
+                return Some((CjsExportTarget::ModuleExports, i + 7));
+            }
+        }
+    }
+    None
+}
+
+fn parse_export_member(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let (_, mut i) = parse_exports_target(source, pos)?;
+    i = skip_ws_comments(source, i);
+    let name;
+    if i < bytes.len() && bytes[i] == b'.' {
+        i = skip_ws_comments(source, i + 1);
+        let (ident, next) = read_ident(source, i)?;
+        name = ident;
+        i = next;
+    } else if i < bytes.len() && bytes[i] == b'[' {
+        i = skip_ws_comments(source, i + 1);
+        let (string_name, next) = read_js_string(source, i)?;
+        i = skip_ws_comments(source, next);
+        if i >= bytes.len() || bytes[i] != b']' {
+            return None;
+        }
+        name = string_name;
+        i += 1;
+    } else {
+        return None;
+    }
+    i = skip_ws_comments(source, i);
+    if i < bytes.len()
+        && bytes[i] == b'='
+        && (i + 1 >= bytes.len() || !matches!(bytes[i + 1], b'=' | b'>'))
+    {
+        Some((name, i + 1))
+    } else {
+        None
+    }
+}
+
+fn parse_require_string(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with("require")
+        || !is_ident_boundary(bytes, pos + 7)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 7);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (specifier, next) = read_js_string(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i < bytes.len() && bytes[i] == b')' {
+        Some((specifier, i + 1))
+    } else {
+        None
+    }
+}
+
+fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with("Object")
+        || !is_ident_boundary(bytes, pos + 6)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 6);
+    if i >= bytes.len() || bytes[i] != b'.' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !source[i..].starts_with("defineProperty") || !is_ident_boundary(bytes, i + 14) {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 14);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (_, next) = parse_exports_target(source, i)?;
+    i = next;
+    i = skip_ws_comments(source, i);
+    if i >= bytes.len() || bytes[i] != b',' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (name, next) = read_js_string(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b',' {
+        return None;
+    }
+    let descriptor_start = i + 1;
+    let end = find_matching_paren(source, pos)?;
+    let descriptor = &source[descriptor_start..end];
+    if descriptor_has_value_property(descriptor) || is_safe_getter_descriptor(descriptor) {
+        Some((name, end + 1))
+    } else {
+        None
+    }
+}
+
+fn descriptor_has_value_property(descriptor: &str) -> bool {
+    let bytes = descriptor.as_bytes();
+    let mut i = 0usize;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(descriptor, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(descriptor, i) => {
+                i = skip_regex_literal(descriptor, i);
+                continue;
+            }
+            b'{' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            b'v' if depth == 1
+                && is_free_ident_start(bytes, i)
+                && descriptor[i..].starts_with("value")
+                && is_ident_boundary(bytes, i + 5) =>
+            {
+                let next = skip_ws_comments(descriptor, i + 5);
+                return next < bytes.len() && bytes[next] == b':';
+            }
+            _ => i += 1,
+        }
+    }
+    false
+}
+
+fn find_matching_paren(source: &str, start: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = source[start..].find('(')? + start;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => i = skip_string_or_template(source, i),
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(i);
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+fn find_matching_brace(source: &str, start: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = start;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => i = skip_string_or_template(source, i),
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+            }
+            b'{' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(i);
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+
+fn is_safe_getter_descriptor(descriptor: &str) -> bool {
+    let Some((body_start, body_end)) = find_getter_body(descriptor) else {
+        return false;
+    };
+    is_simple_getter_body(&descriptor[body_start..body_end])
+}
+
+fn find_getter_body(source: &str) -> Option<(usize, usize)> {
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            b'{' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+                continue;
+            }
+            b'g' if depth == 1
+                && is_free_ident_start(bytes, i)
+                && source[i..].starts_with("get")
+                && is_ident_boundary(bytes, i + 3) =>
+            {
+                let mut j = skip_ws_comments(source, i + 3);
+                if j < bytes.len() && bytes[j] == b'(' {
+                    let params_end = find_matching_paren(source, j)?;
+                    j = skip_ws_comments(source, params_end + 1);
+                    if j < bytes.len() && bytes[j] == b'{' {
+                        let body_end = find_matching_brace(source, j)?;
+                        return Some((j + 1, body_end));
+                    }
+                } else if j < bytes.len() && bytes[j] == b':' {
+                    j = skip_ws_comments(source, j + 1);
+                    if !source[j..].starts_with("function") || !is_ident_boundary(bytes, j + 8) {
+                        i += 1;
+                        continue;
+                    }
+                    j = skip_ws_comments(source, j + 8);
+                    if let Some((_, next)) = read_ident(source, j) {
+                        j = skip_ws_comments(source, next);
+                    }
+                    if j >= bytes.len() || bytes[j] != b'(' {
+                        i += 1;
+                        continue;
+                    }
+                    let params_end = find_matching_paren(source, j)?;
+                    j = skip_ws_comments(source, params_end + 1);
+                    if j < bytes.len() && bytes[j] == b'{' {
+                        let body_end = find_matching_brace(source, j)?;
+                        return Some((j + 1, body_end));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn is_simple_getter_body(body: &str) -> bool {
+    let return_pos = skip_ws_comments(body, 0);
+    if !body[return_pos..].starts_with("return")
+        || !is_free_ident_start(body.as_bytes(), return_pos)
+        || !is_ident_boundary(body.as_bytes(), return_pos + 6)
+    {
+        return false;
+    }
+    let mut i = skip_ws_comments(body, return_pos + 6);
+    let Some((_, next)) = read_ident(body, i) else {
+        return false;
+    };
+    i = skip_ws_comments(body, next);
+    if i < body.len() && body.as_bytes()[i] == b'.' {
+        i = skip_ws_comments(body, i + 1);
+        let Some((_, next)) = read_ident(body, i) else {
+            return false;
+        };
+        i = next;
+    } else if i < body.len() && body.as_bytes()[i] == b'[' {
+        i = skip_ws_comments(body, i + 1);
+        let Some((_, next)) = read_js_string(body, i) else {
+            return false;
+        };
+        i = skip_ws_comments(body, next);
+        if i >= body.len() || body.as_bytes()[i] != b']' {
+            return false;
+        }
+        i += 1;
+    }
+    i = skip_ws_comments(body, i);
+    if i < body.len() && body.as_bytes()[i] == b';' {
+        i = skip_ws_comments(body, i + 1);
+    }
+    i >= body.len()
+}
+
+
+fn parse_require_binding(source: &str, pos: usize) -> Option<(String, String, usize)> {
+    for keyword in ["var", "let", "const"] {
+        if is_free_ident_start(source.as_bytes(), pos)
+            && source[pos..].starts_with(keyword)
+            && is_ident_boundary(source.as_bytes(), pos + keyword.len())
+        {
+            let mut i = skip_ws_comments(source, pos + keyword.len());
+            let (name, next) = read_ident(source, i)?;
+            i = skip_ws_comments(source, next);
+            if i >= source.len() || source.as_bytes()[i] != b'=' {
+                return None;
+            }
+            i = skip_ws_comments(source, i + 1);
+            let (specifier, next) = parse_require_string(source, i)?;
+            let after_require = skip_ws_comments(source, next);
+            if !is_statement_boundary(source, after_require) {
+                return None;
+            }
+            return Some((name, specifier, next));
+        }
+    }
+    None
+}
+
+fn is_statement_boundary(source: &str, pos: usize) -> bool {
+    pos >= source.len() || matches!(source.as_bytes()[pos], b';' | b'}')
+}
+
+fn parse_module_exports_reexport(source: &str, pos: usize) -> Option<(String, usize)> {
+    let (target, mut i) = parse_exports_target(source, pos)?;
+    if target != CjsExportTarget::ModuleExports {
+        return None;
+    }
+    i = skip_ws_comments(source, i);
+    if i >= source.len() || source.as_bytes()[i] != b'=' {
+        return None;
+    }
+    let (specifier, next) = parse_require_string(source, skip_ws_comments(source, i + 1))?;
+    let after_require = skip_ws_comments(source, next);
+    if is_statement_boundary(source, after_require) {
+        Some((specifier, after_require.min(source.len())))
+    } else {
+        None
+    }
+}
+
+fn parse_module_exports_assignment(source: &str, pos: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let (target, mut i) = parse_exports_target(source, pos)?;
+    if target != CjsExportTarget::ModuleExports {
+        return None;
+    }
+    i = skip_ws_comments(source, i);
+    if i < bytes.len()
+        && bytes[i] == b'='
+        && (i + 1 >= bytes.len() || !matches!(bytes[i + 1], b'=' | b'>'))
+    {
+        Some(i + 1)
+    } else {
+        None
+    }
+}
+
+fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<String, String>) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with("Object")
+        || !is_ident_boundary(bytes, pos + 6)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 6);
+    if i >= bytes.len() || bytes[i] != b'.' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !source[i..].starts_with("keys") || !is_ident_boundary(bytes, i + 4) {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 4);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (binding, next) = read_ident(source, i)?;
+    let specifier = bindings.get(&binding)?.clone();
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+    let after_keys = skip_ws_comments(source, i + 1);
+    if after_keys >= bytes.len() || bytes[after_keys] != b'.' {
+        return None;
+    }
+    let for_each_pos = skip_ws_comments(source, after_keys + 1);
+    if !source[for_each_pos..].starts_with("forEach") || !is_ident_boundary(bytes, for_each_pos + 7) {
+        return None;
+    }
+    let end = find_matching_paren(source, for_each_pos + 7).unwrap_or(for_each_pos + 7);
+    let callback = &source[for_each_pos..end];
+    if callback_has_transpiler_reexport(callback, &binding) {
+        Some((specifier, end + 1))
+    } else {
+        None
+    }
+}
+
+fn callback_has_transpiler_reexport(callback: &str, binding: &str) -> bool {
+    let bytes = callback.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(callback, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(callback, i) => {
+                i = skip_regex_literal(callback, i);
+                continue;
+            }
+            _ => {}
+        }
+        if parse_define_property_reexport(callback, i, binding).is_some() {
+            return true;
+        }
+        i = next_char_boundary(callback, i);
+    }
+    false
+}
+
+fn parse_define_property_reexport(source: &str, pos: usize, binding: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with("Object")
+        || !is_ident_boundary(bytes, pos + 6)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 6);
+    if i >= bytes.len() || bytes[i] != b'.' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !source[i..].starts_with("defineProperty") || !is_ident_boundary(bytes, i + 14) {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 14);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (target, next) = parse_exports_target(source, i)?;
+    if target != CjsExportTarget::Exports {
+        return None;
+    }
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b',' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (key, next) = read_ident(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b',' {
+        return None;
+    }
+    let descriptor_start = i + 1;
+    let end = find_matching_paren(source, pos)?;
+    let descriptor = &source[descriptor_start..end];
+    if descriptor_getter_returns_binding_key(descriptor, binding, &key) {
+        Some(end + 1)
+    } else {
+        None
+    }
+}
+
+fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &str) -> bool {
+    let Some((body_start, body_end)) = find_getter_body(descriptor) else {
+        return false;
+    };
+    getter_body_returns_binding_key(&descriptor[body_start..body_end], binding, key)
+}
+
+fn getter_body_returns_binding_key(body: &str, binding: &str, key: &str) -> bool {
+    let bytes = body.as_bytes();
+    let mut i = skip_ws_comments(body, 0);
+    if !body[i..].starts_with("return")
+        || !is_free_ident_start(bytes, i)
+        || !is_ident_boundary(bytes, i + 6)
+    {
+        return false;
+    }
+    i = skip_ws_comments(body, i + 6);
+    if !body[i..].starts_with(binding)
+        || !is_free_ident_start(bytes, i)
+        || !is_ident_boundary(bytes, i + binding.len())
+    {
+        return false;
+    }
+    i = skip_ws_comments(body, i + binding.len());
+    if i >= bytes.len() || bytes[i] != b'[' {
+        return false;
+    }
+    i = skip_ws_comments(body, i + 1);
+    if !body[i..].starts_with(key)
+        || !is_free_ident_start(bytes, i)
+        || !is_ident_boundary(bytes, i + key.len())
+    {
+        return false;
+    }
+    i = skip_ws_comments(body, i + key.len());
+    if i >= bytes.len() || bytes[i] != b']' {
+        return false;
+    }
+    i = skip_ws_comments(body, i + 1);
+    if i < bytes.len() && bytes[i] == b';' {
+        i = skip_ws_comments(body, i + 1);
+    }
+    i >= bytes.len()
+}
+
+fn next_char_boundary(source: &str, pos: usize) -> usize {
+    if pos >= source.len() {
+        return source.len();
+    }
+    pos + source[pos..].chars().next().map_or(1, char::len_utf8)
+}
+
+fn previous_significant_byte(source: &str, pos: usize) -> Option<u8> {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    while i > 0 {
+        i -= 1;
+        if !bytes[i].is_ascii_whitespace() {
+            return Some(bytes[i]);
+        }
+    }
+    None
+}
+
+fn is_regex_literal_start(source: &str, pos: usize) -> bool {
+    if matches!(
+        previous_significant_byte(source, pos),
+        None | Some(b'(' | b'{' | b'[' | b'=' | b':' | b',' | b';' | b'!' | b'?' | b'&' | b'|' | b'+' | b'-' | b'*' | b'~' | b'^' | b'%' | b'>')
+    ) {
+        return true;
+    }
+
+    let bytes = source.as_bytes();
+    let mut end = pos;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let mut start = end;
+    while start > 0 && is_ident_continue(bytes[start - 1]) {
+        start -= 1;
+    }
+    matches!(&source[start..end], "return" | "throw" | "case" | "yield")
+}
+
+fn skip_regex_literal(source: &str, pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = pos + 1;
+    let mut in_class = false;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i += 2,
+            b'[' => {
+                in_class = true;
+                i += 1;
+            }
+            b']' => {
+                in_class = false;
+                i += 1;
+            }
+            b'/' if !in_class => {
+                i += 1;
+                while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+                    i += 1;
+                }
+                return i;
+            }
+            b'\n' | b'\r' => return pos + 1,
+            _ => i += 1,
+        }
+    }
+    pos + 1
+}
+
+fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
+    let bytes = source.as_bytes();
+    let mut analysis = CjsExportAnalysis::default();
+    let mut require_bindings = HashMap::<String, String>::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            _ => {}
+        }
+        if let Some((name, next)) = parse_export_member(source, i) {
+            analysis.is_cjs = true;
+            add_unique(&mut analysis.exports, name);
+            i = next;
+            continue;
+        }
+        if let Some((name, next)) = parse_define_property_export(source, i) {
+            analysis.is_cjs = true;
+            add_unique(&mut analysis.exports, name);
+            i = next;
+            continue;
+        }
+        if let Some((binding, specifier, next)) = parse_require_binding(source, i) {
+            require_bindings.insert(binding, specifier);
+            i = next;
+            continue;
+        }
+        if let Some((specifier, next)) = parse_module_exports_reexport(source, i) {
+            analysis.is_cjs = true;
+            analysis.reexports.clear();
+            add_unique(&mut analysis.reexports, specifier);
+            i = next;
+            continue;
+        }
+        if let Some(next) = parse_module_exports_assignment(source, i) {
+            analysis.is_cjs = true;
+            i = next;
+            continue;
+        }
+        if let Some((specifier, next)) = parse_object_keys_reexport(source, i, &require_bindings) {
+            analysis.is_cjs = true;
+            add_unique(&mut analysis.reexports, specifier);
+            i = next;
+            continue;
+        }
+        i = next_char_boundary(source, i);
+    }
+    analysis
+}
+
+fn resolve_cjs_reexport_path(filename: &str, specifier: &str) -> Option<String> {
+    if !specifier.starts_with("./") && !specifier.starts_with("../") && !specifier.starts_with('/') {
+        return None;
+    }
+    let base = if specifier.starts_with('/') {
+        std::path::PathBuf::from(specifier)
+    } else {
+        std::path::Path::new(filename).parent()?.join(specifier)
+    };
+    let candidates = [
+        base.clone(),
+        base.with_extension("js"),
+        base.with_extension("cjs"),
+        base.join("index.js"),
+        base.join("index.cjs"),
+    ];
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+fn analyze_cjs_exports_for_file(filename: &str, source: &str, seen: &mut HashSet<String>) -> CjsExportAnalysis {
+    let mut analysis = analyze_cjs_exports(source);
+    if !seen.insert(filename.to_string()) {
+        return analysis;
+    }
+    let reexports = analysis.reexports.clone();
+    for reexport in reexports {
+        if let Some(path) = resolve_cjs_reexport_path(filename, &reexport)
+            && !seen.contains(&path)
+            && let Ok(source) = std::fs::read_to_string(&path)
+        {
+            let child = analyze_cjs_exports_for_file(&path, &source, seen);
+            for name in child.exports {
+                add_unique(&mut analysis.exports, name);
+            }
+        }
+    }
+    analysis
+}
+
+fn cjs_named_export_source(names: &[String]) -> String {
+    let mut out = String::new();
+    for (index, name) in names.iter().enumerate() {
+        if name == "default" {
+            continue;
+        }
+        let local = format!("__cjs_export_{}", index);
+        let escaped = escape_js_string(name);
+        out.push_str(&format!(
+            "var {local} = __cjs_default[\"{escaped}\"];\nexport {{ {local} as \"{escaped}\" }};\n"
+        ));
+    }
+    out
+}
+
 impl Loader for CjsCompatLoader {
     fn load<'js>(
         &mut self,
@@ -1578,6 +2573,8 @@ impl Loader for CjsCompatLoader {
         let filename = Some(abs_path.clone());
         let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
         let url = path_to_file_url(path);
+        let escaped_filename = escape_js_string(&abs_path);
+        let escaped_dirname = dirname.as_deref().map(escape_js_string).unwrap_or_default();
 
         let init = ImportMetaInit {
             url,
@@ -1586,11 +2583,14 @@ impl Loader for CjsCompatLoader {
             include_resolve: true,
         };
 
-        // .cjs files are always CommonJS; for .js files, detect CJS patterns
+        let detected_analysis = analyze_cjs_exports_for_file(&abs_path, &source, &mut HashSet::new());
+
+        // .cjs files are always CommonJS; for .js files, use the analyzer so
+        // comments, strings, templates, and regex literals do not force CJS.
         let is_cjs = is_cjs_ext
-            || source.contains("module.exports")
-            || source.contains("exports.")
-            || (source.contains("require(") && !source.contains("import "));
+            || detected_analysis.is_cjs
+            || !detected_analysis.exports.is_empty()
+            || !detected_analysis.reexports.is_empty();
 
         if !is_cjs {
             // Treat as ESM — inject import.meta prologue (handles shebangs)
@@ -1611,24 +2611,40 @@ impl Loader for CjsCompatLoader {
                 String::new()
             }
         } else {
-            source
+            source.clone()
         };
+
+        let analysis = if cjs_source == source {
+            detected_analysis
+        } else {
+            analyze_cjs_exports_for_file(&abs_path, &cjs_source, &mut HashSet::new())
+        };
+        let named_exports = cjs_named_export_source(&analysis.exports);
 
         // Wrap CJS source in ESM-compatible wrapper, with import.meta prologue before the wrapper
         let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
-            r#"{}
+            r#"import {{ createRequire as __wasm_rquickjs_createRequire }} from 'node:module';
+{}
 var module = {{ exports: {{}} }};
 var exports = module.exports;
-(function(module, exports) {{
+var require = __wasm_rquickjs_createRequire("{}");
+var __filename = "{}";
+var __dirname = "{}";
+var global = globalThis;
+(function(module, exports, require, __filename, __dirname) {{
 {}
-}})(module, exports);
+}})(module, exports, require, __filename, __dirname);
 var __cjs_default = module.exports;
 export default __cjs_default;
-export var __esModule = __cjs_default && __cjs_default.__esModule;
+{}
 "#,
             prologue.trim(),
-            cjs_source
+            escaped_filename,
+            escaped_filename,
+            escaped_dirname,
+            cjs_source,
+            named_exports
         );
 
         Module::declare(ctx.clone(), path, wrapped.as_bytes().to_vec())
@@ -2996,6 +4012,165 @@ pub fn format_caught_error(caught: CaughtError) -> String {
         }
         CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
         CaughtError::Value(val) => format_js_exception(&val),
+    }
+}
+
+#[cfg(test)]
+mod cjs_export_analyzer_tests {
+    use super::*;
+
+    fn assert_analysis(
+        source: &str,
+        is_cjs: bool,
+        exports: &[&str],
+        reexports: &[&str],
+    ) {
+        let analysis = analyze_cjs_exports(source);
+        assert_eq!(analysis.is_cjs, is_cjs, "is_cjs mismatch for {source}");
+        assert_eq!(analysis.exports, exports, "exports mismatch for {source}");
+        assert_eq!(
+            analysis.reexports, reexports,
+            "reexports mismatch for {source}"
+        );
+    }
+
+    #[test]
+    fn detects_supported_cjs_export_patterns() {
+        assert_analysis(
+            r#"
+                exports.foo = 1;
+                module.exports.bar = 2;
+                exports["baz"] = 3;
+                Object.defineProperty(exports, "valueExport", { value: 4 });
+                Object.defineProperty(module.exports, "getterExport", { get() { return dep.value; } });
+                Object.defineProperty(exports, "functionGetter", { get: function () { return dep["other"]; } });
+            "#,
+            true,
+            &["foo", "bar", "baz", "valueExport", "getterExport", "functionGetter"],
+            &[],
+        );
+    }
+
+    #[test]
+    fn malformed_non_ascii_escapes_do_not_panic() {
+        assert_analysis(r#"exports["\xaé"] = 1;"#, false, &[], &[]);
+        assert_analysis(r#"exports["\uabcé"] = 1;"#, false, &[], &[]);
+    }
+
+    #[test]
+    fn detects_module_exports_assignments_with_comments() {
+        assert_analysis(r#"module /*x*/ . /*y*/ exports = {};"#, true, &[], &[]);
+        assert_analysis(
+            r#"module /*x*/ . /*y*/ exports = require("./dep.cjs");"#,
+            true,
+            &[],
+            &["./dep.cjs"],
+        );
+        assert_analysis(
+            r#"module.exports = require("./dep.cjs").nested;"#,
+            true,
+            &[],
+            &[],
+        );
+        assert_analysis(
+            r#"module.exports = require("./dep.cjs")();"#,
+            true,
+            &[],
+            &[],
+        );
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs").nested;
+                Object.keys(dep).forEach(function (key) {
+                    Object.defineProperty(exports, key, { get: function () { return dep[key]; } });
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+    }
+
+    #[test]
+    fn require_binding_alone_does_not_classify_esm_as_cjs() {
+        assert_analysis(
+            r#"
+                import { createRequire } from "node:module";
+                const require = createRequire(import.meta.url);
+                const dep = require("./dep.cjs");
+                export const value = dep.value;
+            "#,
+            false,
+            &[],
+            &[],
+        );
+    }
+
+    #[test]
+    fn ignores_false_positive_assignments_and_define_property_descriptors() {
+        assert_analysis(
+            r#"
+                if (module.exports === undefined) {}
+                if (exports.fake == "no") {}
+                Object.defineProperty(exports, "setterOnly", { set(v) { return dep.value; } });
+                Object.defineProperty(exports, "unrelated", { other: function () { return dep.value; } });
+                Object.defineProperty(exports, "regexDescriptor", { enumerable: /value:/ });
+                Object.defineProperty(exports, "multipleReturn", { get() { return dep.value; return dynamic(); } });
+                Object.defineProperty(exports, "conditionalReturn", { get() { if (dep) return dep.value; return dynamic(); } });
+            "#,
+            false,
+            &[],
+            &[],
+        );
+    }
+
+    #[test]
+    fn detects_only_real_transpiler_reexport_callbacks() {
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    const π = 1;
+                    Object.defineProperty(exports, key, {
+                        enumerable: true,
+                        get: function () { return _dep[key]; }
+                    });
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    const msg = "Object.defineProperty(exports, key, { get: function () { return _dep[key]; } })";
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    Object.defineProperty(other, key, { value: 1 });
+                    exports;
+                    function unrelated() { return _dep[key]; }
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
     }
 }
 

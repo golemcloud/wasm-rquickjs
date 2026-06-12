@@ -2,4 +2,8 @@ package quickjs:module-resolution;
 
 world module-resolution {
   export test-esm-package-map-edge-cases: func() -> bool;
+  export test-cjs-direct-named-exports: func() -> bool;
+  export test-cjs-define-property-named-exports: func() -> bool;
+  export test-cjs-reexport-named-exports: func() -> bool;
+  export test-cjs-analyzer-false-positive-guards: func() -> bool;
 }
