@@ -5864,10 +5864,8 @@
     "es-module/test-esm-windows.js": {},
     "es-module/test-loaders-hidden-from-users.js": { "category": "node-internals", "reason": "uses --expose-internals plus Node internals (require('internal/...'), process.binding('natives'))" },
     "es-module/test-require-module-cached-tla.js": {},
-    "es-module/test-require-module-conditional-exports-module.js": { "category": "known-gap", "reason": "node:module does not implement package.json exports condition resolution (module-sync/require/import/default)" },
+    "es-module/test-require-module-conditional-exports-module.js": {},
     "es-module/test-require-module-conditional-exports.js": {
-      "category": "known-gap",
-      "reason": "node:module does not implement package.json exports condition resolution (require/import/default)",
       "split": true,
       "subtests": {
         "block_00_if_only_require_exports_are_defined_return_require_exports": {},
@@ -5973,7 +5971,7 @@
         "block_01_test_esm_that_import_esm": { "category": "runnable" },
         "block_02_test_esm_that_import_cjs": { "category": "known-gap", "reason": "CJS named export analysis for ESM/CJS interop is incomplete (missing named exports like π)" },
         "block_03_test_esm_that_require_cjs": { "category": "runnable" },
-        "block_04_also_test_default_export": { "category": "known-gap", "reason": "package resolution from ESM (node_modules dependency without package.json) is incomplete" },
+        "block_04_also_test_default_export": { "category": "runnable" },
         "block_05_test_data_import": { "category": "runnable" }
       }
     },

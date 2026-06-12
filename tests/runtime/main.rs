@@ -28,6 +28,7 @@ mod fetch;
 mod fs;
 mod imports;
 mod intl;
+mod module_resolution;
 mod node_http;
 mod os;
 mod path;
@@ -75,6 +76,7 @@ tag_suite!(sqlite, group6);
 
 tag_suite!(url, group7);
 tag_suite!(cjs_require, group7);
+tag_suite!(module_resolution, group7);
 tag_suite!(timeout, group7);
 tag_suite!(buffer, group7);
 tag_suite!(bigint_roundtrip, group7);

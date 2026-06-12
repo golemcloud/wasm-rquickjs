@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-05-20 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-11 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3085/4295 (71.8%)
+**Primary compatibility (CI-enforced):** 3089/4295 (71.9%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3085 | 71.8% | 55.0% | 45.8% |
-| 🧩 known gap | 1210 | 28.2% | 21.6% | 18.0% |
+| ✅ passing (runnable) | 3089 | 71.9% | 55.1% | 45.9% |
+| 🧩 known gap | 1206 | 28.1% | 21.5% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1153 | — | 20.6% | 17.1% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
 | **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3085/5610 (55.0%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3089/5610 (55.1%)**.
 
 ## Inventory by Module
 
@@ -50,10 +50,10 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 374 | 12 | 20 | 5 | 0 | 71 | 96.9% | 91.0% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 244 | 305 | 267 | 2 | 0 | 80 | 44.4% | 29.8% |
+| http | 898 | 243 | 306 | 267 | 2 | 0 | 80 | 44.3% | 29.7% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 184 | 102 | 62 | 7 | 1 | 0 | 12 | 62.2% | 59.3% |
+| module | 184 | 107 | 57 | 7 | 1 | 0 | 12 | 65.2% | 62.2% |
 | net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
@@ -93,7 +93,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | File | Subtests | Passing | Gap | WASI-impossible | Engine diff | Unevaluated | Internals |
 |------|----------|----------|-----|-----------------|-------------|-------------|-----------|
 | `test-esm-loader-modulemap.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
-| `test-require-module-conditional-exports.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-require-module-conditional-exports.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-cjs-esm-esm.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-cjs-esm.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-esm-cjs-esm-esm.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
@@ -101,7 +101,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-require-module-defined-esmodule.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module-tla.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-require-module-with-detection.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-require-module.js` | 6 | 4 | 2 | 0 | 0 | 0 | 0 |
+| `test-require-module.js` | 6 | 5 | 1 | 0 | 0 | 0 | 0 |
 | `test-abortcontroller.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-aborted-util.js` | 5 | 4 | 0 | 1 | 0 | 0 | 0 |
 | `test-abortsignal-cloneable.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -680,7 +680,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1210)
+### known gap (1206)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -753,7 +753,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: server parser accepts bare-LF header separators instead of replying 400 and closing | 3 | `parallel/test-http-missing-header-separator-lf.js#block_00_block_00`, `parallel/test-http-missing-header-separator-lf.js#block_01_block_01`, `parallel/test-http-missing-header-separator-lf.js#block_02_block_02` |
 | inherited: setServers argument validation (ERR_INVALID_ARG_TYPE details) is incomplete for dns and dns/promises | 3 | `parallel/test-dns-setservers-type-check.js#block_00_block_00`, `parallel/test-dns-setservers-type-check.js#block_01_block_01`, `parallel/test-dns-setservers-type-check.js#block_02_this_test_for_dns_promises` |
 | net edge case not yet handled | 3 | `parallel/test-net-autoselectfamily.js#block_01_test_that_only_the_last_successful_connection_is_established`, `parallel/test-net-connect-reset.js`, `parallel/test-net-pingpong.js` |
-| node:module does not implement package.json exports condition resolution (require/import/default) | 3 | `es-module/test-require-module-conditional-exports.js#block_00_if_only_require_exports_are_defined_return_require_exports`, `es-module/test-require-module-conditional-exports.js#block_01_if_both_are_defined_require_is_used`, `es-module/test-require-module-conditional-exports.js#block_02_if_import_and_default_are_defined_default_is_used` |
 | node:readline Interface constructor/options are not implemented | 3 | `parallel/test-readline-interface-escapecodetimeout.js`, `parallel/test-readline-interface-no-trailing-newline.js`, `parallel/test-readline-interface-recursive-writes.js` |
 | node:test concurrency scheduling/completion semantics are incomplete | 3 | `parallel/test-runner-concurrency.js#test_00_concurrency_option_boolean_true`, `parallel/test-runner-concurrency.js#test_01_concurrency_option_boolean_false`, `parallel/test-runner-concurrency.js#test_02_concurrency_true_implies_infinity` |
 | node_compat common shim is missing ../common/wpt harness | 3 | `parallel/test-whatwg-events-event-constructors.js`, `parallel/test-whatwg-events-eventtarget-this-of-listener.js`, `parallel/test-whatwg-url-custom-searchparams-sort.js` |
@@ -897,6 +896,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP server incorrectly emits chunked terminator semantics for 204/304 responses | 1 | `parallel/test-http-chunked-304.js` |
 | HTTP server parser does not emit Node-compatible HPE_HEADER_OVERFLOW/431 behavior for oversized headers | 1 | `parallel/test-http-header-overflow.js` |
 | HTTP server socket.setEncoding('') error path (ERR_HTTP_SOCKET_ENCODING) is not Node-compatible | 1 | `parallel/test-http-socket-encoding-error.js` |
+| HTTP/1.0 keep-alive client/server framing is not Node-compatible; consistently fails on CI even with retries | 1 | `parallel/test-http-1.0-keep-alive.js` |
 | HTTP/1.0 keep-alive response connection-closing semantics are not Node-compatible | 1 | `parallel/test-http-wget.js` |
 | Happy Eyeballs autoSelectFamily over custom dual-stack DNS is not wired through wasi:http transport | 1 | `parallel/test-http-autoselectfamily.js` |
 | Host header generation ignores globalAgent.defaultPort and incorrectly includes the port | 1 | `parallel/test-http-default-port.js` |
@@ -1168,7 +1168,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:http client socketPath transport flow is incomplete (unix-socket request hangs) | 1 | `parallel/test-http-client-pipe-end.js` |
 | node:https Agent constructor compatibility is incomplete (call without new) | 1 | `parallel/test-https-agent-constructor.js` |
 | node:https Agent#getName TLS option keying is incomplete | 1 | `parallel/test-https-agent-getname.js` |
-| node:module does not implement package.json exports condition resolution (module-sync/require/import/default) | 1 | `es-module/test-require-module-conditional-exports-module.js` |
 | node:module.findPackageJSON API behavior is incomplete | 1 | `parallel/test-find-package-json.js` |
 | node:sqlite applyChangeset conflict-resolution behavior is incomplete | 1 | `parallel/test-sqlite-session.js#test_05_conflict_resolution` |
 | node:sqlite rejects mixed named+positional parameters where Node accepts them | 1 | `parallel/test-sqlite-statement-sync.js#test_06_statementsync_prototype_expandedsql` |
@@ -1184,7 +1183,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | node_compat test fixture module ../common/process-exit-code-cases is not resolved in this runtime | 1 | `parallel/test-process-exit-code.js` |
 | non-writable global property semantics in vm contexts are incomplete | 1 | `parallel/test-vm-global-non-writable-properties.js` |
 | options.agent validation/lifecycle is not fully Node-compatible | 1 | `parallel/test-http-client-reject-unexpected-agent.js` |
-| package resolution from ESM (node_modules dependency without package.json) is incomplete | 1 | `es-module/test-require-module.js#block_04_also_test_default_export` |
 | passive listener semantics are incomplete (test currently self-skips) | 1 | `parallel/test-whatwg-events-add-event-listener-options-passive.js#block_01_block_01` |
 | per-context Symbol/global binding behavior is incomplete in vm contexts | 1 | `parallel/test-vm-harmony-symbols.js` |
 | perf_hooks HTTP PerformanceEntry emission/detail fields are incomplete | 1 | `parallel/test-http-perf_hooks.js` |

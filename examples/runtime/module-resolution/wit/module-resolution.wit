@@ -1,0 +1,5 @@
+package quickjs:module-resolution;
+
+world module-resolution {
+  export test-esm-package-map-edge-cases: func() -> bool;
+}

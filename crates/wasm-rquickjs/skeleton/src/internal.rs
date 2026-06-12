@@ -1,5 +1,6 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
+use indexmap::IndexMap;
 use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::{
@@ -7,6 +8,7 @@ use rquickjs::{
     Object, Promise, Value, async_with,
 };
 use rquickjs::{CaughtError, prelude::*};
+use serde::Deserialize;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -1023,51 +1025,109 @@ impl Resolver for NodeModuleErrorResolver {
     }
 }
 
+enum NodePackageResolveError {
+    PackagePathNotExported { package_name: String, subpath: String },
+    PackageImportNotDefined { specifier: String },
+    InvalidPackageTarget { kind: &'static str, target: String },
+    InvalidPackageConfig { path: String },
+    ModuleNotFound { request: String },
+}
+
+enum PackageTargetResolution {
+    Resolved(String),
+    NoMatch,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum PackageTarget {
+    String(String),
+    Array(Vec<PackageTarget>),
+    Object(IndexMap<String, PackageTarget>),
+    Bool(bool),
+    Null,
+    Invalid(serde_json::Value),
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct PackageJson {
+    main: Option<String>,
+    exports: Option<PackageTarget>,
+    imports: Option<PackageTarget>,
+}
+
 struct NodeModulesResolver;
 
 impl NodeModulesResolver {
-    fn try_resolve(&self, base: &str, name: &str) -> Option<String> {
+    fn try_resolve(
+        &self,
+        base: &str,
+        name: &str,
+    ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::{Path, PathBuf};
+
+        if name.starts_with('#') {
+            return self.try_resolve_package_import(base, name);
+        }
 
         // Only handle bare specifiers (not relative, absolute, or URL)
         if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
-            return None;
+            return Ok(None);
         }
 
+        let Some((package_name, subpath)) = Self::split_package_name(name) else {
+            return Ok(None);
+        };
+
         // Extract directory from base module path
-        let base_dir = Path::new(base).parent()?;
+        let Some(base_dir) = Path::new(base).parent() else {
+            return Ok(None);
+        };
 
         // Walk up directory tree looking for node_modules
         let mut dir = base_dir.to_path_buf();
         loop {
-            let nm_dir = dir.join("node_modules").join(name);
+            let nm_dir = dir.join("node_modules").join(package_name);
             if nm_dir.is_dir() {
-                // Try package.json main field
                 let pkg_path = nm_dir.join("package.json");
-                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path)
-                    && let Some(main) = Self::extract_json_string_field(&pkg_content, "main")
-                {
-                    // Try the main entry with various extensions
-                    let main_path = nm_dir.join(&main);
-                    let candidates = [
-                        main_path.clone(),
-                        main_path.with_extension("mjs"),
-                        main_path.with_extension("js"),
-                        main_path.join("index.mjs"),
-                        main_path.join("index.js"),
-                    ];
-                    for candidate in &candidates {
-                        if candidate.is_file() {
-                            return Some(candidate.to_string_lossy().into_owned());
+                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
+                    let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
+                        NodePackageResolveError::InvalidPackageConfig {
+                            path: pkg_path.to_string_lossy().into_owned(),
                         }
+                    })?;
+
+                    if let Some(exports_field) = package.exports.as_ref() {
+                        return Self::resolve_package_exports(
+                            package_name,
+                            &nm_dir,
+                            exports_field,
+                            subpath,
+                        )
+                        .map(Some);
                     }
+
+                    if subpath.is_empty()
+                        && let Some(main) = package.main.as_ref()
+                        && let Some(resolved) = Self::resolve_package_target(&nm_dir, main)
+                    {
+                        return Ok(Some(resolved));
+                    }
+                }
+
+                if !subpath.is_empty()
+                    && let Some(resolved) = Self::resolve_package_target(&nm_dir, subpath)
+                {
+                    return Ok(Some(resolved));
                 }
 
                 // Fallback: index.mjs, index.js
                 let fallbacks: [PathBuf; 2] = [nm_dir.join("index.mjs"), nm_dir.join("index.js")];
                 for fallback in &fallbacks {
                     if fallback.is_file() {
-                        return Some(fallback.to_string_lossy().into_owned());
+                        return Ok(Some(fallback.to_string_lossy().into_owned()));
                     }
                 }
             }
@@ -1077,32 +1137,411 @@ impl NodeModulesResolver {
             }
         }
 
+        Ok(None)
+    }
+
+    fn try_resolve_package_import(
+        &self,
+        base: &str,
+        name: &str,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        use std::path::Path;
+
+        let Some(parent) = Path::new(base).parent() else {
+            return Ok(None);
+        };
+        let mut dir = parent.to_path_buf();
+        loop {
+            if dir.file_name().is_some_and(|name| name == "node_modules") {
+                return Err(NodePackageResolveError::PackageImportNotDefined {
+                    specifier: name.to_string(),
+                });
+            }
+
+            let pkg_path = dir.join("package.json");
+            if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
+                let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
+                    NodePackageResolveError::InvalidPackageConfig {
+                        path: pkg_path.to_string_lossy().into_owned(),
+                    }
+                })?;
+                let Some(imports) = package.imports.as_ref() else {
+                    return Err(NodePackageResolveError::PackageImportNotDefined {
+                        specifier: name.to_string(),
+                    });
+                };
+                return Self::resolve_package_import(&dir, imports, name).map(Some);
+            }
+
+            if !dir.pop() {
+                break;
+            }
+        }
+
+        Err(NodePackageResolveError::PackageImportNotDefined {
+            specifier: name.to_string(),
+        })
+    }
+
+    fn split_package_name(name: &str) -> Option<(&str, &str)> {
+        if name.starts_with('@') {
+            let first = name.find('/')?;
+            let rest = &name[first + 1..];
+            if rest.is_empty() {
+                return None;
+            }
+            if let Some(second_rel) = rest.find('/') {
+                let second = first + 1 + second_rel;
+                Some((&name[..second], &name[second + 1..]))
+            } else {
+                Some((name, ""))
+            }
+        } else if let Some(idx) = name.find('/') {
+            Some((&name[..idx], &name[idx + 1..]))
+        } else {
+            Some((name, ""))
+        }
+    }
+
+    fn resolve_package_target(package_dir: &std::path::Path, target: &str) -> Option<String> {
+        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        let mut candidates = vec![target_path.clone()];
+        if target_path.extension().is_none() {
+            candidates.push(target_path.with_extension("mjs"));
+            candidates.push(target_path.with_extension("js"));
+            candidates.push(target_path.with_extension("cjs"));
+            candidates.push(target_path.with_extension("json"));
+        }
+        candidates.push(target_path.join("index.mjs"));
+        candidates.push(target_path.join("index.js"));
+        candidates.push(target_path.join("index.cjs"));
+        candidates.push(target_path.join("index.json"));
+
+        for candidate in &candidates {
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().into_owned());
+            }
+        }
+
         None
     }
 
-    /// Extract a simple string field value from a JSON object string.
-    fn extract_json_string_field(json: &str, field: &str) -> Option<String> {
-        let pattern = format!("\"{}\"", field);
-        let idx = json.find(&pattern)?;
-        let after_key = &json[idx + pattern.len()..];
-        let after_colon = after_key.trim_start();
-        let after_colon = after_colon.strip_prefix(':')?;
-        let after_colon = after_colon.trim_start();
-        let after_colon = after_colon.strip_prefix('"')?;
-        let end = after_colon.find('"')?;
-        Some(after_colon[..end].to_string())
+    fn resolve_package_exports(
+        package_name: &str,
+        package_dir: &std::path::Path,
+        exports: &PackageTarget,
+        subpath: &str,
+    ) -> Result<String, NodePackageResolveError> {
+        let key = if subpath.is_empty() {
+            ".".to_string()
+        } else {
+            format!("./{}", subpath)
+        };
+
+        if matches!(exports, PackageTarget::String(_) | PackageTarget::Array(_))
+            || Self::is_conditions_object(exports)
+        {
+            if key != "." {
+                return Err(NodePackageResolveError::PackagePathNotExported {
+                    package_name: package_name.to_string(),
+                    subpath: subpath.to_string(),
+                });
+            }
+            return Self::resolve_package_target_value(
+                package_dir,
+                exports,
+                false,
+                "exports",
+            )
+            .and_then(|resolution| {
+                Self::target_resolution_to_export_result(resolution, package_name, subpath)
+            });
+        }
+
+        if let PackageTarget::Object(map) = exports {
+            if let Some(target) = map.get(&key) {
+                return Self::resolve_package_target_value(
+                    package_dir,
+                    target,
+                    false,
+                    "exports",
+                )
+                .and_then(|resolution| {
+                    Self::target_resolution_to_export_result(resolution, package_name, subpath)
+                });
+            }
+        }
+
+        Err(NodePackageResolveError::PackagePathNotExported {
+            package_name: package_name.to_string(),
+            subpath: subpath.to_string(),
+        })
     }
+
+    fn resolve_package_import(
+        package_dir: &std::path::Path,
+        imports: &PackageTarget,
+        specifier: &str,
+    ) -> Result<String, NodePackageResolveError> {
+        if let PackageTarget::Object(map) = imports
+            && let Some(target) = map.get(specifier)
+        {
+            return Self::resolve_package_target_value(package_dir, target, true, "imports").and_then(
+                |resolution| Self::target_resolution_to_import_result(resolution, specifier),
+            );
+        }
+        Err(NodePackageResolveError::PackageImportNotDefined {
+            specifier: specifier.to_string(),
+        })
+    }
+
+    fn is_conditions_object(value: &PackageTarget) -> bool {
+        matches!(
+            value,
+            PackageTarget::Object(map) if !map.is_empty() && !map.iter().any(|(key, _)| key.starts_with('.'))
+        )
+    }
+
+    fn resolve_package_target_value(
+        package_dir: &std::path::Path,
+        target: &PackageTarget,
+        allow_bare_target: bool,
+        kind: &'static str,
+    ) -> Result<PackageTargetResolution, NodePackageResolveError> {
+        match target {
+            PackageTarget::Null | PackageTarget::Bool(false) => {
+                return Ok(PackageTargetResolution::Blocked);
+            }
+            PackageTarget::Bool(true) => {
+                return Err(NodePackageResolveError::InvalidPackageTarget {
+                    kind,
+                    target: "true".to_string(),
+                });
+            }
+            PackageTarget::Invalid(value) => {
+                return Err(NodePackageResolveError::InvalidPackageTarget {
+                    kind,
+                    target: value.to_string(),
+                });
+            }
+            PackageTarget::String(target_str) => {
+            if allow_bare_target && Self::is_bare_package_specifier(target_str) {
+                let base = package_dir.join("package.json");
+                let base_str = base.to_string_lossy();
+                let resolver = NodeModulesResolver;
+                if let Some(resolved) = resolver.try_resolve(&base_str, target_str)? {
+                    return Ok(PackageTargetResolution::Resolved(resolved));
+                }
+                return Err(NodePackageResolveError::ModuleNotFound {
+                    request: target_str.to_string(),
+                });
+            }
+            if allow_bare_target && target_str.starts_with("node:") {
+                return Ok(PackageTargetResolution::Resolved(target_str.clone()));
+            }
+            if !target_str.starts_with("./") {
+                return Err(NodePackageResolveError::InvalidPackageTarget {
+                    kind,
+                    target: target_str.to_string(),
+                });
+            }
+            let Some(candidate) = Self::resolve_valid_package_target_path(package_dir, target_str) else {
+                return Err(NodePackageResolveError::InvalidPackageTarget {
+                    kind,
+                    target: target_str.clone(),
+                });
+            };
+            if candidate.is_file() {
+                return Ok(PackageTargetResolution::Resolved(
+                    candidate.to_string_lossy().into_owned(),
+                ));
+            }
+            return Err(NodePackageResolveError::ModuleNotFound {
+                request: candidate.to_string_lossy().into_owned(),
+            });
+            }
+            PackageTarget::Array(array) => {
+            for item in array {
+                match Self::resolve_package_target_value(package_dir, item, allow_bare_target, kind) {
+                    Ok(PackageTargetResolution::Resolved(path)) => {
+                        return Ok(PackageTargetResolution::Resolved(path));
+                    }
+                    Ok(PackageTargetResolution::Blocked) => {
+                        return Ok(PackageTargetResolution::Blocked);
+                    }
+                    Ok(PackageTargetResolution::NoMatch) => continue,
+                    Err(NodePackageResolveError::InvalidPackageTarget { .. }) => continue,
+                    Err(err) => return Err(err),
+                }
+            }
+                return Ok(PackageTargetResolution::NoMatch);
+            }
+            PackageTarget::Object(map) => {
+            for (condition, value) in map {
+                if matches!(condition.as_str(), "golem" | "node" | "import" | "default") {
+                    match Self::resolve_package_target_value(
+                        package_dir,
+                        value,
+                        allow_bare_target,
+                        kind,
+                    )? {
+                        PackageTargetResolution::NoMatch => continue,
+                        resolution => return Ok(resolution),
+                    }
+                }
+            }
+                Ok(PackageTargetResolution::NoMatch)
+            }
+        }
+    }
+
+    fn target_resolution_to_export_result(
+        resolution: PackageTargetResolution,
+        package_name: &str,
+        subpath: &str,
+    ) -> Result<String, NodePackageResolveError> {
+        match resolution {
+            PackageTargetResolution::Resolved(path) => Ok(path),
+            PackageTargetResolution::NoMatch | PackageTargetResolution::Blocked => {
+                Err(NodePackageResolveError::PackagePathNotExported {
+                    package_name: package_name.to_string(),
+                    subpath: subpath.to_string(),
+                })
+            }
+        }
+    }
+
+    fn target_resolution_to_import_result(
+        resolution: PackageTargetResolution,
+        specifier: &str,
+    ) -> Result<String, NodePackageResolveError> {
+        match resolution {
+            PackageTargetResolution::Resolved(path) => Ok(path),
+            PackageTargetResolution::NoMatch | PackageTargetResolution::Blocked => {
+                Err(NodePackageResolveError::PackageImportNotDefined {
+                    specifier: specifier.to_string(),
+                })
+            }
+        }
+    }
+
+    fn is_bare_package_specifier(target: &str) -> bool {
+        !target.is_empty()
+            && !target.starts_with('.')
+            && !target.starts_with('/')
+            && !target.starts_with('#')
+            && !target.contains(':')
+    }
+
+    fn resolve_valid_package_target_path(
+        package_dir: &std::path::Path,
+        target: &str,
+    ) -> Option<std::path::PathBuf> {
+        let mut relative_parts = Vec::<&str>::new();
+        for part in target.strip_prefix("./")?.split('/') {
+            match part {
+                "" => {}
+                part if Self::is_invalid_package_target_segment(part) => return None,
+                part => relative_parts.push(part),
+            }
+        }
+        if relative_parts.is_empty() {
+            return None;
+        }
+        let mut candidate = package_dir.to_path_buf();
+        for part in relative_parts {
+            candidate.push(part);
+        }
+        Some(candidate)
+    }
+
+    fn is_invalid_package_target_segment(segment: &str) -> bool {
+        if matches!(segment, "." | ".." | "node_modules") {
+            return true;
+        }
+        let decoded = percent_decode(segment).unwrap_or_else(|| segment.to_string());
+        matches!(decoded.to_ascii_lowercase().as_str(), "." | ".." | "node_modules")
+    }
+}
+
+fn percent_decode(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(hi), Some(lo)) = (
+                FileUrlResolver::hex_val(bytes[i + 1]),
+                FileUrlResolver::hex_val(bytes[i + 2]),
+            )
+        {
+            decoded.push(hi << 4 | lo);
+            i += 3;
+            continue;
+        }
+        decoded.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(decoded).ok()
+}
+
+fn throw_node_package_resolve_error<'js>(
+    ctx: &Ctx<'js>,
+    err: NodePackageResolveError,
+) -> rquickjs::Result<String> {
+    let (code, message) = match err {
+        NodePackageResolveError::PackagePathNotExported {
+            package_name,
+            subpath,
+        } => {
+            let subpath = if subpath.is_empty() {
+                ".".to_string()
+            } else {
+                format!("./{}", subpath)
+            };
+            (
+                "ERR_PACKAGE_PATH_NOT_EXPORTED",
+                format!("Package subpath '{}' is not defined by \"exports\" in package {}", subpath, package_name),
+            )
+        }
+        NodePackageResolveError::PackageImportNotDefined { specifier } => (
+            "ERR_PACKAGE_IMPORT_NOT_DEFINED",
+            format!("Package import specifier '{}' is not defined", specifier),
+        ),
+        NodePackageResolveError::InvalidPackageTarget { kind, target } => (
+            "ERR_INVALID_PACKAGE_TARGET",
+            format!("Invalid \"{}\" target '{}'", kind, target),
+        ),
+        NodePackageResolveError::InvalidPackageConfig { path } => (
+            "ERR_INVALID_PACKAGE_CONFIG",
+            format!("Invalid package config {}", path),
+        ),
+        NodePackageResolveError::ModuleNotFound { request } => (
+            "ERR_MODULE_NOT_FOUND",
+            format!("Cannot find module '{}'", request),
+        ),
+    };
+
+    let globals = ctx.globals();
+    let error_ctor: Function = globals.get("Error")?;
+    let error_obj: Object = error_ctor.call((message,))?;
+    error_obj.set("code", code)?;
+    Err(ctx.throw(error_obj.into_value()))
 }
 
 impl Resolver for NodeModulesResolver {
     fn resolve<'js>(
         &mut self,
-        _ctx: &Ctx<'js>,
+        ctx: &Ctx<'js>,
         base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
-        self.try_resolve(base, name)
-            .ok_or_else(|| Error::new_resolving(base, name))
+        match self.try_resolve(base, name) {
+            Ok(Some(resolved)) => Ok(resolved),
+            Ok(None) => Err(Error::new_resolving(base, name)),
+            Err(err) => throw_node_package_resolve_error(ctx, err),
+        }
     }
 }
 
