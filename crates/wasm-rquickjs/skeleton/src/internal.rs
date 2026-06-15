@@ -1056,6 +1056,8 @@ struct PackageJson {
     main: Option<String>,
     exports: Option<PackageTarget>,
     imports: Option<PackageTarget>,
+    #[serde(rename = "type")]
+    package_type: Option<String>,
 }
 
 struct NodeModulesResolver;
@@ -2529,6 +2531,29 @@ fn analyze_cjs_exports_for_file(filename: &str, source: &str, seen: &mut HashSet
     analysis
 }
 
+fn package_scope_type(filename: &str) -> Option<String> {
+    let mut dir = std::path::Path::new(filename).parent()?.to_path_buf();
+    loop {
+        if dir.file_name().is_some_and(|name| name == "node_modules") {
+            return None;
+        }
+        let pkg_path = dir.join("package.json");
+        if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path)
+            && let Ok(package) = serde_json::from_str::<PackageJson>(&pkg_content)
+        {
+            return package.package_type;
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+fn is_js_in_module_package_scope(filename: &str) -> bool {
+    filename.ends_with(".js") && package_scope_type(filename).as_deref() == Some("module")
+}
+
 fn cjs_named_export_source(names: &[String]) -> String {
     let mut out = String::new();
     for (index, name) in names.iter().enumerate() {
@@ -2569,17 +2594,16 @@ impl Loader for CjsCompatLoader {
         };
 
         let abs_path = ensure_absolute_path(path);
-        let std_path = std::path::Path::new(&abs_path);
         let filename = Some(abs_path.clone());
-        let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
         let url = path_to_file_url(path);
         let escaped_filename = escape_js_string(&abs_path);
-        let escaped_dirname = dirname.as_deref().map(escape_js_string).unwrap_or_default();
 
         let init = ImportMetaInit {
             url,
             filename,
-            dirname,
+            dirname: std::path::Path::new(&abs_path)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned()),
             include_resolve: true,
         };
 
@@ -2588,9 +2612,10 @@ impl Loader for CjsCompatLoader {
         // .cjs files are always CommonJS; for .js files, use the analyzer so
         // comments, strings, templates, and regex literals do not force CJS.
         let is_cjs = is_cjs_ext
-            || detected_analysis.is_cjs
-            || !detected_analysis.exports.is_empty()
-            || !detected_analysis.reexports.is_empty();
+            || (!is_js_in_module_package_scope(&abs_path)
+                && (detected_analysis.is_cjs
+                    || !detected_analysis.exports.is_empty()
+                    || !detected_analysis.reexports.is_empty()));
 
         if !is_cjs {
             // Treat as ESM — inject import.meta prologue (handles shebangs)
@@ -2598,52 +2623,22 @@ impl Loader for CjsCompatLoader {
             return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
         }
 
-        // Strip shebang before wrapping in IIFE (it would be invalid inside the wrapper)
-        let cjs_source = if let Some(rest) = source.strip_prefix("#!") {
-            if let Some(newline_pos) = rest.find('\n') {
-                // Replace shebang with a comment to preserve line numbers
-                format!(
-                    "//{}{}",
-                    &source[2..2 + newline_pos + 1],
-                    &source[2 + newline_pos + 1..]
-                )
-            } else {
-                String::new()
-            }
-        } else {
-            source.clone()
-        };
+        let named_exports = cjs_named_export_source(&detected_analysis.exports);
 
-        let analysis = if cjs_source == source {
-            detected_analysis
-        } else {
-            analyze_cjs_exports_for_file(&abs_path, &cjs_source, &mut HashSet::new())
-        };
-        let named_exports = cjs_named_export_source(&analysis.exports);
-
-        // Wrap CJS source in ESM-compatible wrapper, with import.meta prologue before the wrapper
+        // Let the existing CommonJS loader execute and cache the module. The
+        // facade only exposes the shared module.exports object to ESM.
         let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
             r#"import {{ createRequire as __wasm_rquickjs_createRequire }} from 'node:module';
 {}
-var module = {{ exports: {{}} }};
-var exports = module.exports;
-var require = __wasm_rquickjs_createRequire("{}");
-var __filename = "{}";
-var __dirname = "{}";
-var global = globalThis;
-(function(module, exports, require, __filename, __dirname) {{
-{}
-}})(module, exports, require, __filename, __dirname);
-var __cjs_default = module.exports;
+var __wasm_rquickjs_require = __wasm_rquickjs_createRequire("{}");
+var __cjs_default = __wasm_rquickjs_require("{}");
 export default __cjs_default;
 {}
 "#,
             prologue.trim(),
             escaped_filename,
             escaped_filename,
-            escaped_dirname,
-            cjs_source,
             named_exports
         );
 

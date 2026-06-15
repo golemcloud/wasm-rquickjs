@@ -554,6 +554,7 @@ function findLongestRegisteredExtension(filename) {
 function getPackageScopeType(filename) {
     let dir = pathModule.dirname(filename);
     while (true) {
+        if (pathModule.basename(dir) === 'node_modules') return 'commonjs';
         const pkgPath = pathModule.join(dir, 'package.json');
         const pkgContent = tryReadFile(pkgPath);
         if (pkgContent !== null) {

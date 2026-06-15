@@ -95,3 +95,20 @@ async fn cjs_analyzer_false_positive_guards(
     assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn cjs_shared_loader_identity(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-cjs-shared-loader-identity",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}

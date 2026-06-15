@@ -422,3 +422,124 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         throw error;
     }
 };
+
+export const testCjsSharedLoaderIdentity = async () => {
+    try {
+        fs.mkdirSync('/cjs-shared-loader-app', { recursive: true });
+        fs.writeFileSync('/cjs-shared-loader-app/shared.cjs', [
+            'globalThis.__sharedLoaderCount = (globalThis.__sharedLoaderCount || 0) + 1;',
+            'exports.count = globalThis.__sharedLoaderCount;',
+            'exports.marker = "shared";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-shared-loader-app/named.cjs', [
+            'globalThis.__sharedNamedCount = (globalThis.__sharedNamedCount || 0) + 1;',
+            'exports.alpha = "alpha";',
+            'module.exports.beta = "beta";',
+            'exports.count = globalThis.__sharedNamedCount;',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-shared-loader-app/esm-first.mjs', [
+            'import { createRequire } from "node:module";',
+            'import shared from "./shared.cjs";',
+            'const require = createRequire(import.meta.url);',
+            'const required = require("./shared.cjs");',
+            'required.fromRequire = "mutated";',
+            'const resolved = require.resolve("./shared.cjs");',
+            'export default {',
+            '  same: shared === required,',
+            '  count: globalThis.__sharedLoaderCount,',
+            '  sharedFromRequire: shared.fromRequire,',
+            '  cacheExportsSame: require.cache[resolved].exports === shared,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-shared-loader-app/cjs-first.cjs', [
+            'exports.run = async function () {',
+            '  const required = require("./shared.cjs");',
+            '  required.fromCjsFirst = "yes";',
+            '  const imported = await import("./shared.cjs");',
+            '  const resolved = require.resolve("./shared.cjs");',
+            '  return {',
+            '    same: imported.default === required,',
+            '    count: globalThis.__sharedLoaderCount,',
+            '    importedMutation: imported.default.fromCjsFirst,',
+            '    cacheExportsSame: require.cache[resolved].exports === imported.default,',
+            '  };',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-shared-loader-app/named-entry.mjs', [
+            'import { createRequire } from "node:module";',
+            'import namedDefault, { alpha, beta, count } from "./named.cjs";',
+            'const require = createRequire(import.meta.url);',
+            'const required = require("./named.cjs");',
+            'export default {',
+            '  same: namedDefault === required,',
+            '  alpha, beta, count,',
+            '  loadCount: globalThis.__sharedNamedCount,',
+            '};',
+        ].join('\n'));
+        fs.mkdirSync('/cjs-shared-loader-app/type-module/node_modules/dep-without-package-json', { recursive: true });
+        fs.writeFileSync('/cjs-shared-loader-app/type-module/package.json', JSON.stringify({ type: 'module' }));
+        fs.writeFileSync('/cjs-shared-loader-app/type-module/index.js', [
+            'import dep from "dep-without-package-json/dep.js";',
+            'export default { esm: true, dep };',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-shared-loader-app/type-module/node_modules/dep-without-package-json/dep.js', [
+            'globalThis.__sharedBoundaryCount = (globalThis.__sharedBoundaryCount || 0) + 1;',
+            'module.exports = { cjs: true, count: globalThis.__sharedBoundaryCount };',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-shared-loader-app/handled.js', 'exports.source = "source";');
+
+        globalThis.__sharedLoaderCount = 0;
+        globalThis.__sharedNamedCount = 0;
+        globalThis.__sharedBoundaryCount = 0;
+
+        const esmFirst = (await import('/cjs-shared-loader-app/esm-first.mjs')).default;
+        assert.deepStrictEqual(esmFirst, {
+            same: true,
+            count: 1,
+            sharedFromRequire: 'mutated',
+            cacheExportsSame: true,
+        });
+
+        const cjsFirst = await (await import('/cjs-shared-loader-app/cjs-first.cjs')).default.run();
+        assert.deepStrictEqual(cjsFirst, {
+            same: true,
+            count: 1,
+            importedMutation: 'yes',
+            cacheExportsSame: true,
+        });
+
+        const named = (await import('/cjs-shared-loader-app/named-entry.mjs')).default;
+        assert.deepStrictEqual(named, {
+            same: true,
+            alpha: 'alpha',
+            beta: 'beta',
+            count: 1,
+            loadCount: 1,
+        });
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/cjs-shared-loader-app/main.cjs');
+        const originalJsHandler = require.extensions['.js'];
+        try {
+            require.extensions['.js'] = (module) => {
+                module.exports = { fromExtension: true };
+            };
+            const handled = (await import('/cjs-shared-loader-app/handled.js')).default;
+            assert.deepStrictEqual(handled, { fromExtension: true });
+            assert.strictEqual(require('/cjs-shared-loader-app/handled.js'), handled);
+        } finally {
+            require.extensions['.js'] = originalJsHandler;
+        }
+
+        const boundary = (await import('/cjs-shared-loader-app/type-module/index.js')).default;
+        assert.deepStrictEqual(boundary, {
+            esm: true,
+            dep: { cjs: true, count: 1 },
+        });
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};

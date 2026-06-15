@@ -6,4 +6,5 @@ world module-resolution {
   export test-cjs-define-property-named-exports: func() -> bool;
   export test-cjs-reexport-named-exports: func() -> bool;
   export test-cjs-analyzer-false-positive-guards: func() -> bool;
+  export test-cjs-shared-loader-identity: func() -> bool;
 }
