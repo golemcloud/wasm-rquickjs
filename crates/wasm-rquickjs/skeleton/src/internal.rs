@@ -1591,6 +1591,9 @@ struct PackageJson {
 struct NodeModulesResolver;
 
 impl NodeModulesResolver {
+    const ESM_CONDITIONS: [&'static str; 4] = ["golem", "node", "import", "default"];
+    const CJS_CONDITIONS: [&'static str; 5] = ["golem", "node", "require", "module-sync", "default"];
+
     fn try_resolve(
         &self,
         base: &str,
@@ -1635,6 +1638,7 @@ impl NodeModulesResolver {
                             &nm_dir,
                             exports_field,
                             subpath,
+                            &Self::ESM_CONDITIONS,
                         )
                         .map(Some);
                     }
@@ -1670,10 +1674,102 @@ impl NodeModulesResolver {
         Ok(None)
     }
 
+    fn try_resolve_for_cjs_analysis(
+        &self,
+        base: &str,
+        name: &str,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        use std::path::Path;
+
+        if name.starts_with('#') {
+            return self.try_resolve_package_import_with_conditions(base, name, &Self::CJS_CONDITIONS);
+        }
+
+        if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
+            return Ok(None);
+        }
+
+        let Some((package_name, subpath)) = Self::split_package_name(name) else {
+            return Ok(None);
+        };
+        let Some(base_dir) = Path::new(base).parent() else {
+            return Ok(None);
+        };
+
+        let mut dir = base_dir.to_path_buf();
+        loop {
+            let package_path = dir.join("node_modules").join(package_name);
+            if package_path.is_dir() {
+                let pkg_path = package_path.join("package.json");
+                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
+                    let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
+                        NodePackageResolveError::InvalidPackageConfig {
+                            path: pkg_path.to_string_lossy().into_owned(),
+                        }
+                    })?;
+
+                    if let Some(exports_field) = package.exports.as_ref() {
+                        return Self::resolve_package_exports(
+                            package_name,
+                            &package_path,
+                            exports_field,
+                            subpath,
+                            &Self::CJS_CONDITIONS,
+                        )
+                        .map(Some);
+                    }
+
+                    if subpath.is_empty()
+                        && let Some(main) = package.main.as_ref()
+                        && let Some(resolved) = Self::resolve_cjs_analysis_main(&package_path, main)
+                    {
+                        return Ok(Some(resolved));
+                    }
+                }
+
+                if !subpath.is_empty()
+                    && let Some(resolved) = Self::resolve_cjs_analysis_subpath(&package_path, subpath)
+                {
+                    return Ok(Some(resolved));
+                }
+
+                if subpath.is_empty()
+                    && let Some(resolved) = Self::resolve_cjs_analysis_package_root(&package_path)
+                {
+                    return Ok(Some(resolved));
+                }
+            }
+
+            if subpath.is_empty() {
+                for candidate in [package_path.with_extension("js"), package_path.with_extension("json")] {
+                    let normalized = CjsEvalResolver::normalize_path(&candidate);
+                    if std::path::Path::new(&normalized).is_file() {
+                        return Ok(Some(normalized));
+                    }
+                }
+            }
+
+            if !dir.pop() {
+                break;
+            }
+        }
+
+        Ok(None)
+    }
+
     fn try_resolve_package_import(
         &self,
         base: &str,
         name: &str,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        self.try_resolve_package_import_with_conditions(base, name, &Self::ESM_CONDITIONS)
+    }
+
+    fn try_resolve_package_import_with_conditions(
+        &self,
+        base: &str,
+        name: &str,
+        conditions: &[&str],
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
@@ -1700,7 +1796,7 @@ impl NodeModulesResolver {
                         specifier: name.to_string(),
                     });
                 };
-                return Self::resolve_package_import(&dir, imports, name).map(Some);
+                return Self::resolve_package_import(&dir, imports, name, conditions).map(Some);
             }
 
             if !dir.pop() {
@@ -1756,11 +1852,50 @@ impl NodeModulesResolver {
         None
     }
 
+    fn first_existing_normalized(candidates: Vec<std::path::PathBuf>) -> Option<String> {
+        for candidate in candidates {
+            let normalized = CjsEvalResolver::normalize_path(&candidate);
+            if std::path::Path::new(&normalized).is_file() {
+                return Some(normalized);
+            }
+        }
+
+        None
+    }
+
+    fn resolve_cjs_analysis_main(package_dir: &std::path::Path, target: &str) -> Option<String> {
+        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        Self::first_existing_normalized(vec![
+            target_path.clone(),
+            target_path.with_extension("js"),
+            target_path.with_extension("json"),
+            target_path.join("index.js"),
+            target_path.join("index.json"),
+        ])
+    }
+
+    fn resolve_cjs_analysis_subpath(package_dir: &std::path::Path, target: &str) -> Option<String> {
+        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        Self::first_existing_normalized(vec![
+            target_path.clone(),
+            target_path.with_extension("js"),
+            target_path.with_extension("mjs"),
+            target_path.with_extension("json"),
+            target_path.join("index.js"),
+            target_path.join("index.json"),
+        ])
+    }
+
+    fn resolve_cjs_analysis_package_root(package_dir: &std::path::Path) -> Option<String> {
+        Self::first_existing_normalized(vec![package_dir.join("index.js"), package_dir.join("index.json")])
+    }
+
     fn resolve_package_exports(
         package_name: &str,
         package_dir: &std::path::Path,
         exports: &PackageTarget,
         subpath: &str,
+        conditions: &[&str],
     ) -> Result<String, NodePackageResolveError> {
         let key = if subpath.is_empty() {
             ".".to_string()
@@ -1782,6 +1917,7 @@ impl NodeModulesResolver {
                 exports,
                 false,
                 "exports",
+                conditions,
             )
             .and_then(|resolution| {
                 Self::target_resolution_to_export_result(resolution, package_name, subpath)
@@ -1795,6 +1931,7 @@ impl NodeModulesResolver {
                     target,
                     false,
                     "exports",
+                    conditions,
                 )
                 .and_then(|resolution| {
                     Self::target_resolution_to_export_result(resolution, package_name, subpath)
@@ -1812,11 +1949,18 @@ impl NodeModulesResolver {
         package_dir: &std::path::Path,
         imports: &PackageTarget,
         specifier: &str,
+        conditions: &[&str],
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
             && let Some(target) = map.get(specifier)
         {
-            return Self::resolve_package_target_value(package_dir, target, true, "imports").and_then(
+            return Self::resolve_package_target_value(
+                package_dir,
+                target,
+                true,
+                "imports",
+                conditions,
+            ).and_then(
                 |resolution| Self::target_resolution_to_import_result(resolution, specifier),
             );
         }
@@ -1837,6 +1981,7 @@ impl NodeModulesResolver {
         target: &PackageTarget,
         allow_bare_target: bool,
         kind: &'static str,
+        conditions: &[&str],
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
             PackageTarget::Null | PackageTarget::Bool(false) => {
@@ -1892,7 +2037,7 @@ impl NodeModulesResolver {
             }
             PackageTarget::Array(array) => {
             for item in array {
-                match Self::resolve_package_target_value(package_dir, item, allow_bare_target, kind) {
+                match Self::resolve_package_target_value(package_dir, item, allow_bare_target, kind, conditions) {
                     Ok(PackageTargetResolution::Resolved(path)) => {
                         return Ok(PackageTargetResolution::Resolved(path));
                     }
@@ -1908,12 +2053,13 @@ impl NodeModulesResolver {
             }
             PackageTarget::Object(map) => {
             for (condition, value) in map {
-                if matches!(condition.as_str(), "golem" | "node" | "import" | "default") {
+                if conditions.contains(&condition.as_str()) {
                     match Self::resolve_package_target_value(
                         package_dir,
                         value,
                         allow_bare_target,
                         kind,
+                        conditions,
                     )? {
                         PackageTargetResolution::NoMatch => continue,
                         resolution => return Ok(resolution),
@@ -3017,7 +3163,8 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
 
 fn resolve_cjs_reexport_path(filename: &str, specifier: &str) -> Option<String> {
     if !specifier.starts_with("./") && !specifier.starts_with("../") && !specifier.starts_with('/') {
-        return None;
+        let resolver = NodeModulesResolver;
+        return resolver.try_resolve_for_cjs_analysis(filename, specifier).ok().flatten();
     }
     let base = if specifier.starts_with('/') {
         std::path::PathBuf::from(specifier)
@@ -3032,8 +3179,9 @@ fn resolve_cjs_reexport_path(filename: &str, specifier: &str) -> Option<String> 
         base.join("index.cjs"),
     ];
     for candidate in candidates {
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().into_owned());
+        let normalized = CjsEvalResolver::normalize_path(&candidate);
+        if std::path::Path::new(&normalized).is_file() {
+            return Some(normalized);
         }
     }
     None

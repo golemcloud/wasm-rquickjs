@@ -728,3 +728,122 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         throw error;
     }
 };
+
+export const testCjsPackageReexportNamedExports = async () => {
+    try {
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/pkg/index.js', [
+            'exports.alpha = "alpha";',
+            'exports.beta = "beta";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/pkg/subpath.js', [
+            'exports.sub = "sub";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-package.cjs', 'module.exports = require("pkg");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-subpath.cjs', 'module.exports = require("pkg/subpath");');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/file-pkg.js', 'exports.file = "file";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-file-package.cjs', 'module.exports = require("file-pkg");');
+
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/exported-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/package.json', JSON.stringify({
+            exports: {
+                '.': './main.cjs',
+                './feature': './feature.cjs',
+                './condition': {
+                    import: './import.mjs',
+                    'module-sync': './sync.cjs',
+                    require: './require.cjs',
+                    default: './default.cjs',
+                },
+            },
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/main.cjs', 'exports.main = "main";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/feature.cjs', 'exports.feature = "feature";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/sync.cjs', 'exports.condition = "module-sync";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/require.cjs', 'exports.condition = "require";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/default.cjs', 'exports.condition = "default";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/import.mjs', 'export const condition = "import";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-exported-root.cjs', 'module.exports = require("exported-pkg");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-exported-feature.cjs', 'module.exports = require("exported-pkg/feature");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-exported-condition.cjs', 'module.exports = require("exported-pkg/condition");');
+
+        fs.writeFileSync('/cjs-package-reexport-app/package.json', JSON.stringify({
+            imports: {
+                '#dep': './imports-target.cjs',
+            },
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/imports-target.cjs', 'exports.imported = "imported";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-imports.cjs', 'module.exports = require("#dep");');
+
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/transitive-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/transitive-pkg/index.js', [
+            'exports.gamma = "gamma";',
+            'exports.delta = "delta";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-transpiler.cjs', [
+            'var dep = require("transitive-pkg");',
+            'Object.keys(dep).forEach(function (key) {',
+            '  Object.defineProperty(exports, key, {',
+            '    enumerable: true,',
+            '    get: function () { return dep[key]; }',
+            '  });',
+            '});',
+        ].join('\n'));
+
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/cycle-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/cycle-a.cjs', [
+            'module.exports = require("cycle-pkg");',
+            'exports.a = "a";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/cycle-pkg/index.js', [
+            'module.exports = require("../../cycle-a.cjs");',
+            'exports.b = "b";',
+        ].join('\n'));
+
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-continuation.cjs', [
+            'var ignored = require("pkg").nested;',
+            'exports.own = "own";',
+        ].join('\n'));
+
+        fs.writeFileSync('/cjs-package-reexport-app/package-entry.mjs', [
+            'import packageDefault, { alpha, beta } from "./reexport-package.cjs";',
+            'import { sub } from "./reexport-subpath.cjs";',
+            'import { file } from "./reexport-file-package.cjs";',
+            'import { main } from "./reexport-exported-root.cjs";',
+            'import { feature } from "./reexport-exported-feature.cjs";',
+            'import { condition } from "./reexport-exported-condition.cjs";',
+            'import { imported } from "./reexport-imports.cjs";',
+            'import { gamma, delta } from "./reexport-transpiler.cjs";',
+            'import * as continuation from "./reexport-continuation.cjs";',
+            'import * as cycle from "./cycle-a.cjs";',
+            'export default {',
+            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, main, feature, condition, imported, gamma, delta,',
+            '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default" && key !== "own"),',
+            '  continuationOwn: continuation.own,',
+            '  cycleKeys: Object.keys(cycle).filter((key) => key !== "default").sort(),',
+            '};',
+        ].join('\n'));
+
+        const result = (await import('/cjs-package-reexport-app/package-entry.mjs')).default;
+        assert.deepStrictEqual(result, {
+            alpha: 'alpha',
+            beta: 'beta',
+            defaultAlpha: 'alpha',
+            sub: 'sub',
+            file: 'file',
+            main: 'main',
+            feature: 'feature',
+            condition: 'module-sync',
+            imported: 'imported',
+            gamma: 'gamma',
+            delta: 'delta',
+            continuationKeys: [],
+            continuationOwn: 'own',
+            cycleKeys: ['a', 'b'],
+        });
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
