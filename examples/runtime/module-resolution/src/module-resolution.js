@@ -847,3 +847,102 @@ export const testCjsPackageReexportNamedExports = async () => {
         throw error;
     }
 };
+
+export const testRequireEsmErrorHandling = async () => {
+    try {
+        fs.mkdirSync('/require-esm-errors-app', { recursive: true });
+        fs.writeFileSync('/require-esm-errors-app/runtime-error.mjs', [
+            'throw new Error("hello");',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/reference-error.mjs', [
+            'Object.defineProperty(exports, "__esModule", { value: true });',
+        ].join('\n'));
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/require-esm-errors-app/main.cjs');
+
+        assert.throws(() => require('/require-esm-errors-app/runtime-error.mjs'), {
+            message: 'hello',
+        });
+        assert.throws(() => require('/require-esm-errors-app/reference-error.mjs'), {
+            name: 'ReferenceError',
+        });
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
+export const testRequireEsmTlaRetry = async () => {
+    try {
+        fs.mkdirSync('/require-esm-tla-app', { recursive: true });
+        fs.writeFileSync('/require-esm-tla-app/tla-success.mjs', [
+            'await Promise.resolve();',
+            'export const hello = "world";',
+        ].join('\n'));
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/require-esm-tla-app/main.cjs');
+
+        assert.throws(() => require('/require-esm-tla-app/tla-success.mjs'), {
+            code: 'ERR_REQUIRE_ASYNC_MODULE',
+        });
+
+        const first = await import('/require-esm-tla-app/tla-success.mjs');
+        const second = await import('/require-esm-tla-app/tla-success.mjs');
+        assert.strictEqual(first.hello, 'world');
+        assert.strictEqual(second.hello, 'world');
+        assert.strictEqual(first, second);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
+export const testRequireEsmCycleGuards = async () => {
+    try {
+        fs.mkdirSync('/require-esm-cycle-app', { recursive: true });
+        fs.writeFileSync('/require-esm-cycle-app/a.mjs', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("./a.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export const value = 1;',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/syntax-detected.js', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("./syntax-detected.js");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export const value = 2;',
+            'export { cycleCode };',
+        ].join('\n'));
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/require-esm-cycle-app/main.cjs');
+
+        const ns = require('/require-esm-cycle-app/a.mjs');
+        assert.strictEqual(ns.value, 1);
+        assert.strictEqual(ns.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+        const detected = require('/require-esm-cycle-app/syntax-detected.js');
+        assert.strictEqual(detected.value, 2);
+        assert.strictEqual(detected.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};

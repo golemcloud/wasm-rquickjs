@@ -1373,10 +1373,29 @@ function compileCjs(filename, source) {
     return _evalWithFilename(wrappedSource, filename);
 }
 
+function requireEsmWithCacheGuard(mod, resolvedFilename) {
+    Object.defineProperty(mod, '__wasmRequireEsmInProgress', {
+        value: true,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+    try {
+        return wrapEsmNamespace(_requireEsm(resolvedFilename));
+    } finally {
+        delete mod.__wasmRequireEsmInProgress;
+    }
+}
+
 function loadModule(resolvedFilename, source, parentModule) {
     // Check cache
     if (moduleCache[resolvedFilename]) {
         const cached = moduleCache[resolvedFilename];
+        if (cached.__wasmRequireEsmInProgress) {
+            const err = new Error('Cannot require() ES Module ' + resolvedFilename + ' in a cycle.');
+            err.code = 'ERR_REQUIRE_CYCLE_MODULE';
+            throw err;
+        }
         if (parentModule && parentModule.children && !parentModule.children.includes(cached)) {
             parentModule.children.push(cached);
         }
@@ -1454,7 +1473,7 @@ function loadModule(resolvedFilename, source, parentModule) {
         }
         if (isEsm) {
             try {
-                mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
+                mod.exports = requireEsmWithCacheGuard(mod, resolvedFilename);
             } catch (err) {
                 delete moduleCache[resolvedFilename];
                 throw err;
@@ -1485,7 +1504,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             if (cjsSyntaxError) {
                 // SyntaxError in a .js file — try loading as ESM (entry point detection)
                 try {
-                    mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
+                    mod.exports = requireEsmWithCacheGuard(mod, resolvedFilename);
                 } catch (esmErr) {
                     delete moduleCache[resolvedFilename];
                     if (looksLikeEsmSource(source)) {
