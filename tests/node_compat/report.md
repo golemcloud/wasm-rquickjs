@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-12 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-15 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3093/4295 (72.0%)
+**Primary compatibility (CI-enforced):** 3096/4295 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3093 | 72.0% | 55.1% | 46.0% |
-| 🧩 known gap | 1202 | 28.0% | 21.4% | 17.9% |
+| ✅ passing (runnable) | 3096 | 72.1% | 55.2% | 46.0% |
+| 🧩 known gap | 1199 | 27.9% | 21.4% | 17.8% |
 | 🚫 WASI-impossible (excluded) | 1153 | — | 20.6% | 17.1% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
 | **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3093/5610 (55.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3096/5610 (55.2%)**.
 
 ## Inventory by Module
 
@@ -53,7 +53,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | http | 898 | 243 | 306 | 267 | 2 | 0 | 80 | 44.3% | 29.7% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 184 | 111 | 53 | 7 | 1 | 0 | 12 | 67.7% | 64.5% |
+| module | 184 | 114 | 50 | 7 | 1 | 0 | 12 | 69.5% | 66.3% |
 | net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
@@ -100,7 +100,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-require-module-cycle-esm-esm-cjs-esm.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-require-module-defined-esmodule.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module-tla.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
-| `test-require-module-with-detection.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-require-module-with-detection.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-abortcontroller.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-aborted-util.js` | 5 | 4 | 0 | 1 | 0 | 0 | 0 |
@@ -680,7 +680,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1202)
+### known gap (1199)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -789,7 +789,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: dgram multicast loopback API is not implemented (ENOSYS) | 2 | `parallel/test-dgram-multicast-loopback.js#block_00_block_00`, `parallel/test-dgram-multicast-loopback.js#block_01_block_01` |
 | inherited: dgram setBroadcast API is not implemented (ENOSYS) | 2 | `parallel/test-dgram-setBroadcast.js#block_00_block_00`, `parallel/test-dgram-setBroadcast.js#block_01_block_01` |
 | inherited: listen(options) argument validation/error semantics are not fully Node-compatible | 2 | `parallel/test-net-server-listen-options.js#block_01_block_01`, `parallel/test-net-server-listen-options.js#block_02_block_02` |
-| inherited: module syntax detection for extensionless/.js sources required by require(esm) is incomplete | 2 | `es-module/test-require-module-with-detection.js#block_00_block_00`, `es-module/test-require-module-with-detection.js#block_01_block_01` |
 | inherited: process.getActiveResourcesInfo() is not implemented | 2 | `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`, `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01` |
 | inherited: queueMicrotask argument validation/error codes are incomplete | 2 | `parallel/test-queue-microtask.js#block_00_block_00`, `parallel/test-queue-microtask.js#block_01_block_01` |
 | inherited: requires perf_hooks.PerformanceObserver with net detail | 2 | `parallel/test-net-perf_hooks.js#block_00_block_00`, `parallel/test-net-perf_hooks.js#block_01_block_01` |
@@ -860,7 +859,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | ECDH key import/deriveKey compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-derivekey-ecdh.js` |
 | ECDSA key import/sign/verify compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-sign-verify-ecdsa.js` |
 | ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented | 1 | `parallel/test-vm-dynamic-import-callback-missing-flag.js` |
-| ESM diagnostics for require/exports globals and package type=module .js error messaging do not match Node yet | 1 | `es-module/test-esm-undefined-cjs-global-like-variables.js` |
 | ESM directory import errors do not match Node ERR_UNSUPPORTED_DIR_IMPORT behavior | 1 | `parallel/test-directory-import.js` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
 | Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |

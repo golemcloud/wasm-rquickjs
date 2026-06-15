@@ -334,6 +334,12 @@ impl Loader for DataUrlLoader {
             // - If valid, strip the `with { ... }` clause
             // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
             let source = process_static_import_attrs(&source, path);
+            if let Some(error_source) = esm_preflight_error_module_source(&source, false) {
+                return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
+            }
+            if let Some(error_source) = data_url_simple_identifier_error_module_source(&source) {
+                return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
+            }
 
             let init = ImportMetaInit {
                 url: path.to_string(),
@@ -655,6 +661,286 @@ fn validate_static_import_attrs(
     None
 }
 
+fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool) -> Option<String> {
+    if package_type_module_js {
+        let cjs_global = find_bare_cjs_global_in_esm(source);
+        if !analyze_cjs_exports(source).is_cjs && cjs_global.is_none() {
+            return None;
+        }
+        let name = cjs_global.unwrap_or("module");
+        let message = format!(
+            "{name} is not defined in ES module scope. This file is being treated as an ES module because it has a .js file extension and package.json contains \"type\": \"module\". To treat it as a CommonJS script, rename it to use the '.cjs' file extension."
+        );
+        let escaped = DataUrlLoader::js_string_escape(&message);
+        return Some(format!(
+            "await Promise.reject(new ReferenceError('{escaped}'));\n"
+        ));
+    }
+
+    let Some(name) = find_bare_cjs_global_in_esm(source) else {
+        return None;
+    };
+    let message = match name {
+        "require" => "require is not defined in ES module scope, you can use import instead",
+        "exports" => "exports is not defined in ES module scope",
+        "module" => "module is not defined in ES module scope",
+        "__filename" => "__filename is not defined in ES module scope",
+        "__dirname" => "__dirname is not defined in ES module scope",
+        _ => return None,
+    };
+    let escaped = DataUrlLoader::js_string_escape(message);
+    Some(format!(
+        "await Promise.reject(new ReferenceError('{escaped}'));\n"
+    ))
+}
+
+fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
+    const NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut declared = Vec::<String>::new();
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            _ => {}
+        }
+
+        if let Some((bindings, next)) = parse_import_declaration_bindings(source, i) {
+            for name in bindings {
+                if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                    declared.push(name);
+                }
+            }
+            i = next;
+            continue;
+        }
+
+        if let Some((name, next)) = parse_function_declaration_span(source, i) {
+            if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                declared.push(name);
+            }
+            i = next;
+            continue;
+        }
+
+        if let Some((name, next)) = parse_simple_declaration_name(source, i) {
+            if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                declared.push(name);
+            }
+            i = next;
+            continue;
+        }
+
+        for name in NAMES {
+            if source[i..].starts_with(name)
+                && is_ident_start_boundary(bytes, i)
+                && is_ident_boundary(bytes, i + name.len())
+                && previous_significant_byte(source, i) != Some(b'.')
+                && !declared.iter().any(|declared| declared == name)
+            {
+                let next = skip_ws_comments(source, i + name.len());
+                if next < bytes.len() && bytes[next] == b':' {
+                    break;
+                }
+                return Some(name);
+            }
+        }
+        i = next_char_boundary(source, i);
+    }
+    None
+}
+
+fn find_statement_end(source: &str, pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b';' | b'\n' | b'\r' => return i + 1,
+            _ => i = next_char_boundary(source, i),
+        }
+    }
+    i
+}
+
+fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    let bytes = source.as_bytes();
+    if !source[pos..].starts_with("import")
+        || !is_ident_start_boundary(bytes, pos)
+        || !is_ident_boundary(bytes, pos + 6)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 6);
+    if i < bytes.len() && (bytes[i] == b'(' || bytes[i] == b'\'' || bytes[i] == b'"') {
+        return Some((Vec::new(), find_statement_end(source, i)));
+    }
+
+    let mut bindings = Vec::new();
+    if i < bytes.len() && bytes[i] == b'*' {
+        i = skip_ws_comments(source, i + 1);
+        if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
+            i = skip_ws_comments(source, i + 2);
+            let (name, _) = read_ident(source, i)?;
+            bindings.push(name);
+        }
+        return Some((bindings, find_statement_end(source, i)));
+    }
+
+    if i < bytes.len() && bytes[i] == b'{' {
+        collect_named_import_bindings(source, i, &mut bindings)?;
+        return Some((bindings, find_statement_end(source, i)));
+    }
+
+    if let Some((name, next)) = read_ident(source, i) {
+        bindings.push(name);
+        i = skip_ws_comments(source, next);
+        if i < bytes.len() && bytes[i] == b',' {
+            i = skip_ws_comments(source, i + 1);
+            if i < bytes.len() && bytes[i] == b'*' {
+                i = skip_ws_comments(source, i + 1);
+                if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
+                    i = skip_ws_comments(source, i + 2);
+                    let (name, _) = read_ident(source, i)?;
+                    bindings.push(name);
+                }
+            } else if i < bytes.len() && bytes[i] == b'{' {
+                collect_named_import_bindings(source, i, &mut bindings)?;
+            }
+        }
+        return Some((bindings, find_statement_end(source, i)));
+    }
+
+    Some((bindings, find_statement_end(source, i)))
+}
+
+fn collect_named_import_bindings(source: &str, start: usize, bindings: &mut Vec<String>) -> Option<()> {
+    let bytes = source.as_bytes();
+    let end = find_matching_brace(source, start)?;
+    let mut i = start + 1;
+    while i < end {
+        i = skip_ws_comments(source, i);
+        if i >= end {
+            break;
+        }
+        let (mut name, next) = read_ident(source, i)?;
+        i = skip_ws_comments(source, next);
+        if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
+            i = skip_ws_comments(source, i + 2);
+            let (alias, next) = read_ident(source, i)?;
+            name = alias;
+            i = next;
+        }
+        bindings.push(name);
+        while i < end && bytes[i] != b',' {
+            i = next_char_boundary(source, i);
+        }
+        if i < end && bytes[i] == b',' {
+            i += 1;
+        }
+    }
+    Some(())
+}
+
+fn parse_function_declaration_span(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if !source[pos..].starts_with("function")
+        || !is_ident_start_boundary(bytes, pos)
+        || !is_ident_boundary(bytes, pos + 8)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 8);
+    let (name, next) = read_ident(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i < bytes.len() && bytes[i] == b'(' {
+        let params_end = find_matching_paren(source, i)?;
+        i = skip_ws_comments(source, params_end + 1);
+        if i < bytes.len() && bytes[i] == b'{' {
+            return Some((name, find_matching_brace(source, i)? + 1));
+        }
+    }
+    Some((name, i))
+}
+
+fn parse_simple_declaration_name(source: &str, pos: usize) -> Option<(String, usize)> {
+    for keyword in ["const", "let", "var", "class"] {
+        if source[pos..].starts_with(keyword)
+            && is_ident_start_boundary(source.as_bytes(), pos)
+            && is_ident_boundary(source.as_bytes(), pos + keyword.len())
+        {
+            let i = skip_ws_comments(source, pos + keyword.len());
+            let (name, next) = read_ident(source, i)?;
+            return Some((name, next));
+        }
+    }
+    None
+}
+
+fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String> {
+    let ident = source.trim().strip_suffix(';').unwrap_or(source.trim()).trim();
+    if ident.is_empty()
+        || ["require", "exports", "module", "__filename", "__dirname"].contains(&ident)
+        || !is_ascii_js_identifier(ident)
+    {
+        return None;
+    }
+    let escaped = DataUrlLoader::js_string_escape(&format!("{ident} is not defined"));
+    Some(format!(
+        "await Promise.reject(new ReferenceError('{escaped}'));\n"
+    ))
+}
+
+fn is_ascii_js_identifier(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.is_empty() || !(bytes[0] == b'_' || bytes[0] == b'$' || bytes[0].is_ascii_alphabetic()) {
+        return false;
+    }
+    bytes[1..]
+        .iter()
+        .all(|byte| *byte == b'_' || *byte == b'$' || byte.is_ascii_alphanumeric())
+}
+
 /// Resolver that strips `file://` URL prefixes so that `import('file:///path/to/mod.mjs')`
 /// resolves to the filesystem path `/path/to/mod.mjs`.
 struct FileUrlResolver;
@@ -663,7 +949,12 @@ impl FileUrlResolver {
     /// Decode a `file://` URL into a filesystem path, handling percent-encoding.
     fn file_url_to_path(url: &str) -> Option<String> {
         let encoded = url.strip_prefix("file://")?;
-        let bytes = encoded.as_bytes();
+        let end = encoded
+            .find(|ch| ch == '?' || ch == '#')
+            .unwrap_or(encoded.len());
+        let encoded_path = &encoded[..end];
+        let suffix = &encoded[end..];
+        let bytes = encoded_path.as_bytes();
         let mut decoded = Vec::with_capacity(bytes.len());
         let mut i = 0;
         while i < bytes.len() {
@@ -679,7 +970,9 @@ impl FileUrlResolver {
             decoded.push(bytes[i]);
             i += 1;
         }
-        String::from_utf8(decoded).ok()
+        let mut path = String::from_utf8(decoded).ok()?;
+        path.push_str(suffix);
+        Some(path)
     }
 
     fn hex_val(b: u8) -> Option<u8> {
@@ -926,17 +1219,17 @@ impl Resolver for CjsEvalResolver {
 struct NodeFileResolver;
 
 impl NodeFileResolver {
-    fn resolve_candidate(candidate: std::path::PathBuf) -> Option<String> {
+    fn resolve_candidate(candidate: std::path::PathBuf, suffix: &str) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
         if std::path::Path::new(&normalized).is_file() {
-            return Some(normalized);
+            return Some(format!("{normalized}{suffix}"));
         }
 
         if std::path::Path::new(&normalized).extension().is_none() {
             for ext in ["js", "mjs", "json"] {
                 let with_ext = format!("{}.{}", normalized, ext);
                 if std::path::Path::new(&with_ext).is_file() {
-                    return Some(with_ext);
+                    return Some(format!("{with_ext}{suffix}"));
                 }
             }
         }
@@ -956,14 +1249,16 @@ impl Resolver for NodeFileResolver {
             return Err(Error::new_resolving(base, name));
         }
 
-        let candidate = if name.starts_with('/') {
-            std::path::PathBuf::from(name)
-        } else if name.starts_with("./") || name.starts_with("../") {
+        let (name_path, suffix) = split_module_path_suffix(name);
+        let candidate = if name_path.starts_with('/') {
+            std::path::PathBuf::from(name_path)
+        } else if name_path.starts_with("./") || name_path.starts_with("../") {
             let base_path = if let Some(path) = FileUrlResolver::file_url_to_path(base) {
                 path
             } else {
                 base.to_string()
             };
+            let base_path = module_filesystem_path(&base_path);
 
             if base_path == "<input>" {
                 return Err(Error::new_resolving(base, name));
@@ -972,12 +1267,12 @@ impl Resolver for NodeFileResolver {
             let base_dir = std::path::Path::new(&base_path)
                 .parent()
                 .ok_or_else(|| Error::new_resolving(base, name))?;
-            base_dir.join(name)
+            base_dir.join(name_path)
         } else {
             return Err(Error::new_resolving(base, name));
         };
 
-        Self::resolve_candidate(candidate).ok_or_else(|| Error::new_resolving(base, name))
+        Self::resolve_candidate(candidate, suffix).ok_or_else(|| Error::new_resolving(base, name))
     }
 }
 
@@ -2575,12 +2870,13 @@ impl Loader for CjsCompatLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let is_cjs_ext = path.ends_with(".cjs");
-        if !path.ends_with(".js") && !is_cjs_ext {
+        let fs_path = module_filesystem_path(path);
+        let is_cjs_ext = fs_path.ends_with(".cjs");
+        if !fs_path.ends_with(".js") && !is_cjs_ext {
             return Err(Error::new_loading(path));
         }
 
-        let source = match std::fs::read_to_string(path) {
+        let source = match std::fs::read_to_string(fs_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -2593,31 +2889,36 @@ impl Loader for CjsCompatLoader {
             Err(_) => return Err(Error::new_loading(path)),
         };
 
-        let abs_path = ensure_absolute_path(path);
-        let filename = Some(abs_path.clone());
+        let fs_abs_path = ensure_absolute_path(fs_path);
+        let filename = Some(fs_abs_path.clone());
         let url = path_to_file_url(path);
-        let escaped_filename = escape_js_string(&abs_path);
 
         let init = ImportMetaInit {
             url,
             filename,
-            dirname: std::path::Path::new(&abs_path)
+            dirname: std::path::Path::new(&fs_abs_path)
                 .parent()
                 .map(|p| p.to_string_lossy().into_owned()),
             include_resolve: true,
         };
 
-        let detected_analysis = analyze_cjs_exports_for_file(&abs_path, &source, &mut HashSet::new());
+        let detected_analysis = analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new());
 
         // .cjs files are always CommonJS; for .js files, use the analyzer so
         // comments, strings, templates, and regex literals do not force CJS.
         let is_cjs = is_cjs_ext
-            || (!is_js_in_module_package_scope(&abs_path)
+            || (!is_js_in_module_package_scope(&fs_abs_path)
                 && (detected_analysis.is_cjs
                     || !detected_analysis.exports.is_empty()
                     || !detected_analysis.reexports.is_empty()));
 
         if !is_cjs {
+            if fs_path.ends_with(".js")
+                && is_js_in_module_package_scope(&fs_abs_path)
+                && let Some(error_source) = esm_preflight_error_module_source(&source, true)
+            {
+                return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
+            }
             // Treat as ESM — inject import.meta prologue (handles shebangs)
             let injected = inject_import_meta_prologue(&init, &source);
             return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
@@ -2637,8 +2938,8 @@ export default __cjs_default;
 {}
 "#,
             prologue.trim(),
-            escaped_filename,
-            escaped_filename,
+            escape_js_string(&fs_abs_path),
+            escape_js_string(&fs_abs_path),
             named_exports
         );
 
@@ -2655,15 +2956,19 @@ struct ImportMetaInit {
 
 /// Ensure a path is absolute. If relative, prepend `/` (WASI cwd is `/`).
 fn ensure_absolute_path(path: &str) -> String {
-    if path.starts_with('/') {
+    let (path, suffix) = split_module_path_suffix(path);
+    let mut absolute = if path.starts_with('/') {
         path.to_string()
     } else {
         format!("/{}", path)
-    }
+    };
+    absolute.push_str(suffix);
+    absolute
 }
 
 fn path_to_file_url(path: &str) -> String {
     let abs_path = ensure_absolute_path(path);
+    let (abs_path, suffix) = split_module_path_suffix(&abs_path);
     let mut url = String::from("file://");
     for byte in abs_path.as_bytes() {
         match byte {
@@ -2685,7 +2990,17 @@ fn path_to_file_url(path: &str) -> String {
             }
         }
     }
+    url.push_str(suffix);
     url
+}
+
+fn split_module_path_suffix(path: &str) -> (&str, &str) {
+    let suffix_start = path.find(|ch| ch == '?' || ch == '#').unwrap_or(path.len());
+    (&path[..suffix_start], &path[suffix_start..])
+}
+
+fn module_filesystem_path(path: &str) -> &str {
+    split_module_path_suffix(path).0
 }
 
 fn escape_js_string(s: &str) -> String {
@@ -2925,11 +3240,13 @@ impl Loader for ImportMetaLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        if !path.ends_with(".mjs") {
+        let fs_path = module_filesystem_path(path);
+        let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
+        if !fs_path.ends_with(".mjs") && !is_extensionless {
             return Err(Error::new_loading(path));
         }
 
-        let source = match std::fs::read_to_string(path) {
+        let source = match std::fs::read_to_string(fs_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -2942,9 +3259,10 @@ impl Loader for ImportMetaLoader {
             Err(_) => return Err(Error::new_loading(path)),
         };
 
-        let abs_path = ensure_absolute_path(path);
-        let std_path = std::path::Path::new(&abs_path);
-        let filename = Some(abs_path.clone());
+        let fs_abs_path = ensure_absolute_path(fs_path);
+        let module_abs_path = ensure_absolute_path(path);
+        let std_path = std::path::Path::new(&fs_abs_path);
+        let filename = Some(fs_abs_path.clone());
         let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
         let url = path_to_file_url(path);
 
@@ -2969,7 +3287,7 @@ impl Loader for ImportMetaLoader {
 
         let mut injected = inject_import_meta_prologue(&init, &source);
         if source_has_top_level_await(&source) {
-            let escaped_path = escape_js_string(&abs_path);
+            let escaped_path = escape_js_string(&module_abs_path);
             let escaped_url = escape_js_string(&init.url);
             let marker = format!(
                 "globalThis.__wasm_rquickjs_async_esm_modules=globalThis.__wasm_rquickjs_async_esm_modules||Object.create(null);globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;\n",
@@ -3013,11 +3331,12 @@ impl Loader for JsonFileLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        if !path.ends_with(".json") {
+        let fs_path = module_filesystem_path(path);
+        if !fs_path.ends_with(".json") {
             return Err(Error::new_loading(path));
         }
 
-        let source = std::fs::read_to_string(path).map_err(|_| Error::new_loading(path))?;
+        let source = std::fs::read_to_string(fs_path).map_err(|_| Error::new_loading(path))?;
         let module_source = if DataUrlLoader::is_valid_json(&source) {
             let escaped = DataUrlLoader::js_string_escape(&source);
             format!("export default JSON.parse('{escaped}');\n")

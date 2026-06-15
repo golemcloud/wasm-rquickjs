@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 async function expectImportError(specifier, code) {
     let thrown = false;
@@ -11,6 +12,19 @@ async function expectImportError(specifier, code) {
     }
     if (!thrown) {
         throw new Error(`Expected import(${specifier}) to throw ${code}`);
+    }
+}
+
+async function expectImportRejectsMessage(specifier, pattern) {
+    let thrown = false;
+    try {
+        await import(specifier);
+    } catch (error) {
+        thrown = true;
+        assert.match(String(error && error.message), pattern, error && error.stack ? `${error.message}\n${error.stack}` : String(error));
+    }
+    if (!thrown) {
+        throw new Error(`Expected import(${specifier}) to reject`);
     }
 }
 
@@ -536,6 +550,108 @@ export const testCjsSharedLoaderIdentity = async () => {
             esm: true,
             dep: { cjs: true, count: 1 },
         });
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
+export const testModuleSyntaxDetectionAndDiagnostics = async () => {
+    try {
+        fs.mkdirSync('/module-syntax-app/package-without-type', { recursive: true });
+        fs.writeFileSync('/module-syntax-app/loose.js', [
+            'export default "loose-module";',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/package-without-type/package.json', JSON.stringify({ main: 'index.js' }));
+        fs.writeFileSync('/module-syntax-app/package-without-type/noext-esm', [
+            'export default "extensionless-module";',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/false-positive.cjs', [
+            'const a = "export default no";',
+            'const b = /import { nope } from "x"/;',
+            '// export const commentOnly = 1;',
+            '/* import "comment-only"; */',
+            'exports.value = "cjs";',
+        ].join('\n'));
+        fs.mkdirSync('/module-syntax-app/type-module', { recursive: true });
+        fs.writeFileSync('/module-syntax-app/type-module/package.json', JSON.stringify({ type: 'module' }));
+        fs.writeFileSync('/module-syntax-app/type-module/cjs.js', 'module.exports = "wrong-extension";');
+        fs.writeFileSync('/module-syntax-app/type-module/require.js', 'require("x");');
+        fs.writeFileSync('/module-syntax-app/type-module/exports.js', 'exports = {};');
+        fs.writeFileSync('/module-syntax-app/type-module/filename.js', 'console.log(__filename);');
+        fs.writeFileSync('/module-syntax-app/type-module/dirname.js', 'console.log(__dirname);');
+        fs.writeFileSync('/module-syntax-app/query.mjs', [
+            'globalThis.__queryModuleCount = (globalThis.__queryModuleCount || 0) + 1;',
+            'export const count = globalThis.__queryModuleCount;',
+            'export const url = import.meta.url;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/relative-query-entry.mjs', [
+            'const one = await import("./query.mjs?relative-one");',
+            'const two = await import("./query.mjs?relative-two");',
+            'export default {',
+            '  one: one.count,',
+            '  two: two.count,',
+            '  oneUrl: one.url,',
+            '  twoUrl: two.url,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/member-false-positive.js', [
+            'const obj = { import: 1 };',
+            'obj.import;',
+            'const = ;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/property-false-positive.js', [
+            '({ export: 1 });',
+            'const = ;',
+        ].join('\n'));
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/module-syntax-app/main.cjs');
+
+        assert.strictEqual(require('/module-syntax-app/loose.js').default, 'loose-module');
+        assert.strictEqual(require('/module-syntax-app/package-without-type/noext-esm').default, 'extensionless-module');
+        assert.deepStrictEqual(require('/module-syntax-app/false-positive.cjs'), { value: 'cjs' });
+
+        await expectImportRejectsMessage('/module-syntax-app/type-module/cjs.js', /use the '\.cjs' file extension/);
+        await expectImportRejectsMessage('/module-syntax-app/type-module/require.js', /require is not defined.*use the '\.cjs' file extension/);
+        await expectImportRejectsMessage('/module-syntax-app/type-module/exports.js', /exports is not defined.*use the '\.cjs' file extension/);
+        await expectImportRejectsMessage('/module-syntax-app/type-module/filename.js', /__filename is not defined.*use the '\.cjs' file extension/);
+        await expectImportRejectsMessage('/module-syntax-app/type-module/dirname.js', /__dirname is not defined.*use the '\.cjs' file extension/);
+        await expectImportRejectsMessage('data:text/javascript,require;', /require is not defined in ES module scope, you can use import instead$/);
+        await expectImportRejectsMessage('data:text/javascript,exports={};', /exports is not defined in ES module scope$/);
+        await expectImportRejectsMessage('data:text/javascript,require_custom;', /^(?!.*in ES module scope)(?!.*use import instead).*$/);
+
+        const propertyKeyModule = await import('data:text/javascript,export default { require: 1 };');
+        assert.deepStrictEqual(propertyKeyModule.default, { require: 1 });
+        const localBindingModule = await import('data:text/javascript,const module = 1; export default module;');
+        assert.strictEqual(localBindingModule.default, 1);
+        const importBindingModule = await import('data:text/javascript,import require from "data:text/javascript,export default 1"; export default require;');
+        assert.strictEqual(importBindingModule.default, 1);
+        const functionParamModule = await import('data:text/javascript,function f(require) { return require; } export default f(1);');
+        assert.strictEqual(functionParamModule.default, 1);
+        const memberNameModule = await import('data:text/javascript,export default import.meta.require;');
+        assert.strictEqual(memberNameModule.default, undefined);
+
+        globalThis.__queryModuleCount = 0;
+        const queryBase = pathToFileURL('/module-syntax-app/query.mjs').href;
+        const queryOne = await import(`${queryBase}?one`);
+        const queryTwo = await import(`${queryBase}?two`);
+        assert.strictEqual(queryOne.count, 1);
+        assert.strictEqual(queryTwo.count, 2);
+        assert.match(queryOne.url, /\?one$/);
+        assert.match(queryTwo.url, /\?two$/);
+        const relativeQuery = (await import('/module-syntax-app/relative-query-entry.mjs')).default;
+        assert.deepStrictEqual(relativeQuery, {
+            one: 3,
+            two: 4,
+            oneUrl: 'file:///module-syntax-app/query.mjs?relative-one',
+            twoUrl: 'file:///module-syntax-app/query.mjs?relative-two',
+        });
+
+        assert.throws(() => require('/module-syntax-app/member-false-positive.js'), /unexpected|expecting|SyntaxError/i);
+        assert.throws(() => require('/module-syntax-app/property-false-positive.js'), /unexpected|expecting|SyntaxError/i);
 
         return true;
     } catch (error) {

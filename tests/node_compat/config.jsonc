@@ -5858,7 +5858,7 @@
     "es-module/test-esm-symlink.js": {},
     "es-module/test-esm-type-field-errors-2.js": {},
     "es-module/test-esm-type-field-errors.js": {},
-    "es-module/test-esm-undefined-cjs-global-like-variables.js": { "category": "known-gap", "reason": "ESM diagnostics for require/exports globals and package type=module .js error messaging do not match Node yet" },
+    "es-module/test-esm-undefined-cjs-global-like-variables.js": {},
     "es-module/test-esm-unknown-extension.js": {},
     "es-module/test-esm-url-extname.js": { "category": "node-internals", "reason": "uses --expose-internals and imports node:internal/modules/esm/get_format" },
     "es-module/test-esm-windows.js": {},
@@ -5954,12 +5954,10 @@
     "es-module/test-require-module-twice.js": {},
     "es-module/test-require-module-warning.js": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --trace-require-module warning output" },
     "es-module/test-require-module-with-detection.js": {
-      "category": "known-gap",
-      "reason": "module syntax detection for extensionless/.js sources required by require(esm) is incomplete",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "reason": "inherited: module syntax detection for extensionless/.js sources required by require(esm) is incomplete" },
-        "block_01_block_01": { "reason": "inherited: module syntax detection for extensionless/.js sources required by require(esm) is incomplete" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "es-module/test-require-module.js": {

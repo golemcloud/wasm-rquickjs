@@ -1202,8 +1202,148 @@ function markAsSyntaxError(err) {
     }
 }
 
+function isIdentifierContinueCode(code) {
+    return code === 0x5f || code === 0x24 || // _ $
+        (code >= 0x30 && code <= 0x39) ||
+        (code >= 0x41 && code <= 0x5a) ||
+        (code >= 0x61 && code <= 0x7a) ||
+        code >= 0x80;
+}
+
+function hasIdentifierBoundary(source, start, end) {
+    return (start === 0 || !isIdentifierContinueCode(source.charCodeAt(start - 1))) &&
+        (end >= source.length || !isIdentifierContinueCode(source.charCodeAt(end)));
+}
+
+function skipQuotedOrTemplate(source, start) {
+    const quote = source.charCodeAt(start);
+    let i = start + 1;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x5c) { // backslash
+            i += 2;
+        } else if (code === quote) {
+            return i + 1;
+        } else {
+            i++;
+        }
+    }
+    return i;
+}
+
+function previousSignificantChar(source, pos) {
+    for (let i = pos - 1; i >= 0; i--) {
+        const ch = source.charCodeAt(i);
+        if (ch !== 0x20 && ch !== 0x09 && ch !== 0x0a && ch !== 0x0d) return ch;
+    }
+    return -1;
+}
+
+function isRegexLiteralStartInSource(source, pos) {
+    const prev = previousSignificantChar(source, pos);
+    return prev === -1 || '({[=,:;!?&|+-*~^%>'.indexOf(String.fromCharCode(prev)) >= 0;
+}
+
+function skipRegexLiteralInSource(source, start) {
+    let i = start + 1;
+    let inClass = false;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x5c) {
+            i += 2;
+        } else if (code === 0x5b) {
+            inClass = true;
+            i++;
+        } else if (code === 0x5d) {
+            inClass = false;
+            i++;
+        } else if (code === 0x2f && !inClass) {
+            i++;
+            while (i < source.length) {
+                const flag = source.charCodeAt(i);
+                if (!((flag >= 0x41 && flag <= 0x5a) || (flag >= 0x61 && flag <= 0x7a))) break;
+                i++;
+            }
+            return i;
+        } else if (code === 0x0a || code === 0x0d) {
+            return start + 1;
+        } else {
+            i++;
+        }
+    }
+    return start + 1;
+}
+
+function skipWhitespace(source, start) {
+    let i = start;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) break;
+        i++;
+    }
+    return i;
+}
+
+function startsWithKeywordAt(source, keyword, pos) {
+    return source.startsWith(keyword, pos) && hasIdentifierBoundary(source, pos, pos + keyword.length);
+}
+
+function isStaticExportSyntax(source, pos) {
+    if (previousSignificantChar(source, pos) === 0x2e) return false; // member property
+    const next = skipWhitespace(source, pos + 6);
+    if (source.charCodeAt(next) === 0x3a) return false; // object label/property
+    const ch = source.charCodeAt(next);
+    if (ch === 0x7b || ch === 0x2a) return true; // { or *
+    return startsWithKeywordAt(source, 'default', next) ||
+        startsWithKeywordAt(source, 'const', next) ||
+        startsWithKeywordAt(source, 'let', next) ||
+        startsWithKeywordAt(source, 'var', next) ||
+        startsWithKeywordAt(source, 'function', next) ||
+        startsWithKeywordAt(source, 'class', next);
+}
+
+function isStaticImportSyntax(source, pos) {
+    if (previousSignificantChar(source, pos) === 0x2e) return false; // member property
+    const next = skipWhitespace(source, pos + 6);
+    if (source.charCodeAt(next) === 0x28 || source.charCodeAt(next) === 0x3a) return false; // dynamic import(...) or property label
+    const ch = source.charCodeAt(next);
+    return ch === 0x27 || ch === 0x22 || ch === 0x7b || ch === 0x2a ||
+        (ch === 0x5f || ch === 0x24 || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a) || ch >= 0x80);
+}
+
 function looksLikeEsmSource(source) {
-    return /(^|[\r\n])\s*(?:import\s+(?:[\s\S]*?\s+from\s+)?['"]|import\s*[\{\*]|export\s+)/.test(source);
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
+            i = skipRegexLiteralInSource(source, i);
+            continue;
+        }
+
+        if (source.startsWith('export', i) && hasIdentifierBoundary(source, i, i + 6) && isStaticExportSyntax(source, i)) {
+            return true;
+        }
+        if (source.startsWith('import', i) && hasIdentifierBoundary(source, i, i + 6)) {
+            if (isStaticImportSyntax(source, i)) return true;
+        }
+        i++;
+    }
+    return false;
 }
 
 const wrapper = [
