@@ -564,6 +564,33 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/loose.js', [
             'export default "loose-module";',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-source.mjs', [
+            'export const named = "named";',
+            'export default "source-default";',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-import-side-effect.js', [
+            'import "./static-source.mjs";',
+            'export default "side-effect-import";',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-import-default.js', [
+            'import value from "./static-source.mjs";',
+            'export default value;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-import-named.js', [
+            'import { named } from "./static-source.mjs";',
+            'export default named;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-import-namespace.js', [
+            'import * as ns from "./static-source.mjs";',
+            'export default ns.named;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-export-list.js', [
+            'const listed = "listed";',
+            'export { listed as default };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-export-star.js', [
+            'export * from "./static-source.mjs";',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/package-without-type/package.json', JSON.stringify({ main: 'index.js' }));
         fs.writeFileSync('/module-syntax-app/package-without-type/noext-esm', [
             'export default "extensionless-module";',
@@ -582,6 +609,10 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/type-module/exports.js', 'exports = {};');
         fs.writeFileSync('/module-syntax-app/type-module/filename.js', 'console.log(__filename);');
         fs.writeFileSync('/module-syntax-app/type-module/dirname.js', 'console.log(__dirname);');
+        fs.writeFileSync('/module-syntax-app/type-module/local-require.js', 'const require = 1; export default require;');
+        fs.writeFileSync('/module-syntax-app/type-module/dep.mjs', 'export default 2;');
+        fs.writeFileSync('/module-syntax-app/type-module/import-module.js', 'import module from "./dep.mjs"; export default module;');
+        fs.writeFileSync('/module-syntax-app/type-module/object-exports.js', 'export default { exports: 3 };');
         fs.writeFileSync('/module-syntax-app/query.mjs', [
             'globalThis.__queryModuleCount = (globalThis.__queryModuleCount || 0) + 1;',
             'export const count = globalThis.__queryModuleCount;',
@@ -606,11 +637,21 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             '({ export: 1 });',
             'const = ;',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/dynamic-import-false-positive.js', [
+            'import("./static-source.mjs");',
+            'const = ;',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/module-syntax-app/main.cjs');
 
         assert.strictEqual(require('/module-syntax-app/loose.js').default, 'loose-module');
+        assert.strictEqual(require('/module-syntax-app/static-import-side-effect.js').default, 'side-effect-import');
+        assert.strictEqual(require('/module-syntax-app/static-import-default.js').default, 'source-default');
+        assert.strictEqual(require('/module-syntax-app/static-import-named.js').default, 'named');
+        assert.strictEqual(require('/module-syntax-app/static-import-namespace.js').default, 'named');
+        assert.strictEqual(require('/module-syntax-app/static-export-list.js').default, 'listed');
+        assert.strictEqual(require('/module-syntax-app/static-export-star.js').named, 'named');
         assert.strictEqual(require('/module-syntax-app/package-without-type/noext-esm').default, 'extensionless-module');
         assert.deepStrictEqual(require('/module-syntax-app/false-positive.cjs'), { value: 'cjs' });
 
@@ -619,6 +660,9 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         await expectImportRejectsMessage('/module-syntax-app/type-module/exports.js', /exports is not defined.*use the '\.cjs' file extension/);
         await expectImportRejectsMessage('/module-syntax-app/type-module/filename.js', /__filename is not defined.*use the '\.cjs' file extension/);
         await expectImportRejectsMessage('/module-syntax-app/type-module/dirname.js', /__dirname is not defined.*use the '\.cjs' file extension/);
+        assert.strictEqual((await import('/module-syntax-app/type-module/local-require.js')).default, 1);
+        assert.strictEqual((await import('/module-syntax-app/type-module/import-module.js')).default, 2);
+        assert.deepStrictEqual((await import('/module-syntax-app/type-module/object-exports.js')).default, { exports: 3 });
         await expectImportRejectsMessage('data:text/javascript,require;', /require is not defined in ES module scope, you can use import instead$/);
         await expectImportRejectsMessage('data:text/javascript,exports={};', /exports is not defined in ES module scope$/);
         await expectImportRejectsMessage('data:text/javascript,require_custom;', /^(?!.*in ES module scope)(?!.*use import instead).*$/);
@@ -629,8 +673,32 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         assert.strictEqual(localBindingModule.default, 1);
         const importBindingModule = await import('data:text/javascript,import require from "data:text/javascript,export default 1"; export default require;');
         assert.strictEqual(importBindingModule.default, 1);
+        const namespaceImportBindingModule = await import('data:text/javascript,import * as module from "data:text/javascript,export default 1"; export default module.default;');
+        assert.strictEqual(namespaceImportBindingModule.default, 1);
+        const namedImportBindingModule = await import('data:text/javascript,import { value as exports } from "data:text/javascript,export const value = 1"; export default exports;');
+        assert.strictEqual(namedImportBindingModule.default, 1);
         const functionParamModule = await import('data:text/javascript,function f(require) { return require; } export default f(1);');
         assert.strictEqual(functionParamModule.default, 1);
+        const arrowParamModule = await import('data:text/javascript,export default ((require) => require)(1);');
+        assert.strictEqual(arrowParamModule.default, 1);
+        const methodNameModule = await import('data:text/javascript,export default { require() { return 1; }, f(module) { return module; } }.f(2);');
+        assert.strictEqual(methodNameModule.default, 2);
+        const asyncMethodModule = await import('data:text/javascript,export default { async require() { return 1; } };');
+        assert.strictEqual(await asyncMethodModule.default.require(), 1);
+        const generatorMethodModule = await import('data:text/javascript,export default { *module() { yield 1; } }.module().next().value;');
+        assert.strictEqual(generatorMethodModule.default, 1);
+        const getterMethodModule = await import('data:text/javascript,export default { get exports() { return 1; } }.exports;');
+        assert.strictEqual(getterMethodModule.default, 1);
+        const stringKeyMethodModule = await import('data:text/javascript,export default { "x"(require) { return require; } }.x(1);');
+        assert.strictEqual(stringKeyMethodModule.default, 1);
+        const commentedMethodModule = await import('data:text/javascript,export default { /* comment */ require() { return 1; } }.require();');
+        assert.strictEqual(commentedMethodModule.default, 1);
+        const generatorModule = await import('data:text/javascript,function* module() { yield 1; } export default module().next().value;');
+        assert.strictEqual(generatorModule.default, 1);
+        const multiDeclarationModule = await import('data:text/javascript,const a = 0,\n  require = 1;\nexport default require;');
+        assert.strictEqual(multiDeclarationModule.default, 1);
+        const destructuringModule = await import('data:text/javascript,const {\n  module\n} = { module: 1 };\nexport default module;');
+        assert.strictEqual(destructuringModule.default, 1);
         const memberNameModule = await import('data:text/javascript,export default import.meta.require;');
         assert.strictEqual(memberNameModule.default, undefined);
 
@@ -652,6 +720,7 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
 
         assert.throws(() => require('/module-syntax-app/member-false-positive.js'), /unexpected|expecting|SyntaxError/i);
         assert.throws(() => require('/module-syntax-app/property-false-positive.js'), /unexpected|expecting|SyntaxError/i);
+        assert.throws(() => require('/module-syntax-app/dynamic-import-false-positive.js'), /unexpected|expecting|SyntaxError/i);
 
         return true;
     } catch (error) {

@@ -700,6 +700,11 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
     let mut i = 0usize;
     let mut declared = Vec::<String>::new();
     while i < bytes.len() {
+        if let Some(next) = parse_object_method_span(source, i) {
+            i = next;
+            continue;
+        }
+
         match bytes[i] {
             b'\'' | b'"' | b'`' => {
                 i = skip_string_or_template(source, i);
@@ -737,17 +742,16 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
             continue;
         }
 
-        if let Some((name, next)) = parse_function_declaration_span(source, i) {
-            if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                declared.push(name);
-            }
+        if let Some(next) = parse_arrow_function_span(source, i) {
             i = next;
             continue;
         }
 
-        if let Some((name, next)) = parse_simple_declaration_name(source, i) {
-            if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                declared.push(name);
+        if let Some((bindings, next)) = parse_declaration_span(source, i) {
+            for name in bindings {
+                if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                    declared.push(name);
+                }
             }
             i = next;
             continue;
@@ -882,7 +886,84 @@ fn collect_named_import_bindings(source: &str, start: usize, bindings: &mut Vec<
     Some(())
 }
 
-fn parse_function_declaration_span(source: &str, pos: usize) -> Option<(String, usize)> {
+fn parse_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    if let Some((bindings, next)) = parse_variable_declaration_span(source, pos) {
+        return Some((bindings, next));
+    }
+    if let Some((bindings, next)) = parse_function_declaration_span(source, pos) {
+        return Some((bindings, next));
+    }
+    if let Some((bindings, next)) = parse_class_declaration_span(source, pos) {
+        return Some((bindings, next));
+    }
+    None
+}
+
+fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    for keyword in ["const", "let", "var"] {
+        if source[pos..].starts_with(keyword)
+            && is_ident_start_boundary(source.as_bytes(), pos)
+            && is_ident_boundary(source.as_bytes(), pos + keyword.len())
+        {
+            let start = skip_ws_comments(source, pos + keyword.len());
+            let end = find_variable_declaration_end(source, start);
+            return Some((collect_cjs_global_names_in_span(source, start, end), end));
+        }
+    }
+    None
+}
+
+fn find_variable_declaration_end(source: &str, pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    let mut paren = 0usize;
+    let mut brace = 0usize;
+    let mut bracket = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            b'(' => paren += 1,
+            b')' => paren = paren.saturating_sub(1),
+            b'{' => brace += 1,
+            b'}' => {
+                if paren == 0 && brace == 0 && bracket == 0 {
+                    return i;
+                }
+                brace = brace.saturating_sub(1);
+            }
+            b'[' => bracket += 1,
+            b']' => bracket = bracket.saturating_sub(1),
+            b';' if paren == 0 && brace == 0 && bracket == 0 => return i + 1,
+            _ => {}
+        }
+        i = next_char_boundary(source, i);
+    }
+    i
+}
+
+fn parse_function_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
     let bytes = source.as_bytes();
     if !source[pos..].starts_with("function")
         || !is_ident_start_boundary(bytes, pos)
@@ -891,30 +972,182 @@ fn parse_function_declaration_span(source: &str, pos: usize) -> Option<(String, 
         return None;
     }
     let mut i = skip_ws_comments(source, pos + 8);
-    let (name, next) = read_ident(source, i)?;
-    i = skip_ws_comments(source, next);
+    if i < bytes.len() && bytes[i] == b'*' {
+        i = skip_ws_comments(source, i + 1);
+    }
+    let mut bindings = Vec::new();
+    if let Some((name, next)) = read_ident(source, i) {
+        bindings.push(name);
+        i = skip_ws_comments(source, next);
+    }
     if i < bytes.len() && bytes[i] == b'(' {
         let params_end = find_matching_paren(source, i)?;
+        bindings.extend(collect_cjs_global_names_in_span(source, i + 1, params_end));
         i = skip_ws_comments(source, params_end + 1);
         if i < bytes.len() && bytes[i] == b'{' {
-            return Some((name, find_matching_brace(source, i)? + 1));
+            return Some((bindings, find_matching_brace(source, i)? + 1));
         }
     }
-    Some((name, i))
+    Some((bindings, i))
 }
 
-fn parse_simple_declaration_name(source: &str, pos: usize) -> Option<(String, usize)> {
-    for keyword in ["const", "let", "var", "class"] {
-        if source[pos..].starts_with(keyword)
-            && is_ident_start_boundary(source.as_bytes(), pos)
-            && is_ident_boundary(source.as_bytes(), pos + keyword.len())
-        {
-            let i = skip_ws_comments(source, pos + keyword.len());
-            let (name, next) = read_ident(source, i)?;
-            return Some((name, next));
+fn parse_arrow_function_span(source: &str, pos: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i;
+    if pos < bytes.len() && bytes[pos] == b'(' {
+        let params_end = find_matching_paren(source, pos)?;
+        i = skip_ws_comments(source, params_end + 1);
+    } else {
+        let (_, next) = read_ident(source, pos)?;
+        i = skip_ws_comments(source, next);
+    }
+    if i + 1 >= bytes.len() || bytes[i] != b'=' || bytes[i + 1] != b'>' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 2);
+    if i < bytes.len() && bytes[i] == b'{' {
+        Some(find_matching_brace(source, i)? + 1)
+    } else {
+        Some(find_statement_end(source, i))
+    }
+}
+
+fn parse_object_method_span(source: &str, pos: usize) -> Option<usize> {
+    if !matches!(previous_significant_byte_before_method(source, pos), Some(b'{') | Some(b',')) {
+        return None;
+    }
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    if source[i..].starts_with("async") && is_ident_boundary(bytes, i + 5) {
+        let next = skip_ws_comments(source, i + 5);
+        if next < bytes.len() && bytes[next] != b':' {
+            i = next;
         }
     }
-    None
+    if i < bytes.len() && bytes[i] == b'*' {
+        i = skip_ws_comments(source, i + 1);
+    }
+    if (source[i..].starts_with("get") && is_ident_boundary(bytes, i + 3))
+        || (source[i..].starts_with("set") && is_ident_boundary(bytes, i + 3))
+    {
+        let next = skip_ws_comments(source, i + 3);
+        if next < bytes.len() && bytes[next] != b':' {
+            i = next;
+        }
+    }
+    if i >= bytes.len() {
+        return None;
+    }
+    if matches!(bytes[i], b'\'' | b'"') {
+        let (_, next) = read_js_string(source, i)?;
+        i = next;
+    } else if bytes[i].is_ascii_digit() {
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+    } else {
+        let (_, next) = read_ident(source, i)?;
+        i = next;
+    }
+    i = skip_ws_comments(source, i);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    let params_end = find_matching_paren(source, i)?;
+    i = skip_ws_comments(source, params_end + 1);
+    if i < bytes.len() && bytes[i] == b'{' {
+        Some(find_matching_brace(source, i)? + 1)
+    } else {
+        None
+    }
+}
+
+fn previous_significant_byte_before_method(source: &str, pos: usize) -> Option<u8> {
+    let bytes = source.as_bytes();
+    let mut end = pos;
+    loop {
+        while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+            end -= 1;
+        }
+        if end >= 2 && bytes[end - 2] == b'*' && bytes[end - 1] == b'/' {
+            if let Some(start) = source[..end - 2].rfind("/*") {
+                end = start;
+                continue;
+            }
+        }
+        return if end == 0 { None } else { Some(bytes[end - 1]) };
+    }
+}
+
+fn parse_class_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    let bytes = source.as_bytes();
+    if !source[pos..].starts_with("class")
+        || !is_ident_start_boundary(bytes, pos)
+        || !is_ident_boundary(bytes, pos + 5)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 5);
+    let mut bindings = Vec::new();
+    if let Some((name, next)) = read_ident(source, i) {
+        bindings.push(name);
+        i = skip_ws_comments(source, next);
+    }
+    while i < bytes.len() && bytes[i] != b'{' {
+        i = next_char_boundary(source, i);
+    }
+    if i < bytes.len() && bytes[i] == b'{' {
+        return Some((bindings, find_matching_brace(source, i)? + 1));
+    }
+    Some((bindings, i))
+}
+
+fn collect_cjs_global_names_in_span(source: &str, start: usize, end: usize) -> Vec<String> {
+    const NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+    let bytes = source.as_bytes();
+    let mut names = Vec::new();
+    let mut i = start;
+    while i < end && i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < end && i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < end && i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(end).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            _ => {}
+        }
+
+        for name in NAMES {
+            if source[i..].starts_with(name)
+                && is_ident_start_boundary(bytes, i)
+                && is_ident_boundary(bytes, i + name.len())
+                && !names.iter().any(|existing| existing == name)
+            {
+                names.push(name.to_string());
+                break;
+            }
+        }
+        i = next_char_boundary(source, i);
+    }
+    names
 }
 
 fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String> {
@@ -4348,6 +4581,14 @@ mod cjs_export_analyzer_tests {
         );
     }
 
+    fn assert_cjs_global(source: &str, expected: Option<&str>) {
+        assert_eq!(
+            find_bare_cjs_global_in_esm(source),
+            expected,
+            "CJS global detection mismatch for {source}"
+        );
+    }
+
     #[test]
     fn detects_supported_cjs_export_patterns() {
         assert_analysis(
@@ -4419,6 +4660,72 @@ mod cjs_export_analyzer_tests {
             &[],
             &[],
         );
+    }
+
+    #[test]
+    fn detects_free_cjs_globals_for_esm_diagnostics() {
+        assert_cjs_global("require;", Some("require"));
+        assert_cjs_global("require('x');", Some("require"));
+        assert_cjs_global("exports = {};", Some("exports"));
+        assert_cjs_global("module;", Some("module"));
+        assert_cjs_global("__filename;", Some("__filename"));
+        assert_cjs_global("__dirname;", Some("__dirname"));
+    }
+
+    #[test]
+    fn ignores_bound_or_non_free_cjs_global_names() {
+        assert_cjs_global("export default { require: 1 };", None);
+        assert_cjs_global("export default import.meta.require;", None);
+        assert_cjs_global("const require = 1; export default require;", None);
+        assert_cjs_global("let exports = 1; export default exports;", None);
+        assert_cjs_global("var module = 1; export default module;", None);
+        assert_cjs_global("class __dirname {} export default __dirname;", None);
+        assert_cjs_global(
+            "import require from 'data:text/javascript,export default 1'; export default require;",
+            None,
+        );
+        assert_cjs_global(
+            "import * as module from 'data:text/javascript,export default {}'; export default module;",
+            None,
+        );
+        assert_cjs_global(
+            "import { value as exports } from 'data:text/javascript,export const value = 1'; export default exports;",
+            None,
+        );
+        assert_cjs_global(
+            "function f(require) { return require; } export default f(1);",
+            None,
+        );
+        assert_cjs_global("const f = (require) => require; export default f(1);", None);
+        assert_cjs_global("export default ((require) => require)(1);", None);
+        assert_cjs_global(
+            "const {\n  module\n} = { module: 1 };\nexport default module;",
+            None,
+        );
+        assert_cjs_global("const x = 0,\n  require = 1;\nexport default require;", None);
+        assert_cjs_global(
+            "export default { require() { return 1; }, f(module) { return module; } }.f(2);",
+            None,
+        );
+        assert_cjs_global("export default { async require() { return 1; } };", None);
+        assert_cjs_global("export default { *module() { yield 1; } }.module().next().value;", None);
+        assert_cjs_global("export default { get exports() { return 1; } }.exports;", None);
+        assert_cjs_global("export default { \"x\"(require) { return require; } }.x(1);", None);
+        assert_cjs_global("export default { /* comment */ require() { return 1; } }.require();", None);
+        assert_cjs_global("function* module() { yield 1; } export default module;", None);
+    }
+
+    #[test]
+    fn package_type_diagnostics_use_first_cjs_global() {
+        let require_diag = esm_preflight_error_module_source("require('x');", true).unwrap();
+        assert!(require_diag.contains("require is not defined"));
+        assert!(require_diag.contains(".cjs"));
+
+        let filename_diag = esm_preflight_error_module_source("console.log(__filename);", true).unwrap();
+        assert!(filename_diag.contains("__filename is not defined"));
+        assert!(filename_diag.contains(".cjs"));
+
+        assert!(esm_preflight_error_module_source("const require = 1; export default require;", true).is_none());
     }
 
     #[test]
