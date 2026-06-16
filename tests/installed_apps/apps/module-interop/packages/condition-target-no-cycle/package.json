@@ -1,0 +1,13 @@
+{
+  "name": "condition-target-no-cycle",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./import.mjs",
+      "module-sync": "./sync.mjs",
+      "require": "./sync.mjs",
+      "default": "./sync.mjs"
+    }
+  }
+}

@@ -857,6 +857,14 @@ export const testRequireEsmErrorHandling = async () => {
         fs.writeFileSync('/require-esm-errors-app/reference-error.mjs', [
             'Object.defineProperty(exports, "__esModule", { value: true });',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/ambiguous-reference.js', [
+            'Object.defineProperty(exports, "__esModule", { value: true });',
+            'const require = () => {};',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/valid-transpiled.js', [
+            'Object.defineProperty(exports, "__esModule", { value: true });',
+            'exports.foo = "foo";',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-errors-app/main.cjs');
@@ -867,6 +875,10 @@ export const testRequireEsmErrorHandling = async () => {
         assert.throws(() => require('/require-esm-errors-app/reference-error.mjs'), {
             name: 'ReferenceError',
         });
+        assert.throws(() => require('/require-esm-errors-app/ambiguous-reference.js'), {
+            name: 'ReferenceError',
+        });
+        assert.strictEqual(require('/require-esm-errors-app/valid-transpiled.js').foo, 'foo');
 
         return true;
     } catch (error) {

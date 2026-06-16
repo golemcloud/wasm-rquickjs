@@ -640,6 +640,7 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
 }
 
 const cjsPackageConditions = new Set(['golem', 'node', 'require', 'module-sync', 'default']);
+const esmPackageConditions = new Set(['golem', 'node', 'module-sync', 'import', 'default']);
 const packageTargetNoMatch = { __packageTargetNoMatch: true };
 const packageTargetBlocked = { __packageTargetBlocked: true };
 
@@ -717,7 +718,7 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
             return { builtin: target };
         }
         if (allowBareTarget && isBarePackageSpecifier(target)) {
-            const resolved = resolveFromNodeModules(target, packageDir, pathModule.join(packageDir, 'package.json'));
+            const resolved = resolveFromNodeModules(target, packageDir, pathModule.join(packageDir, 'package.json'), conditions);
             if (resolved !== null) return resolved;
             throw makeModuleNotFoundError(target);
         }
@@ -1346,6 +1347,529 @@ function looksLikeEsmSource(source) {
     return false;
 }
 
+function hasCjsWrapperRequireRedeclaration(source) {
+    let i = 0;
+    let braceDepth = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
+            i = skipRegexLiteralInSource(source, i);
+            continue;
+        }
+
+        if (code === 0x7b) {
+            braceDepth++;
+            i++;
+            continue;
+        }
+        if (code === 0x7d) {
+            braceDepth = Math.max(0, braceDepth - 1);
+            i++;
+            continue;
+        }
+
+        if (braceDepth === 0 && (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i))) {
+            let next = skipWhitespace(source, i + (source.startsWith('const', i) ? 5 : 3));
+            if (source.startsWith('require', next) && hasIdentifierBoundary(source, next, next + 7)) {
+                return true;
+            }
+        }
+        i++;
+    }
+    return false;
+}
+
+function readStaticSpecifierString(source, start) {
+    const i = skipWhitespace(source, start);
+    const quote = source.charCodeAt(i);
+    if (quote !== 0x27 && quote !== 0x22) return null;
+    let value = '';
+    let p = i + 1;
+    while (p < source.length) {
+        const code = source.charCodeAt(p);
+        if (code === 0x5c && p + 1 < source.length) {
+            value += source[p + 1];
+            p += 2;
+        } else if (code === quote) {
+            return { value, end: p + 1 };
+        } else {
+            value += source[p];
+            p++;
+        }
+    }
+    return null;
+}
+
+function statementEndForStaticImport(source, start) {
+    let i = start;
+    let brace = 0;
+    let paren = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x7b) brace++;
+        else if (code === 0x7d) brace = Math.max(0, brace - 1);
+        else if (code === 0x28) paren++;
+        else if (code === 0x29) paren = Math.max(0, paren - 1);
+        else if ((code === 0x3b || code === 0x0a || code === 0x0d) && brace === 0 && paren === 0) return i;
+        i++;
+    }
+    return source.length;
+}
+
+function staticImportSpecifierAt(source, pos) {
+    if (startsWithKeywordAt(source, 'import', pos)) {
+        const afterImport = skipWhitespace(source, pos + 6);
+        const bare = readStaticSpecifierString(source, afterImport);
+        if (bare) return bare.value;
+
+        const end = statementEndForStaticImport(source, afterImport);
+        let i = afterImport;
+        while (i < end) {
+            const code = source.charCodeAt(i);
+            if (code === 0x27 || code === 0x22 || code === 0x60) {
+                i = skipQuotedOrTemplate(source, i);
+                continue;
+            }
+            if (startsWithKeywordAt(source, 'from', i)) {
+                const spec = readStaticSpecifierString(source, i + 4);
+                if (spec && spec.end <= end + 1) return spec.value;
+            }
+            i++;
+        }
+    }
+
+    if (startsWithKeywordAt(source, 'export', pos)) {
+        const end = statementEndForStaticImport(source, pos + 6);
+        let i = pos + 6;
+        while (i < end) {
+            const code = source.charCodeAt(i);
+            if (code === 0x27 || code === 0x22 || code === 0x60) {
+                i = skipQuotedOrTemplate(source, i);
+                continue;
+            }
+            if (startsWithKeywordAt(source, 'from', i)) {
+                const spec = readStaticSpecifierString(source, i + 4);
+                if (spec && spec.end <= end + 1) return spec.value;
+            }
+            i++;
+        }
+    }
+
+    return null;
+}
+
+function collectStaticEsmSpecifiers(source) {
+    const specifiers = [];
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
+            i = skipRegexLiteralInSource(source, i);
+            continue;
+        }
+        const specifier = staticImportSpecifierAt(source, i);
+        if (specifier !== null) specifiers.push(specifier);
+        i++;
+    }
+    return specifiers;
+}
+
+function collectLiteralRequireSpecifiers(source, names) {
+    names = names || ['require'];
+    const specifiers = [];
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
+            i = skipRegexLiteralInSource(source, i);
+            continue;
+        }
+        for (let n = 0; n < names.length; n++) {
+            const name = names[n];
+            if (startsWithKeywordAt(source, name, i) && previousSignificantChar(source, i) !== 0x2e) {
+                const open = skipWhitespace(source, i + name.length);
+                if (source.charCodeAt(open) === 0x28) {
+                    const spec = readStaticSpecifierString(source, open + 1);
+                    if (spec) specifiers.push(spec.value);
+                }
+            }
+        }
+        i++;
+    }
+    return specifiers;
+}
+
+function collectCreateRequireFactoryNames(source) {
+    const names = [];
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (startsWithKeywordAt(source, 'import', i)) {
+            const end = statementEndForStaticImport(source, i + 6);
+            const statement = source.slice(i, end);
+            if (/from\s*['"](?:node:)?module['"]/.test(statement)) {
+                const m = statement.match(/\{([\s\S]*?)\}/);
+                if (m) {
+                    const parts = m[1].split(',');
+                    for (let p = 0; p < parts.length; p++) {
+                        const part = parts[p].trim();
+                        const alias = part.match(/^createRequire\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/);
+                        if (alias) {
+                            names.push(alias[1]);
+                        } else if (part === 'createRequire') {
+                            names.push('createRequire');
+                        }
+                    }
+                }
+            }
+            i = end;
+            continue;
+        }
+        i++;
+    }
+    return names;
+}
+
+function collectCreateRequireAliases(source, factoryNames) {
+    factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
+    const aliases = [];
+    if (factoryNames.length === 0) return aliases;
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i) || startsWithKeywordAt(source, 'var', i)) {
+            const keywordLen = source.startsWith('const', i) ? 5 : 3;
+            let p = skipWhitespace(source, i + keywordLen);
+            const identMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(p));
+            if (identMatch) {
+                const name = identMatch[0];
+                p = skipWhitespace(source, p + name.length);
+                if (source.charCodeAt(p) === 0x3d) {
+                    p = skipWhitespace(source, p + 1);
+                    for (let f = 0; f < factoryNames.length; f++) {
+                        const factory = factoryNames[f];
+                        if (startsWithKeywordAt(source, factory, p)) {
+                            const open = skipWhitespace(source, p + factory.length);
+                            if (source.charCodeAt(open) === 0x28) {
+                                aliases.push(name);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i++;
+    }
+    return aliases;
+}
+
+function collectCreateRequireCallSpecifiers(source, factoryNames) {
+    factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
+    const specifiers = [];
+    if (factoryNames.length === 0) return specifiers;
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
+            i = skipRegexLiteralInSource(source, i);
+            continue;
+        }
+        for (let f = 0; f < factoryNames.length; f++) {
+            const factory = factoryNames[f];
+            if (startsWithKeywordAt(source, factory, i) && previousSignificantChar(source, i) !== 0x2e) {
+                const firstOpen = skipWhitespace(source, i + factory.length);
+                if (source.charCodeAt(firstOpen) === 0x28) {
+                    const firstClose = source.indexOf(')', firstOpen + 1);
+                    if (firstClose !== -1) {
+                        const secondOpen = skipWhitespace(source, firstClose + 1);
+                        if (source.charCodeAt(secondOpen) === 0x28) {
+                            const spec = readStaticSpecifierString(source, secondOpen + 1);
+                            if (spec) specifiers.push(spec.value);
+                        }
+                    }
+                }
+            }
+        }
+        i++;
+    }
+    return specifiers;
+}
+
+function isEsmGraphFile(filename, source) {
+    return filename.endsWith('.mjs') ||
+        (filename.endsWith('.js') && getPackageScopeType(filename) === 'module') ||
+        (!filename.endsWith('.cjs') && looksLikeEsmSource(source));
+}
+
+function fileUrlForPath(filename) {
+    return 'file://' + filename;
+}
+
+function resolveEsmGraphSpecifier(specifier, parentFilename, conditions) {
+    conditions = conditions || esmPackageConditions;
+    if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;
+    const parentDir = pathModule.dirname(parentFilename);
+    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')) {
+        try {
+            return resolveFilename(specifier, parentDir);
+        } catch (_) {
+            return null;
+        }
+    }
+    if (specifier.startsWith('#')) {
+        try {
+            const resolved = resolvePackageImports(specifier, parentDir, conditions);
+            if (resolved && !resolved.builtin) return resolved;
+        } catch (_) {
+            return null;
+        }
+        return null;
+    }
+    try {
+        return resolveFromNodeModules(specifier, parentDir, parentFilename, conditions);
+    } catch (_) {
+        return null;
+    }
+}
+
+function addRequireEsmGraphMark(filename, marked) {
+    const graph = globalThis.__wasm_rquickjs_require_esm_graph_in_progress || Object.create(null);
+    const counts = globalThis.__wasm_rquickjs_require_esm_graph_counts || Object.create(null);
+    globalThis.__wasm_rquickjs_require_esm_graph_in_progress = graph;
+    globalThis.__wasm_rquickjs_require_esm_graph_counts = counts;
+
+    for (const key of [filename, fileUrlForPath(filename)]) {
+        counts[key] = (counts[key] || 0) + 1;
+        graph[key] = true;
+        marked.push(key);
+    }
+}
+
+function stackContains(stack, filename) {
+    for (let i = 0; i < stack.length; i++) {
+        if (stack[i] === filename) return true;
+    }
+    return false;
+}
+
+function esmGraphReachesAny(filename, stack, seen) {
+    if (stackContains(stack, filename)) return true;
+    seen = seen || Object.create(null);
+    if (seen[filename]) return false;
+    seen[filename] = true;
+
+    const source = tryReadFile(filename);
+    if (source === null) return false;
+
+    const specifiers = isEsmGraphFile(filename, source)
+        ? collectStaticEsmSpecifiers(source)
+        : collectLiteralRequireSpecifiers(source);
+    const conditions = isEsmGraphFile(filename, source) ? esmPackageConditions : cjsPackageConditions;
+    for (let i = 0; i < specifiers.length; i++) {
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions);
+        if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
+    }
+
+    if (isEsmGraphFile(filename, source)) {
+        const factoryNames = collectCreateRequireFactoryNames(source);
+        const aliases = collectCreateRequireAliases(source, factoryNames);
+        const bridgeSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
+            aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
+        );
+        for (let i = 0; i < bridgeSpecifiers.length; i++) {
+            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions);
+            if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
+        }
+    }
+
+    return false;
+}
+
+function scanRequireEsmGraph(filename, marked, seen, stack) {
+    if (seen[filename]) return;
+    seen[filename] = true;
+
+    const source = tryReadFile(filename);
+    if (source === null) return;
+
+    if (!isEsmGraphFile(filename, source)) {
+        const requireSpecifiers = collectLiteralRequireSpecifiers(source);
+        for (let i = 0; i < requireSpecifiers.length; i++) {
+            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions);
+            if (resolved && resolved.filename) {
+                const targetSource = tryReadFile(resolved.filename);
+                if (targetSource !== null && isEsmGraphFile(resolved.filename, targetSource) && esmGraphReachesAny(resolved.filename, stack)) {
+                    addRequireEsmGraphMark(resolved.filename, marked);
+                } else {
+                    scanRequireEsmGraph(resolved.filename, marked, seen, stack);
+                }
+            }
+        }
+        return;
+    }
+
+    stack.push(filename);
+
+    const specifiers = collectStaticEsmSpecifiers(source);
+    for (let i = 0; i < specifiers.length; i++) {
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions);
+        if (resolved && resolved.filename) {
+            scanRequireEsmGraph(resolved.filename, marked, seen, stack);
+        }
+    }
+    const factoryNames = collectCreateRequireFactoryNames(source);
+    const aliases = collectCreateRequireAliases(source, factoryNames);
+    const createRequireSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
+        aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
+    );
+    for (let i = 0; i < createRequireSpecifiers.length; i++) {
+        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions);
+        if (resolved && resolved.filename) {
+            const targetSource = tryReadFile(resolved.filename);
+            if (targetSource !== null && isEsmGraphFile(resolved.filename, targetSource) && esmGraphReachesAny(resolved.filename, stack)) {
+                addRequireEsmGraphMark(resolved.filename, marked);
+            } else {
+                scanRequireEsmGraph(resolved.filename, marked, seen, stack);
+            }
+        }
+    }
+    stack.pop();
+}
+
+function markRequireEsmGraph(filename) {
+    const marked = [];
+    scanRequireEsmGraph(filename, marked, Object.create(null), []);
+    return marked;
+}
+
+function unmarkRequireEsmGraph(marked) {
+    const graph = globalThis.__wasm_rquickjs_require_esm_graph_in_progress;
+    const counts = globalThis.__wasm_rquickjs_require_esm_graph_counts;
+    if (!graph || !counts) return;
+    for (let i = 0; i < marked.length; i++) {
+        const key = marked[i];
+        counts[key] = (counts[key] || 1) - 1;
+        if (counts[key] <= 0) {
+            delete counts[key];
+            delete graph[key];
+        }
+    }
+}
+
+function throwIfRequireEsmGraphCycle(resolvedFilename) {
+    const graph = globalThis.__wasm_rquickjs_require_esm_graph_in_progress;
+    if (graph && (graph[resolvedFilename] || graph[fileUrlForPath(resolvedFilename)])) {
+        const err = new Error('Cannot require() ES Module ' + resolvedFilename + ' in a cycle.');
+        err.code = 'ERR_REQUIRE_CYCLE_MODULE';
+        throw err;
+    }
+}
+
 const wrapper = [
     '(function (exports, require, module, __filename, __dirname) { ',
     '\n});'
@@ -1374,6 +1898,8 @@ function compileCjs(filename, source) {
 }
 
 function requireEsmWithCacheGuard(mod, resolvedFilename) {
+    throwIfRequireEsmGraphCycle(resolvedFilename);
+    const markedGraph = markRequireEsmGraph(resolvedFilename);
     Object.defineProperty(mod, '__wasmRequireEsmInProgress', {
         value: true,
         writable: true,
@@ -1383,6 +1909,7 @@ function requireEsmWithCacheGuard(mod, resolvedFilename) {
     try {
         return wrapEsmNamespace(_requireEsm(resolvedFilename));
     } finally {
+        unmarkRequireEsmGraph(markedGraph);
         delete mod.__wasmRequireEsmInProgress;
     }
 }
@@ -1483,6 +2010,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
             let cjsSyntaxError = null;
+            const cjsWrapperRequireRedeclaration = !resolvedFilename.endsWith('.cjs') && hasCjsWrapperRequireRedeclaration(source);
             try {
                 compiledFn = compileCjs(resolvedFilename, source);
             } catch (err) {
@@ -1501,13 +2029,13 @@ function loadModule(resolvedFilename, source, parentModule) {
                     throw err;
                 }
             }
-            if (cjsSyntaxError) {
+            if (cjsSyntaxError || cjsWrapperRequireRedeclaration) {
                 // SyntaxError in a .js file — try loading as ESM (entry point detection)
                 try {
                     mod.exports = requireEsmWithCacheGuard(mod, resolvedFilename);
                 } catch (esmErr) {
                     delete moduleCache[resolvedFilename];
-                    if (looksLikeEsmSource(source)) {
+                    if (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
                     }
@@ -1569,7 +2097,8 @@ function splitPackageName(id) {
     return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
 }
 
-function resolveFromNodeModules(id, parentDir, parentFilename) {
+function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
+    conditions = conditions || cjsPackageConditions;
     const dirs = _nodeModulePaths(parentDir);
 
     // Split into package name and subpath for packages with subpath specifiers
@@ -1585,7 +2114,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
         if (pkgJson !== null) {
             try {
                 pkg = JSON.parse(pkgJson);
-                const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, cjsPackageConditions);
+                const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
                 if (exportsResolved !== undefined) return exportsResolved;
             } catch (e) {
                 if (e && e.code) {

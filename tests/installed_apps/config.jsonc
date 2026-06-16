@@ -1,0 +1,23 @@
+{
+  "apps": {
+    "module-interop": {
+      "category": "runnable",
+      "reason": "Synthetic npm-installed app covering CJS/ESM/package graph behavior",
+      "tests": {
+        "test-01-esm-import-cjs.js": "ESM app imports named/default exports from installed CJS packages",
+        "test-02-cjs-require-esm.cjs": "CJS app requires an installed synchronous ESM package",
+        "test-03-package-exports-imports.js": "Installed packages use conditional exports, subpaths, and package imports aliases",
+        "test-04-cycle-require-esm.cjs": "CJS require(esm) cycle inside an installed package reports ERR_REQUIRE_CYCLE_MODULE",
+        "test-05-tla-require.cjs": "CJS require() of installed TLA ESM reports ERR_REQUIRE_ASYNC_MODULE and dynamic import still works",
+        "test-06-conditional-import-graph.cjs": "Graph scanning follows import conditions for static ESM package imports",
+        "test-07-conditional-import-no-false-positive.cjs": "Graph scanning does not mark module-sync branches for static ESM package imports",
+        "test-08-conditional-imports-alias-graph.cjs": "Graph scanning follows import conditions for package imports aliases",
+        "test-09-create-require-alias-cycle.cjs": "Graph scanning handles createRequire aliases in ESM modules",
+        "test-10-already-evaluated-dependency.cjs": "CJS bridge can require an already evaluated ESM dependency",
+        "test-11-module-sync-before-import-graph.cjs": "Graph scanning honors module-sync before import in package exports",
+        "test-12-module-sync-before-imports-alias-graph.cjs": "Graph scanning honors module-sync before import in package imports aliases",
+        "test-13-scanner-false-positive-guards.cjs": "Graph scanning avoids property require, non-call createRequire, local createRequire, and nested CJS require false positives"
+      }
+    }
+  }
+}

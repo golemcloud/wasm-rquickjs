@@ -731,6 +731,10 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
         Promise.resolve().then(function() {
             if (_pendingRejections.has(promise)) {
                 _pendingRejections.delete(promise);
+                if (globalThis.__wasm_rquickjs_suppress_unhandled_rejection_count > 0) {
+                    globalThis.__wasm_rquickjs_suppress_unhandled_rejection_count--;
+                    return;
+                }
                 process.emit('unhandledRejection', reason, promise);
             }
         });
@@ -738,6 +742,10 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
     } else {
         _pendingRejections.delete(promise);
     }
+};
+
+globalThis.__wasm_rquickjs_mark_rejection_handled = function(promise) {
+    _pendingRejections.delete(promise);
 };
 
 // Named exports for import { argv } from 'node:process' style

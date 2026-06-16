@@ -1,0 +1,27 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:node": "node run-node.mjs"
+  },
+  "dependencies": {
+    "cjs-basic": "file:./packages/cjs-basic",
+    "cjs-reexport-pkg": "file:./packages/cjs-reexport-pkg",
+    "condition-entry-import-cycle": "file:./packages/condition-entry-import-cycle",
+    "condition-entry-imports-cycle": "file:./packages/condition-entry-imports-cycle",
+    "condition-entry-module-sync-cycle": "file:./packages/condition-entry-module-sync-cycle",
+    "condition-entry-module-sync-imports-cycle": "file:./packages/condition-entry-module-sync-imports-cycle",
+    "condition-entry-no-cycle": "file:./packages/condition-entry-no-cycle",
+    "condition-target-import-cycle": "file:./packages/condition-target-import-cycle",
+    "condition-target-no-cycle": "file:./packages/condition-target-no-cycle",
+    "cjs-nested-require-pkg": "file:./packages/cjs-nested-require-pkg",
+    "cycle-require-esm": "file:./packages/cycle-require-esm",
+    "esm-alias-create-require-cycle": "file:./packages/esm-alias-create-require-cycle",
+    "esm-already-evaluated": "file:./packages/esm-already-evaluated",
+    "esm-false-positive-scanner": "file:./packages/esm-false-positive-scanner",
+    "dual-exports": "file:./packages/dual-exports",
+    "esm-sync": "file:./packages/esm-sync",
+    "imports-alias": "file:./packages/imports-alias",
+    "tla-esm": "file:./packages/tla-esm"
+  }
+}

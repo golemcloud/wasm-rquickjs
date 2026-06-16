@@ -195,6 +195,12 @@ fn require_esm_impl<'js>(
                     true
                 }
                 PromiseState::Rejected => {
+                    attach_noop_promise_catch(ctx.clone(), eval_value.as_raw());
+                    mark_rejection_handled(&ctx, eval_value.clone());
+                    let count = globals
+                        .get::<_, i32>("__wasm_rquickjs_suppress_unhandled_rejection_count")
+                        .unwrap_or(0);
+                    let _ = globals.set("__wasm_rquickjs_suppress_unhandled_rejection_count", count + 1);
                     let _ = promise.result::<Value<'js>>();
                     let rejected = ctx.catch();
                     leave_require_esm(&globals, filename, &file_url)?;
@@ -228,6 +234,15 @@ fn require_esm_impl<'js>(
         throw_require_async_module(ctx, &globals, filename)
     } else {
         Ok(ns)
+    }
+}
+
+fn mark_rejection_handled<'js>(ctx: &rquickjs::Ctx<'js>, promise: Value<'js>) {
+    if let Ok(handler) = ctx
+        .globals()
+        .get::<_, rquickjs::Function>("__wasm_rquickjs_mark_rejection_handled")
+    {
+        let _ = handler.call::<_, ()>((promise,));
     }
 }
 

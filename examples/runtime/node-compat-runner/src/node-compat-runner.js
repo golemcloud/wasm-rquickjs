@@ -43,13 +43,19 @@ function drainAsync() {
 // (set via rquickjs 0.10's set_host_promise_rejection_tracker) emits
 // process.emit('unhandledRejection', reason) which we listen for here.
 var _firstUnhandledRejection = null;
+var _firstUnhandledRejectionHadTestListener = false;
 
 function installRejectionTracking() {
     _firstUnhandledRejection = null;
+    _firstUnhandledRejectionHadTestListener = false;
 
     function onUnhandledRejection(reason) {
         if (!_firstUnhandledRejection) {
             _firstUnhandledRejection = reason;
+            _firstUnhandledRejectionHadTestListener =
+                globalThis.process &&
+                typeof globalThis.process.listenerCount === 'function' &&
+                globalThis.process.listenerCount('unhandledRejection') > 1;
         }
     }
 
@@ -62,8 +68,10 @@ function installRejectionTracking() {
             globalThis.process.removeListener('unhandledRejection', onUnhandledRejection);
         }
         var rejection = _firstUnhandledRejection;
+        var hadTestListener = _firstUnhandledRejectionHadTestListener;
         _firstUnhandledRejection = null;
-        return rejection;
+        _firstUnhandledRejectionHadTestListener = false;
+        return hadTestListener ? null : rejection;
     };
 }
 

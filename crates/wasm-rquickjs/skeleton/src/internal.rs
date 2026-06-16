@@ -1164,6 +1164,69 @@ fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String
     ))
 }
 
+fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut brace_depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            b'{' => {
+                brace_depth += 1;
+                i += 1;
+                continue;
+            }
+            b'}' => {
+                brace_depth = brace_depth.saturating_sub(1);
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        if brace_depth == 0 {
+            for keyword in ["const", "let"] {
+                if source[i..].starts_with(keyword)
+                    && is_ident_start_boundary(bytes, i)
+                    && is_ident_boundary(bytes, i + keyword.len())
+                {
+                    let next = skip_ws_comments(source, i + keyword.len());
+                    if source[next..].starts_with("require")
+                        && is_ident_start_boundary(bytes, next)
+                        && is_ident_boundary(bytes, next + 7)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        i = next_char_boundary(source, i);
+    }
+    false
+}
+
 fn is_ascii_js_identifier(value: &str) -> bool {
     let bytes = value.as_bytes();
     if bytes.is_empty() || !(bytes[0] == b'_' || bytes[0] == b'$' || bytes[0].is_ascii_alphabetic()) {
@@ -1591,7 +1654,7 @@ struct PackageJson {
 struct NodeModulesResolver;
 
 impl NodeModulesResolver {
-    const ESM_CONDITIONS: [&'static str; 4] = ["golem", "node", "import", "default"];
+    const ESM_CONDITIONS: [&'static str; 5] = ["golem", "node", "module-sync", "import", "default"];
     const CJS_CONDITIONS: [&'static str; 5] = ["golem", "node", "require", "module-sync", "default"];
 
     fn try_resolve(
@@ -3289,6 +3352,7 @@ impl Loader for CjsCompatLoader {
         // comments, strings, templates, and regex literals do not force CJS.
         let is_cjs = is_cjs_ext
             || (!is_js_in_module_package_scope(&fs_abs_path)
+                && !has_cjs_wrapper_require_redeclaration(&source)
                 && (detected_analysis.is_cjs
                     || !detected_analysis.exports.is_empty()
                     || !detected_analysis.reexports.is_empty()));
