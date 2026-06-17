@@ -149,6 +149,19 @@ The `tests/node_compat/` directory contains vendored Node.js test files used to 
 
 Load the `fixing-node-compat-test` skill for the full workflow when making a test pass.
 
+## Installed App Compatibility Tests
+
+The `tests/installed_apps/` directory contains CI-enforced runtime tests for unbundled npm apps installed with real `node_modules` and attached to the component filesystem as `/app`. This suite is separate from `tests/libraries/`, which documents Rollup-bundled package compatibility.
+
+Important rules:
+
+- `tests/installed_apps/config.jsonc` is the source of truth for installed-app tests. Runtime tests in `tests/runtime/installed_apps.rs` are generated from it.
+- Update `tests/installed_apps/report.md` by running `cargo test --test installed_apps_report --features use-golem-wasmtime -- --nocapture` after config changes.
+- Add app fixtures under `tests/installed_apps/apps/<app>/` with a `package.json`, `run-node.mjs`, and `test-*` files exporting `run()`.
+- Installed-app tests run `npm install --install-links --ignore-scripts --no-audit --no-fund`, verify the raw test with host Node.js, then run it through wasm-rquickjs from `/app`.
+- Keep this suite focused on real `node_modules` module loading, CJS/ESM interop, package maps, filesystem-backed package behavior, and high-value smoke tests. Do not use it for native `.node`, WASM artifact loading, subprocess-heavy, or live-network scenarios.
+- Before running installed-app runtime tests after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- installed_app --nocapture` or a narrower installed-app filter.
+
 ### ⚠️ Keeping `node_compat` and `node_compat_report` in sync
 
 The `tests/node_compat.rs` test harness and the `tests/node_compat_report.rs` report generator are **two separate runners** with independent Host types, linker setups, and WASI context configurations. **Whenever you change the WASI context, linker setup, or Host configuration in `tests/common/mod.rs` (used by `node_compat`), you MUST apply the same change to `tests/node_compat_report.rs`** — otherwise the two runners will produce different results.

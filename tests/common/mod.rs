@@ -150,6 +150,61 @@ pub struct NodeCompatTestEntry {
     pub subtests: Vec<NodeCompatSubtestEntry>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InstalledAppCategory {
+    Runnable,
+    KnownGap,
+    Deferred,
+}
+
+impl InstalledAppCategory {
+    pub fn from_config_value(value: &str) -> anyhow::Result<Self> {
+        match value {
+            "runnable" => Ok(Self::Runnable),
+            "known-gap" | "gap" => Ok(Self::KnownGap),
+            "deferred" => Ok(Self::Deferred),
+            other => anyhow::bail!("unknown installed_apps category '{other}'"),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Runnable => "runnable",
+            Self::KnownGap => "known gap",
+            Self::Deferred => "deferred",
+        }
+    }
+
+    pub fn status_label(self) -> &'static str {
+        match self {
+            Self::Runnable => "Passing",
+            Self::KnownGap => "Known gap",
+            Self::Deferred => "Deferred",
+        }
+    }
+
+    pub fn should_ignore_in_runner(self) -> bool {
+        !matches!(self, Self::Runnable)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InstalledAppTestEntry {
+    pub file: String,
+    pub category: InstalledAppCategory,
+    pub coverage: String,
+    pub reason: Option<String>,
+    pub timeout_secs: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstalledAppEntry {
+    pub name: String,
+    pub category: InstalledAppCategory,
+    pub reason: Option<String>,
+    pub tests: Vec<InstalledAppTestEntry>,
+}
+
 /// Extract the numeric index from a subtest name like "block_00_foo" or "test_03_bar".
 /// Panics if the name doesn't match the expected format (config is authoritative).
 pub fn extract_node_compat_subtest_index(name: &str) -> usize {
@@ -276,6 +331,101 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
     }
 
     Ok(tests)
+}
+
+pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledAppEntry>> {
+    let content = fs::read_to_string(path)?;
+    let json_str = strip_jsonc_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&json_str)?;
+
+    let apps_obj = value
+        .get("apps")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| anyhow::anyhow!("installed_apps config missing 'apps' object"))?;
+
+    let mut apps = Vec::new();
+    for (app_name, opts) in apps_obj {
+        let category = installed_app_category_from_value(opts, None)?;
+        let reason = opts
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let default_timeout_secs = opts
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS);
+        let tests_obj = opts
+            .get("tests")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| anyhow::anyhow!("installed app '{app_name}' missing 'tests' object"))?;
+
+        let mut tests = Vec::new();
+        for (test_file, test_opts) in tests_obj {
+            let test_category = installed_app_category_from_value(test_opts, Some(category))?;
+            let (coverage, test_reason, timeout_secs) = match test_opts {
+                serde_json::Value::String(coverage) => {
+                    (coverage.clone(), reason.clone(), default_timeout_secs)
+                }
+                serde_json::Value::Object(_) => {
+                    let coverage = test_opts
+                        .get("coverage")
+                        .or_else(|| test_opts.get("description"))
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "installed app '{app_name}' test '{test_file}' missing coverage"
+                            )
+                        })?
+                        .to_string();
+                    let test_reason = test_opts
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                        .or_else(|| reason.clone());
+                    let timeout_secs = test_opts
+                        .get("timeout")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(default_timeout_secs);
+                    (coverage, test_reason, timeout_secs)
+                }
+                _ => anyhow::bail!(
+                    "installed app '{app_name}' test '{test_file}' must be a coverage string or object"
+                ),
+            };
+
+            tests.push(InstalledAppTestEntry {
+                file: test_file.clone(),
+                category: test_category,
+                coverage,
+                reason: test_reason,
+                timeout_secs,
+            });
+        }
+        tests.sort_by(|a, b| a.file.cmp(&b.file));
+
+        apps.push(InstalledAppEntry {
+            name: app_name.clone(),
+            category,
+            reason,
+            tests,
+        });
+    }
+    apps.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(apps)
+}
+
+fn installed_app_category_from_value(
+    value: &serde_json::Value,
+    inherited: Option<InstalledAppCategory>,
+) -> anyhow::Result<InstalledAppCategory> {
+    if let Some(category) = value.get("category").and_then(|v| v.as_str()) {
+        return InstalledAppCategory::from_config_value(category);
+    }
+    if value.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+        return Ok(InstalledAppCategory::KnownGap);
+    }
+    Ok(inherited.unwrap_or(InstalledAppCategory::Runnable))
 }
 
 /// Recursively copy a directory and all its contents to a destination.

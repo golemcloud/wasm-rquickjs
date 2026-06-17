@@ -555,7 +555,7 @@ Compatibility stubs — no V8 inspector in WASM.
 <summary><strong><code>node:module</code></strong></summary>
 
 - `require`, `require.resolve`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
-- Package resolution supports `package.json` `main`, exact `exports` root/subpath maps, and exact `imports` maps. CJS resolution recognizes `golem`, `node`, `require`, `module-sync`, and `default` conditions; ESM resolution recognizes `golem`, `node`, `import`, and `default`. Package `imports` can target relative files, external packages, and `node:` builtins.
+- Package resolution supports `package.json` `main`, `exports` root/subpath maps, wildcard `exports` patterns, `imports` maps, and wildcard `imports` patterns. CJS resolution recognizes `golem`, `node`, `require`, `module-sync`, and `default` conditions; ESM resolution recognizes `golem`, `node`, `import`, `module-sync`, and `default`. Package `imports` can target relative files, external packages, and `node:` builtins.
 
 </details>
 
@@ -803,6 +803,7 @@ Compatibility stubs — workers are not supported in single-threaded WASM.
 ### Compatibility Reports
 
 - [NPM Library Compatibility Tracker](tests/libraries/libraries.md) — test results for popular npm packages
+- [Installed App Compatibility Report](tests/installed_apps/report.md) — CI-enforced smoke tests for unbundled npm apps with real `node_modules`
 - [Node.js v22 Compatibility Report](tests/node_compat/report.md) — per-test results for vendored Node.js test suite
 
 ### Coming from QuickJS
