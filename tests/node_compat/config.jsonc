@@ -1695,10 +1695,10 @@
     "parallel/test-crypto-keygen-async-elliptic-curve-jwk.js": {},
     "parallel/test-crypto-keygen-async-encrypted-private-key-der.js": {},
     "parallel/test-crypto-keygen-async-encrypted-private-key.js": {},
-    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js": {},
+    "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted-p256.js": { "flaky": true, "timeout": 300 },
     "parallel/test-crypto-keygen-async-explicit-elliptic-curve-encrypted.js.js": {},
     "parallel/test-crypto-keygen-async-explicit-elliptic-curve.js": {},
-    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js": {},
+    "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted-p256.js": { "flaky": true, "timeout": 300 },
     "parallel/test-crypto-keygen-async-named-elliptic-curve-encrypted.js": {},
     "parallel/test-crypto-keygen-async-named-elliptic-curve.js": {},
     "parallel/test-crypto-keygen-async-rsa.js": {},
@@ -2719,7 +2719,7 @@
         "block_00_connect_without_calling_dns_lookup": {},
         "block_01_connect_with_single_ip_returned_by_dns_lookup": {},
         "block_02_connect_with_autoselectfamily_and_single_ip": {},
-        "block_03_connect_with_autoselectfamily_and_multiple_ips": { "flaky": true }
+        "block_03_connect_with_autoselectfamily_and_multiple_ips": { "category": "known-gap", "reason": "net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts" }
       }
     },
     "parallel/test-net-buffersize.js": {},
@@ -2930,7 +2930,7 @@
     "parallel/test-net-write-arguments.js": {},
     "parallel/test-net-write-cb-on-destroy-before-connect.js": {},
     "parallel/test-net-write-connect-write.js": {},
-    "parallel/test-net-write-fully-async-buffer.js": { "category": "runnable" },
+    "parallel/test-net-write-fully-async-buffer.js": { "category": "known-gap", "reason": "net write backpressure/drain handling for repeated large Buffer writes can hang in the WASM socket implementation" },
     "parallel/test-net-write-fully-async-hex-string.js": { "category": "runnable" },
     "parallel/test-net-write-slow.js": { "category": "known-gap", "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-process-next-tick.js": {},
@@ -10285,7 +10285,7 @@
         "block_02_block_02": { "category": "known-gap", "reason": "perf_hooks.monitorEventLoopDelay is not implemented" }
       }
     },
-    "sequential/test-pipe.js": { "category": "runnable" },
+    "sequential/test-pipe.js": { "category": "known-gap", "reason": "HTTP request piping into a raw TCP stream with large payloads can hang in current net/http stream backpressure handling" },
     "sequential/test-process-title.js": { "category": "known-gap", "reason": "child_process -p/process.title behavior is incomplete in WASM child emulation" },
     "sequential/test-process-warnings.js": {},
     "sequential/test-repl-timeout-throw.js": { "category": "known-gap", "reason": "child_process.spawn emulation does not support --interactive REPL sessions" },

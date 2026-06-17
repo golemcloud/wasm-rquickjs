@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-16 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-17 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3102/4295 (72.2%)
+**Primary compatibility (CI-enforced):** 3099/4295 (72.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3102 | 72.2% | 55.3% | 46.1% |
-| 🧩 known gap | 1193 | 27.8% | 21.3% | 17.7% |
+| ✅ passing (runnable) | 3099 | 72.2% | 55.2% | 46.0% |
+| 🧩 known gap | 1196 | 27.8% | 21.3% | 17.8% |
 | 🚫 WASI-impossible (excluded) | 1153 | — | 20.6% | 17.1% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
 | **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3102/5610 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3099/5610 (55.2%)**.
 
 ## Inventory by Module
 
@@ -54,7 +54,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 184 | 120 | 44 | 7 | 1 | 0 | 12 | 73.2% | 69.8% |
-| net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
+| net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | other | 469 | 101 | 92 | 83 | 11 | 0 | 182 | 52.3% | 35.2% |
@@ -363,7 +363,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-net-autoselectfamily-default.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-autoselectfamily.js` | 4 | 3 | 1 | 0 | 0 | 0 | 0 |
 | `test-net-better-error-messages-path.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-net-blocklist.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-net-blocklist.js` | 4 | 3 | 1 | 0 | 0 | 0 | 0 |
 | `test-net-bytes-written-large.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-connect-options-port.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-net-normalize-args.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
@@ -680,7 +680,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1193)
+### known gap (1196)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -879,6 +879,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP parser does not emit Node-compatible HPE_INVALID_TRANSFER_ENCODING clientError semantics | 1 | `parallel/test-http-server-reject-chunked-with-content-length.js` |
 | HTTP parser handling for blank request headers and 400 response framing is incomplete | 1 | `parallel/test-http-blank-header.js` |
 | HTTP parser/clientError path does not reject duplicate Content-Length with HPE_UNEXPECTED_CONTENT_LENGTH | 1 | `parallel/test-http-double-content-length.js` |
+| HTTP request piping into a raw TCP stream with large payloads can hang in current net/http stream backpressure handling | 1 | `sequential/test-pipe.js` |
 | HTTP request piping with constrained agent sockets can stall queued requests | 1 | `parallel/test-http-pipe-fs.js` |
 | HTTP request streaming/pipe backpressure behavior is not fully Node-compatible | 1 | `parallel/test-pipe-file-to-http.js` |
 | HTTP response serialization/header ordering differs from Node for first-chunk single-byte encodings | 1 | `parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js` |
@@ -1152,6 +1153,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | native rquickjs URL accessors report Rust conversion errors for invalid receivers before JS can normalize them to V8/Web IDL private-member messages | 1 | `parallel/test-whatwg-url-invalidthis.js` |
 | native rquickjs URL class property enumeration order does not match Web IDL order and descriptors are not fully configurable from JS | 1 | `parallel/test-whatwg-url-custom-properties.js` |
 | net reusePort listen option/support probing is incomplete | 1 | `parallel/test-net-reuseport.js` |
+| net write backpressure/drain handling for repeated large Buffer writes can hang in the WASM socket implementation | 1 | `parallel/test-net-write-fully-async-buffer.js` |
+| net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts | 1 | `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
 | node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals | 1 | `parallel/test-timers-api-refs.js` |

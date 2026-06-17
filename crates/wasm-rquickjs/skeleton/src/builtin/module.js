@@ -2088,6 +2088,11 @@ function loadModule(resolvedFilename, source, parentModule) {
                 }
             }
             if (cjsSyntaxError || cjsWrapperRequireRedeclaration) {
+                if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
+                    delete moduleCache[resolvedFilename];
+                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, resolvedFilename, source);
+                    throw cjsSyntaxError;
+                }
                 // SyntaxError in a .js file — try loading as ESM (entry point detection)
                 try {
                     mod.exports = requireEsmWithCacheGuard(mod, resolvedFilename);
