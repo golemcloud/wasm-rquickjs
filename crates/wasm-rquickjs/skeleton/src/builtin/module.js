@@ -19,6 +19,7 @@ import * as assertStrict from 'node:assert/strict';
 import * as fsPromises from 'node:fs/promises';
 import * as nodeTest from 'node:test';
 import * as querystring from 'node:querystring';
+import * as punycode from 'node:punycode';
 import * as nodeUrl from 'node:url';
 import * as vm from 'node:vm';
 import * as timers from 'node:timers';
@@ -102,6 +103,7 @@ const assertCjs = cjsExport(assert);
 const assertStrictCjs = cjsExport(assertStrict);
 const nodeTestCjs = cjsExport(nodeTest);
 const querystringCjs = cjsExport(querystring);
+const punycodeCjs = cjsExport(punycode);
 const nodeUrlCjs = cjsExport(nodeUrl);
 const vmCjs = cjsExport(vm);
 const timersCjs = cjsExport(timers);
@@ -197,6 +199,7 @@ registerBuiltin(builtinModuleMap, 'assert', assertCjs);
 registerBuiltin(builtinModuleMap, 'assert/strict', assertStrictCjs);
 registerBuiltin(builtinModuleMap, 'test', nodeTestCjs);
 registerBuiltin(builtinModuleMap, 'querystring', querystringCjs);
+registerBuiltin(builtinModuleMap, 'punycode', punycodeCjs);
 registerBuiltin(builtinModuleMap, 'url', nodeUrlCjs);
 registerBuiltin(builtinModuleMap, 'vm', vmCjs);
 registerBuiltin(builtinModuleMap, 'timers', timersCjs);
@@ -709,11 +712,54 @@ function resolveExactPackageFile(filename) {
     throw makeModuleNotFoundError(filename);
 }
 
-function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBareTarget) {
+function packagePatternKeyMatch(patternKey, key) {
+    const star = patternKey.indexOf('*');
+    if (star === -1) return null;
+    const prefix = patternKey.slice(0, star);
+    const suffix = patternKey.slice(star + 1);
+    if (!key.startsWith(prefix) || !key.endsWith(suffix)) return null;
+    if (key.length < prefix.length + suffix.length) return null;
+    return key.slice(prefix.length, key.length - suffix.length);
+}
+
+function findBestPackagePattern(map, key) {
+    let bestKey = null;
+    let bestSubstitution = null;
+    const keys = Object.keys(map);
+    for (let i = 0; i < keys.length; i++) {
+        const patternKey = keys[i];
+        if (patternKey.indexOf('*') === -1) continue;
+        const substitution = packagePatternKeyMatch(patternKey, key);
+        if (substitution === null) continue;
+        if (bestKey === null || packagePatternCompare(patternKey, bestKey) < 0) {
+            bestKey = patternKey;
+            bestSubstitution = substitution;
+        }
+    }
+    return bestKey === null ? null : { key: bestKey, substitution: bestSubstitution };
+}
+
+function packagePatternCompare(a, b) {
+    const aStar = a.indexOf('*');
+    const bStar = b.indexOf('*');
+    const aBase = aStar === -1 ? a.length : aStar;
+    const bBase = bStar === -1 ? b.length : bStar;
+    if (aBase !== bBase) return bBase - aBase;
+    const aTrailer = aStar === -1 ? 0 : a.length - aStar - 1;
+    const bTrailer = bStar === -1 ? 0 : b.length - bStar - 1;
+    if (aTrailer !== bTrailer) return bTrailer - aTrailer;
+    if (a.length !== b.length) return b.length - a.length;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBareTarget, patternSubstitution) {
     seen = seen || new Set();
     if (target === null || target === false) return packageTargetBlocked;
 
     if (typeof target === 'string') {
+        if (patternSubstitution !== undefined && patternSubstitution !== null) {
+            target = target.replace(/\*/g, patternSubstitution);
+        }
         if (allowBareTarget && target.startsWith('node:') && builtinModuleMap[target] !== undefined) {
             return { builtin: target };
         }
@@ -739,11 +785,11 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
     if (Array.isArray(target)) {
         for (let i = 0; i < target.length; i++) {
             try {
-                const resolved = resolvePackageTargetValue(packageDir, target[i], conditions, seen, allowBareTarget);
+                const resolved = resolvePackageTargetValue(packageDir, target[i], conditions, seen, allowBareTarget, patternSubstitution);
                 if (resolved === packageTargetBlocked) return resolved;
                 if (resolved !== packageTargetNoMatch) return resolved;
             } catch (err) {
-                if (!err || err.code !== 'ERR_INVALID_PACKAGE_TARGET') throw err;
+                if (!err || (err.code !== 'ERR_INVALID_PACKAGE_TARGET' && err.code !== 'MODULE_NOT_FOUND')) throw err;
             }
         }
         return packageTargetNoMatch;
@@ -756,7 +802,7 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
         for (let i = 0; i < keys.length; i++) {
             const condition = keys[i];
             if (conditions.has(condition)) {
-                const resolved = resolvePackageTargetValue(packageDir, target[condition], conditions, seen, allowBareTarget);
+                const resolved = resolvePackageTargetValue(packageDir, target[condition], conditions, seen, allowBareTarget, patternSubstitution);
                 if (resolved === packageTargetNoMatch) continue;
                 return resolved;
             }
@@ -786,6 +832,11 @@ function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions
     } else if (exportsField && typeof exportsField === 'object') {
         if (Object.prototype.hasOwnProperty.call(exportsField, key)) {
             resolved = resolvePackageTargetValue(packageDir, exportsField[key], conditions, undefined, false);
+        } else {
+            const pattern = findBestPackagePattern(exportsField, key);
+            if (pattern !== null) {
+                resolved = resolvePackageTargetValue(packageDir, exportsField[pattern.key], conditions, undefined, false, pattern.substitution);
+            }
         }
     } else if (exportsField !== null) {
         throw makeInvalidPackageTargetError(exportsField);
@@ -815,10 +866,17 @@ function resolvePackageImports(id, parentDir, conditions) {
     if (!scope || !scope.pkg || !scope.pkg.imports || typeof scope.pkg.imports !== 'object') {
         throw makePackageImportNotDefinedError(id);
     }
-    if (!Object.prototype.hasOwnProperty.call(scope.pkg.imports, id)) {
-        throw makePackageImportNotDefinedError(id);
+    let target;
+    let patternSubstitution = null;
+    if (Object.prototype.hasOwnProperty.call(scope.pkg.imports, id)) {
+        target = scope.pkg.imports[id];
+    } else {
+        const pattern = findBestPackagePattern(scope.pkg.imports, id);
+        if (pattern === null) throw makePackageImportNotDefinedError(id);
+        target = scope.pkg.imports[pattern.key];
+        patternSubstitution = pattern.substitution;
     }
-    const resolved = resolvePackageTargetValue(scope.dir, scope.pkg.imports[id], conditions, undefined, true);
+    const resolved = resolvePackageTargetValue(scope.dir, target, conditions, undefined, true, patternSubstitution);
     if (resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
     throw makePackageImportNotDefinedError(id);
 }

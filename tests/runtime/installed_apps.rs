@@ -266,3 +266,299 @@ async fn installed_app_scanner_false_positive_guards(
     )
     .await
 }
+
+#[test]
+async fn installed_app_exports_patterns(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "module-interop",
+        "test-14-exports-patterns.mjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_imports_patterns(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "module-interop",
+        "test-15-imports-patterns.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_shim_patterns(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "module-interop", "test-16-shim-patterns.mjs").await
+}
+
+#[test]
+async fn installed_app_popular_cjs_utilities(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "popular-pure-js",
+        "test-01-cjs-utilities.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_popular_modern_esm(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "popular-pure-js", "test-02-modern-esm.mjs").await
+}
+
+#[test]
+async fn installed_app_popular_date_fns_subpaths(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "popular-pure-js",
+        "test-03-date-fns-subpaths.mjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_popular_dotenv_fs(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "popular-pure-js", "test-04-dotenv-fs.cjs").await
+}
+
+#[test]
+async fn installed_app_popular_ajv(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "popular-pure-js", "test-05-ajv.cjs").await
+}
+
+#[test]
+async fn installed_app_popular_rxjs(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "popular-pure-js", "test-06-rxjs.mjs").await
+}
+
+#[test]
+async fn installed_app_http_axios(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "http-clients", "test-01-axios.cjs").await
+}
+
+#[test]
+async fn installed_app_http_fetch_ky(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "http-clients", "test-02-fetch-ky.mjs").await
+}
+
+#[test]
+async fn installed_app_http_graphql_request(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "http-clients", "test-03-graphql-request.mjs").await
+}
+
+#[test]
+async fn installed_app_crypto_jsonwebtoken_bcrypt(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "crypto-auth",
+        "test-01-jsonwebtoken-bcrypt.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_crypto_jose(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "crypto-auth", "test-02-jose.mjs").await
+}
+
+#[test]
+async fn installed_app_crypto_nanoid_cookie(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "crypto-auth", "test-03-nanoid-cookie.mjs").await
+}
+
+#[test]
+async fn installed_app_data_csv(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "data-formats", "test-01-csv.cjs").await
+}
+
+#[test]
+async fn installed_app_data_yaml_xml(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "data-formats", "test-02-yaml-xml.cjs").await
+}
+
+#[test]
+async fn installed_app_data_binary_protobuf(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "data-formats", "test-03-binary-protobuf.cjs").await
+}
+
+#[test]
+async fn installed_app_fs_config_parsers(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "fs-template-config",
+        "test-01-config-parsers.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_fs_template_engines(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "fs-template-config",
+        "test-02-template-engines.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_fs_fast_glob(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "fs-template-config",
+        "test-03-fast-glob-fs.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_validation_joi_yup(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "validation-schema", "test-01-joi-yup.cjs").await
+}
+
+#[test]
+async fn installed_app_validation_superstruct_valibot(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "validation-schema",
+        "test-02-superstruct-valibot.mjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_logging_loggers(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "logging-observability",
+        "test-01-loggers.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_logging_consola_otel(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "logging-observability",
+        "test-02-consola-otel.mjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_cloud_openai(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "cloud-sdk-offline", "test-01-openai.mjs").await
+}
+
+#[test]
+async fn installed_app_cloud_anthropic(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "cloud-sdk-offline", "test-02-anthropic.mjs").await
+}
+
+#[test]
+async fn installed_app_cloud_aws_s3(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "cloud-sdk-offline", "test-03-aws-s3.mjs").await
+}
+
+#[test]
+async fn installed_app_cloud_stripe(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "cloud-sdk-offline", "test-04-stripe.cjs").await
+}
+
+#[test]
+async fn installed_app_db_sql_builders(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "db-clients-offline",
+        "test-01-sql-builders.cjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_db_pg_mysql(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "db-clients-offline", "test-02-pg-mysql.cjs").await
+}
+
+#[test]
+async fn installed_app_db_mongodb_redis(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(
+        compiled_test,
+        "db-clients-offline",
+        "test-03-mongodb-redis.mjs",
+    )
+    .await
+}
+
+#[test]
+async fn installed_app_db_drizzle(
+    #[tagged_as("installed_app_runner")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_installed_app_test(compiled_test, "db-clients-offline", "test-04-drizzle.mjs").await
+}

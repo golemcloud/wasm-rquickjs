@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.39.0",
+    "@aws-sdk/client-s3": "3.717.0",
+    "openai": "4.85.4",
+    "stripe": "17.6.0"
+  }
+}

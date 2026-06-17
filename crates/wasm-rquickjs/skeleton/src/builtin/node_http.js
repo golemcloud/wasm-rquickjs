@@ -249,18 +249,22 @@ export class Agent extends EventEmitter {
             throw err;
         }
 
+        this.options = Object.assign({}, options, { scheduling });
         this.keepAlive = options.keepAlive || false;
         this.keepAliveMsecs = options.keepAliveMsecs || 1000;
         this.maxSockets = options.maxSockets || Infinity;
         this.maxTotalSockets = options.maxTotalSockets || Infinity;
         this.maxFreeSockets = options.maxFreeSockets || 256;
-        this.timeout = options.timeout;
         this.scheduling = scheduling;
         this.freeSockets = {};
         this.requests = {};
         this.sockets = {};
         this._activeRequestCount = {};
         this._requestQueue = {};
+    }
+
+    get timeout() {
+        return this.options ? this.options.timeout : undefined;
     }
 
     get totalSocketCount() {

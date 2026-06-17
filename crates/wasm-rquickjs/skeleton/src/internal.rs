@@ -1981,6 +1981,7 @@ impl NodeModulesResolver {
                 false,
                 "exports",
                 conditions,
+                None,
             )
             .and_then(|resolution| {
                 Self::target_resolution_to_export_result(resolution, package_name, subpath)
@@ -1995,6 +1996,22 @@ impl NodeModulesResolver {
                     false,
                     "exports",
                     conditions,
+                    None,
+                )
+                .and_then(|resolution| {
+                    Self::target_resolution_to_export_result(resolution, package_name, subpath)
+                });
+            }
+            if let Some((pattern_key, pattern_substitution)) = Self::find_best_package_pattern(map, &key)
+                && let Some(target) = map.get(pattern_key)
+            {
+                return Self::resolve_package_target_value(
+                    package_dir,
+                    target,
+                    false,
+                    "exports",
+                    conditions,
+                    Some(&pattern_substitution),
                 )
                 .and_then(|resolution| {
                     Self::target_resolution_to_export_result(resolution, package_name, subpath)
@@ -2015,14 +2032,30 @@ impl NodeModulesResolver {
         conditions: &[&str],
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
-            && let Some(target) = map.get(specifier)
         {
+            let (target, pattern_substitution) = if let Some(target) = map.get(specifier) {
+                (target, None)
+            } else if let Some((pattern_key, pattern_substitution)) =
+                Self::find_best_package_pattern(map, specifier)
+            {
+                let Some(target) = map.get(pattern_key) else {
+                    return Err(NodePackageResolveError::PackageImportNotDefined {
+                        specifier: specifier.to_string(),
+                    });
+                };
+                (target, Some(pattern_substitution))
+            } else {
+                return Err(NodePackageResolveError::PackageImportNotDefined {
+                    specifier: specifier.to_string(),
+                });
+            };
             return Self::resolve_package_target_value(
                 package_dir,
                 target,
                 true,
                 "imports",
                 conditions,
+                pattern_substitution.as_deref(),
             ).and_then(
                 |resolution| Self::target_resolution_to_import_result(resolution, specifier),
             );
@@ -2045,6 +2078,7 @@ impl NodeModulesResolver {
         allow_bare_target: bool,
         kind: &'static str,
         conditions: &[&str],
+        pattern_substitution: Option<&str>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
             PackageTarget::Null | PackageTarget::Bool(false) => {
@@ -2063,30 +2097,35 @@ impl NodeModulesResolver {
                 });
             }
             PackageTarget::String(target_str) => {
-            if allow_bare_target && Self::is_bare_package_specifier(target_str) {
+            let target_str = if let Some(pattern_substitution) = pattern_substitution {
+                target_str.replace('*', pattern_substitution)
+            } else {
+                target_str.clone()
+            };
+            if allow_bare_target && Self::is_bare_package_specifier(&target_str) {
                 let base = package_dir.join("package.json");
                 let base_str = base.to_string_lossy();
                 let resolver = NodeModulesResolver;
-                if let Some(resolved) = resolver.try_resolve(&base_str, target_str)? {
+                if let Some(resolved) = resolver.try_resolve(&base_str, &target_str)? {
                     return Ok(PackageTargetResolution::Resolved(resolved));
                 }
                 return Err(NodePackageResolveError::ModuleNotFound {
-                    request: target_str.to_string(),
+                    request: target_str,
                 });
             }
             if allow_bare_target && target_str.starts_with("node:") {
-                return Ok(PackageTargetResolution::Resolved(target_str.clone()));
+                return Ok(PackageTargetResolution::Resolved(target_str));
             }
             if !target_str.starts_with("./") {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
                     kind,
-                    target: target_str.to_string(),
+                    target: target_str,
                 });
             }
-            let Some(candidate) = Self::resolve_valid_package_target_path(package_dir, target_str) else {
+            let Some(candidate) = Self::resolve_valid_package_target_path(package_dir, &target_str) else {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
                     kind,
-                    target: target_str.clone(),
+                    target: target_str,
                 });
             };
             if candidate.is_file() {
@@ -2100,7 +2139,7 @@ impl NodeModulesResolver {
             }
             PackageTarget::Array(array) => {
             for item in array {
-                match Self::resolve_package_target_value(package_dir, item, allow_bare_target, kind, conditions) {
+                match Self::resolve_package_target_value(package_dir, item, allow_bare_target, kind, conditions, pattern_substitution) {
                     Ok(PackageTargetResolution::Resolved(path)) => {
                         return Ok(PackageTargetResolution::Resolved(path));
                     }
@@ -2108,7 +2147,8 @@ impl NodeModulesResolver {
                         return Ok(PackageTargetResolution::Blocked);
                     }
                     Ok(PackageTargetResolution::NoMatch) => continue,
-                    Err(NodePackageResolveError::InvalidPackageTarget { .. }) => continue,
+                    Err(NodePackageResolveError::InvalidPackageTarget { .. })
+                    | Err(NodePackageResolveError::ModuleNotFound { .. }) => continue,
                     Err(err) => return Err(err),
                 }
             }
@@ -2123,6 +2163,7 @@ impl NodeModulesResolver {
                         allow_bare_target,
                         kind,
                         conditions,
+                        pattern_substitution,
                     )? {
                         PackageTargetResolution::NoMatch => continue,
                         resolution => return Ok(resolution),
@@ -2131,6 +2172,60 @@ impl NodeModulesResolver {
             }
                 Ok(PackageTargetResolution::NoMatch)
             }
+        }
+    }
+
+    fn package_pattern_key_match(pattern_key: &str, key: &str) -> Option<String> {
+        let star = pattern_key.find('*')?;
+        let prefix = &pattern_key[..star];
+        let suffix = &pattern_key[star + 1..];
+        if !key.starts_with(prefix) || !key.ends_with(suffix) {
+            return None;
+        }
+        if key.len() < prefix.len() + suffix.len() {
+            return None;
+        }
+        Some(key[prefix.len()..key.len() - suffix.len()].to_string())
+    }
+
+    fn find_best_package_pattern<'a>(
+        map: &'a IndexMap<String, PackageTarget>,
+        key: &str,
+    ) -> Option<(&'a str, String)> {
+        let mut best: Option<(&str, String)> = None;
+        for pattern_key in map.keys() {
+            if !pattern_key.contains('*') {
+                continue;
+            }
+            let Some(substitution) = Self::package_pattern_key_match(pattern_key, key) else {
+                continue;
+            };
+            if best
+                .as_ref()
+                .is_none_or(|(best_key, _)| Self::package_pattern_compare(pattern_key, best_key).is_lt())
+            {
+                best = Some((pattern_key.as_str(), substitution));
+            }
+        }
+        best
+    }
+
+    fn package_pattern_compare(a: &str, b: &str) -> std::cmp::Ordering {
+        let a_star = a.find('*').unwrap_or(a.len());
+        let b_star = b.find('*').unwrap_or(b.len());
+        match b_star.cmp(&a_star) {
+            std::cmp::Ordering::Equal => {}
+            ordering => return ordering,
+        }
+        let a_trailer = a.len().saturating_sub(a_star + 1);
+        let b_trailer = b.len().saturating_sub(b_star + 1);
+        match b_trailer.cmp(&a_trailer) {
+            std::cmp::Ordering::Equal => {}
+            ordering => return ordering,
+        }
+        match b.len().cmp(&a.len()) {
+            std::cmp::Ordering::Equal => a.cmp(b),
+            ordering => ordering,
         }
     }
 

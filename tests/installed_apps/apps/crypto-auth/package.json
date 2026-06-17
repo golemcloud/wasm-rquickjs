@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "cookie": "1.0.2",
+    "cookie-signature": "1.2.2",
+    "jose": "5.9.6",
+    "jsonwebtoken": "9.0.2",
+    "nanoid": "5.0.9"
+  }
+}

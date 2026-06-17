@@ -22,6 +22,9 @@
     "dual-exports": "file:./packages/dual-exports",
     "esm-sync": "file:./packages/esm-sync",
     "imports-alias": "file:./packages/imports-alias",
+    "pattern-exports": "file:./packages/pattern-exports",
+    "pattern-imports": "file:./packages/pattern-imports",
+    "pattern-shims": "file:./packages/pattern-shims",
     "tla-esm": "file:./packages/tla-esm"
   }
 }
