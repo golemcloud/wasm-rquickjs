@@ -9,6 +9,7 @@ world module-resolution {
   export test-cjs-shared-loader-identity: func() -> bool;
   export test-module-syntax-detection-and-diagnostics: func() -> bool;
   export test-cjs-package-reexport-named-exports: func() -> bool;
+  export test-find-package-json: func() -> bool;
   export test-require-esm-error-handling: func() -> bool;
   export test-require-esm-tla-retry: func() -> bool;
   export test-require-esm-cycle-guards: func() -> bool;

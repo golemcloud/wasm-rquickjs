@@ -50,7 +50,7 @@ import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
 import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
-import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
@@ -2083,7 +2083,10 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
             try {
                 pkg = JSON.parse(pkgJson);
                 const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
-                if (exportsResolved !== undefined) return exportsResolved;
+                if (exportsResolved !== undefined) {
+                    exportsResolved.packageDir = pkgDir;
+                    return exportsResolved;
+                }
             } catch (e) {
                 if (e && e.code) {
                     throw e;
@@ -2104,19 +2107,19 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
             const subCandidate = pathModule.join(pkgDir, parts.subpath);
             // Try exact subpath
             let content = tryReadFile(subCandidate);
-            if (content !== null) return { filename: subCandidate, content: content };
+            if (content !== null) return { filename: subCandidate, content: content, packageDir: pkgDir };
             // Try with extensions
             content = tryReadFile(subCandidate + '.js');
-            if (content !== null) return { filename: subCandidate + '.js', content: content };
+            if (content !== null) return { filename: subCandidate + '.js', content: content, packageDir: pkgDir };
             content = tryReadFile(subCandidate + '.mjs');
-            if (content !== null) return { filename: subCandidate + '.mjs', content: content };
+            if (content !== null) return { filename: subCandidate + '.mjs', content: content, packageDir: pkgDir };
             content = tryReadFile(subCandidate + '.json');
-            if (content !== null) return { filename: subCandidate + '.json', content: content };
+            if (content !== null) return { filename: subCandidate + '.json', content: content, packageDir: pkgDir };
             // Try as directory
             content = tryReadFile(pathModule.join(subCandidate, 'index.js'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content };
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content, packageDir: pkgDir };
             content = tryReadFile(pathModule.join(subCandidate, 'index.json'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content };
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content, packageDir: pkgDir };
         }
 
         const candidate = pkgDir;
@@ -2135,7 +2138,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
                     ];
                     for (let m = 0; m < mainCandidates.length; m++) {
                         const content = tryReadFile(mainCandidates[m]);
-                        if (content !== null) return { filename: mainCandidates[m], content: content };
+                        if (content !== null) return { filename: mainCandidates[m], content: content, packageDir: pkgDir };
                     }
                 }
             } catch (e) {
@@ -2153,18 +2156,18 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
         // Try as directory: index.js / index.json
         const indexJs = pathModule.join(candidate, 'index.js');
         let content = tryReadFile(indexJs);
-        if (content !== null) return { filename: indexJs, content: content };
+        if (content !== null) return { filename: indexJs, content: content, packageDir: pkgDir };
 
         const indexJson = pathModule.join(candidate, 'index.json');
         content = tryReadFile(indexJson);
-        if (content !== null) return { filename: indexJson, content: content };
+        if (content !== null) return { filename: indexJson, content: content, packageDir: pkgDir };
 
         // Try as file with extension
         content = tryReadFile(candidate + '.js');
-        if (content !== null) return { filename: candidate + '.js', content: content };
+        if (content !== null) return { filename: candidate + '.js', content: content, packageDir: pkgDir };
 
         content = tryReadFile(candidate + '.json');
-        if (content !== null) return { filename: candidate + '.json', content: content };
+        if (content !== null) return { filename: candidate + '.json', content: content, packageDir: pkgDir };
     }
     return null;
 }
@@ -2387,6 +2390,149 @@ export function createRequire(filename) {
     return makeRequire(dir, syntheticParent, filepath);
 }
 
+function isUrlInstance(value) {
+    return value instanceof URL ||
+        (value !== null && typeof value === 'object' &&
+            typeof value.href === 'string' && typeof value.protocol === 'string');
+}
+
+function normalizeFindPackageJsonSpecifier(specifier) {
+    if (specifier === undefined) {
+        throw new ERR_MISSING_ARGS('specifier');
+    }
+
+    if (isUrlInstance(specifier)) {
+        const filePath = nodeUrl.fileURLToPath(specifier);
+        return {
+            kind: 'absolute',
+            path: filePath,
+            source: filePath,
+        };
+    }
+
+    if (typeof specifier !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('specifier', ['string', 'URL'], specifier);
+    }
+
+    if (specifier.startsWith('file://')) {
+        const filePath = nodeUrl.fileURLToPath(specifier);
+        return {
+            kind: 'absolute',
+            path: filePath,
+            source: specifier,
+        };
+    }
+
+    if (pathModule.isAbsolute(specifier)) {
+        return {
+            kind: 'absolute',
+            path: pathModule.normalize(specifier),
+            source: specifier,
+        };
+    }
+
+    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../')) {
+        return {
+            kind: 'relative',
+            value: specifier,
+        };
+    }
+
+    return {
+        kind: 'bare',
+        value: specifier,
+    };
+}
+
+function normalizeFindPackageJsonBase(base, baseRequired) {
+    if (base === undefined) {
+        if (baseRequired) {
+            throw new ERR_INVALID_ARG_TYPE('base', ['string', 'URL'], base);
+        }
+        return null;
+    }
+
+    if (isUrlInstance(base) || (typeof base === 'string' && base.startsWith('file://'))) {
+        const filename = nodeUrl.fileURLToPath(base);
+        return {
+            filename,
+            dir: pathModule.dirname(pathModule.resolve(filename)),
+        };
+    }
+
+    if (typeof base !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('base', ['string', 'URL'], base);
+    }
+
+    if (!pathModule.isAbsolute(base)) {
+        throw new ERR_INVALID_ARG_TYPE('base', ['string', 'URL'], base);
+    }
+
+    const filename = pathModule.resolve(base);
+    return {
+        filename,
+        dir: pathModule.dirname(filename),
+    };
+}
+
+function findNearestPackageJsonPath(startDir) {
+    let dir = pathModule.resolve(startDir || '/');
+    while (true) {
+        if (pathModule.basename(dir) === 'node_modules') return undefined;
+        const pkgJsonPath = pathModule.join(dir, 'package.json');
+        if (tryReadFile(pkgJsonPath) !== null) {
+            return pathModule.toNamespacedPath(pkgJsonPath);
+        }
+        const parent = pathModule.dirname(dir);
+        if (parent === dir) return undefined;
+        dir = parent;
+    }
+}
+
+function packageSearchStartDir(resolvedPath, sourceSpecifier) {
+    if (typeof sourceSpecifier === 'string' &&
+        (/\/$/.test(sourceSpecifier) || /(?:^|\/)\.\.?$/.test(sourceSpecifier))) {
+        return pathModule.resolve(resolvedPath);
+    }
+
+    if (_stat(resolvedPath) === 1) {
+        return pathModule.resolve(resolvedPath);
+    }
+
+    return pathModule.dirname(pathModule.resolve(resolvedPath));
+}
+
+function findBarePackageJson(specifier, parentDir, parentFilename) {
+    const resolved = resolveFromNodeModules(specifier, parentDir, parentFilename, cjsPackageConditions);
+    if (resolved === null) return undefined;
+
+    if (typeof resolved.packageDir === 'string' && resolved.packageDir.length > 0) {
+        const pkgJsonPath = pathModule.join(resolved.packageDir, 'package.json');
+        if (tryReadFile(pkgJsonPath) !== null) {
+            return pathModule.toNamespacedPath(pkgJsonPath);
+        }
+    }
+
+    return undefined;
+}
+
+export function findPackageJSON(specifier, base) {
+    const normalizedSpecifier = normalizeFindPackageJsonSpecifier(specifier);
+    if (normalizedSpecifier.kind === 'absolute') {
+        const startDir = packageSearchStartDir(normalizedSpecifier.path, normalizedSpecifier.source);
+        return findNearestPackageJsonPath(startDir);
+    }
+
+    const normalizedBase = normalizeFindPackageJsonBase(base, true);
+    if (normalizedSpecifier.kind === 'relative') {
+        const resolvedPath = pathModule.resolve(normalizedBase.dir, normalizedSpecifier.value);
+        const startDir = packageSearchStartDir(resolvedPath, normalizedSpecifier.value);
+        return findNearestPackageJsonPath(startDir);
+    }
+
+    return findBarePackageJson(normalizedSpecifier.value, normalizedBase.dir, normalizedBase.filename);
+}
+
 export { builtinModuleNames as builtinModules };
 
 export function isBuiltinModule(id) {
@@ -2532,6 +2678,7 @@ function runMain() {
 const moduleExports = {
     require: globalRequire,
     createRequire,
+    findPackageJSON,
     builtinModules: builtinModuleNames,
     isBuiltin: isBuiltinModule,
     wrap: wrap,

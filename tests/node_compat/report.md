@@ -1092,6 +1092,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
 | execSync is ENOSYS-stubbed; default maxBuffer behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execSync is ENOSYS-stubbed; maxBuffer overflow ENOBUFS behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
+| findPackageJSON same-process API is implemented; remaining vendored test failures use child_process/loader eval paths | 1 | `parallel/test-find-package-json.js` |
 | fork() IPC child.send/process.send emulation is not implemented | 1 | `parallel/test-cli-eval.js#block_03_regression_test_for_https_github_com_nodejs_node_issues_1194` |
 | fork() abort-listener lifecycle for timeout+signal is incomplete | 1 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03` |
 | fork() args/options parsing and ERR_INVALID_ARG_TYPE behavior are incomplete | 1 | `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null` |
@@ -1163,7 +1164,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:http client socketPath transport flow is incomplete (unix-socket request hangs) | 1 | `parallel/test-http-client-pipe-end.js` |
 | node:https Agent constructor compatibility is incomplete (call without new) | 1 | `parallel/test-https-agent-constructor.js` |
 | node:https Agent#getName TLS option keying is incomplete | 1 | `parallel/test-https-agent-getname.js` |
-| node:module.findPackageJSON API behavior is incomplete | 1 | `parallel/test-find-package-json.js` |
 | node:sqlite applyChangeset conflict-resolution behavior is incomplete | 1 | `parallel/test-sqlite-session.js#test_05_conflict_resolution` |
 | node:sqlite rejects mixed named+positional parameters where Node accepts them | 1 | `parallel/test-sqlite-statement-sync.js#test_06_statementsync_prototype_expandedsql` |
 | node:test mock timers Date behavior is incomplete | 1 | `parallel/test-runner-mock-timers-date.js` |

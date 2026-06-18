@@ -848,6 +848,102 @@ export const testCjsPackageReexportNamedExports = async () => {
     }
 };
 
+export const testFindPackageJson = async () => {
+    try {
+        const { createRequire, findPackageJSON } = await import('node:module');
+        const require = createRequire('/find-package-json-app/entry.cjs');
+
+        fs.mkdirSync('/find-package-json-app/node_modules/pkg/subfolder', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/node_modules/pkg/subfolder2', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/node_modules/pkg2', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/packages/nested/sub-pkg-cjs', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/packages/nested/sub-pkg-esm', { recursive: true });
+
+        fs.writeFileSync('/find-package-json-app/package.json', JSON.stringify({ name: 'root-app' }));
+        fs.writeFileSync('/find-package-json-app/packages/nested/package.json', JSON.stringify({ name: 'nested-parent' }));
+        fs.writeFileSync('/find-package-json-app/packages/nested/sub-pkg-cjs/index.cjs', [
+            'const { findPackageJSON } = require("node:module");',
+            'module.exports = findPackageJSON("..", __filename);',
+        ].join('\n'));
+        fs.writeFileSync('/find-package-json-app/packages/nested/sub-pkg-esm/index.mjs', [
+            'import { findPackageJSON } from "node:module";',
+            'export default findPackageJSON("..", import.meta.url);',
+        ].join('\n'));
+
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg/subfolder/index.js', 'module.exports = { subfolder: true };');
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg/subfolder/package.json', JSON.stringify({
+            name: 'pkg-subfolder',
+            secretNumberSubfolder: 11,
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg/subfolder2/index.js', 'module.exports = { subfolder2: true };');
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg/subfolder2/package.json', JSON.stringify({
+            name: 'pkg-subfolder2',
+            secretNumberSubfolder2: 22,
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg/package.json', JSON.stringify({
+            name: 'pkg',
+            exports: './subfolder/index.js',
+            secretNumberPkgRoot: 33,
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg2/package.json', JSON.stringify({
+            name: 'pkg2',
+            main: '/find-package-json-app/node_modules/pkg/subfolder2/index.js',
+            secretNumberPkg2: 44,
+        }));
+
+        assert.throws(
+            () => findPackageJSON(),
+            { code: 'ERR_MISSING_ARGS' },
+        );
+
+        for (const invalidBase of [null, {}, [], Symbol('invalid'), () => {}, true, false, 1, 0]) {
+            assert.throws(
+                () => findPackageJSON('', invalidBase),
+                { code: 'ERR_INVALID_ARG_TYPE' },
+            );
+        }
+
+        const basePath = '/find-package-json-app/entry.mjs';
+        const baseUrl = pathToFileURL(basePath);
+        const subfolderPackageJson = '/find-package-json-app/node_modules/pkg/subfolder/package.json';
+        const nestedPackageJson = '/find-package-json-app/packages/nested/package.json';
+        const pkgRootPackageJson = '/find-package-json-app/node_modules/pkg/package.json';
+        const pkg2RootPackageJson = '/find-package-json-app/node_modules/pkg2/package.json';
+
+        assert.strictEqual(
+            findPackageJSON('./node_modules/pkg/subfolder/index.js', baseUrl.href),
+            subfolderPackageJson,
+        );
+        assert.strictEqual(
+            findPackageJSON(new URL('./node_modules/pkg/subfolder/index.js', baseUrl), baseUrl),
+            subfolderPackageJson,
+        );
+        assert.strictEqual(
+            findPackageJSON('./node_modules/pkg/subfolder/index.js', basePath),
+            subfolderPackageJson,
+        );
+
+        const cjsParentPackageJson = require('/find-package-json-app/packages/nested/sub-pkg-cjs/index.cjs');
+        assert.strictEqual(cjsParentPackageJson, nestedPackageJson);
+
+        const esmParentPackageJson = (await import('/find-package-json-app/packages/nested/sub-pkg-esm/index.mjs')).default;
+        assert.strictEqual(esmParentPackageJson, nestedPackageJson);
+
+        assert.strictEqual(findPackageJSON('pkg', baseUrl), pkgRootPackageJson);
+        assert.strictEqual(findPackageJSON('pkg2', baseUrl), pkg2RootPackageJson);
+
+        const pkgResolved = require.resolve('pkg', { paths: ['/find-package-json-app'] });
+        assert.strictEqual(findPackageJSON(pkgResolved), subfolderPackageJson);
+        assert.strictEqual(findPackageJSON(pathToFileURL(pkgResolved).href), subfolderPackageJson);
+        assert.strictEqual(findPackageJSON(pathToFileURL(pkgResolved)), subfolderPackageJson);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testRequireEsmErrorHandling = async () => {
     try {
         fs.mkdirSync('/require-esm-errors-app', { recursive: true });

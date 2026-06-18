@@ -6488,7 +6488,7 @@
       }
     },
     "parallel/test-filehandle-readablestream.js": { "category": "known-gap", "reason": "fs/promises FileHandle.readableWebStream support is missing or incomplete" },
-    "parallel/test-find-package-json.js": { "category": "known-gap", "reason": "node:module.findPackageJSON API behavior is incomplete" },
+    "parallel/test-find-package-json.js": { "category": "known-gap", "reason": "findPackageJSON same-process API is implemented; remaining vendored test failures use child_process/loader eval paths" },
     "parallel/test-fixed-queue.js": {
       "category": "node-internals",
       "reason": "requires --expose-internals and internal/fixed_queue",
