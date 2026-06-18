@@ -151,19 +151,19 @@ pub struct NodeCompatTestEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum InstalledAppCategory {
+pub enum NodeModulesAppCategory {
     Runnable,
     KnownGap,
     Deferred,
 }
 
-impl InstalledAppCategory {
+impl NodeModulesAppCategory {
     pub fn from_config_value(value: &str) -> anyhow::Result<Self> {
         match value {
             "runnable" => Ok(Self::Runnable),
             "known-gap" | "gap" => Ok(Self::KnownGap),
             "deferred" => Ok(Self::Deferred),
-            other => anyhow::bail!("unknown installed_apps category '{other}'"),
+            other => anyhow::bail!("unknown node_modules_apps category '{other}'"),
         }
     }
 
@@ -189,20 +189,20 @@ impl InstalledAppCategory {
 }
 
 #[derive(Debug, Clone)]
-pub struct InstalledAppTestEntry {
+pub struct NodeModulesAppTestEntry {
     pub file: String,
-    pub category: InstalledAppCategory,
+    pub category: NodeModulesAppCategory,
     pub coverage: String,
     pub reason: Option<String>,
     pub timeout_secs: u64,
 }
 
 #[derive(Debug, Clone)]
-pub struct InstalledAppEntry {
+pub struct NodeModulesAppEntry {
     pub name: String,
-    pub category: InstalledAppCategory,
+    pub category: NodeModulesAppCategory,
     pub reason: Option<String>,
-    pub tests: Vec<InstalledAppTestEntry>,
+    pub tests: Vec<NodeModulesAppTestEntry>,
 }
 
 /// Extract the numeric index from a subtest name like "block_00_foo" or "test_03_bar".
@@ -333,7 +333,7 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
     Ok(tests)
 }
 
-pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledAppEntry>> {
+pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModulesAppEntry>> {
     let content = fs::read_to_string(path)?;
     let json_str = strip_jsonc_comments(&content);
     let value: serde_json::Value = serde_json::from_str(&json_str)?;
@@ -341,11 +341,11 @@ pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledApp
     let apps_obj = value
         .get("apps")
         .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow::anyhow!("installed_apps config missing 'apps' object"))?;
+        .ok_or_else(|| anyhow::anyhow!("node_modules_apps config missing 'apps' object"))?;
 
     let mut apps = Vec::new();
     for (app_name, opts) in apps_obj {
-        let category = installed_app_category_from_value(opts, None)?;
+        let category = node_modules_app_category_from_value(opts, None)?;
         let reason = opts
             .get("reason")
             .and_then(|v| v.as_str())
@@ -357,11 +357,13 @@ pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledApp
         let tests_obj = opts
             .get("tests")
             .and_then(|v| v.as_object())
-            .ok_or_else(|| anyhow::anyhow!("installed app '{app_name}' missing 'tests' object"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("node_modules app '{app_name}' missing 'tests' object")
+            })?;
 
         let mut tests = Vec::new();
         for (test_file, test_opts) in tests_obj {
-            let test_category = installed_app_category_from_value(test_opts, Some(category))?;
+            let test_category = node_modules_app_category_from_value(test_opts, Some(category))?;
             let (coverage, test_reason, timeout_secs) = match test_opts {
                 serde_json::Value::String(coverage) => {
                     (coverage.clone(), reason.clone(), default_timeout_secs)
@@ -373,7 +375,7 @@ pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledApp
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| {
                             anyhow::anyhow!(
-                                "installed app '{app_name}' test '{test_file}' missing coverage"
+                                "node_modules app '{app_name}' test '{test_file}' missing coverage"
                             )
                         })?
                         .to_string();
@@ -389,11 +391,11 @@ pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledApp
                     (coverage, test_reason, timeout_secs)
                 }
                 _ => anyhow::bail!(
-                    "installed app '{app_name}' test '{test_file}' must be a coverage string or object"
+                    "node_modules app '{app_name}' test '{test_file}' must be a coverage string or object"
                 ),
             };
 
-            tests.push(InstalledAppTestEntry {
+            tests.push(NodeModulesAppTestEntry {
                 file: test_file.clone(),
                 category: test_category,
                 coverage,
@@ -403,7 +405,7 @@ pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledApp
         }
         tests.sort_by(|a, b| a.file.cmp(&b.file));
 
-        apps.push(InstalledAppEntry {
+        apps.push(NodeModulesAppEntry {
             name: app_name.clone(),
             category,
             reason,
@@ -415,17 +417,17 @@ pub fn load_installed_apps_config(path: &str) -> anyhow::Result<Vec<InstalledApp
     Ok(apps)
 }
 
-fn installed_app_category_from_value(
+fn node_modules_app_category_from_value(
     value: &serde_json::Value,
-    inherited: Option<InstalledAppCategory>,
-) -> anyhow::Result<InstalledAppCategory> {
+    inherited: Option<NodeModulesAppCategory>,
+) -> anyhow::Result<NodeModulesAppCategory> {
     if let Some(category) = value.get("category").and_then(|v| v.as_str()) {
-        return InstalledAppCategory::from_config_value(category);
+        return NodeModulesAppCategory::from_config_value(category);
     }
     if value.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
-        return Ok(InstalledAppCategory::KnownGap);
+        return Ok(NodeModulesAppCategory::KnownGap);
     }
-    Ok(inherited.unwrap_or(InstalledAppCategory::Runnable))
+    Ok(inherited.unwrap_or(NodeModulesAppCategory::Runnable))
 }
 
 /// Recursively copy a directory and all its contents to a destination.

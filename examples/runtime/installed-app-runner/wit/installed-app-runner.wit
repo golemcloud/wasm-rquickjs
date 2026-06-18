@@ -1,5 +1,0 @@
-package quickjs:installed-app-runner;
-
-world installed-app-runner {
-  export run-test: func(test-path: string) -> string;
-}

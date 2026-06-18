@@ -803,7 +803,6 @@ Compatibility stubs — workers are not supported in single-threaded WASM.
 ### Compatibility Reports
 
 - [NPM Library Compatibility Tracker](tests/libraries/libraries.md) — test results for popular npm packages
-- [Installed App Compatibility Report](tests/installed_apps/report.md) — CI-enforced smoke tests for unbundled npm apps with real `node_modules`
 - [Node.js v22 Compatibility Report](tests/node_compat/report.md) — per-test results for vendored Node.js test suite
 
 ### Coming from QuickJS

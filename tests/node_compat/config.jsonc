@@ -5876,7 +5876,7 @@
     "es-module/test-require-module-cycle-cjs-esm-esm.js": {},
     "es-module/test-require-module-cycle-esm-cjs-esm-esm.js": {
       "category": "known-gap",
-      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct installed-app same-process module graph coverage lives in tests/installed_apps",
+      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
       "split": true,
       "subtests": {
         "block_00_a_mjs_b_cjs_c_mjs_a_mjs": {},
@@ -5886,7 +5886,7 @@
     },
     "es-module/test-require-module-cycle-esm-cjs-esm.js": {
       "category": "known-gap",
-      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct installed-app same-process module graph coverage lives in tests/installed_apps",
+      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
       "split": true,
       "subtests": {
         "block_00_require_a_cjs_a_mjs_b_cjs_a_mjs": {},
@@ -5897,7 +5897,7 @@
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm-esm.js": {
       "category": "known-gap",
-      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct installed-app same-process module graph coverage lives in tests/installed_apps",
+      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
       "split": true,
       "subtests": {
         "block_00_a_mjs_b_mjs_c_cjs_z_mjs_a_mjs": {},
@@ -5908,7 +5908,7 @@
     },
     "es-module/test-require-module-cycle-esm-esm-cjs-esm.js": {
       "category": "known-gap",
-      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process installed-app coverage passes",
+      "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes",
       "split": true,
       "subtests": {
         "block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs": {},
