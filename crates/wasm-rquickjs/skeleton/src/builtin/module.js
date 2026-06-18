@@ -1347,6 +1347,48 @@ function startsWithKeywordAt(source, keyword, pos) {
     return source.startsWith(keyword, pos) && hasIdentifierBoundary(source, pos, pos + keyword.length);
 }
 
+function skipNonCode(source, pos, skipRegex) {
+    const code = source.charCodeAt(pos);
+    if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
+        return skipQuotedOrTemplate(source, pos);
+    }
+    if (code === 0x2f && pos + 1 < source.length && source.charCodeAt(pos + 1) === 0x2f) {
+        let i = pos + 2;
+        while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+        return i;
+    }
+    if (code === 0x2f && pos + 1 < source.length && source.charCodeAt(pos + 1) === 0x2a) {
+        let i = pos + 2;
+        while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+        return Math.min(i + 2, source.length);
+    }
+    if (skipRegex && code === 0x2f && isRegexLiteralStartInSource(source, pos)) {
+        return skipRegexLiteralInSource(source, pos);
+    }
+    return null;
+}
+
+function scanSourceCodePositions(source, options, visitor) {
+    const skipRegex = !options || options.skipRegex !== false;
+    let i = 0;
+    while (i < source.length) {
+        const skipped = skipNonCode(source, i, skipRegex);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+
+        const next = visitor(i, source.charCodeAt(i));
+        if (next === false) return false;
+        if (typeof next === 'number') {
+            i = next;
+        } else {
+            i++;
+        }
+    }
+    return true;
+}
+
 function isStaticExportSyntax(source, pos) {
     if (previousSignificantChar(source, pos) === 0x2e) return false; // member property
     const next = skipWhitespace(source, pos + 6);
@@ -1371,85 +1413,46 @@ function isStaticImportSyntax(source, pos) {
 }
 
 function looksLikeEsmSource(source) {
-    let i = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
-            i = skipRegexLiteralInSource(source, i);
-            continue;
-        }
-
+    let found = false;
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
         if (source.startsWith('export', i) && hasIdentifierBoundary(source, i, i + 6) && isStaticExportSyntax(source, i)) {
-            return true;
+            found = true;
+            return false;
         }
         if (source.startsWith('import', i) && hasIdentifierBoundary(source, i, i + 6)) {
-            if (isStaticImportSyntax(source, i)) return true;
+            if (isStaticImportSyntax(source, i)) {
+                found = true;
+                return false;
+            }
         }
-        i++;
-    }
-    return false;
+        return undefined;
+    });
+    return found;
 }
 
 function hasCjsWrapperRequireRedeclaration(source) {
-    let i = 0;
+    let found = false;
     let braceDepth = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
-            i = skipRegexLiteralInSource(source, i);
-            continue;
-        }
-
+    scanSourceCodePositions(source, { skipRegex: true }, (i, code) => {
         if (code === 0x7b) {
             braceDepth++;
-            i++;
-            continue;
+            return undefined;
         }
         if (code === 0x7d) {
             braceDepth = Math.max(0, braceDepth - 1);
-            i++;
-            continue;
+            return undefined;
         }
 
         if (braceDepth === 0 && (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i))) {
             let next = skipWhitespace(source, i + (source.startsWith('const', i) ? 5 : 3));
             if (source.startsWith('require', next) && hasIdentifierBoundary(source, next, next + 7)) {
-                return true;
+                found = true;
+                return false;
             }
         }
-        i++;
-    }
-    return false;
+        return undefined;
+    });
+    return found;
 }
 
 function readStaticSpecifierString(source, start) {
@@ -1548,60 +1551,18 @@ function staticImportSpecifierAt(source, pos) {
 
 function collectStaticEsmSpecifiers(source) {
     const specifiers = [];
-    let i = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
-            i = skipRegexLiteralInSource(source, i);
-            continue;
-        }
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
         const specifier = staticImportSpecifierAt(source, i);
         if (specifier !== null) specifiers.push(specifier);
-        i++;
-    }
+        return undefined;
+    });
     return specifiers;
 }
 
 function collectLiteralRequireSpecifiers(source, names) {
     names = names || ['require'];
     const specifiers = [];
-    let i = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
-            i = skipRegexLiteralInSource(source, i);
-            continue;
-        }
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
         for (let n = 0; n < names.length; n++) {
             const name = names[n];
             if (startsWithKeywordAt(source, name, i) && previousSignificantChar(source, i) !== 0x2e) {
@@ -1612,31 +1573,14 @@ function collectLiteralRequireSpecifiers(source, names) {
                 }
             }
         }
-        i++;
-    }
+        return undefined;
+    });
     return specifiers;
 }
 
 function collectCreateRequireFactoryNames(source) {
     const names = [];
-    let i = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
+    scanSourceCodePositions(source, { skipRegex: false }, (i) => {
         if (startsWithKeywordAt(source, 'import', i)) {
             const end = statementEndForStaticImport(source, i + 6);
             const statement = source.slice(i, end);
@@ -1655,11 +1599,10 @@ function collectCreateRequireFactoryNames(source) {
                     }
                 }
             }
-            i = end;
-            continue;
+            return end;
         }
-        i++;
-    }
+        return undefined;
+    });
     return names;
 }
 
@@ -1667,24 +1610,7 @@ function collectCreateRequireAliases(source, factoryNames) {
     factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
     const aliases = [];
     if (factoryNames.length === 0) return aliases;
-    let i = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
+    scanSourceCodePositions(source, { skipRegex: false }, (i) => {
         if (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i) || startsWithKeywordAt(source, 'var', i)) {
             const keywordLen = source.startsWith('const', i) ? 5 : 3;
             let p = skipWhitespace(source, i + keywordLen);
@@ -1706,8 +1632,8 @@ function collectCreateRequireAliases(source, factoryNames) {
                 }
             }
         }
-        i++;
-    }
+        return undefined;
+    });
     return aliases;
 }
 
@@ -1715,28 +1641,7 @@ function collectCreateRequireCallSpecifiers(source, factoryNames) {
     factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
     const specifiers = [];
     if (factoryNames.length === 0) return specifiers;
-    let i = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
-            i = skipRegexLiteralInSource(source, i);
-            continue;
-        }
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
         for (let f = 0; f < factoryNames.length; f++) {
             const factory = factoryNames[f];
             if (startsWithKeywordAt(source, factory, i) && previousSignificantChar(source, i) !== 0x2e) {
@@ -1753,8 +1658,8 @@ function collectCreateRequireCallSpecifiers(source, factoryNames) {
                 }
             }
         }
-        i++;
-    }
+        return undefined;
+    });
     return specifiers;
 }
 

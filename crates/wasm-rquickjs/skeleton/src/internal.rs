@@ -12,6 +12,7 @@ use serde::Deserialize;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::ops::ControlFlow;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
@@ -1166,42 +1167,17 @@ fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String
 
 fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
     let bytes = source.as_bytes();
-    let mut i = 0usize;
+    let mut found = false;
     let mut brace_depth = 0usize;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
+    scan_code_positions(source, true, |i, byte| {
+        match byte {
             b'{' => {
                 brace_depth += 1;
-                i += 1;
-                continue;
+                return ControlFlow::Continue(None);
             }
             b'}' => {
                 brace_depth = brace_depth.saturating_sub(1);
-                i += 1;
-                continue;
+                return ControlFlow::Continue(None);
             }
             _ => {}
         }
@@ -1217,14 +1193,15 @@ fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
                         && is_ident_start_boundary(bytes, next)
                         && is_ident_boundary(bytes, next + 7)
                     {
-                        return true;
+                        found = true;
+                        return ControlFlow::Break(());
                     }
                 }
             }
         }
-        i = next_char_boundary(source, i);
-    }
-    false
+        ControlFlow::Continue(None)
+    });
+    found
 }
 
 fn is_ascii_js_identifier(value: &str) -> bool {
@@ -2643,6 +2620,25 @@ fn parse_require_string(source: &str, pos: usize) -> Option<(String, usize)> {
     }
 }
 
+fn parse_require_string_loose(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if !source[pos..].starts_with("require") || !is_ident_boundary(bytes, pos + 7) {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 7);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (specifier, next) = read_js_string(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i < bytes.len() && bytes[i] == b')' {
+        Some((specifier, i + 1))
+    } else {
+        None
+    }
+}
+
 fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     if !is_free_ident_start(bytes, pos)
@@ -2990,6 +2986,72 @@ fn parse_module_exports_reexport(source: &str, pos: usize) -> Option<(String, us
     }
 }
 
+fn parse_export_star_reexport(source: &str, pos: usize) -> Option<(String, usize)> {
+    fn parse_export_star_callee(source: &str, pos: usize) -> Option<usize> {
+        let bytes = source.as_bytes();
+        let member_access = previous_significant_byte(source, pos) == Some(b'.');
+        if is_free_ident_start(bytes, pos)
+            && !member_access
+            && source[pos..].starts_with("__exportStar")
+            && is_ident_boundary(bytes, pos + 12)
+        {
+            return Some(pos + 12);
+        }
+        if is_free_ident_start(bytes, pos)
+            && !member_access
+            && source[pos..].starts_with("__export")
+            && is_ident_boundary(bytes, pos + 8)
+        {
+            return Some(pos + 8);
+        }
+        if is_free_ident_start(bytes, pos)
+            && source[pos..].starts_with("tslib")
+            && is_ident_boundary(bytes, pos + 5)
+        {
+            let mut i = skip_ws_comments(source, pos + 5);
+            if i >= bytes.len() || bytes[i] != b'.' {
+                return None;
+            }
+            i = skip_ws_comments(source, i + 1);
+            if source[i..].starts_with("__exportStar") && is_ident_boundary(bytes, i + 12) {
+                return Some(i + 12);
+            }
+            if source[i..].starts_with("__export") && is_ident_boundary(bytes, i + 8) {
+                return Some(i + 8);
+            }
+        }
+        None
+    }
+
+    let bytes = source.as_bytes();
+    let mut i = parse_export_star_callee(source, pos)?;
+    i = skip_ws_comments(source, i);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+
+    i = skip_ws_comments(source, i + 1);
+    let (specifier, next) = parse_require_string(source, i)?;
+    i = skip_ws_comments(source, next);
+
+    if i < bytes.len() && bytes[i] == b',' {
+        i = skip_ws_comments(source, i + 1);
+        let (_, next_target) = parse_exports_target(source, i)?;
+        i = skip_ws_comments(source, next_target);
+    }
+
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+
+    let after_call = skip_ws_comments(source, i + 1);
+    if is_statement_boundary(source, after_call) {
+        Some((specifier, after_call.min(source.len())))
+    } else {
+        None
+    }
+}
+
 fn parse_module_exports_assignment(source: &str, pos: usize) -> Option<usize> {
     let bytes = source.as_bytes();
     let (target, mut i) = parse_exports_target(source, pos)?;
@@ -3002,6 +3064,135 @@ fn parse_module_exports_assignment(source: &str, pos: usize) -> Option<usize> {
         && (i + 1 >= bytes.len() || !matches!(bytes[i + 1], b'=' | b'>'))
     {
         Some(i + 1)
+    } else {
+        None
+    }
+}
+
+fn parse_exports_literal_key(source: &str, pos: usize) -> Option<(String, bool, usize)> {
+    if let Some((ident, next)) = read_ident(source, pos) {
+        return Some((ident, true, next));
+    }
+    let (name, next) = read_js_string(source, pos)?;
+    Some((name, false, next))
+}
+
+fn skip_object_literal_value(source: &str, pos: usize, object_end: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    let mut brace_depth = 0usize;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    while i < object_end {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < object_end && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < object_end && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < object_end && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < object_end && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(object_end);
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i).min(object_end);
+                continue;
+            }
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth = brace_depth.saturating_sub(1),
+            b'(' => paren_depth += 1,
+            b')' => paren_depth = paren_depth.saturating_sub(1),
+            b'[' => bracket_depth += 1,
+            b']' => bracket_depth = bracket_depth.saturating_sub(1),
+            b',' if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => return i,
+            _ => {}
+        }
+        i = next_char_boundary(source, i);
+    }
+    object_end
+}
+
+fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<String>, Vec<String>, usize)> {
+    let bytes = source.as_bytes();
+    let (target, mut i) = parse_exports_target(source, pos)?;
+    if target != CjsExportTarget::ModuleExports {
+        return None;
+    }
+
+    i = skip_ws_comments(source, i);
+    if i >= bytes.len() || bytes[i] != b'=' || (i + 1 < bytes.len() && matches!(bytes[i + 1], b'=' | b'>')) {
+        return None;
+    }
+
+    i = skip_ws_comments(source, i + 1);
+    if i >= bytes.len() || bytes[i] != b'{' {
+        return None;
+    }
+    let object_end = find_matching_brace(source, i)?;
+
+    let mut exports = Vec::new();
+    let mut reexports = Vec::new();
+    let mut cursor = skip_ws_comments(source, i + 1);
+
+    while cursor < object_end {
+        if bytes[cursor] == b',' {
+            cursor = skip_ws_comments(source, cursor + 1);
+            continue;
+        }
+
+        if source[cursor..].starts_with("...") {
+            let (specifier, next) = parse_require_string_loose(source, skip_ws_comments(source, cursor + 3))?;
+            add_unique(&mut reexports, specifier);
+            cursor = skip_ws_comments(source, next);
+            if cursor < object_end {
+                if bytes[cursor] != b',' {
+                    return None;
+                }
+                cursor = skip_ws_comments(source, cursor + 1);
+            }
+            continue;
+        }
+
+        let Some((name, key_is_ident, key_end)) = parse_exports_literal_key(source, cursor) else {
+            break;
+        };
+        let mut next = skip_ws_comments(source, key_end);
+        if next < object_end && bytes[next] == b':' {
+            next = skip_ws_comments(source, next + 1);
+            add_unique(&mut exports, name);
+            if let Some((specifier, _)) = parse_require_string_loose(source, next) {
+                add_unique(&mut reexports, specifier);
+                break;
+            }
+            cursor = skip_ws_comments(source, skip_object_literal_value(source, next, object_end));
+        } else if key_is_ident {
+            add_unique(&mut exports, name);
+            cursor = next;
+        } else {
+            break;
+        }
+
+        if cursor < object_end {
+            if bytes[cursor] != b',' {
+                return None;
+            }
+            cursor = skip_ws_comments(source, cursor + 1);
+        }
+    }
+
+    let after_object = skip_ws_comments(source, object_end + 1);
+    if is_statement_boundary(source, after_object) {
+        Some((exports, reexports, after_object.min(source.len())))
     } else {
         None
     }
@@ -3052,41 +3243,69 @@ fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<Strin
 }
 
 fn callback_has_transpiler_reexport(callback: &str, binding: &str) -> bool {
-    let bytes = callback.as_bytes();
-    let mut i = 0usize;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(callback, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(callback, i) => {
-                i = skip_regex_literal(callback, i);
-                continue;
-            }
-            _ => {}
-        }
+    let mut found = false;
+    scan_code_positions(callback, true, |i, _| {
         if parse_define_property_reexport(callback, i, binding).is_some() {
-            return true;
+            found = true;
+            return ControlFlow::Break(());
         }
-        i = next_char_boundary(callback, i);
+        if parse_direct_exports_reexport_assignment(callback, i, binding).is_some() {
+            found = true;
+            return ControlFlow::Break(());
+        }
+        ControlFlow::Continue(None)
+    });
+    found
+}
+
+fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let (target, mut i) = parse_exports_target(source, pos)?;
+    if target != CjsExportTarget::Exports {
+        return None;
     }
-    false
+
+    i = skip_ws_comments(source, i);
+    if i >= bytes.len() || bytes[i] != b'[' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (key, next) = read_ident(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b']' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if i >= bytes.len() || bytes[i] != b'=' || (i + 1 < bytes.len() && matches!(bytes[i + 1], b'=' | b'>')) {
+        return None;
+    }
+
+    i = skip_ws_comments(source, i + 1);
+    if !source[i..].starts_with(binding)
+        || !is_free_ident_start(bytes, i)
+        || !is_ident_boundary(bytes, i + binding.len())
+    {
+        return None;
+    }
+    i = skip_ws_comments(source, i + binding.len());
+    if i >= bytes.len() || bytes[i] != b'[' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !source[i..].starts_with(&key) || !is_free_ident_start(bytes, i) || !is_ident_boundary(bytes, i + key.len()) {
+        return None;
+    }
+    i = skip_ws_comments(source, i + key.len());
+    if i >= bytes.len() || bytes[i] != b']' {
+        return None;
+    }
+
+    let after_rhs = skip_ws_comments(source, i + 1);
+    if is_statement_boundary(source, after_rhs) {
+        Some(after_rhs.min(source.len()))
+    } else {
+        None
+    }
 }
 
 fn parse_define_property_reexport(source: &str, pos: usize, binding: &str) -> Option<usize> {
@@ -3247,75 +3466,138 @@ fn skip_regex_literal(source: &str, pos: usize) -> usize {
     pos + 1
 }
 
-fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
+fn skip_non_code(source: &str, pos: usize, skip_regex: bool) -> Option<usize> {
     let bytes = source.as_bytes();
-    let mut analysis = CjsExportAnalysis::default();
-    let mut require_bindings = HashMap::<String, String>::new();
+    match bytes.get(pos).copied()? {
+        b'\'' | b'"' | b'`' => Some(skip_string_or_template(source, pos)),
+        b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' => {
+            let mut i = pos + 2;
+            while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                i += 1;
+            }
+            Some(i)
+        }
+        b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
+            let mut i = pos + 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            Some((i + 2).min(bytes.len()))
+        }
+        b'/' if skip_regex && is_regex_literal_start(source, pos) => {
+            Some(skip_regex_literal(source, pos))
+        }
+        _ => None,
+    }
+}
+
+fn scan_code_positions<F>(source: &str, skip_regex: bool, mut visitor: F) -> ControlFlow<()>
+where
+    F: FnMut(usize, u8) -> ControlFlow<(), Option<usize>>,
+{
+    let bytes = source.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
+        if let Some(next) = skip_non_code(source, i, skip_regex) {
+            i = next;
+            continue;
+        }
+
+        match visitor(i, bytes[i]) {
+            ControlFlow::Break(()) => return ControlFlow::Break(()),
+            ControlFlow::Continue(Some(next)) => i = next,
+            ControlFlow::Continue(None) => i = next_char_boundary(source, i),
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn scan_code_positions_with_brace_depth<F>(
+    source: &str,
+    skip_regex: bool,
+    mut visitor: F,
+) -> ControlFlow<()>
+where
+    F: FnMut(usize, u8, usize) -> ControlFlow<(), Option<usize>>,
+{
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut brace_depth = 0usize;
+    while i < bytes.len() {
+        if let Some(next) = skip_non_code(source, i, skip_regex) {
+            i = next;
+            continue;
+        }
+
+        let current = bytes[i];
+        match visitor(i, current, brace_depth) {
+            ControlFlow::Break(()) => return ControlFlow::Break(()),
+            ControlFlow::Continue(Some(next)) => i = next,
+            ControlFlow::Continue(None) => i = next_char_boundary(source, i),
+        }
+
+        match current {
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth = brace_depth.saturating_sub(1),
             _ => {}
         }
+    }
+    ControlFlow::Continue(())
+}
+
+fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
+    let mut analysis = CjsExportAnalysis::default();
+    let mut require_bindings = HashMap::<String, String>::new();
+    scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
         if let Some((name, next)) = parse_export_member(source, i) {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
-            i = next;
-            continue;
+            return ControlFlow::Continue(Some(next));
         }
         if let Some((name, next)) = parse_define_property_export(source, i) {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
-            i = next;
-            continue;
+            return ControlFlow::Continue(Some(next));
         }
         if let Some((binding, specifier, next)) = parse_require_binding(source, i) {
             require_bindings.insert(binding, specifier);
-            i = next;
-            continue;
+            return ControlFlow::Continue(Some(next));
+        }
+        if brace_depth == 0
+            && let Some((specifier, next)) = parse_export_star_reexport(source, i)
+        {
+            analysis.is_cjs = true;
+            add_unique(&mut analysis.reexports, specifier);
+            return ControlFlow::Continue(Some(next));
         }
         if let Some((specifier, next)) = parse_module_exports_reexport(source, i) {
             analysis.is_cjs = true;
             analysis.reexports.clear();
             add_unique(&mut analysis.reexports, specifier);
-            i = next;
-            continue;
+            return ControlFlow::Continue(Some(next));
+        }
+        if let Some((exports, reexports, next)) = parse_module_exports_object_literal(source, i) {
+            analysis.is_cjs = true;
+            analysis.reexports.clear();
+            for name in exports {
+                add_unique(&mut analysis.exports, name);
+            }
+            for specifier in reexports {
+                add_unique(&mut analysis.reexports, specifier);
+            }
+            return ControlFlow::Continue(Some(next));
         }
         if let Some(next) = parse_module_exports_assignment(source, i) {
             analysis.is_cjs = true;
-            i = next;
-            continue;
+            return ControlFlow::Continue(Some(next));
         }
         if let Some((specifier, next)) = parse_object_keys_reexport(source, i, &require_bindings) {
             analysis.is_cjs = true;
             add_unique(&mut analysis.reexports, specifier);
-            i = next;
-            continue;
+            return ControlFlow::Continue(Some(next));
         }
-        i = next_char_boundary(source, i);
-    }
+        ControlFlow::Continue(None)
+    });
     analysis
 }
 
@@ -3442,7 +3724,6 @@ impl Loader for CjsCompatLoader {
         };
 
         let detected_analysis = analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new());
-
         // .cjs files are always CommonJS; for .js files, use the analyzer so
         // comments, strings, templates, and regex literals do not force CJS.
         let is_cjs = is_cjs_ext
@@ -4955,6 +5236,93 @@ mod cjs_export_analyzer_tests {
     }
 
     #[test]
+    fn detects_module_exports_object_literal_names_and_spread_reexports() {
+        assert_analysis(
+            r#"
+                const a = 1;
+                const c = 2;
+                const e = 4;
+                module.exports = { a, b: c, "d": e, ...require("./dep.cjs") };
+            "#,
+            true,
+            &["a", "b", "d"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                const a = 1;
+                module.exports = { a, dynamic: factory() };
+            "#,
+            true,
+            &["a", "dynamic"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                const a = 1;
+                module.exports = { a, b: require("./dep.cjs"), c: "not-detected" };
+            "#,
+            true,
+            &["a", "b"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                const a = 1;
+                const c = 3;
+                module.exports = { a, ...require("./dep.cjs"), c };
+            "#,
+            true,
+            &["a", "c"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                const a = 1;
+                module.exports = { a, [dynamic]: value, c: "not-detected" };
+            "#,
+            true,
+            &["a"],
+            &[],
+        );
+    }
+
+    #[test]
+    fn detects_only_documented_export_star_helper_reexports() {
+        assert_analysis(
+            r#"
+                __export(require("./dep-a.cjs"));
+                __exportStar(require("./dep-b.cjs"), exports);
+                tslib.__export(require("./dep-c.cjs"), exports);
+                tslib.__exportStar(require("./dep-d.cjs"), exports);
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep-a.cjs", "./dep-b.cjs", "./dep-c.cjs", "./dep-d.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                function nested() {
+                    __export(require("./dep-a.cjs"));
+                }
+                nested();
+                helper.__export(require("./dep-b.cjs"), exports);
+                __export(require(depName));
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+    }
+
+    #[test]
     fn require_binding_alone_does_not_classify_esm_as_cjs() {
         assert_analysis(
             r#"
@@ -5036,11 +5404,30 @@ mod cjs_export_analyzer_tests {
     }
 
     #[test]
+    fn require_redeclaration_scanner_skips_non_code() {
+        assert!(has_cjs_wrapper_require_redeclaration("const require = 1;"));
+        assert!(has_cjs_wrapper_require_redeclaration("let /*x*/ require = 1;"));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "const text = `const require = 1`; export default text;"
+        ));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "// const require = 1\nexport default 1;"
+        ));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "const re = /const require = 1/; export default re;"
+        ));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "function f() { const require = 1; return require; }"
+        ));
+    }
+
+    #[test]
     fn ignores_false_positive_assignments_and_define_property_descriptors() {
         assert_analysis(
             r#"
                 if (module.exports === undefined) {}
                 if (exports.fake == "no") {}
+                const template = `exports.templateOnly = "no";`;
                 Object.defineProperty(exports, "setterOnly", { set(v) { return dep.value; } });
                 Object.defineProperty(exports, "unrelated", { other: function () { return dep.value; } });
                 Object.defineProperty(exports, "regexDescriptor", { enumerable: /value:/ });
@@ -5092,6 +5479,33 @@ mod cjs_export_analyzer_tests {
                     Object.defineProperty(other, key, { value: 1 });
                     exports;
                     function unrelated() { return _dep[key]; }
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                Object.keys(dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    exports[key] = dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                Object.keys(dep).forEach(function (key) {
+                    exports[key] = other[key];
                 });
                 exports.own = "own";
             "#,
