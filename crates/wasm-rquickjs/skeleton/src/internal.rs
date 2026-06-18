@@ -2940,6 +2940,33 @@ fn is_simple_getter_body(body: &str) -> bool {
 }
 
 
+fn parse_exports_assign_require_value(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    if let Some((specifier, next)) = parse_require_string(source, pos) {
+        return Some((specifier, next));
+    }
+
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with("_interopRequireWildcard")
+        || !is_ident_boundary(bytes, pos + 23)
+    {
+        return None;
+    }
+
+    let mut i = skip_ws_comments(source, pos + 23);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (specifier, next) = parse_require_string(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+
+    Some((specifier, i + 1))
+}
+
 fn parse_require_binding(source: &str, pos: usize) -> Option<(String, String, usize)> {
     for keyword in ["var", "let", "const"] {
         if is_free_ident_start(source.as_bytes(), pos)
@@ -2953,7 +2980,7 @@ fn parse_require_binding(source: &str, pos: usize) -> Option<(String, String, us
                 return None;
             }
             i = skip_ws_comments(source, i + 1);
-            let (specifier, next) = parse_require_string(source, i)?;
+            let (specifier, next) = parse_exports_assign_require_value(source, i)?;
             let after_require = skip_ws_comments(source, next);
             if !is_statement_boundary(source, after_require) {
                 return None;
@@ -5506,6 +5533,48 @@ mod cjs_export_analyzer_tests {
                 var dep = require("./dep.cjs");
                 Object.keys(dep).forEach(function (key) {
                     exports[key] = other[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (Object.prototype.hasOwnProperty.call(exports, key)) return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopWildcard(require("./dep.cjs"));
+                Object.keys(_dep).forEach(function (key) {
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var name = "./dep.cjs";
+                var _dep = _interopRequireWildcard(require(name));
+                Object.keys(_dep).forEach(function (key) {
+                    exports[key] = _dep[key];
                 });
                 exports.own = "own";
             "#,
