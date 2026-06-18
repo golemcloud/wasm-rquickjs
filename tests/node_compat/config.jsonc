@@ -7252,7 +7252,7 @@
     "parallel/test-promises-unhandled-rejections.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
     "parallel/test-promises-unhandled-symbol-rejections.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
     "parallel/test-promises-warning-on-unhandled-rejection.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
-    "parallel/test-punycode.js": { "category": "known-gap", "reason": "legacy punycode builtin is not wired into CommonJS module resolution" },
+    "parallel/test-punycode.js": {},
     "parallel/test-queue-microtask-uncaught-asynchooks.js": { "category": "known-gap", "reason": "async_hooks lifecycle events for microtasks are not implemented" },
     "parallel/test-queue-microtask.js": {
       "category": "known-gap",

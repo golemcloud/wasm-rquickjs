@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-17 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-18 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3099/4295 (72.2%)
+**Primary compatibility (CI-enforced):** 3100/4295 (72.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3099 | 72.2% | 55.2% | 46.0% |
-| 🧩 known gap | 1196 | 27.8% | 21.3% | 17.8% |
+| ✅ passing (runnable) | 3100 | 72.2% | 55.3% | 46.1% |
+| 🧩 known gap | 1195 | 27.8% | 21.3% | 17.8% |
 | 🚫 WASI-impossible (excluded) | 1153 | — | 20.6% | 17.1% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1121 | — | — | 16.7% |
 | **Total** | **6731** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3099/5610 (55.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3100/5610 (55.3%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 469 | 101 | 92 | 83 | 11 | 0 | 182 | 52.3% | 35.2% |
+| other | 469 | 102 | 91 | 83 | 11 | 0 | 182 | 52.8% | 35.5% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -680,7 +680,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1196)
+### known gap (1195)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1144,7 +1144,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | keep-alive socket reuse plus drain/backpressure behavior for corked responses is not Node-compatible | 1 | `parallel/test-http-outgoing-end-cork.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
-| legacy punycode builtin is not wired into CommonJS module resolution | 1 | `parallel/test-punycode.js` |
 | maxRequestsPerSocket keep-alive header behavior (Keep-Alive/Connection framing) is not Node-compatible | 1 | `parallel/test-http-keep-alive-max-requests.js` |
 | missing importModuleDynamically callback does not raise ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING | 1 | `parallel/test-vm-no-dynamic-import-callback.js` |
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
