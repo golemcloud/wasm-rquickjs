@@ -1,7 +1,8 @@
 test_r::enable!();
 
 use crate::common::js_subtest_parser::{
-    BlockInfo, SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
+    BlockInfo, SubtestDiscovery, TestInfo, discover_subtests_with_options, rewrite_for_block,
+    rewrite_for_node_test,
 };
 use crate::common::{
     CompiledTest, GolemPreparedComponent, TestInstance, load_node_compat_config,
@@ -60,7 +61,7 @@ fn prepare_node_compat_full(
 #[derive(Clone)]
 enum DiscoveryData {
     Block(Vec<BlockInfo>),
-    NodeTest,
+    NodeTest(Vec<TestInfo>),
 }
 
 fn handle_test_result(
@@ -214,7 +215,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 }
             };
 
-            let discovery = discover_subtests(&path, &source);
+            let discovery = discover_subtests_with_options(&path, &source, entry.nested_node_test);
 
             // Staleness check: compare discovered subtest count vs config count
             let discovered_count = match &discovery {
@@ -246,7 +247,9 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 let discovery_clone = match &discovery {
                     SubtestDiscovery::None => None,
                     SubtestDiscovery::Block(blocks) => Some(DiscoveryData::Block(blocks.clone())),
-                    SubtestDiscovery::NodeTest(_) => Some(DiscoveryData::NodeTest),
+                    SubtestDiscovery::NodeTest(tests) => {
+                        Some(DiscoveryData::NodeTest(tests.clone()))
+                    }
                 };
                 let subtest_flaky = subtest.flaky;
 
@@ -284,8 +287,8 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                         Some(DiscoveryData::Block(blocks)) => {
                                             rewrite_for_block(&source, blocks, subtest_index)
                                         }
-                                        Some(DiscoveryData::NodeTest) => {
-                                            rewrite_for_node_test(&source, subtest_index)
+                                        Some(DiscoveryData::NodeTest(tests)) => {
+                                            rewrite_for_node_test(&source, tests, subtest_index)
                                         }
                                         None => source.clone(),
                                     };

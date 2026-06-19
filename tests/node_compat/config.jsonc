@@ -6488,7 +6488,31 @@
       }
     },
     "parallel/test-filehandle-readablestream.js": { "category": "known-gap", "reason": "fs/promises FileHandle.readableWebStream support is missing or incomplete" },
-    "parallel/test-find-package-json.js": { "category": "known-gap", "reason": "findPackageJSON same-process API is implemented; remaining vendored test failures use child_process/loader eval paths" },
+    "parallel/test-find-package-json.js": {
+      "split": true,
+      "nestedNodeTest": true,
+      "subtests": {
+        "test_00_should_throw_when_no_arguments_are_provided": {},
+        "test_01_should_throw_when_parent_location_is_invalid": {},
+        "test_02_should_accept_a_file_url_string": {},
+        "test_03_should_accept_a_file_url_instance": {},
+        "test_04_should_be_able_to_crawl_up_cjs": {},
+        "test_05_should_be_able_to_crawl_up_esm": {},
+        "test_06_can_require_via_package_json": {},
+        "test_07_should_resolve_root_and_closest_package_json": {
+          "category": "known-gap",
+          "reason": "uses child_process spawn path (spawnPromisified)"
+        },
+        "test_08_should_work_within_a_loader": {
+          "category": "known-gap",
+          "reason": "requires child process loader/eval flags"
+        },
+        "test_09_should_work_with_async_resolve_hook_registered": {
+          "category": "known-gap",
+          "reason": "requires child process loader/eval flags"
+        }
+      }
+    },
     "parallel/test-fixed-queue.js": {
       "category": "node-internals",
       "reason": "requires --expose-internals and internal/fixed_queue",

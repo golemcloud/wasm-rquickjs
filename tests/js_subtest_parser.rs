@@ -5,8 +5,8 @@ test_r::enable!();
 mod common;
 
 use crate::common::js_subtest_parser::{
-    BlockInfo, SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
-    sanitize_name,
+    BlockInfo, SubtestDiscovery, discover_subtests, discover_subtests_with_options,
+    rewrite_for_block, rewrite_for_node_test, sanitize_name,
 };
 use test_r::test;
 
@@ -104,10 +104,15 @@ fn test_rewrite_for_block() {
 
 #[test]
 fn test_rewrite_for_node_test() {
-    let source = "test('a', () => {});\ntest('b', () => {});";
-    let result = rewrite_for_node_test(source, 0);
-    assert!(result.starts_with("globalThis.__wasm_rquickjs_node_test_filter = 0;"));
-    assert!(result.contains(source));
+    let source =
+        "const { test } = require('node:test');\ntest('a', () => {});\ntest('b', () => {});\n";
+    let tests = match discover_subtests("test.js", source) {
+        SubtestDiscovery::NodeTest(tests) => tests,
+        other => panic!("Expected NodeTest discovery, got {:?}", other),
+    };
+    let result = rewrite_for_node_test(source, &tests, 1);
+    assert!(!result.contains("test('a', () => {});"));
+    assert!(result.contains("test('b', () => {});"));
 }
 
 #[test]
@@ -156,6 +161,44 @@ test('another standalone', () => {});
             assert_eq!(tests[2].name, "test_02_another_standalone");
         }
         other => panic!("Expected NodeTest discovery, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_describe_it_nested_discovery() {
+    let source = r#"
+'use strict';
+const { describe, it } = require('node:test');
+
+describe('findPackageJSON', () => {
+    it('first same-process case', () => {});
+    it('second same-process case', () => {});
+});
+"#;
+    match discover_subtests_with_options("test.js", source, true) {
+        SubtestDiscovery::NodeTest(tests) => {
+            assert_eq!(tests.len(), 2);
+            assert_eq!(tests[0].name, "test_00_first_same_process_case");
+            assert_eq!(tests[1].name, "test_01_second_same_process_case");
+        }
+        other => panic!("Expected NodeTest discovery, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_describe_it_default_discovers_suite_only() {
+    let source = r#"
+'use strict';
+const { describe, it } = require('node:test');
+
+describe('findPackageJSON', () => {
+    it('first same-process case', () => {});
+    it('second same-process case', () => {});
+});
+"#;
+    match discover_subtests("test.js", source) {
+        SubtestDiscovery::None => {}
+        other => panic!("Expected no split for one top-level suite, got {:?}", other),
     }
 }
 

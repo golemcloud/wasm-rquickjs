@@ -146,14 +146,88 @@ fn is_require_node_test(expr: &Expression) -> bool {
     false
 }
 
-/// Check if an expression is a `test(...)` or `suite(...)` call.
+fn call_name<'a>(call: &'a CallExpression<'a>) -> Option<&'a str> {
+    if let Expression::Identifier(id) = &call.callee {
+        Some(id.name.as_str())
+    } else {
+        None
+    }
+}
+
+fn is_test_call_name(name: &str) -> bool {
+    name == "test" || name == "it"
+}
+
+fn is_suite_call_name(name: &str) -> bool {
+    name == "suite" || name == "describe"
+}
+
+/// Check if an expression is a discoverable node:test call.
 fn is_test_or_suite_call(expr: &Expression) -> bool {
     if let Expression::CallExpression(call) = expr
-        && let Expression::Identifier(id) = &call.callee
+        && let Some(name) = call_name(call)
     {
-        return id.name == "test" || id.name == "suite" || id.name == "describe";
+        return is_test_call_name(name) || is_suite_call_name(name);
     }
     false
+}
+
+fn extract_callback_body<'a>(call: &'a CallExpression<'a>) -> Option<&'a FunctionBody<'a>> {
+    for arg in call.arguments.iter().rev() {
+        match arg {
+            Argument::FunctionExpression(function) => {
+                if let Some(body) = function.body.as_ref() {
+                    return Some(body);
+                }
+            }
+            Argument::ArrowFunctionExpression(arrow) => {
+                if !arrow.expression {
+                    return Some(&arrow.body);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn build_test_info_from_call(index: usize, call: &CallExpression, span: (u32, u32)) -> TestInfo {
+    let name = extract_test_name(call)
+        .map(|n| sanitize_name(&n))
+        .unwrap_or_else(|| format!("test_{index:02}"));
+    let full_name = format!("test_{index:02}_{name}");
+    TestInfo {
+        index,
+        span,
+        name: full_name,
+    }
+}
+
+fn discover_top_level_suite_nested_tests(
+    call: &CallExpression,
+    index: &mut usize,
+) -> Vec<TestInfo> {
+    let Some(body) = extract_callback_body(call) else {
+        return Vec::new();
+    };
+
+    let mut tests = Vec::new();
+    for stmt in &body.statements {
+        if let Statement::ExpressionStatement(expr_stmt) = stmt
+            && let Expression::CallExpression(nested_call) = &expr_stmt.expression
+            && let Some(name) = call_name(nested_call)
+            && is_test_call_name(name)
+        {
+            tests.push(build_test_info_from_call(
+                *index,
+                nested_call,
+                (expr_stmt.span.start, expr_stmt.span.end),
+            ));
+            *index += 1;
+        }
+    }
+
+    tests
 }
 
 /// Extract test name from a test() call's first argument.
@@ -182,6 +256,14 @@ fn extract_test_name(call: &CallExpression) -> Option<String> {
 /// - `path`: file path (used to determine SourceType: .js → CJS, .mjs → ESM)
 /// - `source`: the JS source code
 pub fn discover_subtests(path: &str, source: &str) -> SubtestDiscovery {
+    discover_subtests_with_options(path, source, false)
+}
+
+pub fn discover_subtests_with_options(
+    path: &str,
+    source: &str,
+    nested_node_test: bool,
+) -> SubtestDiscovery {
     let source_type = if path.ends_with(".mjs") {
         SourceType::mjs()
     } else {
@@ -202,16 +284,29 @@ pub fn discover_subtests(path: &str, source: &str) -> SubtestDiscovery {
                 && let Expression::CallExpression(call) = &expr_stmt.expression
                 && is_test_or_suite_call(&expr_stmt.expression)
             {
-                let name = extract_test_name(call)
-                    .map(|n| sanitize_name(&n))
-                    .unwrap_or_else(|| format!("test_{index:02}"));
-                let full_name = format!("test_{index:02}_{name}");
-                tests.push(TestInfo {
-                    index,
-                    span: (expr_stmt.span.start, expr_stmt.span.end),
-                    name: full_name,
-                });
-                index += 1;
+                if nested_node_test
+                    && let Some(name) = call_name(call)
+                    && is_suite_call_name(name)
+                {
+                    let nested_tests = discover_top_level_suite_nested_tests(call, &mut index);
+                    if nested_tests.is_empty() {
+                        tests.push(build_test_info_from_call(
+                            index,
+                            call,
+                            (expr_stmt.span.start, expr_stmt.span.end),
+                        ));
+                        index += 1;
+                    } else {
+                        tests.extend(nested_tests);
+                    }
+                } else {
+                    tests.push(build_test_info_from_call(
+                        index,
+                        call,
+                        (expr_stmt.span.start, expr_stmt.span.end),
+                    ));
+                    index += 1;
+                }
             }
         }
 
@@ -277,11 +372,28 @@ pub fn rewrite_for_block(source: &str, blocks: &[BlockInfo], target_index: usize
     String::from_utf8(result).expect("UTF-8 source remained valid after block rewrite")
 }
 
-/// Rewrite source to filter to a single node:test test by index.
+/// Rewrite source to keep only the targeted discovered node:test call.
 ///
-/// Uses `globalThis.__wasm_rquickjs_node_test_filter` which the node:test
-/// polyfill reads on initialization. This works for both CJS and ESM files
-/// and doesn't break `'use strict'` directive prologue.
-pub fn rewrite_for_node_test(source: &str, target_index: usize) -> String {
-    format!("globalThis.__wasm_rquickjs_node_test_filter = {target_index};\n{source}")
+/// Non-target discovered calls are blanked by span in reverse order to
+/// preserve offsets while keeping unrelated top-level code intact.
+pub fn rewrite_for_node_test(source: &str, tests: &[TestInfo], target_index: usize) -> String {
+    let bytes = source.as_bytes();
+    let mut result = bytes.to_vec();
+
+    for test in tests.iter().rev() {
+        if test.index != target_index {
+            let start = test.span.0 as usize;
+            let end = test.span.1 as usize;
+            if start >= bytes.len() || end > bytes.len() || start >= end {
+                eprintln!(
+                    "WARNING: node:test span ({},{}) is invalid, skipping rewrite",
+                    start, end
+                );
+                continue;
+            }
+            result.splice(start..end, std::iter::once(b' '));
+        }
+    }
+
+    String::from_utf8(result).expect("UTF-8 source remained valid after node:test rewrite")
 }
