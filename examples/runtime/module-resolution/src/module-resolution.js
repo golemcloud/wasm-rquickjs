@@ -1143,3 +1143,59 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         throw error;
     }
 };
+
+export const testCjsNestedDependencyCacheShape = async () => {
+    try {
+        const { createRequire } = await import('node:module');
+        const root = '/cjs-nested-dependency-cache-app';
+
+        fs.mkdirSync(`${root}/b/package`, { recursive: true });
+        fs.writeFileSync(`${root}/b/package/index.js`, [
+            'exports.hello = "world";',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/b/d.js`, [
+            'let value = "D";',
+            'exports.D = function() { return value; };',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/b/c.js`, [
+            'const d = require("./d");',
+            'const package = require("./package");',
+            'if (package.hello !== "world") throw new Error("bad package");',
+            'let value = "C";',
+            'exports.SomeClass = function() {};',
+            'exports.C = function() { return value; };',
+            'exports.D = function() { return d.D(); };',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/a.js`, [
+            'const c = require("./b/c");',
+            'let value = "A";',
+            'exports.SomeClass = c.SomeClass;',
+            'exports.A = function() { return value; };',
+            'exports.C = function() { return c.C(); };',
+            'exports.D = function() { return c.D(); };',
+            'exports.number = 42;',
+        ].join('\n'));
+
+        const require = createRequire(`${root}/entry.cjs`);
+        const withExtension = require(`${root}/a.js`);
+        const withoutExtension = require(`${root}/a`);
+        const c = require(`${root}/b/c`);
+        const d = require(`${root}/b/d`);
+
+        assert.strictEqual(withExtension, withoutExtension);
+        assert.strictEqual(withExtension.number, 42);
+        assert.strictEqual(withExtension.A(), 'A');
+        assert.strictEqual(withExtension.C(), 'C');
+        assert.strictEqual(withExtension.D(), 'D');
+        assert.ok(new withExtension.SomeClass() instanceof c.SomeClass);
+        assert.strictEqual(d.D(), 'D');
+
+        const aCacheKeys = Object.keys(require.cache).filter((key) => key === `${root}/a.js`);
+        assert.deepStrictEqual(aCacheKeys, [`${root}/a.js`]);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
