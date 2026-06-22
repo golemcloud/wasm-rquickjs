@@ -265,3 +265,20 @@ async fn cjs_nested_dependency_cache_shape(
     assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn cjs_module_children_graph(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-cjs-module-children-graph",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}

@@ -1199,3 +1199,56 @@ export const testCjsNestedDependencyCacheShape = async () => {
         throw error;
     }
 };
+
+export const testCjsModuleChildrenGraph = async () => {
+    try {
+        const { createRequire } = await import('node:module');
+        const root = '/cjs-module-children-app';
+
+        fs.mkdirSync(`${root}/nested`, { recursive: true });
+        fs.writeFileSync(`${root}/nested/grandchild.js`, 'exports.name = "grandchild";');
+        fs.writeFileSync(`${root}/nested/child.js`, [
+            'exports.grandchild = require("./grandchild");',
+            'exports.module = module;',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/data.json`, JSON.stringify({ name: 'json' }));
+        fs.writeFileSync(`${root}/custom.test`, 'module.exports.name = "custom";');
+        fs.writeFileSync(`${root}/module-require-target.js`, 'exports.name = "module-require-target";');
+        fs.writeFileSync(`${root}/entry.js`, [
+            'require.extensions[".test"] = function(mod, filename) {',
+            '  mod._compile(require("fs").readFileSync(filename, "utf8"), filename);',
+            '};',
+            'exports.child = require("./nested/child");',
+            'exports.childAgain = require("./nested/child");',
+            'exports.json = require("./data.json");',
+            'exports.custom = require("./custom.test");',
+            'exports.moduleRequireTarget = module.require("./module-require-target");',
+            'exports.module = module;',
+        ].join('\n'));
+
+        const require = createRequire(`${root}/main.cjs`);
+        const entry = require(`${root}/entry.js`);
+        assert.strictEqual(entry.child, entry.childAgain);
+        assert.strictEqual(entry.child.grandchild.name, 'grandchild');
+        assert.strictEqual(entry.json.name, 'json');
+        assert.strictEqual(entry.custom.name, 'custom');
+        assert.strictEqual(entry.moduleRequireTarget.name, 'module-require-target');
+
+        const childIds = entry.module.children.map((child) => child.filename);
+        assert.deepStrictEqual(childIds, [
+            `${root}/nested/child.js`,
+            `${root}/data.json`,
+            `${root}/custom.test`,
+            `${root}/module-require-target.js`,
+        ]);
+        assert.strictEqual(childIds.filter((filename) => filename === `${root}/nested/child.js`).length, 1);
+
+        const nestedChildIds = entry.child.module.children.map((child) => child.filename);
+        assert.deepStrictEqual(nestedChildIds, [`${root}/nested/grandchild.js`]);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
