@@ -6807,7 +6807,7 @@
     "parallel/test-mime-whatwg.js": { "category": "known-gap", "reason": "util.MIMEType parsing API is not implemented" },
     "parallel/test-module-builtin.js": {},
     "parallel/test-module-children.js": {},
-    "parallel/test-module-circular-symlinks.js": { "category": "known-gap", "reason": "module cache behavior with circular symlinked dependencies is not Node-compatible" },
+    "parallel/test-module-circular-symlinks.js": {},
     "parallel/test-module-create-require-multibyte.js": {
       "split": true,
       "subtests": {

@@ -523,6 +523,15 @@ function isBuiltinResolveTarget(id) {
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
 
+function shouldPreserveSymlinks(isMainModuleLoad) {
+    return hasExecArgvFlag(isMainModuleLoad ? '--preserve-symlinks-main' : '--preserve-symlinks');
+}
+
+function toCjsCanonicalFilename(filename, isMainModuleLoad) {
+    if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
+    return fsModule.realpathSync.native(filename);
+}
+
 function tryReadFile(filename) {
     try {
         return fsModule.readFileSync(filename, 'utf8');
@@ -1878,11 +1887,14 @@ function requireEsmWithCacheGuard(mod, resolvedFilename) {
 }
 
 function loadModule(resolvedFilename, source, parentModule) {
+    const isMainModuleLoad = (!parentModule || parentModule === mainModule || parentModule.filename === '/') && typeof mainModule !== 'undefined' && mainModule.filename === '/';
+    const filename = toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
+
     // Check cache
-    if (moduleCache[resolvedFilename]) {
-        const cached = moduleCache[resolvedFilename];
+    if (moduleCache[filename]) {
+        const cached = moduleCache[filename];
         if (cached.__wasmRequireEsmInProgress) {
-            const err = new Error('Cannot require() ES Module ' + resolvedFilename + ' in a cycle.');
+            const err = new Error('Cannot require() ES Module ' + filename + ' in a cycle.');
             err.code = 'ERR_REQUIRE_CYCLE_MODULE';
             throw err;
         }
@@ -1893,69 +1905,69 @@ function loadModule(resolvedFilename, source, parentModule) {
     }
 
     let mod;
-    if ((!parentModule || parentModule === mainModule || parentModule.filename === '/') && typeof mainModule !== 'undefined' && mainModule.filename === '/') {
+    if (isMainModuleLoad) {
         mod = mainModule;
         mod.id = '.';
-        mod.filename = resolvedFilename;
-        mod.path = pathModule.dirname(resolvedFilename);
+        mod.filename = filename;
+        mod.path = pathModule.dirname(filename);
         mod.exports = {};
         mod.loaded = false;
         mod.parent = null;
         mod.children = [];
-        mod.paths = _nodeModulePaths(pathModule.dirname(resolvedFilename));
+        mod.paths = _nodeModulePaths(pathModule.dirname(filename));
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
     } else {
         mod = {
-            id: resolvedFilename,
-            filename: resolvedFilename,
-            path: pathModule.dirname(resolvedFilename),
+            id: filename,
+            filename: filename,
+            path: pathModule.dirname(filename),
             exports: {},
             loaded: false,
             parent: parentModule || null,
             children: [],
-            paths: _nodeModulePaths(pathModule.dirname(resolvedFilename)),
+            paths: _nodeModulePaths(pathModule.dirname(filename)),
         };
     }
 
     // Cache before executing (handles circular dependencies)
-    moduleCache[resolvedFilename] = mod;
+    moduleCache[filename] = mod;
 
     if (parentModule && parentModule.children) {
         parentModule.children.push(mod);
     }
 
     // Check for custom extension handler
-    const ext = findLongestRegisteredExtension(resolvedFilename);
+    const ext = findLongestRegisteredExtension(filename);
     const handler = requireExtensions[ext];
     if (handler && !_defaultExtHandlers.has(handler)) {
         try {
-            handler(mod, resolvedFilename);
+            handler(mod, filename);
         } catch (err) {
-            delete moduleCache[resolvedFilename];
+            delete moduleCache[filename];
             throw err;
         }
-    } else if (resolvedFilename.endsWith('.node')) {
-        delete moduleCache[resolvedFilename];
-        throw new Error("Native .node modules are not supported in WASM: '" + resolvedFilename + "'");
-    } else if (resolvedFilename.endsWith('.json')) {
+    } else if (filename.endsWith('.node')) {
+        delete moduleCache[filename];
+        throw new Error("Native .node modules are not supported in WASM: '" + filename + "'");
+    } else if (filename.endsWith('.json')) {
         try {
             mod.exports = JSON.parse(source);
         } catch (e) {
-            delete moduleCache[resolvedFilename];
-            const err = new SyntaxError(resolvedFilename + ': ' + e.message);
+            delete moduleCache[filename];
+            const err = new SyntaxError(filename + ': ' + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
         }
     } else {
-        const isEsm = resolvedFilename.endsWith('.mjs') ||
-            (resolvedFilename.endsWith('.js') && getPackageScopeType(resolvedFilename) === 'module');
+        const isEsm = filename.endsWith('.mjs') ||
+            (filename.endsWith('.js') && getPackageScopeType(filename) === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
-            delete moduleCache[resolvedFilename];
+            delete moduleCache[filename];
             const esmErr = new Error(
-                "require() of ES Module " + resolvedFilename + " not supported. " +
-                "Instead change the require of " + resolvedFilename + " to a dynamic " +
+                "require() of ES Module " + filename + " not supported. " +
+                "Instead change the require of " + filename + " to a dynamic " +
                 "import() which is available in all CommonJS modules."
             );
             esmErr.code = 'ERR_REQUIRE_ESM';
@@ -1963,19 +1975,19 @@ function loadModule(resolvedFilename, source, parentModule) {
         }
         if (isEsm) {
             try {
-                mod.exports = requireEsmWithCacheGuard(mod, resolvedFilename);
+                mod.exports = requireEsmWithCacheGuard(mod, filename);
             } catch (err) {
-                delete moduleCache[resolvedFilename];
+                delete moduleCache[filename];
                 throw err;
             }
         } else {
-            const dirname = pathModule.dirname(resolvedFilename);
+            const dirname = pathModule.dirname(filename);
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
             let cjsSyntaxError = null;
-            const cjsWrapperRequireRedeclaration = !resolvedFilename.endsWith('.cjs') && hasCjsWrapperRequireRedeclaration(source);
+            const cjsWrapperRequireRedeclaration = !filename.endsWith('.cjs') && hasCjsWrapperRequireRedeclaration(source);
             try {
-                compiledFn = compileCjs(resolvedFilename, source);
+                compiledFn = compileCjs(filename, source);
             } catch (err) {
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
                 if (err && err.name === 'SyntaxError') {
@@ -1984,46 +1996,46 @@ function loadModule(resolvedFilename, source, parentModule) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (!resolvedFilename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
+                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
                     cjsSyntaxError = err;
                 } else {
-                    delete moduleCache[resolvedFilename];
-                    maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+                    delete moduleCache[filename];
+                    maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
             }
             if (cjsSyntaxError || cjsWrapperRequireRedeclaration) {
                 if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
-                    delete moduleCache[resolvedFilename];
-                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, resolvedFilename, source);
+                    delete moduleCache[filename];
+                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
                 // SyntaxError in a .js file — try loading as ESM (entry point detection)
                 try {
-                    mod.exports = requireEsmWithCacheGuard(mod, resolvedFilename);
+                    mod.exports = requireEsmWithCacheGuard(mod, filename);
                 } catch (esmErr) {
-                    delete moduleCache[resolvedFilename];
+                    delete moduleCache[filename];
                     if (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
                     }
                     // ESM loading also failed — throw the original CJS SyntaxError
-                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, resolvedFilename, source);
+                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
             } else if (compiledFn) {
                 const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
                 globalThis.__wasm_rquickjs_current_module = {
-                    filename: resolvedFilename,
+                    filename: filename,
                     source: source
                 };
                 const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
                 globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
                 try {
-                    compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
+                    compiledFn(mod.exports, childRequire, mod, filename, dirname);
                 } catch (err) {
-                    delete moduleCache[resolvedFilename];
-                    maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+                    delete moduleCache[filename];
+                    maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 } finally {
                     globalThis.__wasm_rquickjs_current_module = previousModuleContext;
@@ -2288,14 +2300,14 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
                     // Relative/absolute: resolve directly against the search path
                     try {
                         const resolved = resolveFilename(id, searchDir);
-                        return resolved.filename;
+                        return toCjsCanonicalFilename(resolved.filename, false);
                     } catch (e) {
                         // Try next path
                     }
                 } else {
                     // Bare specifier: use node_modules resolution from search path
                     const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
-                    if (nmResolved) return nmResolved.filename;
+                    if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
                 }
             }
             const err = new Error("Cannot find module '" + id + "'");
@@ -2304,17 +2316,17 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
         if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
             const resolved = resolveFilename(id, parentDir);
-            return resolved.filename;
+            return toCjsCanonicalFilename(resolved.filename, false);
         }
         if (id.startsWith('#')) {
             const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions);
             if (importsResolved.builtin) return importsResolved.builtin;
-            return importsResolved.filename;
+            return toCjsCanonicalFilename(importsResolved.filename, false);
         }
         // node_modules resolution for bare specifiers
         const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
-            return nmResolved.filename;
+            return toCjsCanonicalFilename(nmResolved.filename, false);
         }
         const err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';

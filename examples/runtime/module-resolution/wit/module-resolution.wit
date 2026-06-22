@@ -13,4 +13,5 @@ world module-resolution {
   export test-require-esm-error-handling: func() -> bool;
   export test-require-esm-tla-retry: func() -> bool;
   export test-require-esm-cycle-guards: func() -> bool;
+  export test-cjs-symlink-circular-cache: func() -> bool;
 }

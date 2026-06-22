@@ -1054,3 +1054,38 @@ export const testRequireEsmCycleGuards = async () => {
         throw error;
     }
 };
+
+export const testCjsSymlinkCircularCache = async () => {
+    try {
+        const { createRequire } = await import('node:module');
+        const root = '/cjs-symlink-cycle-app';
+        const moduleA = `${root}/node_modules/moduleA`;
+        const moduleB = `${root}/node_modules/moduleB`;
+        const moduleALink = `${moduleB}/node_modules/moduleA`;
+        const moduleBLink = `${moduleA}/node_modules/moduleB`;
+
+        fs.mkdirSync(`${moduleA}/node_modules`, { recursive: true });
+        fs.mkdirSync(`${moduleB}/node_modules`, { recursive: true });
+        fs.symlinkSync(moduleA, moduleALink);
+        fs.symlinkSync(moduleB, moduleBLink);
+        fs.writeFileSync(`${root}/index.cjs`, 'module.exports = require("moduleA");');
+        fs.writeFileSync(`${moduleA}/index.js`, 'module.exports = { b: require("moduleB") };');
+        fs.writeFileSync(`${moduleB}/index.js`, 'module.exports = { a: require("moduleA") };');
+
+        const require = createRequire(`${root}/index.cjs`);
+        const obj = require(`${root}/index.cjs`);
+        assert.ok(obj);
+        assert.ok(obj.b);
+        assert.ok(obj.b.a);
+        assert.ok(!obj.b.a.b);
+
+        const cacheKeys = Object.keys(require.cache).filter((key) => key.startsWith(root));
+        assert.strictEqual(cacheKeys.some((key) => key.includes('/moduleA/node_modules/moduleB/')), false);
+        assert.strictEqual(cacheKeys.some((key) => key.includes('/moduleB/node_modules/moduleA/')), false);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
