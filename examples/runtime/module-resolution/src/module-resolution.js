@@ -1089,3 +1089,57 @@ export const testCjsSymlinkCircularCache = async () => {
         throw error;
     }
 };
+
+export const testCjsNodeModuleLoadingCompat = async () => {
+    try {
+        const { createRequire } = await import('node:module');
+        const root = '/cjs-node-module-loading-app';
+        const require = createRequire(`${root}/entry.cjs`);
+
+        fs.mkdirSync(`${root}/missing-main-with-index`, { recursive: true });
+        fs.writeFileSync(`${root}/missing-main-with-index/package.json`, JSON.stringify({ main: 'missing.js' }));
+        fs.writeFileSync(`${root}/missing-main-with-index/index.js`, 'module.exports = { ok: true };');
+        assert.deepStrictEqual(require(`${root}/missing-main-with-index`), { ok: true });
+
+        fs.mkdirSync(`${root}/missing-main-no-index`, { recursive: true });
+        fs.writeFileSync(`${root}/missing-main-no-index/package.json`, JSON.stringify({ main: 'missing.js' }));
+        assert.throws(() => require(`${root}/missing-main-no-index`), {
+            code: 'MODULE_NOT_FOUND',
+            path: `${root}/missing-main-no-index/package.json`,
+            requestPath: `${root}/missing-main-no-index`,
+        });
+
+        require.extensions['.test'] = function(module, filename) {
+            const content = fs.readFileSync(filename, 'utf8').replace('VALUE', 'module.exports.value');
+            module._compile(content, filename);
+        };
+        fs.writeFileSync(`${root}/custom.test`, 'VALUE = 42;');
+        assert.strictEqual(require(`${root}/custom`).value, 42);
+
+        fs.mkdirSync(`${root}/parent/child/node_modules/target`, { recursive: true });
+        fs.writeFileSync(`${root}/parent/child/node_modules/target/index.js`, 'module.exports = { from: "child" };');
+        fs.writeFileSync(`${root}/parent/child/index.js`, 'exports.module = module; exports.loaded = require("target");');
+        fs.writeFileSync(`${root}/parent/index.js`, [
+            'const child = require("./child");',
+            'module.exports = { fromModuleRequire: child.module.require("target"), fromChildRequire: child.loaded };',
+        ].join('\n'));
+        const parent = require(`${root}/parent`);
+        assert.deepStrictEqual(parent.fromModuleRequire, { from: 'child' });
+        assert.strictEqual(parent.fromModuleRequire, parent.fromChildRequire);
+
+        fs.writeFileSync(`${root}/bom.js`, '\uFEFFmodule.exports = 42;');
+        fs.writeFileSync(`${root}/bom.json`, '\uFEFF42');
+        assert.strictEqual(require(`${root}/bom.js`), 42);
+        assert.strictEqual(require(`${root}/bom.json`), 42);
+
+        require.extensions['.reg'] = require.extensions['.js'];
+        fs.mkdirSync(`${root}/dir-index-reg`, { recursive: true });
+        fs.writeFileSync(`${root}/dir-index-reg/index.reg`, 'exports.value = "index.reg";');
+        assert.strictEqual(require(`${root}/dir-index-reg`).value, 'index.reg');
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};

@@ -619,16 +619,11 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
 
     const pkgJsonPath = pathModule.join(candidate, 'package.json');
     const pkgJson = tryReadFile(pkgJsonPath);
+    let invalidMain = null;
     if (pkgJson !== null) {
+        let pkg;
         try {
-            const pkg = JSON.parse(pkgJson);
-            if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string' && pkg.main.length > 0) {
-                const mainPath = pathModule.resolve(candidate, pkg.main);
-                let resolved = loadAsFile(mainPath, false);
-                if (resolved !== null) return resolved;
-                resolved = loadAsDirectory(mainPath, id, parentDir, seen);
-                if (resolved !== null) return resolved;
-            }
+            pkg = JSON.parse(pkgJson);
         } catch (e) {
             const pkgErr = new Error(
                 'Invalid package config ' + pkgJsonPath +
@@ -638,17 +633,41 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
             pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
             throw pkgErr;
         }
+
+        if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string' && pkg.main.length > 0) {
+            const mainPath = pathModule.resolve(candidate, pkg.main);
+            let resolved = loadAsFile(mainPath, false);
+            if (resolved !== null) return resolved;
+            resolved = loadAsDirectory(mainPath, id, parentDir, seen);
+            if (resolved !== null) return resolved;
+            invalidMain = { field: pkg.main, path: mainPath };
+        }
     }
 
-    let content = tryReadFile(pathModule.join(candidate, 'index.js'));
-    if (content !== null) {
-        return { filename: pathModule.join(candidate, 'index.js'), content: content };
+    const indexResolved = loadAsFile(pathModule.join(candidate, 'index'), false);
+    if (indexResolved !== null) {
+        emitInvalidMainWarning(pkgJsonPath, invalidMain);
+        return indexResolved;
     }
-    content = tryReadFile(pathModule.join(candidate, 'index.json'));
-    if (content !== null) {
-        return { filename: pathModule.join(candidate, 'index.json'), content: content };
+    if (invalidMain !== null) {
+        const err = new Error("Cannot find module '" + invalidMain.path + "'. Please verify that the package.json has a valid \"main\" entry");
+        err.code = 'MODULE_NOT_FOUND';
+        err.path = pkgJsonPath;
+        err.requestPath = id;
+        throw err;
     }
     return null;
+}
+
+function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
+    if (invalidMain === null) return;
+    const processObject = globalThis.process;
+    if (!processObject || typeof processObject.emitWarning !== 'function') return;
+    processObject.emitWarning(
+        "Invalid 'main' field in '" + pathModule.toNamespacedPath(pkgJsonPath) + "' of '" + invalidMain.field + "'. Please either fix that or report it to the module author",
+        'DeprecationWarning',
+        'DEP0128'
+    );
 }
 
 const cjsPackageConditions = new Set(['golem', 'node', 'require', 'module-sync', 'default']);
@@ -1853,6 +1872,9 @@ function wrap(script) {
 }
 
 function compileCjs(filename, source) {
+    if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
+        source = source.slice(1);
+    }
     // Strip shebang
     if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
         source = '//' + source;
@@ -1867,6 +1889,42 @@ function compileCjs(filename, source) {
 
     const wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
     return _evalWithFilename(wrappedSource, filename);
+}
+
+function compileModuleInto(mod, source, filename) {
+    filename = filename || mod.filename;
+    const dirname = pathModule.dirname(filename);
+    const childRequire = makeRequire(dirname, mod);
+    const compiledFn = compileCjs(filename, String(source));
+    const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+    globalThis.__wasm_rquickjs_current_module = {
+        filename: filename,
+        source: String(source)
+    };
+    const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
+    globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
+    try {
+        return compiledFn(mod.exports, childRequire, mod, filename, dirname);
+    } finally {
+        globalThis.__wasm_rquickjs_current_module = previousModuleContext;
+        if (previousCjsImportDir !== undefined) {
+            globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
+        } else {
+            delete globalThis.__wasm_rquickjs_cjs_import_dir;
+        }
+    }
+}
+
+function makeModuleCompile(mod) {
+    return function _compile(content, filename) {
+        return compileModuleInto(mod, content, filename || mod.filename);
+    };
+}
+
+function makeModuleRequire(mod) {
+    return function require(id) {
+        return makeRequire(pathModule.dirname(mod.filename), mod)(id);
+    };
 }
 
 function requireEsmWithCacheGuard(mod, resolvedFilename) {
@@ -1915,6 +1973,8 @@ function loadModule(resolvedFilename, source, parentModule) {
         mod.parent = null;
         mod.children = [];
         mod.paths = _nodeModulePaths(pathModule.dirname(filename));
+        mod._compile = makeModuleCompile(mod);
+        mod.require = makeModuleRequire(mod);
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
@@ -1929,6 +1989,8 @@ function loadModule(resolvedFilename, source, parentModule) {
             children: [],
             paths: _nodeModulePaths(pathModule.dirname(filename)),
         };
+        mod._compile = makeModuleCompile(mod);
+        mod.require = makeModuleRequire(mod);
     }
 
     // Cache before executing (handles circular dependencies)
@@ -1953,6 +2015,9 @@ function loadModule(resolvedFilename, source, parentModule) {
         throw new Error("Native .node modules are not supported in WASM: '" + filename + "'");
     } else if (filename.endsWith('.json')) {
         try {
+            if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
+                source = source.slice(1);
+            }
             mod.exports = JSON.parse(source);
         } catch (e) {
             delete moduleCache[filename];
@@ -2061,6 +2126,8 @@ const mainModule = {
     parent: null,
     children: [],
 };
+mainModule._compile = makeModuleCompile(mainModule);
+mainModule.require = makeModuleRequire(mainModule);
 
 function splitPackageName(id) {
     // Scoped packages: @scope/pkg or @scope/pkg/subpath
