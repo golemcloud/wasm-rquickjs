@@ -92,6 +92,8 @@ jobs:
           node-version: "22.14.0"
       - name: Runtime tests (group ${{ matrix.group }}/9)
         run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
