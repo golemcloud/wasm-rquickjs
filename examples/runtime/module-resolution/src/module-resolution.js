@@ -1129,8 +1129,12 @@ export const testCjsNodeModuleLoadingCompat = async () => {
 
         fs.writeFileSync(`${root}/bom.js`, '\uFEFFmodule.exports = 42;');
         fs.writeFileSync(`${root}/bom.json`, '\uFEFF42');
+        fs.writeFileSync(`${root}/bom-shebang-shebang.js`, '\uFEFF#!shebang\n#!shebang\nmodule.exports = 1;');
+        fs.writeFileSync(`${root}/shebang-bom.js`, '#!shebang\n\uFEFFmodule.exports = 42;');
         assert.strictEqual(require(`${root}/bom.js`), 42);
         assert.strictEqual(require(`${root}/bom.json`), 42);
+        assert.throws(() => require(`${root}/bom-shebang-shebang.js`), { name: 'SyntaxError' });
+        assert.strictEqual(require(`${root}/shebang-bom.js`), 42);
 
         require.extensions['.reg'] = require.extensions['.js'];
         fs.mkdirSync(`${root}/dir-index-reg`, { recursive: true });

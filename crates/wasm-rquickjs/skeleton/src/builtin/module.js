@@ -1326,6 +1326,15 @@ function previousSignificantChar(source, pos) {
     return -1;
 }
 
+function previousSignificantCharOnSameLine(source, pos) {
+    for (let i = pos - 1; i >= 0; i--) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x0a || ch === 0x0d) return -1;
+        if (ch !== 0x20 && ch !== 0x09) return ch;
+    }
+    return -1;
+}
+
 function isRegexLiteralStartInSource(source, pos) {
     const prev = previousSignificantChar(source, pos);
     return prev === -1 || '({[=,:;!?&|+-*~^%>'.indexOf(String.fromCharCode(prev)) >= 0;
@@ -1418,7 +1427,7 @@ function scanSourceCodePositions(source, options, visitor) {
 }
 
 function isStaticExportSyntax(source, pos) {
-    if (previousSignificantChar(source, pos) === 0x2e) return false; // member property
+    if (previousSignificantCharOnSameLine(source, pos) === 0x2e) return false; // member property
     const next = skipWhitespace(source, pos + 6);
     if (source.charCodeAt(next) === 0x3a) return false; // object label/property
     const ch = source.charCodeAt(next);
@@ -1432,7 +1441,7 @@ function isStaticExportSyntax(source, pos) {
 }
 
 function isStaticImportSyntax(source, pos) {
-    if (previousSignificantChar(source, pos) === 0x2e) return false; // member property
+    if (previousSignificantCharOnSameLine(source, pos) === 0x2e) return false; // member property
     const next = skipWhitespace(source, pos + 6);
     if (source.charCodeAt(next) === 0x28 || source.charCodeAt(next) === 0x3a) return false; // dynamic import(...) or property label
     const ch = source.charCodeAt(next);
@@ -2061,7 +2070,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
+                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError' && (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
                     delete moduleCache[filename];
