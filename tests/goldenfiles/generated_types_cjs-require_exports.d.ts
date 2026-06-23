@@ -8,4 +8,7 @@ declare module 'cjs-require' {
   export function testRequireJson(): Promise<boolean>;
   export function testRequireModuleExportsFunction(): Promise<boolean>;
   export function testRequireModuleNotFound(): Promise<boolean>;
+  export function testRequirePackageExports(): Promise<boolean>;
+  export function testRequirePackageImports(): Promise<boolean>;
+  export function testRequirePackageMapEdgeCases(): Promise<boolean>;
 }
