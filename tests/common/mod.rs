@@ -196,6 +196,7 @@ pub struct NodeModulesAppTestEntry {
     pub coverage: String,
     pub reason: Option<String>,
     pub timeout_secs: u64,
+    pub flaky: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -370,10 +371,13 @@ pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModul
         let mut tests = Vec::new();
         for (test_file, test_opts) in tests_obj {
             let test_category = node_modules_app_category_from_value(test_opts, Some(category))?;
-            let (coverage, test_reason, timeout_secs) = match test_opts {
-                serde_json::Value::String(coverage) => {
-                    (coverage.clone(), reason.clone(), default_timeout_secs)
-                }
+            let (coverage, test_reason, timeout_secs, flaky) = match test_opts {
+                serde_json::Value::String(coverage) => (
+                    coverage.clone(),
+                    reason.clone(),
+                    default_timeout_secs,
+                    false,
+                ),
                 serde_json::Value::Object(_) => {
                     let coverage = test_opts
                         .get("coverage")
@@ -394,7 +398,11 @@ pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModul
                         .get("timeout")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(default_timeout_secs);
-                    (coverage, test_reason, timeout_secs)
+                    let flaky = test_opts
+                        .get("flaky")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    (coverage, test_reason, timeout_secs, flaky)
                 }
                 _ => anyhow::bail!(
                     "node_modules app '{app_name}' test '{test_file}' must be a coverage string or object"
@@ -407,6 +415,7 @@ pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModul
                 coverage,
                 reason: test_reason,
                 timeout_secs,
+                flaky,
             });
         }
         tests.sort_by(|a, b| a.file.cmp(&b.file));

@@ -116,6 +116,8 @@ export const runTest = async (testPath) => {
     var restorePromise = null;
     var restoreArgv = null;
     var restoreCwd = null;
+    var previousNodeTestEntryFile = globalThis.__wasm_rquickjs_node_test_entry_file;
+    globalThis.__wasm_rquickjs_node_test_entry_file = testPath;
 
     if (globalThis.process) {
         var originalArgv = Array.isArray(globalThis.process.argv) ? globalThis.process.argv.slice() : null;
@@ -228,6 +230,11 @@ export const runTest = async (testPath) => {
         var fullMsg = (e && e.message) ? (e.message + "\n" + msg) : msg;
         return "FAIL: " + fullMsg;
     } finally {
+        if (previousNodeTestEntryFile === undefined) {
+            delete globalThis.__wasm_rquickjs_node_test_entry_file;
+        } else {
+            globalThis.__wasm_rquickjs_node_test_entry_file = previousNodeTestEntryFile;
+        }
         if (restoreCwd) {
             restoreCwd();
         }

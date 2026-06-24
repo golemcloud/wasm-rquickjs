@@ -14,6 +14,13 @@ let _subtestFilter = (typeof globalThis.__wasm_rquickjs_node_test_filter === 'nu
     : null;
 let _subtestRegistrationIndex = 0;
 
+function activeTestEntryFile(moduleContext) {
+    if (typeof globalThis.__wasm_rquickjs_node_test_entry_file === 'string') {
+        return globalThis.__wasm_rquickjs_node_test_entry_file;
+    }
+    return moduleContext ? moduleContext.filename : undefined;
+}
+
 // --- Custom assertions registry (testAssertions.register) ---
 const _customAssertions = {};
 
@@ -437,7 +444,7 @@ function runTest(parsed, parentSuite) {
     // Handle todo
     const isTodo = options.todo === true || typeof options.todo === 'string';
 
-    const filePath = moduleContext ? moduleContext.filename : undefined;
+    const filePath = activeTestEntryFile(moduleContext);
     const ctx = new TestContext(name, parentSuite, filePath);
 
     // Collect beforeEach from parent suite chain
@@ -567,7 +574,7 @@ function runSuite(name, options, fn, parentSuite, moduleContext) {
 
     const isTodo = options.todo === true || typeof options.todo === 'string';
 
-    const filePath = moduleContext ? moduleContext.filename : undefined;
+    const filePath = activeTestEntryFile(moduleContext);
     const suite = new SuiteContext(name, parentSuite, filePath);
     const prevSuite = currentSuite;
     currentSuite = suite;

@@ -3197,8 +3197,7 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
         if next < object_end && bytes[next] == b':' {
             next = skip_ws_comments(source, next + 1);
             add_unique(&mut exports, name);
-            if let Some((specifier, _)) = parse_require_string_loose(source, next) {
-                add_unique(&mut reexports, specifier);
+            if parse_require_string_loose(source, next).is_some() {
                 break;
             }
             cursor = skip_ws_comments(source, skip_object_literal_value(source, next, object_end));
@@ -5293,7 +5292,7 @@ mod cjs_export_analyzer_tests {
             "#,
             true,
             &["a", "b"],
-            &["./dep.cjs"],
+            &[],
         );
 
         assert_analysis(
