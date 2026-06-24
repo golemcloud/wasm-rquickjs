@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3124/4404 (70.9%)
+**Primary compatibility (CI-enforced):** 3125/4404 (71.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3124 | 70.9% | 54.6% | 45.7% |
-| 🧩 known gap | 1280 | 29.1% | 22.4% | 18.7% |
+| ✅ passing (runnable) | 3125 | 71.0% | 54.6% | 45.7% |
+| 🧩 known gap | 1279 | 29.0% | 22.4% | 18.7% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3124/5721 (54.6%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3125/5721 (54.6%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 125 | 177 | 85 | 11 | 0 | 183 | 41.4% | 31.4% |
+| other | 581 | 126 | 176 | 85 | 11 | 0 | 183 | 41.7% | 31.7% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1280)
+### known gap (1279)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1119,7 +1119,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs symlink permission checks are incomplete | 1 | `parallel/test-permission-fs-symlink-relative.js` |
 | fs.constants includes Linux-only O_NOATIME even when common.isLinux is false in WASM | 1 | `parallel/test-process-constants-noatime.js` |
 | fs.globSync API is not implemented | 1 | `parallel/test-icu-env.js` |
-| fs.promises file APIs do not yet accept file URL path arguments consistently | 1 | `es-module/test-esm-fs-promises.mjs` |
 | fs.watch directory watcher filename/null and event delivery semantics are not Node-compatible | 1 | `sequential/test-fs-watch.js#block_02_block_02` |
 | fs.watch emits duplicate change events for a single write | 1 | `sequential/test-fs-watch.js#block_00_block_00` |
 | fs.watch path watcher emits duplicate change events | 1 | `sequential/test-fs-watch.js#block_01_block_01` |

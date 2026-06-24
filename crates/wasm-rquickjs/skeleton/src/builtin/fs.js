@@ -47,6 +47,7 @@ let _Readable = null;
 let _Writable = null;
 let _EventEmitter = null;
 let _PathModule = null;
+let _UrlModule = null;
 function getStreamClasses() {
     if (!_Readable) {
         const stream = require('node:stream');
@@ -66,6 +67,12 @@ function getPathModule() {
         _PathModule = require('node:path');
     }
     return _PathModule;
+}
+function getUrlModule() {
+    if (!_UrlModule) {
+        _UrlModule = require('node:url');
+    }
+    return _UrlModule;
 }
 
 // --- Constants ---
@@ -429,8 +436,7 @@ function validatePath(path, propName) {
         // Delegate to fileURLToPath for proper validation - it throws
         // ERR_INVALID_URL_SCHEME, ERR_INVALID_FILE_URL_HOST, ERR_INVALID_FILE_URL_PATH
         // matching Node.js behavior.
-        const urlModule = require('node:url');
-        const converted = urlModule.fileURLToPath(path);
+        const converted = getUrlModule().fileURLToPath(path);
         if (converted.indexOf('\u0000') !== -1) {
             const err = new TypeError(`The argument '${propName || 'path'}' must be a string, Uint8Array, or URL without null bytes. Received ${JSON.stringify(converted)}`);
             err.code = 'ERR_INVALID_ARG_VALUE';
@@ -460,7 +466,7 @@ function pathToString(path) {
     }
     if (path instanceof URL) {
         if (path.protocol !== 'file:') return path.toString();
-        return require('node:url').fileURLToPath(path);
+        return getUrlModule().fileURLToPath(path);
     }
     return String(path);
 }

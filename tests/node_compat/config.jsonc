@@ -6006,7 +6006,7 @@
     "es-module/test-esm-extension-lookup-deprecation.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-extensionless-esm-and-wasm.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-forbidden-globals.mjs": { "category": "known-gap", "reason": "ESM compatibility shim still exposes CJS globals such as __filename and __dirname" },
-    "es-module/test-esm-fs-promises.mjs": { "category": "known-gap", "reason": "fs.promises file APIs do not yet accept file URL path arguments consistently" },
+    "es-module/test-esm-fs-promises.mjs": {},
     "es-module/test-esm-import-assertion-warning.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-import-attributes-1.mjs": {},
     "es-module/test-esm-import-attributes-2.mjs": {},
