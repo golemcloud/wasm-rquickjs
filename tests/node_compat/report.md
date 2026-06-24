@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-22 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-24 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3108/4304 (72.2%)
+**Primary compatibility (CI-enforced):** 3108/4404 (70.6%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3108 | 72.2% | 55.3% | 46.1% |
-| 🧩 known gap | 1196 | 27.8% | 21.3% | 17.7% |
-| 🚫 WASI-impossible (excluded) | 1153 | — | 20.5% | 17.1% |
-| ⚙️ engine difference (excluded) | 162 | — | 2.9% | 2.4% |
+| ✅ passing (runnable) | 3108 | 70.6% | 54.3% | 45.4% |
+| 🧩 known gap | 1296 | 29.4% | 22.7% | 18.9% |
+| 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
+| ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1121 | — | — | 16.6% |
-| **Total** | **6740** |  |  | **100.0%** |
+| 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
+| **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3108/5619 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3108/5721 (54.3%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 478 | 109 | 93 | 83 | 11 | 0 | 182 | 54.0% | 36.8% |
+| other | 581 | 109 | 193 | 85 | 11 | 0 | 183 | 36.1% | 27.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,15 +681,19 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1196)
+### known gap (1296)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
+| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 36 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-dynamic-import-mutating-fs.mjs`, ... (+33) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
+| newly tracked module coverage; same-process ESM behavior has not been triaged yet | 17 | `es-module/test-esm-assert-strict.mjs`, `es-module/test-esm-basic-imports.mjs`, `es-module/test-esm-dns-promises.mjs`, ... (+14) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
+| ESM package type/exports/imports behavior needs resolver unification triage | 12 | `es-module/test-esm-custom-exports.mjs`, `es-module/test-esm-default-type.mjs`, `es-module/test-esm-exports-deprecations.mjs`, ... (+9) |
+| custom ESM loader hooks / module.register are not implemented | 12 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-loader-custom-condition.mjs`, `es-module/test-esm-loader-dependency.mjs`, ... (+9) |
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
 | full script module-loading test still exposes incomplete main-module/cache/package-main edge semantics | 11 | `sequential/test-module-loading.js#block_00_block_00`, `sequential/test-module-loading.js#block_01_block_01`, `sequential/test-module-loading.js#block_02_block_02`, ... (+8) |
@@ -708,7 +712,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
+| import attributes / JSON module runtime enforcement is incomplete | 7 | `es-module/test-esm-dynamic-import-attribute.mjs`, `es-module/test-esm-import-attributes-1.mjs`, `es-module/test-esm-import-attributes-2.mjs`, ... (+4) |
 | inherited: Intl is not available in current runtime | 7 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+4) |
+| CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage | 6 | `es-module/test-esm-cjs-named-error.mjs`, `es-module/test-esm-cyclic-dynamic-import.mjs`, `es-module/test-esm-dynamic-import-commonjs.mjs`, ... (+3) |
 | WebAssembly global is missing in current runtime | 6 | `es-module/test-wasm-memory-out-of-bound.js`, `es-module/test-wasm-simple.js`, `es-module/test-wasm-web-api.js`, ... (+3) |
 | fork() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 6 | `parallel/test-child-process-fork-abort-signal.js#block_00_block_00`, `parallel/test-child-process-fork-abort-signal.js#block_01_block_01`, `parallel/test-child-process-fork-abort-signal.js#block_02_block_02`, ... (+3) |
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |
@@ -719,6 +725,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
 | node:readline createInterface/async iterator API is not implemented | 5 | `parallel/test-readline-async-iterators-backpressure.js`, `parallel/test-readline-async-iterators-destroy.js`, `parallel/test-readline-async-iterators.js`, ... (+2) |
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
+| requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR | 5 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-eval.mjs`, `es-module/test-typescript-module.mjs`, ... (+2) |
 | util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
@@ -764,6 +771,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | test runner edge case | 3 | `parallel/test-runner-filetest-location.js`, `parallel/test-runner-root-after-with-refed-handles.js`, `parallel/test-runner-todo-skip-tests.js` |
 | CLI/NODE_OPTIONS max-http-header-size propagation in child process emulation is incomplete | 2 | `parallel/test-set-http-max-http-headers.js#test_01_test_01`, `parallel/test-set-http-max-http-headers.js#test_02_same_checks_using_node_options_if_it_is_supported` |
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
+| ESM preserve-symlinks / preserve-symlinks-main behavior is incomplete | 2 | `es-module/test-esm-preserve-symlinks-not-found-plain.mjs`, `es-module/test-esm-preserve-symlinks-not-found.mjs` |
 | HTTP keep-alive socket identity reuse across sequential requests is not implemented | 2 | `parallel/test-http-keepalive-client.js`, `parallel/test-http-keepalive-request.js` |
 | IncomingMessage 'aborted' event is not emitted when the server destroys a keep-alive response | 2 | `parallel/test-http-client-aborted-event.js#block_00_block_00`, `parallel/test-http-client-aborted-event.js#block_01_block_01` |
 | TextDecoderStream invalid-encoding errors are not Node-compatible yet | 2 | `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`, `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01` |
@@ -791,6 +799,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: process.getActiveResourcesInfo() is not implemented | 2 | `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`, `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01` |
 | inherited: queueMicrotask argument validation/error codes are incomplete | 2 | `parallel/test-queue-microtask.js#block_00_block_00`, `parallel/test-queue-microtask.js#block_01_block_01` |
 | inherited: requires perf_hooks.PerformanceObserver with net detail | 2 | `parallel/test-net-perf_hooks.js#block_00_block_00`, `parallel/test-net-perf_hooks.js#block_01_block_01` |
+| module.syncBuiltinESMExports is not implemented | 2 | `es-module/test-esm-live-binding.mjs`, `es-module/test-esm-named-exports.mjs` |
 | native rquickjs URL accessor descriptor function names are empty instead of Web IDL names like `get href` | 2 | `parallel/test-whatwg-url-properties.js#block_00_block_00`, `parallel/test-whatwg-url-properties.js#block_01_block_01` |
 | perf_hooks performance.timeOrigin/nodeTiming semantics are not Node-compatible | 2 | `sequential/test-perf-hooks.js#block_00_block_00`, `sequential/test-perf-hooks.js#block_01_block_01` |
 | perf_hooks resource timing buffer/full-event behavior is incomplete | 2 | `parallel/test-performance-resourcetimingbufferfull.js`, `parallel/test-performance-resourcetimingbuffersize.js` |
@@ -1234,6 +1243,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |
 | requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them | 1 | `parallel/test-http-multi-line-headers.js` |
 | requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle | 1 | `parallel/test-http-agent-keepalive.js` |
+| requires simulated process.execPath / Node CLI module_timer and trace-event support | 1 | `parallel/test-module-print-timing.mjs` |
 | response writable state around aborted proxy close is not Node-compatible | 1 | `parallel/test-http-writable-true-after-close.js` |
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |
 | runInContext does not preserve symbol/prototype property access on contextified objects | 1 | `parallel/test-vm-symbols.js` |
@@ -1363,7 +1373,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1153)
+### WASI-impossible (1155)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1480,6 +1490,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires child_process.exec subprocess behavior | 1 | `parallel/test-error-reporting.js` |
 | requires child_process.exec which is not available in WASM | 1 | `parallel/test-child-process-exec-cwd.js` |
 | requires child_process.execSync which is not available in WASM | 1 | `parallel/test-domain-abort-on-uncaught.js` |
+| requires child_process.fork IPC semantics, which are not available in WASM | 1 | `es-module/test-esm-child-process-fork-main.mjs` |
 | requires child_process.fork(), which is unavailable in WASI | 1 | `parallel/test-http-server-stale-close.js` |
 | requires child_process.spawn of a separate Node process to reproduce stack-overflow behavior | 1 | `sequential/test-fs-stat-sync-overflow.js` |
 | requires child_process.spawn of a separate server process | 1 | `sequential/test-net-response-size.js` |
@@ -1519,6 +1530,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires worker_threads to interrupt generatePrime; worker_threads is unavailable in WASM | 1 | `parallel/test-crypto-prime.js#block_09_block_09` |
 | requires worker_threads trace propagation | 1 | `parallel/test-trace-events-async-hooks-worker.js` |
 | requires worker_threads, which are unavailable in WASM | 1 | `sequential/test-vm-break-on-sigint.js` |
+| requires worker_threads/native addon process isolation semantics, which are not available in single-threaded WASM | 1 | `es-module/test-esm-no-addons.mjs` |
 | sending host process signals is not supported in WASI | 1 | `parallel/test-process-kill-null.js` |
 | test is gated to Linux/macOS/Windows shell behavior and excludes WASI | 1 | `parallel/test-stdin-from-file-spawn.js` |
 | tests Worker terminate() during http2.respondWithFile() in the worker; requires real worker_threads execution which is not available in single-threaded WASM | 1 | `parallel/test-worker-terminate-http2-respond-with-file.js` |
@@ -1579,7 +1591,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 _No entries._
 
-### Node.js internals (1121)
+### Node.js internals (1122)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1648,6 +1660,7 @@ _No entries._
 | inherited: requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo | 3 | `parallel/test-dns-lookup.js#block_00_block_00`, `parallel/test-dns-lookup.js#block_01_block_01`, `parallel/test-dns-lookup.js#block_02_block_02` |
 | inherited: uses --expose-internals with dgram._createSocketHandle and internal/test/binding | 3 | `parallel/test-dgram-create-socket-handle-fd.js#block_00_return_a_negative_number_if_the_existing_fd_is_invalid`, `parallel/test-dgram-create-socket-handle-fd.js#block_01_return_a_negative_number_if_the_type_of_fd_is_not_udp`, `parallel/test-dgram-create-socket-handle-fd.js#block_02_create_a_bound_handle` |
 | requires --expose-internals and internal/options | 3 | `parallel/test-options-binding.js`, `parallel/test-pending-deprecation.js`, `parallel/test-worker-cli-options.js` |
+| requires --expose-internals and node:internal/modules/esm/resolve | 3 | `es-module/test-cjs-legacyMainResolve-permission.js`, `es-module/test-cjs-legacyMainResolve.js`, `es-module/test-esm-resolve-type.mjs` |
 | requires internal/test/binding and internalBinding('js_stream') | 3 | `parallel/test-util-types.js#block_00_block_00`, `parallel/test-util-types.js#block_01_block_01`, `parallel/test-util-types.js#block_02_block_02` |
 | requires internal/test/binding internalBinding('tcp_wrap') | 3 | `parallel/test-tcp-wrap-connect.js`, `parallel/test-tcp-wrap-listen.js`, `parallel/test-tcp-wrap.js` |
 | uses --expose-internals and internal/errors AbortError | 3 | `parallel/test-errors-aborterror.js#block_00_block_00`, `parallel/test-errors-aborterror.js#block_01_block_01`, `parallel/test-errors-aborterror.js#block_02_block_02` |
@@ -1669,7 +1682,6 @@ _No entries._
 | requires --expose-internals and internal/error_serdes | 2 | `sequential/test-error-serdes.js#block_00_block_00`, `sequential/test-error-serdes.js#block_01_block_01` |
 | requires --expose-internals and internal/priority_queue | 2 | `parallel/test-priority-queue.js#block_00_block_00`, `parallel/test-priority-queue.js#block_01_block_01` |
 | requires --expose-internals and internal/timers | 2 | `parallel/test-child-process-http-socket-leak.js`, `parallel/test-tls-wrap-timeout.js` |
-| requires --expose-internals and node:internal/modules/esm/resolve | 2 | `es-module/test-cjs-legacyMainResolve-permission.js`, `es-module/test-cjs-legacyMainResolve.js` |
 | requires --expose-internals and require('internal/js_stream_socket') | 2 | `parallel/test-stream-wrap-encoding.js#block_00_block_00`, `parallel/test-stream-wrap-encoding.js#block_01_block_01` |
 | requires --expose-internals plus internal/js_stream_socket and internalBinding('stream_wrap') | 2 | `parallel/test-stream-wrap-drain.js`, `parallel/test-stream-wrap.js` |
 | requires internal _tls_common module | 2 | `parallel/test-tls-translate-peer-certificate.js#block_00_block_00`, `parallel/test-tls-translate-peer-certificate.js#block_01_block_01` |

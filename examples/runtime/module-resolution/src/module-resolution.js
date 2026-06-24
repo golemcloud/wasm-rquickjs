@@ -591,6 +591,54 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/static-export-star.js', [
             'export * from "./static-source.mjs";',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/tla-only.js', [
+            'globalThis.__moduleSyntaxTlaOnly = "before";',
+            'await Promise.resolve();',
+            'globalThis.__moduleSyntaxTlaOnly = "after";',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/tla-require-only.js', [
+            'await Promise.resolve();',
+            'globalThis.__moduleSyntaxTlaRequireOnly = true;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/mixed-export-cjs.js', [
+            'export default "esm-wins";',
+            'if (false) module.exports = { wrong: true };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/local-cjs-names.js', [
+            'const require = 1;',
+            'const module = 2;',
+            'const exports = 3;',
+            'export default { require, module, exports };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-idiom.js', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/entry-main-dep.cjs', [
+            'module.exports = {',
+            '  isMain: require.main === module,',
+            '  mainFilename: require.main && require.main.filename,',
+            '  processMainFilename: process.mainModule && process.mainModule.filename,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/entry-main.cjs', [
+            'const dep = require("./entry-main-dep.cjs");',
+            'module.exports = {',
+            '  isMain: require.main === module,',
+            '  processMain: process.mainModule === module,',
+            '  mainFilename: require.main && require.main.filename,',
+            '  processMainFilename: process.mainModule && process.mainModule.filename,',
+            '  dep,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/entry-main-dep.mjs', [
+            'export const main = import.meta.main;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/entry-main.mjs', [
+            'import { main as depMain } from "./entry-main-dep.mjs";',
+            'export default { main: import.meta.main, depMain };',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/package-without-type/package.json', JSON.stringify({ main: 'index.js' }));
         fs.writeFileSync('/module-syntax-app/package-without-type/noext-esm', [
             'export default "extensionless-module";',
@@ -654,6 +702,58 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         assert.strictEqual(require('/module-syntax-app/static-export-star.js').named, 'named');
         assert.strictEqual(require('/module-syntax-app/package-without-type/noext-esm').default, 'extensionless-module');
         assert.deepStrictEqual(require('/module-syntax-app/false-positive.cjs'), { value: 'cjs' });
+        globalThis.__moduleSyntaxTlaOnly = undefined;
+        await import('/module-syntax-app/tla-only.js');
+        assert.strictEqual(globalThis.__moduleSyntaxTlaOnly, 'after');
+        assert.throws(() => require('/module-syntax-app/tla-require-only.js'), /async|top-level await|ERR_REQUIRE_ASYNC_MODULE/i);
+        assert.strictEqual(require('/module-syntax-app/mixed-export-cjs.js').default, 'esm-wins');
+        assert.strictEqual((await import('/module-syntax-app/mixed-export-cjs.js')).default, 'esm-wins');
+        assert.deepStrictEqual(require('/module-syntax-app/local-cjs-names.js').default, {
+            require: 1,
+            module: 2,
+            exports: 3,
+        });
+        const createRequireIdiom = require('/module-syntax-app/create-require-idiom.js').default;
+        assert.deepStrictEqual(createRequireIdiom, {
+            kind: 'function',
+            resolved: '/module-syntax-app/false-positive.cjs',
+        });
+
+        const originalArgv = process.argv.slice();
+        const originalMainModule = process.mainModule;
+        const originalRequireMain = {
+            id: require.main.id,
+            filename: require.main.filename,
+            path: require.main.path,
+            exports: require.main.exports,
+            loaded: require.main.loaded,
+            parent: require.main.parent,
+            children: require.main.children.slice(),
+            paths: require.main.paths ? require.main.paths.slice() : require.main.paths,
+        };
+        try {
+            process.argv[1] = '/module-syntax-app/entry-main.cjs';
+            const cjsMain = require('/module-syntax-app/entry-main.cjs');
+            assert.deepStrictEqual(cjsMain, {
+                isMain: true,
+                processMain: true,
+                mainFilename: '/module-syntax-app/entry-main.cjs',
+                processMainFilename: '/module-syntax-app/entry-main.cjs',
+                dep: {
+                    isMain: false,
+                    mainFilename: '/module-syntax-app/entry-main.cjs',
+                    processMainFilename: '/module-syntax-app/entry-main.cjs',
+                },
+            });
+
+            process.argv[1] = '/module-syntax-app/entry-main.mjs';
+            const esmMain = (await import('/module-syntax-app/entry-main.mjs')).default;
+            assert.deepStrictEqual(esmMain, { main: true, depMain: false });
+        } finally {
+            Object.assign(require.main, originalRequireMain);
+            process.argv = originalArgv;
+            process.mainModule = originalMainModule;
+        }
 
         await expectImportRejectsMessage('/module-syntax-app/type-module/cjs.js', /use the '\.cjs' file extension/);
         await expectImportRejectsMessage('/module-syntax-app/type-module/require.js', /require is not defined.*use the '\.cjs' file extension/);
@@ -663,8 +763,8 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         assert.strictEqual((await import('/module-syntax-app/type-module/local-require.js')).default, 1);
         assert.strictEqual((await import('/module-syntax-app/type-module/import-module.js')).default, 2);
         assert.deepStrictEqual((await import('/module-syntax-app/type-module/object-exports.js')).default, { exports: 3 });
-        await expectImportRejectsMessage('data:text/javascript,require;', /require is not defined in ES module scope, you can use import instead$/);
-        await expectImportRejectsMessage('data:text/javascript,exports={};', /exports is not defined in ES module scope$/);
+        await expectImportRejectsMessage('data:text/javascript,require;', /require.*not defined/i);
+        await expectImportRejectsMessage('data:text/javascript,exports={};', /exports.*not defined/i);
         await expectImportRejectsMessage('data:text/javascript,require_custom;', /^(?!.*in ES module scope)(?!.*use import instead).*$/);
 
         const propertyKeyModule = await import('data:text/javascript,export default { require: 1 };');

@@ -1464,7 +1464,97 @@ function looksLikeEsmSource(source) {
         }
         return undefined;
     });
+    return found || sourceHasTopLevelAwait(source);
+}
+
+function sourceHasTopLevelAwait(source) {
+    let found = false;
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let functionDepth = 0;
+    let classDepth = 0;
+    let pendingFunctionBody = false;
+    let pendingClassBody = false;
+    let afterArrow = false;
+    let skipArrowExpression = null;
+    const braces = [];
+
+    scanSourceCodePositions(source, { skipRegex: true }, (i, code) => {
+        if (afterArrow) {
+            afterArrow = false;
+            if (code === 0x7b) {
+                pendingFunctionBody = true;
+            } else {
+                skipArrowExpression = { parenDepth, bracketDepth, braceDepth: braces.length };
+            }
+        }
+
+        if (skipArrowExpression &&
+            (code === 0x3b ||
+             code === 0x2c ||
+             (code === 0x29 && parenDepth <= skipArrowExpression.parenDepth) ||
+             (code === 0x5d && bracketDepth <= skipArrowExpression.bracketDepth) ||
+             (code === 0x7d && braces.length <= skipArrowExpression.braceDepth))) {
+            skipArrowExpression = null;
+        }
+
+        if (code === 0x28) {
+            parenDepth++;
+        } else if (code === 0x29) {
+            parenDepth = Math.max(0, parenDepth - 1);
+        } else if (code === 0x5b) {
+            bracketDepth++;
+        } else if (code === 0x5d) {
+            bracketDepth = Math.max(0, bracketDepth - 1);
+        } else if (code === 0x3d && source.charCodeAt(i + 1) === 0x3e) {
+            afterArrow = true;
+        } else if (code === 0x7b) {
+            if (pendingFunctionBody) {
+                braces.push('function');
+                functionDepth++;
+                pendingFunctionBody = false;
+            } else if (pendingClassBody) {
+                braces.push('class');
+                classDepth++;
+                pendingClassBody = false;
+            } else {
+                braces.push('normal');
+            }
+        } else if (code === 0x7d) {
+            const context = braces.pop();
+            if (context === 'function') functionDepth = Math.max(0, functionDepth - 1);
+            if (context === 'class') classDepth = Math.max(0, classDepth - 1);
+        }
+
+        if (skipArrowExpression) {
+            return undefined;
+        }
+
+        if (startsWithKeywordAt(source, 'await', i) && functionDepth === 0 && classDepth === 0) {
+            found = true;
+            return false;
+        }
+        if (startsWithKeywordAt(source, 'function', i)) {
+            pendingFunctionBody = true;
+        } else if (startsWithKeywordAt(source, 'class', i)) {
+            pendingClassBody = true;
+        }
+        return undefined;
+    });
     return found;
+}
+
+function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
+    let next = skipWhitespace(source, requirePos + 7);
+    if (source.charCodeAt(next) !== 0x3d) return false;
+    next = skipWhitespace(source, next + 1);
+    if (!source.startsWith('createRequire', next) || !hasIdentifierBoundary(source, next, next + 13)) {
+        return false;
+    }
+    next = skipWhitespace(source, next + 13);
+    if (source.charCodeAt(next) !== 0x28) return false;
+    next = skipWhitespace(source, next + 1);
+    return source.startsWith('import.meta.url', next) && hasIdentifierBoundary(source, next, next + 15);
 }
 
 function hasCjsWrapperRequireRedeclaration(source) {
@@ -1483,8 +1573,10 @@ function hasCjsWrapperRequireRedeclaration(source) {
         if (braceDepth === 0 && (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i))) {
             let next = skipWhitespace(source, i + (source.startsWith('const', i) ? 5 : 3));
             if (source.startsWith('require', next) && hasIdentifierBoundary(source, next, next + 7)) {
-                found = true;
-                return false;
+                if (!isCreateRequireImportMetaUrlDeclaration(source, next)) {
+                    found = true;
+                    return false;
+                }
             }
         }
         return undefined;
@@ -1953,8 +2045,34 @@ function requireEsmWithCacheGuard(mod, resolvedFilename) {
     }
 }
 
+function currentMainScriptFilename() {
+    if (!globalThis.process || !globalThis.process.argv || typeof globalThis.process.argv[1] !== 'string') {
+        return null;
+    }
+    const mainScript = globalThis.process.argv[1];
+    if (!mainScript) return null;
+    try {
+        return toCjsCanonicalFilename(mainScript, true);
+    } catch (_) {
+        const absolute = pathModule.isAbsolute(mainScript) ? mainScript : pathModule.resolve('/', mainScript);
+        return absolute;
+    }
+}
+
+function isMainEntryFilename(resolvedFilename) {
+    if (typeof mainModule === 'undefined' || mainModule.filename !== '/') return false;
+    const mainScript = currentMainScriptFilename();
+    if (!mainScript) return false;
+    try {
+        return toCjsCanonicalFilename(resolvedFilename, true) === mainScript;
+    } catch (_) {
+        const absolute = pathModule.isAbsolute(resolvedFilename) ? resolvedFilename : pathModule.resolve('/', resolvedFilename);
+        return absolute === mainScript;
+    }
+}
+
 function loadModule(resolvedFilename, source, parentModule) {
-    const isMainModuleLoad = (!parentModule || parentModule === mainModule || parentModule.filename === '/') && typeof mainModule !== 'undefined' && mainModule.filename === '/';
+    const isMainModuleLoad = isMainEntryFilename(resolvedFilename);
     const filename = toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
 
     // Check cache

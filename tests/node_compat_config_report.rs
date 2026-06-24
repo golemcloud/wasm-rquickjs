@@ -18,12 +18,14 @@ use common::{
     NodeCompatCategory, NodeCompatTestEntry, classify_test, load_node_compat_config,
     strip_jsonc_comments,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::path::Path;
 use test_r::test;
 
 const CONFIG_PATH: &str = "tests/node_compat/config.jsonc";
 const REPORT_PATH: &str = "tests/node_compat/report.md";
+const SUITE_ROOT: &str = "tests/node_compat/suite";
 
 #[derive(Debug, Clone)]
 struct InventoryItem {
@@ -139,6 +141,85 @@ fn generate_node_compat_config_report() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn module_related_node_compat_entries_are_configured() -> anyhow::Result<()> {
+    let entries = load_node_compat_config(CONFIG_PATH)?;
+    let configured: BTreeSet<_> = entries.into_iter().map(|entry| entry.path).collect();
+    let expected = collect_module_related_entrypoints()?;
+
+    let missing: Vec<_> = expected
+        .into_iter()
+        .filter(|entry| !configured.contains(entry))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "module-related node_compat tests are vendored but missing from {CONFIG_PATH}:\n{}",
+        missing.join("\n")
+    );
+
+    Ok(())
+}
+
+fn collect_module_related_entrypoints() -> anyhow::Result<BTreeSet<String>> {
+    let mut entries = BTreeSet::new();
+    collect_matching_files("es-module", is_es_module_entrypoint, &mut entries)?;
+    collect_matching_files("parallel", is_parallel_module_entrypoint, &mut entries)?;
+    collect_matching_files("sequential", is_sequential_module_entrypoint, &mut entries)?;
+    Ok(entries)
+}
+
+fn collect_matching_files(
+    suite_dir: &str,
+    predicate: fn(&str) -> bool,
+    entries: &mut BTreeSet<String>,
+) -> anyhow::Result<()> {
+    let dir = Path::new(SUITE_ROOT).join(suite_dir);
+    for entry in fs::read_dir(&dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if predicate(&file_name) {
+            entries.insert(format!("{suite_dir}/{file_name}"));
+        }
+    }
+    Ok(())
+}
+
+fn is_js_entrypoint(name: &str) -> bool {
+    name.starts_with("test-") && (name.ends_with(".js") || name.ends_with(".mjs"))
+}
+
+fn is_es_module_entrypoint(name: &str) -> bool {
+    is_js_entrypoint(name)
+}
+
+fn is_parallel_module_entrypoint(name: &str) -> bool {
+    is_js_entrypoint(name)
+        && [
+            "test-module-",
+            "test-module.",
+            "test-require-",
+            "test-require.",
+            "test-cjs-",
+            "test-cjs.",
+            "test-esm-",
+            "test-esm.",
+            "test-commonjs-",
+            "test-commonjs.",
+        ]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+}
+
+fn is_sequential_module_entrypoint(name: &str) -> bool {
+    is_js_entrypoint(name) && name.starts_with("test-module")
 }
 
 fn expand_entries(entries: &[NodeCompatTestEntry]) -> Vec<InventoryItem> {

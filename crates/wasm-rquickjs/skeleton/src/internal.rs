@@ -347,6 +347,7 @@ impl Loader for DataUrlLoader {
                 filename: None,
                 dirname: None,
                 include_resolve: true,
+                main: false,
             };
             let injected = inject_import_meta_prologue(&init, &source);
             Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
@@ -1193,8 +1194,10 @@ fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
                         && is_ident_start_boundary(bytes, next)
                         && is_ident_boundary(bytes, next + 7)
                     {
-                        found = true;
-                        return ControlFlow::Break(());
+                        if !is_create_require_import_meta_url_declaration(source, next) {
+                            found = true;
+                            return ControlFlow::Break(());
+                        }
                     }
                 }
             }
@@ -1202,6 +1205,27 @@ fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
         ControlFlow::Continue(None)
     });
     found
+}
+
+fn is_create_require_import_meta_url_declaration(source: &str, require_pos: usize) -> bool {
+    let mut next = skip_ws_comments(source, require_pos + "require".len());
+    if source.as_bytes().get(next) != Some(&b'=') {
+        return false;
+    }
+    next = skip_ws_comments(source, next + 1);
+    if !source[next..].starts_with("createRequire")
+        || !is_ident_start_boundary(source.as_bytes(), next)
+        || !is_ident_boundary(source.as_bytes(), next + "createRequire".len())
+    {
+        return false;
+    }
+    next = skip_ws_comments(source, next + "createRequire".len());
+    if source.as_bytes().get(next) != Some(&b'(') {
+        return false;
+    }
+    next = skip_ws_comments(source, next + 1);
+    source[next..].starts_with("import.meta.url")
+        && is_ident_boundary(source.as_bytes(), next + "import.meta.url".len())
 }
 
 fn is_ascii_js_identifier(value: &str) -> bool {
@@ -3747,13 +3771,16 @@ impl Loader for CjsCompatLoader {
                 .parent()
                 .map(|p| p.to_string_lossy().into_owned()),
             include_resolve: true,
+            main: import_meta_main_for_path(ctx, &fs_abs_path),
         };
 
         let detected_analysis = analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new());
+        let has_esm_syntax = source_looks_like_esm(&source);
         // .cjs files are always CommonJS; for .js files, use the analyzer so
         // comments, strings, templates, and regex literals do not force CJS.
         let is_cjs = is_cjs_ext
             || (!is_js_in_module_package_scope(&fs_abs_path)
+                && !has_esm_syntax
                 && !has_cjs_wrapper_require_redeclaration(&source)
                 && (detected_analysis.is_cjs
                     || !detected_analysis.exports.is_empty()
@@ -3799,6 +3826,7 @@ struct ImportMetaInit {
     filename: Option<String>,
     dirname: Option<String>,
     include_resolve: bool,
+    main: bool,
 }
 
 /// Ensure a path is absolute. If relative, prepend `/` (WASI cwd is `/`).
@@ -3848,6 +3876,27 @@ fn split_module_path_suffix(path: &str) -> (&str, &str) {
 
 fn module_filesystem_path(path: &str) -> &str {
     split_module_path_suffix(path).0
+}
+
+fn import_meta_main_for_path(ctx: &Ctx<'_>, fs_abs_path: &str) -> bool {
+    let Ok(process) = ctx.globals().get::<_, Object>("process") else {
+        return false;
+    };
+    let Ok(argv) = process.get::<_, rquickjs::Array>("argv") else {
+        return false;
+    };
+    let Ok(main_script) = argv.get::<String>(1) else {
+        return false;
+    };
+    if main_script.is_empty() {
+        return false;
+    }
+
+    let main_script = main_script
+        .strip_prefix("file://")
+        .unwrap_or(main_script.as_str());
+    let main_path = module_filesystem_path(main_script);
+    ensure_absolute_path(main_path) == fs_abs_path
 }
 
 fn escape_js_string(s: &str) -> String {
@@ -3914,6 +3963,10 @@ fn source_has_top_level_await(source: &str) -> bool {
                     i += 1;
                 }
                 i = (i + 2).min(bytes.len());
+                continue;
+            }
+            if is_regex_literal_start(source, i) {
+                i = skip_regex_literal(source, i);
                 continue;
             }
         }
@@ -4011,6 +4064,68 @@ fn source_has_top_level_await(source: &str) -> bool {
     false
 }
 
+fn source_looks_like_esm(source: &str) -> bool {
+    if source_has_top_level_await(source) {
+        return true;
+    }
+
+    scan_code_positions(source, true, |i, _| {
+        if source[i..].starts_with("export")
+            && is_ident_start_boundary(source.as_bytes(), i)
+            && is_ident_boundary(source.as_bytes(), i + "export".len())
+            && is_static_export_syntax(source, i)
+        {
+            return ControlFlow::Break(());
+        }
+        if source[i..].starts_with("import")
+            && is_ident_start_boundary(source.as_bytes(), i)
+            && is_ident_boundary(source.as_bytes(), i + "import".len())
+            && is_static_import_syntax(source, i)
+        {
+            return ControlFlow::Break(());
+        }
+        ControlFlow::Continue(None)
+    })
+    .is_break()
+}
+
+fn is_static_export_syntax(source: &str, pos: usize) -> bool {
+    if previous_significant_byte(source, pos) == Some(b'.') {
+        return false;
+    }
+    let next = skip_ws_comments(source, pos + "export".len());
+    if source.as_bytes().get(next) == Some(&b':') {
+        return false;
+    }
+    match source.as_bytes().get(next).copied() {
+        Some(b'{' | b'*') => true,
+        _ => ["default", "const", "let", "var", "function", "class"]
+            .iter()
+            .any(|keyword| {
+                source[next..].starts_with(keyword)
+                    && is_ident_boundary(source.as_bytes(), next + keyword.len())
+            }),
+    }
+}
+
+fn is_static_import_syntax(source: &str, pos: usize) -> bool {
+    if previous_significant_byte(source, pos) == Some(b'.') {
+        return false;
+    }
+    let next = skip_ws_comments(source, pos + "import".len());
+    if matches!(source.as_bytes().get(next), Some(b'(' | b':')) {
+        return false;
+    }
+    matches!(
+        source.as_bytes().get(next).copied(),
+        Some(b'\'' | b'"' | b'{' | b'*')
+    ) || source
+        .as_bytes()
+        .get(next)
+        .copied()
+        .is_some_and(is_js_identifier_start)
+}
+
 fn is_js_identifier_start(byte: u8) -> bool {
     byte == b'_' || byte == b'$' || byte.is_ascii_alphabetic()
 }
@@ -4042,6 +4157,11 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
             escape_js_string(&init.url)
         ));
     }
+
+    props.push(format!(
+        "main:{{value:{},writable:true,enumerable:true,configurable:true}}",
+        if init.main { "true" } else { "false" }
+    ));
 
     props.push(format!(
         "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
@@ -4118,6 +4238,7 @@ impl Loader for ImportMetaLoader {
             filename,
             dirname,
             include_resolve: true,
+            main: import_meta_main_for_path(ctx, &fs_abs_path),
         };
 
         // Check if there's a cached compilation error for this module.
@@ -4283,6 +4404,7 @@ impl JsState {
                     filename: None,
                     dirname: None,
                     include_resolve: true,
+                    main: false,
                 },
                 crate::js_export_module(),
             ),
@@ -4295,6 +4417,7 @@ impl JsState {
                     filename: None,
                     dirname: None,
                     include_resolve: true,
+                    main: false,
                 },
                 &source,
             );
