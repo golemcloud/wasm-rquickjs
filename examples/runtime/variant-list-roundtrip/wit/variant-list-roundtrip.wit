@@ -20,6 +20,7 @@ interface api {
   roundtrip-items: func(items: list<item>) -> list<item>;
   roundtrip-payload: func(payload: payload) -> payload;
   roundtrip-envelope: func(envelope: envelope) -> envelope;
+  roundtrip-number: func(value: u32) -> u32;
 }
 
 world variant-list-roundtrip {
