@@ -1,17 +1,18 @@
 use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
 use crate::imports::generate_import_modules;
+use crate::javascript::escape_js_ident;
 use crate::skeleton::{copy_skeleton_lock, copy_skeleton_sources, generate_cargo_toml};
 use crate::wit::{add_get_script_import, add_wizer_init_export};
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
-use heck::{ToSnakeCase, ToUpperCamelCase};
+use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span};
 use std::cell::RefCell;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use wit_parser::{
     Function, Interface, InterfaceId, PackageId, PackageName, PackageSourceMap, Resolve, TypeDef,
-    TypeId, TypeOwner, WorldId, WorldItem,
+    TypeId, TypeOwner, WorldId, WorldItem, WorldKey,
 };
 
 /// WASI package namespaces whose interfaces are remapped to `wasip2::` in the generated code.
@@ -268,6 +269,64 @@ impl<'a> GeneratorContext<'a> {
             .any(|(_, item)| matches!(item, WorldItem::Interface { id, .. } if id == &interface_id))
     }
 
+    fn exported_interface_js_name(
+        &self,
+        interface_id: InterfaceId,
+        export_name: &str,
+    ) -> anyhow::Result<String> {
+        let names = self.exported_interface_js_names()?;
+        names
+            .get(&interface_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("Interface export not found: {export_name}"))
+    }
+
+    fn exported_interface_js_names(&self) -> anyhow::Result<BTreeMap<InterfaceId, String>> {
+        let world = &self.resolve.worlds[self.world];
+        let mut exported_interfaces = Vec::new();
+
+        for (key, export) in &world.exports {
+            if let WorldItem::Interface { id, .. } = export {
+                let interface = &self.resolve.interfaces[*id];
+                let export_name = match key {
+                    WorldKey::Name(name) => name.as_str(),
+                    WorldKey::Interface(_) => interface
+                        .name
+                        .as_deref()
+                        .ok_or_else(|| anyhow!("Interface export does not have a name"))?,
+                };
+                let short_name = exported_interface_short_js_name(export_name);
+                exported_interfaces.push((*id, export_name.to_string(), short_name));
+            }
+        }
+
+        let mut short_name_counts = BTreeMap::<String, usize>::new();
+        for (_, _, short_name) in &exported_interfaces {
+            *short_name_counts.entry(short_name.clone()).or_default() += 1;
+        }
+
+        let mut result = BTreeMap::new();
+        let mut used_names = BTreeMap::<String, InterfaceId>::new();
+        for (interface_id, export_name, short_name) in exported_interfaces {
+            let js_name = if short_name_counts.get(&short_name).copied().unwrap_or(0) > 1 {
+                let interface = &self.resolve.interfaces[interface_id];
+                exported_interface_qualified_js_name(self, interface, &export_name)?
+            } else {
+                short_name
+            };
+
+            if let Some(previous_id) = used_names.insert(js_name.clone(), interface_id) {
+                anyhow::bail!(
+                    "Exported WIT interfaces {previous_id:?} and {interface_id:?} both map to JavaScript export name '{js_name}'"
+                );
+            }
+
+            result.insert(interface_id, js_name);
+        }
+
+        Ok(result)
+    }
+
     fn is_exported_type(&self, type_id: TypeId) -> bool {
         if let Some(typ) = self.resolve.types.get(type_id) {
             match &typ.owner {
@@ -400,6 +459,33 @@ impl<'a> GeneratorContext<'a> {
             false
         }
     }
+}
+
+fn exported_interface_short_js_name(export_name: &str) -> String {
+    escape_js_ident(export_name.to_lower_camel_case())
+}
+
+fn exported_interface_qualified_js_name(
+    context: &GeneratorContext<'_>,
+    interface: &Interface,
+    export_name: &str,
+) -> anyhow::Result<String> {
+    let package_id = interface
+        .package
+        .ok_or_else(|| anyhow!("Anonymous interface exports cannot be qualified: {export_name}"))?;
+    let package = context
+        .resolve
+        .packages
+        .get(package_id)
+        .ok_or_else(|| anyhow!("Unknown owner package of interface export: {export_name}"))?;
+    let interface_name = interface.name.as_deref().unwrap_or(export_name);
+    let module_name = format!(
+        "{}_{}",
+        package.name.to_string().to_snake_case(),
+        interface_name.to_snake_case()
+    );
+
+    Ok(escape_js_ident(module_name.to_lower_camel_case()))
 }
 
 pub struct ImportedInterface<'a> {

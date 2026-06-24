@@ -12,7 +12,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::{Lit, LitStr};
-use wit_parser::{Function, FunctionKind, Interface, TypeId, WorldItem, WorldKey};
+use wit_parser::{Function, FunctionKind, Interface, InterfaceId, TypeId, WorldItem, WorldKey};
 
 /// Generates the `<output>/src/lib.rs` file for the wrapper crate, implementing the component exports
 /// and providing the general Rust module declarations.
@@ -90,7 +90,7 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
         match export {
             WorldItem::Interface { id, .. } => {
                 let interface = &context.resolve.interfaces[*id];
-                interface_exports.push((name, interface));
+                interface_exports.push((name, interface, *id));
             }
             WorldItem::Function(function) => {
                 global_exports.push((name, function));
@@ -110,7 +110,7 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
     }
 
     // Implementing a Guest trait per exported interface
-    for (name, interface) in interface_exports {
+    for (name, interface, interface_id) in interface_exports {
         let interface_exports: Vec<_> = interface
             .functions
             .iter()
@@ -125,7 +125,7 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
                 &name,
                 interface,
             ),
-            Some((&name, interface)),
+            Some((&name, interface, interface_id)),
             &interface_exports,
         )?);
     }
@@ -143,7 +143,7 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
 fn generate_guest_impl(
     context: &GeneratorContext<'_>,
     guest_trait: TokenStream,
-    interface: Option<(&str, &Interface)>,
+    interface: Option<(&str, &Interface, InterfaceId)>,
     exports: &[(String, &Function)],
 ) -> anyhow::Result<Vec<TokenStream>> {
     let mut func_impls = Vec::new();
@@ -205,13 +205,23 @@ fn generate_guest_impl(
             &format!("Guest{}", resource_name.to_upper_camel_case()),
             Span::call_site(),
         );
-        let guest_trait =
-            ident_in_exported_interface_or_global(context, guest_name_ident, interface);
+        let interface_name_and_def = interface.map(|(name, interface, _)| (name, interface));
+        let guest_trait = ident_in_exported_interface_or_global(
+            context,
+            guest_name_ident,
+            interface_name_and_def,
+        );
 
-        let borrow_wrapper =
-            ident_in_exported_interface_or_global(context, resource_name_borrow_ident, interface);
-        let owned_wrapper =
-            ident_in_exported_interface_or_global(context, resource_name_ident.clone(), interface);
+        let borrow_wrapper = ident_in_exported_interface_or_global(
+            context,
+            resource_name_borrow_ident,
+            interface_name_and_def,
+        );
+        let owned_wrapper = ident_in_exported_interface_or_global(
+            context,
+            resource_name_ident.clone(),
+            interface_name_and_def,
+        );
 
         let mut resource_func_impls = Vec::new();
         for (name, resource_function) in resource_funcs {
@@ -309,7 +319,7 @@ fn generate_guest_impl(
 /// Generates one trait method implementation for an exported freestanding function
 fn generate_exported_function_impl(
     context: &GeneratorContext<'_>,
-    interface: Option<(&str, &Interface)>,
+    interface: Option<(&str, &Interface, InterfaceId)>,
     name: &str,
     function: &Function,
 ) -> anyhow::Result<TokenStream> {
@@ -343,12 +353,11 @@ fn generate_exported_function_impl(
         func_name.span(),
     ));
     let (js_func_path, wit_package_lit) = match interface {
-        Some((iface_name, iface)) => {
+        Some((iface_name, iface, interface_id)) => {
             let if_name_str = LitStr::new(
-                &escape_js_ident(iface_name.to_lower_camel_case()),
+                &context.exported_interface_js_name(interface_id, iface_name)?,
                 func_name.span(),
             );
-
             let owner_package_name = match iface.package {
                 Some(package_id) => {
                     let package = context.resolve.packages.get(package_id).ok_or_else(|| {
@@ -397,7 +406,7 @@ fn generate_exported_function_impl(
 /// Generates one trait method implementation for an exported freestanding function
 fn generate_exported_resource_function_impl(
     context: &GeneratorContext<'_>,
-    interface: Option<(&str, &Interface)>,
+    interface: Option<(&str, &Interface, InterfaceId)>,
     resource_type_id: &TypeId,
     name: &str,
     function: &Function,
@@ -465,12 +474,11 @@ fn generate_exported_resource_function_impl(
         Span::call_site(),
     ));
     let (js_resource_path, wit_package_lit) = match interface {
-        Some((iface_name, iface)) => {
+        Some((iface_name, iface, interface_id)) => {
             let if_name_str = LitStr::new(
-                &escape_js_ident(iface_name.to_lower_camel_case()),
+                &context.exported_interface_js_name(interface_id, iface_name)?,
                 Span::call_site(),
             );
-
             let owner_package_name = match iface.package {
                 Some(package_id) => {
                     let package = context.resolve.packages.get(package_id).ok_or_else(|| {
@@ -497,9 +505,9 @@ fn generate_exported_resource_function_impl(
         Span::call_site(),
     ));
     let js_static_func_path = match interface {
-        Some((iface_name, _)) => {
+        Some((iface_name, _, interface_id)) => {
             let if_name_str = LitStr::new(
-                &escape_js_ident(iface_name.to_lower_camel_case()),
+                &context.exported_interface_js_name(interface_id, iface_name)?,
                 Span::call_site(),
             );
             quote! { &[#if_name_str, #js_resource_name_str, #js_func_name_str] }
