@@ -570,7 +570,8 @@ Compatibility stubs — no V8 inspector in WASM.
 <details>
 <summary><strong><code>node:module</code></strong></summary>
 
-- `require`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
+- `require`, `require.resolve`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
+- Package resolution supports `package.json` `main`, `exports` root/subpath maps, wildcard `exports` patterns, `imports` maps, and wildcard `imports` patterns. CJS resolution recognizes `golem`, `node`, `require`, `module-sync`, and `default` conditions; ESM resolution recognizes `golem`, `node`, `import`, `module-sync`, and `default`. Package `imports` can target relative files, external packages, and `node:` builtins.
 
 </details>
 

@@ -145,9 +145,65 @@ pub struct NodeCompatTestEntry {
     pub category: NodeCompatCategory,
     pub reason: Option<String>,
     pub split: bool,
+    pub nested_node_test: bool,
     pub timeout_secs: u64,
     pub flaky: bool,
     pub subtests: Vec<NodeCompatSubtestEntry>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NodeModulesAppCategory {
+    Runnable,
+    KnownGap,
+    Deferred,
+}
+
+impl NodeModulesAppCategory {
+    pub fn from_config_value(value: &str) -> anyhow::Result<Self> {
+        match value {
+            "runnable" => Ok(Self::Runnable),
+            "known-gap" | "gap" => Ok(Self::KnownGap),
+            "deferred" => Ok(Self::Deferred),
+            other => anyhow::bail!("unknown node_modules_apps category '{other}'"),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Runnable => "runnable",
+            Self::KnownGap => "known gap",
+            Self::Deferred => "deferred",
+        }
+    }
+
+    pub fn status_label(self) -> &'static str {
+        match self {
+            Self::Runnable => "Passing",
+            Self::KnownGap => "Known gap",
+            Self::Deferred => "Deferred",
+        }
+    }
+
+    pub fn should_ignore_in_runner(self) -> bool {
+        !matches!(self, Self::Runnable)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeModulesAppTestEntry {
+    pub file: String,
+    pub category: NodeModulesAppCategory,
+    pub coverage: String,
+    pub reason: Option<String>,
+    pub timeout_secs: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeModulesAppEntry {
+    pub name: String,
+    pub category: NodeModulesAppCategory,
+    pub reason: Option<String>,
+    pub tests: Vec<NodeModulesAppTestEntry>,
 }
 
 /// Extract the numeric index from a subtest name like "block_00_foo" or "test_03_bar".
@@ -233,6 +289,10 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         let split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
+        let nested_node_test = opts
+            .get("nestedNodeTest")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let timeout_secs = opts
             .get("timeout")
             .and_then(|v| v.as_u64())
@@ -269,6 +329,7 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             category,
             reason,
             split,
+            nested_node_test,
             timeout_secs,
             flaky,
             subtests,
@@ -276,6 +337,103 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
     }
 
     Ok(tests)
+}
+
+pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModulesAppEntry>> {
+    let content = fs::read_to_string(path)?;
+    let json_str = strip_jsonc_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&json_str)?;
+
+    let apps_obj = value
+        .get("apps")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| anyhow::anyhow!("node_modules_apps config missing 'apps' object"))?;
+
+    let mut apps = Vec::new();
+    for (app_name, opts) in apps_obj {
+        let category = node_modules_app_category_from_value(opts, None)?;
+        let reason = opts
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let default_timeout_secs = opts
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS);
+        let tests_obj = opts
+            .get("tests")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| {
+                anyhow::anyhow!("node_modules app '{app_name}' missing 'tests' object")
+            })?;
+
+        let mut tests = Vec::new();
+        for (test_file, test_opts) in tests_obj {
+            let test_category = node_modules_app_category_from_value(test_opts, Some(category))?;
+            let (coverage, test_reason, timeout_secs) = match test_opts {
+                serde_json::Value::String(coverage) => {
+                    (coverage.clone(), reason.clone(), default_timeout_secs)
+                }
+                serde_json::Value::Object(_) => {
+                    let coverage = test_opts
+                        .get("coverage")
+                        .or_else(|| test_opts.get("description"))
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "node_modules app '{app_name}' test '{test_file}' missing coverage"
+                            )
+                        })?
+                        .to_string();
+                    let test_reason = test_opts
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                        .or_else(|| reason.clone());
+                    let timeout_secs = test_opts
+                        .get("timeout")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(default_timeout_secs);
+                    (coverage, test_reason, timeout_secs)
+                }
+                _ => anyhow::bail!(
+                    "node_modules app '{app_name}' test '{test_file}' must be a coverage string or object"
+                ),
+            };
+
+            tests.push(NodeModulesAppTestEntry {
+                file: test_file.clone(),
+                category: test_category,
+                coverage,
+                reason: test_reason,
+                timeout_secs,
+            });
+        }
+        tests.sort_by(|a, b| a.file.cmp(&b.file));
+
+        apps.push(NodeModulesAppEntry {
+            name: app_name.clone(),
+            category,
+            reason,
+            tests,
+        });
+    }
+    apps.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(apps)
+}
+
+fn node_modules_app_category_from_value(
+    value: &serde_json::Value,
+    inherited: Option<NodeModulesAppCategory>,
+) -> anyhow::Result<NodeModulesAppCategory> {
+    if let Some(category) = value.get("category").and_then(|v| v.as_str()) {
+        return NodeModulesAppCategory::from_config_value(category);
+    }
+    if value.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+        return Ok(NodeModulesAppCategory::KnownGap);
+    }
+    Ok(inherited.unwrap_or(NodeModulesAppCategory::Runnable))
 }
 
 /// Recursively copy a directory and all its contents to a destination.

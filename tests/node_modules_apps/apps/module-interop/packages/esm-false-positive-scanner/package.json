@@ -1,0 +1,12 @@
+{
+  "name": "esm-false-positive-scanner",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "module-sync": "./entry.mjs",
+      "import": "./entry.mjs",
+      "default": "./entry.mjs"
+    }
+  }
+}

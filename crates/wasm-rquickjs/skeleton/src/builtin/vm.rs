@@ -1,5 +1,6 @@
 use rquickjs::qjs;
-use rquickjs::{CaughtError, Persistent, Value};
+use rquickjs::promise::PromiseState;
+use rquickjs::{CaughtError, FromJs, Persistent, Promise, Value};
 use std::ptr::NonNull;
 
 #[rquickjs::module(rename = "camelCase")]
@@ -168,57 +169,55 @@ fn require_esm_impl<'js>(
         return throw_require_async_module(ctx, &globals, filename);
     }
 
-    unsafe {
-        let val = qjs::JS_Eval(
+    enter_require_esm(&ctx, &globals, filename, &file_url)?;
+
+    let eval_result = unsafe {
+        qjs::JS_Eval(
             ctx.as_raw().as_ptr(),
             src.as_ptr(),
             code.len() as _,
             fname.as_ptr(),
             qjs::JS_EVAL_TYPE_MODULE as i32,
-        );
-        if qjs::JS_IsException(val) {
-            return Err(rquickjs::Error::Exception);
-        }
+        )
+    };
 
-        // If the module evaluation returned a Promise (TLA), attach a no-op
-        // .catch() handler so any rejection is marked as handled and doesn't
-        // trigger an unhandledRejection event. We'll report TLA as
-        // ERR_REQUIRE_ASYNC_MODULE below instead.
-        let tag = qjs::JS_VALUE_GET_TAG(val);
-        if tag == qjs::JS_TAG_OBJECT {
-            let catch_str = CString::new("catch").unwrap();
-            let catch_fn = qjs::JS_GetPropertyStr(ctx.as_raw().as_ptr(), val, catch_str.as_ptr());
-            if !qjs::JS_IsUndefined(catch_fn) && !qjs::JS_IsException(catch_fn) {
-                // Create a no-op function: function() {}
-                let noop_code = CString::new("(function(){})").unwrap();
-                let noop_fname = CString::new("<noop>").unwrap();
-                let noop_fn = qjs::JS_Eval(
-                    ctx.as_raw().as_ptr(),
-                    noop_code.as_ptr(),
-                    14,
-                    noop_fname.as_ptr(),
-                    qjs::JS_EVAL_TYPE_GLOBAL as i32,
-                );
-                if !qjs::JS_IsException(noop_fn) {
-                    // Call promise.catch(noop)
-                    let result = qjs::JS_Call(
-                        ctx.as_raw().as_ptr(),
-                        catch_fn,
-                        val,
-                        1,
-                        &noop_fn as *const _ as *mut _,
-                    );
-                    if !qjs::JS_IsException(result) {
-                        qjs::JS_FreeValue(ctx.as_raw().as_ptr(), result);
-                    }
-                    qjs::JS_FreeValue(ctx.as_raw().as_ptr(), noop_fn);
+    if unsafe { qjs::JS_IsException(eval_result) } {
+        leave_require_esm(&globals, filename, &file_url)?;
+        return Err(rquickjs::Error::Exception);
+    }
+
+    let pending_tla = unsafe {
+        let eval_value = Value::from_raw(ctx.clone(), eval_result);
+        if let Ok(promise) = Promise::from_js(&ctx, eval_value.clone()) {
+            match promise.state() {
+                PromiseState::Pending => {
+                    attach_noop_promise_catch(ctx.clone(), eval_value.as_raw());
+                    true
                 }
-                qjs::JS_FreeValue(ctx.as_raw().as_ptr(), catch_fn);
+                PromiseState::Rejected => {
+                    attach_noop_promise_catch(ctx.clone(), eval_value.as_raw());
+                    mark_rejection_handled(&ctx, eval_value.clone());
+                    let count = globals
+                        .get::<_, i32>("__wasm_rquickjs_suppress_unhandled_rejection_count")
+                        .unwrap_or(0);
+                    let _ = globals.set("__wasm_rquickjs_suppress_unhandled_rejection_count", count + 1);
+                    let _ = promise.result::<Value<'js>>();
+                    let rejected = ctx.catch();
+                    leave_require_esm(&globals, filename, &file_url)?;
+                    return Err(ctx.throw(rejected));
+                }
+                PromiseState::Resolved => false,
             }
+        } else {
+            false
         }
+    };
 
-        // Free the return value (Promise from module evaluation)
-        qjs::JS_FreeValue(ctx.as_raw().as_ptr(), val);
+    leave_require_esm(&globals, filename, &file_url)?;
+
+    if pending_tla {
+        mark_async_esm_module(&ctx, &globals, filename, &file_url)?;
+        return throw_require_async_module(ctx, &globals, filename);
     }
 
     // Read the namespace from globalThis and clean up
@@ -236,6 +235,86 @@ fn require_esm_impl<'js>(
     } else {
         Ok(ns)
     }
+}
+
+fn mark_rejection_handled<'js>(ctx: &rquickjs::Ctx<'js>, promise: Value<'js>) {
+    if let Ok(handler) = ctx
+        .globals()
+        .get::<_, rquickjs::Function>("__wasm_rquickjs_mark_rejection_handled")
+    {
+        let _ = handler.call::<_, ()>((promise,));
+    }
+}
+
+fn attach_noop_promise_catch(ctx: rquickjs::Ctx<'_>, val: qjs::JSValue) {
+    unsafe {
+        let catch_fn = qjs::JS_GetPropertyStr(ctx.as_raw().as_ptr(), val, c"catch".as_ptr());
+        if !qjs::JS_IsUndefined(catch_fn) && !qjs::JS_IsException(catch_fn) {
+            let noop_fn = qjs::JS_Eval(
+                ctx.as_raw().as_ptr(),
+                c"(function(){})".as_ptr(),
+                14,
+                c"<noop>".as_ptr(),
+                qjs::JS_EVAL_TYPE_GLOBAL as i32,
+            );
+            if !qjs::JS_IsException(noop_fn) {
+                let result = qjs::JS_Call(
+                    ctx.as_raw().as_ptr(),
+                    catch_fn,
+                    val,
+                    1,
+                    &noop_fn as *const _ as *mut _,
+                );
+                if !qjs::JS_IsException(result) {
+                    qjs::JS_FreeValue(ctx.as_raw().as_ptr(), result);
+                }
+                qjs::JS_FreeValue(ctx.as_raw().as_ptr(), noop_fn);
+            }
+            qjs::JS_FreeValue(ctx.as_raw().as_ptr(), catch_fn);
+        }
+    }
+}
+
+fn enter_require_esm<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    globals: &rquickjs::Object<'js>,
+    filename: &str,
+    file_url: &str,
+) -> rquickjs::Result<()> {
+    let registry = match globals.get::<_, rquickjs::Value>("__wasm_rquickjs_require_esm_in_progress") {
+        Ok(value) if value.is_object() => value.into_object().unwrap(),
+        _ => {
+            let object = rquickjs::Object::new(ctx.clone())?;
+            globals.set("__wasm_rquickjs_require_esm_in_progress", object.clone())?;
+            object
+        }
+    };
+
+    if registry.get::<_, bool>(filename).unwrap_or(false)
+        || registry.get::<_, bool>(file_url).unwrap_or(false)
+    {
+        let error_ctor: rquickjs::Function = globals.get("Error")?;
+        let msg = format!("Cannot require() ES Module {filename} in a cycle.");
+        let error_obj: rquickjs::Object = error_ctor.call((&msg,))?;
+        error_obj.set("code", "ERR_REQUIRE_CYCLE_MODULE")?;
+        return Err(ctx.throw(error_obj.into_value()));
+    }
+
+    registry.set(filename, true)?;
+    registry.set(file_url, true)?;
+    Ok(())
+}
+
+fn leave_require_esm<'js>(
+    globals: &rquickjs::Object<'js>,
+    filename: &str,
+    file_url: &str,
+) -> rquickjs::Result<()> {
+    if let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_require_esm_in_progress") {
+        let _ = registry.remove(filename);
+        let _ = registry.remove(file_url);
+    }
+    Ok(())
 }
 
 fn cached_async_esm_module<'js>(globals: &rquickjs::Object<'js>, filename: &str, file_url: &str) -> bool {

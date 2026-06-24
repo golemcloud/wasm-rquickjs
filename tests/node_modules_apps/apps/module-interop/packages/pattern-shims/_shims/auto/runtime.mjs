@@ -1,0 +1,1 @@
+export default { runtime: 'default' };

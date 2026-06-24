@@ -1,0 +1,11 @@
+{
+  "name": "pattern-imports",
+  "version": "1.0.0",
+  "main": "index.cjs",
+  "imports": {
+    "#internal/*": {
+      "require": "./internal/*.cjs",
+      "default": "./internal/*.mjs"
+    }
+  }
+}

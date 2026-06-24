@@ -19,6 +19,7 @@ import * as assertStrict from 'node:assert/strict';
 import * as fsPromises from 'node:fs/promises';
 import * as nodeTest from 'node:test';
 import * as querystring from 'node:querystring';
+import * as punycode from 'node:punycode';
 import * as nodeUrl from 'node:url';
 import * as vm from 'node:vm';
 import * as timers from 'node:timers';
@@ -49,7 +50,7 @@ import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
 import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
-import { ERR_INVALID_ARG_TYPE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
@@ -102,6 +103,7 @@ const assertCjs = cjsExport(assert);
 const assertStrictCjs = cjsExport(assertStrict);
 const nodeTestCjs = cjsExport(nodeTest);
 const querystringCjs = cjsExport(querystring);
+const punycodeCjs = cjsExport(punycode);
 const nodeUrlCjs = cjsExport(nodeUrl);
 const vmCjs = cjsExport(vm);
 const timersCjs = cjsExport(timers);
@@ -197,6 +199,7 @@ registerBuiltin(builtinModuleMap, 'assert', assertCjs);
 registerBuiltin(builtinModuleMap, 'assert/strict', assertStrictCjs);
 registerBuiltin(builtinModuleMap, 'test', nodeTestCjs);
 registerBuiltin(builtinModuleMap, 'querystring', querystringCjs);
+registerBuiltin(builtinModuleMap, 'punycode', punycodeCjs);
 registerBuiltin(builtinModuleMap, 'url', nodeUrlCjs);
 registerBuiltin(builtinModuleMap, 'vm', vmCjs);
 registerBuiltin(builtinModuleMap, 'timers', timersCjs);
@@ -520,6 +523,15 @@ function isBuiltinResolveTarget(id) {
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
 
+function shouldPreserveSymlinks(isMainModuleLoad) {
+    return hasExecArgvFlag(isMainModuleLoad ? '--preserve-symlinks-main' : '--preserve-symlinks');
+}
+
+function toCjsCanonicalFilename(filename, isMainModuleLoad) {
+    if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
+    return fsModule.realpathSync.native(filename);
+}
+
 function tryReadFile(filename) {
     try {
         return fsModule.readFileSync(filename, 'utf8');
@@ -554,6 +566,7 @@ function findLongestRegisteredExtension(filename) {
 function getPackageScopeType(filename) {
     let dir = pathModule.dirname(filename);
     while (true) {
+        if (pathModule.basename(dir) === 'node_modules') return 'commonjs';
         const pkgPath = pathModule.join(dir, 'package.json');
         const pkgContent = tryReadFile(pkgPath);
         if (pkgContent !== null) {
@@ -606,16 +619,11 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
 
     const pkgJsonPath = pathModule.join(candidate, 'package.json');
     const pkgJson = tryReadFile(pkgJsonPath);
+    let invalidMain = null;
     if (pkgJson !== null) {
+        let pkg;
         try {
-            const pkg = JSON.parse(pkgJson);
-            if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string' && pkg.main.length > 0) {
-                const mainPath = pathModule.resolve(candidate, pkg.main);
-                let resolved = loadAsFile(mainPath, false);
-                if (resolved !== null) return resolved;
-                resolved = loadAsDirectory(mainPath, id, parentDir, seen);
-                if (resolved !== null) return resolved;
-            }
+            pkg = JSON.parse(pkgJson);
         } catch (e) {
             const pkgErr = new Error(
                 'Invalid package config ' + pkgJsonPath +
@@ -625,17 +633,280 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
             pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
             throw pkgErr;
         }
+
+        if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string' && pkg.main.length > 0) {
+            const mainPath = pathModule.resolve(candidate, pkg.main);
+            let resolved = loadAsFile(mainPath, false);
+            if (resolved !== null) return resolved;
+            resolved = loadAsDirectory(mainPath, id, parentDir, seen);
+            if (resolved !== null) return resolved;
+            invalidMain = { field: pkg.main, path: mainPath };
+        }
     }
 
-    let content = tryReadFile(pathModule.join(candidate, 'index.js'));
-    if (content !== null) {
-        return { filename: pathModule.join(candidate, 'index.js'), content: content };
+    const indexResolved = loadAsFile(pathModule.join(candidate, 'index'), false);
+    if (indexResolved !== null) {
+        emitInvalidMainWarning(pkgJsonPath, invalidMain);
+        return indexResolved;
     }
-    content = tryReadFile(pathModule.join(candidate, 'index.json'));
-    if (content !== null) {
-        return { filename: pathModule.join(candidate, 'index.json'), content: content };
+    if (invalidMain !== null) {
+        const err = new Error("Cannot find module '" + invalidMain.path + "'. Please verify that the package.json has a valid \"main\" entry");
+        err.code = 'MODULE_NOT_FOUND';
+        err.path = pkgJsonPath;
+        err.requestPath = id;
+        throw err;
     }
     return null;
+}
+
+function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
+    if (invalidMain === null) return;
+    const processObject = globalThis.process;
+    if (!processObject || typeof processObject.emitWarning !== 'function') return;
+    processObject.emitWarning(
+        "Invalid 'main' field in '" + pathModule.toNamespacedPath(pkgJsonPath) + "' of '" + invalidMain.field + "'. Please either fix that or report it to the module author",
+        'DeprecationWarning',
+        'DEP0128'
+    );
+}
+
+const cjsPackageConditions = new Set(['golem', 'node', 'require', 'module-sync', 'default']);
+const esmPackageConditions = new Set(['golem', 'node', 'module-sync', 'import', 'default']);
+const packageTargetNoMatch = { __packageTargetNoMatch: true };
+const packageTargetBlocked = { __packageTargetBlocked: true };
+
+function makePackagePathNotExportedError(packageName, subpath) {
+    const suffix = subpath ? './' + subpath : '.';
+    const err = new Error('Package subpath ' + JSON.stringify(suffix) + ' is not defined by "exports" in package ' + packageName);
+    err.code = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
+    return err;
+}
+
+function makePackageImportNotDefinedError(specifier) {
+    const err = new Error('Package import specifier ' + JSON.stringify(specifier) + ' is not defined');
+    err.code = 'ERR_PACKAGE_IMPORT_NOT_DEFINED';
+    return err;
+}
+
+function makeInvalidPackageTargetError(target) {
+    const err = new Error('Invalid package target ' + JSON.stringify(target));
+    err.code = 'ERR_INVALID_PACKAGE_TARGET';
+    return err;
+}
+
+function makeModuleNotFoundError(id) {
+    const err = new Error("Cannot find module '" + id + "'");
+    err.code = 'MODULE_NOT_FOUND';
+    return err;
+}
+
+function isBarePackageSpecifier(target) {
+    return typeof target === 'string' &&
+        target.length > 0 &&
+        !target.startsWith('.') &&
+        !target.startsWith('/') &&
+        !target.startsWith('#') &&
+        !target.includes(':');
+}
+
+function isInvalidPackageTargetSegment(segment) {
+    if (segment === '.' || segment === '..' || segment === 'node_modules') return true;
+    let decoded = segment;
+    try {
+        decoded = decodeURIComponent(segment);
+    } catch (_) {
+        // Keep the raw segment when percent decoding fails; invalid escapes are
+        // handled by the normal module-not-found path for now.
+    }
+    decoded = decoded.toLowerCase();
+    return decoded === '.' || decoded === '..' || decoded === 'node_modules';
+}
+
+function validatePackageTargetPath(target) {
+    const rest = target.slice(2);
+    const parts = rest.split('/');
+    if (parts.length === 0) return false;
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part === '') continue;
+        if (isInvalidPackageTargetSegment(part)) return false;
+    }
+    return true;
+}
+
+function resolveExactPackageFile(filename) {
+    const content = tryReadFile(filename);
+    if (content !== null) return { filename, content };
+    throw makeModuleNotFoundError(filename);
+}
+
+function packagePatternKeyMatch(patternKey, key) {
+    const star = patternKey.indexOf('*');
+    if (star === -1) return null;
+    const prefix = patternKey.slice(0, star);
+    const suffix = patternKey.slice(star + 1);
+    if (!key.startsWith(prefix) || !key.endsWith(suffix)) return null;
+    if (key.length < prefix.length + suffix.length) return null;
+    return key.slice(prefix.length, key.length - suffix.length);
+}
+
+function findBestPackagePattern(map, key) {
+    let bestKey = null;
+    let bestSubstitution = null;
+    const keys = Object.keys(map);
+    for (let i = 0; i < keys.length; i++) {
+        const patternKey = keys[i];
+        if (patternKey.indexOf('*') === -1) continue;
+        const substitution = packagePatternKeyMatch(patternKey, key);
+        if (substitution === null) continue;
+        if (bestKey === null || packagePatternCompare(patternKey, bestKey) < 0) {
+            bestKey = patternKey;
+            bestSubstitution = substitution;
+        }
+    }
+    return bestKey === null ? null : { key: bestKey, substitution: bestSubstitution };
+}
+
+function packagePatternCompare(a, b) {
+    const aStar = a.indexOf('*');
+    const bStar = b.indexOf('*');
+    const aBase = aStar === -1 ? a.length : aStar;
+    const bBase = bStar === -1 ? b.length : bStar;
+    if (aBase !== bBase) return bBase - aBase;
+    const aTrailer = aStar === -1 ? 0 : a.length - aStar - 1;
+    const bTrailer = bStar === -1 ? 0 : b.length - bStar - 1;
+    if (aTrailer !== bTrailer) return bTrailer - aTrailer;
+    if (a.length !== b.length) return b.length - a.length;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBareTarget, patternSubstitution) {
+    seen = seen || new Set();
+    if (target === null || target === false) return packageTargetBlocked;
+
+    if (typeof target === 'string') {
+        if (patternSubstitution !== undefined && patternSubstitution !== null) {
+            target = target.replace(/\*/g, patternSubstitution);
+        }
+        if (allowBareTarget && target.startsWith('node:') && builtinModuleMap[target] !== undefined) {
+            return { builtin: target };
+        }
+        if (allowBareTarget && isBarePackageSpecifier(target)) {
+            const resolved = resolveFromNodeModules(target, packageDir, pathModule.join(packageDir, 'package.json'), conditions);
+            if (resolved !== null) return resolved;
+            throw makeModuleNotFoundError(target);
+        }
+        if (!target.startsWith('./')) {
+            throw makeInvalidPackageTargetError(target);
+        }
+        if (!validatePackageTargetPath(target)) {
+            throw makeInvalidPackageTargetError(target);
+        }
+        const candidate = pathModule.resolve(packageDir, target);
+        const relative = pathModule.relative(packageDir, candidate);
+        if (relative === '' || relative.startsWith('..') || pathModule.isAbsolute(relative)) {
+            throw makeInvalidPackageTargetError(target);
+        }
+        return resolveExactPackageFile(candidate);
+    }
+
+    if (Array.isArray(target)) {
+        for (let i = 0; i < target.length; i++) {
+            try {
+                const resolved = resolvePackageTargetValue(packageDir, target[i], conditions, seen, allowBareTarget, patternSubstitution);
+                if (resolved === packageTargetBlocked) return resolved;
+                if (resolved !== packageTargetNoMatch) return resolved;
+            } catch (err) {
+                if (!err || (err.code !== 'ERR_INVALID_PACKAGE_TARGET' && err.code !== 'MODULE_NOT_FOUND')) throw err;
+            }
+        }
+        return packageTargetNoMatch;
+    }
+
+    if (target && typeof target === 'object') {
+        if (seen.has(target)) return null;
+        seen.add(target);
+        const keys = Object.keys(target);
+        for (let i = 0; i < keys.length; i++) {
+            const condition = keys[i];
+            if (conditions.has(condition)) {
+                const resolved = resolvePackageTargetValue(packageDir, target[condition], conditions, seen, allowBareTarget, patternSubstitution);
+                if (resolved === packageTargetNoMatch) continue;
+                return resolved;
+            }
+        }
+        return packageTargetNoMatch;
+    }
+
+    throw makeInvalidPackageTargetError(target);
+}
+
+function isPackageExportsConditionsObject(exportsField) {
+    if (!exportsField || typeof exportsField !== 'object' || Array.isArray(exportsField)) return false;
+    const keys = Object.keys(exportsField);
+    return keys.length > 0 && !keys.some((key) => key.startsWith('.'));
+}
+
+function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions) {
+    if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
+    const key = subpath ? './' + subpath : '.';
+    const exportsField = pkg.exports;
+    let resolved = null;
+
+    if (typeof exportsField === 'string' || Array.isArray(exportsField) || isPackageExportsConditionsObject(exportsField)) {
+        if (key === '.') {
+            resolved = resolvePackageTargetValue(packageDir, exportsField, conditions, undefined, false);
+        }
+    } else if (exportsField && typeof exportsField === 'object') {
+        if (Object.prototype.hasOwnProperty.call(exportsField, key)) {
+            resolved = resolvePackageTargetValue(packageDir, exportsField[key], conditions, undefined, false);
+        } else {
+            const pattern = findBestPackagePattern(exportsField, key);
+            if (pattern !== null) {
+                resolved = resolvePackageTargetValue(packageDir, exportsField[pattern.key], conditions, undefined, false, pattern.substitution);
+            }
+        }
+    } else if (exportsField !== null) {
+        throw makeInvalidPackageTargetError(exportsField);
+    }
+
+    if (resolved !== null && resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
+    throw makePackagePathNotExportedError(packageName, subpath);
+}
+
+function findPackageScope(startDir) {
+    let dir = pathModule.resolve(startDir || '/');
+    while (true) {
+        if (pathModule.basename(dir) === 'node_modules') return null;
+        const pkgJsonPath = pathModule.join(dir, 'package.json');
+        const pkgJson = tryReadFile(pkgJsonPath);
+        if (pkgJson !== null) {
+            return { dir, pkg: JSON.parse(pkgJson) };
+        }
+        const parent = pathModule.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
+}
+
+function resolvePackageImports(id, parentDir, conditions) {
+    const scope = findPackageScope(parentDir);
+    if (!scope || !scope.pkg || !scope.pkg.imports || typeof scope.pkg.imports !== 'object') {
+        throw makePackageImportNotDefinedError(id);
+    }
+    let target;
+    let patternSubstitution = null;
+    if (Object.prototype.hasOwnProperty.call(scope.pkg.imports, id)) {
+        target = scope.pkg.imports[id];
+    } else {
+        const pattern = findBestPackagePattern(scope.pkg.imports, id);
+        if (pattern === null) throw makePackageImportNotDefinedError(id);
+        target = scope.pkg.imports[pattern.key];
+        patternSubstitution = pattern.substitution;
+    }
+    const resolved = resolvePackageTargetValue(scope.dir, target, conditions, undefined, true, patternSubstitution);
+    if (resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
+    throw makePackageImportNotDefinedError(id);
 }
 
 function resolveFilename(id, parentDir) {
@@ -1018,8 +1289,585 @@ function markAsSyntaxError(err) {
     }
 }
 
+function isIdentifierContinueCode(code) {
+    return code === 0x5f || code === 0x24 || // _ $
+        (code >= 0x30 && code <= 0x39) ||
+        (code >= 0x41 && code <= 0x5a) ||
+        (code >= 0x61 && code <= 0x7a) ||
+        code >= 0x80;
+}
+
+function hasIdentifierBoundary(source, start, end) {
+    return (start === 0 || !isIdentifierContinueCode(source.charCodeAt(start - 1))) &&
+        (end >= source.length || !isIdentifierContinueCode(source.charCodeAt(end)));
+}
+
+function skipQuotedOrTemplate(source, start) {
+    const quote = source.charCodeAt(start);
+    let i = start + 1;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x5c) { // backslash
+            i += 2;
+        } else if (code === quote) {
+            return i + 1;
+        } else {
+            i++;
+        }
+    }
+    return i;
+}
+
+function previousSignificantChar(source, pos) {
+    for (let i = pos - 1; i >= 0; i--) {
+        const ch = source.charCodeAt(i);
+        if (ch !== 0x20 && ch !== 0x09 && ch !== 0x0a && ch !== 0x0d) return ch;
+    }
+    return -1;
+}
+
+function previousSignificantCharOnSameLine(source, pos) {
+    for (let i = pos - 1; i >= 0; i--) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x0a || ch === 0x0d) return -1;
+        if (ch !== 0x20 && ch !== 0x09) return ch;
+    }
+    return -1;
+}
+
+function isRegexLiteralStartInSource(source, pos) {
+    const prev = previousSignificantChar(source, pos);
+    return prev === -1 || '({[=,:;!?&|+-*~^%>'.indexOf(String.fromCharCode(prev)) >= 0;
+}
+
+function skipRegexLiteralInSource(source, start) {
+    let i = start + 1;
+    let inClass = false;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x5c) {
+            i += 2;
+        } else if (code === 0x5b) {
+            inClass = true;
+            i++;
+        } else if (code === 0x5d) {
+            inClass = false;
+            i++;
+        } else if (code === 0x2f && !inClass) {
+            i++;
+            while (i < source.length) {
+                const flag = source.charCodeAt(i);
+                if (!((flag >= 0x41 && flag <= 0x5a) || (flag >= 0x61 && flag <= 0x7a))) break;
+                i++;
+            }
+            return i;
+        } else if (code === 0x0a || code === 0x0d) {
+            return start + 1;
+        } else {
+            i++;
+        }
+    }
+    return start + 1;
+}
+
+function skipWhitespace(source, start) {
+    let i = start;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) break;
+        i++;
+    }
+    return i;
+}
+
+function startsWithKeywordAt(source, keyword, pos) {
+    return source.startsWith(keyword, pos) && hasIdentifierBoundary(source, pos, pos + keyword.length);
+}
+
+function skipNonCode(source, pos, skipRegex) {
+    const code = source.charCodeAt(pos);
+    if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
+        return skipQuotedOrTemplate(source, pos);
+    }
+    if (code === 0x2f && pos + 1 < source.length && source.charCodeAt(pos + 1) === 0x2f) {
+        let i = pos + 2;
+        while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+        return i;
+    }
+    if (code === 0x2f && pos + 1 < source.length && source.charCodeAt(pos + 1) === 0x2a) {
+        let i = pos + 2;
+        while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+        return Math.min(i + 2, source.length);
+    }
+    if (skipRegex && code === 0x2f && isRegexLiteralStartInSource(source, pos)) {
+        return skipRegexLiteralInSource(source, pos);
+    }
+    return null;
+}
+
+function scanSourceCodePositions(source, options, visitor) {
+    const skipRegex = !options || options.skipRegex !== false;
+    let i = 0;
+    while (i < source.length) {
+        const skipped = skipNonCode(source, i, skipRegex);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+
+        const next = visitor(i, source.charCodeAt(i));
+        if (next === false) return false;
+        if (typeof next === 'number') {
+            i = next;
+        } else {
+            i++;
+        }
+    }
+    return true;
+}
+
+function isStaticExportSyntax(source, pos) {
+    if (previousSignificantCharOnSameLine(source, pos) === 0x2e) return false; // member property
+    const next = skipWhitespace(source, pos + 6);
+    if (source.charCodeAt(next) === 0x3a) return false; // object label/property
+    const ch = source.charCodeAt(next);
+    if (ch === 0x7b || ch === 0x2a) return true; // { or *
+    return startsWithKeywordAt(source, 'default', next) ||
+        startsWithKeywordAt(source, 'const', next) ||
+        startsWithKeywordAt(source, 'let', next) ||
+        startsWithKeywordAt(source, 'var', next) ||
+        startsWithKeywordAt(source, 'function', next) ||
+        startsWithKeywordAt(source, 'class', next);
+}
+
+function isStaticImportSyntax(source, pos) {
+    if (previousSignificantCharOnSameLine(source, pos) === 0x2e) return false; // member property
+    const next = skipWhitespace(source, pos + 6);
+    if (source.charCodeAt(next) === 0x28 || source.charCodeAt(next) === 0x3a) return false; // dynamic import(...) or property label
+    const ch = source.charCodeAt(next);
+    return ch === 0x27 || ch === 0x22 || ch === 0x7b || ch === 0x2a ||
+        (ch === 0x5f || ch === 0x24 || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a) || ch >= 0x80);
+}
+
 function looksLikeEsmSource(source) {
-    return /(^|[\r\n])\s*(?:import\s+(?:[\s\S]*?\s+from\s+)?['"]|import\s*[\{\*]|export\s+)/.test(source);
+    let found = false;
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
+        if (source.startsWith('export', i) && hasIdentifierBoundary(source, i, i + 6) && isStaticExportSyntax(source, i)) {
+            found = true;
+            return false;
+        }
+        if (source.startsWith('import', i) && hasIdentifierBoundary(source, i, i + 6)) {
+            if (isStaticImportSyntax(source, i)) {
+                found = true;
+                return false;
+            }
+        }
+        return undefined;
+    });
+    return found;
+}
+
+function hasCjsWrapperRequireRedeclaration(source) {
+    let found = false;
+    let braceDepth = 0;
+    scanSourceCodePositions(source, { skipRegex: true }, (i, code) => {
+        if (code === 0x7b) {
+            braceDepth++;
+            return undefined;
+        }
+        if (code === 0x7d) {
+            braceDepth = Math.max(0, braceDepth - 1);
+            return undefined;
+        }
+
+        if (braceDepth === 0 && (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i))) {
+            let next = skipWhitespace(source, i + (source.startsWith('const', i) ? 5 : 3));
+            if (source.startsWith('require', next) && hasIdentifierBoundary(source, next, next + 7)) {
+                found = true;
+                return false;
+            }
+        }
+        return undefined;
+    });
+    return found;
+}
+
+function readStaticSpecifierString(source, start) {
+    const i = skipWhitespace(source, start);
+    const quote = source.charCodeAt(i);
+    if (quote !== 0x27 && quote !== 0x22) return null;
+    let value = '';
+    let p = i + 1;
+    while (p < source.length) {
+        const code = source.charCodeAt(p);
+        if (code === 0x5c && p + 1 < source.length) {
+            value += source[p + 1];
+            p += 2;
+        } else if (code === quote) {
+            return { value, end: p + 1 };
+        } else {
+            value += source[p];
+            p++;
+        }
+    }
+    return null;
+}
+
+function statementEndForStaticImport(source, start) {
+    let i = start;
+    let brace = 0;
+    let paren = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x7b) brace++;
+        else if (code === 0x7d) brace = Math.max(0, brace - 1);
+        else if (code === 0x28) paren++;
+        else if (code === 0x29) paren = Math.max(0, paren - 1);
+        else if ((code === 0x3b || code === 0x0a || code === 0x0d) && brace === 0 && paren === 0) return i;
+        i++;
+    }
+    return source.length;
+}
+
+function staticImportSpecifierAt(source, pos) {
+    if (startsWithKeywordAt(source, 'import', pos)) {
+        const afterImport = skipWhitespace(source, pos + 6);
+        const bare = readStaticSpecifierString(source, afterImport);
+        if (bare) return bare.value;
+
+        const end = statementEndForStaticImport(source, afterImport);
+        let i = afterImport;
+        while (i < end) {
+            const code = source.charCodeAt(i);
+            if (code === 0x27 || code === 0x22 || code === 0x60) {
+                i = skipQuotedOrTemplate(source, i);
+                continue;
+            }
+            if (startsWithKeywordAt(source, 'from', i)) {
+                const spec = readStaticSpecifierString(source, i + 4);
+                if (spec && spec.end <= end + 1) return spec.value;
+            }
+            i++;
+        }
+    }
+
+    if (startsWithKeywordAt(source, 'export', pos)) {
+        const end = statementEndForStaticImport(source, pos + 6);
+        let i = pos + 6;
+        while (i < end) {
+            const code = source.charCodeAt(i);
+            if (code === 0x27 || code === 0x22 || code === 0x60) {
+                i = skipQuotedOrTemplate(source, i);
+                continue;
+            }
+            if (startsWithKeywordAt(source, 'from', i)) {
+                const spec = readStaticSpecifierString(source, i + 4);
+                if (spec && spec.end <= end + 1) return spec.value;
+            }
+            i++;
+        }
+    }
+
+    return null;
+}
+
+function collectStaticEsmSpecifiers(source) {
+    const specifiers = [];
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
+        const specifier = staticImportSpecifierAt(source, i);
+        if (specifier !== null) specifiers.push(specifier);
+        return undefined;
+    });
+    return specifiers;
+}
+
+function collectLiteralRequireSpecifiers(source, names) {
+    names = names || ['require'];
+    const specifiers = [];
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
+        for (let n = 0; n < names.length; n++) {
+            const name = names[n];
+            if (startsWithKeywordAt(source, name, i) && previousSignificantChar(source, i) !== 0x2e) {
+                const open = skipWhitespace(source, i + name.length);
+                if (source.charCodeAt(open) === 0x28) {
+                    const spec = readStaticSpecifierString(source, open + 1);
+                    if (spec) specifiers.push(spec.value);
+                }
+            }
+        }
+        return undefined;
+    });
+    return specifiers;
+}
+
+function collectCreateRequireFactoryNames(source) {
+    const names = [];
+    scanSourceCodePositions(source, { skipRegex: false }, (i) => {
+        if (startsWithKeywordAt(source, 'import', i)) {
+            const end = statementEndForStaticImport(source, i + 6);
+            const statement = source.slice(i, end);
+            if (/from\s*['"](?:node:)?module['"]/.test(statement)) {
+                const m = statement.match(/\{([\s\S]*?)\}/);
+                if (m) {
+                    const parts = m[1].split(',');
+                    for (let p = 0; p < parts.length; p++) {
+                        const part = parts[p].trim();
+                        const alias = part.match(/^createRequire\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/);
+                        if (alias) {
+                            names.push(alias[1]);
+                        } else if (part === 'createRequire') {
+                            names.push('createRequire');
+                        }
+                    }
+                }
+            }
+            return end;
+        }
+        return undefined;
+    });
+    return names;
+}
+
+function collectCreateRequireAliases(source, factoryNames) {
+    factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
+    const aliases = [];
+    if (factoryNames.length === 0) return aliases;
+    scanSourceCodePositions(source, { skipRegex: false }, (i) => {
+        if (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i) || startsWithKeywordAt(source, 'var', i)) {
+            const keywordLen = source.startsWith('const', i) ? 5 : 3;
+            let p = skipWhitespace(source, i + keywordLen);
+            const identMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(p));
+            if (identMatch) {
+                const name = identMatch[0];
+                p = skipWhitespace(source, p + name.length);
+                if (source.charCodeAt(p) === 0x3d) {
+                    p = skipWhitespace(source, p + 1);
+                    for (let f = 0; f < factoryNames.length; f++) {
+                        const factory = factoryNames[f];
+                        if (startsWithKeywordAt(source, factory, p)) {
+                            const open = skipWhitespace(source, p + factory.length);
+                            if (source.charCodeAt(open) === 0x28) {
+                                aliases.push(name);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return undefined;
+    });
+    return aliases;
+}
+
+function collectCreateRequireCallSpecifiers(source, factoryNames) {
+    factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
+    const specifiers = [];
+    if (factoryNames.length === 0) return specifiers;
+    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
+        for (let f = 0; f < factoryNames.length; f++) {
+            const factory = factoryNames[f];
+            if (startsWithKeywordAt(source, factory, i) && previousSignificantChar(source, i) !== 0x2e) {
+                const firstOpen = skipWhitespace(source, i + factory.length);
+                if (source.charCodeAt(firstOpen) === 0x28) {
+                    const firstClose = source.indexOf(')', firstOpen + 1);
+                    if (firstClose !== -1) {
+                        const secondOpen = skipWhitespace(source, firstClose + 1);
+                        if (source.charCodeAt(secondOpen) === 0x28) {
+                            const spec = readStaticSpecifierString(source, secondOpen + 1);
+                            if (spec) specifiers.push(spec.value);
+                        }
+                    }
+                }
+            }
+        }
+        return undefined;
+    });
+    return specifiers;
+}
+
+function isEsmGraphFile(filename, source) {
+    return filename.endsWith('.mjs') ||
+        (filename.endsWith('.js') && getPackageScopeType(filename) === 'module') ||
+        (!filename.endsWith('.cjs') && looksLikeEsmSource(source));
+}
+
+function fileUrlForPath(filename) {
+    return 'file://' + filename;
+}
+
+function resolveEsmGraphSpecifier(specifier, parentFilename, conditions) {
+    conditions = conditions || esmPackageConditions;
+    if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;
+    const parentDir = pathModule.dirname(parentFilename);
+    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')) {
+        try {
+            return resolveFilename(specifier, parentDir);
+        } catch (_) {
+            return null;
+        }
+    }
+    if (specifier.startsWith('#')) {
+        try {
+            const resolved = resolvePackageImports(specifier, parentDir, conditions);
+            if (resolved && !resolved.builtin) return resolved;
+        } catch (_) {
+            return null;
+        }
+        return null;
+    }
+    try {
+        return resolveFromNodeModules(specifier, parentDir, parentFilename, conditions);
+    } catch (_) {
+        return null;
+    }
+}
+
+function addRequireEsmGraphMark(filename, marked) {
+    const graph = globalThis.__wasm_rquickjs_require_esm_graph_in_progress || Object.create(null);
+    const counts = globalThis.__wasm_rquickjs_require_esm_graph_counts || Object.create(null);
+    globalThis.__wasm_rquickjs_require_esm_graph_in_progress = graph;
+    globalThis.__wasm_rquickjs_require_esm_graph_counts = counts;
+
+    for (const key of [filename, fileUrlForPath(filename)]) {
+        counts[key] = (counts[key] || 0) + 1;
+        graph[key] = true;
+        marked.push(key);
+    }
+}
+
+function stackContains(stack, filename) {
+    for (let i = 0; i < stack.length; i++) {
+        if (stack[i] === filename) return true;
+    }
+    return false;
+}
+
+function esmGraphReachesAny(filename, stack, seen) {
+    if (stackContains(stack, filename)) return true;
+    seen = seen || Object.create(null);
+    if (seen[filename]) return false;
+    seen[filename] = true;
+
+    const source = tryReadFile(filename);
+    if (source === null) return false;
+
+    const specifiers = isEsmGraphFile(filename, source)
+        ? collectStaticEsmSpecifiers(source)
+        : collectLiteralRequireSpecifiers(source);
+    const conditions = isEsmGraphFile(filename, source) ? esmPackageConditions : cjsPackageConditions;
+    for (let i = 0; i < specifiers.length; i++) {
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions);
+        if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
+    }
+
+    if (isEsmGraphFile(filename, source)) {
+        const factoryNames = collectCreateRequireFactoryNames(source);
+        const aliases = collectCreateRequireAliases(source, factoryNames);
+        const bridgeSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
+            aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
+        );
+        for (let i = 0; i < bridgeSpecifiers.length; i++) {
+            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions);
+            if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
+        }
+    }
+
+    return false;
+}
+
+function scanRequireEsmGraph(filename, marked, seen, stack) {
+    if (seen[filename]) return;
+    seen[filename] = true;
+
+    const source = tryReadFile(filename);
+    if (source === null) return;
+
+    if (!isEsmGraphFile(filename, source)) {
+        const requireSpecifiers = collectLiteralRequireSpecifiers(source);
+        for (let i = 0; i < requireSpecifiers.length; i++) {
+            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions);
+            if (resolved && resolved.filename) {
+                const targetSource = tryReadFile(resolved.filename);
+                if (targetSource !== null && isEsmGraphFile(resolved.filename, targetSource) && esmGraphReachesAny(resolved.filename, stack)) {
+                    addRequireEsmGraphMark(resolved.filename, marked);
+                } else {
+                    scanRequireEsmGraph(resolved.filename, marked, seen, stack);
+                }
+            }
+        }
+        return;
+    }
+
+    stack.push(filename);
+
+    const specifiers = collectStaticEsmSpecifiers(source);
+    for (let i = 0; i < specifiers.length; i++) {
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions);
+        if (resolved && resolved.filename) {
+            scanRequireEsmGraph(resolved.filename, marked, seen, stack);
+        }
+    }
+    const factoryNames = collectCreateRequireFactoryNames(source);
+    const aliases = collectCreateRequireAliases(source, factoryNames);
+    const createRequireSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
+        aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
+    );
+    for (let i = 0; i < createRequireSpecifiers.length; i++) {
+        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions);
+        if (resolved && resolved.filename) {
+            const targetSource = tryReadFile(resolved.filename);
+            if (targetSource !== null && isEsmGraphFile(resolved.filename, targetSource) && esmGraphReachesAny(resolved.filename, stack)) {
+                addRequireEsmGraphMark(resolved.filename, marked);
+            } else {
+                scanRequireEsmGraph(resolved.filename, marked, seen, stack);
+            }
+        }
+    }
+    stack.pop();
+}
+
+function markRequireEsmGraph(filename) {
+    const marked = [];
+    scanRequireEsmGraph(filename, marked, Object.create(null), []);
+    return marked;
+}
+
+function unmarkRequireEsmGraph(marked) {
+    const graph = globalThis.__wasm_rquickjs_require_esm_graph_in_progress;
+    const counts = globalThis.__wasm_rquickjs_require_esm_graph_counts;
+    if (!graph || !counts) return;
+    for (let i = 0; i < marked.length; i++) {
+        const key = marked[i];
+        counts[key] = (counts[key] || 1) - 1;
+        if (counts[key] <= 0) {
+            delete counts[key];
+            delete graph[key];
+        }
+    }
+}
+
+function throwIfRequireEsmGraphCycle(resolvedFilename) {
+    const graph = globalThis.__wasm_rquickjs_require_esm_graph_in_progress;
+    if (graph && (graph[resolvedFilename] || graph[fileUrlForPath(resolvedFilename)])) {
+        const err = new Error('Cannot require() ES Module ' + resolvedFilename + ' in a cycle.');
+        err.code = 'ERR_REQUIRE_CYCLE_MODULE';
+        throw err;
+    }
 }
 
 const wrapper = [
@@ -1033,6 +1881,9 @@ function wrap(script) {
 }
 
 function compileCjs(filename, source) {
+    if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
+        source = source.slice(1);
+    }
     // Strip shebang
     if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
         source = '//' + source;
@@ -1049,10 +1900,71 @@ function compileCjs(filename, source) {
     return _evalWithFilename(wrappedSource, filename);
 }
 
+function compileModuleInto(mod, source, filename) {
+    filename = filename || mod.filename;
+    const dirname = pathModule.dirname(filename);
+    const childRequire = makeRequire(dirname, mod);
+    const compiledFn = compileCjs(filename, String(source));
+    const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
+    globalThis.__wasm_rquickjs_current_module = {
+        filename: filename,
+        source: String(source)
+    };
+    const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
+    globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
+    try {
+        return compiledFn(mod.exports, childRequire, mod, filename, dirname);
+    } finally {
+        globalThis.__wasm_rquickjs_current_module = previousModuleContext;
+        if (previousCjsImportDir !== undefined) {
+            globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
+        } else {
+            delete globalThis.__wasm_rquickjs_cjs_import_dir;
+        }
+    }
+}
+
+function makeModuleCompile(mod) {
+    return function _compile(content, filename) {
+        return compileModuleInto(mod, content, filename || mod.filename);
+    };
+}
+
+function makeModuleRequire(mod) {
+    return function require(id) {
+        return makeRequire(pathModule.dirname(mod.filename), mod)(id);
+    };
+}
+
+function requireEsmWithCacheGuard(mod, resolvedFilename) {
+    throwIfRequireEsmGraphCycle(resolvedFilename);
+    const markedGraph = markRequireEsmGraph(resolvedFilename);
+    Object.defineProperty(mod, '__wasmRequireEsmInProgress', {
+        value: true,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+    try {
+        return wrapEsmNamespace(_requireEsm(resolvedFilename));
+    } finally {
+        unmarkRequireEsmGraph(markedGraph);
+        delete mod.__wasmRequireEsmInProgress;
+    }
+}
+
 function loadModule(resolvedFilename, source, parentModule) {
+    const isMainModuleLoad = (!parentModule || parentModule === mainModule || parentModule.filename === '/') && typeof mainModule !== 'undefined' && mainModule.filename === '/';
+    const filename = toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
+
     // Check cache
-    if (moduleCache[resolvedFilename]) {
-        const cached = moduleCache[resolvedFilename];
+    if (moduleCache[filename]) {
+        const cached = moduleCache[filename];
+        if (cached.__wasmRequireEsmInProgress) {
+            const err = new Error('Cannot require() ES Module ' + filename + ' in a cycle.');
+            err.code = 'ERR_REQUIRE_CYCLE_MODULE';
+            throw err;
+        }
         if (parentModule && parentModule.children && !parentModule.children.includes(cached)) {
             parentModule.children.push(cached);
         }
@@ -1060,69 +1972,76 @@ function loadModule(resolvedFilename, source, parentModule) {
     }
 
     let mod;
-    if ((!parentModule || parentModule === mainModule || parentModule.filename === '/') && typeof mainModule !== 'undefined' && mainModule.filename === '/') {
+    if (isMainModuleLoad) {
         mod = mainModule;
         mod.id = '.';
-        mod.filename = resolvedFilename;
-        mod.path = pathModule.dirname(resolvedFilename);
+        mod.filename = filename;
+        mod.path = pathModule.dirname(filename);
         mod.exports = {};
         mod.loaded = false;
         mod.parent = null;
         mod.children = [];
-        mod.paths = _nodeModulePaths(pathModule.dirname(resolvedFilename));
+        mod.paths = _nodeModulePaths(pathModule.dirname(filename));
+        mod._compile = makeModuleCompile(mod);
+        mod.require = makeModuleRequire(mod);
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
     } else {
         mod = {
-            id: resolvedFilename,
-            filename: resolvedFilename,
-            path: pathModule.dirname(resolvedFilename),
+            id: filename,
+            filename: filename,
+            path: pathModule.dirname(filename),
             exports: {},
             loaded: false,
             parent: parentModule || null,
             children: [],
-            paths: _nodeModulePaths(pathModule.dirname(resolvedFilename)),
+            paths: _nodeModulePaths(pathModule.dirname(filename)),
         };
+        mod._compile = makeModuleCompile(mod);
+        mod.require = makeModuleRequire(mod);
     }
 
     // Cache before executing (handles circular dependencies)
-    moduleCache[resolvedFilename] = mod;
+    moduleCache[filename] = mod;
 
     if (parentModule && parentModule.children) {
         parentModule.children.push(mod);
     }
 
     // Check for custom extension handler
-    const ext = findLongestRegisteredExtension(resolvedFilename);
+    const ext = findLongestRegisteredExtension(filename);
     const handler = requireExtensions[ext];
     if (handler && !_defaultExtHandlers.has(handler)) {
         try {
-            handler(mod, resolvedFilename);
+            handler(mod, filename);
         } catch (err) {
-            delete moduleCache[resolvedFilename];
+            delete moduleCache[filename];
             throw err;
         }
-    } else if (resolvedFilename.endsWith('.node')) {
-        delete moduleCache[resolvedFilename];
-        throw new Error("Native .node modules are not supported in WASM: '" + resolvedFilename + "'");
-    } else if (resolvedFilename.endsWith('.json')) {
+    } else if (filename.endsWith('.node')) {
+        delete moduleCache[filename];
+        throw new Error("Native .node modules are not supported in WASM: '" + filename + "'");
+    } else if (filename.endsWith('.json')) {
         try {
+            if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
+                source = source.slice(1);
+            }
             mod.exports = JSON.parse(source);
         } catch (e) {
-            delete moduleCache[resolvedFilename];
-            const err = new SyntaxError(resolvedFilename + ': ' + e.message);
+            delete moduleCache[filename];
+            const err = new SyntaxError(filename + ': ' + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
         }
     } else {
-        const isEsm = resolvedFilename.endsWith('.mjs') ||
-            (resolvedFilename.endsWith('.js') && getPackageScopeType(resolvedFilename) === 'module');
+        const isEsm = filename.endsWith('.mjs') ||
+            (filename.endsWith('.js') && getPackageScopeType(filename) === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
-            delete moduleCache[resolvedFilename];
+            delete moduleCache[filename];
             const esmErr = new Error(
-                "require() of ES Module " + resolvedFilename + " not supported. " +
-                "Instead change the require of " + resolvedFilename + " to a dynamic " +
+                "require() of ES Module " + filename + " not supported. " +
+                "Instead change the require of " + filename + " to a dynamic " +
                 "import() which is available in all CommonJS modules."
             );
             esmErr.code = 'ERR_REQUIRE_ESM';
@@ -1130,18 +2049,19 @@ function loadModule(resolvedFilename, source, parentModule) {
         }
         if (isEsm) {
             try {
-                mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
+                mod.exports = requireEsmWithCacheGuard(mod, filename);
             } catch (err) {
-                delete moduleCache[resolvedFilename];
+                delete moduleCache[filename];
                 throw err;
             }
         } else {
-            const dirname = pathModule.dirname(resolvedFilename);
+            const dirname = pathModule.dirname(filename);
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
             let cjsSyntaxError = null;
+            const cjsWrapperRequireRedeclaration = !filename.endsWith('.cjs') && hasCjsWrapperRequireRedeclaration(source);
             try {
-                compiledFn = compileCjs(resolvedFilename, source);
+                compiledFn = compileCjs(filename, source);
             } catch (err) {
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
                 if (err && err.name === 'SyntaxError') {
@@ -1150,41 +2070,46 @@ function loadModule(resolvedFilename, source, parentModule) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (!resolvedFilename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
+                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError' && (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
-                    delete moduleCache[resolvedFilename];
-                    maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+                    delete moduleCache[filename];
+                    maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
             }
-            if (cjsSyntaxError) {
+            if (cjsSyntaxError || cjsWrapperRequireRedeclaration) {
+                if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
+                    delete moduleCache[filename];
+                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
+                    throw cjsSyntaxError;
+                }
                 // SyntaxError in a .js file — try loading as ESM (entry point detection)
                 try {
-                    mod.exports = wrapEsmNamespace(_requireEsm(resolvedFilename));
+                    mod.exports = requireEsmWithCacheGuard(mod, filename);
                 } catch (esmErr) {
-                    delete moduleCache[resolvedFilename];
-                    if (looksLikeEsmSource(source)) {
+                    delete moduleCache[filename];
+                    if (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
                     }
                     // ESM loading also failed — throw the original CJS SyntaxError
-                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, resolvedFilename, source);
+                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
             } else if (compiledFn) {
                 const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
                 globalThis.__wasm_rquickjs_current_module = {
-                    filename: resolvedFilename,
+                    filename: filename,
                     source: source
                 };
                 const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
                 globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
                 try {
-                    compiledFn(mod.exports, childRequire, mod, resolvedFilename, dirname);
+                    compiledFn(mod.exports, childRequire, mod, filename, dirname);
                 } catch (err) {
-                    delete moduleCache[resolvedFilename];
-                    maybeSetArrowMessageOnSyntaxError(err, resolvedFilename, source);
+                    delete moduleCache[filename];
+                    maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 } finally {
                     globalThis.__wasm_rquickjs_current_module = previousModuleContext;
@@ -1210,6 +2135,8 @@ const mainModule = {
     parent: null,
     children: [],
 };
+mainModule._compile = makeModuleCompile(mainModule);
+mainModule.require = makeModuleRequire(mainModule);
 
 function splitPackageName(id) {
     // Scoped packages: @scope/pkg or @scope/pkg/subpath
@@ -1226,7 +2153,8 @@ function splitPackageName(id) {
     return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
 }
 
-function resolveFromNodeModules(id, parentDir, parentFilename) {
+function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
+    conditions = conditions || cjsPackageConditions;
     const dirs = _nodeModulePaths(parentDir);
 
     // Split into package name and subpath for packages with subpath specifiers
@@ -1234,35 +2162,59 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
     const hasSubpath = parts.subpath.length > 0;
 
     for (let i = 0; i < dirs.length; i++) {
+        const pkgDir = pathModule.join(dirs[i], parts.name);
+        const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
+        const pkgJson = tryReadFile(pkgJsonPath);
+        let pkg = null;
+
+        if (pkgJson !== null) {
+            try {
+                pkg = JSON.parse(pkgJson);
+                const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
+                if (exportsResolved !== undefined) {
+                    exportsResolved.packageDir = pkgDir;
+                    return exportsResolved;
+                }
+            } catch (e) {
+                if (e && e.code) {
+                    throw e;
+                }
+                const fromPart = parentFilename || parentDir;
+                const pkgErr = new Error(
+                    'Invalid package config ' + pkgJsonPath +
+                    ' while importing "' + id + '" from ' + fromPart + '.' +
+                    (e.message ? ' ' + e.message : '')
+                );
+                pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
+                throw pkgErr;
+            }
+        }
+
         // If there's a subpath, try resolving it relative to the package directory
         if (hasSubpath) {
-            const pkgDir = pathModule.join(dirs[i], parts.name);
             const subCandidate = pathModule.join(pkgDir, parts.subpath);
             // Try exact subpath
             let content = tryReadFile(subCandidate);
-            if (content !== null) return { filename: subCandidate, content: content };
+            if (content !== null) return { filename: subCandidate, content: content, packageDir: pkgDir };
             // Try with extensions
             content = tryReadFile(subCandidate + '.js');
-            if (content !== null) return { filename: subCandidate + '.js', content: content };
+            if (content !== null) return { filename: subCandidate + '.js', content: content, packageDir: pkgDir };
             content = tryReadFile(subCandidate + '.mjs');
-            if (content !== null) return { filename: subCandidate + '.mjs', content: content };
+            if (content !== null) return { filename: subCandidate + '.mjs', content: content, packageDir: pkgDir };
             content = tryReadFile(subCandidate + '.json');
-            if (content !== null) return { filename: subCandidate + '.json', content: content };
+            if (content !== null) return { filename: subCandidate + '.json', content: content, packageDir: pkgDir };
             // Try as directory
             content = tryReadFile(pathModule.join(subCandidate, 'index.js'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content };
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content, packageDir: pkgDir };
             content = tryReadFile(pathModule.join(subCandidate, 'index.json'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content };
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content, packageDir: pkgDir };
         }
 
-        const candidate = pathModule.join(dirs[i], id);
+        const candidate = pkgDir;
 
         // Try as directory: check package.json "main" field
-        const pkgJsonPath = pathModule.join(candidate, 'package.json');
-        const pkgJson = tryReadFile(pkgJsonPath);
-        if (pkgJson !== null) {
+        if (pkg !== null) {
             try {
-                const pkg = JSON.parse(pkgJson);
                 if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string') {
                     const mainPath = pathModule.resolve(candidate, pkg.main);
                     const mainCandidates = [
@@ -1274,7 +2226,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
                     ];
                     for (let m = 0; m < mainCandidates.length; m++) {
                         const content = tryReadFile(mainCandidates[m]);
-                        if (content !== null) return { filename: mainCandidates[m], content: content };
+                        if (content !== null) return { filename: mainCandidates[m], content: content, packageDir: pkgDir };
                     }
                 }
             } catch (e) {
@@ -1292,18 +2244,18 @@ function resolveFromNodeModules(id, parentDir, parentFilename) {
         // Try as directory: index.js / index.json
         const indexJs = pathModule.join(candidate, 'index.js');
         let content = tryReadFile(indexJs);
-        if (content !== null) return { filename: indexJs, content: content };
+        if (content !== null) return { filename: indexJs, content: content, packageDir: pkgDir };
 
         const indexJson = pathModule.join(candidate, 'index.json');
         content = tryReadFile(indexJson);
-        if (content !== null) return { filename: indexJson, content: content };
+        if (content !== null) return { filename: indexJson, content: content, packageDir: pkgDir };
 
         // Try as file with extension
         content = tryReadFile(candidate + '.js');
-        if (content !== null) return { filename: candidate + '.js', content: content };
+        if (content !== null) return { filename: candidate + '.js', content: content, packageDir: pkgDir };
 
         content = tryReadFile(candidate + '.json');
-        if (content !== null) return { filename: candidate + '.json', content: content };
+        if (content !== null) return { filename: candidate + '.json', content: content, packageDir: pkgDir };
     }
     return null;
 }
@@ -1370,6 +2322,13 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             return mod.exports;
         }
 
+        if (id.startsWith('#')) {
+            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions);
+            if (importsResolved.builtin) return builtinModuleMap[importsResolved.builtin];
+            const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
+            return mod.exports;
+        }
+
         // node_modules resolution for bare specifiers
         const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
@@ -1417,14 +2376,14 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
                     // Relative/absolute: resolve directly against the search path
                     try {
                         const resolved = resolveFilename(id, searchDir);
-                        return resolved.filename;
+                        return toCjsCanonicalFilename(resolved.filename, false);
                     } catch (e) {
                         // Try next path
                     }
                 } else {
                     // Bare specifier: use node_modules resolution from search path
                     const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
-                    if (nmResolved) return nmResolved.filename;
+                    if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
                 }
             }
             const err = new Error("Cannot find module '" + id + "'");
@@ -1433,12 +2392,17 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
         if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
             const resolved = resolveFilename(id, parentDir);
-            return resolved.filename;
+            return toCjsCanonicalFilename(resolved.filename, false);
+        }
+        if (id.startsWith('#')) {
+            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions);
+            if (importsResolved.builtin) return importsResolved.builtin;
+            return toCjsCanonicalFilename(importsResolved.filename, false);
         }
         // node_modules resolution for bare specifiers
         const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
         if (nmResolved) {
-            return nmResolved.filename;
+            return toCjsCanonicalFilename(nmResolved.filename, false);
         }
         const err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
@@ -1512,6 +2476,149 @@ export function createRequire(filename) {
         paths: _nodeModulePaths(dir),
     };
     return makeRequire(dir, syntheticParent, filepath);
+}
+
+function isUrlInstance(value) {
+    return value instanceof URL ||
+        (value !== null && typeof value === 'object' &&
+            typeof value.href === 'string' && typeof value.protocol === 'string');
+}
+
+function normalizeFindPackageJsonSpecifier(specifier) {
+    if (specifier === undefined) {
+        throw new ERR_MISSING_ARGS('specifier');
+    }
+
+    if (isUrlInstance(specifier)) {
+        const filePath = nodeUrl.fileURLToPath(specifier);
+        return {
+            kind: 'absolute',
+            path: filePath,
+            source: filePath,
+        };
+    }
+
+    if (typeof specifier !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('specifier', ['string', 'URL'], specifier);
+    }
+
+    if (specifier.startsWith('file://')) {
+        const filePath = nodeUrl.fileURLToPath(specifier);
+        return {
+            kind: 'absolute',
+            path: filePath,
+            source: specifier,
+        };
+    }
+
+    if (pathModule.isAbsolute(specifier)) {
+        return {
+            kind: 'absolute',
+            path: pathModule.normalize(specifier),
+            source: specifier,
+        };
+    }
+
+    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../')) {
+        return {
+            kind: 'relative',
+            value: specifier,
+        };
+    }
+
+    return {
+        kind: 'bare',
+        value: specifier,
+    };
+}
+
+function normalizeFindPackageJsonBase(base, baseRequired) {
+    if (base === undefined) {
+        if (baseRequired) {
+            throw new ERR_INVALID_ARG_TYPE('base', ['string', 'URL'], base);
+        }
+        return null;
+    }
+
+    if (isUrlInstance(base) || (typeof base === 'string' && base.startsWith('file://'))) {
+        const filename = nodeUrl.fileURLToPath(base);
+        return {
+            filename,
+            dir: pathModule.dirname(pathModule.resolve(filename)),
+        };
+    }
+
+    if (typeof base !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('base', ['string', 'URL'], base);
+    }
+
+    if (!pathModule.isAbsolute(base)) {
+        throw new ERR_INVALID_ARG_TYPE('base', ['string', 'URL'], base);
+    }
+
+    const filename = pathModule.resolve(base);
+    return {
+        filename,
+        dir: pathModule.dirname(filename),
+    };
+}
+
+function findNearestPackageJsonPath(startDir) {
+    let dir = pathModule.resolve(startDir || '/');
+    while (true) {
+        if (pathModule.basename(dir) === 'node_modules') return undefined;
+        const pkgJsonPath = pathModule.join(dir, 'package.json');
+        if (tryReadFile(pkgJsonPath) !== null) {
+            return pathModule.toNamespacedPath(pkgJsonPath);
+        }
+        const parent = pathModule.dirname(dir);
+        if (parent === dir) return undefined;
+        dir = parent;
+    }
+}
+
+function packageSearchStartDir(resolvedPath, sourceSpecifier) {
+    if (typeof sourceSpecifier === 'string' &&
+        (/\/$/.test(sourceSpecifier) || /(?:^|\/)\.\.?$/.test(sourceSpecifier))) {
+        return pathModule.resolve(resolvedPath);
+    }
+
+    if (_stat(resolvedPath) === 1) {
+        return pathModule.resolve(resolvedPath);
+    }
+
+    return pathModule.dirname(pathModule.resolve(resolvedPath));
+}
+
+function findBarePackageJson(specifier, parentDir, parentFilename) {
+    const resolved = resolveFromNodeModules(specifier, parentDir, parentFilename, cjsPackageConditions);
+    if (resolved === null) return undefined;
+
+    if (typeof resolved.packageDir === 'string' && resolved.packageDir.length > 0) {
+        const pkgJsonPath = pathModule.join(resolved.packageDir, 'package.json');
+        if (tryReadFile(pkgJsonPath) !== null) {
+            return pathModule.toNamespacedPath(pkgJsonPath);
+        }
+    }
+
+    return undefined;
+}
+
+export function findPackageJSON(specifier, base) {
+    const normalizedSpecifier = normalizeFindPackageJsonSpecifier(specifier);
+    if (normalizedSpecifier.kind === 'absolute') {
+        const startDir = packageSearchStartDir(normalizedSpecifier.path, normalizedSpecifier.source);
+        return findNearestPackageJsonPath(startDir);
+    }
+
+    const normalizedBase = normalizeFindPackageJsonBase(base, true);
+    if (normalizedSpecifier.kind === 'relative') {
+        const resolvedPath = pathModule.resolve(normalizedBase.dir, normalizedSpecifier.value);
+        const startDir = packageSearchStartDir(resolvedPath, normalizedSpecifier.value);
+        return findNearestPackageJsonPath(startDir);
+    }
+
+    return findBarePackageJson(normalizedSpecifier.value, normalizedBase.dir, normalizedBase.filename);
 }
 
 export { builtinModuleNames as builtinModules };
@@ -1659,6 +2766,7 @@ function runMain() {
 const moduleExports = {
     require: globalRequire,
     createRequire,
+    findPackageJSON,
     builtinModules: builtinModuleNames,
     isBuiltin: isBuiltinModule,
     wrap: wrap,

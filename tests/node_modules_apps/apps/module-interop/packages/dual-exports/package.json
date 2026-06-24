@@ -1,0 +1,17 @@
+{
+  "name": "dual-exports",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./import.mjs",
+      "module-sync": "./sync.mjs",
+      "require": "./require.cjs",
+      "default": "./default.mjs"
+    },
+    "./feature": {
+      "import": "./feature.mjs",
+      "require": "./feature.cjs"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "pattern-exports",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./features/*": "./src/*.mjs",
+    "./sync/*": {
+      "module-sync": "./sync/*-sync.mjs",
+      "import": "./sync/*-import.mjs",
+      "default": "./sync/*-default.mjs"
+    },
+    "./cjs/*": {
+      "require": "./cjs/*.cjs",
+      "default": "./src/*.mjs"
+    }
+  }
+}

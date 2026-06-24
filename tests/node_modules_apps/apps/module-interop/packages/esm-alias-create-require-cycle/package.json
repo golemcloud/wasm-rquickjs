@@ -1,0 +1,12 @@
+{
+  "name": "esm-alias-create-require-cycle",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "module-sync": "./entry.mjs",
+      "require": "./entry.mjs",
+      "default": "./entry.mjs"
+    }
+  }
+}

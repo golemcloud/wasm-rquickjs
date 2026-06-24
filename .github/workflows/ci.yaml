@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,8 +86,14 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
-      - name: Runtime tests (group ${{ matrix.group }}/8)
+      - uses: actions/setup-node@v4
+        if: matrix.group == 9
+        with:
+          node-version: "22.14.0"
+      - name: Runtime tests (group ${{ matrix.group }}/9)
         run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()

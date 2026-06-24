@@ -1,0 +1,20 @@
+package quickjs:module-resolution;
+
+world module-resolution {
+  export test-esm-package-map-edge-cases: func() -> bool;
+  export test-cjs-direct-named-exports: func() -> bool;
+  export test-cjs-define-property-named-exports: func() -> bool;
+  export test-cjs-reexport-named-exports: func() -> bool;
+  export test-cjs-analyzer-false-positive-guards: func() -> bool;
+  export test-cjs-shared-loader-identity: func() -> bool;
+  export test-module-syntax-detection-and-diagnostics: func() -> bool;
+  export test-cjs-package-reexport-named-exports: func() -> bool;
+  export test-find-package-json: func() -> bool;
+  export test-require-esm-error-handling: func() -> bool;
+  export test-require-esm-tla-retry: func() -> bool;
+  export test-require-esm-cycle-guards: func() -> bool;
+  export test-cjs-symlink-circular-cache: func() -> bool;
+  export test-cjs-node-module-loading-compat: func() -> bool;
+  export test-cjs-nested-dependency-cache-shape: func() -> bool;
+  export test-cjs-module-children-graph: func() -> bool;
+}
