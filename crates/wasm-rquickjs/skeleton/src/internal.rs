@@ -293,7 +293,8 @@ impl Loader for DataUrlLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let rest = path
+        let path_without_suffix = module_filesystem_path(path);
+        let rest = path_without_suffix
             .strip_prefix("data:")
             .ok_or_else(|| Error::new_loading(path))?;
 
@@ -317,6 +318,13 @@ impl Loader for DataUrlLoader {
         let base_mime = metadata.split(';').next().unwrap_or(metadata).trim();
 
         if base_mime == "application/json" {
+            if import_attr_type_from_path(path) != Some("json") {
+                let escaped = DataUrlLoader::js_string_escape(path);
+                let module_source = format!(
+                    "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
+                );
+                return Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec());
+            }
             // Validate JSON by attempting a simple parse check.
             // For valid JSON: embed directly as a JS literal.
             // For invalid JSON: throw a SyntaxError with V8-compatible message.
@@ -387,6 +395,8 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
     Some(buf)
 }
 
+const IMPORT_TYPE_QUERY_PREFIX: &str = "__wasm_rquickjs_import_type=";
+
 /// Process static import attributes in JavaScript module source code.
 ///
 /// Handles patterns like `import "specifier" with { type: "json" }`.
@@ -413,32 +423,97 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
             let import_start = i;
             i += 6;
 
-            // Skip whitespace
+            let mut spec_literal_start = None;
+            let mut spec_literal_end = None;
+            let mut specifier_start = None;
+            let mut specifier_end = None;
+
             while i < len && bytes[i].is_ascii_whitespace() {
                 i += 1;
             }
 
-            // Check for string literal (bare import: import "spec")
+            if i < len && bytes[i] == b'(' {
+                if let Some((rewritten, next)) = rewrite_dynamic_import_call(source, import_start, i) {
+                    result.push_str(&rewritten);
+                    i = next;
+                    continue;
+                }
+                result.push_str(&source[import_start..i]);
+                continue;
+            }
+
             if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
+                spec_literal_start = Some(i);
                 let quote = bytes[i];
                 i += 1;
-                let spec_start = i;
+                specifier_start = Some(i);
                 while i < len && bytes[i] != quote {
                     if bytes[i] == b'\\' {
                         i += 1;
                     }
                     i += 1;
                 }
-                let spec_end = i;
+                specifier_end = Some(i);
                 if i < len {
                     i += 1; // skip closing quote
                 }
+                spec_literal_end = Some(i);
+            } else {
+                while i < len {
+                    if bytes[i] == b'f'
+                        && i + 4 <= len
+                        && &source[i..i + 4] == "from"
+                        && (i == 0 || !is_id_char(bytes[i - 1]))
+                        && (i + 4 >= len || !is_id_char(bytes[i + 4]))
+                    {
+                        let mut j = i + 4;
+                        while j < len && bytes[j].is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        if j < len && (bytes[j] == b'"' || bytes[j] == b'\'') {
+                            spec_literal_start = Some(j);
+                            let quote = bytes[j];
+                            j += 1;
+                            specifier_start = Some(j);
+                            while j < len && bytes[j] != quote {
+                                if bytes[j] == b'\\' {
+                                    j += 1;
+                                }
+                                j += 1;
+                            }
+                            specifier_end = Some(j);
+                            if j < len {
+                                j += 1;
+                            }
+                            spec_literal_end = Some(j);
+                            i = j;
+                            break;
+                        }
+                    }
+                    if matches!(bytes[i], b';' | b'\n' | b'\r') {
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+
+            if let (Some(spec_lit_start), Some(spec_lit_end), Some(spec_start), Some(spec_end)) =
+                (spec_literal_start, spec_literal_end, specifier_start, specifier_end)
+            {
                 let specifier = &source[spec_start..spec_end];
 
                 // Skip whitespace
                 let after_spec = i;
                 while i < len && bytes[i].is_ascii_whitespace() {
                     i += 1;
+                }
+
+                if i + 6 <= len
+                    && &source[i..i + 6] == "assert"
+                    && (i + 6 >= len || !is_id_char(bytes[i + 6]))
+                {
+                    return "await Promise.reject(new SyntaxError('Unexpected identifier'));\n"
+                        .to_string();
                 }
 
                 // Check for 'with' keyword (not 'with(' which is a with-statement)
@@ -490,14 +565,17 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                         }
 
                         // Valid: strip the with clause, keep everything else
-                        result.push_str(&source[import_start..after_spec]);
-                        // Skip any remaining content after the with block
-                        // and append the rest of the source
+                        result.push_str(&source[import_start..spec_lit_start]);
+                        result.push_str(&rewrite_import_specifier_literal(
+                            &source[spec_lit_start..spec_lit_end],
+                            specifier,
+                            type_value.as_deref(),
+                        ));
+                        result.push_str(&source[spec_lit_end..after_spec]);
                         while i < len && bytes[i].is_ascii_whitespace() {
                             i += 1;
                         }
-                        result.push_str(&source[i..]);
-                        return result;
+                        continue;
                     } else {
                         // 'with' not followed by '{', not import attrs
                         i = with_start;
@@ -505,7 +583,14 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                         continue;
                     }
                 }
-                // No 'with' keyword, output as-is
+
+                let format = determine_data_url_format(specifier);
+                if let Some(error_module) =
+                    validate_static_import_attrs(None, format, specifier, module_path)
+                {
+                    return error_module;
+                }
+
                 result.push_str(&source[import_start..i]);
                 continue;
             }
@@ -517,11 +602,243 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
             continue;
         }
 
-        result.push(bytes[i] as char);
-        i += 1;
+        if let Some(ch) = source[i..].chars().next() {
+            result.push(ch);
+            i += ch.len_utf8();
+        } else {
+            break;
+        }
     }
 
     result
+}
+
+fn rewrite_import_specifier_literal(literal: &str, specifier: &str, type_value: Option<&str>) -> String {
+    if type_value != Some("json") {
+        return literal.to_string();
+    }
+    let rewritten = append_import_type_query(specifier, "json");
+    format!("\"{}\"", escape_js_string(&rewritten))
+}
+
+fn rewrite_dynamic_import_call(
+    source: &str,
+    import_start: usize,
+    open_paren: usize,
+) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut i = open_paren + 1;
+    while i < len && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if i >= len || (bytes[i] != b'"' && bytes[i] != b'\'') {
+        return rewrite_dynamic_import_expression_call(source, open_paren);
+    }
+
+    let quote = bytes[i];
+    let spec_literal_start = i;
+    i += 1;
+    let spec_start = i;
+    while i < len && bytes[i] != quote {
+        if bytes[i] == b'\\' {
+            i += 1;
+        }
+        i += 1;
+    }
+    if i >= len {
+        return None;
+    }
+    let spec_end = i;
+    i += 1;
+    let spec_literal_end = i;
+    let specifier = &source[spec_start..spec_end];
+
+    while i < len && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+
+    if i < len && bytes[i] == b')' {
+        return None;
+    }
+    if i >= len || bytes[i] != b',' {
+        return None;
+    }
+    i += 1;
+    let options_start = i;
+    let mut paren_depth = 1usize;
+    let mut brace_depth = 0usize;
+    while i < len {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'(' => paren_depth += 1,
+            b')' => {
+                paren_depth = paren_depth.saturating_sub(1);
+                if paren_depth == 0 {
+                    let options = &source[options_start..i];
+                    let type_value = extract_dynamic_import_attr_type_value(options);
+                    let format = determine_data_url_format(specifier);
+                    if let Some((code, message)) =
+                        validate_import_attrs_error(type_value.as_deref(), format, specifier)
+                    {
+                        return Some((import_attr_error_expression(&code, &message), i + 1));
+                    }
+                    let spec_literal = if type_value.as_deref() == Some("json") {
+                        rewrite_import_specifier_literal(
+                            &source[spec_literal_start..spec_literal_end],
+                            specifier,
+                            type_value.as_deref(),
+                        )
+                    } else {
+                        source[spec_literal_start..spec_literal_end].to_string()
+                    };
+                    return Some((format!("import({spec_literal})"), i + 1));
+                }
+            }
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth = brace_depth.saturating_sub(1),
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let _ = import_start;
+    let _ = brace_depth;
+    None
+}
+
+fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut i = open_paren + 1;
+    let expr_start = i;
+    let mut paren_depth = 0usize;
+    let mut bracket_depth = 0usize;
+    let mut brace_depth = 0usize;
+    while i < len {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'(' => paren_depth += 1,
+            b')' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => return None,
+            b')' => paren_depth = paren_depth.saturating_sub(1),
+            b'[' => bracket_depth += 1,
+            b']' => bracket_depth = bracket_depth.saturating_sub(1),
+            b'{' => brace_depth += 1,
+            b'}' => brace_depth = brace_depth.saturating_sub(1),
+            b',' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => break,
+            _ => {}
+        }
+        i += 1;
+    }
+    if i >= len || bytes[i] != b',' {
+        return None;
+    }
+    let expr = source[expr_start..i].trim();
+    i += 1;
+    let options_start = i;
+    let mut call_paren_depth = 1usize;
+    while i < len {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'(' => call_paren_depth += 1,
+            b')' => {
+                call_paren_depth = call_paren_depth.saturating_sub(1);
+                if call_paren_depth == 0 {
+                    let options = &source[options_start..i];
+                    let type_value = extract_dynamic_import_attr_type_value(options);
+                    let type_literal = type_value
+                        .as_deref()
+                        .map(|value| format!("\"{}\"", escape_js_string(value)))
+                        .unwrap_or_else(|| "null".to_string());
+                    return Some((
+                        format!(
+                            "import(globalThis.__wasm_rquickjs_import_attr_specifier({}, {}))",
+                            expr, type_literal
+                        ),
+                        i + 1,
+                    ));
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn extract_dynamic_import_attr_type_value(options: &str) -> Option<String> {
+    let bytes = options.as_bytes();
+    let len = bytes.len();
+    let mut i = 0usize;
+    while i < len {
+        if bytes[i] == b'w'
+            && i + 4 <= len
+            && &options[i..i + 4] == "with"
+            && (i == 0 || !is_id_char(bytes[i - 1]))
+            && (i + 4 >= len || !is_id_char(bytes[i + 4]))
+        {
+            i += 4;
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if i < len && bytes[i] == b':' {
+                i += 1;
+            }
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if i < len && bytes[i] == b'{' {
+                let attrs_start = i + 1;
+                let mut depth = 1usize;
+                i += 1;
+                while i < len && depth > 0 {
+                    match bytes[i] {
+                        b'\'' | b'"' | b'`' => {
+                            i = skip_string_or_template(options, i);
+                            continue;
+                        }
+                        b'{' => depth += 1,
+                        b'}' => depth = depth.saturating_sub(1),
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                let attrs_end = i.saturating_sub(1);
+                return extract_attr_type_value(&options[attrs_start..attrs_end]);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn append_import_type_query(specifier: &str, import_type: &str) -> String {
+    let (base, suffix) = split_module_path_suffix(specifier);
+    let separator = if suffix.is_empty() { "?" } else { "&" };
+    format!("{base}{suffix}{separator}{IMPORT_TYPE_QUERY_PREFIX}{import_type}")
+}
+
+fn import_attr_type_from_path(path: &str) -> Option<&str> {
+    let suffix = split_module_path_suffix(path).1;
+    if suffix.is_empty() {
+        return None;
+    }
+    let query = suffix
+        .strip_prefix('?')
+        .or_else(|| suffix.strip_prefix('#'))
+        .unwrap_or(suffix);
+    query
+        .split(['&', '#'])
+        .find_map(|part| part.strip_prefix(IMPORT_TYPE_QUERY_PREFIX))
 }
 
 fn is_id_char(b: u8) -> bool {
@@ -618,8 +935,13 @@ fn determine_data_url_format(specifier: &str) -> Option<&'static str> {
                 _ => None,
             };
         }
-    } else if specifier.ends_with(".json") {
+    } else if module_filesystem_path(specifier).ends_with(".json") {
         return Some("json");
+    } else if module_filesystem_path(specifier).ends_with(".js")
+        || module_filesystem_path(specifier).ends_with(".mjs")
+        || module_filesystem_path(specifier).ends_with(".cjs")
+    {
+        return Some("module");
     }
     None
 }
@@ -631,22 +953,33 @@ fn validate_static_import_attrs(
     specifier: &str,
     _module_path: &str,
 ) -> Option<String> {
+    let (code, message) = validate_import_attrs_error(type_value, format, specifier)?;
+    Some(import_attr_error_module_source(&code, &message))
+}
+
+fn validate_import_attrs_error(
+    type_value: Option<&str>,
+    format: Option<&str>,
+    specifier: &str,
+) -> Option<(String, String)> {
     if let Some(tv) = type_value {
         match tv {
             "json" => {
                 if format == Some("module") {
-                    return Some(
-                        "await Promise.reject(Object.assign(new TypeError('Cannot use import attributes to change the type of a JavaScript module'), {code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE'}));\n".to_string()
-                    );
+                    return Some((
+                        "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE".to_string(),
+                        "Cannot use import attributes to change the type of a JavaScript module"
+                            .to_string(),
+                    ));
                 }
             }
             "css" => {
                 // CSS is a recognized type, let loader handle it
             }
             other => {
-                let escaped_type = DataUrlLoader::js_string_escape(other);
-                return Some(format!(
-                    "await Promise.reject(Object.assign(new TypeError('Import attribute type \"{escaped_type}\" is not supported'), {{code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED'}}));\n"
+                return Some((
+                    "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED".to_string(),
+                    format!("Import attribute type \"{other}\" is not supported"),
                 ));
             }
         }
@@ -654,13 +987,25 @@ fn validate_static_import_attrs(
 
     // Check for missing required attributes (JSON without type: "json")
     if format == Some("json") && type_value != Some("json") {
-        let escaped = DataUrlLoader::js_string_escape(specifier);
-        return Some(format!(
-            "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
+        return Some((
+            "ERR_IMPORT_ATTRIBUTE_MISSING".to_string(),
+            format!("Module \"{specifier}\" needs an import attribute of type: json"),
         ));
     }
 
     None
+}
+
+fn import_attr_error_module_source(code: &str, message: &str) -> String {
+    format!("await {};\n", import_attr_error_expression(code, message))
+}
+
+fn import_attr_error_expression(code: &str, message: &str) -> String {
+    let escaped_message = DataUrlLoader::js_string_escape(message);
+    let escaped_code = DataUrlLoader::js_string_escape(code);
+    format!(
+        "Promise.reject(Object.assign(new TypeError('{escaped_message}'), {{code: '{escaped_code}'}}))"
+    )
 }
 
 fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool) -> Option<String> {
@@ -3747,7 +4092,7 @@ impl Loader for CjsCompatLoader {
             return Err(Error::new_loading(path));
         }
 
-        let source = match std::fs::read_to_string(fs_path) {
+        let mut source = match std::fs::read_to_string(fs_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -3761,6 +4106,7 @@ impl Loader for CjsCompatLoader {
         };
 
         let fs_abs_path = ensure_absolute_path(fs_path);
+        source = process_static_import_attrs(&source, path);
         let filename = Some(fs_abs_path.clone());
         let url = path_to_file_url(path);
 
@@ -4175,6 +4521,9 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         "Object.defineProperties(import.meta,{{{}}});",
         props.join(",")
     );
+    prologue.push_str(
+        r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){Object.defineProperty(globalThis,"__wasm_rquickjs_import_attr_specifier",{value:(s,t)=>{const v=String(s);const b=v.split(/[?#]/,1)[0];let f=null;if(v.startsWith("data:")){const c=v.indexOf(",");const m=(c<0?v.slice(5):v.slice(5,c)).split(";")[0];if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";function e(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return e("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return e("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return e("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){const h=v.indexOf("#");const p=h<0?v.length:h;const q=v.indexOf("?");const sep=q>=0&&q<p?"&":"?";return v.slice(0,p)+sep+"__wasm_rquickjs_import_type=json"+v.slice(p);}return v;},writable:true,configurable:true});}"##,
+    );
     if let Some(ref filename) = init.filename {
         prologue.push_str(&format!(
             "var __filename=\"{}\";",
@@ -4213,7 +4562,7 @@ impl Loader for ImportMetaLoader {
             return Err(Error::new_loading(path));
         }
 
-        let source = match std::fs::read_to_string(fs_path) {
+        let mut source = match std::fs::read_to_string(fs_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -4228,6 +4577,7 @@ impl Loader for ImportMetaLoader {
 
         let fs_abs_path = ensure_absolute_path(fs_path);
         let module_abs_path = ensure_absolute_path(path);
+        source = process_static_import_attrs(&source, path);
         let std_path = std::path::Path::new(&fs_abs_path);
         let filename = Some(fs_abs_path.clone());
         let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
@@ -4305,9 +4655,17 @@ impl Loader for JsonFileLoader {
         }
 
         let source = std::fs::read_to_string(fs_path).map_err(|_| Error::new_loading(path))?;
-        let module_source = if DataUrlLoader::is_valid_json(&source) {
-            let escaped = DataUrlLoader::js_string_escape(&source);
-            format!("export default JSON.parse('{escaped}');\n")
+        let module_source = if import_attr_type_from_path(path) != Some("json") {
+            let escaped = DataUrlLoader::js_string_escape(path);
+            format!(
+                "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
+            )
+        } else if DataUrlLoader::is_valid_json(&source) {
+            format!(
+                "import {{ createRequire as __wasm_rquickjs_createRequire }} from 'node:module';\nconst __wasm_rquickjs_require = __wasm_rquickjs_createRequire(\"{}\");\nexport default __wasm_rquickjs_require(\"{}\");\n",
+                escape_js_string(fs_path),
+                escape_js_string(fs_path)
+            )
         } else {
             DataUrlLoader::make_json_error_module(&source)
         };

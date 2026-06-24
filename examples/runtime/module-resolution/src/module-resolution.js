@@ -28,6 +28,19 @@ async function expectImportRejectsMessage(specifier, pattern) {
     }
 }
 
+async function expectImportRejectsCode(specifier, code) {
+    let thrown = false;
+    try {
+        await import(specifier);
+    } catch (error) {
+        thrown = true;
+        assert.strictEqual(error && error.code, code, error && error.stack ? error.stack : String(error));
+    }
+    if (!thrown) {
+        throw new Error(`Expected import(${specifier}) to reject with ${code}`);
+    }
+}
+
 function writeImportEntry(path, specifier) {
     fs.writeFileSync(path, `export default await import(${JSON.stringify(specifier)});`);
 }
@@ -152,7 +165,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         return true;
     } catch (error) {
         console.error(error);
-        return false;
+        throw error;
     }
 };
 
@@ -228,7 +241,7 @@ export const testCjsDirectNamedExports = async () => {
         return true;
     } catch (error) {
         console.error(error);
-        return false;
+        throw error;
     }
 };
 
@@ -676,6 +689,41 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             '  twoUrl: two.url,',
             '};',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-data.json', JSON.stringify({ one: 1 }));
+        fs.writeFileSync('/module-syntax-app/attr-cjs.cjs', [
+            'exports.data = require("./attr-data.json");',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-entry.mjs', [
+            'import data from "./attr-data.json" with { type: "json" };',
+            'import dataWithQuery from "./attr-data.json?cache" with { type: "json" };',
+            'import cjs from "./attr-cjs.cjs";',
+            'export default {',
+            '  data,',
+            '  dataWithQuery,',
+            '  sameAsCjs: data === cjs.data,',
+            '  querySameAsCjs: dataWithQuery === cjs.data,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-missing.mjs', [
+            'import data from "./attr-data.json";',
+            'export default data;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-type-mismatch.mjs', [
+            'import value from "./static-source.mjs" with { type: "json" };',
+            'export default value;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-unsupported.mjs', [
+            'import data from "./attr-data.json" with { type: "unsupported" };',
+            'export default data;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-data-url-entry.mjs', [
+            'import data from "data:application/json,{%22two%22:2}" with { type: "json" };',
+            'export default data;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/attr-data-url-missing.mjs', [
+            'import data from "data:application/json,{%22two%22:2}";',
+            'export default data;',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/member-false-positive.js', [
             'const obj = { import: 1 };',
             'obj.import;',
@@ -817,6 +865,18 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             oneUrl: 'file:///module-syntax-app/query.mjs?relative-one',
             twoUrl: 'file:///module-syntax-app/query.mjs?relative-two',
         });
+        const attrEntry = (await import('/module-syntax-app/attr-entry.mjs')).default;
+        assert.deepStrictEqual(attrEntry, {
+            data: { one: 1 },
+            dataWithQuery: { one: 1 },
+            sameAsCjs: true,
+            querySameAsCjs: true,
+        });
+        assert.deepStrictEqual((await import('/module-syntax-app/attr-data-url-entry.mjs')).default, { two: 2 });
+        await expectImportRejectsCode('/module-syntax-app/attr-missing.mjs', 'ERR_IMPORT_ATTRIBUTE_MISSING');
+        await expectImportRejectsCode('/module-syntax-app/attr-type-mismatch.mjs', 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE');
+        await expectImportRejectsCode('/module-syntax-app/attr-unsupported.mjs', 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED');
+        await expectImportRejectsCode('/module-syntax-app/attr-data-url-missing.mjs', 'ERR_IMPORT_ATTRIBUTE_MISSING');
 
         assert.throws(() => require('/module-syntax-app/member-false-positive.js'), /unexpected|expecting|SyntaxError/i);
         assert.throws(() => require('/module-syntax-app/property-false-positive.js'), /unexpected|expecting|SyntaxError/i);
