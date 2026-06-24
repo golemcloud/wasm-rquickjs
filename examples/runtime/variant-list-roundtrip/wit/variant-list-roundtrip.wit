@@ -1,0 +1,27 @@
+package quickjs:variant-list-roundtrip;
+
+interface api {
+  variant item {
+    empty,
+    number(u32),
+    label(string),
+  }
+
+  record payload {
+    items: list<item>,
+  }
+
+  variant envelope {
+    none,
+    batch(payload),
+    direct(list<item>),
+  }
+
+  roundtrip-items: func(items: list<item>) -> list<item>;
+  roundtrip-payload: func(payload: payload) -> payload;
+  roundtrip-envelope: func(envelope: envelope) -> envelope;
+}
+
+world variant-list-roundtrip {
+  export api;
+}

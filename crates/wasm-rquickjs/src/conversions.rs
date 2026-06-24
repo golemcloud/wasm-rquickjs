@@ -183,20 +183,32 @@ fn generate_conversion_instances_for_type(
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
 
-                let wrapped_field = field_type
-                    .wrap
-                    .run(quote! { #field_accessor.#rust_field_ident });
-                let unwrapped_field = field_type.unwrap.run(quote! { #rust_field_ident });
+                if field_type.wrap.is_identity() {
+                    set_fields.push(quote! {
+                        let #rust_field_ident: #original_field_type = #field_accessor.#rust_field_ident;
+                        obj.set(#field_name_lit, #rust_field_ident)?;
+                    });
+                } else {
+                    let wrapped_field = field_type
+                        .wrap
+                        .run(quote! { #field_accessor.#rust_field_ident });
+                    set_fields.push(quote! {
+                        let #rust_field_ident: #wrapped_field_type = #wrapped_field;
+                        obj.set(#field_name_lit, #rust_field_ident)?;
+                    });
+                }
 
-                set_fields.push(quote! {
-                    let #rust_field_ident: #wrapped_field_type = #wrapped_field;
-                    obj.set(#field_name_lit, #rust_field_ident)?;
-                });
-
-                get_fields.push(quote! {
-                    let #rust_field_ident: #wrapped_field_type = obj.get(#field_name_lit)?;
-                    let #rust_field_ident: #original_field_type = #unwrapped_field;
-                });
+                if field_type.unwrap.is_identity() {
+                    get_fields.push(quote! {
+                        let #rust_field_ident: #original_field_type = obj.get(#field_name_lit)?;
+                    });
+                } else {
+                    let unwrapped_field = field_type.unwrap.run(quote! { #rust_field_ident });
+                    get_fields.push(quote! {
+                        let #rust_field_ident: #wrapped_field_type = obj.get(#field_name_lit)?;
+                        let #rust_field_ident: #original_field_type = #unwrapped_field;
+                    });
+                }
 
                 rust_field_list.push(rust_field_ident);
             }
