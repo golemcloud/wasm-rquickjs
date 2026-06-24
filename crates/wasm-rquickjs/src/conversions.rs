@@ -361,7 +361,7 @@ fn generate_conversion_instances_for_type(
                     });
 
                     from_cases.push(quote! {
-                        #case_name_lit => {
+                        tag if tag == #case_name_lit => {
                             let inner: #wrapped_type = obj.get(crate::wrappers::VALUE)?;
                             Ok(#type_path::#rust_ident(#unwrapped_inner))
                         }
@@ -374,7 +374,7 @@ fn generate_conversion_instances_for_type(
                     });
 
                     from_cases.push(quote! {
-                        #case_name_lit => Ok(#type_path::#rust_ident),
+                        tag if tag == #case_name_lit => Ok(#type_path::#rust_ident),
                     });
                 }
             }
@@ -406,13 +406,14 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let obj = rquickjs::Object::from_value(value)?;
-                            let tag: String = obj.get(crate::wrappers::TAG)?;
+                            let tag: rquickjs::String = obj.get(crate::wrappers::TAG)?;
+                            let tag = tag.to_cstring()?;
                             match tag.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown variant case: {tag}"),
+                                    format!("Unknown variant case: {}", tag.as_str()),
                                 )),
                             }.map(Self)
                         }
@@ -433,13 +434,14 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #type_path {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let obj = rquickjs::Object::from_value(value)?;
-                            let tag: String = obj.get(crate::wrappers::TAG)?;
+                            let tag: rquickjs::String = obj.get(crate::wrappers::TAG)?;
+                            let tag = tag.to_cstring()?;
                             match tag.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown variant case: {tag}"),
+                                    format!("Unknown variant case: {}", tag.as_str()),
                                 )),
                             }
                         }
