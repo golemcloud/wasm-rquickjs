@@ -145,6 +145,22 @@ export const sampleApi = {
 All names are converted to camelCase. The JavaScript `this` is bound to object representing the exporter interface, in
 the above example it is `sampleApi`.
 
+If two exported interfaces in the same world map to the same JavaScript object name, the colliding interfaces are
+exported with a qualified name derived from their full WIT interface id. For example, `test:a/guest@1.0.0` and
+`test:b/guest@1.0.0` both have the short interface name `guest`, so they must be exported as:
+
+```javascript
+export const testA100Guest = {
+    invoke: (a, b, c) => `${a}:${b}:${c}`,
+};
+
+export const testB100Guest = {
+    invoke: (a, b, c, d, e) => `${a}:${b}:${c}:${d}:${e}`,
+};
+```
+
+Interfaces whose JavaScript object names do not collide keep the short camelCase export shape.
+
 #### Exported resources
 
 Exported resources are implemented as **classes** in JS:

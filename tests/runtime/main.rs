@@ -24,6 +24,7 @@ mod example1;
 mod example2;
 mod example3;
 mod export_from_inner_package;
+mod export_interface_name_collision;
 mod fetch;
 mod fs;
 mod imports;
@@ -70,6 +71,7 @@ tag_suite!(domain, group6);
 tag_suite!(stateful1, group6);
 tag_suite!(os, group6);
 tag_suite!(export_from_inner_package, group6);
+tag_suite!(export_interface_name_collision, group6);
 tag_suite!(example3, group6);
 tag_suite!(sqlite, group6);
 
