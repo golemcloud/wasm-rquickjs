@@ -165,6 +165,13 @@ Object.defineProperty(process, 'title', {
 });
 process.release = { name: 'node' };
 process.allowedNodeEnvironmentFlags = new Set();
+process.report = {};
+Object.defineProperty(process, Symbol.toStringTag, {
+    value: 'process',
+    writable: true,
+    enumerable: false,
+    configurable: true,
+});
 
 let _startTime = null;
 
@@ -770,6 +777,7 @@ export var cpuUsage = process.cpuUsage;
 export var memoryUsage = process.memoryUsage;
 export var uptime = process.uptime;
 export var release = process.release;
+export var report = process.report;
 export var stdin = process.stdin;
 export var kill = process.kill;
 export var emitWarning = process.emitWarning;

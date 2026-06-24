@@ -3997,7 +3997,7 @@ export const promises = new Proxy({}, {
 
 // --- Internal helpers ---
 
-function _toUnixTimestamp(time, name = 'time') {
+export function _toUnixTimestamp(time, name = 'time') {
     if (typeof time === 'string' && +time == time) {
         return +time;
     }

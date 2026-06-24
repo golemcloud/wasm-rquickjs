@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3114/4404 (70.7%)
+**Primary compatibility (CI-enforced):** 3124/4404 (70.9%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3114 | 70.7% | 54.4% | 45.5% |
-| 🧩 known gap | 1290 | 29.3% | 22.5% | 18.9% |
+| ✅ passing (runnable) | 3124 | 70.9% | 54.6% | 45.7% |
+| 🧩 known gap | 1280 | 29.1% | 22.4% | 18.7% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3114/5721 (54.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3124/5721 (54.6%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 115 | 187 | 85 | 11 | 0 | 183 | 38.1% | 28.9% |
+| other | 581 | 125 | 177 | 85 | 11 | 0 | 183 | 41.4% | 31.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1290)
+### known gap (1280)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -689,10 +689,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 36 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-dynamic-import-mutating-fs.mjs`, ... (+33) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
-| newly tracked module coverage; same-process ESM behavior has not been triaged yet | 17 | `es-module/test-esm-assert-strict.mjs`, `es-module/test-esm-basic-imports.mjs`, `es-module/test-esm-dns-promises.mjs`, ... (+14) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
-| ESM package type/exports/imports behavior needs resolver unification triage | 12 | `es-module/test-esm-custom-exports.mjs`, `es-module/test-esm-default-type.mjs`, `es-module/test-esm-exports-deprecations.mjs`, ... (+9) |
 | custom ESM loader hooks / module.register are not implemented | 12 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-loader-custom-condition.mjs`, `es-module/test-esm-loader-dependency.mjs`, ... (+9) |
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
@@ -701,6 +699,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net.js TCP implementation incomplete - needs event handling and API fixes | 11 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+8) |
 | remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps | 11 | `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_00_a_mjs_b_cjs_c_mjs_a_mjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_01_b_cjs_c_mjs_a_mjs_b_cjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_02_c_mjs_a_mjs_b_cjs_c_mjs`, ... (+8) |
 | wasi:sockets UDP implementation hangs in wasmtime | 11 | `parallel/test-dgram-implicit-bind.js`, `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`, `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`, ... (+8) |
+| ESM package type/exports/imports behavior needs resolver unification triage | 10 | `es-module/test-esm-custom-exports.mjs`, `es-module/test-esm-default-type.mjs`, `es-module/test-esm-exports-deprecations.mjs`, ... (+7) |
 | dgram multicast membership APIs are not implemented (ENOSYS) | 10 | `parallel/test-dgram-membership.js#block_02_addmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_03_dropmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_04_addmembership_with_invalid_multicast_address_should_throw`, ... (+7) |
 | async_hooks not fully implemented | 9 | `parallel/test-async-hooks-destroy-on-gc.js`, `parallel/test-async-hooks-disable-during-promise.js`, `parallel/test-async-hooks-disable-gc-tracking.js`, ... (+6) |
 | module SourceMap/findSourceMap API is not fully implemented | 9 | `parallel/test-source-map-api.js#block_00_it_should_throw_with_invalid_args`, `parallel/test-source-map-api.js#block_01_findsourcemap_should_return_undefined_when_no_source_map_is_`, `parallel/test-source-map-api.js#block_02_non_exceptional_case`, ... (+6) |
@@ -867,7 +866,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | ECDH key import/deriveKey compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-derivekey-ecdh.js` |
 | ECDSA key import/sign/verify compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-sign-verify-ecdsa.js` |
 | ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented | 1 | `parallel/test-vm-dynamic-import-callback-missing-flag.js` |
+| ESM compatibility shim still exposes CJS globals such as __filename and __dirname | 1 | `es-module/test-esm-forbidden-globals.mjs` |
 | ESM directory import errors do not match Node ERR_UNSUPPORTED_DIR_IMPORT behavior | 1 | `parallel/test-directory-import.js` |
+| ESM main lookup and error-url behavior still differ from Node's resolver | 1 | `es-module/test-esm-main-lookup.mjs` |
+| ESM resolver does not yet decode percent-encoded relative path segments like Node | 1 | `es-module/test-esm-encoded-path.mjs` |
+| ESM resolver does not yet preserve Node-compatible double-encoded path semantics | 1 | `es-module/test-esm-double-encoding.mjs` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
 | Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |
 | EventEmitter captureRejections option validation/behavior is incomplete | 1 | `parallel/test-event-capture-rejections.js` |
@@ -1077,6 +1080,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | diagnostics_channel runStores transformer-error propagation is incomplete | 1 | `parallel/test-diagnostics-channel-bind-store.js` |
 | diagnostics_channel subscriber-throw path does not surface uncaughtException handling like Node.js | 1 | `parallel/test-diagnostics-channel-safe-subscriber-errors.js` |
 | dns perf_hooks integration not implemented | 1 | `parallel/test-dns-perf_hooks.js` |
+| dns.promises.lookupService address validation does not yet match Node | 1 | `es-module/test-esm-dns-promises.mjs` |
 | dns.promises.lookupService is not implemented (returns ENOTIMP) | 1 | `parallel/test-dns-lookupService-promises.js` |
 | domain error propagation across node:http server/client callbacks is incomplete | 1 | `parallel/test-domain-multi.js` |
 | domain error/nextTick behavior depends on async_hooks semantics that are incomplete | 1 | `sequential/test-next-tick-error-spin.js` |
@@ -1115,6 +1119,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs symlink permission checks are incomplete | 1 | `parallel/test-permission-fs-symlink-relative.js` |
 | fs.constants includes Linux-only O_NOATIME even when common.isLinux is false in WASM | 1 | `parallel/test-process-constants-noatime.js` |
 | fs.globSync API is not implemented | 1 | `parallel/test-icu-env.js` |
+| fs.promises file APIs do not yet accept file URL path arguments consistently | 1 | `es-module/test-esm-fs-promises.mjs` |
 | fs.watch directory watcher filename/null and event delivery semantics are not Node-compatible | 1 | `sequential/test-fs-watch.js#block_02_block_02` |
 | fs.watch emits duplicate change events for a single write | 1 | `sequential/test-fs-watch.js#block_00_block_00` |
 | fs.watch path watcher emits duplicate change events | 1 | `sequential/test-fs-watch.js#block_01_block_01` |
@@ -1148,6 +1153,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | indexed property definitions on vm globals do not propagate to the sandbox | 1 | `parallel/test-vm-indexed-properties.js` |
 | inherited: Resolver#setLocalAddress validation/error behavior is not implemented | 1 | `parallel/test-dns-setlocaladdress.js#block_01_verify_that_setlocaladdress_throws_if_called_with_an_invalid` |
 | invalid EC private keys do not raise Node-compatible DataError | 1 | `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys` |
+| invalid ESM package specifier validation and error codes do not yet match Node | 1 | `es-module/test-esm-pkgname.mjs` |
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior | 1 | `parallel/test-http-no-read-no-dump.js` |
@@ -1165,6 +1171,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts | 1 | `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
+| newly tracked module coverage; same-process ESM behavior has not been triaged yet | 1 | `es-module/test-esm-snapshot.mjs` |
 | node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals | 1 | `parallel/test-timers-api-refs.js` |
 | node:http abort/destroy response lifecycle (aborted/error/close ordering) is incomplete | 1 | `parallel/test-http-abort-client.js` |
 | node:http client path does not honor/verify net.Socket connect noDelay semantics like Node | 1 | `parallel/test-http-nodelay.js` |
@@ -1253,6 +1260,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | runInNewContext sandbox binding and write-back semantics are incomplete | 1 | `parallel/test-vm-run-in-new-context.js` |
 | runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect | 1 | `parallel/test-vm-not-strict.js` |
 | same-component node:http client->server calls via wasi:http can deadlock in this scenario | 1 | `parallel/test-http-write-head-after-set-header.js` |
+| same-directory relative ESM import resolution differs in the node_compat split runner | 1 | `es-module/test-esm-basic-imports.mjs` |
 | sendBlockList connect path can crash in WASI UDP implementation | 1 | `parallel/test-dgram-blocklist.js#block_00_block_00` |
 | sendBlockList send() callback path is not Node-compatible and can hang | 1 | `parallel/test-dgram-blocklist.js#block_01_block_01` |
 | sequential path is stale in vendored suite; equivalent Upgrade timeout-disabling semantics are not Node-compatible | 1 | `sequential/test-http-server-request-timeout-upgrade.js` |

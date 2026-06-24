@@ -2881,7 +2881,22 @@ function runMain() {
     }
 }
 
-const moduleExports = {
+function Module(id, parent) {
+    this.id = id || '';
+    this.path = '';
+    this.exports = {};
+    this.filename = null;
+    this.loaded = false;
+    this.children = [];
+    this.paths = [];
+    this.parent = parent || null;
+}
+
+Module.prototype.require = function require(id) {
+    return globalRequire(id);
+};
+
+const moduleExports = Object.assign(Module, {
     require: globalRequire,
     createRequire,
     findPackageJSON,
@@ -2898,7 +2913,8 @@ const moduleExports = {
     _stat: _stat,
     globalPaths: globalPaths,
     setSourceMapsSupport,
-};
+});
+moduleExports.Module = Module;
 
 // Add self-reference so require('module') works
 builtinModuleMap['module'] = moduleExports;
