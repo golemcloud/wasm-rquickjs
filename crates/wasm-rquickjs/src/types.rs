@@ -718,23 +718,23 @@ fn get_wrapped_type_list(
 
         Ok(WrappedType {
             wrap: if wrap_is_identity {
-                TokenStreamWrapper::identity()
+                TokenStreamWrapper::new(move |ts| quote! { crate::wrappers::JsVec(#ts) })
             } else {
                 let wrapped_v = inner.wrap.run(quote! { v });
-                TokenStreamWrapper::new(
-                    move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
-                )
+                TokenStreamWrapper::new(move |ts| {
+                    quote! { crate::wrappers::JsVec(#ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>()) }
+                })
             },
             unwrap: if unwrap_is_identity {
-                TokenStreamWrapper::identity()
+                TokenStreamWrapper::new(move |ts| quote! { #ts.0 })
             } else {
                 let unwrapped_v = inner.unwrap.run(quote! { v });
-                TokenStreamWrapper::new(
-                    move |ts| quote! { #ts.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
-                )
+                TokenStreamWrapper::new(move |ts| {
+                    quote! { #ts.0.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() }
+                })
             },
             original_type_ref: ctx.original_type_ref,
-            wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
+            wrapped_type_ref: quote! { crate::wrappers::JsVec<#inner_wrapped_type_ref> },
         })
     }
 }

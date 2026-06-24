@@ -1,5 +1,5 @@
 use rquickjs::function::Args;
-use rquickjs::{Ctx, FromJs, IntoJs, Object, Value};
+use rquickjs::{Array, Ctx, FromJs, IntoJs, Object, Value};
 
 pub const TAG: &str = "tag";
 pub const VALUE: &str = "val";
@@ -71,6 +71,49 @@ impl_into_args!(
 impl_into_args!(
     A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z
 );
+
+#[allow(dead_code)]
+pub struct JsVec<T>(pub Vec<T>);
+
+impl<'js, T: IntoJs<'js>> IntoJs<'js> for JsVec<T> {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        let mut values = Vec::with_capacity(self.0.len());
+        for item in self.0 {
+            values.push(item.into_js(ctx)?);
+        }
+
+        let raw_values = values.iter().map(Value::as_raw).collect::<Vec<_>>();
+        let array = unsafe {
+            rquickjs::qjs::JS_NewArrayFrom(
+                ctx.as_raw().as_ptr(),
+                raw_values.len() as _,
+                raw_values.as_ptr(),
+            )
+        };
+
+        for value in values {
+            core::mem::forget(value);
+        }
+
+        if unsafe { rquickjs::qjs::JS_IsException(array) } {
+            Err(rquickjs::Error::Exception)
+        } else {
+            Ok(unsafe { Value::from_raw(ctx.clone(), array) })
+        }
+    }
+}
+
+impl<'js, T: FromJs<'js>> FromJs<'js> for JsVec<T> {
+    fn from_js(_ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let array = Array::from_value(value)?;
+        let len = array.len();
+        let mut result = Vec::with_capacity(len);
+        for idx in 0..len {
+            result.push(array.get(idx)?);
+        }
+        Ok(JsVec(result))
+    }
+}
 
 /// Wrapper for `Result` for implementing `IntoJs` and `FromJs` traits.
 ///

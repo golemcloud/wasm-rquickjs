@@ -354,7 +354,8 @@ fn generate_conversion_instances_for_type(
 
                     into_cases.push(quote! {
                         #type_path::#rust_ident(inner) => {
-                            obj.set(crate::wrappers::TAG, #case_name_lit)?;
+                            let case_tag = crate::internal::variant_case_tag(ctx, #case_name_lit)?;
+                            obj.set(crate::wrappers::TAG, case_tag)?;
                             let case_value: #wrapped_type = #wrapped_inner;
                             obj.set(crate::wrappers::VALUE, case_value)?;
                         }
@@ -369,7 +370,8 @@ fn generate_conversion_instances_for_type(
                 } else {
                     into_cases.push(quote! {
                         #type_path::#rust_ident => {
-                            obj.set(crate::wrappers::TAG, #case_name_lit)?;
+                            let case_tag = crate::internal::variant_case_tag(ctx, #case_name_lit)?;
+                            obj.set(crate::wrappers::TAG, case_tag)?;
                         }
                     });
 

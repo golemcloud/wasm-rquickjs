@@ -4,7 +4,7 @@ use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
-    Object, Persistent, Promise, Value, async_with,
+    Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
@@ -1587,6 +1587,7 @@ pub struct JsState {
     pub ctx: AsyncContext,
     pub exported_function_cache:
         RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
+    pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
     pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
@@ -1736,6 +1737,7 @@ impl JsState {
             rt,
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
+            variant_case_tag_cache: RefCell::new(HashMap::new()),
             last_resource_id,
             resource_drop_queue_tx,
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
@@ -2213,6 +2215,23 @@ fn get_cached_js_export<'js>(
     );
 
     (user_function, parent)
+}
+
+pub fn variant_case_tag<'js>(
+    ctx: &Ctx<'js>,
+    name: &'static str,
+) -> rquickjs::Result<JsString<'js>> {
+    let js_state = get_js_state();
+    if let Some(tag) = js_state.variant_case_tag_cache.borrow().get(name).cloned() {
+        return tag.restore(ctx);
+    }
+
+    let tag = JsString::from_str(ctx.clone(), name)?;
+    js_state
+        .variant_case_tag_cache
+        .borrow_mut()
+        .insert(name, Persistent::save(ctx, tag.clone()));
+    Ok(tag)
 }
 
 pub async fn call_js_resource_constructor<A>(
