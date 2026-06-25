@@ -212,6 +212,85 @@ export const testEsmInvalidPackageSpecifiers = async () => {
     }
 };
 
+export const testSyncBuiltinEsmExports = async () => {
+    try {
+        const module = await import('node:module');
+        const fsModule = await import('node:fs');
+        const eventsModule = await import('node:events');
+
+        const fs = fsModule.default;
+        const originalReadFile = fs.readFile;
+        const originalReadFileSync = fs.readFileSync;
+        const originalWriteFile = fs.writeFile;
+        const originalExistsSync = fs.existsSync;
+        const originalOpenAsBlob = fs.openAsBlob;
+        const replacementReadFile = function replacementReadFile() {};
+        const replacementReadFileSync = function replacementReadFileSync() {};
+        const replacementWriteFile = function replacementWriteFile() {};
+        const replacementExistsSync = function replacementExistsSync() {};
+        const replacementOpenAsBlob = function replacementOpenAsBlob() {};
+
+        fs.readFile = replacementReadFile;
+        fs.readFileSync = replacementReadFileSync;
+        fs.writeFile = replacementWriteFile;
+        fs.existsSync = replacementExistsSync;
+        fs.openAsBlob = replacementOpenAsBlob;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(fsModule.readFile, replacementReadFile);
+        assert.strictEqual(fsModule.readFileSync, replacementReadFileSync);
+        assert.strictEqual(fsModule.writeFile, replacementWriteFile);
+        assert.strictEqual(fsModule.existsSync, replacementExistsSync);
+        assert.strictEqual(fsModule.openAsBlob, replacementOpenAsBlob);
+
+        delete fs.readFile;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(fsModule.readFile, undefined);
+
+        fs.readFile = originalReadFile;
+        fs.readFileSync = originalReadFileSync;
+        fs.writeFile = originalWriteFile;
+        fs.existsSync = originalExistsSync;
+        fs.openAsBlob = originalOpenAsBlob;
+        module.syncBuiltinESMExports();
+
+        const events = eventsModule.default;
+        const originalDefaultMaxListeners = events.defaultMaxListeners;
+        const originalOnce = events.once;
+        const originalGetMaxListeners = events.getMaxListeners;
+        const replacementOnce = function replacementOnce() {};
+        const replacementGetMaxListeners = function replacementGetMaxListeners() {};
+        events.defaultMaxListeners = originalDefaultMaxListeners + 1;
+        events.once = replacementOnce;
+        events.getMaxListeners = replacementGetMaxListeners;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(eventsModule.defaultMaxListeners, originalDefaultMaxListeners + 1);
+        assert.strictEqual(eventsModule.once, replacementOnce);
+        assert.strictEqual(eventsModule.getMaxListeners, replacementGetMaxListeners);
+        events.defaultMaxListeners = originalDefaultMaxListeners;
+        events.once = originalOnce;
+        events.getMaxListeners = originalGetMaxListeners;
+        module.syncBuiltinESMExports();
+
+        const moduleDefault = module.default;
+        const originalSyncBuiltinESMExports = moduleDefault.syncBuiltinESMExports;
+        const originalCreateRequire = moduleDefault.createRequire;
+        const replacementSyncBuiltinESMExports = function replacementSyncBuiltinESMExports() {};
+        const replacementCreateRequire = function replacementCreateRequire() {};
+        moduleDefault.syncBuiltinESMExports = replacementSyncBuiltinESMExports;
+        moduleDefault.createRequire = replacementCreateRequire;
+        originalSyncBuiltinESMExports();
+        assert.strictEqual(module.syncBuiltinESMExports, replacementSyncBuiltinESMExports);
+        assert.strictEqual(module.createRequire, replacementCreateRequire);
+        moduleDefault.syncBuiltinESMExports = originalSyncBuiltinESMExports;
+        moduleDefault.createRequire = originalCreateRequire;
+        originalSyncBuiltinESMExports();
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDirectNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-named-export-app', { recursive: true });

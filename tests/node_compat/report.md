@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3129/4404 (71.0%)
+**Primary compatibility (CI-enforced):** 3130/4404 (71.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3129 | 71.0% | 54.7% | 45.7% |
-| 🧩 known gap | 1275 | 29.0% | 22.3% | 18.6% |
+| ✅ passing (runnable) | 3130 | 71.1% | 54.7% | 45.7% |
+| 🧩 known gap | 1274 | 28.9% | 22.3% | 18.6% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3129/5721 (54.7%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3130/5721 (54.7%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 130 | 172 | 85 | 11 | 0 | 183 | 43.0% | 32.7% |
+| other | 581 | 131 | 171 | 85 | 11 | 0 | 183 | 43.4% | 32.9% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1275)
+### known gap (1274)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -797,7 +797,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: process.getActiveResourcesInfo() is not implemented | 2 | `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`, `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01` |
 | inherited: queueMicrotask argument validation/error codes are incomplete | 2 | `parallel/test-queue-microtask.js#block_00_block_00`, `parallel/test-queue-microtask.js#block_01_block_01` |
 | inherited: requires perf_hooks.PerformanceObserver with net detail | 2 | `parallel/test-net-perf_hooks.js#block_00_block_00`, `parallel/test-net-perf_hooks.js#block_01_block_01` |
-| module.syncBuiltinESMExports is not implemented | 2 | `es-module/test-esm-live-binding.mjs`, `es-module/test-esm-named-exports.mjs` |
 | native rquickjs URL accessor descriptor function names are empty instead of Web IDL names like `get href` | 2 | `parallel/test-whatwg-url-properties.js#block_00_block_00`, `parallel/test-whatwg-url-properties.js#block_01_block_01` |
 | perf_hooks performance.timeOrigin/nodeTiming semantics are not Node-compatible | 2 | `sequential/test-perf-hooks.js#block_00_block_00`, `sequential/test-perf-hooks.js#block_01_block_01` |
 | perf_hooks resource timing buffer/full-event behavior is incomplete | 2 | `parallel/test-performance-resourcetimingbufferfull.js`, `parallel/test-performance-resourcetimingbuffersize.js` |
@@ -1240,6 +1239,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
+| requires loader pre-import fixture support for --import setup modules | 1 | `es-module/test-esm-named-exports.mjs` |
 | requires module.register loader hooks to synthesize virtual JSON modules | 1 | `es-module/test-esm-virtual-json.mjs` |
 | requires net.createServer with pauseOnConnect and socket.localPort; wasi:http does not expose socket-level properties | 1 | `parallel/test-http-agent-reuse-drained-socket-only.js` |
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |

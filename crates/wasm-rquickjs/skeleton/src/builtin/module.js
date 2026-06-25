@@ -2550,11 +2550,11 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
 // The global require, rooted at '/'
 const globalRequire = makeRequire('/', mainModule);
 
-export function require(id) {
+export let require = function require(id) {
     return globalRequire(id);
-}
+};
 
-export function createRequire(filename) {
+export let createRequire = function createRequire(filename) {
     let filepath;
     const isUrlObj = filename instanceof URL ||
         (filename !== null && typeof filename === 'object' &&
@@ -2594,7 +2594,7 @@ export function createRequire(filename) {
         paths: _nodeModulePaths(dir),
     };
     return makeRequire(dir, syntheticParent, filepath);
-}
+};
 
 function isUrlInstance(value) {
     return value instanceof URL ||
@@ -2722,7 +2722,7 @@ function findBarePackageJson(specifier, parentDir, parentFilename) {
     return undefined;
 }
 
-export function findPackageJSON(specifier, base) {
+export let findPackageJSON = function findPackageJSON(specifier, base) {
     const normalizedSpecifier = normalizeFindPackageJsonSpecifier(specifier);
     if (normalizedSpecifier.kind === 'absolute') {
         const startDir = packageSearchStartDir(normalizedSpecifier.path, normalizedSpecifier.source);
@@ -2737,13 +2737,13 @@ export function findPackageJSON(specifier, base) {
     }
 
     return findBarePackageJson(normalizedSpecifier.value, normalizedBase.dir, normalizedBase.filename);
-}
+};
 
-export { builtinModuleNames as builtinModules };
+export let builtinModules = builtinModuleNames;
 
-export function isBuiltinModule(id) {
+export let isBuiltinModule = function isBuiltinModule(id) {
     return isBuiltin(id);
-}
+};
 
 // "node_modules" reversed as char codes: s-e-l-u-d-o-m-_-e-d-o-n
 const nmChars = [115, 101, 108, 117, 100, 111, 109, 95, 101, 100, 111, 110];
@@ -2881,6 +2881,19 @@ function runMain() {
     }
 }
 
+export let syncBuiltinESMExports = function() {
+    const registry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+    if (!registry) return;
+    if (typeof registry.fs === 'function') registry.fs();
+    if (typeof registry.events === 'function') registry.events();
+    require = moduleExports.require;
+    createRequire = moduleExports.createRequire;
+    findPackageJSON = moduleExports.findPackageJSON;
+    builtinModules = moduleExports.builtinModules;
+    isBuiltinModule = moduleExports.isBuiltin;
+    syncBuiltinESMExports = moduleExports.syncBuiltinESMExports;
+};
+
 function Module(id, parent) {
     this.id = id || '';
     this.path = '';
@@ -2901,6 +2914,7 @@ const moduleExports = Object.assign(Module, {
     createRequire,
     findPackageJSON,
     builtinModules: builtinModuleNames,
+    syncBuiltinESMExports,
     isBuiltin: isBuiltinModule,
     wrap: wrap,
     wrapper: wrapper,

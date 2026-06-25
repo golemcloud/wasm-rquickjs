@@ -135,7 +135,7 @@ const HAS_LCHMOD = false;
 const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 const FILE_HANDLE_IN_USE_COUNT_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUseCount');
 
-export const constants = {
+export let constants = {
     F_OK, R_OK, W_OK, X_OK,
     O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NOCTTY,
     O_TRUNC, O_APPEND, O_DIRECTORY, O_NOATIME, O_NOFOLLOW,
@@ -583,7 +583,7 @@ internalFsBinding.readdir = function readdir(path, encoding, withFileTypes, req)
 
 // --- Stats class ---
 
-export function Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size, blocks, atimeMs, mtimeMs, ctimeMs, birthtimeMs) {
+export let Stats = function Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size, blocks, atimeMs, mtimeMs, ctimeMs, birthtimeMs) {
     if (!(this instanceof Stats)) {
         return new Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size, blocks, atimeMs, mtimeMs, ctimeMs, birthtimeMs);
     }
@@ -622,7 +622,7 @@ export function Stats(devOrObj, mode, nlink, uid, gid, rdev, blksize, ino, size,
     this._isFile = statObj.isFile;
     this._isDirectory = statObj.isDirectory;
     this._isSymlink = statObj.isSymlink;
-}
+};
 
 Stats.prototype._toBigInt = function() {
     const s = new Stats({
@@ -665,7 +665,7 @@ Stats.prototype.isSocket = function() { return false; };
 
 // --- Dirent class ---
 
-export class Dirent {
+export let Dirent = class Dirent {
     constructor(name, fileType, parentPath) {
         this.name = name;
         this.parentPath = parentPath;
@@ -680,11 +680,11 @@ export class Dirent {
     isCharacterDevice() { return this._fileType === UV_DIRENT_CHAR; }
     isFIFO() { return this._fileType === UV_DIRENT_FIFO; }
     isSocket() { return this._fileType === UV_DIRENT_SOCKET; }
-}
+};
 
 // --- Dir class ---
 
-export class Dir {
+export let Dir = class Dir {
     constructor(path, entries) {
         if (path === undefined) {
             const err = new TypeError('The "path" argument must be of type string. Received undefined');
@@ -814,7 +814,7 @@ export class Dir {
             }
         };
     }
-}
+};
 
 const validEncodings = new Set([
     'utf8', 'utf-8', 'ascii', 'base64', 'hex',
@@ -856,7 +856,7 @@ function decodeFileResult(bytes, encoding) {
 
 // --- Sync functions ---
 
-export function readFileSync(path, options) {
+export let readFileSync = function readFileSync(path, options) {
     if (typeof path !== 'number') validatePath(path);
     if (typeof options === 'string') {
         options = {encoding: options};
@@ -921,9 +921,9 @@ export function readFileSync(path, options) {
     } finally {
         closeSync(fd);
     }
-}
+};
 
-export function writeFileSync(path, data, options) {
+export let writeFileSync = function writeFileSync(path, data, options) {
     if (typeof path !== 'number') validatePath(path);
     if (typeof options === 'string') {
         options = {encoding: options};
@@ -973,9 +973,9 @@ export function writeFileSync(path, data, options) {
             }
         }
     }
-}
+};
 
-export function appendFileSync(path, data, options) {
+export let appendFileSync = function appendFileSync(path, data, options) {
     if (typeof path === 'number') {
         validateFd(path);
     } else {
@@ -1003,9 +1003,9 @@ export function appendFileSync(path, data, options) {
             }
         }
     }
-}
+};
 
-export function openSync(path, flags, mode) {
+export let openSync = function openSync(path, flags, mode) {
     validatePath(path);
     flags = flagsToNumber(flags !== undefined ? flags : 'r');
     mode = validateMode(mode, 'mode', 0o666);
@@ -1019,17 +1019,17 @@ export function openSync(path, flags, mode) {
         _notifyFSWatchers(fullPath, 'rename');
     }
     return result.fd;
-}
+};
 
-export function closeSync(fd) {
+export let closeSync = function closeSync(fd) {
     validateFd(fd);
     const error = native.fs_close(fd);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function readSync(fd, buffer, offsetOrOptions, length, position) {
+export let readSync = function readSync(fd, buffer, offsetOrOptions, length, position) {
     validateFd(fd);
     const argCount = arguments.length;
 
@@ -1089,9 +1089,9 @@ export function readSync(fd, buffer, offsetOrOptions, length, position) {
         buffer[offset + i] = src[i];
     }
     return bytesRead;
-}
+};
 
-export function writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, position) {
+export let writeSync = function writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, position) {
     validateFd(fd);
 
     if (typeof bufferOrString === 'string') {
@@ -1143,9 +1143,9 @@ export function writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding
         throw createSystemError(result.error);
     }
     return result.bytesWritten;
-}
+};
 
-export function ftruncateSync(fd, len) {
+export let ftruncateSync = function ftruncateSync(fd, len) {
     validateFd(fd);
     if (len === undefined) {
         len = 0;
@@ -1156,25 +1156,25 @@ export function ftruncateSync(fd, len) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function fsyncSync(fd) {
+export let fsyncSync = function fsyncSync(fd) {
     validateFd(fd);
     const error = native.fs_fsync(fd);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function fdatasyncSync(fd) {
+export let fdatasyncSync = function fdatasyncSync(fd) {
     validateFd(fd);
     const error = native.fs_fdatasync(fd);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function statSync(path, options) {
+export let statSync = function statSync(path, options) {
     validatePath(path);
     const result = native.fs_stat(pathToString(path));
     if (result.error) {
@@ -1185,9 +1185,9 @@ export function statSync(path, options) {
     }
     const s = new Stats(result.stat);
     return (options && options.bigint) ? s._toBigInt() : s;
-}
+};
 
-export function lstatSync(path, options) {
+export let lstatSync = function lstatSync(path, options) {
     validatePath(path);
     const result = native.fs_lstat(pathToString(path));
     if (result.error) {
@@ -1198,9 +1198,9 @@ export function lstatSync(path, options) {
     }
     const s = new Stats(result.stat);
     return (options && options.bigint) ? s._toBigInt() : s;
-}
+};
 
-export function fstatSync(fd, options) {
+export let fstatSync = function fstatSync(fd, options) {
     validateFd(fd);
     const result = native.fs_fstat(fd);
     if (result.error) {
@@ -1208,7 +1208,7 @@ export function fstatSync(fd, options) {
     }
     const s = new Stats(result.stat);
     return (options && options.bigint) ? s._toBigInt() : s;
-}
+};
 
 function makeStatFsResult(bigint) {
     if (bigint) {
@@ -1233,16 +1233,16 @@ function makeStatFsResult(bigint) {
     };
 }
 
-export function statfsSync(path, options) {
+export let statfsSync = function statfsSync(path, options) {
     validatePath(path);
     const result = native.fs_stat(pathToString(path));
     if (result.error) {
         throw createSystemError(result.error);
     }
     return makeStatFsResult(options && options.bigint);
-}
+};
 
-export function readdirSync(path, options) {
+export let readdirSync = function readdirSync(path, options) {
     validatePath(path);
     const opts = getOptions(options, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
@@ -1289,25 +1289,25 @@ export function readdirSync(path, options) {
         return entries.map(e => getBuffer().from(e));
     }
     return entries;
-}
+};
 
-export function accessSync(path, mode) {
+export let accessSync = function accessSync(path, mode) {
     validatePath(path);
     mode = mode !== undefined ? mode : F_OK;
     const error = native.fs_access(pathToString(path), mode);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function existsSync(path) {
+export let existsSync = function existsSync(path) {
     try {
         if (typeof path !== 'string') return false;
         return native.fs_exists(path);
     } catch {
         return false;
     }
-}
+};
 
 function realpathSyncImpl(path, options, useNative) {
     validatePath(path);
@@ -1336,9 +1336,9 @@ function realpathSyncImpl(path, options, useNative) {
     return result.result;
 }
 
-export function realpathSync(path, options) {
+export let realpathSync = function realpathSync(path, options) {
     return realpathSyncImpl(path, options, false);
-}
+};
 
 function realpathSyncNative(path, options) {
     return realpathSyncImpl(path, options, true);
@@ -1346,7 +1346,7 @@ function realpathSyncNative(path, options) {
 
 realpathSync.native = realpathSyncNative;
 
-export function truncateSync(path, len) {
+export let truncateSync = function truncateSync(path, len) {
     if (typeof path === 'number') {
         return ftruncateSync(path, len);
     }
@@ -1360,9 +1360,9 @@ export function truncateSync(path, len) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function copyFileSync(src, dest, mode) {
+export let copyFileSync = function copyFileSync(src, dest, mode) {
     validatePath(src, 'src');
     validatePath(dest, 'dest');
     const copyMode = validateCopyFileMode(mode);
@@ -1384,27 +1384,27 @@ export function copyFileSync(src, dest, mode) {
         throw createCopyFileErrorFromNative(error, srcPath, destPath);
     }
     _notifyFSWatchers(destPath, 'rename');
-}
+};
 
-export function linkSync(existingPath, newPath) {
+export let linkSync = function linkSync(existingPath, newPath) {
     validatePath(existingPath, 'existingPath');
     validatePath(newPath, 'newPath');
     const error = native.fs_link(existingPath, newPath);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function symlinkSync(target, path, type) {
+export let symlinkSync = function symlinkSync(target, path, type) {
     validatePath(target, 'target');
     validatePath(path, 'path');
     const error = native.fs_symlink(target, path);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function readlinkSync(path, options) {
+export let readlinkSync = function readlinkSync(path, options) {
     validatePath(path);
     const opts = getOptions(options, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
@@ -1417,31 +1417,31 @@ export function readlinkSync(path, options) {
         return getBuffer().from(result.result);
     }
     return result.result;
-}
+};
 
-export function chmodSync(path, mode) {
+export let chmodSync = function chmodSync(path, mode) {
     validatePath(path);
     mode = validateMode(mode, 'mode', undefined);
     const error = native.fs_chmod(path, mode);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function fchmodSync(fd, mode) {
+export let fchmodSync = function fchmodSync(fd, mode) {
     validateFd(fd);
     mode = validateMode(mode, 'mode', undefined);
     const error = native.fs_fchmod(fd, mode);
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function lchmodSync(path, mode) {
+export let lchmodSync = function lchmodSync(path, mode) {
     chmodSync(path, mode);
-}
+};
 
-export function chownSync(path, uid, gid) {
+export let chownSync = function chownSync(path, uid, gid) {
     validatePath(path);
     validateUid(uid, 'uid');
     validateUid(gid, 'gid');
@@ -1449,9 +1449,9 @@ export function chownSync(path, uid, gid) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function fchownSync(fd, uid, gid) {
+export let fchownSync = function fchownSync(fd, uid, gid) {
     validateFd(fd);
     validateUid(uid, 'uid');
     validateUid(gid, 'gid');
@@ -1459,9 +1459,9 @@ export function fchownSync(fd, uid, gid) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function lchownSync(path, uid, gid) {
+export let lchownSync = function lchownSync(path, uid, gid) {
     validatePath(path);
     validateUid(uid, 'uid');
     validateUid(gid, 'gid');
@@ -1469,9 +1469,9 @@ export function lchownSync(path, uid, gid) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function utimesSync(path, atime, mtime) {
+export let utimesSync = function utimesSync(path, atime, mtime) {
     validatePath(path);
     const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
     const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
@@ -1479,9 +1479,9 @@ export function utimesSync(path, atime, mtime) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function futimesSync(fd, atime, mtime) {
+export let futimesSync = function futimesSync(fd, atime, mtime) {
     validateFd(fd);
     const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
     const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
@@ -1489,9 +1489,9 @@ export function futimesSync(fd, atime, mtime) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function lutimesSync(path, atime, mtime) {
+export let lutimesSync = function lutimesSync(path, atime, mtime) {
     validatePath(path);
     const atimeSecs = (atime instanceof Date) ? atime.getTime() / 1000 : Number(atime);
     const mtimeSecs = (mtime instanceof Date) ? mtime.getTime() / 1000 : Number(mtime);
@@ -1499,9 +1499,9 @@ export function lutimesSync(path, atime, mtime) {
     if (error) {
         throw createSystemError(error);
     }
-}
+};
 
-export function unlinkSync(path) {
+export let unlinkSync = function unlinkSync(path) {
     validatePath(path);
     const fullPath = pathToString(path);
     const error = native.unlink(fullPath);
@@ -1509,9 +1509,9 @@ export function unlinkSync(path) {
         throw createSystemError(error);
     }
     _notifyFSWatchers(fullPath, 'rename');
-}
+};
 
-export function renameSync(oldPath, newPath) {
+export let renameSync = function renameSync(oldPath, newPath) {
     validatePath(oldPath, 'oldPath');
     validatePath(newPath, 'newPath');
     const oldPathString = pathToString(oldPath);
@@ -1522,9 +1522,9 @@ export function renameSync(oldPath, newPath) {
     }
     _notifyFSWatchers(oldPathString, 'rename');
     _notifyFSWatchers(newPathString, 'rename');
-}
+};
 
-export function mkdirSync(path, options) {
+export let mkdirSync = function mkdirSync(path, options) {
     validatePath(path);
     const { recursive, mode } = parseMkdirOptions(options);
     const pathString = pathToString(path);
@@ -1537,7 +1537,7 @@ export function mkdirSync(path, options) {
     _notifyFSWatchers(pathString, 'rename');
     if (recursive) return firstCreatedPath;
     return undefined;
-}
+};
 
 function _rimrafSync(dirPath) {
     const entries = readdirSync(dirPath, { withFileTypes: true });
@@ -1553,7 +1553,7 @@ function _rimrafSync(dirPath) {
     _default.rmdirSync(dirPath);
 }
 
-export function rmdirSync(path, options) {
+export let rmdirSync = function rmdirSync(path, options) {
     validatePath(path);
     if (options && options.recursive) {
         path = pathToString(path);
@@ -1576,9 +1576,9 @@ export function rmdirSync(path, options) {
         if (error) throw createSystemError(error);
         _notifyFSWatchers(pathString, 'rename');
     }
-}
+};
 
-export function rmSync(path, options) {
+export let rmSync = function rmSync(path, options) {
     validatePath(path);
     path = pathToString(path);
     const recursive = options && options.recursive || false;
@@ -1588,9 +1588,9 @@ export function rmSync(path, options) {
         throw createSystemError(error);
     }
     _notifyFSWatchers(path, 'rename');
-}
+};
 
-export function mkdtempSync(prefix, options) {
+export let mkdtempSync = function mkdtempSync(prefix, options) {
     validateMkdtempPrefix(prefix);
     const opts = getOptions(options, {});
     if (opts.encoding) validateEncoding(opts.encoding, 'encoding', true);
@@ -1603,19 +1603,19 @@ export function mkdtempSync(prefix, options) {
         return getBuffer().from(result.result);
     }
     return result.result;
-}
+};
 
-export function opendirSync(path, options) {
+export let opendirSync = function opendirSync(path, options) {
     validatePath(path);
     validateOpendirOptions(options);
     const recursive = options && options.recursive ? true : false;
     const entries = readdirSync(path, { withFileTypes: true, recursive });
     return new Dir(path, entries);
-}
+};
 
 // --- Callback (async) functions ---
 
-export function readFile(path, optionsOrCallback, callback) {
+export let readFile = function readFile(path, optionsOrCallback, callback) {
     if (typeof path !== 'number') validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -1665,9 +1665,9 @@ export function readFile(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function writeFile(path, data, optionsOrCallback, callback) {
+export let writeFile = function writeFile(path, data, optionsOrCallback, callback) {
     if (typeof path !== 'number') validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -1725,9 +1725,9 @@ export function writeFile(path, data, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function appendFile(path, data, optionsOrCallback, callback) {
+export let appendFile = function appendFile(path, data, optionsOrCallback, callback) {
     if (typeof path === 'number') {
         validateFd(path);
     } else {
@@ -1770,9 +1770,9 @@ export function appendFile(path, data, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function open(path, flagsOrCallback, modeOrCallback, callback) {
+export let open = function open(path, flagsOrCallback, modeOrCallback, callback) {
     validatePath(path);
     let flags = 'r';
     let mode = 0o666;
@@ -1805,9 +1805,9 @@ export function open(path, flagsOrCallback, modeOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function close(fd, callback) {
+export let close = function close(fd, callback) {
     validateFd(fd);
     if (callback !== undefined && typeof callback !== 'function') {
         const err = new TypeError(`The "callback" argument must be of type function. Received ${describeType(callback)}`);
@@ -1826,9 +1826,9 @@ export function close(fd, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function read(fd, bufferOrOptions, offsetOrCallback, length, position, callback) {
+export let read = function read(fd, bufferOrOptions, offsetOrCallback, length, position, callback) {
     validateFd(fd);
     let buffer, offset, cb;
 
@@ -1919,9 +1919,9 @@ export function read(fd, bufferOrOptions, offsetOrCallback, length, position, ca
             cb(err, 0, buffer);
         }
     });
-}
+};
 
-export function write(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, positionOrCallback, callback) {
+export let write = function write(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, positionOrCallback, callback) {
     validateFd(fd);
     let cb;
     if (typeof bufferOrString === 'string') {
@@ -2052,9 +2052,9 @@ export function write(fd, bufferOrString, offsetOrPosition, lengthOrEncoding, po
             cb(err, 0, bufferOrString);
         }
     });
-}
+};
 
-export function stat(path, optionsOrCallback, callback) {
+export let stat = function stat(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2070,9 +2070,9 @@ export function stat(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function lstat(path, optionsOrCallback, callback) {
+export let lstat = function lstat(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2088,9 +2088,9 @@ export function lstat(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function statfs(path, optionsOrCallback, callback) {
+export let statfs = function statfs(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2106,9 +2106,9 @@ export function statfs(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function fstat(fd, optionsOrCallback, callback) {
+export let fstat = function fstat(fd, optionsOrCallback, callback) {
     validateFd(fd);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2124,9 +2124,9 @@ export function fstat(fd, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function ftruncate(fd, lenOrCallback, callback) {
+export let ftruncate = function ftruncate(fd, lenOrCallback, callback) {
     validateFd(fd);
     let len = 0;
     let cb;
@@ -2148,9 +2148,9 @@ export function ftruncate(fd, lenOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function fsync(fd, callback) {
+export let fsync = function fsync(fd, callback) {
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -2160,9 +2160,9 @@ export function fsync(fd, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function fdatasync(fd, callback) {
+export let fdatasync = function fdatasync(fd, callback) {
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -2172,9 +2172,9 @@ export function fdatasync(fd, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function readdir(path, optionsOrCallback, callback) {
+export let readdir = function readdir(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2259,9 +2259,9 @@ export function readdir(path, optionsOrCallback, callback) {
         }
     };
     internalFsBinding.readdir(pathStr, opts.encoding, withFileTypes, req);
-}
+};
 
-export function access(path, modeOrCallback, callback) {
+export let access = function access(path, modeOrCallback, callback) {
     validatePath(path);
     let mode = F_OK;
     let cb;
@@ -2280,9 +2280,9 @@ export function access(path, modeOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function exists(path, callback) {
+export let exists = function exists(path, callback) {
     if (typeof callback !== 'function') {
         throw Object.assign(
             new TypeError(`Callback must be a function. Received ${typeof callback}`),
@@ -2292,9 +2292,9 @@ export function exists(path, callback) {
     queueMicrotask(() => {
         callback(existsSync(path));
     });
-}
+};
 
-export function realpath(path, optionsOrCallback, callback) {
+export let realpath = function realpath(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2322,7 +2322,7 @@ export function realpath(path, optionsOrCallback, callback) {
             }
         });
     }
-}
+};
 
 function realpathNative(path, optionsOrCallback, callback) {
     validatePath(path);
@@ -2346,7 +2346,7 @@ function realpathNative(path, optionsOrCallback, callback) {
 
 realpath.native = realpathNative;
 
-export function truncate(path, lenOrCallback, callback) {
+export let truncate = function truncate(path, lenOrCallback, callback) {
     if (typeof path === 'number') {
         return ftruncate(path, lenOrCallback, callback);
     }
@@ -2371,9 +2371,9 @@ export function truncate(path, lenOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function copyFile(src, dest, modeOrCallback, callback) {
+export let copyFile = function copyFile(src, dest, modeOrCallback, callback) {
     validatePath(src, 'src');
     validatePath(dest, 'dest');
     let mode = 0;
@@ -2393,9 +2393,9 @@ export function copyFile(src, dest, modeOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function link(existingPath, newPath, callback) {
+export let link = function link(existingPath, newPath, callback) {
     validatePath(existingPath, 'existingPath');
     validatePath(newPath, 'newPath');
     validateCallback(callback);
@@ -2407,9 +2407,9 @@ export function link(existingPath, newPath, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function symlink(target, path, typeOrCallback, callback) {
+export let symlink = function symlink(target, path, typeOrCallback, callback) {
     validatePath(target, 'target');
     validatePath(path, 'path');
     let cb;
@@ -2427,9 +2427,9 @@ export function symlink(target, path, typeOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function readlink(path, optionsOrCallback, callback) {
+export let readlink = function readlink(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2447,9 +2447,9 @@ export function readlink(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function chmod(path, mode, callback) {
+export let chmod = function chmod(path, mode, callback) {
     validatePath(path);
     validateCallback(callback);
     queueMicrotask(() => {
@@ -2460,9 +2460,9 @@ export function chmod(path, mode, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function fchmod(fd, mode, callback) {
+export let fchmod = function fchmod(fd, mode, callback) {
     validateFd(fd);
     mode = validateMode(mode, 'mode', undefined);
     validateCallback(callback);
@@ -2474,9 +2474,9 @@ export function fchmod(fd, mode, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function lchmod(path, mode, callback) {
+export let lchmod = function lchmod(path, mode, callback) {
     validateCallback(callback);
     queueMicrotask(() => {
         try {
@@ -2486,9 +2486,9 @@ export function lchmod(path, mode, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function chown(path, uid, gid, callback) {
+export let chown = function chown(path, uid, gid, callback) {
     validatePath(path);
     validateUid(uid, 'uid');
     validateUid(gid, 'gid');
@@ -2501,9 +2501,9 @@ export function chown(path, uid, gid, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function fchown(fd, uid, gid, callback) {
+export let fchown = function fchown(fd, uid, gid, callback) {
     validateFd(fd);
     validateUid(uid, 'uid');
     validateUid(gid, 'gid');
@@ -2516,9 +2516,9 @@ export function fchown(fd, uid, gid, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function lchown(path, uid, gid, callback) {
+export let lchown = function lchown(path, uid, gid, callback) {
     validatePath(path);
     validateUid(uid, 'uid');
     validateUid(gid, 'gid');
@@ -2531,9 +2531,9 @@ export function lchown(path, uid, gid, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function utimes(path, atime, mtime, callback) {
+export let utimes = function utimes(path, atime, mtime, callback) {
     validatePath(path);
     validateCallback(callback);
     queueMicrotask(() => {
@@ -2544,9 +2544,9 @@ export function utimes(path, atime, mtime, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function futimes(fd, atime, mtime, callback) {
+export let futimes = function futimes(fd, atime, mtime, callback) {
     validateFd(fd);
     validateCallback(callback);
     queueMicrotask(() => {
@@ -2557,9 +2557,9 @@ export function futimes(fd, atime, mtime, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function lutimes(path, atime, mtime, callback) {
+export let lutimes = function lutimes(path, atime, mtime, callback) {
     validatePath(path);
     validateCallback(callback);
     queueMicrotask(() => {
@@ -2570,9 +2570,9 @@ export function lutimes(path, atime, mtime, callback) {
             callback(err);
         }
     });
-}
+};
 
-export function unlink(path, callback) {
+export let unlink = function unlink(path, callback) {
     validatePath(path);
     validateCallback(callback);
     const error = native.unlink(pathToString(path));
@@ -2581,9 +2581,9 @@ export function unlink(path, callback) {
     } else {
         queueMicrotask(() => callback(null));
     }
-}
+};
 
-export function rename(oldPath, newPath, callback) {
+export let rename = function rename(oldPath, newPath, callback) {
     validatePath(oldPath, 'oldPath');
     validatePath(newPath, 'newPath');
     validateCallback(callback);
@@ -2595,9 +2595,9 @@ export function rename(oldPath, newPath, callback) {
     } else {
         queueMicrotask(() => callback(null));
     }
-}
+};
 
-export function mkdir(path, optionsOrCallback, callback) {
+export let mkdir = function mkdir(path, optionsOrCallback, callback) {
     validatePath(path);
     let cb;
     let options;
@@ -2622,9 +2622,9 @@ export function mkdir(path, optionsOrCallback, callback) {
             cb(null, recursive ? firstCreatedPath : undefined);
         }
     });
-}
+};
 
-export function rmdir(path, optionsOrCallback, callback) {
+export let rmdir = function rmdir(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2640,9 +2640,9 @@ export function rmdir(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function rm(path, optionsOrCallback, callback) {
+export let rm = function rm(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2658,9 +2658,9 @@ export function rm(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function mkdtemp(prefix, optionsOrCallback, callback) {
+export let mkdtemp = function mkdtemp(prefix, optionsOrCallback, callback) {
     validateMkdtempPrefix(prefix);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2678,9 +2678,9 @@ export function mkdtemp(prefix, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
-export function opendir(path, optionsOrCallback, callback) {
+export let opendir = function opendir(path, optionsOrCallback, callback) {
     validatePath(path);
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
@@ -2697,7 +2697,7 @@ export function opendir(path, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
 // --- FSWatcher (polling-based, since WASI has no native inotify/kqueue) ---
 // Synchronous notification registry: mutating fs operations notify active watchers
@@ -2747,7 +2747,7 @@ function _snapshotDir(dir, recursive) {
     return entries;
 }
 
-export class FSWatcher {
+export let FSWatcher = class FSWatcher {
     constructor() {
         this._listeners = {};
         this._timer = null;
@@ -2864,7 +2864,7 @@ export class FSWatcher {
         if (this._timer && typeof this._timer.unref === 'function') this._timer.unref();
         return this;
     }
-}
+};
 
 const _statWatchers = new Map();
 
@@ -2885,7 +2885,7 @@ function _tryStat(filename) {
     return new Stats(result.stat);
 }
 
-export class StatWatcher {
+export let StatWatcher = class StatWatcher {
     constructor() {
         this._eventListeners = {};
         this._timer = null;
@@ -2966,9 +2966,9 @@ export class StatWatcher {
         if (this._timer) this._timer.unref();
         return this;
     }
-}
+};
 
-export function watch(filename, optionsOrListener, listener) {
+export let watch = function watch(filename, optionsOrListener, listener) {
     validatePath(filename, 'filename');
     if (typeof optionsOrListener === 'function') {
         listener = optionsOrListener;
@@ -3008,9 +3008,9 @@ export function watch(filename, optionsOrListener, listener) {
     }
 
     return watcher;
-}
+};
 
-export function watchFile(filename, optionsOrListener, listener) {
+export let watchFile = function watchFile(filename, optionsOrListener, listener) {
     validatePath(filename, 'filename');
     filename = pathToString(filename);
 
@@ -3033,9 +3033,9 @@ export function watchFile(filename, optionsOrListener, listener) {
     }
     watcher.addListener('change', listener);
     return watcher;
-}
+};
 
-export function unwatchFile(filename, listener) {
+export let unwatchFile = function unwatchFile(filename, listener) {
     validatePath(filename, 'filename');
     filename = pathToString(filename);
     const watcher = _statWatchers.get(filename);
@@ -3051,13 +3051,13 @@ export function unwatchFile(filename, listener) {
         watcher.stop();
         _statWatchers.delete(filename);
     }
-}
+};
 
 // --- ReadStream / WriteStream ---
 
 let _readStreamProtoInited = false;
 
-export function ReadStream(path, options) {
+export let ReadStream = function ReadStream(path, options) {
     if (!(this instanceof ReadStream)) return new ReadStream(path, options);
 
     if (options !== undefined && options !== null && typeof options !== 'object' && typeof options !== 'string') {
@@ -3193,7 +3193,7 @@ export function ReadStream(path, options) {
             if (!self.destroyed) self.destroy();
         });
     }
-}
+};
 
 ReadStream.prototype._construct = function(callback) {
     if (typeof this.fd === 'number') {
@@ -3360,7 +3360,7 @@ Object.defineProperty(ReadStream.prototype, 'closed', {
 
 let _writeStreamProtoInited = false;
 
-export function WriteStream(path, options) {
+export let WriteStream = function WriteStream(path, options) {
     if (!(this instanceof WriteStream)) return new WriteStream(path, options);
 
     if (options !== undefined && options !== null && typeof options !== 'object' && typeof options !== 'string') {
@@ -3463,7 +3463,7 @@ export function WriteStream(path, options) {
             if (!self.destroyed) self.destroy();
         });
     }
-}
+};
 
 WriteStream.prototype._construct = function(callback) {
     if (typeof this.fd === 'number') {
@@ -3618,17 +3618,17 @@ Object.defineProperty(WriteStream.prototype, 'closed', {
     configurable: true
 });
 
-export function createReadStream(path, options) {
+export let createReadStream = function createReadStream(path, options) {
     return new ReadStream(path, options);
-}
+};
 
-export function createWriteStream(path, options) {
+export let createWriteStream = function createWriteStream(path, options) {
     return new WriteStream(path, options);
-}
+};
 
 // --- readv/writev stubs ---
 
-export function readv(fd, buffers, positionOrCallback, callback) {
+export let readv = function readv(fd, buffers, positionOrCallback, callback) {
     validateFd(fd);
     let position = null;
     let cb;
@@ -3666,9 +3666,9 @@ export function readv(fd, buffers, positionOrCallback, callback) {
             cb(err, 0, buffers);
         }
     });
-}
+};
 
-export function writev(fd, buffers, positionOrCallback, callback) {
+export let writev = function writev(fd, buffers, positionOrCallback, callback) {
     validateFd(fd);
     let position = null;
     let cb;
@@ -3704,9 +3704,9 @@ export function writev(fd, buffers, positionOrCallback, callback) {
             cb(err, 0, buffers);
         }
     });
-}
+};
 
-export function readvSync(fd, buffers, position) {
+export let readvSync = function readvSync(fd, buffers, position) {
     validateFd(fd);
     if (!Array.isArray(buffers)) {
         const err = new TypeError('The "buffers" argument must be an instance of Array. Received ' + describeType(buffers));
@@ -3730,9 +3730,9 @@ export function readvSync(fd, buffers, position) {
         if (bytesRead < buf.byteLength) break;
     }
     return totalRead;
-}
+};
 
-export function writevSync(fd, buffers, position) {
+export let writevSync = function writevSync(fd, buffers, position) {
     validateFd(fd);
     if (!Array.isArray(buffers)) {
         const err = new TypeError('The "buffers" argument must be an instance of Array. Received ' + describeType(buffers));
@@ -3754,11 +3754,11 @@ export function writevSync(fd, buffers, position) {
         if (pos !== null) pos += written;
     }
     return totalWritten;
-}
+};
 
 // --- cp stub ---
 
-export function cpSync(src, dest, options) {
+export let cpSync = function cpSync(src, dest, options) {
     const recursive = options && options.recursive;
     const srcStat = statSync(src);
     if (srcStat.isDirectory()) {
@@ -3778,9 +3778,9 @@ export function cpSync(src, dest, options) {
     } else {
         copyFileSync(src, dest);
     }
-}
+};
 
-export function cp(src, dest, optionsOrCallback, callback) {
+export let cp = function cp(src, dest, optionsOrCallback, callback) {
     if (typeof optionsOrCallback === 'function') {
         callback = optionsOrCallback;
         optionsOrCallback = {};
@@ -3795,7 +3795,7 @@ export function cp(src, dest, optionsOrCallback, callback) {
             cb(err);
         }
     });
-}
+};
 
 // --- util.promisify support ---
 
@@ -3981,11 +3981,11 @@ class FileBackedBlobSlice {
     }
 }
 
-export async function openAsBlob(path, options) {
+export let openAsBlob = async function openAsBlob(path, options) {
     validatePath(path);
     const st = statSync(path);
     return new FileBackedBlob(pathToString(path), st.size, st.mtimeMs);
-}
+};
 
 // Expose the symbol for structuredClone integration
 export { _kFileBackedBlob };
@@ -3993,7 +3993,7 @@ export { _kFileBackedBlob };
 // Named re-export so `import { promises } from 'node:fs'` works.
 // We cannot call getPromises() at module evaluation time because `require` is
 // not yet available, so we export a proxy object that lazily delegates.
-export const promises = new Proxy({}, {
+export let promises = new Proxy({}, {
     get(_, prop) { return getPromises()[prop]; },
     set(_, prop, value) { getPromises()[prop] = value; return true; },
     has(_, prop) { return prop in getPromises(); },
@@ -4003,7 +4003,7 @@ export const promises = new Proxy({}, {
 
 // --- Internal helpers ---
 
-export function _toUnixTimestamp(time, name = 'time') {
+export let _toUnixTimestamp = function _toUnixTimestamp(time, name = 'time') {
     if (typeof time === 'string' && +time == time) {
         return +time;
     }
@@ -4017,7 +4017,7 @@ export function _toUnixTimestamp(time, name = 'time') {
         return time.getTime() / 1000;
     }
     throw new ERR_INVALID_ARG_TYPE(name, ['Date', 'Time in seconds'], time);
-}
+};
 
 // --- Default export ---
 
@@ -4124,6 +4124,115 @@ const _default = {
     cp,
     openAsBlob,
     _toUnixTimestamp,
+};
+
+const _syncBuiltinESMExportsRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports ||
+    Object.defineProperty(globalThis, '__wasm_rquickjs_sync_builtin_esm_exports', {
+        value: Object.create(null),
+        configurable: true,
+    }).__wasm_rquickjs_sync_builtin_esm_exports;
+
+_syncBuiltinESMExportsRegistry.fs = function syncFsBuiltinESMExports() {
+    constants = _default.constants;
+    Stats = _default.Stats;
+    Dirent = _default.Dirent;
+    Dir = _default.Dir;
+    FSWatcher = _default.FSWatcher;
+    StatWatcher = _default.StatWatcher;
+    readFileSync = _default.readFileSync;
+    writeFileSync = _default.writeFileSync;
+    appendFileSync = _default.appendFileSync;
+    openSync = _default.openSync;
+    closeSync = _default.closeSync;
+    readSync = _default.readSync;
+    writeSync = _default.writeSync;
+    ftruncateSync = _default.ftruncateSync;
+    fsyncSync = _default.fsyncSync;
+    fdatasyncSync = _default.fdatasyncSync;
+    statSync = _default.statSync;
+    lstatSync = _default.lstatSync;
+    fstatSync = _default.fstatSync;
+    statfsSync = _default.statfsSync;
+    readdirSync = _default.readdirSync;
+    accessSync = _default.accessSync;
+    existsSync = _default.existsSync;
+    realpathSync = _default.realpathSync;
+    truncateSync = _default.truncateSync;
+    copyFileSync = _default.copyFileSync;
+    linkSync = _default.linkSync;
+    symlinkSync = _default.symlinkSync;
+    readlinkSync = _default.readlinkSync;
+    chmodSync = _default.chmodSync;
+    fchmodSync = _default.fchmodSync;
+    lchmodSync = _default.lchmodSync;
+    chownSync = _default.chownSync;
+    fchownSync = _default.fchownSync;
+    lchownSync = _default.lchownSync;
+    utimesSync = _default.utimesSync;
+    futimesSync = _default.futimesSync;
+    lutimesSync = _default.lutimesSync;
+    unlinkSync = _default.unlinkSync;
+    renameSync = _default.renameSync;
+    mkdirSync = _default.mkdirSync;
+    rmdirSync = _default.rmdirSync;
+    rmSync = _default.rmSync;
+    mkdtempSync = _default.mkdtempSync;
+    opendirSync = _default.opendirSync;
+    readFile = _default.readFile;
+    writeFile = _default.writeFile;
+    appendFile = _default.appendFile;
+    open = _default.open;
+    close = _default.close;
+    read = _default.read;
+    write = _default.write;
+    stat = _default.stat;
+    lstat = _default.lstat;
+    statfs = _default.statfs;
+    fstat = _default.fstat;
+    ftruncate = _default.ftruncate;
+    fsync = _default.fsync;
+    fdatasync = _default.fdatasync;
+    readdir = _default.readdir;
+    access = _default.access;
+    exists = _default.exists;
+    realpath = _default.realpath;
+    truncate = _default.truncate;
+    copyFile = _default.copyFile;
+    link = _default.link;
+    symlink = _default.symlink;
+    readlink = _default.readlink;
+    chmod = _default.chmod;
+    fchmod = _default.fchmod;
+    lchmod = _default.lchmod;
+    chown = _default.chown;
+    fchown = _default.fchown;
+    lchown = _default.lchown;
+    utimes = _default.utimes;
+    futimes = _default.futimes;
+    lutimes = _default.lutimes;
+    unlink = _default.unlink;
+    rename = _default.rename;
+    mkdir = _default.mkdir;
+    rmdir = _default.rmdir;
+    rm = _default.rm;
+    mkdtemp = _default.mkdtemp;
+    opendir = _default.opendir;
+    watch = _default.watch;
+    watchFile = _default.watchFile;
+    unwatchFile = _default.unwatchFile;
+    ReadStream = _default.ReadStream;
+    WriteStream = _default.WriteStream;
+    createReadStream = _default.createReadStream;
+    createWriteStream = _default.createWriteStream;
+    readv = _default.readv;
+    writev = _default.writev;
+    readvSync = _default.readvSync;
+    writevSync = _default.writevSync;
+    cpSync = _default.cpSync;
+    cp = _default.cp;
+    openAsBlob = _default.openAsBlob;
+    promises = _default.promises;
+    _toUnixTimestamp = _default._toUnixTimestamp;
 };
 
 export default _default;
