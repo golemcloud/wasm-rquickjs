@@ -5974,7 +5974,7 @@
       }
     },
     "es-module/test-require-node-modules-warning.js": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --trace-require-module warning output" },
-    "es-module/test-vm-compile-function-lineoffset.js": { "category": "known-gap", "reason": "vm.compileFunction options range validation (lineOffset/columnOffset) is incomplete" },
+    "es-module/test-vm-compile-function-lineoffset.js": { "category": "runnable" },
     "es-module/test-vm-main-context-default-loader.js": { "category": "known-gap", "reason": "vm.USE_MAIN_CONTEXT_DEFAULT_LOADER behavior for dynamic import resolution is incomplete" },
     "es-module/test-vm-source-text-module-leak.js": { "category": "known-gap", "reason": "common-shim gc helper does not provide V8-style collectability checks used by this leak test" },
     "es-module/test-vm-synthetic-module-leak.js": { "category": "known-gap", "reason": "common-shim gc helper does not provide V8-style collectability checks used by this leak test" },

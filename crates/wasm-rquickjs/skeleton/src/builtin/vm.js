@@ -233,7 +233,50 @@ export function runInThisContext(code, options) {
 
 export function compileFunction(code, params, options) {
     params = params || [];
+    options = validateOptionsObject(options);
+    validateInt32Option(options.lineOffset, 'options.lineOffset');
+    validateInt32Option(options.columnOffset, 'options.columnOffset');
     return new Function(...params, code);
+}
+
+function validateOptionsObject(options) {
+    if (options === undefined) return {};
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        throwInvalidArgType('options', 'object', options);
+    }
+    return options;
+}
+
+function validateInt32Option(value, name) {
+    if (value === undefined) return;
+    if (typeof value !== 'number') {
+        throwInvalidArgType(name, 'number', value);
+    }
+    if (!Number.isInteger(value)) {
+        throwOutOfRange(name, 'an integer', value);
+    }
+    if (value < -2147483648 || value > 2147483647) {
+        throwOutOfRange(name, '>= -2147483648 && <= 2147483647', value);
+    }
+}
+
+function throwInvalidArgType(name, expected, value) {
+    const err = new TypeError('The "' + name + '" argument must be of type ' + expected + '. Received ' + formatReceived(value));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+function throwOutOfRange(name, range, value) {
+    const err = new RangeError('The value of "' + name + '" is out of range. It must be ' + range + '. Received ' + formatReceived(value));
+    err.code = 'ERR_OUT_OF_RANGE';
+    throw err;
+}
+
+function formatReceived(value) {
+    if (value === null) return 'null';
+    if (typeof value === 'string') return "'" + value + "'";
+    if (typeof value === 'symbol') return value.toString();
+    return String(value);
 }
 
 export class Script {
