@@ -1388,6 +1388,27 @@ export const testRequireEsmErrorHandling = async () => {
             'export default "namespace default";',
             'export { value as "module.exports" };',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/cjs-missing-named.cjs', [
+            'module.exports = { missing: "runtime" };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/cjs-default-named.cjs', [
+            'module.exports = { defaultNamed: true };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/cjs-quoted-named.cjs', [
+            'module.exports = {};',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/import-missing-named.mjs', [
+            'import { missing } from "./cjs-missing-named.cjs";',
+            'export default missing;',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/import-default-named.mjs', [
+            'import { default as cjsDefault } from "./cjs-default-named.cjs";',
+            'export default cjsDefault;',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/import-quoted-named.mjs', [
+            'import { "missing-name" as missingName } from "./cjs-quoted-named.cjs";',
+            'export default missingName;',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-errors-app/main.cjs');
@@ -1403,6 +1424,31 @@ export const testRequireEsmErrorHandling = async () => {
         });
         assert.strictEqual(require('/require-esm-errors-app/valid-transpiled.js').foo, 'foo');
         assert.deepStrictEqual(require('/require-esm-errors-app/module-exports-marker.mjs'), { marker: true });
+        assert.deepStrictEqual((await import('/require-esm-errors-app/import-default-named.mjs')).default, {
+            defaultNamed: true,
+        });
+        await assert.rejects(() => import('/require-esm-errors-app/import-missing-named.mjs'), {
+            name: 'SyntaxError',
+            message: [
+                "Named export 'missing' not found. The requested module './cjs-missing-named.cjs' is a CommonJS module, which may not support all module.exports as named exports.",
+                'CommonJS modules can always be imported via the default export, for example using:',
+                '',
+                "import pkg from './cjs-missing-named.cjs';",
+                'const { missing } = pkg;',
+                '',
+            ].join('\n'),
+        });
+        await assert.rejects(() => import('/require-esm-errors-app/import-quoted-named.mjs'), {
+            name: 'SyntaxError',
+            message: [
+                'Named export \'missing-name\' not found. The requested module \'./cjs-quoted-named.cjs\' is a CommonJS module, which may not support all module.exports as named exports.',
+                'CommonJS modules can always be imported via the default export, for example using:',
+                '',
+                "import pkg from './cjs-quoted-named.cjs';",
+                'const { "missing-name": missingName } = pkg;',
+                '',
+            ].join('\n'),
+        });
 
         return true;
     } catch (error) {

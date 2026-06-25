@@ -5987,7 +5987,7 @@
     "es-module/test-esm-basic-imports.mjs": { "category": "runnable" },
     "es-module/test-esm-child-process-fork-main.mjs": { "category": "wasi-impossible", "reason": "requires child_process.fork IPC semantics, which are not available in WASM" },
     "es-module/test-esm-cjs-load-error-note.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-cjs-named-error.mjs": { "category": "known-gap", "reason": "CJS named-export misses reject, but the loader does not yet emit Node-shaped CommonJS named-export diagnostics" },
+    "es-module/test-esm-cjs-named-error.mjs": { "category": "runnable" },
     "es-module/test-esm-custom-exports.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },
     "es-module/test-esm-cyclic-dynamic-import.mjs": { "category": "runnable" },
     "es-module/test-esm-default-type.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },

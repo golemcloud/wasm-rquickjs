@@ -1043,6 +1043,112 @@ fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool)
     ))
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct StaticNamedImport {
+    imported: String,
+    local: String,
+}
+
+fn cjs_named_import_error_module_source(filename: &str, source: &str) -> Option<String> {
+    find_cjs_named_import_error(filename, source).map(|message| {
+        let escaped = DataUrlLoader::js_string_escape(&message);
+        format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
+    })
+}
+
+fn find_cjs_named_import_error(filename: &str, source: &str) -> Option<String> {
+    let mut result = None;
+    scan_code_positions(source, true, |i, _| {
+        if let Some((specifier, named_imports, next)) = parse_static_named_import(source, i) {
+            if let Some(message) = cjs_named_import_error_message(filename, &specifier, &named_imports) {
+                result = Some(message);
+                return ControlFlow::Break(());
+            }
+            return ControlFlow::Continue(Some(next));
+        }
+        ControlFlow::Continue(None)
+    });
+    result
+}
+
+fn cjs_named_import_error_message(
+    filename: &str,
+    specifier: &str,
+    named_imports: &[StaticNamedImport],
+) -> Option<String> {
+    if named_imports.is_empty() || !could_resolve_to_cjs_for_named_import_error(specifier) {
+        return None;
+    }
+    let resolved = resolve_cjs_reexport_path(filename, specifier)?;
+    if !resolved.ends_with(".cjs") && !is_cjs_js_file_for_named_import_error(&resolved) {
+        return None;
+    }
+    let source = std::fs::read_to_string(&resolved).ok()?;
+    let analysis = analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new());
+    if !analysis.is_cjs && analysis.exports.is_empty() && analysis.reexports.is_empty() {
+        return None;
+    }
+
+    for named_import in named_imports {
+        if named_import.imported == "default" {
+            continue;
+        }
+        if !analysis.exports.iter().any(|name| name == &named_import.imported) {
+            let mut message = format!(
+                "Named export '{}' not found. The requested module '{}' is a CommonJS module, which may not support all module.exports as named exports.\nCommonJS modules can always be imported via the default export, for example using:\n\nimport pkg from '{}';\n",
+                named_import.imported, specifier, specifier
+            );
+            if named_imports.len() == 1 {
+                message.push_str(&format!(
+                    "const {{ {} }} = pkg;\n",
+                    format_cjs_named_import_binding(named_import)
+                ));
+            }
+            return Some(message);
+        }
+    }
+    None
+}
+
+fn could_resolve_to_cjs_for_named_import_error(specifier: &str) -> bool {
+    if specifier.starts_with("node:") || specifier.starts_with("data:") || specifier.contains("://") {
+        return false;
+    }
+    if specifier.starts_with("./") || specifier.starts_with("../") || specifier.starts_with('/') {
+        let (path, _) = split_module_path_suffix(specifier);
+        return match std::path::Path::new(path).extension().and_then(|ext| ext.to_str()) {
+            Some("cjs" | "js") | None => true,
+            Some(_) => false,
+        };
+    }
+    true
+}
+
+fn format_cjs_named_import_binding(named_import: &StaticNamedImport) -> String {
+    let imported = if is_valid_js_identifier_name(&named_import.imported) {
+        named_import.imported.clone()
+    } else {
+        format!("\"{}\"", escape_js_string(&named_import.imported))
+    };
+    if named_import.imported == named_import.local {
+        imported
+    } else {
+        format!("{}: {}", imported, named_import.local)
+    }
+}
+
+fn is_valid_js_identifier_name(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let Some((&first, rest)) = bytes.split_first() else {
+        return false;
+    };
+    is_ident_start(first) && rest.iter().copied().all(is_ident_continue)
+}
+
+fn is_cjs_js_file_for_named_import_error(filename: &str) -> bool {
+    filename.ends_with(".js") && package_scope_type(filename).as_deref() != Some("module")
+}
+
 fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
     const NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
     let bytes = source.as_bytes();
@@ -1205,6 +1311,89 @@ fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<St
     }
 
     Some((bindings, find_statement_end(source, i)))
+}
+
+fn parse_static_named_import(source: &str, pos: usize) -> Option<(String, Vec<StaticNamedImport>, usize)> {
+    let bytes = source.as_bytes();
+    if !source[pos..].starts_with("import")
+        || !is_ident_start_boundary(bytes, pos)
+        || !is_ident_boundary(bytes, pos + 6)
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + 6);
+    if i < bytes.len() && matches!(bytes[i], b'(' | b'\'' | b'"') {
+        return None;
+    }
+
+    let mut named_imports = Vec::new();
+    if i < bytes.len() && bytes[i] == b'{' {
+        collect_named_import_specifiers(source, i, &mut named_imports)?;
+        i = skip_ws_comments(source, find_matching_brace(source, i)? + 1);
+    } else {
+        if i < bytes.len() && bytes[i] == b'*' {
+            return None;
+        }
+        let (_, next) = read_ident(source, i)?;
+        i = skip_ws_comments(source, next);
+        if i >= bytes.len() || bytes[i] != b',' {
+            return None;
+        }
+        i = skip_ws_comments(source, i + 1);
+        if i >= bytes.len() || bytes[i] != b'{' {
+            return None;
+        }
+        collect_named_import_specifiers(source, i, &mut named_imports)?;
+        i = skip_ws_comments(source, find_matching_brace(source, i)? + 1);
+    }
+
+    if !source[i..].starts_with("from") || !is_ident_boundary(bytes, i + 4) {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 4);
+    let (specifier, next) = read_js_string(source, i)?;
+    Some((specifier, named_imports, find_statement_end(source, next)))
+}
+
+fn collect_named_import_specifiers(
+    source: &str,
+    start: usize,
+    imports: &mut Vec<StaticNamedImport>,
+) -> Option<()> {
+    let bytes = source.as_bytes();
+    let end = find_matching_brace(source, start)?;
+    let mut i = start + 1;
+    while i < end {
+        i = skip_ws_comments(source, i);
+        if i >= end {
+            break;
+        }
+        let (imported, next, needs_alias) = if matches!(bytes[i], b'\'' | b'"') {
+            let (name, next) = read_js_string(source, i)?;
+            (name, next, true)
+        } else {
+            let (name, next) = read_ident(source, i)?;
+            (name, next, false)
+        };
+        let mut local = imported.clone();
+        i = skip_ws_comments(source, next);
+        if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
+            i = skip_ws_comments(source, i + 2);
+            let (alias, next) = read_ident(source, i)?;
+            local = alias;
+            i = next;
+        } else if needs_alias {
+            return None;
+        }
+        imports.push(StaticNamedImport { imported, local });
+        while i < end && bytes[i] != b',' {
+            i = next_char_boundary(source, i);
+        }
+        if i < end && bytes[i] == b',' {
+            i += 1;
+        }
+    }
+    Some(())
 }
 
 fn collect_named_import_bindings(source: &str, start: usize, bindings: &mut Vec<String>) -> Option<()> {
@@ -4393,6 +4582,9 @@ impl Loader for CjsCompatLoader {
             {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
+            if let Some(error_source) = cjs_named_import_error_module_source(&fs_abs_path, &source) {
+                return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
+            }
             // Treat as ESM — inject import.meta prologue (handles shebangs)
             let injected = inject_import_meta_prologue(&init, &source);
             return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
@@ -4967,6 +5159,10 @@ impl Loader for ImportMetaLoader {
             && !cached_error.is_undefined()
         {
             return Err(ctx.throw(cached_error));
+        }
+
+        if let Some(error_source) = cjs_named_import_error_module_source(&fs_abs_path, &source) {
+            return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
         }
 
         let mut injected = inject_import_meta_prologue(&init, &source);
@@ -6307,6 +6503,84 @@ mod cjs_export_analyzer_tests {
             true,
         )
         .is_none());
+    }
+
+    #[test]
+    fn parses_static_named_import_specifiers_for_cjs_diagnostics() {
+        assert_eq!(
+            parse_static_named_import(r#"import { comeOn } from './fail.cjs';"#, 0),
+            Some((
+                "./fail.cjs".to_string(),
+                vec![StaticNamedImport {
+                    imported: "comeOn".to_string(),
+                    local: "comeOn".to_string(),
+                }],
+                r#"import { comeOn } from './fail.cjs';"#.len()
+            ))
+        );
+        assert_eq!(
+            parse_static_named_import(r#"import { comeOn as renamed } from "deep-fail""#, 0)
+                .map(|(specifier, imports, _)| (specifier, imports)),
+            Some((
+                "deep-fail".to_string(),
+                vec![StaticNamedImport {
+                    imported: "comeOn".to_string(),
+                    local: "renamed".to_string(),
+                }],
+            ))
+        );
+        assert_eq!(
+            parse_static_named_import(
+                r#"import defaultValue, { comeOn, everybody } from './fail.cjs';"#,
+                0,
+            )
+            .map(|(specifier, imports, _)| (specifier, imports)),
+            Some((
+                "./fail.cjs".to_string(),
+                vec![
+                    StaticNamedImport {
+                        imported: "comeOn".to_string(),
+                        local: "comeOn".to_string(),
+                    },
+                    StaticNamedImport {
+                        imported: "everybody".to_string(),
+                        local: "everybody".to_string(),
+                    },
+                ],
+            ))
+        );
+        assert_eq!(
+            parse_static_named_import(r#"import { default as cjsDefault } from './dep.cjs';"#, 0)
+                .map(|(specifier, imports, _)| (specifier, imports)),
+            Some((
+                "./dep.cjs".to_string(),
+                vec![StaticNamedImport {
+                    imported: "default".to_string(),
+                    local: "cjsDefault".to_string(),
+                }],
+            ))
+        );
+        assert_eq!(
+            parse_static_named_import(
+                r#"import { "missing-name" as missingName } from './dep.cjs';"#,
+                0,
+            )
+            .map(|(specifier, imports, _)| (specifier, imports)),
+            Some((
+                "./dep.cjs".to_string(),
+                vec![StaticNamedImport {
+                    imported: "missing-name".to_string(),
+                    local: "missingName".to_string(),
+                }],
+            ))
+        );
+        assert_eq!(
+            format_cjs_named_import_binding(&StaticNamedImport {
+                imported: "missing-name".to_string(),
+                local: "missingName".to_string(),
+            }),
+            r#""missing-name": missingName"#
+        );
     }
 
     #[test]
