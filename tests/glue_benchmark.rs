@@ -32,6 +32,9 @@ async fn main() -> anyhow::Result<()> {
         "direct".to_string(),
         Some(Box::new(Val::List(large_variant_list()))),
     );
+    let results = Val::List(large_result_list());
+    let options = Val::List(large_option_list());
+    let colors = Val::List(large_color_list());
 
     println!("generated glue benchmark");
     println!("component: {wasm_path}");
@@ -66,6 +69,30 @@ async fn main() -> anyhow::Result<()> {
         "variant direct(list<variant> 10k)",
         "roundtrip-envelope",
         std::slice::from_ref(&variant),
+        25,
+    )
+    .await?;
+    run_case(
+        &prepared,
+        "list<result<u32,string>> 10k",
+        "roundtrip-results",
+        std::slice::from_ref(&results),
+        25,
+    )
+    .await?;
+    run_case(
+        &prepared,
+        "list<option<u32>> 10k",
+        "roundtrip-options",
+        std::slice::from_ref(&options),
+        25,
+    )
+    .await?;
+    run_case(
+        &prepared,
+        "list<enum> 10k",
+        "roundtrip-colors",
+        std::slice::from_ref(&colors),
         25,
     )
     .await?;
@@ -167,6 +194,43 @@ fn large_variant_list() -> Vec<Val> {
                 "label".to_string(),
                 Some(Box::new(Val::String(format!("item-{idx}")))),
             ),
+        })
+        .collect()
+}
+
+fn large_result_list() -> Vec<Val> {
+    (0..10_000)
+        .map(|idx| {
+            if idx % 2 == 0 {
+                Val::Result(Ok(Some(Box::new(Val::U32(idx)))))
+            } else {
+                Val::Result(Err(Some(Box::new(Val::String(format!("err-{idx}"))))))
+            }
+        })
+        .collect()
+}
+
+fn large_option_list() -> Vec<Val> {
+    (0..10_000)
+        .map(|idx| {
+            if idx % 2 == 0 {
+                Val::Option(Some(Box::new(Val::U32(idx))))
+            } else {
+                Val::Option(None)
+            }
+        })
+        .collect()
+}
+
+fn large_color_list() -> Vec<Val> {
+    (0..10_000)
+        .map(|idx| {
+            let name = match idx % 3 {
+                0 => "red",
+                1 => "green",
+                _ => "blue",
+            };
+            Val::Enum(name.to_string())
         })
         .collect()
 }

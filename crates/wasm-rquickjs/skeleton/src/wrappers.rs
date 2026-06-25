@@ -91,7 +91,16 @@ impl<'js, T: IntoJs<'js>> IntoJs<'js> for JsVec<T> {
             )
         };
 
+        // `JS_NewArrayFrom` takes ownership of every JS value (on success it stores them in
+        // the array, on the exception path it frees them all). We must therefore not let the
+        // `Value` wrappers run their `Drop` (which would call `JS_FreeValue`). However each
+        // `Value` also owns a `Ctx` clone (a `JS_DupContext`), so we still have to release that
+        // context reference manually before forgetting the value - mirroring rquickjs' own
+        // `Value::into_js_value`.
         for value in values {
+            unsafe {
+                rquickjs::qjs::JS_FreeContext(value.ctx().as_raw().as_ptr());
+            }
             core::mem::forget(value);
         }
 
@@ -143,7 +152,10 @@ impl<'js, Ok: IntoJs<'js>, Err: IntoJs<'js>> IntoJs<'js> for JsResult<Ok, Err> {
 impl<'js, Ok: FromJs<'js>, Err: FromJs<'js>> FromJs<'js> for JsResult<Ok, Err> {
     fn from_js(_ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
         let obj = Object::from_value(value)?;
-        let tag: String = obj.get(TAG)?;
+        // Read the tag as a JS C string (no UTF-8 validation / heap String allocation), matching
+        // the variant-conversion fast path.
+        let tag: rquickjs::String = obj.get(TAG)?;
+        let tag = tag.to_cstring()?;
         match tag.as_str() {
             RESULT_OK => {
                 let val: Ok = obj.get(VALUE)?;
@@ -153,10 +165,10 @@ impl<'js, Ok: FromJs<'js>, Err: FromJs<'js>> FromJs<'js> for JsResult<Ok, Err> {
                 let val: Err = obj.get(VALUE)?;
                 Ok(JsResult(Err(val)))
             }
-            _ => Err(rquickjs::Error::new_from_js_message(
+            other => Err(rquickjs::Error::new_from_js_message(
                 "JS result object",
                 "WIT result type",
-                format!("Unknown tag: {tag}"),
+                format!("Unknown tag: {other}"),
             )),
         }
     }

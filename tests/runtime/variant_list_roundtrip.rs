@@ -68,6 +68,60 @@ async fn roundtrip_large_variant_list_in_variant(
     Ok(())
 }
 
+#[test]
+async fn roundtrip_large_result_list(
+    #[tagged_as("variant_list_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let input = Val::List(large_result_list());
+
+    let (result, _) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("quickjs:variant-list-roundtrip/api"),
+        "roundtrip-results",
+        std::slice::from_ref(&input),
+    )
+    .await;
+
+    assert_eq!(result?, Some(input));
+    Ok(())
+}
+
+#[test]
+async fn roundtrip_large_option_list(
+    #[tagged_as("variant_list_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let input = Val::List(large_option_list());
+
+    let (result, _) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("quickjs:variant-list-roundtrip/api"),
+        "roundtrip-options",
+        std::slice::from_ref(&input),
+    )
+    .await;
+
+    assert_eq!(result?, Some(input));
+    Ok(())
+}
+
+#[test]
+async fn roundtrip_large_color_list(
+    #[tagged_as("variant_list_roundtrip")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let input = Val::List(large_color_list());
+
+    let (result, _) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        Some("quickjs:variant-list-roundtrip/api"),
+        "roundtrip-colors",
+        std::slice::from_ref(&input),
+    )
+    .await;
+
+    assert_eq!(result?, Some(input));
+    Ok(())
+}
+
 fn large_variant_list() -> Vec<Val> {
     (0..10_000)
         .map(|idx| match idx % 3 {
@@ -77,6 +131,43 @@ fn large_variant_list() -> Vec<Val> {
                 "label".to_string(),
                 Some(Box::new(Val::String(format!("item-{idx}")))),
             ),
+        })
+        .collect::<Vec<_>>()
+}
+
+fn large_result_list() -> Vec<Val> {
+    (0..10_000)
+        .map(|idx| {
+            if idx % 2 == 0 {
+                Val::Result(Ok(Some(Box::new(Val::U32(idx)))))
+            } else {
+                Val::Result(Err(Some(Box::new(Val::String(format!("err-{idx}"))))))
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+fn large_option_list() -> Vec<Val> {
+    (0..10_000)
+        .map(|idx| {
+            if idx % 2 == 0 {
+                Val::Option(Some(Box::new(Val::U32(idx))))
+            } else {
+                Val::Option(None)
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+fn large_color_list() -> Vec<Val> {
+    (0..10_000)
+        .map(|idx| {
+            let name = match idx % 3 {
+                0 => "red",
+                1 => "green",
+                _ => "blue",
+            };
+            Val::Enum(name.to_string())
         })
         .collect::<Vec<_>>()
 }

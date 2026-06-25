@@ -489,17 +489,17 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let value = value
-                                .as_string()
+                                .into_string()
                                 .ok_or_else(|| {
                                     rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
                                 })?
-                                .to_string()?;
+                                .to_cstring()?;
                             match value.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown case value: {value}"),
+                                    format!("Unknown case value: {}", value.as_str()),
                                 )),
                             }.map(Self)
                         }
@@ -518,17 +518,17 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #type_path {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let value = value
-                                .as_string()
+                                .into_string()
                                 .ok_or_else(|| {
                                     rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
                                 })?
-                                .to_string()?;
+                                .to_cstring()?;
                             match value.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown case value: {value}"),
+                                    format!("Unknown case value: {}", value.as_str()),
                                 )),
                             }
                         }

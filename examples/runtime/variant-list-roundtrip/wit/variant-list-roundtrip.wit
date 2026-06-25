@@ -17,10 +17,19 @@ interface api {
     direct(list<item>),
   }
 
+  enum color {
+    red,
+    green,
+    blue,
+  }
+
   roundtrip-items: func(items: list<item>) -> list<item>;
   roundtrip-payload: func(payload: payload) -> payload;
   roundtrip-envelope: func(envelope: envelope) -> envelope;
   roundtrip-number: func(value: u32) -> u32;
+  roundtrip-results: func(items: list<result<u32, string>>) -> list<result<u32, string>>;
+  roundtrip-options: func(items: list<option<u32>>) -> list<option<u32>>;
+  roundtrip-colors: func(items: list<color>) -> list<color>;
 }
 
 world variant-list-roundtrip {
