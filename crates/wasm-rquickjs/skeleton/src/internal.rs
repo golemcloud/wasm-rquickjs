@@ -1013,7 +1013,7 @@ fn import_attr_error_expression(code: &str, message: &str) -> String {
 fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool) -> Option<String> {
     if package_type_module_js {
         let cjs_global = find_bare_cjs_global_in_esm(source);
-        if !analyze_cjs_exports(source).is_cjs && cjs_global.is_none() {
+        if cjs_global.is_none() {
             return None;
         }
         let name = cjs_global.unwrap_or("module");
@@ -6292,6 +6292,21 @@ mod cjs_export_analyzer_tests {
         assert_cjs_global("export default { \"x\"(require) { return require; } }.x(1);", None);
         assert_cjs_global("export default { /* comment */ require() { return 1; } }.require();", None);
         assert_cjs_global("function* module() { yield 1; } export default module;", None);
+    }
+
+    #[test]
+    fn package_type_diagnostics_ignore_local_exports_binding() {
+        assert!(esm_preflight_error_module_source(
+            r#"
+                const exports = {};
+                Object.defineProperty(exports, "__esModule", { value: true });
+                exports.default = "value";
+                export default exports;
+                export { exports as "module.exports" };
+            "#,
+            true,
+        )
+        .is_none());
     }
 
     #[test]

@@ -6079,7 +6079,7 @@
     "es-module/test-import-module-conditional-exports-module.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },
     "es-module/test-loaders-unknown-builtin-module.mjs": { "category": "known-gap", "reason": "custom ESM loader hooks / module.register are not implemented" },
     "es-module/test-loaders-workers-spawned.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-require-as-esm-interop.mjs": { "category": "known-gap", "reason": "CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage" },
+    "es-module/test-require-as-esm-interop.mjs": { "category": "runnable" },
     "es-module/test-typescript-commonjs.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
     "es-module/test-typescript-eval.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
     "es-module/test-typescript-module.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },

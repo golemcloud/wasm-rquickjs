@@ -1383,6 +1383,11 @@ export const testRequireEsmErrorHandling = async () => {
             'Object.defineProperty(exports, "__esModule", { value: true });',
             'exports.foo = "foo";',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-errors-app/module-exports-marker.mjs', [
+            'const value = { marker: true };',
+            'export default "namespace default";',
+            'export { value as "module.exports" };',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-errors-app/main.cjs');
@@ -1397,6 +1402,7 @@ export const testRequireEsmErrorHandling = async () => {
             name: 'ReferenceError',
         });
         assert.strictEqual(require('/require-esm-errors-app/valid-transpiled.js').foo, 'foo');
+        assert.deepStrictEqual(require('/require-esm-errors-app/module-exports-marker.mjs'), { marker: true });
 
         return true;
     } catch (error) {

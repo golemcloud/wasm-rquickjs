@@ -2038,7 +2038,11 @@ function requireEsmWithCacheGuard(mod, resolvedFilename) {
         enumerable: false,
     });
     try {
-        return wrapEsmNamespace(_requireEsm(resolvedFilename));
+        const namespace = _requireEsm(resolvedFilename);
+        if (namespace && typeof namespace === 'object' && Object.hasOwn(namespace, 'module.exports')) {
+            return namespace['module.exports'];
+        }
+        return wrapEsmNamespace(namespace);
     } finally {
         unmarkRequireEsmGraph(markedGraph);
         delete mod.__wasmRequireEsmInProgress;
