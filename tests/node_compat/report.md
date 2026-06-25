@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3142/4404 (71.3%)
+**Primary compatibility (CI-enforced):** 3144/4404 (71.4%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3142 | 71.3% | 54.9% | 45.9% |
-| 🧩 known gap | 1262 | 28.7% | 22.1% | 18.4% |
+| ✅ passing (runnable) | 3144 | 71.4% | 55.0% | 45.9% |
+| 🧩 known gap | 1260 | 28.6% | 22.0% | 18.4% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3142/5721 (54.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3144/5721 (55.0%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 142 | 160 | 85 | 11 | 0 | 183 | 47.0% | 35.7% |
+| other | 581 | 144 | 158 | 85 | 11 | 0 | 183 | 47.7% | 36.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1262)
+### known gap (1260)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -709,7 +709,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Intl is not available in current runtime | 8 | `parallel/test-intl-v8BreakIterator.js`, `parallel/test-intl.js`, `parallel/test-whatwg-encoding-custom-textdecoder-fatal.js`, ... (+5) |
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
-| ESM package type/exports/imports behavior needs resolver unification triage | 7 | `es-module/test-esm-custom-exports.mjs`, `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-exports.mjs`, ... (+4) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
 | inherited: Intl is not available in current runtime | 7 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+4) |
 | WebAssembly global is missing in current runtime | 6 | `es-module/test-wasm-memory-out-of-bound.js`, `es-module/test-wasm-simple.js`, `es-module/test-wasm-web-api.js`, ... (+3) |
@@ -717,6 +716,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |
 | inherited: perf_hooks createHistogram/monitorEventLoopDelay are not implemented | 6 | `parallel/test-perf-hooks-histogram.js#block_00_block_00`, `parallel/test-perf-hooks-histogram.js#block_01_block_01`, `parallel/test-perf-hooks-histogram.js#block_02_block_02`, ... (+3) |
 | inherited: performance.timerify function entries are not implemented | 6 | `parallel/test-performance-function.js#block_00_block_00`, `parallel/test-performance-function.js#block_01_block_01`, `parallel/test-performance-function.js#block_02_block_02`, ... (+3) |
+| ESM package type/exports/imports behavior needs resolver unification triage | 5 | `es-module/test-esm-custom-exports.mjs`, `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-exports.mjs`, ... (+2) |
 | IPv6 sockets are not available in this runtime (common.hasIPv6=false) | 5 | `parallel/test-dgram-ipv6only.js`, `parallel/test-dgram-udp6-link-local-address.js`, `parallel/test-dgram-udp6-send-default-host.js`, ... (+2) |
 | http.request({ createConnection }) generic duplex stream semantics are incomplete (request dispatch, keep-alive, and clientError paths) | 5 | `parallel/test-http-generic-streams.js#block_00_test_1_simple_http_test_no_keep_alive`, `parallel/test-http-generic-streams.js#block_01_test_2_keep_alive_for_2_requests`, `parallel/test-http-generic-streams.js#block_02_test_3_connection_close_request_response_with_chunked`, ... (+2) |
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
