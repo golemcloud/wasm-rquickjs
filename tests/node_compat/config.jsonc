@@ -5989,7 +5989,7 @@
     "es-module/test-esm-cjs-load-error-note.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-cjs-named-error.mjs": { "category": "known-gap", "reason": "CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage" },
     "es-module/test-esm-custom-exports.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },
-    "es-module/test-esm-cyclic-dynamic-import.mjs": { "category": "known-gap", "reason": "CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage" },
+    "es-module/test-esm-cyclic-dynamic-import.mjs": { "category": "runnable" },
     "es-module/test-esm-default-type.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },
     "es-module/test-esm-detect-ambiguous.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-dns-promises.mjs": { "category": "runnable" },
