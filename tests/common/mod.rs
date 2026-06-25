@@ -486,6 +486,24 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     let dst_test = suite_dir.join(test_filename);
     fs::copy(&src_test, &dst_test)?;
 
+    // Some vendored ESM tests import sibling test files with relative specifiers.
+    // The split runner still executes one configured test at a time, but those
+    // relative imports need the original suite directory shape.
+    let src_suite_dir = std::path::Path::new("tests/node_compat/suite").join(suite);
+    if suite == "es-module" && src_suite_dir.exists() {
+        for entry in fs::read_dir(&src_suite_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                let file_name = entry.file_name();
+                let file_name_str = file_name.to_string_lossy();
+                let dst = suite_dir.join(file_name_str.as_ref());
+                if !dst.exists() {
+                    fs::copy(entry.path(), dst)?;
+                }
+            }
+        }
+    }
+
     // Copy the common shim
     let src_shim = "tests/node_compat/common-shim/index.js";
     let dst_shim = common_dir.join("index.js");
@@ -509,6 +527,22 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
                 continue;
             }
             if entry.file_type()?.is_file() {
+                fs::copy(entry.path(), common_dir.join(file_name_str.as_ref()))?;
+            }
+        }
+    }
+
+    // Copy vendored ESM common helpers that are not replaced by local shims.
+    let vendored_common_dir = std::path::Path::new("tests/node_compat/suite/common");
+    if vendored_common_dir.exists() {
+        for entry in fs::read_dir(vendored_common_dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name_str = file_name.to_string_lossy();
+            if entry.file_type()?.is_file()
+                && file_name_str.ends_with(".mjs")
+                && !common_dir.join(file_name_str.as_ref()).exists()
+            {
                 fs::copy(entry.path(), common_dir.join(file_name_str.as_ref()))?;
             }
         }

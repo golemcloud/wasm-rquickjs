@@ -5,6 +5,7 @@ world module-resolution {
   export test-esm-encoded-relative-paths: func() -> bool;
   export test-esm-invalid-package-specifiers: func() -> bool;
   export test-sync-builtin-esm-exports: func() -> bool;
+  export test-esm-resolution-error-urls: func() -> bool;
   export test-cjs-direct-named-exports: func() -> bool;
   export test-cjs-define-property-named-exports: func() -> bool;
   export test-cjs-reexport-named-exports: func() -> bool;

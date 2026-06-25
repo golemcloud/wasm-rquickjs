@@ -3,9 +3,10 @@ use futures_concurrency::future::Join;
 use indexmap::IndexMap;
 use rquickjs::function::{Args, Constructor};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
+use rquickjs::object::Property;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
-    Object, Promise, Value, async_with,
+    Object, Promise, Value, async_with, Exception,
 };
 use rquickjs::{CaughtError, prelude::*};
 use serde::Deserialize;
@@ -1591,12 +1592,13 @@ struct FileUrlResolver;
 impl FileUrlResolver {
     /// Decode a `file://` URL into a filesystem path, handling percent-encoding.
     fn file_url_to_path(url: &str) -> Option<String> {
-        let encoded = url.strip_prefix("file://")?;
-        let end = encoded
-            .find(|ch| ch == '?' || ch == '#')
-            .unwrap_or(encoded.len());
-        let encoded_path = &encoded[..end];
-        let suffix = &encoded[end..];
+        let (mut path, suffix) = Self::file_url_to_path_parts(url)?;
+        path.push_str(suffix);
+        Some(path)
+    }
+
+    fn file_url_to_path_parts(url: &str) -> Option<(String, &str)> {
+        let (encoded_path, suffix) = Self::file_url_path_and_suffix(url)?;
         let bytes = encoded_path.as_bytes();
         let mut decoded = Vec::with_capacity(bytes.len());
         let mut i = 0;
@@ -1613,9 +1615,32 @@ impl FileUrlResolver {
             decoded.push(bytes[i]);
             i += 1;
         }
-        let mut path = String::from_utf8(decoded).ok()?;
-        path.push_str(suffix);
-        Some(path)
+        Some((String::from_utf8(decoded).ok()?, suffix))
+    }
+
+    fn file_url_path_and_suffix(url: &str) -> Option<(&str, &str)> {
+        let encoded = url.strip_prefix("file://")?;
+        let end = encoded
+            .find(|ch| ch == '?' || ch == '#')
+            .unwrap_or(encoded.len());
+        let encoded_path = &encoded[..end];
+        let (host, path) = if encoded_path.starts_with('/') {
+            ("", encoded_path)
+        } else if let Some(slash) = encoded_path.find('/') {
+            (&encoded_path[..slash], &encoded_path[slash..])
+        } else {
+            (encoded_path, "/")
+        };
+
+        if host.is_empty() || host.eq_ignore_ascii_case("localhost") {
+            Some((path, &encoded[end..]))
+        } else {
+            None
+        }
+    }
+
+    fn has_invalid_file_url_host(url: &str) -> bool {
+        url.starts_with("file://") && Self::file_url_path_and_suffix(url).is_none()
     }
 
     fn hex_val(b: u8) -> Option<u8> {
@@ -1642,10 +1667,34 @@ impl Resolver for FileUrlResolver {
             if NodeFileResolver::has_encoded_path_separator(&encoded[..end]) {
                 return NodeFileResolver::throw_invalid_encoded_separator(ctx, base, name);
             }
+            if Self::has_invalid_file_url_host(name) {
+                return NodeFileResolver::throw_invalid_file_url_host(
+                    ctx,
+                    format!("File URL host must be \"localhost\" or empty: {}", name),
+                );
+            }
         }
 
-        if let Some(path) = Self::file_url_to_path(name) {
-            Ok(path)
+        if let Some((path, suffix)) = Self::file_url_to_path_parts(name) {
+            let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
+            let url = NodeFileResolver::module_url_for_file_specifier(name);
+            if std::path::Path::new(&normalized).is_dir() {
+                return NodeFileResolver::throw_module_resolution_error(
+                    ctx,
+                    "ERR_UNSUPPORTED_DIR_IMPORT",
+                    format!("Directory import '{}' is not supported resolving ES modules", name),
+                    url,
+                );
+            }
+            if !std::path::Path::new(&normalized).is_file() {
+                return NodeFileResolver::throw_module_resolution_error(
+                    ctx,
+                    "ERR_MODULE_NOT_FOUND",
+                    format!("Cannot find module '{}'", name),
+                    url,
+                );
+            }
+            Ok(format!("{normalized}{suffix}"))
         } else {
             Err(Error::new_resolving(base, name))
         }
@@ -1919,6 +1968,19 @@ impl NodeFileResolver {
         Err(ctx.throw(error_obj.into_value()))
     }
 
+    fn throw_invalid_file_url_host<'js, T>(
+        ctx: &Ctx<'js>,
+        message: String,
+    ) -> rquickjs::Result<T> {
+        let _ = Exception::throw_type(ctx, &message);
+        let error_value = ctx.catch();
+        let Some(error_obj) = error_value.clone().into_object() else {
+            return Err(ctx.throw(error_value));
+        };
+        Self::define_error_property(&error_obj, "code", "ERR_INVALID_FILE_URL_HOST")?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+
     fn resolve_candidate(candidate: std::path::PathBuf, suffix: &str) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
         if std::path::Path::new(&normalized).is_file() {
@@ -1936,6 +1998,65 @@ impl NodeFileResolver {
 
         None
     }
+
+    fn module_url_for_path(path: &str, suffix: &str) -> String {
+        format!(
+            "{}{}",
+            path_without_suffix_to_file_url(path),
+            serialize_url_preserving_escapes(suffix)
+        )
+    }
+
+    fn module_url_for_encoded_path(path: &str, suffix: &str) -> String {
+        let path = normalize_encoded_module_path(path);
+        format!(
+            "{}{}",
+            path_with_preserved_escapes_to_file_url(&path),
+            serialize_url_preserving_escapes(suffix)
+        )
+    }
+
+    fn module_url_for_file_specifier(specifier: &str) -> String {
+        if !specifier.starts_with("file://") {
+            return serialize_url_preserving_escapes(specifier);
+        }
+        let Some((encoded_path, suffix)) = FileUrlResolver::file_url_path_and_suffix(specifier)
+        else {
+            return serialize_url_preserving_escapes(specifier);
+        };
+        let encoded_path = normalize_encoded_module_path(encoded_path);
+        format!(
+            "{}{}",
+            path_with_preserved_escapes_to_file_url(&encoded_path),
+            serialize_url_preserving_escapes(suffix)
+        )
+    }
+
+    fn throw_module_resolution_error<'js, T>(
+        ctx: &Ctx<'js>,
+        code: &str,
+        message: String,
+        url: String,
+    ) -> rquickjs::Result<T> {
+        let error_obj = Exception::from_message(ctx.clone(), &message)?.into_object();
+        Self::define_error_property(&error_obj, "code", code)?;
+        Self::define_error_property(&error_obj, "url", &url)?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+
+    fn define_error_property<'js>(
+        error_obj: &Object<'js>,
+        name: &str,
+        value: &str,
+    ) -> rquickjs::Result<()> {
+        error_obj.prop(
+            name,
+            Property::from(value)
+                .writable()
+                .enumerable()
+                .configurable(),
+        )
+    }
 }
 
 impl Resolver for NodeFileResolver {
@@ -1950,11 +2071,12 @@ impl Resolver for NodeFileResolver {
         }
 
         let (name_path, suffix) = split_module_path_suffix(name);
-        let candidate = if name_path.starts_with('/') {
+        let (candidate, url) = if name_path.starts_with('/') {
+            let encoded_path = CjsEvalResolver::normalize_path(std::path::Path::new(name_path));
+            let url = Self::module_url_for_encoded_path(&encoded_path, suffix);
             let name_path = Self::decode_module_path(ctx, base, name, name_path)?;
-            std::path::PathBuf::from(name_path.as_ref())
+            (std::path::PathBuf::from(name_path.as_ref()), url)
         } else if name_path.starts_with("./") || name_path.starts_with("../") {
-            let name_path = Self::decode_module_path(ctx, base, name, name_path)?;
             let base_path = if let Some(path) = FileUrlResolver::file_url_to_path(base) {
                 path
             } else {
@@ -1969,12 +2091,35 @@ impl Resolver for NodeFileResolver {
             let base_dir = std::path::Path::new(&base_path)
                 .parent()
                 .ok_or_else(|| Error::new_resolving(base, name))?;
-            base_dir.join(name_path.as_ref())
+            let encoded_candidate = base_dir.join(name_path);
+            let encoded_path = CjsEvalResolver::normalize_path(&encoded_candidate);
+            let url = Self::module_url_for_encoded_path(&encoded_path, suffix);
+            let name_path = Self::decode_module_path(ctx, base, name, name_path)?;
+            (base_dir.join(name_path.as_ref()), url)
         } else {
             return Err(Error::new_resolving(base, name));
         };
 
-        Self::resolve_candidate(candidate, suffix).ok_or_else(|| Error::new_resolving(base, name))
+        let normalized = CjsEvalResolver::normalize_path(&candidate);
+        if std::path::Path::new(&normalized).is_dir() {
+            return Self::throw_module_resolution_error(
+                ctx,
+                "ERR_UNSUPPORTED_DIR_IMPORT",
+                format!("Directory import '{}' is not supported resolving ES modules", name),
+                url,
+            );
+        }
+
+        if let Some(resolved) = Self::resolve_candidate(candidate, suffix) {
+            return Ok(resolved);
+        }
+
+        Self::throw_module_resolution_error(
+            ctx,
+            "ERR_MODULE_NOT_FOUND",
+            format!("Cannot find module '{}'", name),
+            url,
+        )
     }
 }
 
@@ -4283,6 +4428,17 @@ fn ensure_absolute_path(path: &str) -> String {
 fn path_to_file_url(path: &str) -> String {
     let abs_path = ensure_absolute_path(path);
     let (abs_path, suffix) = split_module_path_suffix(&abs_path);
+    let mut url = path_without_suffix_to_file_url(abs_path);
+    url.push_str(suffix);
+    url
+}
+
+fn path_without_suffix_to_file_url(path: &str) -> String {
+    let abs_path = if path.starts_with('/') {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(format!("/{path}"))
+    };
     let mut url = String::from("file://");
     for byte in abs_path.as_bytes() {
         match byte {
@@ -4304,8 +4460,109 @@ fn path_to_file_url(path: &str) -> String {
             }
         }
     }
-    url.push_str(suffix);
     url
+}
+
+fn path_with_preserved_escapes_to_file_url(path: &str) -> String {
+    let abs_path = if path.starts_with('/') {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(format!("/{path}"))
+    };
+    let mut url = String::from("file://");
+    let bytes = abs_path.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len()
+                && FileUrlResolver::hex_val(bytes[i + 1]).is_some()
+                && FileUrlResolver::hex_val(bytes[i + 2]).is_some() =>
+            {
+                url.push('%');
+                url.push(bytes[i + 1] as char);
+                url.push(bytes[i + 2] as char);
+                i += 3;
+                continue;
+            }
+            b'%' => url.push_str("%25"),
+            b' ' => url.push_str("%20"),
+            b'#' => url.push_str("%23"),
+            b'?' => url.push_str("%3F"),
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'/'
+            | b':' => url.push(bytes[i] as char),
+            _ => {
+                url.push_str(&format!("%{:02X}", bytes[i]));
+            }
+        }
+        i += 1;
+    }
+    url
+}
+
+fn normalize_encoded_module_path(path: &str) -> String {
+    let is_absolute = path.starts_with('/');
+    let mut parts = Vec::new();
+
+    for segment in path.split('/') {
+        if segment.is_empty() || is_encoded_dot_segment(segment, ".") {
+            continue;
+        }
+        if is_encoded_dot_segment(segment, "..") {
+            parts.pop();
+        } else {
+            parts.push(segment);
+        }
+    }
+
+    if is_absolute {
+        format!("/{}", parts.join("/"))
+    } else {
+        parts.join("/")
+    }
+}
+
+fn is_encoded_dot_segment(segment: &str, expected: &str) -> bool {
+    if segment == expected {
+        return true;
+    }
+    percent_decode(segment).is_some_and(|decoded| decoded == expected)
+}
+
+fn serialize_url_preserving_escapes(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut encoded = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len()
+                && FileUrlResolver::hex_val(bytes[i + 1]).is_some()
+                && FileUrlResolver::hex_val(bytes[i + 2]).is_some() =>
+            {
+                encoded.push('%');
+                encoded.push(bytes[i + 1] as char);
+                encoded.push(bytes[i + 2] as char);
+                i += 3;
+                continue;
+            }
+            b' ' => encoded.push_str("%20"),
+            0x00..=0x20 | b'"' | b'<' | b'>' | b'`' => {
+                encoded.push_str(&format!("%{:02X}", bytes[i]));
+            }
+            _ if bytes[i] > 0x7F => {
+                encoded.push_str(&format!("%{:02X}", bytes[i]));
+            }
+            _ => encoded.push(bytes[i] as char),
+        }
+        i += 1;
+    }
+    encoded
 }
 
 fn split_module_path_suffix(path: &str) -> (&str, &str) {

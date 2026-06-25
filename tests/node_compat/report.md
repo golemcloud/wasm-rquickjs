@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3130/4404 (71.1%)
+**Primary compatibility (CI-enforced):** 3132/4404 (71.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3130 | 71.1% | 54.7% | 45.7% |
-| 🧩 known gap | 1274 | 28.9% | 22.3% | 18.6% |
+| ✅ passing (runnable) | 3132 | 71.1% | 54.7% | 45.8% |
+| 🧩 known gap | 1272 | 28.9% | 22.2% | 18.6% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3130/5721 (54.7%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3132/5721 (54.7%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 131 | 171 | 85 | 11 | 0 | 183 | 43.4% | 32.9% |
+| other | 581 | 133 | 169 | 85 | 11 | 0 | 183 | 44.0% | 33.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1274)
+### known gap (1272)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -865,9 +865,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | ECDH key import/deriveKey compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-derivekey-ecdh.js` |
 | ECDSA key import/sign/verify compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-sign-verify-ecdsa.js` |
 | ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented | 1 | `parallel/test-vm-dynamic-import-callback-missing-flag.js` |
-| ESM compatibility shim still exposes CJS globals such as __filename and __dirname | 1 | `es-module/test-esm-forbidden-globals.mjs` |
+| ESM compatibility shim intentionally exposes CommonJS-style __filename/__dirname; switching to strict Node ESM globals needs a product compatibility decision | 1 | `es-module/test-esm-forbidden-globals.mjs` |
 | ESM directory import errors do not match Node ERR_UNSUPPORTED_DIR_IMPORT behavior | 1 | `parallel/test-directory-import.js` |
-| ESM main lookup and error-url behavior still differ from Node's resolver | 1 | `es-module/test-esm-main-lookup.mjs` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
 | Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |
 | EventEmitter captureRejections option validation/behavior is incomplete | 1 | `parallel/test-event-capture-rejections.js` |
@@ -962,6 +961,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | SourceTextModule import.meta initialization hook is not implemented | 1 | `parallel/test-vm-module-import-meta.js` |
 | SourceTextModule linker/dependency parsing semantics are incomplete (imports, cycles, and attributes) | 1 | `parallel/test-vm-module-link.js` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
+| V8 startup snapshot fixture mutates CommonJS require.cache; the WASM runner does not model Node/V8 startup snapshot and cache coupling | 1 | `es-module/test-esm-snapshot.mjs` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
 | WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags | 1 | `parallel/test-runner-module-mocking.js#test_16_wrong_import_syntax_should_throw_error_after_module_mocking` |
@@ -1165,7 +1165,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts | 1 | `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
-| newly tracked module coverage; same-process ESM behavior has not been triaged yet | 1 | `es-module/test-esm-snapshot.mjs` |
 | node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals | 1 | `parallel/test-timers-api-refs.js` |
 | node:http abort/destroy response lifecycle (aborted/error/close ordering) is incomplete | 1 | `parallel/test-http-abort-client.js` |
 | node:http client path does not honor/verify net.Socket connect noDelay semantics like Node | 1 | `parallel/test-http-nodelay.js` |
@@ -1255,7 +1254,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | runInNewContext sandbox binding and write-back semantics are incomplete | 1 | `parallel/test-vm-run-in-new-context.js` |
 | runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect | 1 | `parallel/test-vm-not-strict.js` |
 | same-component node:http client->server calls via wasi:http can deadlock in this scenario | 1 | `parallel/test-http-write-head-after-set-header.js` |
-| same-directory relative ESM import resolution differs in the node_compat split runner | 1 | `es-module/test-esm-basic-imports.mjs` |
 | sendBlockList connect path can crash in WASI UDP implementation | 1 | `parallel/test-dgram-blocklist.js#block_00_block_00` |
 | sendBlockList send() callback path is not Node-compatible and can hang | 1 | `parallel/test-dgram-blocklist.js#block_01_block_01` |
 | sequential path is stale in vendored suite; equivalent Upgrade timeout-disabling semantics are not Node-compatible | 1 | `sequential/test-http-server-request-timeout-upgrade.js` |

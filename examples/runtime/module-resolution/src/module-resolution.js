@@ -291,6 +291,98 @@ export const testSyncBuiltinEsmExports = async () => {
     }
 };
 
+export const testEsmResolutionErrorUrls = async () => {
+    try {
+        fs.mkdirSync('/esm-error-url-app/dir', { recursive: true });
+        fs.mkdirSync('/esm-error-url-app/sub', { recursive: true });
+        fs.writeFileSync('/esm-error-url-app/entry.mjs', "await import('./miss%2Eing');\n");
+        fs.writeFileSync('/esm-error-url-app/entry-dot.mjs', "await import('./sub/%2e%2e/missing');\n");
+        const originalError = globalThis.Error;
+        const originalTypeError = globalThis.TypeError;
+        const poisonUrl = {
+            configurable: true,
+            get() {
+                throw new originalError('prototype url getter should not be read');
+            },
+            set() {
+                throw new originalError('prototype url setter should not be called');
+            },
+        };
+        Object.defineProperty(Error.prototype, 'url', poisonUrl);
+        Object.defineProperty(Object.prototype, 'url', poisonUrl);
+        const originalDefineProperty = Object.defineProperty;
+        Object.defineProperty = () => {
+            throw new originalError('patched Object.defineProperty should not be called');
+        };
+        globalThis.Error = function PatchedError() {
+            throw new originalError('patched Error constructor should not be called');
+        };
+        globalThis.TypeError = function PatchedTypeError() {
+            throw new originalError('patched TypeError constructor should not be called');
+        };
+        const cases = [
+            ['/esm-error-url-app/dir', 'ERR_UNSUPPORTED_DIR_IMPORT'],
+            ['/esm-error-url-app/missing', 'ERR_MODULE_NOT_FOUND'],
+            ['/esm-error-url-app/miss%2Eing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/miss%2Eing'],
+            ['/esm-error-url-app/missing?x= a#b c', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing?x=%20a#b%20c'],
+            ['/esm-error-url-app/entry.mjs', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/miss%2Eing'],
+            ['/esm-error-url-app/sub/%2e%2e/missing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing'],
+            ['/esm-error-url-app/entry-dot.mjs', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing'],
+            ['file:///esm-error-url-app/miss%23ing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/miss%23ing'],
+            ['file:///esm-error-url-app/miss%2Eing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/miss%2Eing'],
+            ['file:///esm-error-url-app/missing?x= a#b c', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing?x=%20a#b%20c'],
+            ['file:///esm-error-url-app/sub/%2e%2e/missing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing'],
+            ['file://localhost/esm-error-url-app/sub/%2e%2e/missing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing'],
+            ['file://LOCALHOST/esm-error-url-app/sub/%2e%2e/missing', 'ERR_MODULE_NOT_FOUND', 'file:///esm-error-url-app/missing'],
+            ['file://example.com/esm-error-url-app/missing', 'ERR_INVALID_FILE_URL_HOST', null],
+        ];
+
+        try {
+            for (const [specifier, code, expectedUrl = pathToFileURL(specifier).href] of cases) {
+                await assert.rejects(
+                    import(specifier),
+                    (error) => {
+                        assert.strictEqual(error.code, code);
+                        if (expectedUrl === null) {
+                            assert(!Object.prototype.hasOwnProperty.call(error, 'url'));
+                            assert(error instanceof originalError || error.name === 'TypeError');
+                        } else {
+                            assert(Object.prototype.hasOwnProperty.call(error, 'url'));
+                            assert.strictEqual(error.url, expectedUrl);
+                        }
+                        return true;
+                    }
+                );
+                const dataSpecifier = expectedUrl === null ? specifier : expectedUrl;
+                await assert.rejects(
+                    import(`data:text/javascript,import${encodeURIComponent(JSON.stringify(dataSpecifier))}`),
+                    (error) => {
+                        assert.strictEqual(error.code, code);
+                        if (expectedUrl === null) {
+                            assert(!Object.prototype.hasOwnProperty.call(error, 'url'));
+                            assert(error instanceof originalError || error.name === 'TypeError');
+                        } else {
+                            assert(Object.prototype.hasOwnProperty.call(error, 'url'));
+                            assert.strictEqual(error.url, expectedUrl);
+                        }
+                        return true;
+                    }
+                );
+            }
+        } finally {
+            globalThis.TypeError = originalTypeError;
+            globalThis.Error = originalError;
+            Object.defineProperty = originalDefineProperty;
+            delete Error.prototype.url;
+            delete Object.prototype.url;
+        }
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDirectNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-named-export-app', { recursive: true });
