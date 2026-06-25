@@ -183,20 +183,32 @@ fn generate_conversion_instances_for_type(
                 let original_field_type = &field_type.original_type_ref;
                 let wrapped_field_type = &field_type.wrapped_type_ref;
 
-                let wrapped_field = field_type
-                    .wrap
-                    .run(quote! { #field_accessor.#rust_field_ident });
-                let unwrapped_field = field_type.unwrap.run(quote! { #rust_field_ident });
+                if field_type.wrap.is_identity() {
+                    set_fields.push(quote! {
+                        let #rust_field_ident: #original_field_type = #field_accessor.#rust_field_ident;
+                        obj.set(#field_name_lit, #rust_field_ident)?;
+                    });
+                } else {
+                    let wrapped_field = field_type
+                        .wrap
+                        .run(quote! { #field_accessor.#rust_field_ident });
+                    set_fields.push(quote! {
+                        let #rust_field_ident: #wrapped_field_type = #wrapped_field;
+                        obj.set(#field_name_lit, #rust_field_ident)?;
+                    });
+                }
 
-                set_fields.push(quote! {
-                    let #rust_field_ident: #wrapped_field_type = #wrapped_field;
-                    obj.set(#field_name_lit, #rust_field_ident)?;
-                });
-
-                get_fields.push(quote! {
-                    let #rust_field_ident: #wrapped_field_type = obj.get(#field_name_lit)?;
-                    let #rust_field_ident: #original_field_type = #unwrapped_field;
-                });
+                if field_type.unwrap.is_identity() {
+                    get_fields.push(quote! {
+                        let #rust_field_ident: #original_field_type = obj.get(#field_name_lit)?;
+                    });
+                } else {
+                    let unwrapped_field = field_type.unwrap.run(quote! { #rust_field_ident });
+                    get_fields.push(quote! {
+                        let #rust_field_ident: #wrapped_field_type = obj.get(#field_name_lit)?;
+                        let #rust_field_ident: #original_field_type = #unwrapped_field;
+                    });
+                }
 
                 rust_field_list.push(rust_field_ident);
             }
@@ -342,14 +354,15 @@ fn generate_conversion_instances_for_type(
 
                     into_cases.push(quote! {
                         #type_path::#rust_ident(inner) => {
-                            obj.set(crate::wrappers::TAG, #case_name_lit)?;
+                            let case_tag = crate::internal::variant_case_tag(ctx, #case_name_lit)?;
+                            obj.set(crate::wrappers::TAG, case_tag)?;
                             let case_value: #wrapped_type = #wrapped_inner;
                             obj.set(crate::wrappers::VALUE, case_value)?;
                         }
                     });
 
                     from_cases.push(quote! {
-                        #case_name_lit => {
+                        tag if tag == #case_name_lit => {
                             let inner: #wrapped_type = obj.get(crate::wrappers::VALUE)?;
                             Ok(#type_path::#rust_ident(#unwrapped_inner))
                         }
@@ -357,12 +370,13 @@ fn generate_conversion_instances_for_type(
                 } else {
                     into_cases.push(quote! {
                         #type_path::#rust_ident => {
-                            obj.set(crate::wrappers::TAG, #case_name_lit)?;
+                            let case_tag = crate::internal::variant_case_tag(ctx, #case_name_lit)?;
+                            obj.set(crate::wrappers::TAG, case_tag)?;
                         }
                     });
 
                     from_cases.push(quote! {
-                        #case_name_lit => Ok(#type_path::#rust_ident),
+                        tag if tag == #case_name_lit => Ok(#type_path::#rust_ident),
                     });
                 }
             }
@@ -394,13 +408,14 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let obj = rquickjs::Object::from_value(value)?;
-                            let tag: String = obj.get(crate::wrappers::TAG)?;
+                            let tag: rquickjs::String = obj.get(crate::wrappers::TAG)?;
+                            let tag = tag.to_cstring()?;
                             match tag.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown variant case: {tag}"),
+                                    format!("Unknown variant case: {}", tag.as_str()),
                                 )),
                             }.map(Self)
                         }
@@ -421,13 +436,14 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #type_path {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let obj = rquickjs::Object::from_value(value)?;
-                            let tag: String = obj.get(crate::wrappers::TAG)?;
+                            let tag: rquickjs::String = obj.get(crate::wrappers::TAG)?;
+                            let tag = tag.to_cstring()?;
                             match tag.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown variant case: {tag}"),
+                                    format!("Unknown variant case: {}", tag.as_str()),
                                 )),
                             }
                         }
@@ -473,17 +489,17 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #wrapper_name {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let value = value
-                                .as_string()
+                                .into_string()
                                 .ok_or_else(|| {
                                     rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
                                 })?
-                                .to_string()?;
+                                .to_cstring()?;
                             match value.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown case value: {value}"),
+                                    format!("Unknown case value: {}", value.as_str()),
                                 )),
                             }.map(Self)
                         }
@@ -502,17 +518,17 @@ fn generate_conversion_instances_for_type(
                     impl<'js> rquickjs::FromJs<'js> for #type_path {
                         fn from_js(_ctx: &rquickjs::Ctx<'js>, value: rquickjs::Value<'js>) -> rquickjs::Result<Self> {
                             let value = value
-                                .as_string()
+                                .into_string()
                                 .ok_or_else(|| {
                                     rquickjs::Error::new_from_js_message(#lit_js_type, #lit_wit_type, "Expected a string")
                                 })?
-                                .to_string()?;
+                                .to_cstring()?;
                             match value.as_str() {
                                 #(#from_cases)*
                                 _ => Err(rquickjs::Error::new_from_js_message(
                                     #lit_js_type,
                                     #lit_wit_type,
-                                    format!("Unknown case value: {value}"),
+                                    format!("Unknown case value: {}", value.as_str()),
                                 )),
                             }
                         }

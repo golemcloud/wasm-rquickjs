@@ -930,6 +930,17 @@ impl TestInstance {
         (results, stdout)
     }
 
+    pub async fn invoke(
+        &mut self,
+        interface_name: Option<&str>,
+        function_name: &str,
+        args: &[Val],
+    ) -> anyhow::Result<Option<Val>> {
+        self.invoke_and_capture_output_inner(interface_name, function_name, args)
+            .await
+            .map(|results| results.first().cloned())
+    }
+
     pub async fn invoke_and_capture_output_with_stderr(
         &mut self,
         interface_name: Option<&str>,

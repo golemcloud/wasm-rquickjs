@@ -310,6 +310,10 @@ impl TokenStreamWrapper {
     pub fn as_slice() -> Self {
         TokenStreamWrapper::AsSlice
     }
+
+    pub fn is_identity(&self) -> bool {
+        matches!(self, TokenStreamWrapper::Identity)
+    }
 }
 
 impl From<Box<dyn Fn(TokenStream) -> TokenStream>> for TokenStreamWrapper {
@@ -676,16 +680,26 @@ fn get_wrapped_type_list(
             true,
         )?;
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
-        let wrapped_v = inner.wrap.run(quote! { v });
-        let unwrapped_v = inner.unwrap.run(quote! { v });
+        let wrap_is_identity = inner.wrap.is_identity();
+        let unwrap_is_identity = inner.unwrap.is_identity();
 
         Ok(WrappedType {
-            wrap: TokenStreamWrapper::new(
-                move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
-            ),
-            unwrap: TokenStreamWrapper::new(
-                move |ts| quote! { #ts.iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
-            ),
+            wrap: if wrap_is_identity {
+                TokenStreamWrapper::identity()
+            } else {
+                let wrapped_v = inner.wrap.run(quote! { v });
+                TokenStreamWrapper::new(
+                    move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
+                )
+            },
+            unwrap: if unwrap_is_identity {
+                TokenStreamWrapper::identity()
+            } else {
+                let unwrapped_v = inner.unwrap.run(quote! { v });
+                TokenStreamWrapper::new(
+                    move |ts| quote! { #ts.iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
+                )
+            },
             original_type_ref: ctx.original_type_ref,
             wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
         })
@@ -699,18 +713,28 @@ fn get_wrapped_type_list(
             ctx.forced_ref,
         )?;
         let inner_wrapped_type_ref = inner.wrapped_type_ref;
-        let wrapped_v = inner.wrap.run(quote! { v });
-        let unwrapped_v = inner.unwrap.run(quote! { v });
+        let wrap_is_identity = inner.wrap.is_identity();
+        let unwrap_is_identity = inner.unwrap.is_identity();
 
         Ok(WrappedType {
-            wrap: TokenStreamWrapper::new(
-                move |ts| quote! { #ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>() },
-            ),
-            unwrap: TokenStreamWrapper::new(
-                move |ts| quote! { #ts.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() },
-            ),
+            wrap: if wrap_is_identity {
+                TokenStreamWrapper::new(move |ts| quote! { crate::wrappers::JsVec(#ts) })
+            } else {
+                let wrapped_v = inner.wrap.run(quote! { v });
+                TokenStreamWrapper::new(move |ts| {
+                    quote! { crate::wrappers::JsVec(#ts.into_iter().map(|v| #wrapped_v).collect::<Vec<_>>()) }
+                })
+            },
+            unwrap: if unwrap_is_identity {
+                TokenStreamWrapper::new(move |ts| quote! { #ts.0 })
+            } else {
+                let unwrapped_v = inner.unwrap.run(quote! { v });
+                TokenStreamWrapper::new(move |ts| {
+                    quote! { #ts.0.into_iter().map(|v| #unwrapped_v).collect::<Vec<_>>() }
+                })
+            },
             original_type_ref: ctx.original_type_ref,
-            wrapped_type_ref: quote! { Vec<#inner_wrapped_type_ref> },
+            wrapped_type_ref: quote! { crate::wrappers::JsVec<#inner_wrapped_type_ref> },
         })
     }
 }

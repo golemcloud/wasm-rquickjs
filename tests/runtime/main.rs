@@ -43,6 +43,7 @@ mod timeout;
 mod toplevel_timer;
 mod url;
 mod v8_stack_trace;
+mod variant_list_roundtrip;
 mod xhr;
 
 // Tag suites into 8 groups for parallel CI matrix execution
@@ -81,6 +82,7 @@ tag_suite!(timeout, group7);
 tag_suite!(buffer, group7);
 tag_suite!(bigint_roundtrip, group7);
 tag_suite!(imports, group7);
+tag_suite!(variant_list_roundtrip, group7);
 
 tag_suite!(response_static, group8);
 tag_suite!(v8_stack_trace, group8);
