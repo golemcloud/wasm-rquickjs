@@ -625,6 +625,36 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '});',
             'exports.own = "own";',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-values.cjs', [
+            'const identifierValue = "identifier";',
+            'const memberSource = { x: "member" };',
+            'module.exports = {',
+            '  identifierValue,',
+            '  callExpression: factory(),',
+            '  memberExpression: memberSource.x,',
+            '  booleanLiteral: true,',
+            '  nullLiteral: null,',
+            '  undefinedLiteral: undefined,',
+            '};',
+            'function factory() { return "call"; }',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-require-value.cjs', [
+            'module.exports = {',
+            '  requireValue: require("./dep.cjs"),',
+            '  afterRequire: "not-detected",',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-unsupported.cjs', [
+            'const identifierValue = "identifier";',
+            'module.exports = {',
+            '  stringLiteral: "not-detected",',
+            '  numberLiteral: 1,',
+            '  objectLiteral: {},',
+            '  callExpression: factory(),',
+            '  identifierValue,',
+            '};',
+            'function factory() { return "not-detected"; }',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/guards-entry.mjs', [
             'import * as fp from "./false-positives.cjs";',
             'import * as unsafe from "./unsafe-define.cjs";',
@@ -632,6 +662,9 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as unicodeReexport from "./unicode-reexport.cjs";',
             'import * as continuation from "./continuation.cjs";',
             'import * as bindingContinuation from "./binding-continuation.cjs";',
+            'import * as objectLiteralValues from "./object-literal-values.cjs";',
+            'import * as objectLiteralRequireValue from "./object-literal-require-value.cjs";',
+            'import * as objectLiteralUnsupported from "./object-literal-unsupported.cjs";',
             'export default {',
             '  fpKeys: Object.keys(fp).filter((key) => key !== "default" && key !== "real"),',
             '  real: fp.real,',
@@ -643,6 +676,12 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default"),',
             '  bindingContinuationKeys: Object.keys(bindingContinuation).filter((key) => key !== "default" && key !== "own"),',
             '  bindingContinuationOwn: bindingContinuation.own,',
+            '  objectLiteralValueKeys: Object.keys(objectLiteralValues).filter((key) => key !== "default").sort(),',
+            '  identifierValue: objectLiteralValues.identifierValue,',
+            '  callExpression: objectLiteralValues.callExpression,',
+            '  objectLiteralRequireValueKeys: Object.keys(objectLiteralRequireValue).filter((key) => key !== "default").sort(),',
+            '  requireValue: objectLiteralRequireValue.requireValue,',
+            '  objectLiteralUnsupportedKeys: Object.keys(objectLiteralUnsupported).filter((key) => key !== "default").sort(),',
             '};',
         ].join('\n'));
 
@@ -657,6 +696,15 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.deepStrictEqual(result.continuationKeys, []);
         assert.deepStrictEqual(result.bindingContinuationKeys, []);
         assert.strictEqual(result.bindingContinuationOwn, 'own');
+        assert.deepStrictEqual(result.objectLiteralValueKeys, [
+            'callExpression',
+            'identifierValue',
+        ]);
+        assert.strictEqual(result.identifierValue, 'identifier');
+        assert.strictEqual(result.callExpression, 'call');
+        assert.deepStrictEqual(result.objectLiteralRequireValueKeys, ['requireValue']);
+        assert.deepStrictEqual(result.requireValue, { alpha: 'alpha' });
+        assert.deepStrictEqual(result.objectLiteralUnsupportedKeys, []);
         return true;
     } catch (error) {
         console.error(error);

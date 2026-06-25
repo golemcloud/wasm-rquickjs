@@ -766,7 +766,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | setUncaughtExceptionCaptureCallback does not fully intercept thrown uncaught exceptions | 3 | `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`, `parallel/test-process-exception-capture-should-abort-on-uncaught.js`, `parallel/test-process-exception-capture.js` |
 | spawn() stdio validation/pipe semantics are not Node-compatible in WASM emulation | 3 | `parallel/test-child-process-stdio.js#block_00_test_stdio_piping`, `parallel/test-child-process-stdio.js#block_02_asset_options_invariance`, `parallel/test-child-process-stdio.js#block_03_test_stdout_buffering` |
 | test runner edge case | 3 | `parallel/test-runner-filetest-location.js`, `parallel/test-runner-root-after-with-refed-handles.js`, `parallel/test-runner-todo-skip-tests.js` |
-| CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage | 2 | `es-module/test-esm-cjs-named-error.mjs`, `es-module/test-require-as-esm-interop.mjs` |
 | CLI/NODE_OPTIONS max-http-header-size propagation in child process emulation is incomplete | 2 | `parallel/test-set-http-max-http-headers.js#test_01_test_01`, `parallel/test-set-http-max-http-headers.js#test_02_same_checks_using_node_options_if_it_is_supported` |
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
 | ESM preserve-symlinks / preserve-symlinks-main behavior is incomplete | 2 | `es-module/test-esm-preserve-symlinks-not-found-plain.mjs`, `es-module/test-esm-preserve-symlinks-not-found.mjs` |
@@ -845,6 +844,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | AsyncLocalStorage deep nesting/recursion handling is unstable | 1 | `parallel/test-async-local-storage-deep-stack.js` |
 | AsyncLocalStorage.bind argument validation is incomplete | 1 | `parallel/test-async-local-storage-bind.js` |
 | AsyncLocalStorage.snapshot is missing or incomplete | 1 | `parallel/test-async-local-storage-snapshot.js` |
+| CJS named-export misses reject, but the loader does not yet emit Node-shaped CommonJS named-export diagnostics | 1 | `es-module/test-esm-cjs-named-error.mjs` |
+| CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage | 1 | `es-module/test-require-as-esm-interop.mjs` |
 | CLI --security-revert behavior in child_process spawnSync is not fully implemented | 1 | `parallel/test-security-revert-unknown.js` |
 | CLI --title flag does not update process.title | 1 | `parallel/test-process-title-cli.js` |
 | CLI --unhandled-rejections flag parsing/validation is incomplete | 1 | `parallel/test-promise-unhandled-flag.js` |

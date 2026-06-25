@@ -3756,6 +3756,17 @@ fn skip_object_literal_value(source: &str, pos: usize, object_end: usize) -> usi
     object_end
 }
 
+fn is_named_export_object_literal_value(source: &str, pos: usize, object_end: usize) -> bool {
+    let Some((name, mut next)) = read_ident(source, pos) else {
+        return false;
+    };
+    if matches!(name.as_str(), "true" | "false" | "null" | "undefined") {
+        return false;
+    }
+    next = skip_ws_comments(source, next);
+    next >= object_end || matches!(source.as_bytes()[next], b',' | b'(')
+}
+
 fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<String>, Vec<String>, usize)> {
     let bytes = source.as_bytes();
     let (target, mut i) = parse_exports_target(source, pos)?;
@@ -3803,8 +3814,13 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
         let mut next = skip_ws_comments(source, key_end);
         if next < object_end && bytes[next] == b':' {
             next = skip_ws_comments(source, next + 1);
-            add_unique(&mut exports, name);
             if parse_require_string_loose(source, next).is_some() {
+                add_unique(&mut exports, name);
+                break;
+            }
+            if is_named_export_object_literal_value(source, next, object_end) {
+                add_unique(&mut exports, name);
+            } else {
                 break;
             }
             cursor = skip_ws_comments(source, skip_object_literal_value(source, next, object_end));
@@ -6123,6 +6139,37 @@ mod cjs_export_analyzer_tests {
             "#,
             true,
             &["a", "b"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = {
+                    identifierValue: value,
+                    callExpression: factory(),
+                    memberExpression: ns.x,
+                    booleanLiteral: true,
+                    nullLiteral: null,
+                    undefinedLiteral: undefined,
+                };
+            "#,
+            true,
+            &["identifierValue", "callExpression"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = {
+                    stringLiteral: "not-detected",
+                    numberLiteral: 1,
+                    objectLiteral: {},
+                    callExpression: factory(),
+                    identifierValue: value,
+                };
+            "#,
+            true,
+            &[],
             &[],
         );
 
