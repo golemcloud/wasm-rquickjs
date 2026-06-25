@@ -6055,7 +6055,7 @@
     "es-module/test-esm-process.mjs": {},
     "es-module/test-esm-prototype-pollution.mjs": {},
     "es-module/test-esm-recursive-cjs-dependencies.mjs": { "category": "runnable" },
-    "es-module/test-esm-require-cache.mjs": { "category": "known-gap", "reason": "CJS/ESM interop behavior needs CJS lexer / require(esm) bridge triage" },
+    "es-module/test-esm-require-cache.mjs": { "category": "runnable" },
     "es-module/test-esm-resolve-type.mjs": { "category": "node-internals", "reason": "requires --expose-internals and node:internal/modules/esm/resolve" },
     "es-module/test-esm-scope-node-modules.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },
     "es-module/test-esm-shared-loader-dep.mjs": { "category": "known-gap", "reason": "custom ESM loader hooks / module.register are not implemented" },

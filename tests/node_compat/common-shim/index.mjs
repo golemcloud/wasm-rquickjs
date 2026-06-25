@@ -59,6 +59,7 @@ const {
 } = common;
 
 export {
+  createRequire,
   isWindows,
   isAIX,
   isSunOS,
