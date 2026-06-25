@@ -9,6 +9,7 @@ use rquickjs::{
 };
 use rquickjs::{CaughtError, prelude::*};
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -1630,14 +1631,23 @@ impl FileUrlResolver {
 impl Resolver for FileUrlResolver {
     fn resolve<'js>(
         &mut self,
-        _ctx: &Ctx<'js>,
-        _base: &str,
+        ctx: &Ctx<'js>,
+        base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
+        if let Some(encoded) = name.strip_prefix("file://") {
+            let end = encoded
+                .find(|ch| ch == '?' || ch == '#')
+                .unwrap_or(encoded.len());
+            if NodeFileResolver::has_encoded_path_separator(&encoded[..end]) {
+                return NodeFileResolver::throw_invalid_encoded_separator(ctx, base, name);
+            }
+        }
+
         if let Some(path) = Self::file_url_to_path(name) {
             Ok(path)
         } else {
-            Err(Error::new_resolving(_base, name))
+            Err(Error::new_resolving(base, name))
         }
     }
 }
@@ -1861,6 +1871,54 @@ impl Resolver for CjsEvalResolver {
 struct NodeFileResolver;
 
 impl NodeFileResolver {
+    fn decode_module_path<'js, 'path>(
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        path: &'path str,
+    ) -> rquickjs::Result<Cow<'path, str>> {
+        if path.as_bytes().contains(&b'%') {
+            if Self::has_encoded_path_separator(path) {
+                return Self::throw_invalid_encoded_separator(ctx, base, name);
+            }
+            percent_decode(path)
+                .map(Cow::Owned)
+                .ok_or_else(|| Error::new_resolving(base, name))
+        } else {
+            Ok(Cow::Borrowed(path))
+        }
+    }
+
+    fn has_encoded_path_separator(path: &str) -> bool {
+        let bytes = path.as_bytes();
+        let mut i = 0;
+        while i + 2 < bytes.len() {
+            if bytes[i] == b'%' && bytes[i + 1] == b'2' && matches!(bytes[i + 2], b'f' | b'F') {
+                return true;
+            }
+            if bytes[i] == b'%' && bytes[i + 1] == b'5' && matches!(bytes[i + 2], b'c' | b'C') {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
+    fn throw_invalid_encoded_separator<'js, T>(
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<T> {
+        let msg = format!(
+            "Invalid module \"{}\" must not include encoded \"/\" or \"\\\" characters imported from {}",
+            name, base
+        );
+        let type_error_ctor: Function = ctx.globals().get("TypeError")?;
+        let error_obj: Object = type_error_ctor.call((&msg,))?;
+        error_obj.set("code", "ERR_INVALID_MODULE_SPECIFIER")?;
+        Err(ctx.throw(error_obj.into_value()))
+    }
+
     fn resolve_candidate(candidate: std::path::PathBuf, suffix: &str) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
         if std::path::Path::new(&normalized).is_file() {
@@ -1883,7 +1941,7 @@ impl NodeFileResolver {
 impl Resolver for NodeFileResolver {
     fn resolve<'js>(
         &mut self,
-        _ctx: &Ctx<'js>,
+        ctx: &Ctx<'js>,
         base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
@@ -1893,8 +1951,10 @@ impl Resolver for NodeFileResolver {
 
         let (name_path, suffix) = split_module_path_suffix(name);
         let candidate = if name_path.starts_with('/') {
-            std::path::PathBuf::from(name_path)
+            let name_path = Self::decode_module_path(ctx, base, name, name_path)?;
+            std::path::PathBuf::from(name_path.as_ref())
         } else if name_path.starts_with("./") || name_path.starts_with("../") {
+            let name_path = Self::decode_module_path(ctx, base, name, name_path)?;
             let base_path = if let Some(path) = FileUrlResolver::file_url_to_path(base) {
                 path
             } else {
@@ -1909,7 +1969,7 @@ impl Resolver for NodeFileResolver {
             let base_dir = std::path::Path::new(&base_path)
                 .parent()
                 .ok_or_else(|| Error::new_resolving(base, name))?;
-            base_dir.join(name_path)
+            base_dir.join(name_path.as_ref())
         } else {
             return Err(Error::new_resolving(base, name));
         };

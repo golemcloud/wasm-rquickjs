@@ -169,6 +169,34 @@ export const testEsmPackageMapEdgeCases = async () => {
     }
 };
 
+export const testEsmEncodedRelativePaths = async () => {
+    try {
+        fs.mkdirSync('/esm-encoded-relative-app/sub', { recursive: true });
+        fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-ok.mjs', 'export default "ok";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-comma,.mjs', 'export default "comma";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-double-encoding-native%20.mjs', 'export default "percent";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub/blocked.mjs', 'export default "blocked";');
+        fs.writeFileSync('/esm-encoded-relative-app/entry.mjs', [
+            'import ok from "./sub/test-%65%73%6d-ok.mjs";',
+            'import comma from "./sub/test-esm-comma%2c.mjs";',
+            'import percent from "./sub/test-esm-double-encoding-native%2520.mjs";',
+            'export default { ok, comma, percent };',
+        ].join('\n'));
+
+        assert.deepStrictEqual((await import('/esm-encoded-relative-app/entry.mjs')).default, {
+            ok: 'ok',
+            comma: 'comma',
+            percent: 'percent',
+        });
+        await expectImportRejectsCode('/esm-encoded-relative-app/sub%2Fblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        await expectImportRejectsCode('/esm-encoded-relative-app/sub%5Cblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDirectNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-named-export-app', { recursive: true });
