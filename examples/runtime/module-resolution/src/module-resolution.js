@@ -197,6 +197,21 @@ export const testEsmEncodedRelativePaths = async () => {
     }
 };
 
+export const testEsmInvalidPackageSpecifiers = async () => {
+    try {
+        await Promise.all([
+            'as%2Ff',
+            'as%5Cf',
+            'as\\df',
+            '@as@df',
+        ].map((specifier) => expectImportRejectsCode(specifier, 'ERR_INVALID_MODULE_SPECIFIER')));
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDirectNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-named-export-app', { recursive: true });

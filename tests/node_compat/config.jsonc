@@ -6049,7 +6049,7 @@
     "es-module/test-esm-nowarn-exports.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-path-posix.mjs": {},
     "es-module/test-esm-path-win32.mjs": {},
-    "es-module/test-esm-pkgname.mjs": { "category": "known-gap", "reason": "invalid ESM package specifier validation and error codes do not yet match Node" },
+    "es-module/test-esm-pkgname.mjs": { "category": "runnable" },
     "es-module/test-esm-preserve-symlinks-not-found-plain.mjs": { "category": "known-gap", "reason": "ESM preserve-symlinks / preserve-symlinks-main behavior is incomplete" },
     "es-module/test-esm-preserve-symlinks-not-found.mjs": { "category": "known-gap", "reason": "ESM preserve-symlinks / preserve-symlinks-main behavior is incomplete" },
     "es-module/test-esm-process.mjs": {},

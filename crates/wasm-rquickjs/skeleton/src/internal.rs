@@ -2023,6 +2023,7 @@ impl Resolver for NodeModuleErrorResolver {
 }
 
 enum NodePackageResolveError {
+    InvalidModuleSpecifier { specifier: String, base: String },
     PackagePathNotExported { package_name: String, subpath: String },
     PackageImportNotDefined { specifier: String },
     InvalidPackageTarget { kind: &'static str, target: String },
@@ -2082,6 +2083,7 @@ impl NodeModulesResolver {
         let Some((package_name, subpath)) = Self::split_package_name(name) else {
             return Ok(None);
         };
+        Self::validate_package_name(base, name, package_name)?;
 
         // Extract directory from base module path
         let Some(base_dir) = Path::new(base).parent() else {
@@ -2161,6 +2163,7 @@ impl NodeModulesResolver {
         let Some((package_name, subpath)) = Self::split_package_name(name) else {
             return Ok(None);
         };
+        Self::validate_package_name(base, name, package_name)?;
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
         };
@@ -2280,10 +2283,12 @@ impl NodeModulesResolver {
 
     fn split_package_name(name: &str) -> Option<(&str, &str)> {
         if name.starts_with('@') {
-            let first = name.find('/')?;
+            let Some(first) = name.find('/') else {
+                return Some((name, ""));
+            };
             let rest = &name[first + 1..];
             if rest.is_empty() {
-                return None;
+                return Some((name, ""));
             }
             if let Some(second_rel) = rest.find('/') {
                 let second = first + 1 + second_rel;
@@ -2296,6 +2301,21 @@ impl NodeModulesResolver {
         } else {
             Some((name, ""))
         }
+    }
+
+    fn validate_package_name(
+        base: &str,
+        specifier: &str,
+        package_name: &str,
+    ) -> Result<(), NodePackageResolveError> {
+        let invalid_scoped_name = package_name.starts_with('@') && !package_name.contains('/');
+        if invalid_scoped_name || package_name.contains('%') || package_name.contains('\\') {
+            return Err(NodePackageResolveError::InvalidModuleSpecifier {
+                specifier: specifier.to_string(),
+                base: base.to_string(),
+            });
+        }
+        Ok(())
     }
 
     fn resolve_package_target(package_dir: &std::path::Path, target: &str) -> Option<String> {
@@ -2730,7 +2750,15 @@ fn throw_node_package_resolve_error<'js>(
     ctx: &Ctx<'js>,
     err: NodePackageResolveError,
 ) -> rquickjs::Result<String> {
-    let (code, message) = match err {
+    let (code, message, type_error) = match err {
+        NodePackageResolveError::InvalidModuleSpecifier { specifier, base } => (
+            "ERR_INVALID_MODULE_SPECIFIER",
+            format!(
+                "Invalid module \"{}\" is not a valid package name imported from {}",
+                specifier, base
+            ),
+            true,
+        ),
         NodePackageResolveError::PackagePathNotExported {
             package_name,
             subpath,
@@ -2743,28 +2771,33 @@ fn throw_node_package_resolve_error<'js>(
             (
                 "ERR_PACKAGE_PATH_NOT_EXPORTED",
                 format!("Package subpath '{}' is not defined by \"exports\" in package {}", subpath, package_name),
+                false,
             )
         }
         NodePackageResolveError::PackageImportNotDefined { specifier } => (
             "ERR_PACKAGE_IMPORT_NOT_DEFINED",
             format!("Package import specifier '{}' is not defined", specifier),
+            false,
         ),
         NodePackageResolveError::InvalidPackageTarget { kind, target } => (
             "ERR_INVALID_PACKAGE_TARGET",
             format!("Invalid \"{}\" target '{}'", kind, target),
+            false,
         ),
         NodePackageResolveError::InvalidPackageConfig { path } => (
             "ERR_INVALID_PACKAGE_CONFIG",
             format!("Invalid package config {}", path),
+            false,
         ),
         NodePackageResolveError::ModuleNotFound { request } => (
             "ERR_MODULE_NOT_FOUND",
             format!("Cannot find module '{}'", request),
+            false,
         ),
     };
 
     let globals = ctx.globals();
-    let error_ctor: Function = globals.get("Error")?;
+    let error_ctor: Function = globals.get(if type_error { "TypeError" } else { "Error" })?;
     let error_obj: Object = error_ctor.call((message,))?;
     error_obj.set("code", code)?;
     Err(ctx.throw(error_obj.into_value()))
