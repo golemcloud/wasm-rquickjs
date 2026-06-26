@@ -4685,6 +4685,9 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
         } else if key_is_ident {
             add_unique(&mut exports, name);
             cursor = next;
+            if cursor < object_end && bytes[cursor] != b',' {
+                break;
+            }
         } else {
             break;
         }

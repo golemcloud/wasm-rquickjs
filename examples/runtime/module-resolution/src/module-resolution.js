@@ -1005,6 +1005,15 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '};',
             'function factory() { return "call"; }',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-method-terminal.cjs', [
+            'const beforeMethod = "before";',
+            'const afterMethod = "after";',
+            'module.exports = {',
+            '  beforeMethod,',
+            '  method() { return "method"; },',
+            '  afterMethod,',
+            '};',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/guards-entry.mjs', [
             'import * as fp from "./false-positives.cjs";',
             'import * as unsafe from "./unsafe-define.cjs";',
@@ -1034,6 +1043,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as objectLiteralRequireValue from "./object-literal-require-value.cjs";',
             'import * as objectLiteralUnsupported from "./object-literal-unsupported.cjs";',
             'import * as objectLiteralCallTerminal from "./object-literal-call-terminal.cjs";',
+            'import * as objectLiteralMethodTerminal from "./object-literal-method-terminal.cjs";',
             'export default {',
             '  fpKeys: Object.keys(fp).filter((key) => key !== "default" && key !== "real"),',
             '  real: fp.real,',
@@ -1079,6 +1089,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  objectLiteralUnsupportedKeys: Object.keys(objectLiteralUnsupported).filter((key) => key !== "default").sort(),',
             '  objectLiteralCallTerminalKeys: Object.keys(objectLiteralCallTerminal).filter((key) => key !== "default").sort(),',
             '  callValue: objectLiteralCallTerminal.callValue,',
+            '  objectLiteralMethodTerminalKeys: Object.keys(objectLiteralMethodTerminal).filter((key) => key !== "default").sort(),',
+            '  methodType: typeof objectLiteralMethodTerminal.method,',
             '};',
         ].join('\n'));
 
@@ -1130,6 +1142,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.deepStrictEqual(result.objectLiteralUnsupportedKeys, []);
         assert.deepStrictEqual(result.objectLiteralCallTerminalKeys, ['callValue']);
         assert.strictEqual(result.callValue, 'call');
+        assert.deepStrictEqual(result.objectLiteralMethodTerminalKeys, ['beforeMethod', 'method']);
+        assert.strictEqual(result.methodType, 'function');
         return true;
     } catch (error) {
         console.error(error);
