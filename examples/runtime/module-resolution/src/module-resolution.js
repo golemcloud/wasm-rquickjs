@@ -132,15 +132,33 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
 
+        const genericDeprecationWarnings = [];
+        const onGenericDeprecationWarning = (warning) => {
+            if (warning.code === 'DEP0155' && warning.message === 'generic dep0155') {
+                genericDeprecationWarnings.push(warning);
+            }
+        };
+        process.on('warning', onGenericDeprecationWarning);
+        try {
+            process.emitWarning('generic dep0155', 'DeprecationWarning', 'DEP0155');
+            process.emitWarning('generic dep0155', 'DeprecationWarning', 'DEP0155');
+            await new Promise((resolve) => process.nextTick(resolve));
+        } finally {
+            process.removeListener('warning', onGenericDeprecationWarning);
+        }
+        assert.strictEqual(genericDeprecationWarnings.length, 2);
+
         const packageWarnings = [];
         const onPackageWarning = (warning) => packageWarnings.push(warning);
         process.on('warning', onPackageWarning);
         try {
             writeImportEntry('/esm-package-map-edge-app/deprecated-double-subpath.mjs', 'exported-pkg/deprecated-double');
             writeImportEntry('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs', 'exported-pkg/trailing-pattern-slash/');
+            writeImportEntry('/esm-package-map-edge-app/trailing-pattern-slash-subpath-duplicate.mjs', 'exported-pkg/trailing-pattern-slash/');
             writeImportEntry('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs', 'exported-pkg/folder-pattern/foo/');
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/deprecated-double-subpath.mjs')).default.default, { public: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs')).default.default, { trailingPattern: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath-duplicate.mjs')).default.default, { trailingPattern: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs')).default.default, { folderPattern: true });
             await new Promise((resolve) => process.nextTick(resolve));
         } finally {

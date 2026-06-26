@@ -314,6 +314,7 @@ export const testRequirePackageMapEdgeCases = () => {
             exports: {
                 './public': './public.js',
                 './encoded-target': './sp%20ce.js',
+                './trailing-pattern-slash*': './trailing-pattern-slash*index.js',
                 './missing-selected': {
                     require: './missing.cjs',
                     default: './default.js',
@@ -359,6 +360,8 @@ export const testRequirePackageMapEdgeCases = () => {
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/sp ce.js', 'module.exports = { encoded: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/default.js', 'module.exports = { defaulted: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/real.js', 'module.exports = { extensionFallback: true };');
+        fs.mkdirSync('/package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash', { recursive: true });
+        fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash/index.js', 'module.exports = { trailingPattern: true };');
         fs.mkdirSync('/package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/subdir/index.js', 'module.exports = { directory: true };');
 
@@ -381,6 +384,17 @@ export const testRequirePackageMapEdgeCases = () => {
         const appRequire = createRequire('/package-map-edge-app/app.js');
         assert.deepStrictEqual(appRequire('exported-pkg/public'), { public: true });
         assert.deepStrictEqual(appRequire('exported-pkg/encoded-target'), { encoded: true });
+        const cjsPackageWarnings = [];
+        const onCjsPackageWarning = (warning) => cjsPackageWarnings.push(warning);
+        process.on('warning', onCjsPackageWarning);
+        try {
+            assert.deepStrictEqual(appRequire('exported-pkg/trailing-pattern-slash/'), { trailingPattern: true });
+            assert.deepStrictEqual(appRequire('exported-pkg/trailing-pattern-slash/'), { trailingPattern: true });
+            globalThis.__wasm_rquickjs_drainNextTick();
+        } finally {
+            process.removeListener('warning', onCjsPackageWarning);
+        }
+        assert.deepStrictEqual(cjsPackageWarnings.map((warning) => warning.code), ['DEP0155']);
         assert.deepStrictEqual(appRequire('exported-pkg/array-blocked'), { public: true });
         assert.deepStrictEqual(appRequire('#cjs'), { hashPackage: true });
         assert.strictEqual(appRequire.resolve('#cjs'), '/package-map-edge-app/node_modules/#cjs/index.js');

@@ -671,13 +671,11 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
 }
 
 function emitPackageDeprecationWarning(message, code, key) {
-    if (typeof globalThis.__wasm_rquickjs_emit_package_deprecation_warning === 'function') {
-        globalThis.__wasm_rquickjs_emit_package_deprecation_warning(message, code, key);
-        return;
+    const emitWarning = globalThis.__wasm_rquickjs_emit_package_deprecation_warning;
+    if (typeof emitWarning !== 'function') {
+        throw new Error('Internal package deprecation warning emitter is not initialized');
     }
-    const processObject = globalThis.process;
-    if (!processObject || typeof processObject.emitWarning !== 'function') return;
-    processObject.emitWarning(message, 'DeprecationWarning', code);
+    emitWarning(message, code, key);
 }
 
 const cjsDefaultPackageConditions = ['golem', 'node', 'require', 'module-sync', 'default'];

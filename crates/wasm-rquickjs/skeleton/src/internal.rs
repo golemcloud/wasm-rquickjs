@@ -3520,24 +3520,21 @@ fn emit_node_package_deprecation_warnings<'js>(
     if warnings.is_empty() {
         return Ok(());
     }
-    let Ok(process) = ctx.globals().get::<_, Object>("process") else {
-        return Ok(());
-    };
-    let Ok(emit_warning) = process.get::<_, Function>("emitWarning") else {
-        return Ok(());
-    };
-    let emit_package_warning = ctx
+    let emit_package_warning = match ctx
         .globals()
         .get::<_, Function>("__wasm_rquickjs_emit_package_deprecation_warning")
-        .ok();
-    for warning in warnings {
-        if let Some(emit_package_warning) = emit_package_warning.as_ref() {
-            let key = warning.dedupe_key.as_deref().unwrap_or(warning.message.as_str());
-            let _: Value = emit_package_warning.call((warning.message.as_str(), warning.code, key))?;
-        } else {
-            let _: Value =
-                emit_warning.call((warning.message.as_str(), "DeprecationWarning", warning.code))?;
+    {
+        Ok(emit_package_warning) => emit_package_warning,
+        Err(_) => {
+            let error_ctor: Function = ctx.globals().get("Error")?;
+            let error_obj: Object =
+                error_ctor.call(("Internal package deprecation warning emitter is not initialized",))?;
+            return Err(ctx.throw(error_obj.into_value()));
         }
+    };
+    for warning in warnings {
+        let key = warning.dedupe_key.as_deref().unwrap_or(warning.message.as_str());
+        let _: Value = emit_package_warning.call((warning.message.as_str(), warning.code, key))?;
     }
     Ok(())
 }
