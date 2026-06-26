@@ -56,6 +56,7 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './public': './public.mjs',
                 './encoded-target': './sp%20ce.mjs',
                 './deprecated-double': './/public.mjs',
+                './pattern-slash*': './subpath*.mjs',
                 './trailing-pattern-slash*': './trailing-pattern-slash*index.mjs',
                 './folder-pattern*': './folder-pattern*index.mjs',
                 './condition-order': {
@@ -107,6 +108,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash/index.mjs', 'export default { trailingPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo/index.mjs', 'export default { folderPattern: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subpath/dir1', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subpath/dir1/dir1.mjs', 'export default { patternSlash: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
@@ -153,10 +156,12 @@ export const testEsmPackageMapEdgeCases = async () => {
         process.on('warning', onPackageWarning);
         try {
             writeImportEntry('/esm-package-map-edge-app/deprecated-double-subpath.mjs', 'exported-pkg/deprecated-double');
+            writeImportEntry('/esm-package-map-edge-app/pattern-slash-subpath.mjs', 'exported-pkg/pattern-slash/dir1/dir1');
             writeImportEntry('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs', 'exported-pkg/trailing-pattern-slash/');
             writeImportEntry('/esm-package-map-edge-app/trailing-pattern-slash-subpath-duplicate.mjs', 'exported-pkg/trailing-pattern-slash/');
             writeImportEntry('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs', 'exported-pkg/folder-pattern/foo/');
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/deprecated-double-subpath.mjs')).default.default, { public: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/pattern-slash-subpath.mjs')).default.default, { patternSlash: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs')).default.default, { trailingPattern: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath-duplicate.mjs')).default.default, { trailingPattern: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs')).default.default, { folderPattern: true });
@@ -164,10 +169,15 @@ export const testEsmPackageMapEdgeCases = async () => {
         } finally {
             process.removeListener('warning', onPackageWarning);
         }
-        assert.deepStrictEqual(packageWarnings.map((warning) => warning.code), ['DEP0166', 'DEP0155', 'DEP0155']);
+        assert.deepStrictEqual(packageWarnings.map((warning) => warning.code), ['DEP0166', 'DEP0166', 'DEP0155', 'DEP0155']);
         assert.match(packageWarnings[0].stack, /DeprecationWarning: Use of deprecated double slash/);
-        assert.match(packageWarnings[1].stack, /DeprecationWarning: Use of deprecated trailing slash pattern mapping/);
-        assert.match(packageWarnings[2].stack, /folder-pattern\/foo\//);
+        assert.match(packageWarnings[0].message, /package\.json imported from \/esm-package-map-edge-app\/deprecated-double-subpath\.mjs\./);
+        assert.match(packageWarnings[1].message, /matched to "\.\/pattern-slash\*"/);
+        assert.match(packageWarnings[1].message, /package\.json imported from \/esm-package-map-edge-app\/pattern-slash-subpath\.mjs\./);
+        assert.match(packageWarnings[2].stack, /DeprecationWarning: Use of deprecated trailing slash pattern mapping/);
+        assert.match(packageWarnings[2].message, /package\.json imported from \/esm-package-map-edge-app\/trailing-pattern-slash-subpath\.mjs\./);
+        assert.match(packageWarnings[3].message, /folder-pattern\/foo\//);
+        assert.match(packageWarnings[3].message, /package\.json imported from \/esm-package-map-edge-app\/folder-pattern-trailing-subpath\.mjs\./);
 
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-exports-warn', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/package.json', JSON.stringify({
@@ -234,9 +244,9 @@ export const testEsmPackageMapEdgeCases = async () => {
             process.removeListener('warning', onFallbackWarning);
         }
         assert.deepStrictEqual(fallbackWarnings.map((warning) => warning.code), ['DEP0151', 'DEP0151', 'DEP0151']);
-        assert.match(fallbackWarnings[0].stack, /no-exports-warn/);
-        assert.match(fallbackWarnings[1].stack, /main-extension-warn/);
-        assert.match(fallbackWarnings[2].stack, /main-directory-warn/);
+        assert.match(fallbackWarnings[0].message, /no-exports-warn\/ resolving the main entry point "index\.js", imported from \/esm-package-map-edge-app\/no-exports-warn-entry\.mjs\.\nDefault "index" lookups/);
+        assert.match(fallbackWarnings[1].message, /main-extension-warn\/ has a "main" field set to "index".*resolved file at "index\.js", imported from \/esm-package-map-edge-app\/main-extension-warn-entry\.mjs\.\nAutomatic extension resolution/);
+        assert.match(fallbackWarnings[2].message, /main-directory-warn\/ has a "main" field set to "dir".*resolved file at "dir\/index\.js", imported from \/esm-package-map-edge-app\/main-directory-warn-entry\.mjs\.\nAutomatic extension resolution/);
 
         writeImportEntry('/esm-package-map-edge-app/no-exports-mjs-only-entry.mjs', 'no-exports-mjs-only');
         writeImportEntry('/esm-package-map-edge-app/main-extension-mjs-only-entry.mjs', 'main-extension-mjs-only');
@@ -1637,6 +1647,18 @@ export const testRequireEsmErrorHandling = async () => {
             'import { "missing-name" as missingName } from "./cjs-quoted-named.cjs";',
             'export default missingName;',
         ].join('\n'));
+        fs.mkdirSync('/require-esm-errors-app/node_modules/warn-pkg/trailing-pattern-slash', { recursive: true });
+        fs.writeFileSync('/require-esm-errors-app/node_modules/warn-pkg/package.json', JSON.stringify({
+            type: 'module',
+            exports: {
+                './trailing-pattern-slash*': './trailing-pattern-slash*index.mjs',
+            },
+        }));
+        fs.writeFileSync('/require-esm-errors-app/node_modules/warn-pkg/trailing-pattern-slash/index.mjs', 'export default { warned: true };');
+        fs.writeFileSync('/require-esm-errors-app/import-warn-pkg.mjs', [
+            'import warned from "warn-pkg/trailing-pattern-slash/";',
+            'export default warned;',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-errors-app/main.cjs');
@@ -1655,6 +1677,17 @@ export const testRequireEsmErrorHandling = async () => {
         assert.deepStrictEqual((await import('/require-esm-errors-app/import-default-named.mjs')).default, {
             defaultNamed: true,
         });
+        const requireEsmPackageWarnings = [];
+        const onRequireEsmPackageWarning = (warning) => requireEsmPackageWarnings.push(warning);
+        process.on('warning', onRequireEsmPackageWarning);
+        try {
+            assert.deepStrictEqual(require('/require-esm-errors-app/import-warn-pkg.mjs').default, { warned: true });
+            await new Promise((resolve) => process.nextTick(resolve));
+        } finally {
+            process.removeListener('warning', onRequireEsmPackageWarning);
+        }
+        assert.deepStrictEqual(requireEsmPackageWarnings.map((warning) => warning.code), ['DEP0155']);
+        assert.match(requireEsmPackageWarnings[0].message, /package\.json imported from \/require-esm-errors-app\/import-warn-pkg\.mjs\./);
         await assert.rejects(() => import('/require-esm-errors-app/import-missing-named.mjs'), {
             name: 'SyntaxError',
             message: [

@@ -2444,7 +2444,7 @@ impl NodeModulesResolver {
             return Ok(None);
         };
         if let Some(resolved) =
-            Self::try_resolve_package_self(base_dir, package_name, subpath, conditions, warnings)?
+            Self::try_resolve_package_self(base_dir, base, package_name, subpath, conditions, warnings)?
         {
             return Ok(Some(resolved));
         }
@@ -2474,6 +2474,7 @@ impl NodeModulesResolver {
                             subpath,
                             conditions,
                             warnings,
+                            Some(base),
                         )
                         .map(Some);
                     }
@@ -2487,8 +2488,15 @@ impl NodeModulesResolver {
                             if is_module_package && used_extension_lookup {
                                 warnings.push(NodePackageWarning {
                                     message: format!(
-                                        "Package {} uses deprecated main extension lookup for {:?}",
-                                        package_name, main
+                                        "Package {}/ has a \"main\" field set to {:?}, excluding the full filename and extension to the resolved file at {:?}, imported from {}.\nAutomatic extension resolution of the \"main\" field is deprecated for ES modules.",
+                                        nm_dir.to_string_lossy().trim_end_matches('/'),
+                                        main,
+                                        std::path::Path::new(&resolved)
+                                            .strip_prefix(&nm_dir)
+                                            .ok()
+                                            .map(|path| path.to_string_lossy().into_owned())
+                                            .unwrap_or_else(|| resolved.clone()),
+                                        base
                                     ),
                                     code: "DEP0151",
                                     dedupe_key: None,
@@ -2516,8 +2524,9 @@ impl NodeModulesResolver {
                             {
                                 warnings.push(NodePackageWarning {
                                     message: format!(
-                                        "Package {} uses deprecated index lookup",
-                                        package_name
+                                        "No \"main\" or \"exports\" field defined in the package.json for {}/ resolving the main entry point \"index.js\", imported from {}.\nDefault \"index\" lookups for the main are deprecated for ES modules.",
+                                        nm_dir.to_string_lossy().trim_end_matches('/'),
+                                        base
                                     ),
                                     code: "DEP0151",
                                     dedupe_key: None,
@@ -2569,6 +2578,7 @@ impl NodeModulesResolver {
         if let Some(resolved) =
             Self::try_resolve_package_self(
                 base_dir,
+                base,
                 package_name,
                 subpath,
                 conditions,
@@ -2600,6 +2610,7 @@ impl NodeModulesResolver {
                             subpath,
                             &conditions,
                             &mut Vec::new(),
+                            None,
                         )
                         .map(Some);
                     }
@@ -2676,7 +2687,7 @@ impl NodeModulesResolver {
                     });
                 };
                 Self::validate_package_import_specifier(name)?;
-                return Self::resolve_package_import(&dir, imports, name, conditions, warnings).map(Some);
+                return Self::resolve_package_import(&dir, imports, name, conditions, warnings, Some(base)).map(Some);
             }
 
             if !dir.pop() {
@@ -2691,6 +2702,7 @@ impl NodeModulesResolver {
 
     fn try_resolve_package_self(
         base_dir: &std::path::Path,
+        importer: &str,
         package_name: &str,
         subpath: &str,
         conditions: &[String],
@@ -2721,6 +2733,7 @@ impl NodeModulesResolver {
                         subpath,
                         conditions,
                         warnings,
+                        Some(importer),
                     )
                     .map(Some);
                 }
@@ -2904,6 +2917,7 @@ impl NodeModulesResolver {
         subpath: &str,
         conditions: &[String],
         warnings: &mut Vec<NodePackageWarning>,
+        importer: Option<&str>,
     ) -> Result<String, NodePackageResolveError> {
         let key = if subpath.is_empty() {
             ".".to_string()
@@ -2929,6 +2943,8 @@ impl NodeModulesResolver {
                 conditions,
                 None,
                 &key,
+                None,
+                importer,
                 warnings,
             ), &key)
             .and_then(|resolution| {
@@ -2951,6 +2967,8 @@ impl NodeModulesResolver {
                     conditions,
                     None,
                     &key,
+                    None,
+                    importer,
                     warnings,
                 ), &key)
                 .and_then(|resolution| {
@@ -2977,6 +2995,8 @@ impl NodeModulesResolver {
                     conditions,
                     Some(&pattern_substitution),
                     &key,
+                    Some(pattern_key),
+                    importer,
                     warnings,
                 ), &key)
                 .and_then(|resolution| {
@@ -2998,11 +3018,12 @@ impl NodeModulesResolver {
         specifier: &str,
         conditions: &[String],
         warnings: &mut Vec<NodePackageWarning>,
+        importer: Option<&str>,
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
         {
-            let (target, pattern_substitution) = if let Some(target) = map.get(specifier) {
-                (target, None)
+            let (target, pattern_substitution, pattern_key) = if let Some(target) = map.get(specifier) {
+                (target, None, None)
             } else if let Some((pattern_key, pattern_substitution)) =
                 Self::find_best_package_pattern(map, specifier)
             {
@@ -3020,7 +3041,7 @@ impl NodeModulesResolver {
                         specifier: specifier.to_string(),
                     });
                 };
-                (target, Some(pattern_substitution))
+                (target, Some(pattern_substitution), Some(pattern_key))
             } else {
                 return Err(NodePackageResolveError::PackageImportNotDefined {
                     specifier: specifier.to_string(),
@@ -3034,6 +3055,8 @@ impl NodeModulesResolver {
                 conditions,
                 pattern_substitution.as_deref(),
                 specifier,
+                pattern_key,
+                importer,
                 warnings,
             ), specifier).and_then(
                 |resolution| Self::target_resolution_to_import_result(resolution, specifier),
@@ -3096,6 +3119,8 @@ impl NodeModulesResolver {
         conditions: &[String],
         pattern_substitution: Option<&str>,
         warning_specifier: &str,
+        warning_pattern_key: Option<&str>,
+        warning_importer: Option<&str>,
         warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
@@ -3133,6 +3158,8 @@ impl NodeModulesResolver {
                 warning_specifier,
                 &target_str,
                 pattern_substitution,
+                warning_pattern_key,
+                warning_importer,
             );
             if allow_bare_target && Self::is_bare_package_specifier(&target_str) {
                 let base = package_dir.join("package.json");
@@ -3194,6 +3221,8 @@ impl NodeModulesResolver {
                     conditions,
                     pattern_substitution,
                     warning_specifier,
+                    warning_pattern_key,
+                    warning_importer,
                     warnings,
                 ) {
                     Ok(PackageTargetResolution::Resolved(path)) => {
@@ -3224,6 +3253,8 @@ impl NodeModulesResolver {
                         conditions,
                         pattern_substitution,
                         warning_specifier,
+                        warning_pattern_key,
+                        warning_importer,
                         warnings,
                     )? {
                         PackageTargetResolution::NoMatch => continue,
@@ -3409,6 +3440,25 @@ impl NodeModulesResolver {
         value.is_some_and(|value| value.starts_with('/') || value.ends_with('/'))
     }
 
+    fn package_warning_location(
+        package_dir: &std::path::Path,
+        kind: &str,
+        importer: Option<&str>,
+    ) -> String {
+        let package_json = package_dir.join("package.json");
+        let mut location = format!(
+            " in the \"{}\" field module resolution of the package at {}",
+            kind,
+            package_json.to_string_lossy()
+        );
+        if let Some(importer) = importer {
+            location.push_str(" imported from ");
+            location.push_str(importer);
+        }
+        location.push('.');
+        location
+    }
+
     fn push_package_deprecation_warning(
         warnings: &mut Vec<NodePackageWarning>,
         package_dir: &std::path::Path,
@@ -3416,14 +3466,17 @@ impl NodeModulesResolver {
         specifier: &str,
         target: &str,
         pattern_substitution: Option<&str>,
+        pattern_key: Option<&str>,
+        importer: Option<&str>,
     ) {
         if kind == "exports"
             && pattern_substitution.is_some_and(|substitution| substitution.ends_with('/'))
         {
+            let location = Self::package_warning_location(package_dir, kind, importer);
             warnings.push(NodePackageWarning {
                 message: format!(
-                    "Use of deprecated trailing slash pattern mapping {:?} in the \"{}\" field module resolution",
-                    specifier, kind
+                    "Use of deprecated trailing slash pattern mapping {:?}{} Mapping specifiers ending in \"/\" is no longer supported.",
+                    specifier, location
                 ),
                 code: "DEP0155",
                 dedupe_key: Some(format!(
@@ -3435,28 +3488,40 @@ impl NodeModulesResolver {
             return;
         }
         if Self::has_deprecated_double_slash(target) {
+            let location = Self::package_warning_location(package_dir, kind, importer);
+            let matched_pattern = pattern_key
+                .map(|pattern_key| format!(" matched to {:?}", pattern_key))
+                .unwrap_or_default();
             warnings.push(NodePackageWarning {
                 message: format!(
-                    "Use of deprecated double slash in \"{}\" mapping for {:?} to {:?}",
-                    kind, specifier, target
+                    "Use of deprecated double slash resolving {:?} for module request {:?}{}{}",
+                    target, specifier, matched_pattern, location
                 ),
                 code: "DEP0166",
                 dedupe_key: None,
             });
         } else if Self::has_deprecated_leading_or_trailing_slash(pattern_substitution) {
+            let location = Self::package_warning_location(package_dir, kind, importer);
+            let matched_pattern = pattern_key
+                .map(|pattern_key| format!(" matched to {:?}", pattern_key))
+                .unwrap_or_default();
             warnings.push(NodePackageWarning {
                 message: format!(
-                    "Use of deprecated leading or trailing slash in \"{}\" mapping for {:?} to {:?}",
-                    kind, specifier, target
+                    "Use of deprecated leading or trailing slash matching resolving {:?} for module request {:?}{}{}",
+                    target, specifier, matched_pattern, location
                 ),
                 code: "DEP0166",
                 dedupe_key: None,
             });
         } else if Self::has_deprecated_double_slash(specifier) {
+            let location = Self::package_warning_location(package_dir, kind, importer);
+            let matched_pattern = pattern_key
+                .map(|pattern_key| format!(" matched to {:?}", pattern_key))
+                .unwrap_or_default();
             warnings.push(NodePackageWarning {
                 message: format!(
-                    "Use of deprecated double slash in \"{}\" specifier {:?}",
-                    kind, specifier
+                    "Use of deprecated double slash resolving {:?} for module request {:?}{}{}",
+                    target, specifier, matched_pattern, location
                 ),
                 code: "DEP0166",
                 dedupe_key: None,

@@ -671,11 +671,25 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
 }
 
 function emitPackageDeprecationWarning(message, code, key) {
+    if (globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings) return;
     const emitWarning = globalThis.__wasm_rquickjs_emit_package_deprecation_warning;
     if (typeof emitWarning !== 'function') {
         throw new Error('Internal package deprecation warning emitter is not initialized');
     }
     emitWarning(message, code, key);
+}
+
+function withSuppressedPackageDeprecationWarnings(callback) {
+    globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings =
+        (globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings || 0) + 1;
+    try {
+        return callback();
+    } finally {
+        globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings -= 1;
+        if (globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings <= 0) {
+            delete globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings;
+        }
+    }
 }
 
 const cjsDefaultPackageConditions = ['golem', 'node', 'require', 'module-sync', 'default'];
@@ -820,37 +834,55 @@ function hasDeprecatedLeadingOrTrailingSlash(substitution) {
     return typeof substitution === 'string' && (substitution.startsWith('/') || substitution.endsWith('/'));
 }
 
-function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubstitution, packageDir) {
+function packageWarningLocation(kind, packageDir, importer) {
+    return ' in the "' + kind + '" field module resolution of the package at ' +
+        pathModule.join(packageDir, 'package.json') +
+        (importer ? ' imported from ' + importer : '') + '.';
+}
+
+function matchedPackagePatternSuffix(patternKey) {
+    return patternKey ? ' matched to ' + JSON.stringify(patternKey) : '';
+}
+
+function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubstitution, packageDir, patternKey, importer) {
     if (kind === 'exports' && typeof patternSubstitution === 'string' && patternSubstitution.endsWith('/')) {
+        const location = packageWarningLocation(kind, packageDir, importer);
         emitPackageDeprecationWarning(
             'Use of deprecated trailing slash pattern mapping ' +
-            JSON.stringify(specifier) + ' in the "' + kind + '" field module resolution',
+            JSON.stringify(specifier) + location + ' Mapping specifiers ending in "/" is no longer supported.',
             'DEP0155',
             packageDir + ':' + specifier
         );
         return;
     }
     if (hasDeprecatedDoubleSlash(target)) {
+        const location = packageWarningLocation(kind, packageDir, importer);
+        const matchedPattern = matchedPackagePatternSuffix(patternKey);
         emitPackageDeprecationWarning(
-            'Use of deprecated double slash in "' + kind + '" mapping for ' +
-            JSON.stringify(specifier) + ' to ' + JSON.stringify(target),
+            'Use of deprecated double slash resolving ' + JSON.stringify(target) +
+            ' for module request ' + JSON.stringify(specifier) + matchedPattern + location,
             'DEP0166',
             packageDir + ':' + specifier + ':' + target
         );
         return;
     }
     if (hasDeprecatedLeadingOrTrailingSlash(patternSubstitution)) {
+        const location = packageWarningLocation(kind, packageDir, importer);
+        const matchedPattern = matchedPackagePatternSuffix(patternKey);
         emitPackageDeprecationWarning(
-            'Use of deprecated leading or trailing slash in "' + kind + '" mapping for ' +
-            JSON.stringify(specifier) + ' to ' + JSON.stringify(target),
+            'Use of deprecated leading or trailing slash matching resolving ' + JSON.stringify(target) +
+            ' for module request ' + JSON.stringify(specifier) + matchedPattern + location,
             'DEP0166',
             packageDir + ':' + specifier + ':' + target
         );
         return;
     }
     if (hasDeprecatedDoubleSlash(specifier)) {
+        const location = packageWarningLocation(kind, packageDir, importer);
+        const matchedPattern = matchedPackagePatternSuffix(patternKey);
         emitPackageDeprecationWarning(
-            'Use of deprecated double slash in "' + kind + '" specifier ' + JSON.stringify(specifier),
+            'Use of deprecated double slash resolving ' + JSON.stringify(target) +
+            ' for module request ' + JSON.stringify(specifier) + matchedPattern + location,
             'DEP0166',
             packageDir + ':' + specifier
         );
@@ -935,7 +967,15 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
             target = target.replace(/\*/g, () => patternSubstitution);
         }
         if (warningContext) {
-            emitDeprecatedPackageTargetWarning(warningContext.kind, warningContext.specifier, target, patternSubstitution, packageDir);
+            emitDeprecatedPackageTargetWarning(
+                warningContext.kind,
+                warningContext.specifier,
+                target,
+                patternSubstitution,
+                packageDir,
+                warningContext.patternKey,
+                warningContext.importer
+            );
         }
         if (hasEncodedSlashOrBackslash(target)) {
             throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');
@@ -1053,7 +1093,7 @@ function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions
                     throw makeInvalidModuleSpecifierError(key, invalidPackagePatternSubstitutionMessage(pattern.substitution, 'is not a valid match in pattern'));
                 }
                 try {
-                    resolved = resolvePackageTargetValue(packageDir, exportsField[pattern.key], conditions, undefined, false, pattern.substitution, { kind: 'exports', specifier: key });
+                    resolved = resolvePackageTargetValue(packageDir, exportsField[pattern.key], conditions, undefined, false, pattern.substitution, { kind: 'exports', specifier: key, patternKey: pattern.key });
                 } catch (err) {
                     if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
                         throw addPackageErrorContext(err, key);
@@ -1100,6 +1140,7 @@ function resolvePackageImports(id, parentDir, conditions) {
     validatePackageImportSpecifier(id);
     let target;
     let patternSubstitution = null;
+    let patternKey = null;
     if (Object.prototype.hasOwnProperty.call(scope.pkg.imports, id)) {
         target = scope.pkg.imports[id];
     } else {
@@ -1110,10 +1151,11 @@ function resolvePackageImports(id, parentDir, conditions) {
         }
         target = scope.pkg.imports[pattern.key];
         patternSubstitution = pattern.substitution;
+        patternKey = pattern.key;
     }
     let resolved;
     try {
-        resolved = resolvePackageTargetValue(scope.dir, target, conditions, undefined, true, patternSubstitution, { kind: 'imports', specifier: id });
+        resolved = resolvePackageTargetValue(scope.dir, target, conditions, undefined, true, patternSubstitution, { kind: 'imports', specifier: id, patternKey });
     } catch (err) {
         if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
             throw addPackageErrorContext(err, id);
@@ -2150,7 +2192,9 @@ function scanRequireEsmGraph(filename, marked, seen, stack) {
 
 function markRequireEsmGraph(filename) {
     const marked = [];
-    scanRequireEsmGraph(filename, marked, Object.create(null), []);
+    withSuppressedPackageDeprecationWarnings(() => {
+        scanRequireEsmGraph(filename, marked, Object.create(null), []);
+    });
     return marked;
 }
 

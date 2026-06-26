@@ -395,6 +395,8 @@ export const testRequirePackageMapEdgeCases = () => {
             process.removeListener('warning', onCjsPackageWarning);
         }
         assert.deepStrictEqual(cjsPackageWarnings.map((warning) => warning.code), ['DEP0155']);
+        assert.match(cjsPackageWarnings[0].message, /package at \/package-map-edge-app\/node_modules\/exported-pkg\/package\.json\./);
+        assert.doesNotMatch(cjsPackageWarnings[0].message, / imported from /);
         assert.deepStrictEqual(appRequire('exported-pkg/array-blocked'), { public: true });
         assert.deepStrictEqual(appRequire('#cjs'), { hashPackage: true });
         assert.strictEqual(appRequire.resolve('#cjs'), '/package-map-edge-app/node_modules/#cjs/index.js');
