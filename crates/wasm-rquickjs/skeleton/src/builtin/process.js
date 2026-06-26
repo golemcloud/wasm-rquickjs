@@ -635,6 +635,10 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     if (isDeprecationWarning && process.noDeprecation) {
         return;
     }
+    const warningHeader = warningName + ': ' + String(obj.message || obj);
+    if (typeof obj.stack === 'string' && obj.stack.indexOf(String(obj.message || obj)) < 0) {
+        obj.stack = warningHeader + '\n' + obj.stack;
+    }
 
     const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
     const shouldThrowDeprecation = isDeprecationWarning && !!process.throwDeprecation;
@@ -643,12 +647,11 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
             throw obj;
         }
         if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
-            const header = warningName + ': ' + String(obj.message || obj);
-            let text = header;
+            let text = warningHeader;
             if (typeof obj.stack === 'string') {
                 text = obj.stack.indexOf(String(obj.message || obj)) >= 0
                     ? obj.stack
-                    : header + '\n' + obj.stack;
+                    : warningHeader + '\n' + obj.stack;
             }
             process.stderr.write(text.endsWith('\n') ? text : text + '\n');
         }

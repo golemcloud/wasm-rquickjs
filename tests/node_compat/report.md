@@ -723,7 +723,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
 | requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR | 5 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-eval.mjs`, `es-module/test-typescript-module.mjs`, ... (+2) |
 | util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
-| ESM package type/exports/imports behavior needs resolver unification triage | 4 | `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-exports.mjs`, `es-module/test-esm-imports-deprecations.mjs`, ... (+1) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |
@@ -866,6 +865,10 @@ Secondary full-public compatibility, including public tests that are currently e
 | ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented | 1 | `parallel/test-vm-dynamic-import-callback-missing-flag.js` |
 | ESM compatibility shim intentionally exposes CommonJS-style __filename/__dirname; switching to strict Node ESM globals needs a product compatibility decision | 1 | `es-module/test-esm-forbidden-globals.mjs` |
 | ESM directory import errors do not match Node ERR_UNSUPPORTED_DIR_IMPORT behavior | 1 | `parallel/test-directory-import.js` |
+| ESM package exports behavior passes in focused isolation, but concurrent node_compat promotion still exposes warning/error ordering interference | 1 | `es-module/test-esm-exports.mjs` |
+| ESM package exports resolution now passes, but DEP0166 package-map deprecation warning context/text is incomplete | 1 | `es-module/test-esm-exports-deprecations.mjs` |
+| ESM package imports behavior passes in focused isolation, but concurrent node_compat promotion still exposes warning/error ordering interference | 1 | `es-module/test-esm-imports.mjs` |
+| ESM package imports resolution now passes, but DEP0166 package-map deprecation warning context/text is incomplete | 1 | `es-module/test-esm-imports-deprecations.mjs` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
 | Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |
 | EventEmitter captureRejections option validation/behavior is incomplete | 1 | `parallel/test-event-capture-rejections.js` |

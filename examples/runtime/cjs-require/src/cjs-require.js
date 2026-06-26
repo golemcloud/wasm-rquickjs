@@ -206,6 +206,7 @@ export const testRequirePackageExports = () => {
                     require: './feature.cjs',
                     default: './feature-default.js',
                 },
+                './encoded-target': './sp%20ce.js',
                 './import-only': {
                     import: './import-only.mjs',
                 },
@@ -216,11 +217,13 @@ export const testRequirePackageExports = () => {
         fs.writeFileSync('/exports-app/node_modules/conditional-pkg/default.js', 'module.exports = { mode: "default" };');
         fs.writeFileSync('/exports-app/node_modules/conditional-pkg/feature.cjs', 'module.exports = { feature: "cjs" };');
         fs.writeFileSync('/exports-app/node_modules/conditional-pkg/feature-default.js', 'module.exports = { feature: "default" };');
+        fs.writeFileSync('/exports-app/node_modules/conditional-pkg/sp ce.js', 'module.exports = { encoded: true };');
         fs.writeFileSync('/exports-app/node_modules/conditional-pkg/import-only.mjs', 'export default { mode: "import" };');
 
         const appRequire = require('module').createRequire('/exports-app/app.js');
         assert.deepStrictEqual(appRequire('conditional-pkg'), { mode: 'cjs' });
         assert.deepStrictEqual(appRequire('conditional-pkg/feature'), { feature: 'cjs' });
+        assert.deepStrictEqual(appRequire('conditional-pkg/encoded-target'), { encoded: true });
 
         assert.throws(() => appRequire('conditional-pkg/import-only'), {
             code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
@@ -257,6 +260,11 @@ export const testRequirePackageImports = () => {
                 '#import-only': {
                     import: './import-only.mjs',
                 },
+                '#false-target': false,
+                '#array-false-fallback': [
+                    false,
+                    './dep.cjs',
+                ],
             },
         }));
         fs.writeFileSync('/imports-app/dep.cjs', 'module.exports = { mode: "require" };');
@@ -267,7 +275,11 @@ export const testRequirePackageImports = () => {
             'exports.dep = require("#dep");',
             'exports.defaultOnly = require("#default-only");',
             'exports.missing = function() { return require("#missing"); };',
+            'exports.invalidBare = function() { return require("#"); };',
+            'exports.initialSlash = function() { return require("#/initialslash"); };',
             'exports.importOnly = function() { return require("#import-only"); };',
+            'exports.falseTarget = function() { return require("#false-target"); };',
+            'exports.arrayFalseFallback = require("#array-false-fallback");',
         ].join('\n'));
 
         const appRequire = require('module').createRequire('/imports-app/main.cjs');
@@ -275,7 +287,11 @@ export const testRequirePackageImports = () => {
         assert.deepStrictEqual(mod.dep, { mode: 'require' });
         assert.deepStrictEqual(mod.defaultOnly, { mode: 'default-only' });
         assert.throws(() => mod.missing(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
+        assert.throws(() => mod.invalidBare(), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
+        assert.throws(() => mod.initialSlash(), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         assert.throws(() => mod.importOnly(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
+        assert.throws(() => mod.falseTarget(), { code: 'ERR_INVALID_PACKAGE_TARGET' });
+        assert.deepStrictEqual(mod.arrayFalseFallback, { mode: 'require' });
         assert.strictEqual(appRequire.resolve('#dep'), '/imports-app/dep.cjs');
 
         return true;
@@ -297,6 +313,7 @@ export const testRequirePackageMapEdgeCases = () => {
             main: './main.js',
             exports: {
                 './public': './public.js',
+                './encoded-target': './sp%20ce.js',
                 './missing-selected': {
                     require: './missing.cjs',
                     default: './default.js',
@@ -316,6 +333,14 @@ export const testRequirePackageMapEdgeCases = () => {
                     null,
                     './public.js',
                 ],
+                './array-false-fallback': [
+                    false,
+                    './public.js',
+                ],
+                './array-missing-first': [
+                    './missing.js',
+                    './public.js',
+                ],
                 './array-invalid-fallback': [
                     '../outside.js',
                     './public.js',
@@ -324,17 +349,41 @@ export const testRequirePackageMapEdgeCases = () => {
                     node: { browser: './browser.js' },
                     default: './public.js',
                 },
+                './directory': './subdir',
                 './no-ext': './real',
             },
         }));
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/main.js', 'module.exports = { main: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/private.js', 'module.exports = { private: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/public.js', 'module.exports = { public: true };');
+        fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/sp ce.js', 'module.exports = { encoded: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/default.js', 'module.exports = { defaulted: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/real.js', 'module.exports = { extensionFallback: true };');
+        fs.mkdirSync('/package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
+        fs.writeFileSync('/package-map-edge-app/node_modules/exported-pkg/subdir/index.js', 'module.exports = { directory: true };');
+
+        fs.mkdirSync('/package-map-edge-app/node_modules/#cjs', { recursive: true });
+        fs.writeFileSync('/package-map-edge-app/node_modules/#cjs/index.js', 'module.exports = { hashPackage: true };');
+        fs.mkdirSync('/package-map-edge-app/node_modules/self-invalid', { recursive: true });
+        fs.writeFileSync('/package-map-edge-app/node_modules/self-invalid/package.json', JSON.stringify({
+            name: 'self-invalid',
+            exports: {
+                '.': './index.js',
+                './feature': './feature.js',
+                bad: './bad.js',
+            },
+        }));
+        fs.writeFileSync('/package-map-edge-app/node_modules/self-invalid/index.js', [
+            'exports.loadFeature = function() { return require("self-invalid/feature"); };',
+        ].join('\n'));
+        fs.writeFileSync('/package-map-edge-app/node_modules/self-invalid/feature.js', 'module.exports = { feature: true };');
 
         const appRequire = createRequire('/package-map-edge-app/app.js');
         assert.deepStrictEqual(appRequire('exported-pkg/public'), { public: true });
+        assert.deepStrictEqual(appRequire('exported-pkg/encoded-target'), { encoded: true });
+        assert.deepStrictEqual(appRequire('exported-pkg/array-blocked'), { public: true });
+        assert.deepStrictEqual(appRequire('#cjs'), { hashPackage: true });
+        assert.strictEqual(appRequire.resolve('#cjs'), '/package-map-edge-app/node_modules/#cjs/index.js');
         assert.throws(() => appRequire('exported-pkg'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
         assert.throws(() => appRequire('exported-pkg/private.js'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
         assert.throws(() => appRequire('exported-pkg/missing-selected'), { code: 'MODULE_NOT_FOUND' });
@@ -344,12 +393,15 @@ export const testRequirePackageMapEdgeCases = () => {
         assert.throws(() => appRequire('exported-pkg/dot-segment-target'), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         assert.throws(() => appRequire('exported-pkg/encoded-dot-target'), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         assert.throws(() => appRequire('exported-pkg/blocked-null'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
-        assert.throws(() => appRequire('exported-pkg/blocked-false'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+        assert.throws(() => appRequire('exported-pkg/blocked-false'), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         assert.deepStrictEqual(appRequire('exported-pkg/array-fallback'), { public: true });
-        assert.throws(() => appRequire('exported-pkg/array-blocked'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+        assert.deepStrictEqual(appRequire('exported-pkg/array-false-fallback'), { public: true });
         assert.deepStrictEqual(appRequire('exported-pkg/array-invalid-fallback'), { public: true });
         assert.deepStrictEqual(appRequire('exported-pkg/condition-no-match-fallback'), { public: true });
+        assert.throws(() => appRequire('exported-pkg/array-missing-first'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => appRequire('exported-pkg/directory'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => appRequire('exported-pkg/no-ext'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => appRequire('self-invalid').loadFeature(), { code: 'ERR_INVALID_PACKAGE_CONFIG' });
 
         fs.mkdirSync('/package-map-edge-app/node_modules/external-pkg', { recursive: true });
         fs.writeFileSync('/package-map-edge-app/node_modules/external-pkg/index.js', 'module.exports = { external: true };');

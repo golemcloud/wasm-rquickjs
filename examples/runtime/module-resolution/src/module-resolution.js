@@ -54,6 +54,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             main: './main.mjs',
             exports: {
                 './public': './public.mjs',
+                './encoded-target': './sp%20ce.mjs',
                 './condition-order': {
                     default: './default.mjs',
                     import: './import.mjs',
@@ -73,6 +74,14 @@ export const testEsmPackageMapEdgeCases = async () => {
                     null,
                     './public.mjs',
                 ],
+                './array-false-fallback': [
+                    false,
+                    './public.mjs',
+                ],
+                './array-missing-first': [
+                    './missing.mjs',
+                    './public.mjs',
+                ],
                 './array-invalid-fallback': [
                     '../outside.mjs',
                     './public.mjs',
@@ -81,28 +90,38 @@ export const testEsmPackageMapEdgeCases = async () => {
                     node: { browser: './browser.mjs' },
                     default: './public.mjs',
                 },
+                './directory': './subdir',
                 './no-ext': './real',
             },
         }));
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/main.mjs', 'export default { main: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/private.mjs', 'export default { private: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/public.mjs', 'export default { public: true };');
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/sp ce.mjs', 'export default { encoded: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/default.mjs', 'export default { condition: "default" };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/import.mjs', 'export default { condition: "import" };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
 
         fs.writeFileSync('/esm-package-map-edge-app/entry.mjs', [
             'export const publicValue = (await import("exported-pkg/public")).default;',
+            'export const encodedTarget = (await import("exported-pkg/encoded-target")).default;',
             'export const conditionOrder = (await import("exported-pkg/condition-order")).default;',
             'export const arrayFallback = (await import("exported-pkg/array-fallback")).default;',
+            'export const arrayBlocked = (await import("exported-pkg/array-blocked")).default;',
+            'export const arrayFalseFallback = (await import("exported-pkg/array-false-fallback")).default;',
             'export const arrayInvalidFallback = (await import("exported-pkg/array-invalid-fallback")).default;',
             'export const conditionNoMatchFallback = (await import("exported-pkg/condition-no-match-fallback")).default;',
         ].join('\n'));
 
         const entry = await import('/esm-package-map-edge-app/entry.mjs');
         assert.deepStrictEqual(entry.publicValue, { public: true });
+        assert.deepStrictEqual(entry.encodedTarget, { encoded: true });
         assert.deepStrictEqual(entry.conditionOrder, { condition: 'default' });
         assert.deepStrictEqual(entry.arrayFallback, { public: true });
+        assert.deepStrictEqual(entry.arrayBlocked, { public: true });
+        assert.deepStrictEqual(entry.arrayFalseFallback, { public: true });
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
 
@@ -115,7 +134,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         writeImportEntry('/esm-package-map-edge-app/encoded-dot-target-subpath.mjs', 'exported-pkg/encoded-dot-target');
         writeImportEntry('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'exported-pkg/blocked-null');
         writeImportEntry('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'exported-pkg/blocked-false');
-        writeImportEntry('/esm-package-map-edge-app/array-blocked-subpath.mjs', 'exported-pkg/array-blocked');
+        writeImportEntry('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'exported-pkg/array-missing-first');
+        writeImportEntry('/esm-package-map-edge-app/directory-subpath.mjs', 'exported-pkg/directory');
         writeImportEntry('/esm-package-map-edge-app/no-ext-subpath.mjs', 'exported-pkg/no-ext');
 
         await expectImportError('/esm-package-map-edge-app/missing-root.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
@@ -126,8 +146,9 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/dot-segment-target-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/encoded-dot-target-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
-        await expectImportError('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
-        await expectImportError('/esm-package-map-edge-app/array-blocked-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+        await expectImportError('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
+        await expectImportError('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/directory-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
         await expectImportError('/esm-package-map-edge-app/no-ext-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
 
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/external-pkg', { recursive: true });
@@ -142,13 +163,20 @@ export const testEsmPackageMapEdgeCases = async () => {
                 '#app-alias': './app-alias.mjs',
                 '#external': 'external-pkg',
                 '#fs': 'node:fs',
+                '#false-target': false,
+                '#array-false-fallback': [
+                    false,
+                    './app-alias.mjs',
+                ],
             },
         }));
         fs.writeFileSync('/esm-package-map-edge-app/app-alias.mjs', 'export default { appAlias: true };');
         fs.writeFileSync('/esm-package-map-edge-app/imports-entry.mjs', [
             'import external from "#external";',
+            'import arrayFalseFallback from "#array-false-fallback";',
             'import fs from "#fs";',
             'export default external;',
+            'export const arrayFalseFallbackValue = arrayFalseFallback;',
             'export const readFileSyncType = typeof fs.readFileSync;',
         ].join('\n'));
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/dep/index.mjs', [
@@ -159,7 +187,10 @@ export const testEsmPackageMapEdgeCases = async () => {
 
         const importsEntry = await import('/esm-package-map-edge-app/imports-entry.mjs');
         assert.deepStrictEqual(importsEntry.default, { external: true });
+        assert.deepStrictEqual(importsEntry.arrayFalseFallbackValue, { appAlias: true });
         assert.strictEqual(importsEntry.readFileSyncType, 'function');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-false-entry.mjs', 'export default await import("#false-target");');
+        await expectImportError('/esm-package-map-edge-app/imports-false-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/imports-boundary-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
 
         return true;

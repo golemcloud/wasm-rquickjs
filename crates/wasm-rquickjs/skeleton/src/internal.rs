@@ -2360,10 +2360,19 @@ impl Resolver for NodeModuleErrorResolver {
 
 enum NodePackageResolveError {
     InvalidModuleSpecifier { specifier: String, base: String },
-    PackagePathNotExported { package_name: String, subpath: String },
+    InvalidPackagePatternMatch { specifier: String, message: String },
+    PackagePathNotExported {
+        package_name: String,
+        subpath: String,
+        no_exports_main: bool,
+    },
     PackageImportNotDefined { specifier: String },
     InvalidPackageTarget { kind: &'static str, target: String },
-    InvalidPackageConfig { path: String },
+    InvalidPackageConfig {
+        path: String,
+        reason: Option<String>,
+    },
+    UnsupportedDirectoryImport { request: String },
     ModuleNotFound { request: String },
 }
 
@@ -2387,6 +2396,7 @@ enum PackageTarget {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct PackageJson {
+    name: Option<String>,
     main: Option<String>,
     exports: Option<PackageTarget>,
     imports: Option<PackageTarget>,
@@ -2405,11 +2415,12 @@ impl NodeModulesResolver {
         base: &str,
         name: &str,
         conditions: &[String],
+        warnings: &mut Vec<String>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::{Path, PathBuf};
 
         if name.starts_with('#') {
-            return self.try_resolve_package_import_with_conditions(base, name, conditions);
+            return self.try_resolve_package_import_with_conditions(base, name, conditions, warnings);
         }
 
         // Only handle bare specifiers (not relative, absolute, or URL)
@@ -2426,6 +2437,11 @@ impl NodeModulesResolver {
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
         };
+        if let Some(resolved) =
+            Self::try_resolve_package_self(base_dir, package_name, subpath, conditions, warnings)?
+        {
+            return Ok(Some(resolved));
+        }
 
         // Walk up directory tree looking for node_modules
         let mut dir = base_dir.to_path_buf();
@@ -2437,16 +2453,19 @@ impl NodeModulesResolver {
                     let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
                         NodePackageResolveError::InvalidPackageConfig {
                             path: pkg_path.to_string_lossy().into_owned(),
+                            reason: None,
                         }
                     })?;
 
                     if let Some(exports_field) = package.exports.as_ref() {
+                        Self::validate_package_exports_map(&pkg_path, exports_field)?;
                         return Self::resolve_package_exports(
                             package_name,
                             &nm_dir,
                             exports_field,
                             subpath,
                             conditions,
+                            warnings,
                         )
                         .map(Some);
                     }
@@ -2491,7 +2510,13 @@ impl NodeModulesResolver {
         use std::path::Path;
 
         if name.starts_with('#') {
-            return self.try_resolve_package_import_with_conditions(base, name, &conditions);
+            let mut ignored_warnings = Vec::new();
+            return self.try_resolve_package_import_with_conditions(
+                base,
+                name,
+                conditions,
+                &mut ignored_warnings,
+            );
         }
 
         if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
@@ -2505,6 +2530,17 @@ impl NodeModulesResolver {
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
         };
+        if let Some(resolved) =
+            Self::try_resolve_package_self(
+                base_dir,
+                package_name,
+                subpath,
+                conditions,
+                &mut Vec::new(),
+            )?
+        {
+            return Ok(Some(resolved));
+        }
 
         let mut dir = base_dir.to_path_buf();
         loop {
@@ -2515,16 +2551,19 @@ impl NodeModulesResolver {
                     let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
                         NodePackageResolveError::InvalidPackageConfig {
                             path: pkg_path.to_string_lossy().into_owned(),
+                            reason: None,
                         }
                     })?;
 
                     if let Some(exports_field) = package.exports.as_ref() {
+                        Self::validate_package_exports_map(&pkg_path, exports_field)?;
                         return Self::resolve_package_exports(
                             package_name,
                             &package_path,
                             exports_field,
                             subpath,
                             &conditions,
+                            &mut Vec::new(),
                         )
                         .map(Some);
                     }
@@ -2572,6 +2611,7 @@ impl NodeModulesResolver {
         base: &str,
         name: &str,
         conditions: &[String],
+        warnings: &mut Vec<String>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
@@ -2591,6 +2631,7 @@ impl NodeModulesResolver {
                 let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
                     NodePackageResolveError::InvalidPackageConfig {
                         path: pkg_path.to_string_lossy().into_owned(),
+                        reason: None,
                     }
                 })?;
                 let Some(imports) = package.imports.as_ref() else {
@@ -2598,7 +2639,8 @@ impl NodeModulesResolver {
                         specifier: name.to_string(),
                     });
                 };
-                return Self::resolve_package_import(&dir, imports, name, conditions).map(Some);
+                Self::validate_package_import_specifier(name)?;
+                return Self::resolve_package_import(&dir, imports, name, conditions, warnings).map(Some);
             }
 
             if !dir.pop() {
@@ -2609,6 +2651,52 @@ impl NodeModulesResolver {
         Err(NodePackageResolveError::PackageImportNotDefined {
             specifier: name.to_string(),
         })
+    }
+
+    fn try_resolve_package_self(
+        base_dir: &std::path::Path,
+        package_name: &str,
+        subpath: &str,
+        conditions: &[String],
+        warnings: &mut Vec<String>,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        let mut dir = base_dir.to_path_buf();
+        loop {
+            if dir.file_name().is_some_and(|name| name == "node_modules") {
+                return Ok(None);
+            }
+
+            let pkg_path = dir.join("package.json");
+            if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
+                let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
+                    NodePackageResolveError::InvalidPackageConfig {
+                        path: pkg_path.to_string_lossy().into_owned(),
+                        reason: None,
+                    }
+                })?;
+                if package.name.as_deref() == Some(package_name)
+                    && let Some(exports_field) = package.exports.as_ref()
+                {
+                    Self::validate_package_exports_map(&pkg_path, exports_field)?;
+                    return Self::resolve_package_exports(
+                        package_name,
+                        &dir,
+                        exports_field,
+                        subpath,
+                        conditions,
+                        warnings,
+                    )
+                    .map(Some);
+                }
+                return Ok(None);
+            }
+
+            if !dir.pop() {
+                break;
+            }
+        }
+
+        Ok(None)
     }
 
     fn split_package_name(name: &str) -> Option<(&str, &str)> {
@@ -2643,6 +2731,16 @@ impl NodeModulesResolver {
             return Err(NodePackageResolveError::InvalidModuleSpecifier {
                 specifier: specifier.to_string(),
                 base: base.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_package_import_specifier(specifier: &str) -> Result<(), NodePackageResolveError> {
+        if specifier == "#" || specifier.starts_with("#/") {
+            return Err(NodePackageResolveError::InvalidPackagePatternMatch {
+                specifier: specifier.to_string(),
+                message: "is not a valid internal imports specifier name".to_string(),
             });
         }
         Ok(())
@@ -2715,6 +2813,7 @@ impl NodeModulesResolver {
         exports: &PackageTarget,
         subpath: &str,
         conditions: &[String],
+        warnings: &mut Vec<String>,
     ) -> Result<String, NodePackageResolveError> {
         let key = if subpath.is_empty() {
             ".".to_string()
@@ -2729,48 +2828,69 @@ impl NodeModulesResolver {
                 return Err(NodePackageResolveError::PackagePathNotExported {
                     package_name: package_name.to_string(),
                     subpath: subpath.to_string(),
+                    no_exports_main: false,
                 });
             }
-            return Self::resolve_package_target_value(
+            return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
                 package_dir,
                 exports,
                 false,
                 "exports",
                 conditions,
                 None,
-            )
+                &key,
+                warnings,
+            ), &key)
             .and_then(|resolution| {
-                Self::target_resolution_to_export_result(resolution, package_name, subpath)
+                Self::target_resolution_to_export_result(
+                    resolution,
+                    package_name,
+                    subpath,
+                    key == "." && Self::is_conditions_object(exports),
+                )
             });
         }
 
         if let PackageTarget::Object(map) = exports {
             if let Some(target) = map.get(&key) {
-                return Self::resolve_package_target_value(
+                return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
                     package_dir,
                     target,
                     false,
                     "exports",
                     conditions,
                     None,
-                )
+                    &key,
+                    warnings,
+                ), &key)
                 .and_then(|resolution| {
-                    Self::target_resolution_to_export_result(resolution, package_name, subpath)
+                    Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
                 });
             }
             if let Some((pattern_key, pattern_substitution)) = Self::find_best_package_pattern(map, &key)
                 && let Some(target) = map.get(pattern_key)
             {
-                return Self::resolve_package_target_value(
+                if Self::is_invalid_package_pattern_substitution(&pattern_substitution) {
+                    return Err(NodePackageResolveError::InvalidPackagePatternMatch {
+                        specifier: key,
+                        message: Self::invalid_package_pattern_substitution_message(
+                            &pattern_substitution,
+                            "is not a valid match in pattern",
+                        ),
+                    });
+                }
+                return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
                     package_dir,
                     target,
                     false,
                     "exports",
                     conditions,
                     Some(&pattern_substitution),
-                )
+                    &key,
+                    warnings,
+                ), &key)
                 .and_then(|resolution| {
-                    Self::target_resolution_to_export_result(resolution, package_name, subpath)
+                    Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
                 });
             }
         }
@@ -2778,6 +2898,7 @@ impl NodeModulesResolver {
         Err(NodePackageResolveError::PackagePathNotExported {
             package_name: package_name.to_string(),
             subpath: subpath.to_string(),
+            no_exports_main: false,
         })
     }
 
@@ -2786,6 +2907,7 @@ impl NodeModulesResolver {
         imports: &PackageTarget,
         specifier: &str,
         conditions: &[String],
+        warnings: &mut Vec<String>,
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
         {
@@ -2794,6 +2916,15 @@ impl NodeModulesResolver {
             } else if let Some((pattern_key, pattern_substitution)) =
                 Self::find_best_package_pattern(map, specifier)
             {
+                if Self::is_invalid_package_pattern_substitution(&pattern_substitution) {
+                    return Err(NodePackageResolveError::InvalidPackagePatternMatch {
+                        specifier: specifier.to_string(),
+                        message: Self::invalid_package_pattern_substitution_message(
+                            &pattern_substitution,
+                            "request is not a valid match in pattern",
+                        ),
+                    });
+                }
                 let Some(target) = map.get(pattern_key) else {
                     return Err(NodePackageResolveError::PackageImportNotDefined {
                         specifier: specifier.to_string(),
@@ -2805,14 +2936,16 @@ impl NodeModulesResolver {
                     specifier: specifier.to_string(),
                 });
             };
-            return Self::resolve_package_target_value(
+            return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
                 package_dir,
                 target,
                 true,
                 "imports",
                 conditions,
                 pattern_substitution.as_deref(),
-            ).and_then(
+                specifier,
+                warnings,
+            ), specifier).and_then(
                 |resolution| Self::target_resolution_to_import_result(resolution, specifier),
             );
         }
@@ -2828,6 +2961,43 @@ impl NodeModulesResolver {
         )
     }
 
+    fn validate_package_exports_map(
+        pkg_path: &std::path::Path,
+        exports: &PackageTarget,
+    ) -> Result<(), NodePackageResolveError> {
+        let PackageTarget::Object(map) = exports else {
+            return Ok(());
+        };
+        if map.keys().any(|key| {
+            !key.is_empty()
+                && key
+                    .chars()
+                    .enumerate()
+                    .all(|(idx, ch)| ch.is_ascii_digit() && (idx > 0 || ch != '0' || key.len() == 1))
+        }) {
+            return Err(NodePackageResolveError::InvalidPackageConfig {
+                path: pkg_path.to_string_lossy().into_owned(),
+                reason: Some("\"exports\" cannot contain numeric property keys".to_string()),
+            });
+        }
+        let has_subpath_key = map.keys().any(|key| key.starts_with('.'));
+        let has_condition_key = map.keys().any(|key| !key.starts_with('.'));
+        if has_subpath_key && has_condition_key {
+            return Err(NodePackageResolveError::InvalidPackageConfig {
+                path: pkg_path.to_string_lossy().into_owned(),
+                reason: Some(
+                    "\"exports\" cannot contain some keys starting with '.' and some not. The exports object must either be an object of package subpath keys or an object of main entry condition name keys only."
+                        .to_string(),
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    fn decode_package_target_path(target: &str) -> String {
+        percent_decode(target).unwrap_or_else(|| target.to_string())
+    }
+
     fn resolve_package_target_value(
         package_dir: &std::path::Path,
         target: &PackageTarget,
@@ -2835,10 +3005,18 @@ impl NodeModulesResolver {
         kind: &'static str,
         conditions: &[String],
         pattern_substitution: Option<&str>,
+        warning_specifier: &str,
+        warnings: &mut Vec<String>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
-            PackageTarget::Null | PackageTarget::Bool(false) => {
+            PackageTarget::Null => {
                 return Ok(PackageTargetResolution::Blocked);
+            }
+            PackageTarget::Bool(false) => {
+                return Err(NodePackageResolveError::InvalidPackageTarget {
+                    kind,
+                    target: "false".to_string(),
+                });
             }
             PackageTarget::Bool(true) => {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
@@ -2858,11 +3036,20 @@ impl NodeModulesResolver {
             } else {
                 target_str.clone()
             };
+            Self::push_package_deprecation_warning(
+                warnings,
+                kind,
+                warning_specifier,
+                &target_str,
+                pattern_substitution,
+            );
             if allow_bare_target && Self::is_bare_package_specifier(&target_str) {
                 let base = package_dir.join("package.json");
                 let base_str = base.to_string_lossy();
                 let resolver = NodeModulesResolver;
-                if let Some(resolved) = resolver.try_resolve(&base_str, &target_str, conditions)? {
+                if let Some(resolved) =
+                    resolver.try_resolve(&base_str, &target_str, conditions, warnings)?
+                {
                     return Ok(PackageTargetResolution::Resolved(resolved));
                 }
                 return Err(NodePackageResolveError::ModuleNotFound {
@@ -2872,13 +3059,20 @@ impl NodeModulesResolver {
             if allow_bare_target && target_str.starts_with("node:") {
                 return Ok(PackageTargetResolution::Resolved(target_str));
             }
+            if Self::has_encoded_slash_or_backslash(&target_str) {
+                return Err(NodePackageResolveError::InvalidPackagePatternMatch {
+                    specifier: target_str,
+                    message: "must not include encoded \"/\" or \"\\\" characters".to_string(),
+                });
+            }
             if !target_str.starts_with("./") {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
                     kind,
                     target: target_str,
                 });
             }
-            let Some(candidate) = Self::resolve_valid_package_target_path(package_dir, &target_str) else {
+            let decoded_target = Self::decode_package_target_path(&target_str);
+            let Some(candidate) = Self::resolve_valid_package_target_path(package_dir, &decoded_target) else {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
                     kind,
                     target: target_str,
@@ -2889,25 +3083,43 @@ impl NodeModulesResolver {
                     candidate.to_string_lossy().into_owned(),
                 ));
             }
+            if candidate.is_dir() {
+                return Err(NodePackageResolveError::UnsupportedDirectoryImport {
+                    request: candidate.to_string_lossy().into_owned(),
+                });
+            }
             return Err(NodePackageResolveError::ModuleNotFound {
                 request: candidate.to_string_lossy().into_owned(),
             });
             }
             PackageTarget::Array(array) => {
+            let mut last_fallback_error = None;
             for item in array {
-                match Self::resolve_package_target_value(package_dir, item, allow_bare_target, kind, conditions, pattern_substitution) {
+                match Self::resolve_package_target_value(
+                    package_dir,
+                    item,
+                    allow_bare_target,
+                    kind,
+                    conditions,
+                    pattern_substitution,
+                    warning_specifier,
+                    warnings,
+                ) {
                     Ok(PackageTargetResolution::Resolved(path)) => {
                         return Ok(PackageTargetResolution::Resolved(path));
                     }
-                    Ok(PackageTargetResolution::Blocked) => {
-                        return Ok(PackageTargetResolution::Blocked);
-                    }
+                    Ok(PackageTargetResolution::Blocked) => continue,
                     Ok(PackageTargetResolution::NoMatch) => continue,
-                    Err(NodePackageResolveError::InvalidPackageTarget { .. })
-                    | Err(NodePackageResolveError::ModuleNotFound { .. }) => continue,
+                    Err(err @ NodePackageResolveError::InvalidPackageTarget { .. }) => {
+                        last_fallback_error = Some(err);
+                        continue;
+                    }
                     Err(err) => return Err(err),
                 }
             }
+                if let Some(err) = last_fallback_error {
+                    return Err(err);
+                }
                 return Ok(PackageTargetResolution::NoMatch);
             }
             PackageTarget::Object(map) => {
@@ -2920,6 +3132,8 @@ impl NodeModulesResolver {
                         kind,
                         conditions,
                         pattern_substitution,
+                        warning_specifier,
+                        warnings,
                     )? {
                         PackageTargetResolution::NoMatch => continue,
                         resolution => return Ok(resolution),
@@ -2938,10 +3152,51 @@ impl NodeModulesResolver {
         if !key.starts_with(prefix) || !key.ends_with(suffix) {
             return None;
         }
-        if key.len() < prefix.len() + suffix.len() {
+        if key.len() <= prefix.len() + suffix.len() {
             return None;
         }
         Some(key[prefix.len()..key.len() - suffix.len()].to_string())
+    }
+
+    fn has_encoded_slash_or_backslash(value: &str) -> bool {
+        let lower = value.to_ascii_lowercase();
+        lower.contains("%2f") || lower.contains("%5c")
+    }
+
+    fn is_invalid_package_pattern_substitution(substitution: &str) -> bool {
+        if Self::has_encoded_slash_or_backslash(substitution) {
+            return true;
+        }
+        substitution
+            .split('/')
+            .any(|segment| !segment.is_empty() && Self::is_invalid_package_target_segment(segment))
+    }
+
+    fn invalid_package_pattern_substitution_message(substitution: &str, fallback: &str) -> String {
+        if Self::has_encoded_slash_or_backslash(substitution) {
+            "must not include encoded \"/\" or \"\\\" characters".to_string()
+        } else {
+            fallback.to_string()
+        }
+    }
+
+    fn add_invalid_package_target_context(
+        result: Result<PackageTargetResolution, NodePackageResolveError>,
+        specifier: &str,
+    ) -> Result<PackageTargetResolution, NodePackageResolveError> {
+        result.map_err(|err| match err {
+            NodePackageResolveError::InvalidPackageTarget { kind, target } => {
+                NodePackageResolveError::InvalidPackageTarget {
+                    kind,
+                    target: if target.contains(specifier) {
+                        target
+                    } else {
+                        format!("{} for {}", target, specifier)
+                    },
+                }
+            }
+            other => other,
+        })
     }
 
     fn find_best_package_pattern<'a>(
@@ -2989,13 +3244,15 @@ impl NodeModulesResolver {
         resolution: PackageTargetResolution,
         package_name: &str,
         subpath: &str,
+        no_exports_main: bool,
     ) -> Result<String, NodePackageResolveError> {
         match resolution {
             PackageTargetResolution::Resolved(path) => Ok(path),
             PackageTargetResolution::NoMatch | PackageTargetResolution::Blocked => {
-                Err(NodePackageResolveError::PackagePathNotExported {
+        Err(NodePackageResolveError::PackagePathNotExported {
                     package_name: package_name.to_string(),
                     subpath: subpath.to_string(),
+                    no_exports_main,
                 })
             }
         }
@@ -3053,6 +3310,39 @@ impl NodeModulesResolver {
         matches!(decoded.to_ascii_lowercase().as_str(), "." | ".." | "node_modules")
     }
 
+    fn has_deprecated_double_slash(value: &str) -> bool {
+        value.contains("//")
+    }
+
+    fn has_deprecated_leading_or_trailing_slash(value: Option<&str>) -> bool {
+        value.is_some_and(|value| value.starts_with('/') || value.ends_with('/'))
+    }
+
+    fn push_package_deprecation_warning(
+        warnings: &mut Vec<String>,
+        kind: &str,
+        specifier: &str,
+        target: &str,
+        pattern_substitution: Option<&str>,
+    ) {
+        if Self::has_deprecated_leading_or_trailing_slash(pattern_substitution) {
+            warnings.push(format!(
+                "Use of deprecated leading or trailing slash in \"{}\" mapping for {:?} to {:?}",
+                kind, specifier, target
+            ));
+        } else if Self::has_deprecated_double_slash(target) {
+            warnings.push(format!(
+                "Use of deprecated double slash in \"{}\" mapping for {:?} to {:?}",
+                kind, specifier, target
+            ));
+        } else if Self::has_deprecated_double_slash(specifier) {
+            warnings.push(format!(
+                "Use of deprecated double slash in \"{}\" specifier {:?}",
+                kind, specifier
+            ));
+        }
+    }
+
     fn default_conditions(defaults: &[&str]) -> Vec<String> {
         defaults.iter().map(|condition| (*condition).to_string()).collect()
     }
@@ -3102,6 +3392,43 @@ fn percent_decode(input: &str) -> Option<String> {
     String::from_utf8(decoded).ok()
 }
 
+fn has_pending_deprecation_flag(ctx: &Ctx<'_>) -> bool {
+    let Ok(process) = ctx.globals().get::<_, Object>("process") else {
+        return false;
+    };
+    let Ok(exec_argv) = process.get::<_, rquickjs::Array>("execArgv") else {
+        return false;
+    };
+    for i in 0..exec_argv.len() {
+        let Ok(arg) = exec_argv.get::<String>(i) else {
+            continue;
+        };
+        if arg == "--pending-deprecation" || arg.starts_with("--pending-deprecation=") {
+            return true;
+        }
+    }
+    false
+}
+
+fn emit_node_package_deprecation_warnings<'js>(
+    ctx: &Ctx<'js>,
+    warnings: &[String],
+) -> rquickjs::Result<()> {
+    if warnings.is_empty() || !has_pending_deprecation_flag(ctx) {
+        return Ok(());
+    }
+    let Ok(process) = ctx.globals().get::<_, Object>("process") else {
+        return Ok(());
+    };
+    let Ok(emit_warning) = process.get::<_, Function>("emitWarning") else {
+        return Ok(());
+    };
+    for warning in warnings {
+        let _: Value = emit_warning.call((warning.as_str(), "DeprecationWarning"))?;
+    }
+    Ok(())
+}
+
 fn throw_node_package_resolve_error<'js>(
     ctx: &Ctx<'js>,
     err: NodePackageResolveError,
@@ -3115,34 +3442,61 @@ fn throw_node_package_resolve_error<'js>(
             ),
             true,
         ),
+        NodePackageResolveError::InvalidPackagePatternMatch { specifier, message } => (
+            "ERR_INVALID_MODULE_SPECIFIER",
+            format!("Invalid module \"{}\" {}", specifier, message),
+            true,
+        ),
         NodePackageResolveError::PackagePathNotExported {
             package_name,
             subpath,
+            no_exports_main,
         } => {
-            let subpath = if subpath.is_empty() {
-                ".".to_string()
+            if no_exports_main {
+                (
+                    "ERR_PACKAGE_PATH_NOT_EXPORTED",
+                    format!("No \"exports\" main defined in package {}", package_name),
+                    false,
+                )
             } else {
-                format!("./{}", subpath)
-            };
-            (
-                "ERR_PACKAGE_PATH_NOT_EXPORTED",
-                format!("Package subpath '{}' is not defined by \"exports\" in package {}", subpath, package_name),
-                false,
-            )
+                let subpath = if subpath.is_empty() {
+                    ".".to_string()
+                } else {
+                    format!("./{}", subpath)
+                };
+                (
+                    "ERR_PACKAGE_PATH_NOT_EXPORTED",
+                    format!("Package subpath '{}' is not defined by \"exports\" in package {}", subpath, package_name),
+                    false,
+                )
+            }
         }
         NodePackageResolveError::PackageImportNotDefined { specifier } => (
             "ERR_PACKAGE_IMPORT_NOT_DEFINED",
             format!("Package import specifier '{}' is not defined", specifier),
             false,
         ),
-        NodePackageResolveError::InvalidPackageTarget { kind, target } => (
-            "ERR_INVALID_PACKAGE_TARGET",
-            format!("Invalid \"{}\" target '{}'", kind, target),
+        NodePackageResolveError::InvalidPackageTarget { kind, target } => {
+            let mut message = format!("Invalid \"{}\" target '{}'", kind, target);
+            if kind == "exports" && !target.starts_with("./") {
+                message.push_str("; targets must start with \"./\"");
+            }
+            ("ERR_INVALID_PACKAGE_TARGET", message, false)
+        }
+        NodePackageResolveError::InvalidPackageConfig { path, reason } => (
+            "ERR_INVALID_PACKAGE_CONFIG",
+            match reason {
+                Some(reason) => format!("Invalid package config {}. {}", path, reason),
+                None => format!("Invalid package config {}", path),
+            },
             false,
         ),
-        NodePackageResolveError::InvalidPackageConfig { path } => (
-            "ERR_INVALID_PACKAGE_CONFIG",
-            format!("Invalid package config {}", path),
+        NodePackageResolveError::UnsupportedDirectoryImport { request } => (
+            "ERR_UNSUPPORTED_DIR_IMPORT",
+            format!(
+                "Directory import '{}' is not supported resolving ES modules",
+                request
+            ),
             false,
         ),
         NodePackageResolveError::ModuleNotFound { request } => (
@@ -3167,7 +3521,10 @@ impl Resolver for NodeModulesResolver {
         name: &str,
     ) -> rquickjs::Result<String> {
         let conditions = Self::conditions_from_global(ctx, &Self::ESM_CONDITIONS);
-        match self.try_resolve(base, name, &conditions) {
+        let mut warnings = Vec::new();
+        let result = self.try_resolve(base, name, &conditions, &mut warnings);
+        emit_node_package_deprecation_warnings(ctx, &warnings)?;
+        match result {
             Ok(Some(resolved)) => Ok(resolved),
             Ok(None) => Err(Error::new_resolving(base, name)),
             Err(err) => throw_node_package_resolve_error(ctx, err),
