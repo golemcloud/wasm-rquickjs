@@ -55,6 +55,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             exports: {
                 './public': './public.mjs',
                 './encoded-target': './sp%20ce.mjs',
+                './deprecated-double': './/public.mjs',
                 './condition-order': {
                     default: './default.mjs',
                     import: './import.mjs',
@@ -124,6 +125,20 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.arrayFalseFallback, { public: true });
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
+
+        const packageWarnings = [];
+        const onPackageWarning = (warning) => packageWarnings.push(warning);
+        process.on('warning', onPackageWarning);
+        try {
+            writeImportEntry('/esm-package-map-edge-app/deprecated-double-subpath.mjs', 'exported-pkg/deprecated-double');
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/deprecated-double-subpath.mjs')).default.default, { public: true });
+            await new Promise((resolve) => process.nextTick(resolve));
+        } finally {
+            process.removeListener('warning', onPackageWarning);
+        }
+        assert.strictEqual(packageWarnings.length, 1);
+        assert.strictEqual(packageWarnings[0].code, 'DEP0166');
+        assert.match(packageWarnings[0].stack, /DeprecationWarning: Use of deprecated double slash/);
 
         writeImportEntry('/esm-package-map-edge-app/missing-root.mjs', 'exported-pkg');
         writeImportEntry('/esm-package-map-edge-app/private-subpath.mjs', 'exported-pkg/private.mjs');

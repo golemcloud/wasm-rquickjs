@@ -2404,6 +2404,11 @@ struct PackageJson {
     package_type: Option<String>,
 }
 
+struct NodePackageWarning {
+    message: String,
+    code: &'static str,
+}
+
 struct NodeModulesResolver;
 
 impl NodeModulesResolver {
@@ -2415,7 +2420,7 @@ impl NodeModulesResolver {
         base: &str,
         name: &str,
         conditions: &[String],
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::{Path, PathBuf};
 
@@ -2611,7 +2616,7 @@ impl NodeModulesResolver {
         base: &str,
         name: &str,
         conditions: &[String],
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
@@ -2658,7 +2663,7 @@ impl NodeModulesResolver {
         package_name: &str,
         subpath: &str,
         conditions: &[String],
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         let mut dir = base_dir.to_path_buf();
         loop {
@@ -2813,7 +2818,7 @@ impl NodeModulesResolver {
         exports: &PackageTarget,
         subpath: &str,
         conditions: &[String],
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<String, NodePackageResolveError> {
         let key = if subpath.is_empty() {
             ".".to_string()
@@ -2907,7 +2912,7 @@ impl NodeModulesResolver {
         imports: &PackageTarget,
         specifier: &str,
         conditions: &[String],
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
         {
@@ -3006,7 +3011,7 @@ impl NodeModulesResolver {
         conditions: &[String],
         pattern_substitution: Option<&str>,
         warning_specifier: &str,
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
             PackageTarget::Null => {
@@ -3319,27 +3324,36 @@ impl NodeModulesResolver {
     }
 
     fn push_package_deprecation_warning(
-        warnings: &mut Vec<String>,
+        warnings: &mut Vec<NodePackageWarning>,
         kind: &str,
         specifier: &str,
         target: &str,
         pattern_substitution: Option<&str>,
     ) {
-        if Self::has_deprecated_leading_or_trailing_slash(pattern_substitution) {
-            warnings.push(format!(
-                "Use of deprecated leading or trailing slash in \"{}\" mapping for {:?} to {:?}",
-                kind, specifier, target
-            ));
-        } else if Self::has_deprecated_double_slash(target) {
-            warnings.push(format!(
-                "Use of deprecated double slash in \"{}\" mapping for {:?} to {:?}",
-                kind, specifier, target
-            ));
+        if Self::has_deprecated_double_slash(target) {
+            warnings.push(NodePackageWarning {
+                message: format!(
+                    "Use of deprecated double slash in \"{}\" mapping for {:?} to {:?}",
+                    kind, specifier, target
+                ),
+                code: "DEP0166",
+            });
+        } else if Self::has_deprecated_leading_or_trailing_slash(pattern_substitution) {
+            warnings.push(NodePackageWarning {
+                message: format!(
+                    "Use of deprecated leading or trailing slash in \"{}\" mapping for {:?} to {:?}",
+                    kind, specifier, target
+                ),
+                code: "DEP0166",
+            });
         } else if Self::has_deprecated_double_slash(specifier) {
-            warnings.push(format!(
-                "Use of deprecated double slash in \"{}\" specifier {:?}",
-                kind, specifier
-            ));
+            warnings.push(NodePackageWarning {
+                message: format!(
+                    "Use of deprecated double slash in \"{}\" specifier {:?}",
+                    kind, specifier
+                ),
+                code: "DEP0166",
+            });
         }
     }
 
@@ -3392,29 +3406,11 @@ fn percent_decode(input: &str) -> Option<String> {
     String::from_utf8(decoded).ok()
 }
 
-fn has_pending_deprecation_flag(ctx: &Ctx<'_>) -> bool {
-    let Ok(process) = ctx.globals().get::<_, Object>("process") else {
-        return false;
-    };
-    let Ok(exec_argv) = process.get::<_, rquickjs::Array>("execArgv") else {
-        return false;
-    };
-    for i in 0..exec_argv.len() {
-        let Ok(arg) = exec_argv.get::<String>(i) else {
-            continue;
-        };
-        if arg == "--pending-deprecation" || arg.starts_with("--pending-deprecation=") {
-            return true;
-        }
-    }
-    false
-}
-
 fn emit_node_package_deprecation_warnings<'js>(
     ctx: &Ctx<'js>,
-    warnings: &[String],
+    warnings: &[NodePackageWarning],
 ) -> rquickjs::Result<()> {
-    if warnings.is_empty() || !has_pending_deprecation_flag(ctx) {
+    if warnings.is_empty() {
         return Ok(());
     }
     let Ok(process) = ctx.globals().get::<_, Object>("process") else {
@@ -3424,7 +3420,8 @@ fn emit_node_package_deprecation_warnings<'js>(
         return Ok(());
     };
     for warning in warnings {
-        let _: Value = emit_warning.call((warning.as_str(), "DeprecationWarning"))?;
+        let _: Value =
+            emit_warning.call((warning.message.as_str(), "DeprecationWarning", warning.code))?;
     }
     Ok(())
 }

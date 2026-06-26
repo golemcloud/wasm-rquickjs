@@ -635,9 +635,17 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     if (isDeprecationWarning && process.noDeprecation) {
         return;
     }
+    const warningCode = obj.code ? ' [' + String(obj.code) + ']' : '';
     const warningHeader = warningName + ': ' + String(obj.message || obj);
-    if (typeof obj.stack === 'string' && obj.stack.indexOf(String(obj.message || obj)) < 0) {
-        obj.stack = warningHeader + '\n' + obj.stack;
+    const stderrHeader = warningName + warningCode + ': ' + String(obj.message || obj);
+    if (typeof obj.stack === 'string') {
+        const newline = obj.stack.indexOf('\n');
+        const rest = newline === -1 ? '' : obj.stack.slice(newline);
+        if (!obj.stack.startsWith(warningHeader)) {
+            obj.stack = warningHeader + rest;
+        }
+    } else {
+        obj.stack = warningHeader;
     }
 
     const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
@@ -647,11 +655,14 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
             throw obj;
         }
         if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
-            let text = warningHeader;
+            let text = stderrHeader;
             if (typeof obj.stack === 'string') {
                 text = obj.stack.indexOf(String(obj.message || obj)) >= 0
                     ? obj.stack
-                    : warningHeader + '\n' + obj.stack;
+                    : stderrHeader + '\n' + obj.stack;
+                if (warningCode && text.startsWith(warningHeader)) {
+                    text = stderrHeader + text.slice(warningHeader.length);
+                }
             }
             process.stderr.write(text.endsWith('\n') ? text : text + '\n');
         }

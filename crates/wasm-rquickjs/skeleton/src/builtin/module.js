@@ -670,11 +670,10 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
     );
 }
 
-function emitPackageDeprecationWarning(message) {
-    if (!hasExecArgvFlag('--pending-deprecation')) return;
+function emitPackageDeprecationWarning(message, code) {
     const processObject = globalThis.process;
     if (!processObject || typeof processObject.emitWarning !== 'function') return;
-    processObject.emitWarning(message, 'DeprecationWarning');
+    processObject.emitWarning(message, 'DeprecationWarning', code);
 }
 
 const cjsDefaultPackageConditions = ['golem', 'node', 'require', 'module-sync', 'default'];
@@ -820,23 +819,26 @@ function hasDeprecatedLeadingOrTrailingSlash(substitution) {
 }
 
 function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubstitution) {
-    if (hasDeprecatedLeadingOrTrailingSlash(patternSubstitution)) {
-        emitPackageDeprecationWarning(
-            'Use of deprecated leading or trailing slash in "' + kind + '" mapping for ' +
-            JSON.stringify(specifier) + ' to ' + JSON.stringify(target)
-        );
-        return;
-    }
     if (hasDeprecatedDoubleSlash(target)) {
         emitPackageDeprecationWarning(
             'Use of deprecated double slash in "' + kind + '" mapping for ' +
-            JSON.stringify(specifier) + ' to ' + JSON.stringify(target)
+            JSON.stringify(specifier) + ' to ' + JSON.stringify(target),
+            'DEP0166'
+        );
+        return;
+    }
+    if (hasDeprecatedLeadingOrTrailingSlash(patternSubstitution)) {
+        emitPackageDeprecationWarning(
+            'Use of deprecated leading or trailing slash in "' + kind + '" mapping for ' +
+            JSON.stringify(specifier) + ' to ' + JSON.stringify(target),
+            'DEP0166'
         );
         return;
     }
     if (hasDeprecatedDoubleSlash(specifier)) {
         emitPackageDeprecationWarning(
-            'Use of deprecated double slash in "' + kind + '" specifier ' + JSON.stringify(specifier)
+            'Use of deprecated double slash in "' + kind + '" specifier ' + JSON.stringify(specifier),
+            'DEP0166'
         );
     }
 }
