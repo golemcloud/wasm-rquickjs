@@ -670,7 +670,11 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
     );
 }
 
-function emitPackageDeprecationWarning(message, code) {
+function emitPackageDeprecationWarning(message, code, key) {
+    if (typeof globalThis.__wasm_rquickjs_emit_package_deprecation_warning === 'function') {
+        globalThis.__wasm_rquickjs_emit_package_deprecation_warning(message, code, key);
+        return;
+    }
     const processObject = globalThis.process;
     if (!processObject || typeof processObject.emitWarning !== 'function') return;
     processObject.emitWarning(message, 'DeprecationWarning', code);
@@ -818,12 +822,22 @@ function hasDeprecatedLeadingOrTrailingSlash(substitution) {
     return typeof substitution === 'string' && (substitution.startsWith('/') || substitution.endsWith('/'));
 }
 
-function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubstitution) {
+function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubstitution, packageDir) {
+    if (kind === 'exports' && typeof patternSubstitution === 'string' && patternSubstitution.endsWith('/')) {
+        emitPackageDeprecationWarning(
+            'Use of deprecated trailing slash pattern mapping ' +
+            JSON.stringify(specifier) + ' in the "' + kind + '" field module resolution',
+            'DEP0155',
+            packageDir + ':' + specifier
+        );
+        return;
+    }
     if (hasDeprecatedDoubleSlash(target)) {
         emitPackageDeprecationWarning(
             'Use of deprecated double slash in "' + kind + '" mapping for ' +
             JSON.stringify(specifier) + ' to ' + JSON.stringify(target),
-            'DEP0166'
+            'DEP0166',
+            packageDir + ':' + specifier + ':' + target
         );
         return;
     }
@@ -831,14 +845,16 @@ function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubs
         emitPackageDeprecationWarning(
             'Use of deprecated leading or trailing slash in "' + kind + '" mapping for ' +
             JSON.stringify(specifier) + ' to ' + JSON.stringify(target),
-            'DEP0166'
+            'DEP0166',
+            packageDir + ':' + specifier + ':' + target
         );
         return;
     }
     if (hasDeprecatedDoubleSlash(specifier)) {
         emitPackageDeprecationWarning(
             'Use of deprecated double slash in "' + kind + '" specifier ' + JSON.stringify(specifier),
-            'DEP0166'
+            'DEP0166',
+            packageDir + ':' + specifier
         );
     }
 }
@@ -921,7 +937,7 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
             target = target.replace(/\*/g, () => patternSubstitution);
         }
         if (warningContext) {
-            emitDeprecatedPackageTargetWarning(warningContext.kind, warningContext.specifier, target, patternSubstitution);
+            emitDeprecatedPackageTargetWarning(warningContext.kind, warningContext.specifier, target, patternSubstitution, packageDir);
         }
         if (hasEncodedSlashOrBackslash(target)) {
             throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');

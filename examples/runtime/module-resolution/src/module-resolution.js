@@ -56,6 +56,8 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './public': './public.mjs',
                 './encoded-target': './sp%20ce.mjs',
                 './deprecated-double': './/public.mjs',
+                './trailing-pattern-slash*': './trailing-pattern-slash*index.mjs',
+                './folder-pattern*': './folder-pattern*index.mjs',
                 './condition-order': {
                     default: './default.mjs',
                     import: './import.mjs',
@@ -101,6 +103,10 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/sp ce.mjs', 'export default { encoded: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/default.mjs', 'export default { condition: "default" };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/import.mjs', 'export default { condition: "import" };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash/index.mjs', 'export default { trailingPattern: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo/index.mjs', 'export default { folderPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
@@ -131,15 +137,99 @@ export const testEsmPackageMapEdgeCases = async () => {
         process.on('warning', onPackageWarning);
         try {
             writeImportEntry('/esm-package-map-edge-app/deprecated-double-subpath.mjs', 'exported-pkg/deprecated-double');
+            writeImportEntry('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs', 'exported-pkg/trailing-pattern-slash/');
+            writeImportEntry('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs', 'exported-pkg/folder-pattern/foo/');
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/deprecated-double-subpath.mjs')).default.default, { public: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs')).default.default, { trailingPattern: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs')).default.default, { folderPattern: true });
             await new Promise((resolve) => process.nextTick(resolve));
         } finally {
             process.removeListener('warning', onPackageWarning);
         }
-        assert.strictEqual(packageWarnings.length, 1);
-        assert.strictEqual(packageWarnings[0].code, 'DEP0166');
+        assert.deepStrictEqual(packageWarnings.map((warning) => warning.code), ['DEP0166', 'DEP0155', 'DEP0155']);
         assert.match(packageWarnings[0].stack, /DeprecationWarning: Use of deprecated double slash/);
+        assert.match(packageWarnings[1].stack, /DeprecationWarning: Use of deprecated trailing slash pattern mapping/);
+        assert.match(packageWarnings[2].stack, /folder-pattern\/foo\//);
 
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-exports-warn', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/package.json', JSON.stringify({
+            type: 'module',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/index.js', 'export default { indexFallback: true };');
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/foo.js', 'export default { exactSubpath: true };');
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/sp ce.js', 'export default { encodedSpace: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-exports-warn/dir', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/dir/index.js', 'export default { directorySubpath: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/main-extension-warn', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/main-extension-warn/package.json', JSON.stringify({
+            type: 'module',
+            main: 'index',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/main-extension-warn/index.js', 'export default { mainExtensionFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/main-directory-warn/dir', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/main-directory-warn/package.json', JSON.stringify({
+            type: 'module',
+            main: 'dir',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/main-directory-warn/dir/index.js', 'export default { mainDirectoryFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-exports-mjs-only', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-mjs-only/package.json', JSON.stringify({
+            type: 'module',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-mjs-only/index.mjs', 'export default { indexFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/main-extension-mjs-only', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/main-extension-mjs-only/package.json', JSON.stringify({
+            type: 'module',
+            main: 'index',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/main-extension-mjs-only/index.mjs', 'export default { mainExtensionFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-package-mjs-only', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-package-mjs-only/index.mjs', 'export default { indexFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/default-main-mjs-only', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/default-main-mjs-only/package.json', JSON.stringify({
+            main: 'index',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/default-main-mjs-only/index.mjs', 'export default { mainExtensionFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/commonjs-main-mjs-only', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/commonjs-main-mjs-only/package.json', JSON.stringify({
+            type: 'commonjs',
+            main: 'index',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/commonjs-main-mjs-only/index.mjs', 'export default { mainExtensionFallback: true };');
+
+        const fallbackWarnings = [];
+        const onFallbackWarning = (warning) => fallbackWarnings.push(warning);
+        process.on('warning', onFallbackWarning);
+        try {
+            writeImportEntry('/esm-package-map-edge-app/no-exports-warn-entry.mjs', 'no-exports-warn');
+            writeImportEntry('/esm-package-map-edge-app/no-exports-exact-subpath.mjs', 'no-exports-warn/foo.js');
+            writeImportEntry('/esm-package-map-edge-app/no-exports-encoded-space-subpath.mjs', 'no-exports-warn/sp%20ce.js');
+            writeImportEntry('/esm-package-map-edge-app/main-extension-warn-entry.mjs', 'main-extension-warn');
+            writeImportEntry('/esm-package-map-edge-app/main-directory-warn-entry.mjs', 'main-directory-warn');
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/no-exports-warn-entry.mjs')).default.default, { indexFallback: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/no-exports-exact-subpath.mjs')).default.default, { exactSubpath: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/no-exports-encoded-space-subpath.mjs')).default.default, { encodedSpace: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/main-extension-warn-entry.mjs')).default.default, { mainExtensionFallback: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/main-directory-warn-entry.mjs')).default.default, { mainDirectoryFallback: true });
+            await new Promise((resolve) => process.nextTick(resolve));
+        } finally {
+            process.removeListener('warning', onFallbackWarning);
+        }
+        assert.deepStrictEqual(fallbackWarnings.map((warning) => warning.code), ['DEP0151', 'DEP0151', 'DEP0151']);
+        assert.match(fallbackWarnings[0].stack, /no-exports-warn/);
+        assert.match(fallbackWarnings[1].stack, /main-extension-warn/);
+        assert.match(fallbackWarnings[2].stack, /main-directory-warn/);
+
+        writeImportEntry('/esm-package-map-edge-app/no-exports-mjs-only-entry.mjs', 'no-exports-mjs-only');
+        writeImportEntry('/esm-package-map-edge-app/main-extension-mjs-only-entry.mjs', 'main-extension-mjs-only');
+        writeImportEntry('/esm-package-map-edge-app/no-package-mjs-only-entry.mjs', 'no-package-mjs-only');
+        writeImportEntry('/esm-package-map-edge-app/default-main-mjs-only-entry.mjs', 'default-main-mjs-only');
+        writeImportEntry('/esm-package-map-edge-app/commonjs-main-mjs-only-entry.mjs', 'commonjs-main-mjs-only');
+        writeImportEntry('/esm-package-map-edge-app/no-exports-missing-subpath.mjs', 'no-exports-warn/missing');
+        writeImportEntry('/esm-package-map-edge-app/no-exports-no-ext-subpath.mjs', 'no-exports-warn/foo');
+        writeImportEntry('/esm-package-map-edge-app/no-exports-dir-subpath.mjs', 'no-exports-warn/dir');
+        writeImportEntry('/esm-package-map-edge-app/no-exports-encoded-slash-subpath.mjs', 'no-exports-warn/a%2Fb.js');
+        writeImportEntry('/esm-package-map-edge-app/no-exports-encoded-backslash-subpath.mjs', 'no-exports-warn/a%5Cb.js');
         writeImportEntry('/esm-package-map-edge-app/missing-root.mjs', 'exported-pkg');
         writeImportEntry('/esm-package-map-edge-app/private-subpath.mjs', 'exported-pkg/private.mjs');
         writeImportEntry('/esm-package-map-edge-app/escape-subpath.mjs', 'exported-pkg/escape');
@@ -153,6 +243,16 @@ export const testEsmPackageMapEdgeCases = async () => {
         writeImportEntry('/esm-package-map-edge-app/directory-subpath.mjs', 'exported-pkg/directory');
         writeImportEntry('/esm-package-map-edge-app/no-ext-subpath.mjs', 'exported-pkg/no-ext');
 
+        await expectImportError('/esm-package-map-edge-app/no-exports-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/main-extension-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/no-package-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/default-main-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/commonjs-main-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/no-exports-missing-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/no-exports-no-ext-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/no-exports-dir-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
+        await expectImportError('/esm-package-map-edge-app/no-exports-encoded-slash-subpath.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        await expectImportError('/esm-package-map-edge-app/no-exports-encoded-backslash-subpath.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportError('/esm-package-map-edge-app/missing-root.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
         await expectImportError('/esm-package-map-edge-app/private-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
         await expectImportError('/esm-package-map-edge-app/escape-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
@@ -194,7 +294,11 @@ export const testEsmPackageMapEdgeCases = async () => {
             'export const arrayFalseFallbackValue = arrayFalseFallback;',
             'export const readFileSyncType = typeof fs.readFileSync;',
         ].join('\n'));
-        fs.writeFileSync('/esm-package-map-edge-app/node_modules/dep/index.mjs', [
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/dep/package.json', JSON.stringify({
+            type: 'module',
+            exports: './index.js',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/dep/index.js', [
             'import appAlias from "#app-alias";',
             'export default appAlias;',
         ].join('\n'));

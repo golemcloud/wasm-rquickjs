@@ -2407,6 +2407,7 @@ struct PackageJson {
 struct NodePackageWarning {
     message: String,
     code: &'static str,
+    dedupe_key: Option<String>,
 }
 
 struct NodeModulesResolver;
@@ -2454,6 +2455,7 @@ impl NodeModulesResolver {
             let nm_dir = dir.join("node_modules").join(package_name);
             if nm_dir.is_dir() {
                 let pkg_path = nm_dir.join("package.json");
+                let mut package_type = None;
                 if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
                     let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
                         NodePackageResolveError::InvalidPackageConfig {
@@ -2461,6 +2463,7 @@ impl NodeModulesResolver {
                             reason: None,
                         }
                     })?;
+                    package_type = package.package_type.clone();
 
                     if let Some(exports_field) = package.exports.as_ref() {
                         Self::validate_package_exports_map(&pkg_path, exports_field)?;
@@ -2477,23 +2480,51 @@ impl NodeModulesResolver {
 
                     if subpath.is_empty()
                         && let Some(main) = package.main.as_ref()
-                        && let Some(resolved) = Self::resolve_package_target(&nm_dir, main)
                     {
-                        return Ok(Some(resolved));
+                        let is_module_package = package.package_type.as_deref() == Some("module");
+                        let resolved = Self::resolve_package_legacy_main(&nm_dir, main);
+                        if let Some((resolved, used_extension_lookup)) = resolved {
+                            if is_module_package && used_extension_lookup {
+                                warnings.push(NodePackageWarning {
+                                    message: format!(
+                                        "Package {} uses deprecated main extension lookup for {:?}",
+                                        package_name, main
+                                    ),
+                                    code: "DEP0151",
+                                    dedupe_key: None,
+                                });
+                            }
+                            return Ok(Some(resolved));
+                        }
                     }
                 }
 
-                if !subpath.is_empty()
-                    && let Some(resolved) = Self::resolve_package_target(&nm_dir, subpath)
-                {
-                    return Ok(Some(resolved));
+                if !subpath.is_empty() {
+                    match Self::resolve_package_subpath(&nm_dir, subpath, base, name)? {
+                        Some(resolved) => return Ok(Some(resolved)),
+                        None => {}
+                    }
                 }
 
-                // Fallback: index.mjs, index.js
-                let fallbacks: [PathBuf; 2] = [nm_dir.join("index.mjs"), nm_dir.join("index.js")];
-                for fallback in &fallbacks {
-                    if fallback.is_file() {
-                        return Ok(Some(fallback.to_string_lossy().into_owned()));
+                if subpath.is_empty() {
+                    let is_module_package = package_type.as_deref() == Some("module");
+                    let fallbacks = [nm_dir.join("index.js"), nm_dir.join("index.json")];
+                    for fallback in &fallbacks {
+                        if fallback.is_file() {
+                            if is_module_package
+                                && fallback.extension().and_then(|ext| ext.to_str()) == Some("js")
+                            {
+                                warnings.push(NodePackageWarning {
+                                    message: format!(
+                                        "Package {} uses deprecated index lookup",
+                                        package_name
+                                    ),
+                                    code: "DEP0151",
+                                    dedupe_key: None,
+                                });
+                            }
+                            return Ok(Some(fallback.to_string_lossy().into_owned()));
+                        }
                     }
                 }
             }
@@ -2774,6 +2805,60 @@ impl NodeModulesResolver {
         None
     }
 
+    fn resolve_package_subpath(
+        package_dir: &std::path::Path,
+        subpath: &str,
+        base: &str,
+        specifier: &str,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        if Self::has_encoded_slash_or_backslash(subpath) {
+            return Err(NodePackageResolveError::InvalidModuleSpecifier {
+                specifier: specifier.to_string(),
+                base: base.to_string(),
+            });
+        }
+        let decoded_subpath = percent_decode(subpath).unwrap_or_else(|| subpath.to_string());
+        let target_path = package_dir.join(decoded_subpath);
+        if target_path.is_file() {
+            return Ok(Some(target_path.to_string_lossy().into_owned()));
+        }
+        if target_path.is_dir() {
+            return Err(NodePackageResolveError::UnsupportedDirectoryImport {
+                request: target_path.to_string_lossy().into_owned(),
+            });
+        }
+        Ok(None)
+    }
+
+    fn resolve_package_legacy_main(
+        package_dir: &std::path::Path,
+        target: &str,
+    ) -> Option<(String, bool)> {
+        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        if target_path.is_file() {
+            return Some((target_path.to_string_lossy().into_owned(), false));
+        }
+        if target_path.extension().is_none() {
+            let js_target = target_path.with_extension("js");
+            if js_target.is_file() {
+                return Some((js_target.to_string_lossy().into_owned(), true));
+            }
+            let json_target = target_path.with_extension("json");
+            if json_target.is_file() {
+                return Some((json_target.to_string_lossy().into_owned(), false));
+            }
+        }
+        let index_js = target_path.join("index.js");
+        if index_js.is_file() {
+            return Some((index_js.to_string_lossy().into_owned(), true));
+        }
+        let index_json = target_path.join("index.json");
+        if index_json.is_file() {
+            return Some((index_json.to_string_lossy().into_owned(), false));
+        }
+        None
+    }
+
     fn first_existing_normalized(candidates: Vec<std::path::PathBuf>) -> Option<String> {
         for candidate in candidates {
             let normalized = CjsEvalResolver::normalize_path(&candidate);
@@ -3043,6 +3128,7 @@ impl NodeModulesResolver {
             };
             Self::push_package_deprecation_warning(
                 warnings,
+                package_dir,
                 kind,
                 warning_specifier,
                 &target_str,
@@ -3325,11 +3411,29 @@ impl NodeModulesResolver {
 
     fn push_package_deprecation_warning(
         warnings: &mut Vec<NodePackageWarning>,
+        package_dir: &std::path::Path,
         kind: &str,
         specifier: &str,
         target: &str,
         pattern_substitution: Option<&str>,
     ) {
+        if kind == "exports"
+            && pattern_substitution.is_some_and(|substitution| substitution.ends_with('/'))
+        {
+            warnings.push(NodePackageWarning {
+                message: format!(
+                    "Use of deprecated trailing slash pattern mapping {:?} in the \"{}\" field module resolution",
+                    specifier, kind
+                ),
+                code: "DEP0155",
+                dedupe_key: Some(format!(
+                    "{}:{}",
+                    package_dir.to_string_lossy(),
+                    specifier
+                )),
+            });
+            return;
+        }
         if Self::has_deprecated_double_slash(target) {
             warnings.push(NodePackageWarning {
                 message: format!(
@@ -3337,6 +3441,7 @@ impl NodeModulesResolver {
                     kind, specifier, target
                 ),
                 code: "DEP0166",
+                dedupe_key: None,
             });
         } else if Self::has_deprecated_leading_or_trailing_slash(pattern_substitution) {
             warnings.push(NodePackageWarning {
@@ -3345,6 +3450,7 @@ impl NodeModulesResolver {
                     kind, specifier, target
                 ),
                 code: "DEP0166",
+                dedupe_key: None,
             });
         } else if Self::has_deprecated_double_slash(specifier) {
             warnings.push(NodePackageWarning {
@@ -3353,6 +3459,7 @@ impl NodeModulesResolver {
                     kind, specifier
                 ),
                 code: "DEP0166",
+                dedupe_key: None,
             });
         }
     }
@@ -3419,9 +3526,18 @@ fn emit_node_package_deprecation_warnings<'js>(
     let Ok(emit_warning) = process.get::<_, Function>("emitWarning") else {
         return Ok(());
     };
+    let emit_package_warning = ctx
+        .globals()
+        .get::<_, Function>("__wasm_rquickjs_emit_package_deprecation_warning")
+        .ok();
     for warning in warnings {
-        let _: Value =
-            emit_warning.call((warning.message.as_str(), "DeprecationWarning", warning.code))?;
+        if let Some(emit_package_warning) = emit_package_warning.as_ref() {
+            let key = warning.dedupe_key.as_deref().unwrap_or(warning.message.as_str());
+            let _: Value = emit_package_warning.call((warning.message.as_str(), warning.code, key))?;
+        } else {
+            let _: Value =
+                emit_warning.call((warning.message.as_str(), "DeprecationWarning", warning.code))?;
+        }
     }
     Ok(())
 }
