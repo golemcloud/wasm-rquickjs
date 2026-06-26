@@ -793,12 +793,169 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '});',
             'exports.own = "own";',
         ].join('\n'));
-        fs.writeFileSync('/cjs-analyzer-guards-app/unicode-reexport.cjs', [
+        fs.writeFileSync('/cjs-analyzer-guards-app/nested-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'function copy() {',
+            '  Object.keys(_dep).forEach(function (key) {',
+            '    if (key === "default" || key === "__esModule") return;',
+            '    exports[key] = _dep[key];',
+            '  });',
+            '}',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/nested-require-binding.cjs', [
+            'var _dep = {};',
+            'function init() {',
+            '  var _dep = require("./dep.cjs");',
+            '}',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/unguarded-reexport.cjs', [
             'var _dep = require("./dep.cjs");',
             'Object.keys(_dep).forEach(function (key) {',
             '  const π = 1;',
             '  Object.defineProperty(exports, key, { enumerable: true, get: function () { return _dep[key]; } });',
             '});',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/reversed-guard-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if ("default" === key || "__esModule" === key) return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/delayed-guard-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  exports[key] = _dep[key];',
+            '  if (key === "default" || key === "__esModule") return;',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/nested-guard-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  function guard() {',
+            '    if (key === "default" || key === "__esModule") return;',
+            '  }',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/for-header-binding.cjs', [
+            'for (var _dep = require("./dep.cjs"); false;) {}',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/commented-reexport.cjs', [
+            '/* header */ var _dep = require("./dep.cjs");',
+            'exports.own = "own";',
+            '/* separator */ Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/line-commented-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'exports.own = "own"; // trailing comment',
+            '// separator',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/arrow-callback-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach((key) => {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/extra-arg-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '}, null);',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/has-own-guard-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key !== "default" && !Object.prototype.hasOwnProperty.call(exports, key)) exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/asi-reexport.cjs', [
+            'var _dep = require("./dep.cjs")',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key]',
+            '})',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/renamed-key-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (name) {',
+            '  if (name === "default" || name === "__esModule") return;',
+            '  exports[name] = _dep[name];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/require-continuation.cjs', [
+            'var _dep = require("./dep.cjs")',
+            '+ 0;',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/statement-continuation.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'false &&',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/conditional-body-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  if (false) exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/intervening-statement-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'function touch() {}',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  touch();',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/prefix-asi-reexport.cjs', [
+            'var x = 0;',
+            'var _dep = require("./dep.cjs")',
+            '++x;',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
         ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/continuation.cjs', [
             'module.exports = require("./dep.cjs").nested;',
@@ -844,7 +1001,25 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as fp from "./false-positives.cjs";',
             'import * as unsafe from "./unsafe-define.cjs";',
             'import * as nonReexport from "./not-reexport.cjs";',
-            'import * as unicodeReexport from "./unicode-reexport.cjs";',
+            'import * as nestedReexport from "./nested-reexport.cjs";',
+            'import * as nestedRequireBinding from "./nested-require-binding.cjs";',
+            'import * as unguardedReexport from "./unguarded-reexport.cjs";',
+            'import * as reversedGuardReexport from "./reversed-guard-reexport.cjs";',
+            'import * as delayedGuardReexport from "./delayed-guard-reexport.cjs";',
+            'import * as nestedGuardReexport from "./nested-guard-reexport.cjs";',
+            'import * as forHeaderBinding from "./for-header-binding.cjs";',
+            'import * as commentedReexport from "./commented-reexport.cjs";',
+            'import * as lineCommentedReexport from "./line-commented-reexport.cjs";',
+            'import * as arrowCallbackReexport from "./arrow-callback-reexport.cjs";',
+            'import * as extraArgReexport from "./extra-arg-reexport.cjs";',
+            'import * as hasOwnGuardReexport from "./has-own-guard-reexport.cjs";',
+            'import * as asiReexport from "./asi-reexport.cjs";',
+            'import * as renamedKeyReexport from "./renamed-key-reexport.cjs";',
+            'import * as requireContinuation from "./require-continuation.cjs";',
+            'import * as statementContinuation from "./statement-continuation.cjs";',
+            'import * as conditionalBodyReexport from "./conditional-body-reexport.cjs";',
+            'import * as interveningStatementReexport from "./intervening-statement-reexport.cjs";',
+            'import * as prefixAsiReexport from "./prefix-asi-reexport.cjs";',
             'import * as continuation from "./continuation.cjs";',
             'import * as bindingContinuation from "./binding-continuation.cjs";',
             'import * as objectLiteralValues from "./object-literal-values.cjs";',
@@ -857,7 +1032,33 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  safe: unsafe.safe,',
             '  nonReexportKeys: Object.keys(nonReexport).filter((key) => key !== "default" && key !== "own"),',
             '  own: nonReexport.own,',
-            '  unicodeAlpha: unicodeReexport.alpha,',
+            '  nestedReexportKeys: Object.keys(nestedReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  nestedOwn: nestedReexport.own,',
+            '  nestedRequireBindingKeys: Object.keys(nestedRequireBinding).filter((key) => key !== "default" && key !== "own"),',
+            '  nestedRequireBindingOwn: nestedRequireBinding.own,',
+            '  unguardedReexportKeys: Object.keys(unguardedReexport).filter((key) => key !== "default"),',
+            '  reversedGuardReexportKeys: Object.keys(reversedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  reversedGuardOwn: reversedGuardReexport.own,',
+            '  delayedGuardReexportKeys: Object.keys(delayedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  delayedGuardOwn: delayedGuardReexport.own,',
+            '  nestedGuardReexportKeys: Object.keys(nestedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  nestedGuardOwn: nestedGuardReexport.own,',
+            '  forHeaderBindingKeys: Object.keys(forHeaderBinding).filter((key) => key !== "default" && key !== "own"),',
+            '  forHeaderBindingOwn: forHeaderBinding.own,',
+            '  commentedAlpha: commentedReexport.alpha,',
+            '  lineCommentedAlpha: lineCommentedReexport.alpha,',
+            '  arrowCallbackReexportKeys: Object.keys(arrowCallbackReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  arrowCallbackOwn: arrowCallbackReexport.own,',
+            '  extraArgReexportKeys: Object.keys(extraArgReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  extraArgOwn: extraArgReexport.own,',
+            '  hasOwnGuardAlpha: hasOwnGuardReexport.alpha,',
+            '  asiAlpha: asiReexport.alpha,',
+            '  renamedKeyAlpha: renamedKeyReexport.alpha,',
+            '  requireContinuationKeys: Object.keys(requireContinuation).filter((key) => key !== "default" && key !== "own"),',
+            '  statementContinuationKeys: Object.keys(statementContinuation).filter((key) => key !== "default" && key !== "own"),',
+            '  conditionalBodyReexportKeys: Object.keys(conditionalBodyReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  interveningStatementReexportKeys: Object.keys(interveningStatementReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  prefixAsiAlpha: prefixAsiReexport.alpha,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default"),',
             '  bindingContinuationKeys: Object.keys(bindingContinuation).filter((key) => key !== "default" && key !== "own"),',
             '  bindingContinuationOwn: bindingContinuation.own,',
@@ -877,7 +1078,33 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.strictEqual(result.safe, 'yes');
         assert.deepStrictEqual(result.nonReexportKeys, []);
         assert.strictEqual(result.own, 'own');
-        assert.strictEqual(result.unicodeAlpha, 'alpha');
+        assert.deepStrictEqual(result.nestedReexportKeys, []);
+        assert.strictEqual(result.nestedOwn, 'own');
+        assert.deepStrictEqual(result.nestedRequireBindingKeys, []);
+        assert.strictEqual(result.nestedRequireBindingOwn, 'own');
+        assert.deepStrictEqual(result.unguardedReexportKeys, []);
+        assert.deepStrictEqual(result.reversedGuardReexportKeys, []);
+        assert.strictEqual(result.reversedGuardOwn, 'own');
+        assert.deepStrictEqual(result.delayedGuardReexportKeys, []);
+        assert.strictEqual(result.delayedGuardOwn, 'own');
+        assert.deepStrictEqual(result.nestedGuardReexportKeys, []);
+        assert.strictEqual(result.nestedGuardOwn, 'own');
+        assert.deepStrictEqual(result.forHeaderBindingKeys, []);
+        assert.strictEqual(result.forHeaderBindingOwn, 'own');
+        assert.strictEqual(result.commentedAlpha, 'alpha');
+        assert.strictEqual(result.lineCommentedAlpha, 'alpha');
+        assert.deepStrictEqual(result.arrowCallbackReexportKeys, []);
+        assert.strictEqual(result.arrowCallbackOwn, 'own');
+        assert.deepStrictEqual(result.extraArgReexportKeys, []);
+        assert.strictEqual(result.extraArgOwn, 'own');
+        assert.strictEqual(result.hasOwnGuardAlpha, 'alpha');
+        assert.strictEqual(result.asiAlpha, 'alpha');
+        assert.strictEqual(result.renamedKeyAlpha, 'alpha');
+        assert.deepStrictEqual(result.requireContinuationKeys, []);
+        assert.deepStrictEqual(result.statementContinuationKeys, []);
+        assert.deepStrictEqual(result.conditionalBodyReexportKeys, []);
+        assert.deepStrictEqual(result.interveningStatementReexportKeys, []);
+        assert.strictEqual(result.prefixAsiAlpha, 'alpha');
         assert.deepStrictEqual(result.continuationKeys, []);
         assert.deepStrictEqual(result.bindingContinuationKeys, []);
         assert.strictEqual(result.bindingContinuationOwn, 'own');
