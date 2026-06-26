@@ -2950,6 +2950,48 @@ impl NodeModulesResolver {
         ])
     }
 
+    fn read_package_json_main_optional(pkg_path: &std::path::Path) -> Result<Option<String>, NodePackageResolveError> {
+        match std::fs::read_to_string(pkg_path) {
+            Ok(pkg_content) => {
+                let value: serde_json::Value =
+                    serde_json::from_str(&pkg_content).map_err(|_| NodePackageResolveError::InvalidPackageConfig {
+                        path: pkg_path.to_string_lossy().into_owned(),
+                        reason: None,
+                    })?;
+                Ok(value
+                    .get("main")
+                    .and_then(|main| main.as_str())
+                    .map(|main| main.to_string()))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn resolve_cjs_analysis_relative(target_path: &std::path::Path) -> Option<String> {
+        if let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(target_path) {
+            return Some(resolved);
+        }
+
+        if target_path.is_dir() {
+            let pkg_path = target_path.join("package.json");
+            match Self::read_package_json_main_optional(&pkg_path) {
+                Ok(Some(main)) => {
+                    if let Some(resolved) = Self::resolve_cjs_analysis_main(target_path, &main) {
+                        return Some(resolved);
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => return None,
+            }
+
+            if let Some(resolved) = Self::resolve_cjs_analysis_package_root_directory(target_path) {
+                return Some(resolved);
+            }
+        }
+
+        None
+    }
+
     fn resolve_package_exports(
         package_name: &str,
         package_dir: &std::path::Path,
@@ -5450,20 +5492,14 @@ fn resolve_cjs_reexport_path(filename: &str, specifier: &str, conditions: &[Stri
     } else {
         std::path::Path::new(filename).parent()?.join(specifier)
     };
-    let candidates = [
-        base.clone(),
-        base.with_extension("js"),
-        base.with_extension("cjs"),
-        base.join("index.js"),
-        base.join("index.cjs"),
-    ];
-    for candidate in candidates {
-        let normalized = CjsEvalResolver::normalize_path(&candidate);
-        if std::path::Path::new(&normalized).is_file() {
-            return Some(normalized);
-        }
-    }
-    None
+    NodeModulesResolver::resolve_cjs_analysis_relative(&base)
+}
+
+fn is_cjs_analysis_source_path(path: &str) -> bool {
+    let extension = std::path::Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str());
+    !matches!(extension, Some("json" | "node"))
 }
 
 fn analyze_cjs_exports_for_file(
@@ -5480,6 +5516,7 @@ fn analyze_cjs_exports_for_file(
     for reexport in reexports {
         if let Some(path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
             && !seen.contains(&path)
+            && is_cjs_analysis_source_path(&path)
             && let Ok(source) = std::fs::read_to_string(&path)
         {
             let child = analyze_cjs_exports_for_file(&path, &source, seen, conditions);

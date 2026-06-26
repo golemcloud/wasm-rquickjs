@@ -1726,6 +1726,42 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-package-reexport-app/imports-target.cjs', 'exports.imported = "imported";');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-imports.cjs', 'module.exports = require("#dep");');
 
+        fs.mkdirSync('/cjs-package-reexport-app/relative-main-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/relative-main-pkg/package.json', JSON.stringify({
+            main: 'main.cjs',
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/relative-main-pkg/main.cjs', 'exports.relativeMain = "relative-main";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-relative-main.cjs', 'module.exports = require("./relative-main-pkg");');
+        fs.mkdirSync('/cjs-package-reexport-app/relative-index-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/relative-index-pkg/index.js', 'exports.relativeIndex = "relative-index";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-relative-index.cjs', 'module.exports = require("./relative-index-pkg");');
+        fs.mkdirSync('/cjs-package-reexport-app/non-string-main-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/non-string-main-pkg/package.json', JSON.stringify({
+            main: {},
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/non-string-main-pkg/index.js', 'exports.nonStringMainIndex = "non-string-main-index";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-non-string-main.cjs', 'module.exports = require("./non-string-main-pkg");');
+        fs.mkdirSync('/cjs-package-reexport-app/malformed-relative-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/malformed-relative-pkg/package.json', '{');
+        fs.writeFileSync('/cjs-package-reexport-app/malformed-relative-pkg/index.js', 'exports.malformedIndex = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-malformed-relative.cjs', 'module.exports = require("./malformed-relative-pkg");');
+        fs.writeFileSync('/cjs-package-reexport-app/malformed-relative-entry.mjs', [
+            'import { malformedIndex } from "./reexport-malformed-relative.cjs";',
+            'export default malformedIndex;',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/json-analysis.json', '"exports.jsonFalsePositive = true;"');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-json-analysis.cjs', 'module.exports = require("./json-analysis");');
+        fs.writeFileSync('/cjs-package-reexport-app/json-analysis-entry.mjs', [
+            'import { jsonFalsePositive } from "./reexport-json-analysis.cjs";',
+            'export default jsonFalsePositive;',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/implicit-cjs.cjs', 'exports.implicitCjs = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-implicit-cjs.cjs', 'module.exports = require("./implicit-cjs");');
+        fs.writeFileSync('/cjs-package-reexport-app/implicit-cjs-entry.mjs', [
+            'import { implicitCjs } from "./reexport-implicit-cjs.cjs";',
+            'export default implicitCjs;',
+        ].join('\n'));
+
         fs.mkdirSync('/cjs-package-reexport-app/node_modules/transitive-pkg', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/node_modules/transitive-pkg/index.js', [
             'exports.gamma = "gamma";',
@@ -1789,11 +1825,14 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import { feature } from "./reexport-exported-feature.cjs";',
             'import { condition } from "./reexport-exported-condition.cjs";',
             'import { imported } from "./reexport-imports.cjs";',
+            'import { relativeMain } from "./reexport-relative-main.cjs";',
+            'import { relativeIndex } from "./reexport-relative-index.cjs";',
+            'import { nonStringMainIndex } from "./reexport-non-string-main.cjs";',
             'import { gamma, delta } from "./reexport-transpiler.cjs";',
             'import * as continuation from "./reexport-continuation.cjs";',
             'import * as cycle from "./cycle-a.cjs";',
             'export default {',
-            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, main, feature, condition, imported, gamma, delta,',
+            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, main, feature, condition, imported, relativeMain, relativeIndex, nonStringMainIndex, gamma, delta,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default" && key !== "own"),',
             '  continuationOwn: continuation.own,',
             '  cycleKeys: Object.keys(cycle).filter((key) => key !== "default").sort(),',
@@ -1811,6 +1850,9 @@ export const testCjsPackageReexportNamedExports = async () => {
             feature: 'feature',
             condition: 'module-sync',
             imported: 'imported',
+            relativeMain: 'relative-main',
+            relativeIndex: 'relative-index',
+            nonStringMainIndex: 'non-string-main-index',
             gamma: 'gamma',
             delta: 'delta',
             continuationKeys: [],
@@ -1820,6 +1862,18 @@ export const testCjsPackageReexportNamedExports = async () => {
         await assert.rejects(() => import('/cjs-package-reexport-app/native-named-entry.mjs'), {
             name: 'SyntaxError',
             message: /Named export 'wrong' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/implicit-cjs-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'implicitCjs' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/malformed-relative-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'malformedIndex' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/json-analysis-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'jsonFalsePositive' not found/,
         });
         assert.strictEqual((await import('/cjs-package-reexport-app/analysis-exports-entry.mjs')).default, 'right');
         await assert.rejects(() => import('/cjs-package-reexport-app/analysis-exports-wrong-entry.mjs'), {
