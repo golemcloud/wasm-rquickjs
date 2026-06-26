@@ -1151,6 +1151,66 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
     }
 };
 
+export const testPackageCustomConditions = async () => {
+    const hadPackageConditions = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_package_conditions');
+    const originalPackageConditions = globalThis.__wasm_rquickjs_package_conditions;
+    try {
+        globalThis.__wasm_rquickjs_package_conditions = ['custom-condition', 'another'];
+
+        fs.mkdirSync('/package-custom-conditions-app/node_modules/conditional-pkg', { recursive: true });
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/package.json', JSON.stringify({
+            exports: {
+                './condition': {
+                    'custom-condition': {
+                        import: './custom.mjs',
+                        require: './custom.cjs',
+                    },
+                    another: './another.mjs',
+                    import: './import.mjs',
+                    require: './require.cjs',
+                    default: './default.mjs',
+                },
+            },
+        }));
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/custom.mjs', 'export default "custom-import";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/custom.cjs', 'exports.selected = "custom-require";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/another.mjs', 'export default "another";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/import.mjs', 'export default "import";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/require.cjs', 'module.exports = "require";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/default.mjs', 'export default "default";');
+        fs.writeFileSync('/package-custom-conditions-app/entry.mjs', [
+            'import selected from "conditional-pkg/condition";',
+            'export default selected;',
+        ].join('\n'));
+        fs.writeFileSync('/package-custom-conditions-app/reexport.cjs', 'module.exports = require("conditional-pkg/condition");');
+        fs.writeFileSync('/package-custom-conditions-app/facade-entry.mjs', [
+            'import { selected } from "./reexport.cjs";',
+            'export default selected;',
+        ].join('\n'));
+
+        const imported = (await import('/package-custom-conditions-app/entry.mjs')).default;
+        assert.strictEqual(imported, 'custom-import');
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/package-custom-conditions-app/entry.cjs');
+        assert.deepStrictEqual(require('conditional-pkg/condition'), { selected: 'custom-require' });
+
+        const facadeImported = (await import('/package-custom-conditions-app/facade-entry.mjs')).default;
+        assert.strictEqual(facadeImported, 'custom-require');
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    } finally {
+        if (hadPackageConditions) {
+            globalThis.__wasm_rquickjs_package_conditions = originalPackageConditions;
+        } else {
+            delete globalThis.__wasm_rquickjs_package_conditions;
+        }
+    }
+};
+
 export const testCjsPackageReexportNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-package-reexport-app/node_modules/pkg', { recursive: true });

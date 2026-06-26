@@ -670,8 +670,34 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
     );
 }
 
-const cjsPackageConditions = new Set(['golem', 'node', 'require', 'module-sync', 'default']);
-const esmPackageConditions = new Set(['golem', 'node', 'module-sync', 'import', 'default']);
+const cjsDefaultPackageConditions = ['golem', 'node', 'require', 'module-sync', 'default'];
+const esmDefaultPackageConditions = ['golem', 'node', 'module-sync', 'import', 'default'];
+
+function addPackageCondition(conditions, condition) {
+    if (condition) conditions.add(condition);
+}
+
+function packageConditions(defaults) {
+    const conditions = new Set(defaults);
+    const userConditions = globalThis.__wasm_rquickjs_package_conditions;
+    if (!Array.isArray(userConditions)) {
+        return conditions;
+    }
+
+    for (let i = 0; i < userConditions.length; i++) {
+        addPackageCondition(conditions, String(userConditions[i]));
+    }
+
+    return conditions;
+}
+
+function cjsPackageConditions() {
+    return packageConditions(cjsDefaultPackageConditions);
+}
+
+function esmPackageConditions() {
+    return packageConditions(esmDefaultPackageConditions);
+}
 const packageTargetNoMatch = { __packageTargetNoMatch: true };
 const packageTargetBlocked = { __packageTargetBlocked: true };
 
@@ -1803,7 +1829,7 @@ function fileUrlForPath(filename) {
 }
 
 function resolveEsmGraphSpecifier(specifier, parentFilename, conditions) {
-    conditions = conditions || esmPackageConditions;
+    conditions = conditions || esmPackageConditions();
     if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;
     const parentDir = pathModule.dirname(parentFilename);
     if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')) {
@@ -1861,7 +1887,7 @@ function esmGraphReachesAny(filename, stack, seen) {
     const specifiers = isEsmGraphFile(filename, source)
         ? collectStaticEsmSpecifiers(source)
         : collectLiteralRequireSpecifiers(source);
-    const conditions = isEsmGraphFile(filename, source) ? esmPackageConditions : cjsPackageConditions;
+    const conditions = isEsmGraphFile(filename, source) ? esmPackageConditions() : cjsPackageConditions();
     for (let i = 0; i < specifiers.length; i++) {
         const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions);
         if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
@@ -1874,7 +1900,7 @@ function esmGraphReachesAny(filename, stack, seen) {
             aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
         );
         for (let i = 0; i < bridgeSpecifiers.length; i++) {
-            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions);
+            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions());
             if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
         }
     }
@@ -1892,7 +1918,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack) {
     if (!isEsmGraphFile(filename, source)) {
         const requireSpecifiers = collectLiteralRequireSpecifiers(source);
         for (let i = 0; i < requireSpecifiers.length; i++) {
-            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions);
+            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions());
             if (resolved && resolved.filename) {
                 const targetSource = tryReadFile(resolved.filename);
                 if (targetSource !== null && isEsmGraphFile(resolved.filename, targetSource) && esmGraphReachesAny(resolved.filename, stack)) {
@@ -1909,7 +1935,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack) {
 
     const specifiers = collectStaticEsmSpecifiers(source);
     for (let i = 0; i < specifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions);
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions());
         if (resolved && resolved.filename) {
             scanRequireEsmGraph(resolved.filename, marked, seen, stack);
         }
@@ -1920,7 +1946,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack) {
         aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
     );
     for (let i = 0; i < createRequireSpecifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions);
+        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions());
         if (resolved && resolved.filename) {
             const targetSource = tryReadFile(resolved.filename);
             if (targetSource !== null && isEsmGraphFile(resolved.filename, targetSource) && esmGraphReachesAny(resolved.filename, stack)) {
@@ -2276,7 +2302,7 @@ function splitPackageName(id) {
 }
 
 function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
-    conditions = conditions || cjsPackageConditions;
+    conditions = conditions || cjsPackageConditions();
     const dirs = _nodeModulePaths(parentDir);
 
     // Split into package name and subpath for packages with subpath specifiers
@@ -2445,7 +2471,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
 
         if (id.startsWith('#')) {
-            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions);
+            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions());
             if (importsResolved.builtin) return builtinModuleMap[importsResolved.builtin];
             const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
             return mod.exports;
@@ -2517,7 +2543,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             return toCjsCanonicalFilename(resolved.filename, false);
         }
         if (id.startsWith('#')) {
-            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions);
+            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions());
             if (importsResolved.builtin) return importsResolved.builtin;
             return toCjsCanonicalFilename(importsResolved.filename, false);
         }
@@ -2713,7 +2739,7 @@ function packageSearchStartDir(resolvedPath, sourceSpecifier) {
 }
 
 function findBarePackageJson(specifier, parentDir, parentFilename) {
-    const resolved = resolveFromNodeModules(specifier, parentDir, parentFilename, cjsPackageConditions);
+    const resolved = resolveFromNodeModules(specifier, parentDir, parentFilename, cjsPackageConditions());
     if (resolved === null) return undefined;
 
     if (typeof resolved.packageDir === 'string' && resolved.packageDir.length > 0) {

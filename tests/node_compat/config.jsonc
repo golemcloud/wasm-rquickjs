@@ -5988,7 +5988,7 @@
     "es-module/test-esm-child-process-fork-main.mjs": { "category": "wasi-impossible", "reason": "requires child_process.fork IPC semantics, which are not available in WASM" },
     "es-module/test-esm-cjs-load-error-note.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-cjs-named-error.mjs": { "category": "runnable" },
-    "es-module/test-esm-custom-exports.mjs": { "category": "known-gap", "reason": "ESM package type/exports/imports behavior needs resolver unification triage" },
+    "es-module/test-esm-custom-exports.mjs": { "category": "runnable" },
     "es-module/test-esm-cyclic-dynamic-import.mjs": { "category": "runnable" },
     "es-module/test-esm-default-type.mjs": { "category": "runnable" },
     "es-module/test-esm-detect-ambiguous.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },

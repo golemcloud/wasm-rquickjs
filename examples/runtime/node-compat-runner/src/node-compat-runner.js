@@ -97,6 +97,24 @@ function parseTestFlags(testPath) {
     return flags;
 }
 
+function packageConditionsFromFlags(flags) {
+    var conditions = [];
+    function add(condition) {
+        if (condition) conditions.push(condition);
+    }
+    for (var i = 0; i < flags.length; i++) {
+        var flag = String(flags[i]);
+        if (flag.indexOf('--conditions=') === 0) {
+            add(flag.slice('--conditions='.length));
+        } else if (flag === '--conditions' || flag === '-C') {
+            if (i + 1 < flags.length) {
+                add(String(flags[++i]));
+            }
+        }
+    }
+    return conditions;
+}
+
 function applyTestFlagsToProcess(testPath) {
     if (!globalThis.process) return;
 
@@ -110,6 +128,7 @@ function applyTestFlagsToProcess(testPath) {
     for (var i = 0; i < flags.length; i++) {
         globalThis.process.execArgv.push(flags[i]);
     }
+    globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromFlags(flags);
 }
 
 export const runTest = async (testPath) => {
@@ -117,6 +136,8 @@ export const runTest = async (testPath) => {
     var restoreArgv = null;
     var restoreCwd = null;
     var previousNodeTestEntryFile = globalThis.__wasm_rquickjs_node_test_entry_file;
+    var hadPackageConditions = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_package_conditions');
+    var previousPackageConditions = globalThis.__wasm_rquickjs_package_conditions;
     globalThis.__wasm_rquickjs_node_test_entry_file = testPath;
 
     if (globalThis.process) {
@@ -234,6 +255,11 @@ export const runTest = async (testPath) => {
             delete globalThis.__wasm_rquickjs_node_test_entry_file;
         } else {
             globalThis.__wasm_rquickjs_node_test_entry_file = previousNodeTestEntryFile;
+        }
+        if (hadPackageConditions) {
+            globalThis.__wasm_rquickjs_package_conditions = previousPackageConditions;
+        } else {
+            delete globalThis.__wasm_rquickjs_package_conditions;
         }
         if (restoreCwd) {
             restoreCwd();

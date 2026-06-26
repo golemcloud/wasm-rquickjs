@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-25 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-26 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3144/4404 (71.4%)
+**Primary compatibility (CI-enforced):** 3145/4404 (71.4%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3144 | 71.4% | 55.0% | 45.9% |
-| 🧩 known gap | 1260 | 28.6% | 22.0% | 18.4% |
+| ✅ passing (runnable) | 3145 | 71.4% | 55.0% | 46.0% |
+| 🧩 known gap | 1259 | 28.6% | 22.0% | 18.4% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3144/5721 (55.0%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3145/5721 (55.0%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 144 | 158 | 85 | 11 | 0 | 183 | 47.7% | 36.2% |
+| other | 581 | 145 | 157 | 85 | 11 | 0 | 183 | 48.0% | 36.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1260)
+### known gap (1259)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -716,7 +716,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |
 | inherited: perf_hooks createHistogram/monitorEventLoopDelay are not implemented | 6 | `parallel/test-perf-hooks-histogram.js#block_00_block_00`, `parallel/test-perf-hooks-histogram.js#block_01_block_01`, `parallel/test-perf-hooks-histogram.js#block_02_block_02`, ... (+3) |
 | inherited: performance.timerify function entries are not implemented | 6 | `parallel/test-performance-function.js#block_00_block_00`, `parallel/test-performance-function.js#block_01_block_01`, `parallel/test-performance-function.js#block_02_block_02`, ... (+3) |
-| ESM package type/exports/imports behavior needs resolver unification triage | 5 | `es-module/test-esm-custom-exports.mjs`, `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-exports.mjs`, ... (+2) |
 | IPv6 sockets are not available in this runtime (common.hasIPv6=false) | 5 | `parallel/test-dgram-ipv6only.js`, `parallel/test-dgram-udp6-link-local-address.js`, `parallel/test-dgram-udp6-send-default-host.js`, ... (+2) |
 | http.request({ createConnection }) generic duplex stream semantics are incomplete (request dispatch, keep-alive, and clientError paths) | 5 | `parallel/test-http-generic-streams.js#block_00_test_1_simple_http_test_no_keep_alive`, `parallel/test-http-generic-streams.js#block_01_test_2_keep_alive_for_2_requests`, `parallel/test-http-generic-streams.js#block_02_test_3_connection_close_request_response_with_chunked`, ... (+2) |
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
@@ -724,6 +723,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
 | requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR | 5 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-eval.mjs`, `es-module/test-typescript-module.mjs`, ... (+2) |
 | util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
+| ESM package type/exports/imports behavior needs resolver unification triage | 4 | `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-exports.mjs`, `es-module/test-esm-imports-deprecations.mjs`, ... (+1) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |

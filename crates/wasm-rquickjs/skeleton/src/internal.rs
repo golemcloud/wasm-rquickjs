@@ -1049,18 +1049,19 @@ struct StaticNamedImport {
     local: String,
 }
 
-fn cjs_named_import_error_module_source(filename: &str, source: &str) -> Option<String> {
-    find_cjs_named_import_error(filename, source).map(|message| {
+fn cjs_named_import_error_module_source(ctx: &Ctx<'_>, filename: &str, source: &str) -> Option<String> {
+    let conditions = NodeModulesResolver::conditions_from_global(ctx, &NodeModulesResolver::CJS_CONDITIONS);
+    find_cjs_named_import_error(filename, source, &conditions).map(|message| {
         let escaped = DataUrlLoader::js_string_escape(&message);
         format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
     })
 }
 
-fn find_cjs_named_import_error(filename: &str, source: &str) -> Option<String> {
+fn find_cjs_named_import_error(filename: &str, source: &str, conditions: &[String]) -> Option<String> {
     let mut result = None;
     scan_code_positions(source, true, |i, _| {
         if let Some((specifier, named_imports, next)) = parse_static_named_import(source, i) {
-            if let Some(message) = cjs_named_import_error_message(filename, &specifier, &named_imports) {
+            if let Some(message) = cjs_named_import_error_message(filename, &specifier, &named_imports, conditions) {
                 result = Some(message);
                 return ControlFlow::Break(());
             }
@@ -1075,16 +1076,17 @@ fn cjs_named_import_error_message(
     filename: &str,
     specifier: &str,
     named_imports: &[StaticNamedImport],
+    conditions: &[String],
 ) -> Option<String> {
     if named_imports.is_empty() || !could_resolve_to_cjs_for_named_import_error(specifier) {
         return None;
     }
-    let resolved = resolve_cjs_reexport_path(filename, specifier)?;
+    let resolved = resolve_cjs_reexport_path(filename, specifier, conditions)?;
     if !resolved.ends_with(".cjs") && !is_cjs_js_file_for_named_import_error(&resolved) {
         return None;
     }
     let source = std::fs::read_to_string(&resolved).ok()?;
-    let analysis = analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new());
+    let analysis = analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new(), conditions);
     if !analysis.is_cjs && analysis.exports.is_empty() && analysis.reexports.is_empty() {
         return None;
     }
@@ -2402,11 +2404,12 @@ impl NodeModulesResolver {
         &self,
         base: &str,
         name: &str,
+        conditions: &[String],
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::{Path, PathBuf};
 
         if name.starts_with('#') {
-            return self.try_resolve_package_import(base, name);
+            return self.try_resolve_package_import_with_conditions(base, name, conditions);
         }
 
         // Only handle bare specifiers (not relative, absolute, or URL)
@@ -2443,7 +2446,7 @@ impl NodeModulesResolver {
                             &nm_dir,
                             exports_field,
                             subpath,
-                            &Self::ESM_CONDITIONS,
+                            conditions,
                         )
                         .map(Some);
                     }
@@ -2483,11 +2486,12 @@ impl NodeModulesResolver {
         &self,
         base: &str,
         name: &str,
+        conditions: &[String],
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
         if name.starts_with('#') {
-            return self.try_resolve_package_import_with_conditions(base, name, &Self::CJS_CONDITIONS);
+            return self.try_resolve_package_import_with_conditions(base, name, &conditions);
         }
 
         if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
@@ -2520,7 +2524,7 @@ impl NodeModulesResolver {
                             &package_path,
                             exports_field,
                             subpath,
-                            &Self::CJS_CONDITIONS,
+                            &conditions,
                         )
                         .map(Some);
                     }
@@ -2563,19 +2567,11 @@ impl NodeModulesResolver {
         Ok(None)
     }
 
-    fn try_resolve_package_import(
-        &self,
-        base: &str,
-        name: &str,
-    ) -> Result<Option<String>, NodePackageResolveError> {
-        self.try_resolve_package_import_with_conditions(base, name, &Self::ESM_CONDITIONS)
-    }
-
     fn try_resolve_package_import_with_conditions(
         &self,
         base: &str,
         name: &str,
-        conditions: &[&str],
+        conditions: &[String],
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
@@ -2718,7 +2714,7 @@ impl NodeModulesResolver {
         package_dir: &std::path::Path,
         exports: &PackageTarget,
         subpath: &str,
-        conditions: &[&str],
+        conditions: &[String],
     ) -> Result<String, NodePackageResolveError> {
         let key = if subpath.is_empty() {
             ".".to_string()
@@ -2789,7 +2785,7 @@ impl NodeModulesResolver {
         package_dir: &std::path::Path,
         imports: &PackageTarget,
         specifier: &str,
-        conditions: &[&str],
+        conditions: &[String],
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
         {
@@ -2837,7 +2833,7 @@ impl NodeModulesResolver {
         target: &PackageTarget,
         allow_bare_target: bool,
         kind: &'static str,
-        conditions: &[&str],
+        conditions: &[String],
         pattern_substitution: Option<&str>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
@@ -2866,7 +2862,7 @@ impl NodeModulesResolver {
                 let base = package_dir.join("package.json");
                 let base_str = base.to_string_lossy();
                 let resolver = NodeModulesResolver;
-                if let Some(resolved) = resolver.try_resolve(&base_str, &target_str)? {
+                if let Some(resolved) = resolver.try_resolve(&base_str, &target_str, conditions)? {
                     return Ok(PackageTargetResolution::Resolved(resolved));
                 }
                 return Err(NodePackageResolveError::ModuleNotFound {
@@ -2916,7 +2912,7 @@ impl NodeModulesResolver {
             }
             PackageTarget::Object(map) => {
             for (condition, value) in map {
-                if conditions.contains(&condition.as_str()) {
+                if conditions.iter().any(|candidate| candidate == condition) {
                     match Self::resolve_package_target_value(
                         package_dir,
                         value,
@@ -3056,6 +3052,32 @@ impl NodeModulesResolver {
         let decoded = percent_decode(segment).unwrap_or_else(|| segment.to_string());
         matches!(decoded.to_ascii_lowercase().as_str(), "." | ".." | "node_modules")
     }
+
+    fn default_conditions(defaults: &[&str]) -> Vec<String> {
+        defaults.iter().map(|condition| (*condition).to_string()).collect()
+    }
+
+    fn conditions_from_global(ctx: &Ctx<'_>, defaults: &[&str]) -> Vec<String> {
+        let mut conditions = Self::default_conditions(defaults);
+        let Ok(user_conditions) = ctx.globals().get::<_, rquickjs::Array>("__wasm_rquickjs_package_conditions") else {
+            return conditions;
+        };
+
+        for i in 0..user_conditions.len() {
+            if let Ok(condition) = user_conditions.get::<String>(i) {
+                Self::add_condition(&mut conditions, &condition);
+            }
+        }
+
+        conditions
+    }
+
+    fn add_condition(conditions: &mut Vec<String>, condition: &str) {
+        if condition.is_empty() || conditions.iter().any(|existing| existing == condition) {
+            return;
+        }
+        conditions.push(condition.to_string());
+    }
 }
 
 fn percent_decode(input: &str) -> Option<String> {
@@ -3144,7 +3166,8 @@ impl Resolver for NodeModulesResolver {
         base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
-        match self.try_resolve(base, name) {
+        let conditions = Self::conditions_from_global(ctx, &Self::ESM_CONDITIONS);
+        match self.try_resolve(base, name, &conditions) {
             Ok(Some(resolved)) => Ok(resolved),
             Ok(None) => Err(Error::new_resolving(base, name)),
             Err(err) => throw_node_package_resolve_error(ctx, err),
@@ -4439,10 +4462,13 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     analysis
 }
 
-fn resolve_cjs_reexport_path(filename: &str, specifier: &str) -> Option<String> {
+fn resolve_cjs_reexport_path(filename: &str, specifier: &str, conditions: &[String]) -> Option<String> {
     if !specifier.starts_with("./") && !specifier.starts_with("../") && !specifier.starts_with('/') {
         let resolver = NodeModulesResolver;
-        return resolver.try_resolve_for_cjs_analysis(filename, specifier).ok().flatten();
+        return resolver
+            .try_resolve_for_cjs_analysis(filename, specifier, conditions)
+            .ok()
+            .flatten();
     }
     let base = if specifier.starts_with('/') {
         std::path::PathBuf::from(specifier)
@@ -4465,18 +4491,23 @@ fn resolve_cjs_reexport_path(filename: &str, specifier: &str) -> Option<String> 
     None
 }
 
-fn analyze_cjs_exports_for_file(filename: &str, source: &str, seen: &mut HashSet<String>) -> CjsExportAnalysis {
+fn analyze_cjs_exports_for_file(
+    filename: &str,
+    source: &str,
+    seen: &mut HashSet<String>,
+    conditions: &[String],
+) -> CjsExportAnalysis {
     let mut analysis = analyze_cjs_exports(source);
     if !seen.insert(filename.to_string()) {
         return analysis;
     }
     let reexports = analysis.reexports.clone();
     for reexport in reexports {
-        if let Some(path) = resolve_cjs_reexport_path(filename, &reexport)
+        if let Some(path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
             && !seen.contains(&path)
             && let Ok(source) = std::fs::read_to_string(&path)
         {
-            let child = analyze_cjs_exports_for_file(&path, &source, seen);
+            let child = analyze_cjs_exports_for_file(&path, &source, seen, conditions);
             for name in child.exports {
                 add_unique(&mut analysis.exports, name);
             }
@@ -4563,7 +4594,9 @@ impl Loader for CjsCompatLoader {
             main: import_meta_main_for_path(ctx, &fs_abs_path),
         };
 
-        let detected_analysis = analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new());
+        let cjs_conditions = NodeModulesResolver::conditions_from_global(ctx, &NodeModulesResolver::CJS_CONDITIONS);
+        let detected_analysis =
+            analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
         let has_esm_syntax = source_looks_like_esm(&source);
         // .cjs files are always CommonJS; for .js files, use the analyzer so
         // comments, strings, templates, and regex literals do not force CJS.
@@ -4582,7 +4615,7 @@ impl Loader for CjsCompatLoader {
             {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
-            if let Some(error_source) = cjs_named_import_error_module_source(&fs_abs_path, &source) {
+            if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
             // Treat as ESM — inject import.meta prologue (handles shebangs)
@@ -5161,7 +5194,7 @@ impl Loader for ImportMetaLoader {
             return Err(ctx.throw(cached_error));
         }
 
-        if let Some(error_source) = cjs_named_import_error_module_source(&fs_abs_path, &source) {
+        if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
             return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
         }
 
