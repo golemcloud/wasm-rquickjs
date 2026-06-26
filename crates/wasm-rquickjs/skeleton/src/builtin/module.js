@@ -2402,7 +2402,9 @@ function loadModule(resolvedFilename, source, parentModule) {
         }
     } else if (filename.endsWith('.node')) {
         delete moduleCache[filename];
-        throw new Error("Native .node modules are not supported in WASM: '" + filename + "'");
+        const err = new Error("Native .node modules are not supported in WASM: '" + filename + "'");
+        err.code = 'ERR_DLOPEN_FAILED';
+        throw err;
     } else if (filename.endsWith('.json')) {
         try {
             if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
@@ -2593,15 +2595,29 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
             // Try with extensions
             content = tryReadFile(subCandidate + '.js');
             if (content !== null) return { filename: subCandidate + '.js', content: content, packageDir: pkgDir };
-            content = tryReadFile(subCandidate + '.mjs');
-            if (content !== null) return { filename: subCandidate + '.mjs', content: content, packageDir: pkgDir };
             content = tryReadFile(subCandidate + '.json');
             if (content !== null) return { filename: subCandidate + '.json', content: content, packageDir: pkgDir };
+            content = tryReadFile(subCandidate + '.node');
+            if (content !== null) return { filename: subCandidate + '.node', content: content, packageDir: pkgDir };
             // Try as directory
             content = tryReadFile(pathModule.join(subCandidate, 'index.js'));
             if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content, packageDir: pkgDir };
             content = tryReadFile(pathModule.join(subCandidate, 'index.json'));
             if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content, packageDir: pkgDir };
+            content = tryReadFile(pathModule.join(subCandidate, 'index.node'));
+            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.node'), content: content, packageDir: pkgDir };
+        } else {
+            let content = tryReadFile(pkgDir);
+            if (content !== null) return { filename: pkgDir, content: content, packageDir: pkgDir };
+
+            content = tryReadFile(pkgDir + '.js');
+            if (content !== null) return { filename: pkgDir + '.js', content: content, packageDir: pkgDir };
+
+            content = tryReadFile(pkgDir + '.json');
+            if (content !== null) return { filename: pkgDir + '.json', content: content, packageDir: pkgDir };
+
+            content = tryReadFile(pkgDir + '.node');
+            if (content !== null) return { filename: pkgDir + '.node', content: content, packageDir: pkgDir };
         }
 
         const candidate = pkgDir;
@@ -2615,8 +2631,10 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
                         mainPath,
                         mainPath + '.js',
                         mainPath + '.json',
+                        mainPath + '.node',
                         pathModule.join(mainPath, 'index.js'),
                         pathModule.join(mainPath, 'index.json'),
+                        pathModule.join(mainPath, 'index.node'),
                     ];
                     for (let m = 0; m < mainCandidates.length; m++) {
                         const content = tryReadFile(mainCandidates[m]);
@@ -2644,12 +2662,10 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
         content = tryReadFile(indexJson);
         if (content !== null) return { filename: indexJson, content: content, packageDir: pkgDir };
 
-        // Try as file with extension
-        content = tryReadFile(candidate + '.js');
-        if (content !== null) return { filename: candidate + '.js', content: content, packageDir: pkgDir };
+        const indexNode = pathModule.join(candidate, 'index.node');
+        content = tryReadFile(indexNode);
+        if (content !== null) return { filename: indexNode, content: content, packageDir: pkgDir };
 
-        content = tryReadFile(candidate + '.json');
-        if (content !== null) return { filename: candidate + '.json', content: content, packageDir: pkgDir };
     }
     return null;
 }

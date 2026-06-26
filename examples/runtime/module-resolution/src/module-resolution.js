@@ -224,6 +224,11 @@ export const testEsmPackageMapEdgeCases = async () => {
             main: 'index',
         }));
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/commonjs-main-mjs-only/index.mjs', 'export default { mainExtensionFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-exports-native-only', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-native-only/package.json', JSON.stringify({
+            type: 'module',
+        }));
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-native-only/index.node', 'not a native addon');
 
         const fallbackWarnings = [];
         const onFallbackWarning = (warning) => fallbackWarnings.push(warning);
@@ -253,6 +258,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         writeImportEntry('/esm-package-map-edge-app/no-package-mjs-only-entry.mjs', 'no-package-mjs-only');
         writeImportEntry('/esm-package-map-edge-app/default-main-mjs-only-entry.mjs', 'default-main-mjs-only');
         writeImportEntry('/esm-package-map-edge-app/commonjs-main-mjs-only-entry.mjs', 'commonjs-main-mjs-only');
+        writeImportEntry('/esm-package-map-edge-app/no-exports-native-only-entry.mjs', 'no-exports-native-only');
         writeImportEntry('/esm-package-map-edge-app/no-exports-missing-subpath.mjs', 'no-exports-warn/missing');
         writeImportEntry('/esm-package-map-edge-app/no-exports-no-ext-subpath.mjs', 'no-exports-warn/foo');
         writeImportEntry('/esm-package-map-edge-app/no-exports-dir-subpath.mjs', 'no-exports-warn/dir');
@@ -276,6 +282,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/no-package-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
         await expectImportError('/esm-package-map-edge-app/default-main-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
         await expectImportError('/esm-package-map-edge-app/commonjs-main-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/no-exports-native-only-entry.mjs', 'ERR_UNKNOWN_FILE_EXTENSION');
         await expectImportError('/esm-package-map-edge-app/no-exports-missing-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
         await expectImportError('/esm-package-map-edge-app/no-exports-no-ext-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
         await expectImportError('/esm-package-map-edge-app/no-exports-dir-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
@@ -1465,6 +1472,30 @@ export const testCjsPackageReexportNamedExports = async () => {
             'exports.own = "own";',
         ].join('\n'));
 
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/analysis-native.node', 'not a native addon');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/analysis-native', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/analysis-native/index.js', 'exports.wrong = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-native.cjs', 'module.exports = require("analysis-native");');
+        fs.writeFileSync('/cjs-package-reexport-app/native-named-entry.mjs', [
+            'import { wrong } from "./reexport-native.cjs";',
+            'export default wrong;',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/analysis-exports.js', 'exports.wrong = "wrong";');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/analysis-exports', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/analysis-exports/package.json', JSON.stringify({
+            exports: './main.cjs',
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/analysis-exports/main.cjs', 'exports.right = "right";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-analysis-exports.cjs', 'module.exports = require("analysis-exports");');
+        fs.writeFileSync('/cjs-package-reexport-app/analysis-exports-entry.mjs', [
+            'import { right } from "./reexport-analysis-exports.cjs";',
+            'export default right;',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-package-reexport-app/analysis-exports-wrong-entry.mjs', [
+            'import { wrong } from "./reexport-analysis-exports.cjs";',
+            'export default wrong;',
+        ].join('\n'));
+
         fs.writeFileSync('/cjs-package-reexport-app/package-entry.mjs', [
             'import packageDefault, { alpha, beta } from "./reexport-package.cjs";',
             'import { sub } from "./reexport-subpath.cjs";',
@@ -1500,6 +1531,15 @@ export const testCjsPackageReexportNamedExports = async () => {
             continuationKeys: [],
             continuationOwn: 'own',
             cycleKeys: ['a', 'b'],
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/native-named-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'wrong' not found/,
+        });
+        assert.strictEqual((await import('/cjs-package-reexport-app/analysis-exports-entry.mjs')).default, 'right');
+        await assert.rejects(() => import('/cjs-package-reexport-app/analysis-exports-wrong-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'wrong' not found/,
         });
         return true;
     } catch (error) {

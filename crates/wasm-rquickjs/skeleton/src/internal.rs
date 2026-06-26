@@ -2516,7 +2516,11 @@ impl NodeModulesResolver {
 
                 if subpath.is_empty() {
                     let is_module_package = package_type.as_deref() == Some("module");
-                    let fallbacks = [nm_dir.join("index.js"), nm_dir.join("index.json")];
+                    let fallbacks = [
+                        nm_dir.join("index.js"),
+                        nm_dir.join("index.json"),
+                        nm_dir.join("index.node"),
+                    ];
                     for fallback in &fallbacks {
                         if fallback.is_file() {
                             if is_module_package
@@ -2593,14 +2597,17 @@ impl NodeModulesResolver {
             let package_path = dir.join("node_modules").join(package_name);
             if package_path.is_dir() {
                 let pkg_path = package_path.join("package.json");
-                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
-                    let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
+                let package = match std::fs::read_to_string(&pkg_path) {
+                    Ok(pkg_content) => Some(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
                         NodePackageResolveError::InvalidPackageConfig {
                             path: pkg_path.to_string_lossy().into_owned(),
                             reason: None,
                         }
-                    })?;
+                    })?),
+                    Err(_) => None,
+                };
 
+                if let Some(package) = package.as_ref() {
                     if let Some(exports_field) = package.exports.as_ref() {
                         Self::validate_package_exports_map(&pkg_path, exports_field)?;
                         return Self::resolve_package_exports(
@@ -2614,7 +2621,15 @@ impl NodeModulesResolver {
                         )
                         .map(Some);
                     }
+                }
 
+                if subpath.is_empty()
+                    && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(&package_path)
+                {
+                    return Ok(Some(resolved));
+                }
+
+                if let Some(package) = package.as_ref() {
                     if subpath.is_empty()
                         && let Some(main) = package.main.as_ref()
                         && let Some(resolved) = Self::resolve_cjs_analysis_main(&package_path, main)
@@ -2630,19 +2645,16 @@ impl NodeModulesResolver {
                 }
 
                 if subpath.is_empty()
-                    && let Some(resolved) = Self::resolve_cjs_analysis_package_root(&package_path)
+                    && let Some(resolved) = Self::resolve_cjs_analysis_package_root_directory(&package_path)
                 {
                     return Ok(Some(resolved));
                 }
             }
 
-            if subpath.is_empty() {
-                for candidate in [package_path.with_extension("js"), package_path.with_extension("json")] {
-                    let normalized = CjsEvalResolver::normalize_path(&candidate);
-                    if std::path::Path::new(&normalized).is_file() {
-                        return Ok(Some(normalized));
-                    }
-                }
+            if subpath.is_empty()
+                && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(&package_path)
+            {
+                return Ok(Some(resolved));
             }
 
             if !dir.pop() {
@@ -2795,29 +2807,6 @@ impl NodeModulesResolver {
         Ok(())
     }
 
-    fn resolve_package_target(package_dir: &std::path::Path, target: &str) -> Option<String> {
-        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        let mut candidates = vec![target_path.clone()];
-        if target_path.extension().is_none() {
-            candidates.push(target_path.with_extension("mjs"));
-            candidates.push(target_path.with_extension("js"));
-            candidates.push(target_path.with_extension("cjs"));
-            candidates.push(target_path.with_extension("json"));
-        }
-        candidates.push(target_path.join("index.mjs"));
-        candidates.push(target_path.join("index.js"));
-        candidates.push(target_path.join("index.cjs"));
-        candidates.push(target_path.join("index.json"));
-
-        for candidate in &candidates {
-            if candidate.is_file() {
-                return Some(candidate.to_string_lossy().into_owned());
-            }
-        }
-
-        None
-    }
-
     fn resolve_package_subpath(
         package_dir: &std::path::Path,
         subpath: &str,
@@ -2852,13 +2841,17 @@ impl NodeModulesResolver {
             return Some((target_path.to_string_lossy().into_owned(), false));
         }
         if target_path.extension().is_none() {
-            let js_target = target_path.with_extension("js");
+            let js_target = Self::with_appended_extension(&target_path, ".js");
             if js_target.is_file() {
                 return Some((js_target.to_string_lossy().into_owned(), true));
             }
-            let json_target = target_path.with_extension("json");
+            let json_target = Self::with_appended_extension(&target_path, ".json");
             if json_target.is_file() {
                 return Some((json_target.to_string_lossy().into_owned(), false));
+            }
+            let node_target = Self::with_appended_extension(&target_path, ".node");
+            if node_target.is_file() {
+                return Some((node_target.to_string_lossy().into_owned(), false));
             }
         }
         let index_js = target_path.join("index.js");
@@ -2868,6 +2861,10 @@ impl NodeModulesResolver {
         let index_json = target_path.join("index.json");
         if index_json.is_file() {
             return Some((index_json.to_string_lossy().into_owned(), false));
+        }
+        let index_node = target_path.join("index.node");
+        if index_node.is_file() {
+            return Some((index_node.to_string_lossy().into_owned(), false));
         }
         None
     }
@@ -2883,31 +2880,59 @@ impl NodeModulesResolver {
         None
     }
 
-    fn resolve_cjs_analysis_main(package_dir: &std::path::Path, target: &str) -> Option<String> {
-        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        Self::first_existing_normalized(vec![
-            target_path.clone(),
-            target_path.with_extension("js"),
-            target_path.with_extension("json"),
+    fn with_appended_extension(path: &std::path::Path, extension: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(format!("{}{}", path.to_string_lossy(), extension))
+    }
+
+    fn cjs_analysis_main_candidates(target_path: &std::path::Path) -> Vec<std::path::PathBuf> {
+        vec![
+            target_path.to_path_buf(),
+            Self::with_appended_extension(target_path, ".js"),
+            Self::with_appended_extension(target_path, ".json"),
+            Self::with_appended_extension(target_path, ".node"),
             target_path.join("index.js"),
             target_path.join("index.json"),
-        ])
+            target_path.join("index.node"),
+        ]
+    }
+
+    fn cjs_analysis_subpath_candidates(target_path: &std::path::Path) -> Vec<std::path::PathBuf> {
+        vec![
+            target_path.to_path_buf(),
+            Self::with_appended_extension(target_path, ".js"),
+            Self::with_appended_extension(target_path, ".json"),
+            Self::with_appended_extension(target_path, ".node"),
+            target_path.join("index.js"),
+            target_path.join("index.json"),
+            target_path.join("index.node"),
+        ]
+    }
+
+    fn resolve_cjs_analysis_main(package_dir: &std::path::Path, target: &str) -> Option<String> {
+        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        Self::first_existing_normalized(Self::cjs_analysis_main_candidates(&target_path))
     }
 
     fn resolve_cjs_analysis_subpath(package_dir: &std::path::Path, target: &str) -> Option<String> {
         let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        Self::first_existing_normalized(Self::cjs_analysis_subpath_candidates(&target_path))
+    }
+
+    fn resolve_cjs_analysis_package_root_file(package_dir: &std::path::Path) -> Option<String> {
         Self::first_existing_normalized(vec![
-            target_path.clone(),
-            target_path.with_extension("js"),
-            target_path.with_extension("mjs"),
-            target_path.with_extension("json"),
-            target_path.join("index.js"),
-            target_path.join("index.json"),
+            package_dir.to_path_buf(),
+            Self::with_appended_extension(package_dir, ".js"),
+            Self::with_appended_extension(package_dir, ".json"),
+            Self::with_appended_extension(package_dir, ".node"),
         ])
     }
 
-    fn resolve_cjs_analysis_package_root(package_dir: &std::path::Path) -> Option<String> {
-        Self::first_existing_normalized(vec![package_dir.join("index.js"), package_dir.join("index.json")])
+    fn resolve_cjs_analysis_package_root_directory(package_dir: &std::path::Path) -> Option<String> {
+        Self::first_existing_normalized(vec![
+            package_dir.join("index.js"),
+            package_dir.join("index.json"),
+            package_dir.join("index.node"),
+        ])
     }
 
     fn resolve_package_exports(
@@ -5682,7 +5707,19 @@ impl Loader for ImportMetaLoader {
         let fs_path = module_filesystem_path(path);
         let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
         if !fs_path.ends_with(".mjs") && !is_extensionless {
-            return Err(Error::new_loading(path));
+            let ext = std::path::Path::new(fs_path)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| format!(".{}", ext))
+                .unwrap_or_default();
+            let globals = ctx.globals();
+            let type_error_ctor: Function = globals.get("TypeError")?;
+            let error_obj: Object = type_error_ctor.call((format!(
+                "Unknown file extension {:?} for {}",
+                ext, fs_path
+            ),))?;
+            error_obj.set("code", "ERR_UNKNOWN_FILE_EXTENSION")?;
+            return Err(ctx.throw(error_obj.into_value()));
         }
 
         let mut source = match std::fs::read_to_string(fs_path) {
