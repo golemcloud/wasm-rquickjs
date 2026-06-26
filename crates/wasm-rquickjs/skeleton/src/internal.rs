@@ -2412,6 +2412,11 @@ struct NodePackageWarning {
 
 struct NodeModulesResolver;
 
+enum NodePackageResolveMode {
+    EsmImport,
+    CjsAnalysis,
+}
+
 impl NodeModulesResolver {
     const ESM_CONDITIONS: [&'static str; 5] = ["golem", "node", "module-sync", "import", "default"];
     const CJS_CONDITIONS: [&'static str; 5] = ["golem", "node", "require", "module-sync", "default"];
@@ -2423,131 +2428,7 @@ impl NodeModulesResolver {
         conditions: &[String],
         warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<Option<String>, NodePackageResolveError> {
-        use std::path::{Path, PathBuf};
-
-        if name.starts_with('#') {
-            return self.try_resolve_package_import_with_conditions(base, name, conditions, warnings);
-        }
-
-        // Only handle bare specifiers (not relative, absolute, or URL)
-        if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
-            return Ok(None);
-        }
-
-        let Some((package_name, subpath)) = Self::split_package_name(name) else {
-            return Ok(None);
-        };
-        Self::validate_package_name(base, name, package_name)?;
-
-        // Extract directory from base module path
-        let Some(base_dir) = Path::new(base).parent() else {
-            return Ok(None);
-        };
-        if let Some(resolved) =
-            Self::try_resolve_package_self(base_dir, base, package_name, subpath, conditions, warnings)?
-        {
-            return Ok(Some(resolved));
-        }
-
-        // Walk up directory tree looking for node_modules
-        let mut dir = base_dir.to_path_buf();
-        loop {
-            let nm_dir = dir.join("node_modules").join(package_name);
-            if nm_dir.is_dir() {
-                let pkg_path = nm_dir.join("package.json");
-                let mut package_type = None;
-                if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
-                    let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
-                        NodePackageResolveError::InvalidPackageConfig {
-                            path: pkg_path.to_string_lossy().into_owned(),
-                            reason: None,
-                        }
-                    })?;
-                    package_type = package.package_type.clone();
-
-                    if let Some(exports_field) = package.exports.as_ref() {
-                        Self::validate_package_exports_map(&pkg_path, exports_field)?;
-                        return Self::resolve_package_exports(
-                            package_name,
-                            &nm_dir,
-                            exports_field,
-                            subpath,
-                            conditions,
-                            warnings,
-                            Some(base),
-                        )
-                        .map(Some);
-                    }
-
-                    if subpath.is_empty()
-                        && let Some(main) = package.main.as_ref()
-                    {
-                        let is_module_package = package.package_type.as_deref() == Some("module");
-                        let resolved = Self::resolve_package_legacy_main(&nm_dir, main);
-                        if let Some((resolved, used_extension_lookup)) = resolved {
-                            if is_module_package && used_extension_lookup {
-                                warnings.push(NodePackageWarning {
-                                    message: format!(
-                                        "Package {}/ has a \"main\" field set to {:?}, excluding the full filename and extension to the resolved file at {:?}, imported from {}.\nAutomatic extension resolution of the \"main\" field is deprecated for ES modules.",
-                                        nm_dir.to_string_lossy().trim_end_matches('/'),
-                                        main,
-                                        std::path::Path::new(&resolved)
-                                            .strip_prefix(&nm_dir)
-                                            .ok()
-                                            .map(|path| path.to_string_lossy().into_owned())
-                                            .unwrap_or_else(|| resolved.clone()),
-                                        base
-                                    ),
-                                    code: "DEP0151",
-                                    dedupe_key: None,
-                                });
-                            }
-                            return Ok(Some(resolved));
-                        }
-                    }
-                }
-
-                if !subpath.is_empty() {
-                    match Self::resolve_package_subpath(&nm_dir, subpath, base, name)? {
-                        Some(resolved) => return Ok(Some(resolved)),
-                        None => {}
-                    }
-                }
-
-                if subpath.is_empty() {
-                    let is_module_package = package_type.as_deref() == Some("module");
-                    let fallbacks = [
-                        nm_dir.join("index.js"),
-                        nm_dir.join("index.json"),
-                        nm_dir.join("index.node"),
-                    ];
-                    for fallback in &fallbacks {
-                        if fallback.is_file() {
-                            if is_module_package
-                                && fallback.extension().and_then(|ext| ext.to_str()) == Some("js")
-                            {
-                                warnings.push(NodePackageWarning {
-                                    message: format!(
-                                        "No \"main\" or \"exports\" field defined in the package.json for {}/ resolving the main entry point \"index.js\", imported from {}.\nDefault \"index\" lookups for the main are deprecated for ES modules.",
-                                        nm_dir.to_string_lossy().trim_end_matches('/'),
-                                        base
-                                    ),
-                                    code: "DEP0151",
-                                    dedupe_key: None,
-                                });
-                            }
-                            return Ok(Some(fallback.to_string_lossy().into_owned()));
-                        }
-                    }
-                }
-            }
-
-            if !dir.pop() {
-                break;
-            }
-        }
-
-        Ok(None)
+        self.try_resolve_package(base, name, conditions, warnings, NodePackageResolveMode::EsmImport)
     }
 
     fn try_resolve_for_cjs_analysis(
@@ -2556,16 +2437,28 @@ impl NodeModulesResolver {
         name: &str,
         conditions: &[String],
     ) -> Result<Option<String>, NodePackageResolveError> {
+        let mut ignored_warnings = Vec::new();
+        self.try_resolve_package(
+            base,
+            name,
+            conditions,
+            &mut ignored_warnings,
+            NodePackageResolveMode::CjsAnalysis,
+        )
+    }
+
+    fn try_resolve_package(
+        &self,
+        base: &str,
+        name: &str,
+        conditions: &[String],
+        warnings: &mut Vec<NodePackageWarning>,
+        mode: NodePackageResolveMode,
+    ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
         if name.starts_with('#') {
-            let mut ignored_warnings = Vec::new();
-            return self.try_resolve_package_import_with_conditions(
-                base,
-                name,
-                conditions,
-                &mut ignored_warnings,
-            );
+            return self.try_resolve_package_import_with_conditions(base, name, conditions, warnings);
         }
 
         if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
@@ -2576,18 +2469,18 @@ impl NodeModulesResolver {
             return Ok(None);
         };
         Self::validate_package_name(base, name, package_name)?;
+
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
         };
-        if let Some(resolved) =
-            Self::try_resolve_package_self(
-                base_dir,
-                base,
-                package_name,
-                subpath,
-                conditions,
-                &mut Vec::new(),
-            )?
+        if let Some(resolved) = Self::try_resolve_package_self(
+            base_dir,
+            base,
+            package_name,
+            subpath,
+            conditions,
+            warnings,
+        )?
         {
             return Ok(Some(resolved));
         }
@@ -2596,62 +2489,22 @@ impl NodeModulesResolver {
         loop {
             let package_path = dir.join("node_modules").join(package_name);
             if package_path.is_dir() {
-                let pkg_path = package_path.join("package.json");
-                let package = match std::fs::read_to_string(&pkg_path) {
-                    Ok(pkg_content) => Some(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
-                        NodePackageResolveError::InvalidPackageConfig {
-                            path: pkg_path.to_string_lossy().into_owned(),
-                            reason: None,
-                        }
-                    })?),
-                    Err(_) => None,
-                };
-
-                if let Some(package) = package.as_ref() {
-                    if let Some(exports_field) = package.exports.as_ref() {
-                        Self::validate_package_exports_map(&pkg_path, exports_field)?;
-                        return Self::resolve_package_exports(
-                            package_name,
-                            &package_path,
-                            exports_field,
-                            subpath,
-                            &conditions,
-                            &mut Vec::new(),
-                            None,
-                        )
-                        .map(Some);
-                    }
-                }
-
-                if subpath.is_empty()
-                    && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(&package_path)
-                {
-                    return Ok(Some(resolved));
-                }
-
-                if let Some(package) = package.as_ref() {
-                    if subpath.is_empty()
-                        && let Some(main) = package.main.as_ref()
-                        && let Some(resolved) = Self::resolve_cjs_analysis_main(&package_path, main)
-                    {
-                        return Ok(Some(resolved));
-                    }
-                }
-
-                if !subpath.is_empty()
-                    && let Some(resolved) = Self::resolve_cjs_analysis_subpath(&package_path, subpath)
-                {
-                    return Ok(Some(resolved));
-                }
-
-                if subpath.is_empty()
-                    && let Some(resolved) = Self::resolve_cjs_analysis_package_root_directory(&package_path)
-                {
+                if let Some(resolved) = Self::try_resolve_package_directory(
+                    base,
+                    name,
+                    package_name,
+                    subpath,
+                    &package_path,
+                    conditions,
+                    warnings,
+                    &mode,
+                )? {
                     return Ok(Some(resolved));
                 }
             }
 
-            if subpath.is_empty()
+            if matches!(mode, NodePackageResolveMode::CjsAnalysis)
+                && subpath.is_empty()
                 && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(&package_path)
             {
                 return Ok(Some(resolved));
@@ -2663,6 +2516,168 @@ impl NodeModulesResolver {
         }
 
         Ok(None)
+    }
+
+    fn try_resolve_package_directory(
+        base: &str,
+        specifier: &str,
+        package_name: &str,
+        subpath: &str,
+        package_path: &std::path::Path,
+        conditions: &[String],
+        warnings: &mut Vec<NodePackageWarning>,
+        mode: &NodePackageResolveMode,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        let pkg_path = package_path.join("package.json");
+        let package = Self::read_package_json_optional(&pkg_path)?;
+
+        if let Some(package) = package.as_ref() {
+            if let Some(exports_field) = package.exports.as_ref() {
+                Self::validate_package_exports_map(&pkg_path, exports_field)?;
+                return Self::resolve_package_exports(
+                    package_name,
+                    package_path,
+                    exports_field,
+                    subpath,
+                    conditions,
+                    warnings,
+                    match mode {
+                        NodePackageResolveMode::EsmImport => Some(base),
+                        NodePackageResolveMode::CjsAnalysis => None,
+                    },
+                )
+                .map(Some);
+            }
+        }
+
+        match mode {
+            NodePackageResolveMode::EsmImport => {
+                Self::try_resolve_package_directory_esm(base, specifier, subpath, package_path, package.as_ref(), warnings)
+            }
+            NodePackageResolveMode::CjsAnalysis => {
+                Ok(Self::try_resolve_package_directory_for_cjs_analysis(subpath, package_path, package.as_ref()))
+            }
+        }
+    }
+
+    fn read_package_json_optional(pkg_path: &std::path::Path) -> Result<Option<PackageJson>, NodePackageResolveError> {
+        match std::fs::read_to_string(pkg_path) {
+            Ok(pkg_content) => Ok(Some(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
+                NodePackageResolveError::InvalidPackageConfig {
+                    path: pkg_path.to_string_lossy().into_owned(),
+                    reason: None,
+                }
+            })?)),
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn try_resolve_package_directory_esm(
+        base: &str,
+        specifier: &str,
+        subpath: &str,
+        package_path: &std::path::Path,
+        package: Option<&PackageJson>,
+        warnings: &mut Vec<NodePackageWarning>,
+    ) -> Result<Option<String>, NodePackageResolveError> {
+        let package_type = package.and_then(|package| package.package_type.as_ref());
+        if subpath.is_empty()
+            && let Some(package) = package
+            && let Some(main) = package.main.as_ref()
+        {
+            let is_module_package = package.package_type.as_deref() == Some("module");
+            let resolved = Self::resolve_package_legacy_main(package_path, main);
+            if let Some((resolved, used_extension_lookup)) = resolved {
+                if is_module_package && used_extension_lookup {
+                    warnings.push(NodePackageWarning {
+                        message: format!(
+                            "Package {}/ has a \"main\" field set to {:?}, excluding the full filename and extension to the resolved file at {:?}, imported from {}.\nAutomatic extension resolution of the \"main\" field is deprecated for ES modules.",
+                            package_path.to_string_lossy().trim_end_matches('/'),
+                            main,
+                            std::path::Path::new(&resolved)
+                                .strip_prefix(package_path)
+                                .ok()
+                                .map(|path| path.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| resolved.clone()),
+                            base
+                        ),
+                        code: "DEP0151",
+                        dedupe_key: None,
+                    });
+                }
+                return Ok(Some(resolved));
+            }
+        }
+
+        if !subpath.is_empty()
+            && let Some(resolved) = Self::resolve_package_subpath(package_path, subpath, base, specifier)?
+        {
+            return Ok(Some(resolved));
+        }
+
+        if subpath.is_empty() {
+            let is_module_package = package_type.is_some_and(|package_type| package_type == "module");
+            let fallbacks = [
+                package_path.join("index.js"),
+                package_path.join("index.json"),
+                package_path.join("index.node"),
+            ];
+            for fallback in &fallbacks {
+                if fallback.is_file() {
+                    if is_module_package
+                        && fallback.extension().and_then(|ext| ext.to_str()) == Some("js")
+                    {
+                        warnings.push(NodePackageWarning {
+                            message: format!(
+                                "No \"main\" or \"exports\" field defined in the package.json for {}/ resolving the main entry point \"index.js\", imported from {}.\nDefault \"index\" lookups for the main are deprecated for ES modules.",
+                                package_path.to_string_lossy().trim_end_matches('/'),
+                                base
+                            ),
+                            code: "DEP0151",
+                            dedupe_key: None,
+                        });
+                    }
+                    return Ok(Some(fallback.to_string_lossy().into_owned()));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn try_resolve_package_directory_for_cjs_analysis(
+        subpath: &str,
+        package_path: &std::path::Path,
+        package: Option<&PackageJson>,
+    ) -> Option<String> {
+        if subpath.is_empty()
+            && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(package_path)
+        {
+            return Some(resolved);
+        }
+
+        if let Some(package) = package {
+            if subpath.is_empty()
+                && let Some(main) = package.main.as_ref()
+                && let Some(resolved) = Self::resolve_cjs_analysis_main(package_path, main)
+            {
+                return Some(resolved);
+            }
+        }
+
+        if !subpath.is_empty()
+            && let Some(resolved) = Self::resolve_cjs_analysis_subpath(package_path, subpath)
+        {
+            return Some(resolved);
+        }
+
+        if subpath.is_empty()
+            && let Some(resolved) = Self::resolve_cjs_analysis_package_root_directory(package_path)
+        {
+            return Some(resolved);
+        }
+
+        None
     }
 
     fn try_resolve_package_import_with_conditions(

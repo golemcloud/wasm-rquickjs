@@ -1707,6 +1707,7 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-package-reexport-app/reexport-transpiler.cjs', [
             'var dep = require("transitive-pkg");',
             'Object.keys(dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
             '  Object.defineProperty(exports, key, {',
             '    enumerable: true,',
             '    get: function () { return dep[key]; }',
