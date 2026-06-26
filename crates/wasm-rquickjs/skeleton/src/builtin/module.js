@@ -540,6 +540,19 @@ function tryReadFile(filename) {
     }
 }
 
+const packageJsonParseCache = Object.create(null);
+
+function readPackageJson(pkgJsonPath) {
+    if (Object.prototype.hasOwnProperty.call(packageJsonParseCache, pkgJsonPath)) {
+        return packageJsonParseCache[pkgJsonPath];
+    }
+    const content = tryReadFile(pkgJsonPath);
+    if (content === null) return null;
+    const entry = { path: pkgJsonPath, content, pkg: JSON.parse(content) };
+    packageJsonParseCache[pkgJsonPath] = entry;
+    return entry;
+}
+
 // Shared require.extensions registry (mirrors Node.js Module._extensions)
 const requireExtensions = Object.create(null);
 requireExtensions['.js'] = function _defaultJs(mod, filename) { /* built-in */ };
@@ -568,14 +581,13 @@ function getPackageScopeType(filename) {
     while (true) {
         if (pathModule.basename(dir) === 'node_modules') return 'commonjs';
         const pkgPath = pathModule.join(dir, 'package.json');
-        const pkgContent = tryReadFile(pkgPath);
-        if (pkgContent !== null) {
-            try {
-                const pkg = JSON.parse(pkgContent);
-                return pkg.type || 'commonjs';
-            } catch (e) {
-                return 'commonjs';
+        try {
+            const entry = readPackageJson(pkgPath);
+            if (entry !== null) {
+                return entry.pkg.type || 'commonjs';
             }
+        } catch (e) {
+            return 'commonjs';
         }
         const parent = pathModule.dirname(dir);
         if (parent === dir) break;
@@ -618,21 +630,22 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
     seen[candidate] = true;
 
     const pkgJsonPath = pathModule.join(candidate, 'package.json');
-    const pkgJson = tryReadFile(pkgJsonPath);
+    let packageJsonEntry;
     let invalidMain = null;
-    if (pkgJson !== null) {
+    try {
+        packageJsonEntry = readPackageJson(pkgJsonPath);
+    } catch (e) {
+        const pkgErr = new Error(
+            'Invalid package config ' + pkgJsonPath +
+            ' while resolving "' + id + '" from ' + parentDir + '.' +
+            (e.message ? ' ' + e.message : '')
+        );
+        pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
+        throw pkgErr;
+    }
+    if (packageJsonEntry !== null) {
         let pkg;
-        try {
-            pkg = JSON.parse(pkgJson);
-        } catch (e) {
-            const pkgErr = new Error(
-                'Invalid package config ' + pkgJsonPath +
-                ' while resolving "' + id + '" from ' + parentDir + '.' +
-                (e.message ? ' ' + e.message : '')
-            );
-            pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
-            throw pkgErr;
-        }
+        pkg = packageJsonEntry.pkg;
 
         if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string' && pkg.main.length > 0) {
             const mainPath = pathModule.resolve(candidate, pkg.main);
@@ -1120,9 +1133,9 @@ function findPackageScope(startDir) {
             return packageScopeCache[dir];
         }
         const pkgJsonPath = pathModule.join(dir, 'package.json');
-        const pkgJson = tryReadFile(pkgJsonPath);
-        if (pkgJson !== null) {
-            const scope = { dir, pkg: JSON.parse(pkgJson), pkgJsonPath };
+        const packageJsonEntry = readPackageJson(pkgJsonPath);
+        if (packageJsonEntry !== null) {
+            const scope = { dir, pkg: packageJsonEntry.pkg, pkgJsonPath };
             packageScopeCache[dir] = scope;
             return scope;
         }
@@ -2557,12 +2570,12 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
     for (let i = 0; i < dirs.length; i++) {
         const pkgDir = pathModule.join(dirs[i], parts.name);
         const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
-        const pkgJson = tryReadFile(pkgJsonPath);
         let pkg = null;
 
-        if (pkgJson !== null) {
-            try {
-                pkg = JSON.parse(pkgJson);
+        try {
+            const packageJsonEntry = readPackageJson(pkgJsonPath);
+            if (packageJsonEntry !== null) {
+                pkg = packageJsonEntry.pkg;
                 if (pkg && Object.prototype.hasOwnProperty.call(pkg, 'exports')) {
                     validatePackageExportsMap(pkgJsonPath, pkg.exports);
                 }
@@ -2571,19 +2584,19 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
                     exportsResolved.packageDir = pkgDir;
                     return exportsResolved;
                 }
-            } catch (e) {
-                if (e && e.code) {
-                    throw e;
-                }
-                const fromPart = parentFilename || parentDir;
-                const pkgErr = new Error(
-                    'Invalid package config ' + pkgJsonPath +
-                    ' while importing "' + id + '" from ' + fromPart + '.' +
-                    (e.message ? ' ' + e.message : '')
-                );
-                pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
-                throw pkgErr;
             }
+        } catch (e) {
+            if (e && e.code) {
+                throw e;
+            }
+            const fromPart = parentFilename || parentDir;
+            const pkgErr = new Error(
+                'Invalid package config ' + pkgJsonPath +
+                ' while importing "' + id + '" from ' + fromPart + '.' +
+                (e.message ? ' ' + e.message : '')
+            );
+            pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
+            throw pkgErr;
         }
 
         // If there's a subpath, try resolving it relative to the package directory

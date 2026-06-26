@@ -1396,6 +1396,36 @@ export const testPackageCustomConditions = async () => {
     }
 };
 
+export const testCjsPackageJsonParseCache = async () => {
+    try {
+        const root = '/package-json-cache-app';
+        fs.mkdirSync(`${root}/node_modules/cached-pkg`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/cached-pkg/package.json`, JSON.stringify({
+            exports: './entry.js',
+        }));
+        fs.writeFileSync(`${root}/node_modules/cached-pkg/entry.js`, 'module.exports = { cached: true };');
+        fs.writeFileSync(`${root}/node_modules/cached-pkg/changed.js`, 'module.exports = { changed: true };');
+        fs.writeFileSync(`${root}/app.cjs`, [
+            'const assert = require("assert");',
+            'const path = require("path");',
+            'const fs = require("fs");',
+            'const pkgJsonPath = "/package-json-cache-app/node_modules/cached-pkg/package.json";',
+            'const first = require.resolve("cached-pkg");',
+            'fs.writeFileSync(pkgJsonPath, JSON.stringify({ exports: "./changed.js" }));',
+            'const second = require.resolve("cached-pkg");',
+            'assert.strictEqual(first, second);',
+            'assert.strictEqual(path.basename(first), "entry.js");',
+            'module.exports = true;',
+        ].join('\n'));
+
+        assert.strictEqual(require(`${root}/app.cjs`), true);
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsPackageReexportNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-package-reexport-app/node_modules/pkg', { recursive: true });
