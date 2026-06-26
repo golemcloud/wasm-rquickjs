@@ -4598,15 +4598,26 @@ fn skip_object_literal_value(source: &str, pos: usize, object_end: usize) -> usi
     object_end
 }
 
-fn is_named_export_object_literal_value(source: &str, pos: usize, object_end: usize) -> bool {
+enum ObjectLiteralValueExport {
+    NamedContinue,
+    NamedStop,
+}
+
+fn named_export_object_literal_value(source: &str, pos: usize, object_end: usize) -> Option<ObjectLiteralValueExport> {
     let Some((name, mut next)) = read_ident(source, pos) else {
-        return false;
+        return None;
     };
     if matches!(name.as_str(), "true" | "false" | "null" | "undefined") {
-        return false;
+        return None;
     }
     next = skip_ws_comments(source, next);
-    next >= object_end || matches!(source.as_bytes()[next], b',' | b'(')
+    if next >= object_end || source.as_bytes()[next] == b',' {
+        Some(ObjectLiteralValueExport::NamedContinue)
+    } else if source.as_bytes()[next] == b'(' {
+        Some(ObjectLiteralValueExport::NamedStop)
+    } else {
+        None
+    }
 }
 
 fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<String>, Vec<String>, usize)> {
@@ -4660,12 +4671,17 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
                 add_unique(&mut exports, name);
                 break;
             }
-            if is_named_export_object_literal_value(source, next, object_end) {
-                add_unique(&mut exports, name);
-            } else {
-                break;
+            match named_export_object_literal_value(source, next, object_end) {
+                Some(ObjectLiteralValueExport::NamedContinue) => {
+                    add_unique(&mut exports, name);
+                    cursor = skip_ws_comments(source, skip_object_literal_value(source, next, object_end));
+                }
+                Some(ObjectLiteralValueExport::NamedStop) => {
+                    add_unique(&mut exports, name);
+                    break;
+                }
+                None => break,
             }
-            cursor = skip_ws_comments(source, skip_object_literal_value(source, next, object_end));
         } else if key_is_ident {
             add_unique(&mut exports, name);
             cursor = next;

@@ -997,6 +997,14 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '};',
             'function factory() { return "not-detected"; }',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-call-terminal.cjs', [
+            'const afterCall = "after";',
+            'module.exports = {',
+            '  callValue: factory(),',
+            '  afterCall,',
+            '};',
+            'function factory() { return "call"; }',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/guards-entry.mjs', [
             'import * as fp from "./false-positives.cjs";',
             'import * as unsafe from "./unsafe-define.cjs";',
@@ -1025,6 +1033,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as objectLiteralValues from "./object-literal-values.cjs";',
             'import * as objectLiteralRequireValue from "./object-literal-require-value.cjs";',
             'import * as objectLiteralUnsupported from "./object-literal-unsupported.cjs";',
+            'import * as objectLiteralCallTerminal from "./object-literal-call-terminal.cjs";',
             'export default {',
             '  fpKeys: Object.keys(fp).filter((key) => key !== "default" && key !== "real"),',
             '  real: fp.real,',
@@ -1068,6 +1077,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  objectLiteralRequireValueKeys: Object.keys(objectLiteralRequireValue).filter((key) => key !== "default").sort(),',
             '  requireValue: objectLiteralRequireValue.requireValue,',
             '  objectLiteralUnsupportedKeys: Object.keys(objectLiteralUnsupported).filter((key) => key !== "default").sort(),',
+            '  objectLiteralCallTerminalKeys: Object.keys(objectLiteralCallTerminal).filter((key) => key !== "default").sort(),',
+            '  callValue: objectLiteralCallTerminal.callValue,',
             '};',
         ].join('\n'));
 
@@ -1117,6 +1128,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.deepStrictEqual(result.objectLiteralRequireValueKeys, ['requireValue']);
         assert.deepStrictEqual(result.requireValue, { alpha: 'alpha' });
         assert.deepStrictEqual(result.objectLiteralUnsupportedKeys, []);
+        assert.deepStrictEqual(result.objectLiteralCallTerminalKeys, ['callValue']);
+        assert.strictEqual(result.callValue, 'call');
         return true;
     } catch (error) {
         console.error(error);
