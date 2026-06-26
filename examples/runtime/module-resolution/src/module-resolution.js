@@ -1694,6 +1694,58 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-package-reexport-app/reexport-subpath.cjs', 'module.exports = require("pkg/subpath");');
         fs.writeFileSync('/cjs-package-reexport-app/node_modules/file-pkg.js', 'exports.file = "file";');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-file-package.cjs', 'module.exports = require("file-pkg");');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-non-string-main', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-main/package.json', JSON.stringify({
+            main: {},
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-main/index.js', 'exports.bareNonStringMain = "bare-non-string-main";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-bare-non-string-main.cjs', 'module.exports = require("bare-non-string-main");');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-null-main', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-null-main/package.json', JSON.stringify({
+            main: null,
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-null-main/index.js', 'exports.bareNullMain = "bare-null-main";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-bare-null-main.cjs', 'module.exports = require("bare-null-main");');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-non-string-type', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-type/package.json', JSON.stringify({
+            type: {},
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-type/index.js', 'exports.bareNonStringType = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-bare-non-string-type.cjs', 'module.exports = require("bare-non-string-type");');
+        fs.writeFileSync('/cjs-package-reexport-app/bare-non-string-type-entry.mjs', [
+            'import { bareNonStringType } from "./reexport-bare-non-string-type.cjs";',
+            'export default bareNonStringType;',
+        ].join('\n'));
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-null-type', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-null-type/package.json', JSON.stringify({
+            type: null,
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-null-type/index.js', 'exports.bareNullType = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-bare-null-type.cjs', 'module.exports = require("bare-null-type");');
+        fs.writeFileSync('/cjs-package-reexport-app/bare-null-type-entry.mjs', [
+            'import { bareNullType } from "./reexport-bare-null-type.cjs";',
+            'export default bareNullType;',
+        ].join('\n'));
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-non-string-name', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-name/package.json', JSON.stringify({
+            name: {},
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-name/index.js', 'exports.bareNonStringName = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-bare-non-string-name.cjs', 'module.exports = require("bare-non-string-name");');
+        fs.writeFileSync('/cjs-package-reexport-app/bare-non-string-name-entry.mjs', [
+            'import { bareNonStringName } from "./reexport-bare-non-string-name.cjs";',
+            'export default bareNonStringName;',
+        ].join('\n'));
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-null-name', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-null-name/package.json', JSON.stringify({
+            name: null,
+        }));
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-null-name/index.js', 'exports.bareNullName = "wrong";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-bare-null-name.cjs', 'module.exports = require("bare-null-name");');
+        fs.writeFileSync('/cjs-package-reexport-app/bare-null-name-entry.mjs', [
+            'import { bareNullName } from "./reexport-bare-null-name.cjs";',
+            'export default bareNullName;',
+        ].join('\n'));
 
         fs.mkdirSync('/cjs-package-reexport-app/node_modules/exported-pkg', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/node_modules/exported-pkg/package.json', JSON.stringify({
@@ -1821,6 +1873,8 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import packageDefault, { alpha, beta } from "./reexport-package.cjs";',
             'import { sub } from "./reexport-subpath.cjs";',
             'import { file } from "./reexport-file-package.cjs";',
+            'import { bareNonStringMain } from "./reexport-bare-non-string-main.cjs";',
+            'import { bareNullMain } from "./reexport-bare-null-main.cjs";',
             'import { main } from "./reexport-exported-root.cjs";',
             'import { feature } from "./reexport-exported-feature.cjs";',
             'import { condition } from "./reexport-exported-condition.cjs";',
@@ -1832,7 +1886,7 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import * as continuation from "./reexport-continuation.cjs";',
             'import * as cycle from "./cycle-a.cjs";',
             'export default {',
-            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, main, feature, condition, imported, relativeMain, relativeIndex, nonStringMainIndex, gamma, delta,',
+            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, bareNonStringMain, bareNullMain, main, feature, condition, imported, relativeMain, relativeIndex, nonStringMainIndex, gamma, delta,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default" && key !== "own"),',
             '  continuationOwn: continuation.own,',
             '  cycleKeys: Object.keys(cycle).filter((key) => key !== "default").sort(),',
@@ -1846,6 +1900,8 @@ export const testCjsPackageReexportNamedExports = async () => {
             defaultAlpha: 'alpha',
             sub: 'sub',
             file: 'file',
+            bareNonStringMain: 'bare-non-string-main',
+            bareNullMain: 'bare-null-main',
             main: 'main',
             feature: 'feature',
             condition: 'module-sync',
@@ -1874,6 +1930,22 @@ export const testCjsPackageReexportNamedExports = async () => {
         await assert.rejects(() => import('/cjs-package-reexport-app/json-analysis-entry.mjs'), {
             name: 'SyntaxError',
             message: /Named export 'jsonFalsePositive' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/bare-non-string-type-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'bareNonStringType' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/bare-null-type-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'bareNullType' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/bare-non-string-name-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'bareNonStringName' not found/,
+        });
+        await assert.rejects(() => import('/cjs-package-reexport-app/bare-null-name-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'bareNullName' not found/,
         });
         assert.strictEqual((await import('/cjs-package-reexport-app/analysis-exports-entry.mjs')).default, 'right');
         await assert.rejects(() => import('/cjs-package-reexport-app/analysis-exports-wrong-entry.mjs'), {

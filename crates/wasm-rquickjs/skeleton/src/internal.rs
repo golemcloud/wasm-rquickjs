@@ -9,7 +9,8 @@ use rquickjs::{
     Object, Promise, Value, async_with, Exception,
 };
 use rquickjs::{CaughtError, prelude::*};
-use serde::Deserialize;
+use serde::de::Error as SerdeError;
+use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -2393,14 +2394,38 @@ enum PackageTarget {
     Invalid(serde_json::Value),
 }
 
+fn deserialize_optional_package_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| value.as_str().map(|value| value.to_string())))
+}
+
+fn deserialize_strict_package_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::String(value) => Ok(Some(value)),
+        value => Err(D::Error::custom(format!(
+            "invalid package field type {}, expected string",
+            value
+        ))),
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct PackageJson {
+    #[serde(default, deserialize_with = "deserialize_strict_package_string")]
     name: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_package_string")]
     main: Option<String>,
     exports: Option<PackageTarget>,
     imports: Option<PackageTarget>,
     #[serde(rename = "type")]
+    #[serde(default, deserialize_with = "deserialize_strict_package_string")]
     package_type: Option<String>,
 }
 
@@ -2950,23 +2975,6 @@ impl NodeModulesResolver {
         ])
     }
 
-    fn read_package_json_main_optional(pkg_path: &std::path::Path) -> Result<Option<String>, NodePackageResolveError> {
-        match std::fs::read_to_string(pkg_path) {
-            Ok(pkg_content) => {
-                let value: serde_json::Value =
-                    serde_json::from_str(&pkg_content).map_err(|_| NodePackageResolveError::InvalidPackageConfig {
-                        path: pkg_path.to_string_lossy().into_owned(),
-                        reason: None,
-                    })?;
-                Ok(value
-                    .get("main")
-                    .and_then(|main| main.as_str())
-                    .map(|main| main.to_string()))
-            }
-            Err(_) => Ok(None),
-        }
-    }
-
     fn resolve_cjs_analysis_relative(target_path: &std::path::Path) -> Option<String> {
         if let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(target_path) {
             return Some(resolved);
@@ -2974,9 +2982,11 @@ impl NodeModulesResolver {
 
         if target_path.is_dir() {
             let pkg_path = target_path.join("package.json");
-            match Self::read_package_json_main_optional(&pkg_path) {
-                Ok(Some(main)) => {
-                    if let Some(resolved) = Self::resolve_cjs_analysis_main(target_path, &main) {
+            match Self::read_package_json_optional(&pkg_path) {
+                Ok(Some(package)) => {
+                    if let Some(main) = package.main.as_ref()
+                        && let Some(resolved) = Self::resolve_cjs_analysis_main(target_path, main)
+                    {
                         return Some(resolved);
                     }
                 }
