@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3145/4404 (71.4%)
+**Primary compatibility (CI-enforced):** 3147/4404 (71.5%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3145 | 71.4% | 55.0% | 46.0% |
-| 🧩 known gap | 1259 | 28.6% | 22.0% | 18.4% |
+| ✅ passing (runnable) | 3147 | 71.5% | 55.0% | 46.0% |
+| 🧩 known gap | 1257 | 28.5% | 22.0% | 18.4% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3145/5721 (55.0%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3147/5721 (55.0%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 145 | 157 | 85 | 11 | 0 | 183 | 48.0% | 36.4% |
+| other | 581 | 147 | 155 | 85 | 11 | 0 | 183 | 48.7% | 36.9% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1259)
+### known gap (1257)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -767,6 +767,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | test runner edge case | 3 | `parallel/test-runner-filetest-location.js`, `parallel/test-runner-root-after-with-refed-handles.js`, `parallel/test-runner-todo-skip-tests.js` |
 | CLI/NODE_OPTIONS max-http-header-size propagation in child process emulation is incomplete | 2 | `parallel/test-set-http-max-http-headers.js#test_01_test_01`, `parallel/test-set-http-max-http-headers.js#test_02_same_checks_using_node_options_if_it_is_supported` |
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
+| ESM package deprecation warnings resolve but do not yet preserve Node DEP0151/DEP0155/DEP0166 warning identity/context | 2 | `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-imports-deprecations.mjs` |
 | ESM preserve-symlinks / preserve-symlinks-main behavior is incomplete | 2 | `es-module/test-esm-preserve-symlinks-not-found-plain.mjs`, `es-module/test-esm-preserve-symlinks-not-found.mjs` |
 | HTTP keep-alive socket identity reuse across sequential requests is not implemented | 2 | `parallel/test-http-keepalive-client.js`, `parallel/test-http-keepalive-request.js` |
 | IncomingMessage 'aborted' event is not emitted when the server destroys a keep-alive response | 2 | `parallel/test-http-client-aborted-event.js#block_00_block_00`, `parallel/test-http-client-aborted-event.js#block_01_block_01` |
@@ -865,10 +866,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented | 1 | `parallel/test-vm-dynamic-import-callback-missing-flag.js` |
 | ESM compatibility shim intentionally exposes CommonJS-style __filename/__dirname; switching to strict Node ESM globals needs a product compatibility decision | 1 | `es-module/test-esm-forbidden-globals.mjs` |
 | ESM directory import errors do not match Node ERR_UNSUPPORTED_DIR_IMPORT behavior | 1 | `parallel/test-directory-import.js` |
-| ESM package exports behavior passes in focused isolation, but concurrent node_compat promotion still exposes warning/error ordering interference | 1 | `es-module/test-esm-exports.mjs` |
-| ESM package exports resolution now passes, but DEP0166 package-map deprecation warning context/text is incomplete | 1 | `es-module/test-esm-exports-deprecations.mjs` |
-| ESM package imports behavior passes in focused isolation, but concurrent node_compat promotion still exposes warning/error ordering interference | 1 | `es-module/test-esm-imports.mjs` |
-| ESM package imports resolution now passes, but DEP0166 package-map deprecation warning context/text is incomplete | 1 | `es-module/test-esm-imports-deprecations.mjs` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
 | Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |
 | EventEmitter captureRejections option validation/behavior is incomplete | 1 | `parallel/test-event-capture-rejections.js` |
