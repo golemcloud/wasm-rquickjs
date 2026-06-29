@@ -611,8 +611,11 @@ export const testEsmDataUrlImportAttributes = async () => {
             'async function resolve(specifier, context, next) {',
             '  const result = await next(specifier, context);',
             '  const url = new URL(result.url);',
-            '  url.searchParams.set("seed", String(++seed));',
-            '  return { url: url.href };',
+            '  if (url.pathname.endsWith("/dynamic-json-relative-app/data.json")) {',
+            '    url.searchParams.set("seed", String(++seed));',
+            '    return Object.assign({}, result, { url: url.href });',
+            '  }',
+            '  return result;',
             '}',
             'function load(url, context, next) {',
             '  if (context.importAttributes.type === "json" && url.includes("/dynamic-json-relative-app/data.json")) {',
@@ -694,6 +697,121 @@ export const testEsmDataUrlImportAttributes = async () => {
             'register("data:text/javascript," + encodeURIComponent("export " + resolve + "; export " + load));',
             'assert.deepStrictEqual((await import("virtual:resolve-attrs", {})).default, { resolveAttrs: true });',
         ].join('\n')));
+        fs.mkdirSync('/loader-next-app/node_modules/loader-next-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/loader-next-app/node_modules/loader-next-pkg/package.json',
+            JSON.stringify({
+                name: 'loader-next-pkg',
+                exports: {
+                    '.': {
+                        golem: './data.json',
+                        default: './fallback.json',
+                    },
+                },
+            }),
+        );
+        fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/data.json', '{"fromPackage":true}');
+        fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/fallback.json', '{"fallback":true}');
+        fs.mkdirSync('/loader-next-app/node_modules/fs', { recursive: true });
+        fs.writeFileSync(
+            '/loader-next-app/node_modules/fs/package.json',
+            JSON.stringify({ name: 'fs', main: './shadow.js' }),
+        );
+        fs.writeFileSync('/loader-next-app/node_modules/fs/shadow.js', 'export default "shadow";');
+        fs.mkdirSync('/loader-next-app/node_modules/loader-subpath-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/loader-next-app/node_modules/loader-subpath-pkg/package.json',
+            JSON.stringify({ name: 'loader-subpath-pkg' }),
+        );
+        fs.writeFileSync('/loader-next-app/node_modules/loader-subpath-pkg/foo.js', 'export default "should-not-resolve";');
+        fs.writeFileSync('/loader-next-app/node_modules/loader-subpath-pkg/sp ce.json', '{"encodedSpaceSubpath":true}');
+        fs.writeFileSync('/loader-next-app/query.json', '{"query":true}');
+        fs.writeFileSync('/loader-next-app/extensionless.js', 'export default "should-not-resolve";');
+        fs.writeFileSync(
+            '/loader-next-app/main.mjs',
+            [
+                'import assert from "node:assert";',
+                'import { register } from "node:module";',
+                'async function resolve(specifier, context, next) {',
+                '  if (specifier === "loader-next-pkg") {',
+                '    const result = await next(specifier, context);',
+                '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-next-pkg/data.json") throw new Error("nextResolve did not use package exports import condition: " + result.url);',
+                '    return result;',
+                '  }',
+                '  if (specifier === "virtual:builtin-shadow") {',
+                '    const result = await next("fs", context);',
+                '    if (result.url !== "node:fs") throw new Error("nextResolve allowed node_modules to shadow builtin: " + result.url);',
+                '    return { shortCircuit: true, url: "virtual:builtin-shadow-json", format: "json" };',
+                '  }',
+                '  if (specifier === "virtual:package-subpath-no-extension") {',
+                '    try {',
+                '      await next("loader-subpath-pkg/foo", context);',
+                '      throw new Error("nextResolve unexpectedly resolved package subpath without extension");',
+                '    } catch (error) {',
+                '      if (!error || error.code !== "ERR_MODULE_NOT_FOUND") throw error;',
+                '    }',
+                '    return { shortCircuit: true, url: "virtual:package-subpath-json", format: "json" };',
+                '  }',
+                '  if (specifier === "virtual:encoded-space-subpath") {',
+                '    const result = await next("loader-subpath-pkg/sp%20ce.json", context);',
+                '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-subpath-pkg/sp%20ce.json") throw new Error("nextResolve did not decode package subpath space: " + result.url);',
+                '    return result;',
+                '  }',
+                '  if (specifier === "virtual:encoded-separator-subpath") {',
+                '    for (const bad of ["loader-subpath-pkg/a%2Fb.js", "loader-subpath-pkg/a%5Cb.js"]) {',
+                '      try {',
+                '        await next(bad, context);',
+                '        throw new Error("nextResolve unexpectedly accepted encoded separator subpath: " + bad);',
+                '      } catch (error) {',
+                '        if (!error || error.code !== "ERR_INVALID_MODULE_SPECIFIER") throw error;',
+                '      }',
+                '    }',
+                '    return { shortCircuit: true, url: "virtual:encoded-separator-json", format: "json" };',
+                '  }',
+                '  if (specifier === "./query.json?one#two") {',
+                '    const result = await next(specifier, context);',
+                '    const url = new URL(result.url);',
+                '    if (url.pathname !== "/loader-next-app/query.json" || url.search !== "?one" || url.hash !== "#two") throw new Error("nextResolve did not preserve file URL search/hash: " + result.url);',
+                '    return result;',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'function load(url, context, next) {',
+                '  if (new URL(url).pathname === "/loader-next-app/node_modules/loader-next-pkg/data.json") {',
+                '    if (context.format !== "json") throw new Error("nextResolve did not pass json format to load");',
+                '    return { shortCircuit: true, format: "json", source: "{\\"nextResolvePackage\\":true}" };',
+                '  }',
+                '  if (url === "virtual:builtin-shadow-json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"builtinShadow\\":true}" };',
+                '  }',
+                '  if (url === "virtual:package-subpath-json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"packageSubpath\\":true}" };',
+                '  }',
+                '  if (new URL(url).pathname === "/loader-next-app/node_modules/loader-subpath-pkg/sp%20ce.json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"encodedSpaceSubpath\\":true}" };',
+                '  }',
+                '  if (url === "virtual:encoded-separator-json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"encodedSeparator\\":true}" };',
+                '  }',
+                '  if (new URL(url).pathname === "/loader-next-app/query.json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"queryHash\\":true}" };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+                'register("data:text/javascript," + encodeURIComponent("export " + resolve + "; export " + load));',
+                'await assert.rejects(import("./extensionless", {}), { code: "ERR_MODULE_NOT_FOUND" });',
+                'assert.deepStrictEqual((await import("virtual:builtin-shadow", { with: { type: "json" } })).default, { builtinShadow: true });',
+                'assert.deepStrictEqual((await import("virtual:package-subpath-no-extension", { with: { type: "json" } })).default, { packageSubpath: true });',
+                'assert.deepStrictEqual((await import("virtual:encoded-space-subpath", { with: { type: "json" } })).default, { encodedSpaceSubpath: true });',
+                'assert.deepStrictEqual((await import("virtual:encoded-separator-subpath", { with: { type: "json" } })).default, { encodedSeparator: true });',
+                'assert.deepStrictEqual((await import("./query.json?one#two", { with: { type: "json" } })).default, { queryHash: true });',
+                'export default (await import("loader-next-pkg", { with: { type: "json" } })).default;',
+            ].join('\n'),
+        );
+        assert.deepStrictEqual(
+            (await import('/loader-next-app/main.mjs')).default,
+            { nextResolvePackage: true },
+        );
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
             'import { register } from "node:module";',
