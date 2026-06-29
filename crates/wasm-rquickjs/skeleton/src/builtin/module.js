@@ -3458,40 +3458,71 @@ export let isBuiltinModule = function isBuiltinModule(id) {
     return isBuiltin(id);
 };
 
-export let register = function register(specifier, parentURL) {
+export let register = function register(specifier, parentURL, options) {
     const url = String(specifier);
     let parent = parentURL;
-    if (parentURL && typeof parentURL === 'object' && parentURL.parentURL !== undefined) {
+    let data;
+    if (parentURL && typeof parentURL === 'object' && !isUrlInstance(parentURL)) {
         parent = parentURL.parentURL;
+        data = parentURL.data;
+    } else if (options && typeof options === 'object') {
+        data = options.data;
     }
     parent = parent === undefined ? undefined : String(parent);
     const loaders = globalThis.__wasm_rquickjs_registered_loaders ||
         (globalThis.__wasm_rquickjs_registered_loaders = []);
-    loaders.push({ url, parent });
+    const loader = { url, parent, data, module: undefined, initialized: false, initializing: undefined };
+    loaders.push(loader);
+    if (typeof globalThis.__wasm_rquickjs_start_registered_loader === 'function') {
+        globalThis.__wasm_rquickjs_start_registered_loader(loader);
+    }
 };
 
 if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
+    function normalizeLoaderResolvedUrl(url) {
+        if (url.startsWith('/')) {
+            url = nodeUrl.pathToFileURL(url).href;
+        }
+        return url;
+    }
+
+    function resolveRegisteredLoaderUrl(loader) {
+        if (loader.parent !== undefined) {
+            return normalizeLoaderResolvedUrl(globalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url));
+        }
+        return loader.url;
+    }
+
+    globalThis.__wasm_rquickjs_start_registered_loader = function startRegisteredLoader(loader) {
+        if (loader.initialized || loader.initializing) return loader.initializing;
+        loader.initializing = (async () => {
+            const module = await import(resolveRegisteredLoaderUrl(loader));
+            loader.module = module;
+            if (typeof module.initialize === 'function') {
+                await module.initialize(loader.data);
+            }
+            loader.initialized = true;
+        })();
+        loader.initializing.catch(() => {});
+        return loader.initializing;
+    };
+
     globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(baseUrl, specifier, attrs) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
 
-        function normalizeResolvedUrl(url) {
-            if (url.startsWith('/')) {
-                url = nodeUrl.pathToFileURL(url).href;
-            }
-            return url;
-        }
-
-        function resolveLoaderUrl(loader) {
-            if (loader.parent !== undefined) {
-                return normalizeResolvedUrl(globalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url));
-            }
-            return loader.url;
-        }
-
         const modules = [];
         for (let i = 0; i < loaders.length; i++) {
-            modules.push(await import(resolveLoaderUrl(loaders[i])));
+            const loader = loaders[i];
+            try {
+                await globalThis.__wasm_rquickjs_start_registered_loader(loader);
+            } catch (e) {
+                loader.initializing = undefined;
+                throw e;
+            }
+            if (loader.module) {
+                modules.push(loader.module);
+            }
         }
 
         const importAttributes = attrs && attrs.typeValue !== undefined
@@ -3643,7 +3674,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
 
             let url = globalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
-            return { url: normalizeResolvedUrl(url) };
+            return { url: normalizeLoaderResolvedUrl(url) };
         }
 
         const defaultResolve = async (nextSpecifier, context) => {
@@ -3676,7 +3707,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const resolved = await runResolve(modules.length - 1, specifier, baseContext);
         if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
-        resolved.url = normalizeResolvedUrl(String(resolved.url));
+        resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
 
         const defaultLoad = async (_nextUrl, context) => ({ format: context && context.format });
 

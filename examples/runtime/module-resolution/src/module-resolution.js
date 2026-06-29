@@ -824,6 +824,63 @@ export const testEsmDataUrlImportAttributes = async () => {
             'register("data:text/javascript," + encodeURIComponent("export " + load));',
             'assert.deepStrictEqual((await import("/loader-relative-app/bytes.json", { with: { type: "json" } })).default, { bytes: true });',
         ].join('\n')));
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'function initialize(data) {',
+            '  globalThis.__loader_initialize_calls = (globalThis.__loader_initialize_calls || 0) + 1;',
+            '  globalThis.__loader_initialize_value = data.value;',
+            '}',
+            'function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:initialize-data") {',
+            '    if (globalThis.__loader_initialize_value !== 42) throw new Error("loader initialize data was not available");',
+            '    return { shortCircuit: true, url: "virtual:initialize-data-json", format: "json" };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'function load(url, context, next) {',
+            '  if (url === "virtual:initialize-data-json") {',
+            '    return { shortCircuit: true, format: "json", source: "{\\"initialized\\":true}" };',
+            '  }',
+            '  return next(url, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export " + initialize + "; export " + resolve + "; export " + load), { data: { value: 42 } });',
+            'assert.deepStrictEqual((await import("virtual:initialize-data", { with: { type: "json" } })).default, { initialized: true });',
+            'assert.deepStrictEqual((await import("virtual:initialize-data", { with: { type: "json" } })).default, { initialized: true });',
+            'assert.strictEqual(globalThis.__loader_initialize_calls, 1);',
+        ].join('\n')));
+        fs.writeFileSync(
+            '/loader-relative-app/url-parent-loader.mjs',
+            [
+                'let initializedValue;',
+                'export function initialize(data) { initializedValue = data.value; }',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:url-parent-initialize") {',
+                '    if (initializedValue !== 7) throw new Error("three-argument initialize data was not available");',
+                '    return { shortCircuit: true, url: "virtual:url-parent-initialize-json", format: "json" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "virtual:url-parent-initialize-json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"urlParent\\":true}" };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'register("./url-parent-loader.mjs", new URL("file:///loader-relative-app/main.mjs"), { data: { value: 7 } });',
+            'assert.deepStrictEqual((await import("virtual:url-parent-initialize", { with: { type: "json" } })).default, { urlParent: true });',
+        ].join('\n')));
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'register("./url-parent-loader.mjs", { parentURL: "file:///loader-relative-app/main.mjs", data: { value: 7 } });',
+            'assert.deepStrictEqual((await import("virtual:url-parent-initialize", { with: { type: "json" } })).default, { urlParent: true });',
+        ].join('\n')));
         await assert.rejects(
             import('data:text/javascript,' + encodeURIComponent(
                 'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',
