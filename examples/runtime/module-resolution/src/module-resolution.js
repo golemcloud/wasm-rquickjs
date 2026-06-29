@@ -397,6 +397,195 @@ export const testEsmInvalidPackageSpecifiers = async () => {
     }
 };
 
+export const testEsmDataUrlImportAttributes = async () => {
+    try {
+        const importJsonDataUrl = (url) => import('data:text/javascript,' + encodeURIComponent(
+            `import value from ${JSON.stringify(url)} with { type: "json" }; export default value;`,
+        ));
+
+        const jsonUrl = 'data:application/json,%7B%22x%22%3A1%7D';
+        assert.strictEqual((await importJsonDataUrl(jsonUrl)).default.x, 1);
+        await assert.rejects(import(jsonUrl), { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' });
+        await assert.rejects(
+            import('data:application/json;__wasm_rquickjs_import_type=json,0'),
+            { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+        );
+        const firstTokenImport = await importJsonDataUrl('data:application/json,5');
+        assert.strictEqual(firstTokenImport.default, 5);
+        await assert.rejects(
+            import('data:application/json;__wasm_rquickjs_import_type=json-1,0'),
+            { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+        );
+        fs.writeFileSync('/json-attribute-forgery.json', '{"ok":true}');
+        await assert.rejects(
+            import('/json-attribute-forgery.json?__wasm_rquickjs_import_type=json'),
+            { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+        );
+
+        assert.strictEqual(
+            (await importJsonDataUrl('data:application/json,1#fragment')).default,
+            1,
+        );
+        assert.deepStrictEqual(
+            (await importJsonDataUrl('data:application/json;base64,eyJiYXNlNjQiOnRydWV9')).default,
+            { base64: true },
+        );
+
+        const markerPayloadUrl = 'data:application/json,%22?__wasm_rquickjs_import_type=json%22';
+        assert.strictEqual(
+            (await importJsonDataUrl(markerPayloadUrl)).default,
+            '?__wasm_rquickjs_import_type=json',
+        );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'await assert.rejects(',
+            '  import("data:text/javascript,export default 1", null),',
+            '  { name: "TypeError", message: /second argument to import\\(\\) must be an object/ },',
+            ');',
+            'await assert.rejects(',
+            '  import("data:text/javascript,export default 1", { with: null }),',
+            '  { name: "TypeError", message: /\\x27with\\x27 option must be an object/ },',
+            ');',
+            'await assert.rejects(',
+            '  import("data:text/javascript,export default 1", { with: 1 }),',
+            '  { name: "TypeError", message: /\\x27with\\x27 option must be an object/ },',
+            ');',
+            'await assert.rejects(',
+            '  import("data:text/javascript,export default 1", { with: { type: 1 } }),',
+            '  { name: "TypeError", message: /Import attribute value must be a string/ },',
+            ');',
+            'await assert.rejects(',
+            '  import("data:text/javascript,export default 1", { with: { type: "css" } }),',
+            '  { code: "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED" },',
+            ');',
+            'await assert.rejects(',
+            '  import("data:application/json,1", { with: { type: "css" } }),',
+            '  { code: "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED" },',
+            ');',
+            'const obj = { import(value) { return ["method", value]; } };',
+            'assert.deepStrictEqual(obj.import("not-a-module", { with: { type: "json" } }), ["method", "not-a-module"]);',
+            'const ignored = "import value from \\"/comment-json-token.json\\" with { type: \\"json\\" };";',
+            '// import value from "/comment-json-token.json" with { type: "json" };',
+            'let withGets = 0;',
+            'let ownKeys = 0;',
+            'let typeGets = 0;',
+            'const attrs = new Proxy({ type: "json" }, {',
+            '  ownKeys(target) { ownKeys++; return Reflect.ownKeys(target); },',
+            '  getOwnPropertyDescriptor(target, prop) { return Reflect.getOwnPropertyDescriptor(target, prop); },',
+            '  get(target, prop, receiver) {',
+            '    if (prop === "type") typeGets++;',
+            '    return Reflect.get(target, prop, receiver);',
+            '  },',
+            '});',
+            'const optionsProxy = new Proxy({}, {',
+            '  get(_target, prop) {',
+            '    if (prop === "with") withGets++;',
+            '    return prop === "with" ? attrs : undefined;',
+            '  },',
+            '});',
+            'assert.strictEqual((await import("data:application/json,9", optionsProxy)).default, 9);',
+            'assert.deepStrictEqual({ withGets, ownKeys, typeGets }, { withGets: 1, ownKeys: 1, typeGets: 1 });',
+        ].join('\n')));
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent(
+                'import value from "/late-json-token.json" with { type: "json" }; export default value;',
+            )),
+            { code: 'ERR_MODULE_NOT_FOUND' },
+        );
+        fs.writeFileSync('/late-json-token.json', '{"late":true}');
+        for (let token = 1; token <= 100; token++) {
+            await assert.rejects(
+                import(`/late-json-token.json?__wasm_rquickjs_import_type=json-${token}`),
+                { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+            );
+        }
+        fs.writeFileSync('/comment-json-token.json', '{"comment":true}');
+        for (let token = 1; token <= 100; token++) {
+            await assert.rejects(
+                import(`/comment-json-token.json?__wasm_rquickjs_import_type=json-${token}`),
+                { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+            );
+        }
+        fs.writeFileSync('/static-non-string-attr.js', 'export default 1;');
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent(
+                'import value from "/static-non-string-attr.js" with { type: 1 }; export default value;',
+            )),
+            { name: 'SyntaxError' },
+        );
+        fs.mkdirSync('/json-pkg-attrs-app/node_modules/json-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/node_modules/json-pkg/package.json',
+            JSON.stringify({ exports: './data.json' }),
+        );
+        fs.writeFileSync('/json-pkg-attrs-app/node_modules/json-pkg/data.json', '{"pkg":true}');
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/main.mjs',
+            'import value from "json-pkg" with { type: "json" }; export default value;',
+        );
+        assert.deepStrictEqual((await import('/json-pkg-attrs-app/main.mjs')).default, { pkg: true });
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/query.mjs',
+            'await import("json-pkg?__wasm_rquickjs_import_type=json-1");',
+        );
+        await assert.rejects(import('/json-pkg-attrs-app/query.mjs'), { code: 'ERR_MODULE_NOT_FOUND' });
+        fs.writeFileSync('/dynamic-json-attrs.json', '{"file":true}');
+        const dynamicModule = await import('data:text/javascript,' + encodeURIComponent([
+            'let optionsCount = 0;',
+            'const options = () => { optionsCount++; return { with: { type: "json" } }; };',
+            'const jsonPath = "/dynamic-json-attrs.json";',
+            'const fileJson = await import(jsonPath, options());',
+            'const dataJson = await import("data:application/json,4", options());',
+            'export default { file: fileJson.default.file, data: dataJson.default, optionsCount };',
+        ].join('\n')));
+        assert.deepStrictEqual(dynamicModule.default, { file: true, data: 4, optionsCount: 2 });
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent(
+                'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',
+            )),
+            { name: 'SyntaxError', message: /Unterminated string in JSON at position 3/ },
+        );
+        fs.writeFileSync('/cjs-data-url-import-attributes.cjs', [
+            'const assert = require("node:assert");',
+            'module.exports = async function () {',
+            '  const literal = await import("data:application/json;foo=\\"test,\\"this\\"", { with: { type: "json" } });',
+            '  if (literal.default !== "this") throw new Error("literal data URL import failed");',
+            '  const unicodeLiteral = await import("data:application/json,%7B%22snowman%22%3A%22\\u2603%22%7D", { with: { type: "json" } });',
+            '  if (unicodeLiteral.default.snowman !== "☃") throw new Error("unicode literal data URL import failed");',
+            '  const escaped = await import("data:application/json,%7B%22snowman%22%3A%22%E2%98%83%22%7D", { with: { type: "json" } });',
+            '  if (escaped.default.snowman !== "☃") throw new Error("escaped literal data URL import failed");',
+            '  const variableSpecifier = `data:application/json;foo=${encodeURIComponent("test,")},0`;',
+            '  const variable = await import(variableSpecifier, { with: { type: "json" } });',
+            '  if (variable.default !== 0) throw new Error("variable data URL import failed");',
+            '  await assert.rejects(import(variableSpecifier), { code: "ERR_IMPORT_ATTRIBUTE_MISSING" });',
+            '  const urls = [variableSpecifier, "data:application/json,1"];',
+            '  let index = 0;',
+            '  let optionsCount = 0;',
+            '  const options = () => { optionsCount++; return { with: { type: "json" } }; };',
+            '  const sideEffected = await import(urls[index++], { with: { type: "json" } });',
+            '  if (index !== 1 || sideEffected.default !== 0) throw new Error("specifier evaluated more than once");',
+            '  const sideEffectedOptions = await import(urls[index++], options());',
+            '  if (index !== 2 || optionsCount !== 1 || sideEffectedOptions.default !== 1) throw new Error("options evaluated more than once");',
+            '  const plainUrls = ["data:text/javascript,export default 6", "data:text/javascript,export default 7"];',
+            '  let plainIndex = 0;',
+            '  const plain = await import(plainUrls[plainIndex++]);',
+            '  if (plainIndex !== 1 || plain.default !== 6) throw new Error("plain import specifier evaluated more than once");',
+            '  const obj = { "import": function(value) { return ["method", value]; } };',
+            '  const methodResult = obj.import("not-a-module", { with: { type: "json" } });',
+            '  if (methodResult[0] !== "method" || methodResult[1] !== "not-a-module") throw new Error("property import call was rewritten");',
+            '  const regex = /import\\("not-a-module", \\{ with: \\{ type: "json" \\} \\}\\)/;',
+            '  if (!regex.test(\'import("not-a-module", { with: { type: "json" } })\')) throw new Error("regex literal changed");',
+            '};',
+        ].join('\n'));
+        await (await import('/cjs-data-url-import-attributes.cjs')).default();
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testSyncBuiltinEsmExports = async () => {
     try {
         const module = await import('node:module');

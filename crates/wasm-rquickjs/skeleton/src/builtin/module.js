@@ -1274,6 +1274,41 @@ function _iaSkipTpl(s, i) {
     return i;
 }
 
+function _iaLooksRegexStart(s, i) {
+    let j = i - 1;
+    while (j >= 0) {
+        const c = s.charCodeAt(j);
+        if (c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D) { j--; continue; }
+        return c === 0x28 || c === 0x5B || c === 0x7B || c === 0x2C || c === 0x3D ||
+            c === 0x3A || c === 0x3B || c === 0x21 || c === 0x3F || c === 0x26 ||
+            c === 0x7C || c === 0x2B || c === 0x2D || c === 0x2A || c === 0x2F ||
+            c === 0x25 || c === 0x5E || c === 0x7E;
+    }
+    return true;
+}
+
+function _iaSkipRegex(s, i) {
+    i++;
+    let inClass = false;
+    while (i < s.length) {
+        const c = s.charCodeAt(i);
+        if (c === 0x5C) { i += 2; }
+        else if (c === 0x5B) { inClass = true; i++; }
+        else if (c === 0x5D) { inClass = false; i++; }
+        else if (c === 0x2F && !inClass) {
+            i++;
+            while (i < s.length) {
+                const f = s.charCodeAt(i);
+                if (!(f >= 65 && f <= 90) && !(f >= 97 && f <= 122)) break;
+                i++;
+            }
+            return i;
+        } else if (c === 0x0A || c === 0x0D) { return i; }
+        else { i++; }
+    }
+    return i;
+}
+
 function stripImportAttributes(source) {
     const len = source.length;
     const out = [];
@@ -1290,9 +1325,11 @@ function stripImportAttributes(source) {
             const nc = source.charCodeAt(i + 1);
             if (nc === 0x2F) { const s = i; while (i < len && source.charCodeAt(i) !== 0x0A) i++; out.push(source.substring(s, i)); continue; }
             if (nc === 0x2A) { const s = i; i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; out.push(source.substring(s, i)); continue; }
+            if (_iaLooksRegexStart(source, i)) { const s = i; i = _iaSkipRegex(source, i); out.push(source.substring(s, i)); continue; }
         }
         if (ch === 0x69 && i + 7 <= len && source.substring(i, i + 7) === 'import(' &&
-            (i === 0 || !((ch = source.charCodeAt(i - 1)) >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 || ch === 95 || ch === 36))) {
+            (i === 0 || ((ch = source.charCodeAt(i - 1)) !== 46 && ch !== 35 &&
+                !(ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 || ch === 95 || ch === 36)))) {
             i += 7;
             let depth = 1, commaPos = -1;
             const argStart = i;
@@ -1310,18 +1347,14 @@ function stripImportAttributes(source) {
             if (commaPos > -1) {
                 const firstArg = source.substring(argStart, commaPos);
                 const secondArg = source.substring(commaPos + 1, i - 1);
-                out.push('(globalThis.__wasm_rquickjs_validate_import_attrs(');
+                out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare(__wasm_rquickjs_specifier,__wasm_rquickjs_options)))(');
                 out.push(firstArg);
                 out.push(',');
                 out.push(secondArg);
-                out.push(') || import(');
-                out.push(firstArg);
                 out.push('))');
             } else {
                 const spec = source.substring(argStart, i - 1);
-                out.push('(globalThis.__wasm_rquickjs_validate_import_attrs(');
-                out.push(spec);
-                out.push(') || import(');
+                out.push('((async(__wasm_rquickjs_specifier)=>import(globalThis.__wasm_rquickjs_import_attr_prepare(__wasm_rquickjs_specifier)))(');
                 out.push(spec);
                 out.push('))');
             }
@@ -1332,7 +1365,6 @@ function stripImportAttributes(source) {
     }
     return out.join('');
 }
-
 function hasExecArgvFlag(flag) {
     const processObject = globalThis.process;
     if (!processObject || !Array.isArray(processObject.execArgv)) {
