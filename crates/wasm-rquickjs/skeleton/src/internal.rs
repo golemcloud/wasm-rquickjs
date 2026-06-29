@@ -2938,19 +2938,7 @@ impl NodeModulesResolver {
         std::path::PathBuf::from(format!("{}{}", path.to_string_lossy(), extension))
     }
 
-    fn cjs_analysis_main_candidates(target_path: &std::path::Path) -> Vec<std::path::PathBuf> {
-        vec![
-            target_path.to_path_buf(),
-            Self::with_appended_extension(target_path, ".js"),
-            Self::with_appended_extension(target_path, ".json"),
-            Self::with_appended_extension(target_path, ".node"),
-            target_path.join("index.js"),
-            target_path.join("index.json"),
-            target_path.join("index.node"),
-        ]
-    }
-
-    fn cjs_analysis_subpath_candidates(target_path: &std::path::Path) -> Vec<std::path::PathBuf> {
+    fn cjs_analysis_file_or_directory_candidates(target_path: &std::path::Path) -> Vec<std::path::PathBuf> {
         vec![
             target_path.to_path_buf(),
             Self::with_appended_extension(target_path, ".js"),
@@ -2964,12 +2952,12 @@ impl NodeModulesResolver {
 
     fn resolve_cjs_analysis_main(package_dir: &std::path::Path, target: &str) -> Option<String> {
         let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        Self::first_existing_normalized(Self::cjs_analysis_main_candidates(&target_path))
+        Self::first_existing_normalized(Self::cjs_analysis_file_or_directory_candidates(&target_path))
     }
 
     fn resolve_cjs_analysis_subpath(package_dir: &std::path::Path, target: &str) -> Option<String> {
         let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        Self::first_existing_normalized(Self::cjs_analysis_subpath_candidates(&target_path))
+        Self::first_existing_normalized(Self::cjs_analysis_file_or_directory_candidates(&target_path))
     }
 
     fn resolve_cjs_analysis_package_root_file(package_dir: &std::path::Path) -> Option<String> {
