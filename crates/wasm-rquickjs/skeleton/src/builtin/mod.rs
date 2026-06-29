@@ -572,9 +572,7 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
 };"#;
 
 const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
-globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options) {
-  var value = String(specifier);
-  var attrs = null;
+globalThis.__wasm_rquickjs_import_attr_read_options = function(options) {
   var typeValue;
   var unsupportedKey;
 
@@ -587,7 +585,7 @@ globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options) {
       if (w === null || typeof w !== 'object') {
         throw new TypeError("The 'with' option must be an object");
       }
-      attrs = w;
+      var attrs = w;
       var keys = Object.keys(attrs);
       for (var k = 0; k < keys.length; k++) {
         if (keys[k] === 'type') {
@@ -600,6 +598,22 @@ globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options) {
         }
       }
     }
+  }
+  return { typeValue: typeValue, unsupportedKey: unsupportedKey };
+};
+
+globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, parsedOptions, asyncSemanticErrors) {
+  value = String(value);
+  parsedOptions = parsedOptions || {};
+  var typeValue = parsedOptions.typeValue;
+  var unsupportedKey = parsedOptions.unsupportedKey;
+
+  function semanticError(error) {
+    if (!asyncSemanticErrors) throw error;
+    return 'data:text/javascript,' + encodeURIComponent(
+      'await Promise.reject(Object.assign(new TypeError(' +
+      JSON.stringify(error.message) + '), { code: ' + JSON.stringify(error.code) + ' }));'
+    );
   }
 
   var format = null;
@@ -618,38 +632,38 @@ globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options) {
     format = 'module';
   }
 
+  if (unsupportedKey !== undefined) {
+    return semanticError(Object.assign(
+      new TypeError('Import attribute "' + unsupportedKey + '" is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
+  }
+
   if (typeValue !== undefined) {
     if (typeValue === 'json') {
       if (format === 'module') {
-        throw Object.assign(
+        return semanticError(Object.assign(
           new TypeError('Cannot use import attributes to change the type of a JavaScript module'),
           { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' }
-        );
+        ));
       }
     } else if (typeValue === 'css' && format === 'css') {
       // Let the loader report unsupported CSS modules as an unknown format.
     } else {
-      throw Object.assign(
+      return semanticError(Object.assign(
         new TypeError('Import attribute type "' + typeValue + '" is not supported'),
         { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-      );
+      ));
     }
   }
 
   if (format === 'json') {
     if (typeValue !== 'json') {
-      throw Object.assign(
+      return semanticError(Object.assign(
         new TypeError('Module "' + value + '" needs an import attribute of "type: json"'),
         { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' }
-      );
+      ));
     }
-  }
-
-  if (unsupportedKey !== undefined) {
-    throw Object.assign(
-      new TypeError('Import attribute "' + unsupportedKey + '" is not supported'),
-      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-    );
   }
 
   if (typeValue !== 'json') return value;
@@ -657,5 +671,11 @@ globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options) {
   return 'data:text/javascript,' + encodeURIComponent(
     'import value from ' + JSON.stringify(value) + ' with { type: "json" }; export default value;'
   );
+};
+
+globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, asyncSemanticErrors) {
+  var value = String(specifier);
+  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
+  return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 };
 "#;

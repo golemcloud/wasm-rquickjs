@@ -131,6 +131,13 @@ function applyTestFlagsToProcess(testPath) {
     globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromFlags(flags);
 }
 
+function withSuppressedModuleRequireDiagnostics(fn) {
+    if (typeof globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics === 'function') {
+        return globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics(fn);
+    }
+    return fn();
+}
+
 export const runTest = async (testPath) => {
     var restorePromise = null;
     var restoreArgv = null;
@@ -175,8 +182,10 @@ export const runTest = async (testPath) => {
         // Reset mustCall tracking for this test
         var commonMod;
         try {
-            commonMod = require('node:module')
-                .createRequire('/home/node/test/common/index.js')('/home/node/test/common/index.js');
+            commonMod = withSuppressedModuleRequireDiagnostics(function() {
+                return require('node:module')
+                    .createRequire('/home/node/test/common/index.js')('/home/node/test/common/index.js');
+            });
         } catch(e) {}
         if (commonMod && typeof commonMod._resetMustCalls === 'function') {
             commonMod._resetMustCalls();
@@ -194,7 +203,9 @@ export const runTest = async (testPath) => {
             testRequire(testPath);
         }
         // Await any pending async tests from node:test
-        var testModule = require('node:test');
+        var testModule = withSuppressedModuleRequireDiagnostics(function() {
+            return require('node:test');
+        });
         if (testModule && typeof testModule._awaitPendingTests === 'function') {
             await testModule._awaitPendingTests();
         }
@@ -211,8 +222,10 @@ export const runTest = async (testPath) => {
         // Verify mustCall expectations first
         var common;
         try {
-            common = require('node:module')
-                .createRequire('/home/node/test/common/index.js')('/home/node/test/common/index.js');
+            common = withSuppressedModuleRequireDiagnostics(function() {
+                return require('node:module')
+                    .createRequire('/home/node/test/common/index.js')('/home/node/test/common/index.js');
+            });
         } catch(e) {}
         var mustCallErrors = [];
         if (common && typeof common._checkMustCalls === 'function') {

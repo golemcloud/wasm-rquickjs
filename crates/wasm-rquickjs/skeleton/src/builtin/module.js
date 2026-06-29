@@ -113,6 +113,8 @@ const asyncHooksCjs = cjsExport(async_hooks);
 const clusterCjs = cjsExport(cluster);
 const dgramCjs = cjsExport(dgram);
 const diagnosticsChannelCjs = cjsExport(diagnostics_channel);
+const moduleRequireTrace = diagnostics_channel.tracingChannel('module.require');
+const moduleImportTrace = diagnostics_channel.tracingChannel('module.import');
 const dnsCjs = cjsExport(dns);
 const dnsPromisesCjs = cjsExport(dnsPromises);
 const domainCjs = cjsExport(domain);
@@ -413,6 +415,40 @@ globalThis.__wasm_rquickjs_mock_canonical_key = _mockCanonicalKey;
 globalThis.__wasm_rquickjs_register_module_mock = _registerModuleMock;
 globalThis.__wasm_rquickjs_resolve_require_mock = _resolveRequireMock;
 globalThis.__wasm_rquickjs_materialize_cjs_mock = _materializeCjsMock;
+
+function traceModuleRequire(id, parentFilename, fn) {
+    if (globalThis.__wasm_rquickjs_suppress_module_require_diagnostics) {
+        return fn();
+    }
+    if (!moduleRequireTrace.hasSubscribers) {
+        return fn();
+    }
+    return moduleRequireTrace.traceSync(fn, {
+        id,
+        parentFilename,
+    });
+}
+
+function traceModuleImport(url, parentFilename, fn) {
+    return moduleImportTrace.tracePromise(fn, {
+        url,
+        parentURL: nodeUrl.pathToFileURL(parentFilename).href,
+    });
+}
+globalThis.__wasm_rquickjs_trace_module_import = traceModuleImport;
+globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics = function(fn) {
+    const previous = globalThis.__wasm_rquickjs_suppress_module_require_diagnostics;
+    globalThis.__wasm_rquickjs_suppress_module_require_diagnostics = true;
+    try {
+        return fn();
+    } finally {
+        if (previous === undefined) {
+            delete globalThis.__wasm_rquickjs_suppress_module_require_diagnostics;
+        } else {
+            globalThis.__wasm_rquickjs_suppress_module_require_diagnostics = previous;
+        }
+    }
+};
 
 // Lookup mock entry by ID (for ESM source generation)
 globalThis.__wasm_rquickjs_get_mock_module_entry = function(mockId) {
@@ -1309,9 +1345,10 @@ function _iaSkipRegex(s, i) {
     return i;
 }
 
-function stripImportAttributes(source) {
+function stripImportAttributes(source, filename) {
     const len = source.length;
     const out = [];
+    const filenameLiteral = JSON.stringify(filename);
     let i = 0;
     while (i < len) {
         let ch = source.charCodeAt(i);
@@ -1347,14 +1384,18 @@ function stripImportAttributes(source) {
             if (commaPos > -1) {
                 const firstArg = source.substring(argStart, commaPos);
                 const secondArg = source.substring(commaPos + 1, i - 1);
-                out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare(__wasm_rquickjs_specifier,__wasm_rquickjs_options)))(');
+                out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);const __wasm_rquickjs_attrs=globalThis.__wasm_rquickjs_import_attr_read_options(__wasm_rquickjs_options);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                out.push(filenameLiteral);
+                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_from_options(__wasm_rquickjs_url,__wasm_rquickjs_attrs,true)));})(');
                 out.push(firstArg);
                 out.push(',');
                 out.push(secondArg);
                 out.push('))');
             } else {
                 const spec = source.substring(argStart, i - 1);
-                out.push('((async(__wasm_rquickjs_specifier)=>import(globalThis.__wasm_rquickjs_import_attr_prepare(__wasm_rquickjs_specifier)))(');
+                out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);const __wasm_rquickjs_attrs=globalThis.__wasm_rquickjs_import_attr_read_options(undefined);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                out.push(filenameLiteral);
+                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_from_options(__wasm_rquickjs_url,__wasm_rquickjs_attrs,true)));})(');
                 out.push(spec);
                 out.push('))');
             }
@@ -2287,7 +2328,7 @@ function compileCjs(filename, source) {
 
     source = transpileTypeScriptModule(filename, source);
     source = stripV8OptimizationIntrinsics(source);
-    source = stripImportAttributes(source);
+    source = stripImportAttributes(source, filename);
 
     const cjsLineOffsets = getCjsLineOffsetRegistry();
     cjsLineOffsets[filename] = 2;
@@ -2727,6 +2768,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
             throw argErr;
         }
 
+        return traceModuleRequire(id, parentFilename, () => {
         // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
         if ((id === 'zlib' || id === 'node:zlib') && zlib._captureKMaxLength) {
             zlib._captureKMaxLength();
@@ -2806,6 +2848,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         const err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
         throw err;
+        });
     }
 
     localRequire.cache = moduleCache;

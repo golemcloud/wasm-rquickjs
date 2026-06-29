@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3151/4404 (71.5%)
+**Primary compatibility (CI-enforced):** 3155/4404 (71.6%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3151 | 71.5% | 55.1% | 46.0% |
-| 🧩 known gap | 1253 | 28.5% | 21.9% | 18.3% |
+| ✅ passing (runnable) | 3155 | 71.6% | 55.1% | 46.1% |
+| 🧩 known gap | 1249 | 28.4% | 21.8% | 18.3% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3151/5721 (55.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3155/5721 (55.1%)**.
 
 ## Inventory by Module
 
@@ -39,7 +39,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
 | crypto | 239 | 204 | 11 | 8 | 0 | 0 | 16 | 94.9% | 91.5% |
 | dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
-| diagnostics_channel | 33 | 18 | 12 | 1 | 2 | 0 | 0 | 60.0% | 54.5% |
+| diagnostics_channel | 33 | 22 | 8 | 1 | 2 | 0 | 0 | 73.3% | 66.7% |
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
 | domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1253)
+### known gap (1249)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -780,8 +780,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | crypto.X509Certificate.checkHost is not available | 2 | `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`, `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist` |
 | dgram send() callback does not report bytes correctly for multi-buffer payloads | 2 | `parallel/test-dgram-send-callback-multi-buffer.js`, `parallel/test-dgram-send-multi-buffer-copy.js` |
 | dgram socket buffer size APIs do not match Node error semantics | 2 | `parallel/test-dgram-socket-buffer-size.js#block_00_block_00`, `parallel/test-dgram-socket-buffer-size.js#block_01_block_01` |
-| diagnostics_channel tracing for module.import events is incomplete | 2 | `parallel/test-diagnostics-channel-module-import-error.js`, `parallel/test-diagnostics-channel-module-import.js` |
-| diagnostics_channel tracing for module.require events is incomplete | 2 | `parallel/test-diagnostics-channel-module-require-error.js`, `parallel/test-diagnostics-channel-module-require.js` |
 | dns.resolveAny/Resolver.resolveAny protocol handling is not implemented | 2 | `parallel/test-dns-resolveany-bad-ancount.js`, `parallel/test-dns-resolveany.js` |
 | domain/setUncaughtExceptionCaptureCallback interaction is incomplete | 2 | `parallel/test-domain-load-after-set-uncaught-exception-capture.js`, `parallel/test-domain-set-uncaught-exception-capture-after-load.js` |
 | execPath child emulation does not yet support trace-events CLI arg parsing used by -e runs | 2 | `parallel/test-trace-events-fs-async.js`, `parallel/test-trace-events-fs-sync.js` |

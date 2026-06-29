@@ -126,6 +126,72 @@ async fn diagnostics_channel_api(
             r["tracingChannelCtorError"].as_bool().unwrap(),
             "tracingChannelCtorError"
         );
+
+        // Module require/import tracing
+        assert!(
+            r["moduleRequireResult"].as_bool().unwrap(),
+            "moduleRequireResult"
+        );
+        assert!(
+            r["moduleRequireTrace"].as_bool().unwrap(),
+            "moduleRequireTrace"
+        );
+        assert!(
+            r["moduleRequireSameObject"].as_bool().unwrap(),
+            "moduleRequireSameObject"
+        );
+        assert!(
+            r["moduleImportResult"].as_bool().unwrap(),
+            "moduleImportResult"
+        );
+        assert!(
+            r["moduleImportTrace"].as_bool().unwrap(),
+            "moduleImportTrace"
+        );
+        assert!(
+            r["moduleImportEndSameObject"].as_bool().unwrap(),
+            "moduleImportEndSameObject"
+        );
+        assert!(
+            r["moduleImportAsyncStartSameObject"].as_bool().unwrap(),
+            "moduleImportAsyncStartSameObject"
+        );
+        assert!(
+            r["moduleImportAsyncEndSameObject"].as_bool().unwrap(),
+            "moduleImportAsyncEndSameObject"
+        );
+        assert!(
+            r["moduleRequireNestedResult"].as_bool().unwrap(),
+            "moduleRequireNestedResult"
+        );
+        assert!(
+            r["moduleRequireNestedTrace"].as_bool().unwrap(),
+            "moduleRequireNestedTrace"
+        );
+        assert!(
+            r["moduleImportCoerceOnce"].as_bool().unwrap(),
+            "moduleImportCoerceOnce"
+        );
+        assert!(
+            r["moduleImportShadowParentResult"].as_bool().unwrap(),
+            "moduleImportShadowParentResult"
+        );
+        assert!(
+            r["moduleImportShadowParent"].as_bool().unwrap(),
+            "moduleImportShadowParent"
+        );
+        assert!(
+            r["moduleImportInvalidOptionsTrace"].as_bool().unwrap(),
+            "moduleImportInvalidOptionsTrace"
+        );
+        assert!(
+            r["moduleImportUnsupportedAttrTrace"].as_bool().unwrap(),
+            "moduleImportUnsupportedAttrTrace"
+        );
+        assert!(
+            r["moduleImportMixedAttrPriority"].as_bool().unwrap(),
+            "moduleImportMixedAttrPriority"
+        );
     } else {
         anyhow::bail!("Expected string result from test function");
     }
