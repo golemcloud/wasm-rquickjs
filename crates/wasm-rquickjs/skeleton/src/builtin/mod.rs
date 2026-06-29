@@ -626,6 +626,8 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
       else if (meta === 'text/javascript' || meta === 'application/javascript') format = 'module';
       else if (meta === 'text/css') format = 'css';
     }
+  } else if (value.startsWith('node:')) {
+    format = 'module';
   } else if (value.endsWith('.json')) {
     format = 'json';
   } else if (value.endsWith('.js') || value.endsWith('.mjs') || value.endsWith('.cjs')) {
@@ -667,10 +669,7 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
   }
 
   if (typeValue !== 'json') return value;
-  if (value.startsWith('data:')) value = value.replace(/"/g, '%22');
-  return 'data:text/javascript,' + encodeURIComponent(
-    'import value from ' + JSON.stringify(value) + ' with { type: "json" }; export default value;'
-  );
+  return globalThis.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
 };
 
 globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, asyncSemanticErrors) {

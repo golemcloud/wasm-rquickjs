@@ -519,11 +519,47 @@ export const testEsmDataUrlImportAttributes = async () => {
             JSON.stringify({ exports: './data.json' }),
         );
         fs.writeFileSync('/json-pkg-attrs-app/node_modules/json-pkg/data.json', '{"pkg":true}');
+        fs.mkdirSync('/json-pkg-attrs-app/node_modules/js-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/node_modules/js-pkg/package.json',
+            JSON.stringify({ exports: './index.mjs' }),
+        );
+        fs.writeFileSync('/json-pkg-attrs-app/node_modules/js-pkg/index.mjs', 'export default { js: true };');
         fs.writeFileSync(
             '/json-pkg-attrs-app/main.mjs',
             'import value from "json-pkg" with { type: "json" }; export default value;',
         );
         assert.deepStrictEqual((await import('/json-pkg-attrs-app/main.mjs')).default, { pkg: true });
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/dynamic.mjs',
+            'export default (await import("json-pkg", { with: { type: "json" } })).default;',
+        );
+        assert.deepStrictEqual((await import('/json-pkg-attrs-app/dynamic.mjs')).default, { pkg: true });
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/dynamic-js.mjs',
+            'await import("js-pkg", { with: { type: "json" } });',
+        );
+        await assert.rejects(
+            import('/json-pkg-attrs-app/dynamic-js.mjs'),
+            { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' },
+        );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'await assert.rejects(',
+            '  import("node:fs", { with: { type: "json" } }),',
+            '  { code: "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE" },',
+            ');',
+            'await assert.rejects(',
+            '  import("node:fs.json", { with: { type: "json" } }),',
+            '  { code: "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE" },',
+            ');',
+        ].join('\n')));
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent(
+                'import "node:fs" with { type: "json" };',
+            )),
+            { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' },
+        );
         fs.writeFileSync(
             '/json-pkg-attrs-app/query.mjs',
             'await import("json-pkg?__wasm_rquickjs_import_type=json-1");',

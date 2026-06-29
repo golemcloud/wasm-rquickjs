@@ -1012,6 +1012,8 @@ fn determine_data_url_format(specifier: &str) -> Option<&'static str> {
                 _ => None,
             };
         }
+    } else if specifier.starts_with("node:") {
+        return Some("module");
     } else if module_filesystem_path(specifier).ends_with(".json") {
         return Some("json");
     } else if module_filesystem_path(specifier).ends_with(".js")
@@ -1102,6 +1104,15 @@ fn import_attr_error_expression(code: &str, message: &str) -> String {
     format!(
         "Promise.reject(Object.assign(new TypeError('{escaped_message}'), {{code: '{escaped_code}'}}))"
     )
+}
+
+fn throw_import_attr_type_incompatible<'js, T>(ctx: &Ctx<'js>) -> rquickjs::Result<T> {
+    let globals = ctx.globals();
+    let type_error_ctor: Function = globals.get("TypeError")?;
+    let error_obj: Object =
+        type_error_ctor.call(("Cannot use import attributes to change the type of a JavaScript module",))?;
+    error_obj.set("code", "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE")?;
+    Err(ctx.throw(error_obj.into_value()))
 }
 
 fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool) -> Option<String> {
@@ -5759,6 +5770,9 @@ impl Loader for CjsCompatLoader {
         if !fs_path.ends_with(".js") && !is_cjs_ext {
             return Err(Error::new_loading(path));
         }
+        if import_attr_type_from_path(path).as_deref() == Some("json") {
+            return throw_import_attr_type_incompatible(ctx);
+        }
 
         let mut source = match std::fs::read_to_string(fs_path) {
             Ok(s) => s,
@@ -6282,7 +6296,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         props.join(",")
     );
     prologue.push_str(
-        r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){Object.defineProperty(globalThis,"__wasm_rquickjs_import_attr_specifier",{value:(s,t)=>{let v=String(s);let f=null;if(v.startsWith("data:")){const r=v.slice(5);const c=r.indexOf(",");const m=(c<0?r:r.slice(0,c)).split(";")[0].trim();if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else{const b=v.split(/[?#]/,1)[0];if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";}function er(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return er("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return er("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return er("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){if(v.startsWith("data:"))v=v.replace(/\"/g,"%22");return"data:text/javascript,"+encodeURIComponent("import value from "+JSON.stringify(v)+" with { type: \"json\" }; export default value;");}return v;},writable:true,configurable:true});}"##,
+        r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){Object.defineProperty(globalThis,"__wasm_rquickjs_import_attr_specifier",{value:(s,t)=>{let v=String(s);let f=null;if(v.startsWith("data:")){const r=v.slice(5);const c=r.indexOf(",");const m=(c<0?r:r.slice(0,c)).split(";")[0].trim();if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else if(v.startsWith("node:"))f="module";else{const b=v.split(/[?#]/,1)[0];if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";}function er(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return er("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return er("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return er("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){if(v.startsWith("data:"))v=v.replace(/\"/g,"%22");return"data:text/javascript,"+encodeURIComponent("import value from "+JSON.stringify(v)+" with { type: \"json\" }; export default value;");}return v;},writable:true,configurable:true});}"##,
     );
     if let Some(ref filename) = init.filename {
         prologue.push_str(&format!(
@@ -6332,6 +6346,9 @@ impl Loader for ImportMetaLoader {
             ),))?;
             error_obj.set("code", "ERR_UNKNOWN_FILE_EXTENSION")?;
             return Err(ctx.throw(error_obj.into_value()));
+        }
+        if import_attr_type_from_path(path).as_deref() == Some("json") {
+            return throw_import_attr_type_incompatible(ctx);
         }
 
         let mut source = match std::fs::read_to_string(fs_path) {
@@ -6584,6 +6601,19 @@ impl JsState {
 
             global.set("__wasm_rquickjs_mock_seq", 0i64)
                 .expect("Failed to initialize mock sequence counter");
+
+            global.set(
+                "__wasm_rquickjs_register_import_attr_rewrite",
+                Function::new(ctx.clone(), |specifier: String, import_type: String| {
+                    if import_type == "json" {
+                        append_import_type_query(&specifier, &import_type)
+                    } else {
+                        specifier
+                    }
+                })
+                .expect("Failed to create import attribute rewrite registrar"),
+            )
+            .expect("Failed to initialize import attribute rewrite registrar");
         })
         .await;
 
