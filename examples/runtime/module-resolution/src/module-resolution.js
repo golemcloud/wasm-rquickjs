@@ -668,8 +668,15 @@ export const testSyncBuiltinEsmExports = async () => {
 export const testEsmResolutionErrorUrls = async () => {
     try {
         fs.mkdirSync('/esm-error-url-app/dir', { recursive: true });
+        fs.mkdirSync('/esm-error-url-app/package-dir', { recursive: true });
+        fs.mkdirSync('/esm-error-url-app/relative-package-dir', { recursive: true });
         fs.mkdirSync('/esm-error-url-app/sub', { recursive: true });
+        fs.writeFileSync('/esm-error-url-app/package-dir/package.json', JSON.stringify({ main: 'main-entry' }));
+        fs.writeFileSync('/esm-error-url-app/package-dir/main-entry.js', 'export default 1;');
+        fs.writeFileSync('/esm-error-url-app/relative-package-dir/package.json', JSON.stringify({ main: 'main-entry' }));
+        fs.writeFileSync('/esm-error-url-app/relative-package-dir/main-entry.js', 'export default 1;');
         fs.writeFileSync('/esm-error-url-app/entry.mjs', "await import('./miss%2Eing');\n");
+        fs.writeFileSync('/esm-error-url-app/relative-package-entry.mjs', "await import('./relative-package-dir');\n");
         fs.writeFileSync('/esm-error-url-app/entry-dot.mjs', "await import('./sub/%2e%2e/missing');\n");
         const originalError = globalThis.Error;
         const originalTypeError = globalThis.TypeError;
@@ -717,6 +724,7 @@ export const testEsmResolutionErrorUrls = async () => {
                     import(specifier),
                     (error) => {
                         assert.strictEqual(error.code, code);
+                        assert(!Object.prototype.hasOwnProperty.call(error, 'name'));
                         if (expectedUrl === null) {
                             assert(!Object.prototype.hasOwnProperty.call(error, 'url'));
                             assert(error instanceof originalError || error.name === 'TypeError');
@@ -732,6 +740,7 @@ export const testEsmResolutionErrorUrls = async () => {
                     import(`data:text/javascript,import${encodeURIComponent(JSON.stringify(dataSpecifier))}`),
                     (error) => {
                         assert.strictEqual(error.code, code);
+                        assert(!Object.prototype.hasOwnProperty.call(error, 'name'));
                         if (expectedUrl === null) {
                             assert(!Object.prototype.hasOwnProperty.call(error, 'url'));
                             assert(error instanceof originalError || error.name === 'TypeError');
@@ -750,6 +759,12 @@ export const testEsmResolutionErrorUrls = async () => {
             delete Error.prototype.url;
             delete Object.prototype.url;
         }
+        await assert.rejects(import('/esm-error-url-app/dir'), /ERR_UNSUPPORTED_DIR_IMPORT/);
+        await assert.rejects(import('file:///esm-error-url-app/package-dir'), /Did you mean/);
+        await assert.rejects(
+            import('/esm-error-url-app/relative-package-entry.mjs'),
+            (error) => error.code === 'ERR_UNSUPPORTED_DIR_IMPORT' && !String(error).includes('Did you mean'),
+        );
         return true;
     } catch (error) {
         console.error(error);

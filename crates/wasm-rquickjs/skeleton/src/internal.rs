@@ -1967,7 +1967,7 @@ impl Resolver for FileUrlResolver {
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
                     "ERR_UNSUPPORTED_DIR_IMPORT",
-                    format!("Directory import '{}' is not supported resolving ES modules", name),
+                    NodeFileResolver::directory_import_message(&normalized, base, true),
                     url,
                 );
             }
@@ -2324,9 +2324,42 @@ impl NodeFileResolver {
         url: String,
     ) -> rquickjs::Result<T> {
         let error_obj = Exception::from_message(ctx.clone(), &message)?.into_object();
+        let error_proto = error_obj.get_prototype();
+        let coded_proto = Object::new(ctx.clone())?;
+        coded_proto.set_prototype(error_proto.as_ref())?;
+        coded_proto.prop(
+            "name",
+            Property::from(format!("Error [{code}]"))
+                .writable()
+                .configurable(),
+        )?;
+        error_obj.set_prototype(Some(&coded_proto))?;
         Self::define_error_property(&error_obj, "code", code)?;
         Self::define_error_property(&error_obj, "url", &url)?;
         Err(ctx.throw(error_obj.into_value()))
+    }
+
+    fn directory_import_message(normalized_dir: &str, importer: &str, include_suggestion: bool) -> String {
+        let mut message = format!(
+            "Directory import '{}' is not supported resolving ES modules imported from {}",
+            normalized_dir,
+            Self::format_importer(importer)
+        );
+        if include_suggestion {
+            let package_json_path = std::path::Path::new(normalized_dir).join("package.json");
+            if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional(&package_json_path)
+                && let Some(main) = package.main.as_deref()
+                && let Some((suggestion, _)) =
+                    NodeModulesResolver::resolve_package_legacy_main(std::path::Path::new(normalized_dir), main)
+            {
+                message.push_str(&format!("\nDid you mean to import \"{suggestion}\"?"));
+            }
+        }
+        message
+    }
+
+    fn format_importer(importer: &str) -> String {
+        FileUrlResolver::file_url_to_path(importer).unwrap_or_else(|| importer.to_string())
     }
 
     fn define_error_property<'js>(
@@ -2406,7 +2439,11 @@ impl Resolver for NodeFileResolver {
             return Self::throw_module_resolution_error(
                 ctx,
                 "ERR_UNSUPPORTED_DIR_IMPORT",
-                format!("Directory import '{}' is not supported resolving ES modules", name),
+                Self::directory_import_message(
+                    &normalized,
+                    base,
+                    name_path.starts_with('/'),
+                ),
                 url,
             );
         }
