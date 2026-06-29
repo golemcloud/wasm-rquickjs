@@ -4670,19 +4670,14 @@ enum ObjectLiteralValueExport {
 }
 
 fn named_export_object_literal_value(source: &str, pos: usize, object_end: usize) -> Option<ObjectLiteralValueExport> {
-    let Some((name, mut next)) = read_ident(source, pos) else {
+    let Some((_, mut next)) = read_ident(source, pos) else {
         return None;
     };
-    if matches!(name.as_str(), "true" | "false" | "null" | "undefined") {
-        return None;
-    }
     next = skip_ws_comments(source, next);
     if next >= object_end || source.as_bytes()[next] == b',' {
         Some(ObjectLiteralValueExport::NamedContinue)
-    } else if source.as_bytes()[next] == b'(' {
-        Some(ObjectLiteralValueExport::NamedStop)
     } else {
-        None
+        Some(ObjectLiteralValueExport::NamedStop)
     }
 }
 
@@ -7420,17 +7415,46 @@ mod cjs_export_analyzer_tests {
 
         assert_analysis(
             r#"
-                module.exports = {
-                    identifierValue: value,
-                    callExpression: factory(),
-                    memberExpression: ns.x,
-                    booleanLiteral: true,
-                    nullLiteral: null,
-                    undefinedLiteral: undefined,
-                };
+                module.exports = { booleanLiteral: true, nullLiteral: null, undefinedLiteral: undefined };
             "#,
             true,
-            &["identifierValue", "callExpression"],
+            &["booleanLiteral", "nullLiteral", "undefinedLiteral"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = { identifierValue: value, memberExpression: ns.x, callExpression: factory() };
+            "#,
+            true,
+            &["identifierValue", "memberExpression"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = { nestedMemberExpression: ns.x.y, after: value };
+            "#,
+            true,
+            &["nestedMemberExpression"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = { bracketMemberExpression: ns["x"], after: value };
+            "#,
+            true,
+            &["bracketMemberExpression"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = { binaryExpression: value + 1, after: value };
+            "#,
+            true,
+            &["binaryExpression"],
             &[],
         );
 
