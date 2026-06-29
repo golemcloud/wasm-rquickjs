@@ -1277,77 +1277,9 @@ function stripV8OptimizationIntrinsics(source) {
         .replace(/eval\(\s*(['"])%OptimizeFunctionOnNextCall\([^'"\\\r\n]*\)\1\s*\)\s*;?/g, 'undefined;');
 }
 
-function _iaSkipStr(s, i) {
-    const q = s.charCodeAt(i);
-    i++;
-    while (i < s.length) {
-        if (s.charCodeAt(i) === 0x5C) { i += 2; }
-        else if (s.charCodeAt(i) === q) { return i + 1; }
-        else { i++; }
-    }
-    return i;
-}
-
-function _iaSkipTpl(s, i) {
-    i++;
-    while (i < s.length) {
-        let c = s.charCodeAt(i);
-        if (c === 0x5C) { i += 2; }
-        else if (c === 0x60) { return i + 1; }
-        else if (c === 0x24 && i + 1 < s.length && s.charCodeAt(i + 1) === 0x7B) {
-            i += 2;
-            let d = 1;
-            while (i < s.length && d > 0) {
-                c = s.charCodeAt(i);
-                if (c === 0x27 || c === 0x22) { i = _iaSkipStr(s, i); }
-                else if (c === 0x60) { i = _iaSkipTpl(s, i); }
-                else if (c === 0x7B || c === 0x28 || c === 0x5B) { d++; i++; }
-                else if (c === 0x7D || c === 0x29 || c === 0x5D) { d--; i++; }
-                else { i++; }
-            }
-        } else { i++; }
-    }
-    return i;
-}
-
-function _iaLooksRegexStart(s, i) {
-    let j = i - 1;
-    while (j >= 0) {
-        const c = s.charCodeAt(j);
-        if (c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D) { j--; continue; }
-        return c === 0x28 || c === 0x5B || c === 0x7B || c === 0x2C || c === 0x3D ||
-            c === 0x3A || c === 0x3B || c === 0x21 || c === 0x3F || c === 0x26 ||
-            c === 0x7C || c === 0x2B || c === 0x2D || c === 0x2A || c === 0x2F ||
-            c === 0x25 || c === 0x5E || c === 0x7E;
-    }
-    return true;
-}
-
-function _iaSkipRegex(s, i) {
-    i++;
-    let inClass = false;
-    while (i < s.length) {
-        const c = s.charCodeAt(i);
-        if (c === 0x5C) { i += 2; }
-        else if (c === 0x5B) { inClass = true; i++; }
-        else if (c === 0x5D) { inClass = false; i++; }
-        else if (c === 0x2F && !inClass) {
-            i++;
-            while (i < s.length) {
-                const f = s.charCodeAt(i);
-                if (!(f >= 65 && f <= 90) && !(f >= 97 && f <= 122)) break;
-                i++;
-            }
-            return i;
-        } else if (c === 0x0A || c === 0x0D) { return i; }
-        else { i++; }
-    }
-    return i;
-}
-
 function stripImportAttributes(source, filename) {
     const len = source.length;
-    const out = [];
+    let out = [];
     const filenameLiteral = JSON.stringify(filename);
     const baseUrlLiteral = JSON.stringify(nodeUrl.pathToFileURL(filename).href);
     function prevNonWs(pos) {
@@ -1378,8 +1310,8 @@ function stripImportAttributes(source, filename) {
         let depth = 1;
         while (pos < len) {
             const c = source.charCodeAt(pos);
-            if (c === 0x27 || c === 0x22) { pos = _iaSkipStr(source, pos); continue; }
-            if (c === 0x60) { pos = _iaSkipTpl(source, pos); continue; }
+            const skipped = skipNonCode(source, pos, true);
+            if (skipped !== null) { pos = skipped; continue; }
             if (c === 0x28) depth++;
             else if (c === 0x29 && --depth === 0) return pos + 1;
             pos++;
@@ -1420,70 +1352,148 @@ function stripImportAttributes(source, filename) {
             return false;
         }
     }
-    let i = 0;
-    while (i < len) {
-        let ch = source.charCodeAt(i);
-        if (ch === 0x27 || ch === 0x22) {
-            const s = i; i = _iaSkipStr(source, i); out.push(source.substring(s, i)); continue;
-        }
-        if (ch === 0x60) {
-            const s = i; i = _iaSkipTpl(source, i); out.push(source.substring(s, i)); continue;
-        }
-        if (ch === 0x2F && i + 1 < len) {
-            const nc = source.charCodeAt(i + 1);
-            if (nc === 0x2F) { const s = i; while (i < len && source.charCodeAt(i) !== 0x0A) i++; out.push(source.substring(s, i)); continue; }
-            if (nc === 0x2A) { const s = i; i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; out.push(source.substring(s, i)); continue; }
-            if (_iaLooksRegexStart(source, i)) { const s = i; i = _iaSkipRegex(source, i); out.push(source.substring(s, i)); continue; }
-        }
-        if (ch === 0x69 && i + 7 <= len && source.substring(i, i + 7) === 'import(' &&
-            (i === 0 || ((ch = source.charCodeAt(i - 1)) !== 46 && ch !== 35 &&
-                !(ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 || ch === 95 || ch === 36)))) {
-            if (isImportMethodDefinition(i, i + 6)) {
-                out.push(source[i]);
+    function skipWsComments(pos, end) {
+        let i = pos;
+        while (i < end) {
+            const c = source.charCodeAt(i);
+            if (c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D || c === 0x0C || c === 0x0B) {
                 i++;
                 continue;
             }
-            i += 7;
-            let depth = 1, commaPos = -1;
-            const argStart = i;
-            while (i < len && depth > 0) {
-                ch = source.charCodeAt(i);
-                if (ch === 0x27 || ch === 0x22) { i = _iaSkipStr(source, i); }
-                else if (ch === 0x60) { i = _iaSkipTpl(source, i); }
-                else if (ch === 0x2F && i + 1 < len && source.charCodeAt(i + 1) === 0x2F) { while (i < len && source.charCodeAt(i) !== 0x0A) i++; }
-                else if (ch === 0x2F && i + 1 < len && source.charCodeAt(i + 1) === 0x2A) { i += 2; while (i + 1 < len && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++; if (i + 1 < len) i += 2; }
-                else if (ch === 0x28 || ch === 0x5B || ch === 0x7B) { depth++; i++; }
-                else if (ch === 0x29 || ch === 0x5D || ch === 0x7D) { depth--; i++; }
-                else if (ch === 0x2C && depth === 1 && commaPos === -1) { commaPos = i; i++; }
-                else { i++; }
+            if (c === 0x2F && i + 1 < end && source.charCodeAt(i + 1) === 0x2F) {
+                i += 2;
+                while (i < end && source.charCodeAt(i) !== 0x0A && source.charCodeAt(i) !== 0x0D) i++;
+                continue;
             }
-            if (commaPos > -1) {
-                const firstArg = source.substring(argStart, commaPos);
-                const secondArg = source.substring(commaPos + 1, i - 1);
-                out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
-                out.push(filenameLiteral);
-                out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
-                out.push(baseUrlLiteral);
-                out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
-                out.push(firstArg);
-                out.push(',');
-                out.push(secondArg);
-                out.push('))');
-            } else {
-                const spec = source.substring(argStart, i - 1);
-                out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
-                out.push(filenameLiteral);
-                out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
-                out.push(baseUrlLiteral);
-                out.push(',__wasm_rquickjs_url,undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
-                out.push(spec);
-                out.push('))');
+            if (c === 0x2F && i + 1 < end && source.charCodeAt(i + 1) === 0x2A) {
+                i += 2;
+                while (i + 1 < end && !(source.charCodeAt(i) === 0x2A && source.charCodeAt(i + 1) === 0x2F)) i++;
+                i = Math.min(i + 2, end);
+                continue;
             }
-            continue;
+            break;
         }
-        out.push(source[i]);
-        i++;
+        return i;
     }
+    function findTemplateExpressionEnd(start, end) {
+        let i = start;
+        let depth = 1;
+        while (i < end) {
+            const skipped = skipNonCode(source, i, true);
+            if (skipped !== null) { i = skipped; continue; }
+            const c = source.charCodeAt(i);
+            if (c === 0x7B || c === 0x28 || c === 0x5B) { depth++; i++; }
+            else if (c === 0x7D || c === 0x29 || c === 0x5D) {
+                depth--;
+                if (depth === 0) return i;
+                i++;
+            } else { i++; }
+        }
+        return end;
+    }
+    function processTemplate(start, end) {
+        out.push('`');
+        let i = start + 1;
+        let rawStart = i;
+        while (i < end) {
+            const c = source.charCodeAt(i);
+            if (c === 0x5C) { i += 2; continue; }
+            if (c === 0x60) {
+                out.push(source.substring(rawStart, i + 1));
+                return i + 1;
+            }
+            if (c === 0x24 && i + 1 < end && source.charCodeAt(i + 1) === 0x7B) {
+                out.push(source.substring(rawStart, i + 2));
+                const exprEnd = findTemplateExpressionEnd(i + 2, end);
+                processRange(i + 2, exprEnd);
+                if (exprEnd < end) {
+                    out.push('}');
+                    i = exprEnd + 1;
+                } else {
+                    i = exprEnd;
+                }
+                rawStart = i;
+                continue;
+            }
+            i++;
+        }
+        out.push(source.substring(rawStart, i));
+        return i;
+    }
+    function processRange(start, end) {
+        let i = start;
+        while (i < end) {
+            let ch = source.charCodeAt(i);
+            if (ch === 0x60) {
+                i = processTemplate(i, end);
+                continue;
+            }
+            const skipped = skipNonCode(source, i, true);
+            if (skipped !== null) {
+                out.push(source.substring(i, skipped));
+                i = skipped;
+                continue;
+            }
+            if (ch === 0x69 && i + 6 <= end && source.substring(i, i + 6) === 'import' &&
+                (i === 0 || ((ch = source.charCodeAt(i - 1)) !== 46 && ch !== 35 && !isIdentifierContinueCode(ch))) &&
+                (i + 6 >= end || !isIdentifierContinueCode(source.charCodeAt(i + 6)))) {
+                const openParen = skipWsComments(i + 6, end);
+                if (openParen < end && source.charCodeAt(openParen) === 0x28) {
+                    if (isImportMethodDefinition(i, openParen)) {
+                        out.push(source[i]);
+                        i++;
+                        continue;
+                    }
+                    i = openParen + 1;
+                    let depth = 1, commaPos = -1;
+                    const argStart = i;
+                    while (i < end && depth > 0) {
+                        ch = source.charCodeAt(i);
+                        const skipped = skipNonCode(source, i, true);
+                        if (skipped !== null) { i = skipped; }
+                        else if (ch === 0x28 || ch === 0x5B || ch === 0x7B) { depth++; i++; }
+                        else if (ch === 0x29 || ch === 0x5D || ch === 0x7D) { depth--; i++; }
+                        else if (ch === 0x2C && depth === 1 && commaPos === -1) { commaPos = i; i++; }
+                        else { i++; }
+                    }
+                    if (commaPos > -1) {
+                        const firstArg = processSubrange(argStart, commaPos);
+                        const secondArg = processSubrange(commaPos + 1, i - 1);
+                        out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                        out.push(filenameLiteral);
+                        out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
+                        out.push(baseUrlLiteral);
+                        out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
+                        out.push(firstArg);
+                        out.push(',');
+                        out.push(secondArg);
+                        out.push('))');
+                    } else {
+                        const spec = processSubrange(argStart, i - 1);
+                        out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                        out.push(filenameLiteral);
+                        out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
+                        out.push(baseUrlLiteral);
+                        out.push(',__wasm_rquickjs_url,undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
+                        out.push(spec);
+                        out.push('))');
+                    }
+                    continue;
+                }
+            }
+            out.push(source[i]);
+            i++;
+        }
+    }
+    function processSubrange(start, end) {
+        const previousOut = out;
+        out = [];
+        processRange(start, end);
+        const rewritten = out.join('');
+        out = previousOut;
+        return rewritten;
+    }
+    processRange(0, len);
     return out.join('');
 }
 function hasExecArgvFlag(flag) {
@@ -2038,8 +2048,34 @@ function skipQuotedOrTemplate(source, start) {
         const code = source.charCodeAt(i);
         if (code === 0x5c) { // backslash
             i += 2;
+        } else if (quote === 0x60 && code === 0x24 && i + 1 < source.length && source.charCodeAt(i + 1) === 0x7b) {
+            i = skipTemplateExpression(source, i + 2);
         } else if (code === quote) {
             return i + 1;
+        } else {
+            i++;
+        }
+    }
+    return i;
+}
+
+function skipTemplateExpression(source, start) {
+    let i = start;
+    let depth = 1;
+    while (i < source.length && depth > 0) {
+        const skipped = skipNonCode(source, i, true);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+
+        const code = source.charCodeAt(i);
+        if (code === 0x7b || code === 0x28 || code === 0x5b) {
+            depth++;
+            i++;
+        } else if (code === 0x7d || code === 0x29 || code === 0x5d) {
+            depth--;
+            i++;
         } else {
             i++;
         }
@@ -2064,9 +2100,52 @@ function previousSignificantCharOnSameLine(source, pos) {
     return -1;
 }
 
+function previousRegexContextToken(source, pos) {
+    let token = null;
+    let i = 0;
+    for (let j = pos - 1; j >= 0; j--) {
+        const ch = source.charCodeAt(j);
+        if (ch === 0x0a || ch === 0x0d || ch === 0x3b || ch === 0x7b || ch === 0x7d) {
+            i = j + 1;
+            break;
+        }
+    }
+    while (i < pos) {
+        const skipped = skipNonCode(source, i, false);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+
+        const ch = source.charCodeAt(i);
+        if (ch === 0x20 || ch === 0x09 || ch === 0x0a || ch === 0x0d) {
+            i++;
+            continue;
+        }
+        if (isIdentifierContinueCode(ch)) {
+            const start = i;
+            i++;
+            while (i < pos && isIdentifierContinueCode(source.charCodeAt(i))) {
+                i++;
+            }
+            token = source.substring(start, i);
+            continue;
+        }
+        token = ch;
+        i++;
+    }
+    return token;
+}
+
 function isRegexLiteralStartInSource(source, pos) {
-    const prev = previousSignificantChar(source, pos);
-    return prev === -1 || '({[=,:;!?&|+-*~^%>'.indexOf(String.fromCharCode(prev)) >= 0;
+    const token = previousRegexContextToken(source, pos);
+    if (token === null) {
+        return true;
+    }
+    if (typeof token === 'number') {
+        return '({[=,:;!?&|+-*~^%>'.indexOf(String.fromCharCode(token)) >= 0;
+    }
+    return token === 'return' || token === 'throw' || token === 'case' || token === 'yield';
 }
 
 function skipRegexLiteralInSource(source, start) {

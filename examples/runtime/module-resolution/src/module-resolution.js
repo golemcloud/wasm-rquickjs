@@ -1047,6 +1047,60 @@ export const testEsmDataUrlImportAttributes = async () => {
     }
 };
 
+export const testCjsDynamicImportAttributeScanner = async () => {
+    try {
+        fs.mkdirSync('/cjs-dynamic-import-attr-scanner', { recursive: true });
+        fs.writeFileSync('/cjs-dynamic-import-attr-scanner/data.json', '{"fromCjs":true}');
+        fs.writeFileSync('/cjs-dynamic-import-attr-scanner/module.cjs', [
+            'const assert = require("node:assert");',
+            'const stringLiteral = "import(\\"./missing-string.json\\", { with: { type: \\"json\\" } })";',
+            'const templateLiteral = `before ${"import(\\"./missing-template.json\\", { with: { type: \\"json\\" } })"} after`;',
+            'const regexLiteral = /import\\(\\"\\.\\/missing-regex\\.json\\", \\{ with: \\{ type: \\"json\\" \\} \\}\\)/;',
+            'const commentedAssignmentRegexLiteral = /* scanner comment */ /import(".+")/.source;',
+            'function returnedRegexLiteral() { return /* scanner comment */ /import(".+")/.source; }',
+            '// import("./missing-comment.json", { with: { type: "json" } });',
+            'const objectMethod = { import(value, options) { return [value, options.with.type]; } };',
+            'class ImportMethods {',
+            '  static import(value, options) { return [value, options.with.type]; }',
+            '}',
+            'exports.run = async function run() {',
+            '  assert.deepStrictEqual(objectMethod.import("object", { with: { type: "json" } }), ["object", "json"]);',
+            '  assert.deepStrictEqual(ImportMethods.import("static", { with: { type: "json" } }), ["static", "json"]);',
+            '  const imported = await import("./data.json", { with: { type: "json" } });',
+            '  const spaced = await import ("./data.json", { with: { type: "json" } });',
+            '  const commented = await import /* scanner comment */ ("./data.json", { with: { type: "json" } });',
+            '  const templateImported = await `${(await import("./data.json", { with: { type: "json" } })).default.fromCjs}`;',
+            '  const nested = await import((await import("./name.json", { with: { type: "json" } })).default.name, { with: { type: "json" } });',
+            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), json: imported.default, spaced: spaced.default, commented: commented.default, templateImported, nested: nested.default };',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-dynamic-import-attr-scanner/name.json', '{"name":"./data.json"}');
+
+        const result = (await import('/cjs-dynamic-import-attr-scanner/module.cjs')).default;
+        const value = await result.run();
+        assert.strictEqual(
+            value.stringLiteral,
+            'import("./missing-string.json", { with: { type: "json" } })',
+        );
+        assert.strictEqual(
+            value.templateLiteral,
+            'before import("./missing-template.json", { with: { type: "json" } }) after',
+        );
+        assert.match(value.regexLiteral, /missing-regex/);
+        assert.strictEqual(value.commentedAssignmentRegexLiteral, 'import(".+")');
+        assert.strictEqual(value.returnedRegexLiteral, 'import(".+")');
+        assert.deepStrictEqual(value.json, { fromCjs: true });
+        assert.deepStrictEqual(value.spaced, { fromCjs: true });
+        assert.deepStrictEqual(value.commented, { fromCjs: true });
+        assert.strictEqual(value.templateImported, 'true');
+        assert.deepStrictEqual(value.nested, { fromCjs: true });
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testSyncBuiltinEsmExports = async () => {
     try {
         const module = await import('node:module');
