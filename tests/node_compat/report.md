@@ -767,7 +767,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | test runner edge case | 3 | `parallel/test-runner-filetest-location.js`, `parallel/test-runner-root-after-with-refed-handles.js`, `parallel/test-runner-todo-skip-tests.js` |
 | CLI/NODE_OPTIONS max-http-header-size propagation in child process emulation is incomplete | 2 | `parallel/test-set-http-max-http-headers.js#test_01_test_01`, `parallel/test-set-http-max-http-headers.js#test_02_same_checks_using_node_options_if_it_is_supported` |
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
-| ESM preserve-symlinks / preserve-symlinks-main behavior is incomplete | 2 | `es-module/test-esm-preserve-symlinks-not-found-plain.mjs`, `es-module/test-esm-preserve-symlinks-not-found.mjs` |
 | HTTP keep-alive socket identity reuse across sequential requests is not implemented | 2 | `parallel/test-http-keepalive-client.js`, `parallel/test-http-keepalive-request.js` |
 | IncomingMessage 'aborted' event is not emitted when the server destroys a keep-alive response | 2 | `parallel/test-http-client-aborted-event.js#block_00_block_00`, `parallel/test-http-client-aborted-event.js#block_01_block_01` |
 | TextDecoderStream invalid-encoding errors are not Node-compatible yet | 2 | `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`, `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01` |
@@ -804,6 +803,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.report.writeReport and permission-model integration are missing | 2 | `parallel/test-permission-fs-write-report.js#block_00_block_00`, `parallel/test-permission-fs-write-report.js#block_01_block_01` |
 | promisified exec()/execFile() rejection errors miss stdout/stderr fields | 2 | `parallel/test-child-process-promisified.js#block_04_block_04`, `parallel/test-child-process-promisified.js#block_05_block_05` |
 | requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_async_resolve_hook_registered` |
+| requires custom ESM loader hooks to assert not-found resolution details | 2 | `es-module/test-esm-preserve-symlinks-not-found-plain.mjs`, `es-module/test-esm-preserve-symlinks-not-found.mjs` |
 | spawn() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01` |
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
@@ -1236,7 +1236,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
-| requires loader pre-import fixture support for --import setup modules | 1 | `es-module/test-esm-named-exports.mjs` |
+| requires module.register loader hooks to remap and synthesize builtin named exports | 1 | `es-module/test-esm-named-exports.mjs` |
 | requires module.register loader hooks to synthesize virtual JSON modules | 1 | `es-module/test-esm-virtual-json.mjs` |
 | requires net.createServer with pauseOnConnect and socket.localPort; wasi:http does not expose socket-level properties | 1 | `parallel/test-http-agent-reuse-drained-socket-only.js` |
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |
