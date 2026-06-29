@@ -359,7 +359,6 @@ impl Loader for DataUrlLoader {
                 filename: None,
                 dirname: None,
                 include_resolve: true,
-                main: false,
             };
             let injected = inject_import_meta_prologue(&init, &source);
             Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
@@ -5609,7 +5608,6 @@ impl Loader for CjsCompatLoader {
                 .parent()
                 .map(|p| p.to_string_lossy().into_owned()),
             include_resolve: true,
-            main: import_meta_main_for_path(ctx, &fs_abs_path),
         };
 
         let cjs_conditions = NodeModulesResolver::conditions_from_global(ctx, &NodeModulesResolver::CJS_CONDITIONS);
@@ -5669,7 +5667,6 @@ struct ImportMetaInit {
     filename: Option<String>,
     dirname: Option<String>,
     include_resolve: bool,
-    main: bool,
 }
 
 /// Ensure a path is absolute. If relative, prepend `/` (WASI cwd is `/`).
@@ -5831,27 +5828,6 @@ fn split_module_path_suffix(path: &str) -> (&str, &str) {
 
 fn module_filesystem_path(path: &str) -> &str {
     split_module_path_suffix(path).0
-}
-
-fn import_meta_main_for_path(ctx: &Ctx<'_>, fs_abs_path: &str) -> bool {
-    let Ok(process) = ctx.globals().get::<_, Object>("process") else {
-        return false;
-    };
-    let Ok(argv) = process.get::<_, rquickjs::Array>("argv") else {
-        return false;
-    };
-    let Ok(main_script) = argv.get::<String>(1) else {
-        return false;
-    };
-    if main_script.is_empty() {
-        return false;
-    }
-
-    let main_script = main_script
-        .strip_prefix("file://")
-        .unwrap_or(main_script.as_str());
-    let main_path = module_filesystem_path(main_script);
-    ensure_absolute_path(main_path) == fs_abs_path
 }
 
 fn escape_js_string(s: &str) -> String {
@@ -6114,11 +6090,6 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     }
 
     props.push(format!(
-        "main:{{value:{},writable:true,enumerable:true,configurable:true}}",
-        if init.main { "true" } else { "false" }
-    ));
-
-    props.push(format!(
         "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
         escape_js_string(&init.url)
     ));
@@ -6209,7 +6180,6 @@ impl Loader for ImportMetaLoader {
             filename,
             dirname,
             include_resolve: true,
-            main: import_meta_main_for_path(ctx, &fs_abs_path),
         };
 
         // Check if there's a cached compilation error for this module.
@@ -6387,7 +6357,6 @@ impl JsState {
                     filename: None,
                     dirname: None,
                     include_resolve: true,
-                    main: false,
                 },
                 crate::js_export_module(),
             ),
@@ -6400,7 +6369,6 @@ impl JsState {
                     filename: None,
                     dirname: None,
                     include_resolve: true,
-                    main: false,
                 },
                 &source,
             );
