@@ -6970,8 +6970,8 @@
       }
     },
     "parallel/test-module-symlinked-peer-modules.js": { "category": "runnable" },
-    "parallel/test-module-version.js": {},
-    "parallel/test-module-wrap.js": {},
+    "parallel/test-module-version.js": { "category": "runnable" },
+    "parallel/test-module-wrap.js": { "category": "runnable" },
     "parallel/test-module-wrapper.js": { "category": "runnable" },
     "parallel/test-navigator.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/navigator" },
     "parallel/test-next-tick-errors.js": { "category": "runnable" },
