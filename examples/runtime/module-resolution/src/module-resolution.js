@@ -604,6 +604,108 @@ export const testEsmDataUrlImportAttributes = async () => {
             (await import('/dynamic-json-relative-app/object-specifier.mjs')).default,
             { relative: true },
         );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'let seed = 0;',
+            'async function resolve(specifier, context, next) {',
+            '  const result = await next(specifier, context);',
+            '  const url = new URL(result.url);',
+            '  url.searchParams.set("seed", String(++seed));',
+            '  return { url: url.href };',
+            '}',
+            'function load(url, context, next) {',
+            '  if (context.importAttributes.type === "json" && url.includes("/dynamic-json-relative-app/data.json")) {',
+            '    const value = new URL(url).searchParams.get("seed");',
+            '    return { shortCircuit: true, format: "json", source: JSON.stringify({ value }) };',
+            '  }',
+            '  return next(url, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("let seed = 0; export " + resolve + ";export " + load));',
+            'const first = await import("/dynamic-json-relative-app/data.json", { with: { type: "json" } });',
+            'const second = await import("/dynamic-json-relative-app/data.json", { with: { type: "json" } });',
+            'assert.notDeepStrictEqual(first.default, second.default);',
+            'assert.deepStrictEqual(first.default, { value: "1" });',
+            'assert.deepStrictEqual(second.default, { value: "2" });',
+        ].join('\n')));
+        fs.mkdirSync('/loader-relative-app', { recursive: true });
+        fs.writeFileSync('/loader-relative-app/data.json', '{"hookRelative":true}');
+        fs.writeFileSync(
+            '/loader-relative-app/main.mjs',
+            'export default (await import("./data.json", { with: { type: "json" } })).default;',
+        );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'async function resolve(specifier, context, next) {',
+            '  if (specifier === "data:text/javascript,export default 5") {',
+            '    if (JSON.stringify(context.importAttributes) !== "{}") throw new Error("plain import should pass empty import attributes");',
+            '  }',
+            '  if (String(context.parentURL).endsWith("/loader-relative-app/main.mjs")) {',
+            '    if (specifier !== "./data.json") throw new Error("resolve hook did not receive original relative specifier");',
+            '    globalThis.__loader_relative_seen = true;',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export " + resolve));',
+            'assert.deepStrictEqual((await import("/loader-relative-app/main.mjs")).default, { hookRelative: true });',
+            'assert.strictEqual(globalThis.__loader_relative_seen, true);',
+            'assert.strictEqual((await import("data:text/javascript,export default 5", {})).default, 5);',
+        ].join('\n')));
+        fs.writeFileSync(
+            '/loader-relative-app/relative-loader.mjs',
+            [
+                'export async function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:relative-loader") {',
+                '    return { shortCircuit: true, url: "virtual:relative-loader-json", format: "json" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "virtual:relative-loader-json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"relativeLoader\\":true}" };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'register("./relative-loader.mjs", { parentURL: "file:///loader-relative-app/main.mjs" });',
+            'assert.deepStrictEqual((await import("virtual:relative-loader", { with: { type: "json" } })).default, { relativeLoader: true });',
+        ].join('\n')));
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'async function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:resolve-attrs") {',
+            '    return { shortCircuit: true, url: "data:application/json,{%22resolveAttrs%22:true}", format: "json", importAttributes: { type: "json" } };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'function load(url, context, next) {',
+            '  if (url.includes("%22resolveAttrs%22")) {',
+            '    if (JSON.stringify(context.importAttributes) !== "{\\"type\\":\\"json\\"}") throw new Error("resolve import attributes were not passed to load");',
+            '    return { shortCircuit: true, format: "json", source: "{\\"resolveAttrs\\":true}" };',
+            '  }',
+            '  return next(url, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export " + resolve + "; export " + load));',
+            'assert.deepStrictEqual((await import("virtual:resolve-attrs", {})).default, { resolveAttrs: true });',
+        ].join('\n')));
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'function load(url, context, next) {',
+            '  if (url.includes("/loader-relative-app/bytes.json")) {',
+            '    return { shortCircuit: true, format: "json", source: new TextEncoder().encode("{\\"bytes\\":true}") };',
+            '  }',
+            '  return next(url, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export " + load));',
+            'assert.deepStrictEqual((await import("/loader-relative-app/bytes.json", { with: { type: "json" } })).default, { bytes: true });',
+        ].join('\n')));
         await assert.rejects(
             import('data:text/javascript,' + encodeURIComponent(
                 'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',

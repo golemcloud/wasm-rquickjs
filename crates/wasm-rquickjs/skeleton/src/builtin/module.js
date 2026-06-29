@@ -1387,7 +1387,7 @@ function stripImportAttributes(source, filename) {
                 const secondArg = source.substring(commaPos + 1, i - 1);
                 out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                 out.push(filenameLiteral);
-                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
+                out.push(',async()=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
                 out.push(baseUrlLiteral);
                 out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true)));})(');
                 out.push(firstArg);
@@ -1398,7 +1398,7 @@ function stripImportAttributes(source, filename) {
                 const spec = source.substring(argStart, i - 1);
                 out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                 out.push(filenameLiteral);
-                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
+                out.push(',async()=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
                 out.push(baseUrlLiteral);
                 out.push(',__wasm_rquickjs_url,undefined,true)));})(');
                 out.push(spec);
@@ -3458,6 +3458,139 @@ export let isBuiltinModule = function isBuiltinModule(id) {
     return isBuiltin(id);
 };
 
+export let register = function register(specifier, parentURL) {
+    const url = String(specifier);
+    let parent = parentURL;
+    if (parentURL && typeof parentURL === 'object' && parentURL.parentURL !== undefined) {
+        parent = parentURL.parentURL;
+    }
+    parent = parent === undefined ? undefined : String(parent);
+    const loaders = globalThis.__wasm_rquickjs_registered_loaders ||
+        (globalThis.__wasm_rquickjs_registered_loaders = []);
+    loaders.push({ url, parent });
+};
+
+if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
+    globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(baseUrl, specifier, attrs) {
+        const loaders = globalThis.__wasm_rquickjs_registered_loaders;
+        if (!loaders || loaders.length === 0) return undefined;
+
+        function normalizeResolvedUrl(url) {
+            if (url.startsWith('/')) {
+                url = nodeUrl.pathToFileURL(url).href;
+            }
+            return url;
+        }
+
+        function resolveLoaderUrl(loader) {
+            if (loader.parent !== undefined) {
+                return normalizeResolvedUrl(globalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url));
+            }
+            return loader.url;
+        }
+
+        const modules = [];
+        for (let i = 0; i < loaders.length; i++) {
+            modules.push(await import(resolveLoaderUrl(loaders[i])));
+        }
+
+        const importAttributes = attrs && attrs.typeValue !== undefined
+            ? { type: attrs.typeValue }
+            : {};
+
+        const baseContext = {
+            conditions: ['node', 'import'],
+            importAttributes,
+            parentURL: String(baseUrl),
+        };
+
+        function makeLoaderChainError(hook) {
+            const err = new Error(`${hook} hook did not call the next hook and did not explicitly short circuit`);
+            err.code = 'ERR_LOADER_CHAIN_INCOMPLETE';
+            return err;
+        }
+
+        const defaultResolve = async (nextSpecifier, context) => {
+            let url = globalThis.__wasm_rquickjs_import_meta_resolve(
+                context && context.parentURL ? String(context.parentURL) : String(baseUrl),
+                String(nextSpecifier),
+            );
+            return { url: normalizeResolvedUrl(url) };
+        };
+
+        const runResolve = async (index, nextSpecifier, context) => {
+            if (index < 0) return defaultResolve(nextSpecifier, context);
+            const module = modules[index];
+            if (typeof module.resolve === 'function') {
+                let nextCalled = false;
+                const nextResolve = async (specifierForNext, contextForNext) => {
+                    nextCalled = true;
+                    return runResolve(
+                        index - 1,
+                        specifierForNext === undefined ? nextSpecifier : specifierForNext,
+                        contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
+                    );
+                };
+                const result = await module.resolve(nextSpecifier, context, nextResolve);
+                if (!nextCalled && (!result || result.shortCircuit !== true)) {
+                    throw makeLoaderChainError('resolve');
+                }
+                return result;
+            }
+            return runResolve(index - 1, nextSpecifier, context);
+        };
+
+        const resolved = await runResolve(modules.length - 1, specifier, baseContext);
+        if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
+        resolved.url = normalizeResolvedUrl(String(resolved.url));
+
+        const defaultLoad = async (_nextUrl, context) => ({ format: context && context.format });
+
+        const runLoad = async (index, nextUrl, context) => {
+            if (index < 0) return defaultLoad(nextUrl, context);
+            const module = modules[index];
+            if (typeof module.load === 'function') {
+                let nextCalled = false;
+                const nextLoad = async (urlForNext, contextForNext) => {
+                    nextCalled = true;
+                    return runLoad(
+                        index - 1,
+                        urlForNext === undefined ? nextUrl : String(urlForNext),
+                        contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
+                    );
+                };
+                const result = await module.load(nextUrl, context, nextLoad);
+                if (!nextCalled && (!result || result.shortCircuit !== true)) {
+                    throw makeLoaderChainError('load');
+                }
+                return result;
+            }
+            return runLoad(index - 1, nextUrl, context);
+        };
+
+        const loadContext = {
+            conditions: baseContext.conditions,
+            importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
+                ? resolved.importAttributes
+                : baseContext.importAttributes,
+            format: resolved.format,
+        };
+        const loaded = await runLoad(modules.length - 1, resolved.url, loadContext);
+
+        if (loaded && loaded.format === 'json' && loaded.source !== undefined) {
+            let source = loaded.source;
+            if (source instanceof ArrayBuffer || (ArrayBuffer.isView(source) && source.buffer instanceof ArrayBuffer)) {
+                source = new TextDecoder().decode(source);
+            }
+            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(
+                'data:application/json,' + encodeURIComponent(String(source)),
+                'json',
+            );
+        }
+        return undefined;
+    };
+}
+
 // "node_modules" reversed as char codes: s-e-l-u-d-o-m-_-e-d-o-n
 const nmChars = [115, 101, 108, 117, 100, 111, 109, 95, 101, 100, 111, 110];
 const nmLen = nmChars.length;
@@ -3604,6 +3737,7 @@ export let syncBuiltinESMExports = function() {
     findPackageJSON = moduleExports.findPackageJSON;
     builtinModules = moduleExports.builtinModules;
     isBuiltinModule = moduleExports.isBuiltin;
+    register = moduleExports.register;
     syncBuiltinESMExports = moduleExports.syncBuiltinESMExports;
 };
 
@@ -3631,6 +3765,7 @@ const moduleExports = Object.assign(Module, {
     builtinModules: builtinModuleNames,
     syncBuiltinESMExports,
     isBuiltin: isBuiltinModule,
+    register,
     wrap: wrap,
     wrapper: wrapper,
     runMain: runMain,

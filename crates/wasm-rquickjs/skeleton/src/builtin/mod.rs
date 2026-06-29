@@ -678,8 +678,17 @@ globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, as
   return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 };
 
-globalThis.__wasm_rquickjs_import_attr_prepare_for_base = function(baseUrl, specifier, options, asyncSemanticErrors) {
-  var value = String(specifier);
+globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function(baseUrl, specifier, options, asyncSemanticErrors) {
+  var originalValue = String(specifier);
+  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
+  if (
+    globalThis.__wasm_rquickjs_registered_loaders &&
+    globalThis.__wasm_rquickjs_registered_loaders.length > 0
+  ) {
+    var hooked = await globalThis.__wasm_rquickjs_run_registered_loaders(String(baseUrl), originalValue, parsedOptions);
+    if (hooked !== undefined) return hooked;
+  }
+  var value = originalValue;
   if (
     value.startsWith('./') ||
     value.startsWith('../') ||
@@ -688,7 +697,6 @@ globalThis.__wasm_rquickjs_import_attr_prepare_for_base = function(baseUrl, spec
   ) {
     value = globalThis.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
   }
-  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
   return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 };
 "#;

@@ -799,7 +799,7 @@ fn rewrite_dynamic_import_call(
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
+                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
                             &source[spec_literal_start..spec_literal_end],
                             options
                         ),
@@ -865,7 +865,7 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
+                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
                             expr, options
                         ),
                         i + 1,
