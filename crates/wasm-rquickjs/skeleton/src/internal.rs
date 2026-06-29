@@ -799,7 +799,7 @@ fn rewrite_dynamic_import_call(
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare(__wasm_rquickjs_specifier,__wasm_rquickjs_options)))({},{}))",
+                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
                             &source[spec_literal_start..spec_literal_end],
                             options
                         ),
@@ -865,7 +865,7 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare(__wasm_rquickjs_specifier,__wasm_rquickjs_options)))({},{}))",
+                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
                             expr, options
                         ),
                         i + 1,
@@ -1964,6 +1964,7 @@ impl Resolver for FileUrlResolver {
             let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
             let url = NodeFileResolver::module_url_for_file_specifier(name);
             if std::path::Path::new(&normalized).is_dir() {
+                discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
                     "ERR_UNSUPPORTED_DIR_IMPORT",
@@ -1972,6 +1973,7 @@ impl Resolver for FileUrlResolver {
                 );
             }
             if !std::path::Path::new(&normalized).is_file() {
+                discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
                     "ERR_MODULE_NOT_FOUND",
@@ -1979,7 +1981,9 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            Ok(format!("{normalized}{suffix}"))
+            let resolved = format!("{normalized}{suffix}");
+            transfer_import_type_rewrite_token(name, &resolved);
+            Ok(resolved)
         } else {
             Err(Error::new_resolving(base, name))
         }

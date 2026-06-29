@@ -539,6 +539,35 @@ export const testEsmDataUrlImportAttributes = async () => {
             'export default { file: fileJson.default.file, data: dataJson.default, optionsCount };',
         ].join('\n')));
         assert.deepStrictEqual(dynamicModule.default, { file: true, data: 4, optionsCount: 2 });
+        fs.mkdirSync('/dynamic-json-relative-app', { recursive: true });
+        fs.writeFileSync('/dynamic-json-relative-app/data.json', '{"relative":true}');
+        fs.writeFileSync(
+            '/dynamic-json-relative-app/main.mjs',
+            [
+                'import staticValue from "./data.json" with { type: "json" };',
+                'const dynamicValue = await import("./data.json", { with: { type: "json" } });',
+                'export default { staticValue, dynamicValue: dynamicValue.default, same: staticValue === dynamicValue.default };',
+            ].join('\n'),
+        );
+        assert.deepStrictEqual(
+            (await import('/dynamic-json-relative-app/main.mjs')).default,
+            {
+                staticValue: { relative: true },
+                dynamicValue: { relative: true },
+                same: true,
+            },
+        );
+        fs.writeFileSync(
+            '/dynamic-json-relative-app/object-specifier.mjs',
+            [
+                'const specifier = { toString() { return "./data.json"; } };',
+                'export default (await import(specifier, { with: { type: "json" } })).default;',
+            ].join('\n'),
+        );
+        assert.deepStrictEqual(
+            (await import('/dynamic-json-relative-app/object-specifier.mjs')).default,
+            { relative: true },
+        );
         await assert.rejects(
             import('data:text/javascript,' + encodeURIComponent(
                 'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',

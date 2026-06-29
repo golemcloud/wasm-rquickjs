@@ -1349,6 +1349,7 @@ function stripImportAttributes(source, filename) {
     const len = source.length;
     const out = [];
     const filenameLiteral = JSON.stringify(filename);
+    const baseUrlLiteral = JSON.stringify(nodeUrl.pathToFileURL(filename).href);
     let i = 0;
     while (i < len) {
         let ch = source.charCodeAt(i);
@@ -1384,18 +1385,22 @@ function stripImportAttributes(source, filename) {
             if (commaPos > -1) {
                 const firstArg = source.substring(argStart, commaPos);
                 const secondArg = source.substring(commaPos + 1, i - 1);
-                out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);const __wasm_rquickjs_attrs=globalThis.__wasm_rquickjs_import_attr_read_options(__wasm_rquickjs_options);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                 out.push(filenameLiteral);
-                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_from_options(__wasm_rquickjs_url,__wasm_rquickjs_attrs,true)));})(');
+                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
+                out.push(baseUrlLiteral);
+                out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true)));})(');
                 out.push(firstArg);
                 out.push(',');
                 out.push(secondArg);
                 out.push('))');
             } else {
                 const spec = source.substring(argStart, i - 1);
-                out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);const __wasm_rquickjs_attrs=globalThis.__wasm_rquickjs_import_attr_read_options(undefined);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                 out.push(filenameLiteral);
-                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_from_options(__wasm_rquickjs_url,__wasm_rquickjs_attrs,true)));})(');
+                out.push(',()=>import(globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
+                out.push(baseUrlLiteral);
+                out.push(',__wasm_rquickjs_url,undefined,true)));})(');
                 out.push(spec);
                 out.push('))');
             }

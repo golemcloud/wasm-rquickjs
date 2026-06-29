@@ -632,13 +632,6 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
     format = 'module';
   }
 
-  if (unsupportedKey !== undefined) {
-    return semanticError(Object.assign(
-      new TypeError('Import attribute "' + unsupportedKey + '" is not supported'),
-      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-    ));
-  }
-
   if (typeValue !== undefined) {
     if (typeValue === 'json') {
       if (format === 'module') {
@@ -666,6 +659,13 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
     }
   }
 
+  if (unsupportedKey !== undefined) {
+    return semanticError(Object.assign(
+      new TypeError('Import attribute "' + unsupportedKey + '" is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
+  }
+
   if (typeValue !== 'json') return value;
   if (value.startsWith('data:')) value = value.replace(/"/g, '%22');
   return 'data:text/javascript,' + encodeURIComponent(
@@ -675,6 +675,20 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
 
 globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, asyncSemanticErrors) {
   var value = String(specifier);
+  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
+  return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
+};
+
+globalThis.__wasm_rquickjs_import_attr_prepare_for_base = function(baseUrl, specifier, options, asyncSemanticErrors) {
+  var value = String(specifier);
+  if (
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('/') ||
+    value.startsWith('file://')
+  ) {
+    value = globalThis.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
+  }
   var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
   return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 };
