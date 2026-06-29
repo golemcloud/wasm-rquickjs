@@ -1350,6 +1350,76 @@ function stripImportAttributes(source, filename) {
     const out = [];
     const filenameLiteral = JSON.stringify(filename);
     const baseUrlLiteral = JSON.stringify(nodeUrl.pathToFileURL(filename).href);
+    function prevNonWs(pos) {
+        while (pos > 0) {
+            pos--;
+            const c = source.charCodeAt(pos);
+            if (c !== 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D && c !== 0x0C && c !== 0x0B) return { pos, c };
+        }
+        return null;
+    }
+    function prevWord(pos) {
+        let end = pos;
+        while (end > 0) {
+            const c = source.charCodeAt(end - 1);
+            if (c !== 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D && c !== 0x0C && c !== 0x0B) break;
+            end--;
+        }
+        let start = end;
+        while (start > 0) {
+            const c = source.charCodeAt(start - 1);
+            if (!(c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c === 95 || c === 36)) break;
+            start--;
+        }
+        return start < end ? { word: source.substring(start, end), start } : null;
+    }
+    function matchingParenEnd(openParen) {
+        let pos = openParen + 1;
+        let depth = 1;
+        while (pos < len) {
+            const c = source.charCodeAt(pos);
+            if (c === 0x27 || c === 0x22) { pos = _iaSkipStr(source, pos); continue; }
+            if (c === 0x60) { pos = _iaSkipTpl(source, pos); continue; }
+            if (c === 0x28) depth++;
+            else if (c === 0x29 && --depth === 0) return pos + 1;
+            pos++;
+        }
+        return -1;
+    }
+    function nextNonWs(pos) {
+        while (pos < len) {
+            const c = source.charCodeAt(pos);
+            if (c !== 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D && c !== 0x0C && c !== 0x0B) return c;
+            pos++;
+        }
+        return -1;
+    }
+    function methodPrefixBoundary(pos) {
+        const prev = prevNonWs(pos);
+        return !prev || prev.c === 0x7B || prev.c === 0x2C || prev.c === 0x3B;
+    }
+    function isImportMethodDefinition(importStart, openParen) {
+        const close = matchingParenEnd(openParen);
+        if (close < 0 || nextNonWs(close) !== 0x7B) return false;
+        const directWord = prevWord(importStart);
+        if (directWord && directWord.word === 'static') return true;
+        let pos = importStart;
+        for (;;) {
+            const prev = prevNonWs(pos);
+            if (!prev) return false;
+            if (prev.c === 0x7B || prev.c === 0x2C || prev.c === 0x3B) return true;
+            if (prev.c === 0x2A) {
+                pos = prev.pos;
+                continue;
+            }
+            const word = prevWord(pos);
+            if (word && (word.word === 'async' || word.word === 'get' || word.word === 'set' || word.word === 'static')) {
+                pos = word.start;
+                continue;
+            }
+            return false;
+        }
+    }
     let i = 0;
     while (i < len) {
         let ch = source.charCodeAt(i);
@@ -1368,6 +1438,11 @@ function stripImportAttributes(source, filename) {
         if (ch === 0x69 && i + 7 <= len && source.substring(i, i + 7) === 'import(' &&
             (i === 0 || ((ch = source.charCodeAt(i - 1)) !== 46 && ch !== 35 &&
                 !(ch >= 48 && ch <= 57 || ch >= 65 && ch <= 90 || ch >= 97 && ch <= 122 || ch === 95 || ch === 36)))) {
+            if (isImportMethodDefinition(i, i + 6)) {
+                out.push(source[i]);
+                i++;
+                continue;
+            }
             i += 7;
             let depth = 1, commaPos = -1;
             const argStart = i;
@@ -1387,9 +1462,9 @@ function stripImportAttributes(source, filename) {
                 const secondArg = source.substring(commaPos + 1, i - 1);
                 out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                 out.push(filenameLiteral);
-                out.push(',async()=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
+                out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
                 out.push(baseUrlLiteral);
-                out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true)));})(');
+                out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
                 out.push(firstArg);
                 out.push(',');
                 out.push(secondArg);
@@ -1398,9 +1473,9 @@ function stripImportAttributes(source, filename) {
                 const spec = source.substring(argStart, i - 1);
                 out.push('((async(__wasm_rquickjs_specifier)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                 out.push(filenameLiteral);
-                out.push(',async()=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(');
+                out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
                 out.push(baseUrlLiteral);
-                out.push(',__wasm_rquickjs_url,undefined,true)));})(');
+                out.push(',__wasm_rquickjs_url,undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
                 out.push(spec);
                 out.push('))');
             }
@@ -3481,7 +3556,14 @@ export let register = function register(specifier, parentURL, options) {
 if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     function normalizeLoaderResolvedUrl(url) {
         if (url.startsWith('/')) {
-            url = nodeUrl.pathToFileURL(url).href;
+            const query = url.indexOf('?');
+            const hash = url.indexOf('#');
+            const end = query < 0 ? hash : (hash < 0 ? query : Math.min(query, hash));
+            if (end >= 0) {
+                url = nodeUrl.pathToFileURL(url.slice(0, end)).href + url.slice(end);
+            } else {
+                url = nodeUrl.pathToFileURL(url).href;
+            }
         }
         return url;
     }
@@ -3577,6 +3659,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/');
         }
 
+        function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
+            return resultForEsmFileUrl(new URL(specifier, parentURL));
+        }
+
         function resultForEsmFileUrl(url) {
             const filename = nodeUrl.fileURLToPath(url);
             const stat = _stat(filename);
@@ -3657,7 +3743,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 return { url: 'node:' + specifier };
             }
             if (parentFilename !== null && isRelativeOrAbsoluteSpecifier(specifier)) {
-                return resultForEsmFileUrl(new URL(specifier, parentURL));
+                return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
             }
 
             if (parentFilename !== null && specifier.startsWith('#')) {
@@ -3751,6 +3837,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 'data:application/json,' + encodeURIComponent(String(source)),
                 'json',
             );
+        }
+        if (loadContext.importAttributes && loadContext.importAttributes.type === 'json') {
+            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(resolved.url, 'json');
         }
         return undefined;
     };

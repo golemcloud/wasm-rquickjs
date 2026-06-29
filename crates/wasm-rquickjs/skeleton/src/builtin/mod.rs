@@ -556,16 +556,25 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
     }
     return '/' + out.join('/');
   }
+  function splitSuffix(value) {
+    var query = value.indexOf('?');
+    var hash = value.indexOf('#');
+    var end = query < 0 ? hash : (hash < 0 ? query : Math.min(query, hash));
+    return end < 0 ? [value, ''] : [value.substring(0, end), value.substring(end)];
+  }
   if (specifier.startsWith('/')) {
-    var path = normalizePath(specifier);
-    return baseUrl.startsWith('file://') ? 'file://' + path : path;
+    var parts = splitSuffix(specifier);
+    var path = normalizePath(parts[0]);
+    return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
   }
   if (specifier.startsWith('.')) {
     var base = baseUrl;
     if (base.startsWith('file://')) base = base.slice(7);
+    base = splitSuffix(base)[0];
     var dir = base.substring(0, base.lastIndexOf('/') + 1);
-    var path = normalizePath(dir + specifier);
-    return baseUrl.startsWith('file://') ? 'file://' + path : path;
+    var parts = splitSuffix(specifier);
+    var path = normalizePath(dir + parts[0]);
+    return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
   }
   if (NODE_BUILTINS.has(specifier)) return 'node:' + specifier;
   throw new Error('Cannot resolve bare specifier "' + specifier + '" from "' + baseUrl + '"');
@@ -698,5 +707,71 @@ globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function(baseUrl
     value = globalThis.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
   }
   return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
+};
+
+globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, specifier, options, asyncSemanticErrors, importer) {
+  var originalSpecifier = String(specifier);
+  var prepared = await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(baseUrl, specifier, options, asyncSemanticErrors);
+  var key = String(prepared);
+  var completedKey = key;
+  var originalHasRewriteToken = originalSpecifier.indexOf('__wasm_rquickjs_import_type=') >= 0;
+  var tokenMatch = originalHasRewriteToken ? null : /^data:([^,]*);__wasm_rquickjs_import_type=([^;,]+)(,.*)$/.exec(key);
+  if (tokenMatch) {
+    completedKey = 'import-attr:' + tokenMatch[2].split('-')[0] + ':data:' + tokenMatch[1] + tokenMatch[3];
+  } else {
+    tokenMatch = originalHasRewriteToken ? null : /([?#&])__wasm_rquickjs_import_type=([^&#]+)(&?)/.exec(key);
+    if (tokenMatch) {
+      var tokenStart = tokenMatch.index;
+      var tokenEnd = tokenStart + tokenMatch[0].length;
+      var prefix = key.slice(0, tokenStart);
+      var suffix = key.slice(tokenEnd);
+      var separator = tokenMatch[1];
+      if (separator === '&') {
+        completedKey = prefix + (suffix ? '&' + suffix : '');
+      } else if (tokenMatch[3] === '&') {
+        completedKey = prefix + separator + suffix;
+      } else {
+        completedKey = prefix + suffix;
+      }
+      if (completedKey.endsWith('?') || completedKey.endsWith('#')) completedKey = completedKey.slice(0, -1);
+      completedKey = 'import-attr:' + tokenMatch[2].split('-')[0] + ':' + completedKey;
+    }
+  }
+  var generatedRewriteToken = completedKey !== key && !originalHasRewriteToken;
+  function discardGeneratedRewriteToken() {
+    if (generatedRewriteToken && typeof globalThis.__wasm_rquickjs_discard_import_attr_rewrite === 'function') {
+      globalThis.__wasm_rquickjs_discard_import_attr_rewrite(key);
+    }
+  }
+  var cache = globalThis.__wasm_rquickjs_import_attr_inflight;
+  if (!cache) {
+    cache = Object.create(null);
+    Object.defineProperty(globalThis, '__wasm_rquickjs_import_attr_inflight', {
+      value: cache,
+      writable: true,
+      configurable: true
+    });
+  }
+  if (cache[completedKey] !== undefined) {
+    var cached = cache[completedKey];
+    if (cached.preparedKey !== key) {
+      discardGeneratedRewriteToken();
+    }
+    return cached.promise;
+  }
+  var importFn = typeof importer === 'function' ? importer : function(value) { return import(value); };
+  var promise = importFn(prepared);
+  var entry = { promise: promise, preparedKey: key };
+  cache[completedKey] = entry;
+  try {
+    var result = await promise;
+    discardGeneratedRewriteToken();
+    return result;
+  } catch (error) {
+    if (cache[completedKey] === entry) delete cache[completedKey];
+    discardGeneratedRewriteToken();
+    throw error;
+  } finally {
+  }
 };
 "#;

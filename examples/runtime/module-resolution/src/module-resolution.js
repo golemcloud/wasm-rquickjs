@@ -402,24 +402,36 @@ export const testEsmDataUrlImportAttributes = async () => {
         const importJsonDataUrl = (url) => import('data:text/javascript,' + encodeURIComponent(
             `import value from ${JSON.stringify(url)} with { type: "json" }; export default value;`,
         ));
+        async function expectReject(label, promise, code) {
+            try {
+                await promise;
+            } catch (err) {
+                assert.strictEqual(err && err.code, code, label);
+                return;
+            }
+            throw new Error('Missing expected rejection: ' + label);
+        }
 
         const jsonUrl = 'data:application/json,%7B%22x%22%3A1%7D';
         assert.strictEqual((await importJsonDataUrl(jsonUrl)).default.x, 1);
-        await assert.rejects(import(jsonUrl), { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' });
-        await assert.rejects(
+        await expectReject('JSON data URL without import attribute should reject', import(jsonUrl), 'ERR_IMPORT_ATTRIBUTE_MISSING');
+        await expectReject(
+            'forged JSON data URL rewrite token without sequence should reject',
             import('data:application/json;__wasm_rquickjs_import_type=json,0'),
-            { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+            'ERR_IMPORT_ATTRIBUTE_MISSING',
         );
         const firstTokenImport = await importJsonDataUrl('data:application/json,5');
         assert.strictEqual(firstTokenImport.default, 5);
-        await assert.rejects(
+        await expectReject(
+            'replayed JSON data URL rewrite token should reject',
             import('data:application/json;__wasm_rquickjs_import_type=json-1,0'),
-            { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+            'ERR_IMPORT_ATTRIBUTE_MISSING',
         );
         fs.writeFileSync('/json-attribute-forgery.json', '{"ok":true}');
-        await assert.rejects(
+        await expectReject(
+            'forged JSON file rewrite token without sequence should reject',
             import('/json-attribute-forgery.json?__wasm_rquickjs_import_type=json'),
-            { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+            'ERR_IMPORT_ATTRIBUTE_MISSING',
         );
 
         assert.strictEqual(
@@ -438,30 +450,21 @@ export const testEsmDataUrlImportAttributes = async () => {
         );
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
-            'await assert.rejects(',
-            '  import("data:text/javascript,export default 1", null),',
-            '  { name: "TypeError", message: /second argument to import\\(\\) must be an object/ },',
-            ');',
-            'await assert.rejects(',
-            '  import("data:text/javascript,export default 1", { with: null }),',
-            '  { name: "TypeError", message: /\\x27with\\x27 option must be an object/ },',
-            ');',
-            'await assert.rejects(',
-            '  import("data:text/javascript,export default 1", { with: 1 }),',
-            '  { name: "TypeError", message: /\\x27with\\x27 option must be an object/ },',
-            ');',
-            'await assert.rejects(',
-            '  import("data:text/javascript,export default 1", { with: { type: 1 } }),',
-            '  { name: "TypeError", message: /Import attribute value must be a string/ },',
-            ');',
-            'await assert.rejects(',
-            '  import("data:text/javascript,export default 1", { with: { type: "css" } }),',
-            '  { code: "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED" },',
-            ');',
-            'await assert.rejects(',
-            '  import("data:application/json,1", { with: { type: "css" } }),',
-            '  { code: "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED" },',
-            ');',
+            'async function expectReject(label, promise, expected) {',
+            '  try { await promise; } catch (err) {',
+            '    if (expected.code !== undefined) assert.strictEqual(err && err.code, expected.code, label);',
+            '    if (expected.name !== undefined) assert.strictEqual(err && err.name, expected.name, label);',
+            '    if (expected.message !== undefined) assert.match(err && err.message, expected.message, label);',
+            '    return;',
+            '  }',
+            '  throw new Error("Missing expected rejection: " + label);',
+            '}',
+            'await expectReject("null import options should reject", import("data:text/javascript,export default 1", null), { name: "TypeError", message: /second argument to import\\(\\) must be an object/ });',
+            'await expectReject("null import with option should reject", import("data:text/javascript,export default 1", { with: null }), { name: "TypeError", message: /\\x27with\\x27 option must be an object/ });',
+            'await expectReject("non-object import with option should reject", import("data:text/javascript,export default 1", { with: 1 }), { name: "TypeError", message: /\\x27with\\x27 option must be an object/ });',
+            'await expectReject("non-string import attribute type should reject", import("data:text/javascript,export default 1", { with: { type: 1 } }), { name: "TypeError", message: /Import attribute value must be a string/ });',
+            'await expectReject("CSS import attribute for JS should reject", import("data:text/javascript,export default 1", { with: { type: "css" } }), { code: "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED" });',
+            'await expectReject("CSS import attribute for JSON should reject", import("data:application/json,1", { with: { type: "css" } }), { code: "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED" });',
             'const obj = { import(value) { return ["method", value]; } };',
             'assert.deepStrictEqual(obj.import("not-a-module", { with: { type: "json" } }), ["method", "not-a-module"]);',
             'const ignored = "import value from \\"/comment-json-token.json\\" with { type: \\"json\\" };";',
@@ -486,33 +489,42 @@ export const testEsmDataUrlImportAttributes = async () => {
             'assert.strictEqual((await import("data:application/json,9", optionsProxy)).default, 9);',
             'assert.deepStrictEqual({ withGets, ownKeys, typeGets }, { withGets: 1, ownKeys: 1, typeGets: 1 });',
         ].join('\n')));
-        await assert.rejects(
+        await expectReject(
+            'late static JSON rewrite token should not authorize future file import',
             import('data:text/javascript,' + encodeURIComponent(
                 'import value from "/late-json-token.json" with { type: "json" }; export default value;',
             )),
-            { code: 'ERR_MODULE_NOT_FOUND' },
+            'ERR_MODULE_NOT_FOUND',
         );
         fs.writeFileSync('/late-json-token.json', '{"late":true}');
         for (let token = 1; token <= 100; token++) {
-            await assert.rejects(
+            await expectReject(
+                'late JSON rewrite token replay should reject',
                 import(`/late-json-token.json?__wasm_rquickjs_import_type=json-${token}`),
-                { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+                'ERR_IMPORT_ATTRIBUTE_MISSING',
             );
         }
         fs.writeFileSync('/comment-json-token.json', '{"comment":true}');
         for (let token = 1; token <= 100; token++) {
-            await assert.rejects(
+            await expectReject(
+                'commented JSON rewrite token should not authorize import',
                 import(`/comment-json-token.json?__wasm_rquickjs_import_type=json-${token}`),
-                { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' },
+                'ERR_IMPORT_ATTRIBUTE_MISSING',
             );
         }
         fs.writeFileSync('/static-non-string-attr.js', 'export default 1;');
-        await assert.rejects(
-            import('data:text/javascript,' + encodeURIComponent(
+        let staticNonStringRejected = false;
+        try {
+            await import('data:text/javascript,' + encodeURIComponent(
                 'import value from "/static-non-string-attr.js" with { type: 1 }; export default value;',
-            )),
-            { name: 'SyntaxError' },
-        );
+            ));
+        } catch (err) {
+            assert.strictEqual(err && err.name, 'SyntaxError', 'static non-string import attribute should reject');
+            staticNonStringRejected = true;
+        }
+        if (!staticNonStringRejected) {
+            throw new Error('Missing expected rejection: static non-string import attribute should reject');
+        }
         fs.mkdirSync('/json-pkg-attrs-app/node_modules/json-pkg', { recursive: true });
         fs.writeFileSync(
             '/json-pkg-attrs-app/node_modules/json-pkg/package.json',
@@ -539,32 +551,36 @@ export const testEsmDataUrlImportAttributes = async () => {
             '/json-pkg-attrs-app/dynamic-js.mjs',
             'await import("js-pkg", { with: { type: "json" } });',
         );
-        await assert.rejects(
+        await expectReject(
+            'dynamic JS package import with JSON attributes should reject',
             import('/json-pkg-attrs-app/dynamic-js.mjs'),
-            { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' },
+            'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE',
         );
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
-            'await assert.rejects(',
-            '  import("node:fs", { with: { type: "json" } }),',
-            '  { code: "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE" },',
-            ');',
-            'await assert.rejects(',
-            '  import("node:fs.json", { with: { type: "json" } }),',
-            '  { code: "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE" },',
-            ');',
+            'async function expectReject(label, promise, code) {',
+            '  try { await promise; } catch (err) { assert.strictEqual(err && err.code, code, label); return; }',
+            '  throw new Error("Missing expected rejection: " + label);',
+            '}',
+            'await expectReject("builtin JSON attribute should reject", import("node:fs", { with: { type: "json" } }), "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE");',
+            'await expectReject("builtin-like JSON attribute should reject", import("node:fs.json", { with: { type: "json" } }), "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE");',
         ].join('\n')));
-        await assert.rejects(
+        await expectReject(
+            'static builtin import with JSON attributes should reject',
             import('data:text/javascript,' + encodeURIComponent(
                 'import "node:fs" with { type: "json" };',
             )),
-            { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' },
+            'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE',
         );
         fs.writeFileSync(
             '/json-pkg-attrs-app/query.mjs',
             'await import("json-pkg?__wasm_rquickjs_import_type=json-1");',
         );
-        await assert.rejects(import('/json-pkg-attrs-app/query.mjs'), { code: 'ERR_MODULE_NOT_FOUND' });
+        await expectReject(
+            'forged import attribute token should reject',
+            import('/json-pkg-attrs-app/query.mjs'),
+            'ERR_MODULE_NOT_FOUND',
+        );
         fs.writeFileSync('/dynamic-json-attrs.json', '{"file":true}');
         const dynamicModule = await import('data:text/javascript,' + encodeURIComponent([
             'let optionsCount = 0;',
@@ -603,6 +619,57 @@ export const testEsmDataUrlImportAttributes = async () => {
         assert.deepStrictEqual(
             (await import('/dynamic-json-relative-app/object-specifier.mjs')).default,
             { relative: true },
+        );
+        fs.writeFileSync('/dynamic-json-relative-app/assertionless.json', '{"ofLife":42}');
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'globalThis.__assertionlessJsonSeen = [];',
+            'async function resolve(specifier, context, next) {',
+            '  const noType = context.importAttributes.type == null;',
+            '  const result = await next(specifier, context);',
+            '  const url = new URL(result.url);',
+            '  if (globalThis.__assertionlessJsonEnabled !== false && noType && (url.pathname.endsWith("/assertionless.json") || (result.url.startsWith("data:application/json") && result.url.includes("ofLife")))) {',
+            '    result.importAttributes = Object.assign({}, result.importAttributes || context.importAttributes, { type: "json" });',
+            '  }',
+            '  globalThis.__assertionlessJsonSeen.push({ specifier, url: result.url, contextImportAttributes: context.importAttributes, resultImportAttributes: result.importAttributes });',
+            '  return result;',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export " + resolve));',
+            'const [filePlain, fileTyped] = await Promise.all([',
+            '  import("/dynamic-json-relative-app/assertionless.json"),',
+            '  import("/dynamic-json-relative-app/assertionless.json", { with: { type: "json" } }),',
+            ']);',
+            'assert.strictEqual(filePlain, fileTyped, JSON.stringify(globalThis.__assertionlessJsonSeen));',
+            'assert.strictEqual(filePlain.default, fileTyped.default, JSON.stringify(globalThis.__assertionlessJsonSeen));',
+            'assert.deepStrictEqual(filePlain.default, { ofLife: 42 });',
+            'const filePlainAgain = await import("/dynamic-json-relative-app/assertionless.json");',
+            'const fileTypedAgain = await import("/dynamic-json-relative-app/assertionless.json", { with: { type: "json" } });',
+            'assert.strictEqual(filePlainAgain, filePlain);',
+            'assert.strictEqual(fileTypedAgain, filePlain);',
+            'const [queryPlain, queryTyped] = await Promise.all([',
+            '  import("/dynamic-json-relative-app/assertionless.json?cache#frag"),',
+            '  import("/dynamic-json-relative-app/assertionless.json?cache#frag", { with: { type: "json" } }),',
+            ']);',
+            'assert.strictEqual(queryPlain, queryTyped);',
+            'assert.deepStrictEqual(queryPlain.default, { ofLife: 42 });',
+            'const dataPlain = await import("data:application/json,{%22ofLife%22:42}");',
+            'const dataTyped = await import("data:application/json,{%22ofLife%22:42}", { with: { type: "json" } });',
+            'assert.deepStrictEqual(dataPlain.default, { ofLife: 42 });',
+            'assert.deepStrictEqual(dataTyped.default, { ofLife: 42 });',
+            'globalThis.__assertionlessJsonEnabled = false;',
+        ].join('\n')));
+        for (let token = 1; token <= 100; token++) {
+            await expectReject(
+                `assertionless JSON superseded rewrite token should not authorize import: ${token}`,
+                import(`/dynamic-json-relative-app/assertionless.json?__wasm_rquickjs_import_type=json-${token}`),
+                'ERR_IMPORT_ATTRIBUTE_MISSING',
+            );
+        }
+        await expectReject(
+            'JSON file imported with attributes should still reject without attributes after assertionless hook is disabled',
+            import('/dynamic-json-relative-app/assertionless.json'),
+            'ERR_IMPORT_ATTRIBUTE_MISSING',
         );
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
@@ -726,6 +793,7 @@ export const testEsmDataUrlImportAttributes = async () => {
         fs.writeFileSync('/loader-next-app/node_modules/loader-subpath-pkg/foo.js', 'export default "should-not-resolve";');
         fs.writeFileSync('/loader-next-app/node_modules/loader-subpath-pkg/sp ce.json', '{"encodedSpaceSubpath":true}');
         fs.writeFileSync('/loader-next-app/query.json', '{"query":true}');
+        fs.writeFileSync('/loader-next-app/sp ce.json', '{"encodedRelative":true}');
         fs.writeFileSync('/loader-next-app/extensionless.js', 'export default "should-not-resolve";');
         fs.writeFileSync(
             '/loader-next-app/main.mjs',
@@ -774,6 +842,12 @@ export const testEsmDataUrlImportAttributes = async () => {
                 '    if (url.pathname !== "/loader-next-app/query.json" || url.search !== "?one" || url.hash !== "#two") throw new Error("nextResolve did not preserve file URL search/hash: " + result.url);',
                 '    return result;',
                 '  }',
+                '  if (specifier === "./sp%20ce.json?encoded#space") {',
+                '    const result = await next(specifier, context);',
+                '    const url = new URL(result.url);',
+                '    if (url.pathname !== "/loader-next-app/sp%20ce.json" || url.search !== "?encoded" || url.hash !== "#space") throw new Error("nextResolve did not preserve encoded relative path/search/hash: " + result.url);',
+                '    return result;',
+                '  }',
                 '  return next(specifier, context);',
                 '}',
                 'function load(url, context, next) {',
@@ -796,15 +870,26 @@ export const testEsmDataUrlImportAttributes = async () => {
                 '  if (new URL(url).pathname === "/loader-next-app/query.json") {',
                 '    return { shortCircuit: true, format: "json", source: "{\\"queryHash\\":true}" };',
                 '  }',
+                '  if (new URL(url).pathname === "/loader-next-app/sp%20ce.json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"encodedRelative\\":true}" };',
+                '  }',
                 '  return next(url, context);',
                 '}',
                 'register("data:text/javascript," + encodeURIComponent("export " + resolve + "; export " + load));',
-                'await assert.rejects(import("./extensionless", {}), { code: "ERR_MODULE_NOT_FOUND" });',
+                'let extensionlessRejected = false;',
+                'try {',
+                '  await import("./extensionless", {});',
+                '} catch (err) {',
+                '  assert.strictEqual(err && err.code, "ERR_MODULE_NOT_FOUND", "extensionless loader nextResolve import should reject");',
+                '  extensionlessRejected = true;',
+                '}',
+                'if (!extensionlessRejected) throw new Error("Missing expected rejection: extensionless loader nextResolve import should reject");',
                 'assert.deepStrictEqual((await import("virtual:builtin-shadow", { with: { type: "json" } })).default, { builtinShadow: true });',
                 'assert.deepStrictEqual((await import("virtual:package-subpath-no-extension", { with: { type: "json" } })).default, { packageSubpath: true });',
                 'assert.deepStrictEqual((await import("virtual:encoded-space-subpath", { with: { type: "json" } })).default, { encodedSpaceSubpath: true });',
                 'assert.deepStrictEqual((await import("virtual:encoded-separator-subpath", { with: { type: "json" } })).default, { encodedSeparator: true });',
                 'assert.deepStrictEqual((await import("./query.json?one#two", { with: { type: "json" } })).default, { queryHash: true });',
+                'assert.deepStrictEqual((await import("./sp%20ce.json?encoded#space", { with: { type: "json" } })).default, { encodedRelative: true });',
                 'export default (await import("loader-next-pkg", { with: { type: "json" } })).default;',
             ].join('\n'),
         );
@@ -881,12 +966,19 @@ export const testEsmDataUrlImportAttributes = async () => {
             'register("./url-parent-loader.mjs", { parentURL: "file:///loader-relative-app/main.mjs", data: { value: 7 } });',
             'assert.deepStrictEqual((await import("virtual:url-parent-initialize", { with: { type: "json" } })).default, { urlParent: true });',
         ].join('\n')));
-        await assert.rejects(
-            import('data:text/javascript,' + encodeURIComponent(
+        let malformedJsonRejected = false;
+        try {
+            await import('data:text/javascript,' + encodeURIComponent(
                 'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',
-            )),
-            { name: 'SyntaxError', message: /Unterminated string in JSON at position 3/ },
-        );
+            ));
+        } catch (err) {
+            assert.strictEqual(err && err.name, 'SyntaxError', 'malformed JSON data URL should reject');
+            assert.match(err && err.message, /Unterminated string in JSON at position 3/, 'malformed JSON data URL should reject');
+            malformedJsonRejected = true;
+        }
+        if (!malformedJsonRejected) {
+            throw new Error('Missing expected rejection: malformed JSON data URL should reject');
+        }
         fs.writeFileSync('/cjs-data-url-import-attributes.cjs', [
             'const assert = require("node:assert");',
             'module.exports = async function () {',
@@ -899,7 +991,14 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  const variableSpecifier = `data:application/json;foo=${encodeURIComponent("test,")},0`;',
             '  const variable = await import(variableSpecifier, { with: { type: "json" } });',
             '  if (variable.default !== 0) throw new Error("variable data URL import failed");',
-            '  await assert.rejects(import(variableSpecifier), { code: "ERR_IMPORT_ATTRIBUTE_MISSING" });',
+            '  let missingAttrRejected = false;',
+            '  try {',
+            '    await import(variableSpecifier);',
+            '  } catch (err) {',
+            '    assert.strictEqual(err && err.code, "ERR_IMPORT_ATTRIBUTE_MISSING", "CJS dynamic JSON import without attributes should reject");',
+            '    missingAttrRejected = true;',
+            '  }',
+            '  if (!missingAttrRejected) throw new Error("Missing expected rejection: CJS dynamic JSON import without attributes should reject");',
             '  const urls = [variableSpecifier, "data:application/json,1"];',
             '  let index = 0;',
             '  let optionsCount = 0;',
@@ -915,6 +1014,26 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  const obj = { "import": function(value) { return ["method", value]; } };',
             '  const methodResult = obj.import("not-a-module", { with: { type: "json" } });',
             '  if (methodResult[0] !== "method" || methodResult[1] !== "not-a-module") throw new Error("property import call was rewritten");',
+            '  const plainMethod = { import(value) { return ["plain", value]; } };',
+            '  if (plainMethod.import("value")[0] !== "plain") throw new Error("plain import method was rewritten");',
+            '  const asyncMethod = { async import(value) { return ["async", value]; } };',
+            '  if ((await asyncMethod.import("value"))[0] !== "async") throw new Error("async import method was rewritten");',
+            '  const generatorMethod = { *import(value) { yield value; } };',
+            '  if (generatorMethod.import("value").next().value !== "value") throw new Error("generator import method was rewritten");',
+            '  const asyncGeneratorMethod = { async * import(value) { yield value; } };',
+            '  if ((await asyncGeneratorMethod.import("value").next()).value !== "value") throw new Error("async generator import method was rewritten");',
+            '  const accessorMethod = { get import() { return "getter"; }, set import(value) { this.setter = value; } };',
+            '  if (accessorMethod.import !== "getter") throw new Error("getter import method was rewritten");',
+            '  accessorMethod.import = "setter";',
+            '  if (accessorMethod.setter !== "setter") throw new Error("setter import method was rewritten");',
+            '  class ImportMethods { import(value) { return ["class", value]; } }',
+            '  if (new ImportMethods().import("value")[0] !== "class") throw new Error("class import method was rewritten");',
+            '  class StaticImportMethod { static import(value) { return ["static", value]; } }',
+            '  if (StaticImportMethod.import("value")[0] !== "static") throw new Error("static import method was rewritten");',
+            '  class StaticGetterImportMethod { static get import() { return "staticGetter"; } }',
+            '  if (StaticGetterImportMethod.import !== "staticGetter") throw new Error("static getter import method was rewritten");',
+            '  class AsyncGeneratorImportMethod { async * import(value) { yield value; } }',
+            '  if ((await new AsyncGeneratorImportMethod().import("value").next()).value !== "value") throw new Error("class async generator import method was rewritten");',
             '  const regex = /import\\("not-a-module", \\{ with: \\{ type: "json" \\} \\}\\)/;',
             '  if (!regex.test(\'import("not-a-module", { with: { type: "json" } })\')) throw new Error("regex literal changed");',
             '};',

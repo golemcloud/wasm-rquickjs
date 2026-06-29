@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-06-29 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-06-30 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -1044,7 +1044,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | contextified global proxy identity/property fallback semantics are incomplete | 1 | `parallel/test-vm-property-not-on-sandbox.js` |
 | createContext does not preserve non-enumerable/non-writable sandbox property descriptors | 1 | `parallel/test-vm-preserves-property.js` |
 | createContext incorrectly triggers Proxy getOwnPropertyDescriptor traps | 1 | `parallel/test-vm-proxy-failure-CP.js` |
-| custom ESM loader hooks (--experimental-loader) and assertionless JSON import behavior are not implemented | 1 | `es-module/test-esm-assertionless-json-import.js` |
 | decoding empty-passphrase encrypted PEM traps in the WASM crypto backend | 1 | `parallel/test-crypto-keygen-empty-passphrase-no-prompt.js` |
 | deep async recursion intended to exercise V8 stack recovery can trap the QuickJS/WASM runtime before JavaScript can catch and log the RangeError | 1 | `parallel/test-ttywrap-stack.js` |
 | default clientError path does not send/close with Node-compatible 400 Bad Request behavior | 1 | `parallel/test-http-server-destroy-socket-on-client-error.js` |
@@ -1225,6 +1224,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | request drain captureRejections path hangs when request is never finalized with end() under wasi:http | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01` |
 | request header population/normalization (for example Accept) is incomplete | 1 | `parallel/test-http.js` |
 | request/response pause-resume flow control does not complete with Node-compatible behavior | 1 | `parallel/test-http-pause.js` |
+| requires --experimental-loader CLI wiring; same-process assertionless JSON resolve-hook behavior is covered by runtime tests | 1 | `es-module/test-esm-assertionless-json-import.js` |
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
 | requires Intl/timezone data support that is not available in the current runtime | 1 | `parallel/test-datetime-change-notify.js` |

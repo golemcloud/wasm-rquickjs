@@ -5820,7 +5820,7 @@
     "es-module/test-cjs-legacyMainResolve.js": { "category": "node-internals", "reason": "requires --expose-internals and node:internal/modules/esm/resolve" },
     "es-module/test-cjs-prototype-pollution.js": {},
     "es-module/test-disable-require-module-with-detection.js": {},
-    "es-module/test-esm-assertionless-json-import.js": { "category": "known-gap", "reason": "custom ESM loader hooks (--experimental-loader) and assertionless JSON import behavior are not implemented" },
+    "es-module/test-esm-assertionless-json-import.js": { "category": "known-gap", "reason": "requires --experimental-loader CLI wiring; same-process assertionless JSON resolve-hook behavior is covered by runtime tests" },
     "es-module/test-esm-cjs-builtins.js": {},
     "es-module/test-esm-cjs-exports.js": { "category": "known-gap", "reason": "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js" },
     "es-module/test-esm-cjs-main.js": {},

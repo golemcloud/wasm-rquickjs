@@ -18,6 +18,7 @@ use std::future::Future;
 use std::ops::ControlFlow;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use wstd::runtime::block_on;
 
 /// Resolver that passes `data:` URLs through as-is.
@@ -424,7 +425,11 @@ static IMPORT_ATTR_REWRITE_SEQ: AtomicUsize = AtomicUsize::new(1);
 
 fn next_import_attr_rewrite_token(import_type: &str) -> String {
     let seq = IMPORT_ATTR_REWRITE_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("{import_type}-{seq:x}")
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(seq as u128);
+    format!("{import_type}-{seq:x}-{nonce:x}")
 }
 
 fn register_import_attr_rewrite(token: &str, rewritten_specifier: &str) {
@@ -433,6 +438,19 @@ fn register_import_attr_rewrite(token: &str, rewritten_specifier: &str) {
             .borrow_mut()
             .insert(token.to_string(), rewritten_specifier.to_string());
     });
+}
+
+fn existing_import_attr_rewrite(specifier: &str, import_type: &str) -> Option<String> {
+    IMPORT_ATTR_REWRITE_TOKENS.with(|tokens| {
+        tokens.borrow().iter().find_map(|(token, rewritten)| {
+            let (token_import_type, _) = token.split_once('-')?;
+            if token_import_type == import_type && strip_import_type_rewrite_token(rewritten) == specifier {
+                Some(rewritten.clone())
+            } else {
+                None
+            }
+        })
+    })
 }
 
 fn consume_import_type_rewrite_token(token: &str, path: &str) -> Option<String> {
@@ -470,6 +488,15 @@ fn discard_import_type_rewrite_token(path: &str) {
             if tokens.get(token).is_some_and(|specifier| specifier == path) {
                 tokens.remove(token);
             }
+        });
+    }
+}
+
+fn discard_generated_import_type_rewrite_token(path: &str) {
+    let token = import_type_rewrite_token(path);
+    if let Some(token) = token {
+        IMPORT_ATTR_REWRITE_TOKENS.with(|tokens| {
+            tokens.borrow_mut().remove(token);
         });
     }
 }
@@ -551,6 +578,10 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
             }
 
             if i < len && bytes[i] == b'(' {
+                if is_object_method_shorthand_import(source, import_start, i) {
+                    result.push_str(&source[import_start..i]);
+                    continue;
+                }
                 if let Some((rewritten, next)) = rewrite_dynamic_import_call(source, import_start, i) {
                     result.push_str(&rewritten);
                     i = next;
@@ -777,7 +808,13 @@ fn rewrite_dynamic_import_call(
     }
 
     if i < len && bytes[i] == b')' {
-        return None;
+        return Some((
+            format!(
+                "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
+                &source[spec_literal_start..spec_literal_end]
+            ),
+            i + 1,
+        ));
     }
     if i >= len || bytes[i] != b',' {
         return None;
@@ -799,7 +836,7 @@ fn rewrite_dynamic_import_call(
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
+                            "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},{},true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
                             &source[spec_literal_start..spec_literal_end],
                             options
                         ),
@@ -819,6 +856,124 @@ fn rewrite_dynamic_import_call(
     None
 }
 
+fn previous_non_whitespace_byte(source: &str, pos: usize) -> Option<u8> {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    while i > 0 {
+        i -= 1;
+        if !bytes[i].is_ascii_whitespace() {
+            return Some(bytes[i]);
+        }
+    }
+    None
+}
+
+fn previous_non_whitespace_pos(source: &str, pos: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    while i > 0 {
+        i -= 1;
+        if !bytes[i].is_ascii_whitespace() {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn previous_word(source: &str, pos: usize) -> Option<(&str, usize)> {
+    let bytes = source.as_bytes();
+    let mut end = pos;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let mut start = end;
+    while start > 0 && is_id_char(bytes[start - 1]) {
+        start -= 1;
+    }
+    (start < end).then_some((&source[start..end], start))
+}
+
+fn next_non_whitespace_byte(source: &str, pos: usize) -> Option<u8> {
+    let bytes = source.as_bytes();
+    let mut i = pos;
+    while i < bytes.len() {
+        if !bytes[i].is_ascii_whitespace() {
+            return Some(bytes[i]);
+        }
+        i += 1;
+    }
+    None
+}
+
+fn matching_paren_end(source: &str, open_paren: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = open_paren + 1;
+    let mut depth = 1usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn method_prefix_boundary(source: &str, pos: usize) -> bool {
+    matches!(
+        previous_non_whitespace_byte(source, pos),
+        None | Some(b'{') | Some(b',') | Some(b';')
+    )
+}
+
+fn is_object_method_shorthand_import(source: &str, import_start: usize, open_paren: usize) -> bool {
+    if matching_paren_end(source, open_paren)
+        .and_then(|close| next_non_whitespace_byte(source, close))
+        != Some(b'{')
+    {
+        return false;
+    }
+    if previous_word(source, import_start).is_some_and(|(word, _)| word == "static")
+    {
+        return true;
+    }
+
+    let bytes = source.as_bytes();
+    let mut pos = import_start;
+    loop {
+        let Some(prev) = previous_non_whitespace_pos(source, pos) else {
+            return false;
+        };
+        match bytes[prev] {
+            b'{' | b',' | b';' => return true,
+            b'*' => {
+                pos = prev;
+                continue;
+            }
+            _ => {}
+        }
+
+        let Some((word, start)) = previous_word(source, pos) else {
+            return false;
+        };
+        if matches!(word, "async" | "get" | "set" | "static") {
+            pos = start;
+            continue;
+        }
+        return false;
+    }
+}
+
 fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let len = bytes.len();
@@ -834,7 +989,16 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                 continue;
             }
             b'(' => paren_depth += 1,
-            b')' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => return None,
+            b')' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => {
+                let expr = source[expr_start..i].trim();
+                return Some((
+                    format!(
+                        "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
+                        expr
+                    ),
+                    i + 1,
+                ));
+            }
             b')' => paren_depth = paren_depth.saturating_sub(1),
             b'[' => bracket_depth += 1,
             b']' => bracket_depth = bracket_depth.saturating_sub(1),
@@ -865,7 +1029,7 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true)))({},{}))",
+                            "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},{},true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
                             expr, options
                         ),
                         i + 1,
@@ -887,6 +1051,10 @@ struct ImportAttrInfo {
 }
 
 fn append_import_type_query(specifier: &str, import_type: &str) -> String {
+    if let Some(rewritten) = existing_import_attr_rewrite(specifier, import_type) {
+        return rewritten;
+    }
+
     let token = next_import_attr_rewrite_token(import_type);
     if specifier.starts_with("data:") {
         if let Some(comma_pos) = specifier.strip_prefix("data:").and_then(DataUrlLoader::content_separator_pos) {
@@ -911,6 +1079,47 @@ fn append_import_type_query(specifier: &str, import_type: &str) -> String {
 fn import_attr_type_from_path(path: &str) -> Option<String> {
     import_type_rewrite_token(path)
         .and_then(|token| consume_import_type_rewrite_token(token, path))
+}
+
+fn strip_import_type_rewrite_token(path: &str) -> String {
+    let Some(token) = import_type_rewrite_token(path) else {
+        return path.to_string();
+    };
+    let marker = format!("{IMPORT_TYPE_QUERY_PREFIX}{token}");
+
+    if let Some(rest) = path.strip_prefix("data:")
+        && let Some(comma_pos) = DataUrlLoader::content_separator_pos(rest)
+    {
+        let metadata_end = "data:".len() + comma_pos;
+        let metadata = &path[..metadata_end];
+        if let Some(marker_start) = metadata.find(&marker) {
+            let remove_start = marker_start
+                .checked_sub(1)
+                .filter(|idx| path.as_bytes().get(*idx) == Some(&b';'))
+                .unwrap_or(marker_start);
+            return format!("{}{}", &path[..remove_start], &path[marker_start + marker.len()..]);
+        }
+    }
+
+    let (base, suffix) = split_module_path_suffix(path);
+    if suffix.is_empty() {
+        return path.to_string();
+    }
+    let Some(marker_start) = suffix.find(&marker) else {
+        return path.to_string();
+    };
+    let remove_start = marker_start
+        .checked_sub(1)
+        .filter(|idx| matches!(suffix.as_bytes().get(*idx), Some(b'?') | Some(b'&')))
+        .unwrap_or(marker_start);
+    let mut stripped_suffix = String::with_capacity(suffix.len().saturating_sub(marker.len()));
+    stripped_suffix.push_str(&suffix[..remove_start]);
+    stripped_suffix.push_str(&suffix[marker_start + marker.len()..]);
+    if stripped_suffix == "?" || stripped_suffix == "#" {
+        base.to_string()
+    } else {
+        format!("{base}{stripped_suffix}")
+    }
 }
 
 fn is_id_char(b: u8) -> bool {
@@ -6614,6 +6823,15 @@ impl JsState {
                 .expect("Failed to create import attribute rewrite registrar"),
             )
             .expect("Failed to initialize import attribute rewrite registrar");
+
+            global.set(
+                "__wasm_rquickjs_discard_import_attr_rewrite",
+                Function::new(ctx.clone(), |specifier: String| {
+                    discard_generated_import_type_rewrite_token(&specifier);
+                })
+                .expect("Failed to create import attribute rewrite discard"),
+            )
+            .expect("Failed to initialize import attribute rewrite discard");
         })
         .await;
 
@@ -7519,6 +7737,59 @@ mod cjs_export_analyzer_tests {
             import_attr_type_from_path(&resolved_rewritten),
             Some("json".to_string())
         );
+    }
+
+    #[test]
+    fn dynamic_import_rewrite_handles_array_commas() {
+        let source = r#"
+            await Promise.all([
+                import("./plain.json"),
+                import("./typed.json", { with: { type: "json" } }),
+            ]);
+        "#;
+        let rewritten = process_static_import_attrs(source, "/app/main.mjs");
+
+        assert!(rewritten.contains("__wasm_rquickjs_import_attr_dynamic_import"));
+        assert!(rewritten.contains(r#"./typed.json", { with: { type: "json" } }"#));
+        assert!(!rewritten.contains(r#"import("./typed.json","#));
+    }
+
+    #[test]
+    fn dynamic_import_rewrite_preserves_object_method_shorthand() {
+        let source = r#"
+            const obj = {
+                import(value) { return ["method", value]; },
+                async importAsync(value) { return value; },
+                *importGenerator(value) { yield value; },
+                get importGetter() { return "getter"; },
+                set importSetter(value) { this.value = value; },
+            };
+            const asyncObj = { async import(value) { return value; } };
+            const generatorObj = { *import(value) { yield value; } };
+            const asyncGeneratorObj = { async * import(value) { yield value; } };
+            const getterObj = { get import() { return "getter"; } };
+            const setterObj = { set import(value) { this.value = value; } };
+            class ImportMethods {
+                import(value) { return value; }
+                static import(value) { return value; }
+                static get importGetterStatic() { return "getter"; }
+                async importAsync(value) { return value; }
+                *importGenerator(value) { yield value; }
+                async * importAsyncGenerator(value) { yield value; }
+                get importGetter() { return "getter"; }
+                set importSetter(value) { this.value = value; }
+            }
+            class AsyncImportMethod { async import(value) { return value; } }
+            class GeneratorImportMethod { *import(value) { yield value; } }
+            class StaticImportMethod { static import(value) { return value; } }
+            class StaticGetterImportMethod { static get import() { return "getter"; } }
+            class AsyncGeneratorImportMethod { async * import(value) { yield value; } }
+            class GetterImportMethod { get import() { return "getter"; } }
+            class SetterImportMethod { set import(value) { this.value = value; } }
+            obj.import("value");
+        "#;
+
+        assert_eq!(process_static_import_attrs(source, "/app/main.mjs"), source);
     }
 
     fn assert_analysis(
