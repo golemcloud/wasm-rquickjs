@@ -5863,17 +5863,17 @@
     "es-module/test-esm-url-extname.js": { "category": "node-internals", "reason": "uses --expose-internals and imports node:internal/modules/esm/get_format" },
     "es-module/test-esm-windows.js": {},
     "es-module/test-loaders-hidden-from-users.js": { "category": "node-internals", "reason": "uses --expose-internals plus Node internals (require('internal/...'), process.binding('natives'))" },
-    "es-module/test-require-module-cached-tla.js": {},
-    "es-module/test-require-module-conditional-exports-module.js": {},
+    "es-module/test-require-module-cached-tla.js": { "category": "runnable" },
+    "es-module/test-require-module-conditional-exports-module.js": { "category": "runnable" },
     "es-module/test-require-module-conditional-exports.js": {
       "split": true,
       "subtests": {
-        "block_00_if_only_require_exports_are_defined_return_require_exports": {},
-        "block_01_if_both_are_defined_require_is_used": {},
-        "block_02_if_import_and_default_are_defined_default_is_used": {}
+        "block_00_if_only_require_exports_are_defined_return_require_exports": { "category": "runnable" },
+        "block_01_if_both_are_defined_require_is_used": { "category": "runnable" },
+        "block_02_if_import_and_default_are_defined_default_is_used": { "category": "runnable" }
       }
     },
-    "es-module/test-require-module-cycle-cjs-esm-esm.js": {},
+    "es-module/test-require-module-cycle-cjs-esm-esm.js": { "category": "runnable" },
     "es-module/test-require-module-cycle-esm-cjs-esm-esm.js": {
       "category": "known-gap",
       "reason": "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
@@ -5917,52 +5917,51 @@
         "block_03_d_mjs_c_mjs_d_mjs": {}
       }
     },
-    "es-module/test-require-module-default-extension.js": {},
+    "es-module/test-require-module-default-extension.js": { "category": "runnable" },
     "es-module/test-require-module-defined-esmodule.js": {
       "split": true,
       "subtests": {
-        "block_00_require_esm_should_allow_the_user_override": {},
-        "block_01_block_01": {}
+        "block_00_require_esm_should_allow_the_user_override": { "category": "runnable" },
+        "block_01_block_01": { "category": "runnable" }
       }
     },
-    "es-module/test-require-module-detect-entry-point-aou.js": {},
-    "es-module/test-require-module-detect-entry-point.js": {},
-    "es-module/test-require-module-dont-detect-cjs.js": {},
-    "es-module/test-require-module-dynamic-import-1.js": {},
-    "es-module/test-require-module-dynamic-import-2.js": {},
-    "es-module/test-require-module-dynamic-import-3.js": {},
-    "es-module/test-require-module-dynamic-import-4.js": {},
-    "es-module/test-require-module-error-catching.js": {},
+    "es-module/test-require-module-detect-entry-point-aou.js": { "category": "runnable" },
+    "es-module/test-require-module-detect-entry-point.js": { "category": "runnable" },
+    "es-module/test-require-module-dont-detect-cjs.js": { "category": "runnable" },
+    "es-module/test-require-module-dynamic-import-1.js": { "category": "runnable" },
+    "es-module/test-require-module-dynamic-import-2.js": { "category": "runnable" },
+    "es-module/test-require-module-dynamic-import-3.js": { "category": "runnable" },
+    "es-module/test-require-module-dynamic-import-4.js": { "category": "runnable" },
+    "es-module/test-require-module-error-catching.js": { "category": "runnable" },
     "es-module/test-require-module-errors.js": { "category": "engine-difference", "reason": "asserts V8-specific syntax error stderr text/format that differs in QuickJS" },
-    "es-module/test-require-module-feature-detect.js": {},
-    "es-module/test-require-module-implicit.js": {},
+    "es-module/test-require-module-feature-detect.js": { "category": "runnable" },
+    "es-module/test-require-module-implicit.js": { "category": "runnable" },
     "es-module/test-require-module-preload.js": { "category": "known-gap", "reason": "child_process execPath emulation lacks full --import/--require preload semantics" },
-    "es-module/test-require-module-retry-import-errored.js": {},
-    "es-module/test-require-module-retry-import-evaluating.js": {},
-    "es-module/test-require-module-synchronous-rejection-handling.js": {},
-    "es-module/test-require-module-tla-retry-import-2.js": {},
-    "es-module/test-require-module-tla-retry-import.js": {},
-    "es-module/test-require-module-tla-retry-require.js": {},
+    "es-module/test-require-module-retry-import-errored.js": { "category": "runnable" },
+    "es-module/test-require-module-retry-import-evaluating.js": { "category": "runnable" },
+    "es-module/test-require-module-synchronous-rejection-handling.js": { "category": "runnable" },
+    "es-module/test-require-module-tla-retry-import-2.js": { "category": "runnable" },
+    "es-module/test-require-module-tla-retry-import.js": { "category": "runnable" },
+    "es-module/test-require-module-tla-retry-require.js": { "category": "runnable" },
     "es-module/test-require-module-tla.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
+        "block_00_block_00": { "category": "runnable" },
         "block_01_block_01": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output" }
       }
     },
-    "es-module/test-require-module-transpiled.js": {},
-    "es-module/test-require-module-twice.js": {},
+    "es-module/test-require-module-transpiled.js": { "category": "runnable" },
+    "es-module/test-require-module-twice.js": { "category": "runnable" },
     "es-module/test-require-module-warning.js": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --trace-require-module warning output" },
     "es-module/test-require-module-with-detection.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {}
+        "block_00_block_00": { "category": "runnable" },
+        "block_01_block_01": { "category": "runnable" }
       }
     },
     "es-module/test-require-module.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
+      "category": "runnable",
       "split": true,
       "subtests": {
         "block_00_test_named_exports": { "category": "runnable" },
