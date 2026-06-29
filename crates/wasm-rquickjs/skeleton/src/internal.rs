@@ -16,6 +16,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::ops::ControlFlow;
+use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
@@ -2415,7 +2416,7 @@ where
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 struct PackageJson {
     #[serde(default, deserialize_with = "deserialize_strict_package_string")]
@@ -2427,6 +2428,10 @@ struct PackageJson {
     #[serde(rename = "type")]
     #[serde(default, deserialize_with = "deserialize_strict_package_string")]
     package_type: Option<String>,
+}
+
+thread_local! {
+    static PACKAGE_JSON_CACHE: RefCell<HashMap<String, Rc<PackageJson>>> = RefCell::new(HashMap::new());
 }
 
 struct NodePackageWarning {
@@ -2577,22 +2582,43 @@ impl NodeModulesResolver {
 
         match mode {
             NodePackageResolveMode::EsmImport => {
-                Self::try_resolve_package_directory_esm(base, specifier, subpath, package_path, package.as_ref(), warnings)
+                Self::try_resolve_package_directory_esm(
+                    base,
+                    specifier,
+                    subpath,
+                    package_path,
+                    package.as_deref(),
+                    warnings,
+                )
             }
             NodePackageResolveMode::CjsAnalysis => {
-                Ok(Self::try_resolve_package_directory_for_cjs_analysis(subpath, package_path, package.as_ref()))
+                Ok(Self::try_resolve_package_directory_for_cjs_analysis(
+                    subpath,
+                    package_path,
+                    package.as_deref(),
+                ))
             }
         }
     }
 
-    fn read_package_json_optional(pkg_path: &std::path::Path) -> Result<Option<PackageJson>, NodePackageResolveError> {
+    fn read_package_json_optional(pkg_path: &std::path::Path) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
+        let cache_key = CjsEvalResolver::normalize_path(pkg_path);
+        if let Some(cached) = PACKAGE_JSON_CACHE.with_borrow(|cache| cache.get(&cache_key).cloned()) {
+            return Ok(Some(cached));
+        }
         match std::fs::read_to_string(pkg_path) {
-            Ok(pkg_content) => Ok(Some(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
-                NodePackageResolveError::InvalidPackageConfig {
-                    path: pkg_path.to_string_lossy().into_owned(),
-                    reason: None,
-                }
-            })?)),
+            Ok(pkg_content) => {
+                let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
+                    NodePackageResolveError::InvalidPackageConfig {
+                        path: pkg_path.to_string_lossy().into_owned(),
+                        reason: None,
+                    }
+                })?);
+                PACKAGE_JSON_CACHE.with_borrow_mut(|cache| {
+                    cache.insert(cache_key, package.clone());
+                });
+                Ok(Some(package))
+            }
             Err(_) => Ok(None),
         }
     }
@@ -2726,13 +2752,7 @@ impl NodeModulesResolver {
             }
 
             let pkg_path = dir.join("package.json");
-            if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
-                let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
-                    NodePackageResolveError::InvalidPackageConfig {
-                        path: pkg_path.to_string_lossy().into_owned(),
-                        reason: None,
-                    }
-                })?;
+            if let Some(package) = Self::read_package_json_optional(&pkg_path)? {
                 let Some(imports) = package.imports.as_ref() else {
                     return Err(NodePackageResolveError::PackageImportNotDefined {
                         specifier: name.to_string(),
@@ -2767,13 +2787,7 @@ impl NodeModulesResolver {
             }
 
             let pkg_path = dir.join("package.json");
-            if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path) {
-                let package: PackageJson = serde_json::from_str(&pkg_content).map_err(|_| {
-                    NodePackageResolveError::InvalidPackageConfig {
-                        path: pkg_path.to_string_lossy().into_owned(),
-                        reason: None,
-                    }
-                })?;
+            if let Some(package) = Self::read_package_json_optional(&pkg_path)? {
                 if package.name.as_deref() == Some(package_name)
                     && let Some(exports_field) = package.exports.as_ref()
                 {
@@ -5545,10 +5559,9 @@ fn package_scope_type(filename: &str) -> Option<String> {
             return None;
         }
         let pkg_path = dir.join("package.json");
-        if let Ok(pkg_content) = std::fs::read_to_string(&pkg_path)
-            && let Ok(package) = serde_json::from_str::<PackageJson>(&pkg_content)
+        if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional(&pkg_path)
         {
-            return package.package_type;
+            return package.package_type.clone();
         }
         if !dir.pop() {
             break;
@@ -8054,6 +8067,7 @@ pub fn wizer_initialize() {
             );
         });
 
+        PACKAGE_JSON_CACHE.with_borrow_mut(|cache| cache.clear());
         INIT_PHASE = InitPhase::WizerPreInitialized;
     }
 

@@ -1673,6 +1673,28 @@ export const testCjsPackageJsonParseCache = async () => {
         ].join('\n'));
 
         assert.strictEqual(require(`${root}/app.cjs`), true);
+
+        fs.mkdirSync(`${root}/node_modules/cached-esm-pkg`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/cached-esm-pkg/package.json`, JSON.stringify({
+            exports: {
+                './first': './entry.mjs',
+                './second': './entry.mjs',
+            },
+        }));
+        fs.writeFileSync(`${root}/node_modules/cached-esm-pkg/entry.mjs`, 'export default { cached: true };');
+        fs.writeFileSync(`${root}/node_modules/cached-esm-pkg/changed.mjs`, 'export default { changed: true };');
+        fs.writeFileSync(`${root}/esm-entry.mjs`, [
+            'const fs = await import("node:fs");',
+            'const first = await import("cached-esm-pkg/first");',
+            'fs.writeFileSync("/package-json-cache-app/node_modules/cached-esm-pkg/package.json", JSON.stringify({ exports: { "./second": "./changed.mjs" } }));',
+            'const second = await import("cached-esm-pkg/second");',
+            'export default { first: first.default, second: second.default };',
+        ].join('\n'));
+
+        assert.deepStrictEqual((await import(`${root}/esm-entry.mjs`)).default, {
+            first: { cached: true },
+            second: { cached: true },
+        });
         return true;
     } catch (error) {
         console.error(error);
