@@ -1453,6 +1453,312 @@ function getCjsLineOffsetRegistry() {
     return registry;
 }
 
+const cjsLineOffset = 6;
+
+const sourceMapVlqChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const sourceMapVlqMap = Object.create(null);
+for (let i = 0; i < sourceMapVlqChars.length; i++) {
+    sourceMapVlqMap[sourceMapVlqChars.charAt(i)] = i;
+}
+
+function sourceMapInvalidPayloadError(payload) {
+    let received;
+    if (payload === null) {
+        received = ' Received null';
+    } else if (typeof payload === 'number') {
+        received = ' Received type number (' + payload + ')';
+    } else if (typeof payload === 'string') {
+        received = " Received type string ('" + payload + "')";
+    } else {
+        received = ' Received type ' + typeof payload + ' (' + String(payload) + ')';
+    }
+    const err = new TypeError('The "payload" argument must be of type object.' + received);
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    return err;
+}
+
+function cloneSourceMapPayload(payload) {
+    return JSON.parse(JSON.stringify(payload));
+}
+
+function decodeSourceMapVlq(text, state) {
+    let result = 0;
+    let shift = 0;
+    let continuation = true;
+    while (continuation) {
+        if (state.index >= text.length) throw new Error('Unexpected end of source map VLQ');
+        const value = sourceMapVlqMap[text.charAt(state.index++)];
+        if (value === undefined) throw new Error('Invalid source map VLQ character');
+        continuation = (value & 32) !== 0;
+        result += (value & 31) * Math.pow(2, shift);
+        shift += 5;
+    }
+    const negative = (result % 2) === 1;
+    result = Math.floor(result / 2);
+    if (negative && result === 0) return -2147483648;
+    return negative ? -result : result;
+}
+
+function resolveSourceMapSource(source, sourceRoot, sourceBasePath) {
+    source = String(source);
+    if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(source)) return source;
+    if (sourceBasePath) {
+        const resolved = pathModule.resolve(sourceBasePath, sourceRoot || '', source);
+        return nodeUrl.pathToFileURL(resolved).href;
+    }
+    if (!sourceRoot) return source;
+    sourceRoot = String(sourceRoot);
+    if (sourceRoot.endsWith('/') || source.startsWith('/')) return sourceRoot + source;
+    return sourceRoot + '/' + source;
+}
+
+function parseSourceMapMappings(payload, sourceBasePath) {
+    const mappings = String(payload.mappings);
+    const sources = Array.isArray(payload.sources) ? payload.sources : [];
+    const names = Array.isArray(payload.names) ? payload.names : [];
+    const sourceRoot = payload.sourceRoot || '';
+    const lines = [];
+    let generatedLine = 0;
+    let previousGeneratedColumn = 0;
+    let previousSource = 0;
+    let previousOriginalLine = 0;
+    let previousOriginalColumn = 0;
+    let previousName = 0;
+    let i = 0;
+
+    while (i <= mappings.length) {
+        if (!lines[generatedLine]) lines[generatedLine] = [];
+        if (i === mappings.length) break;
+        const ch = mappings.charAt(i);
+        if (ch === ';') {
+            generatedLine++;
+            previousGeneratedColumn = 0;
+            i++;
+            continue;
+        }
+        if (ch === ',') {
+            i++;
+            continue;
+        }
+
+        const segmentStart = i;
+        while (i < mappings.length && mappings.charAt(i) !== ',' && mappings.charAt(i) !== ';') {
+            i++;
+        }
+        const segmentText = mappings.slice(segmentStart, i);
+        if (segmentText.length === 0) continue;
+        const state = { index: 0 };
+        const generatedColumn = previousGeneratedColumn + decodeSourceMapVlq(segmentText, state);
+        previousGeneratedColumn = generatedColumn;
+        if (state.index >= segmentText.length) {
+            lines[generatedLine].push({ generatedLine, generatedColumn });
+            continue;
+        }
+
+        const sourceIndex = previousSource + decodeSourceMapVlq(segmentText, state);
+        const originalLine = previousOriginalLine + decodeSourceMapVlq(segmentText, state);
+        const originalColumn = previousOriginalColumn + decodeSourceMapVlq(segmentText, state);
+        previousSource = sourceIndex;
+        previousOriginalLine = originalLine;
+        previousOriginalColumn = originalColumn;
+        let name;
+        if (state.index < segmentText.length) {
+            const nameIndex = previousName + decodeSourceMapVlq(segmentText, state);
+            previousName = nameIndex;
+            name = names[nameIndex];
+        }
+
+        lines[generatedLine].push({
+            generatedLine,
+            generatedColumn,
+            originalSource: resolveSourceMapSource(sources[sourceIndex], sourceRoot, sourceBasePath),
+            originalLine,
+            originalColumn,
+            name,
+        });
+    }
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        if (lines[lineIndex]) {
+            lines[lineIndex].sort((a, b) => a.generatedColumn - b.generatedColumn);
+        }
+    }
+    return lines;
+}
+
+function parseIndexSourceMapMappings(payload, sourceBasePath) {
+    const lines = [];
+    const sections = Array.isArray(payload.sections) ? payload.sections : [];
+    for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        if (!section || !section.map || !section.offset) continue;
+        const offsetLine = Number(section.offset.line) || 0;
+        const offsetColumn = Number(section.offset.column) || 0;
+        const sectionMap = parseSourceMapMappings(section.map, sourceBasePath);
+        for (let line = 0; line < sectionMap.length; line++) {
+            const segments = sectionMap[line];
+            if (!segments) continue;
+            const targetLine = line + offsetLine;
+            if (!lines[targetLine]) lines[targetLine] = [];
+            for (let j = 0; j < segments.length; j++) {
+                const segment = Object.assign({}, segments[j]);
+                segment.generatedLine += offsetLine;
+                if (line === 0) segment.generatedColumn += offsetColumn;
+                lines[targetLine].push(segment);
+            }
+        }
+    }
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        if (lines[lineIndex]) {
+            lines[lineIndex].sort((a, b) => a.generatedColumn - b.generatedColumn);
+        }
+    }
+    return lines;
+}
+
+function decodeSourceMapPayload(payload, sourceBasePath) {
+    try {
+        if (Array.isArray(payload.sections)) return parseIndexSourceMapMappings(payload, sourceBasePath);
+        return parseSourceMapMappings(payload, sourceBasePath);
+    } catch (_) {
+        return [];
+    }
+}
+
+function cloneSourceMapEntry(entry) {
+    if (!entry || entry.originalSource === undefined) return {};
+    return {
+        generatedLine: entry.generatedLine,
+        generatedColumn: entry.generatedColumn,
+        originalSource: entry.originalSource,
+        originalLine: entry.originalLine,
+        originalColumn: entry.originalColumn,
+        name: entry.name,
+    };
+}
+
+function findSourceMapMapping(lines, lineOffset, columnOffset) {
+    lineOffset = Math.floor(lineOffset);
+    columnOffset = Math.floor(columnOffset);
+    for (let lineIndex = lineOffset; lineIndex >= 0; lineIndex--) {
+        const line = lines[lineIndex];
+        if (!line || line.length === 0) continue;
+        let match = null;
+        if (lineIndex === lineOffset) {
+            for (let i = 0; i < line.length; i++) {
+                if (line[i].generatedColumn <= columnOffset) match = line[i];
+                else break;
+            }
+            if (match) return match;
+        } else {
+            return line[line.length - 1];
+        }
+    }
+    return null;
+}
+
+class SourceMap {
+    constructor(payload, options) {
+        if (payload === null || typeof payload !== 'object') {
+            throw sourceMapInvalidPayloadError(payload);
+        }
+        options = options || {};
+        this.payload = cloneSourceMapPayload(payload);
+        if (options.lineLengths !== undefined) {
+            this.lineLengths = Array.prototype.slice.call(options.lineLengths);
+        }
+        this._decodedMappings = decodeSourceMapPayload(this.payload, options.sourceBasePath);
+    }
+
+    findEntry(lineOffset, columnOffset) {
+        lineOffset = Number(lineOffset);
+        columnOffset = Number(columnOffset);
+        if (!Number.isFinite(lineOffset) || !Number.isFinite(columnOffset)) return {};
+        return cloneSourceMapEntry(findSourceMapMapping(this._decodedMappings, lineOffset, columnOffset));
+    }
+
+    findOrigin(lineNumber, columnNumber) {
+        const generatedLine = Number(lineNumber) - 1;
+        const generatedColumn = Number(columnNumber) - 1;
+        if (!Number.isFinite(generatedLine) || !Number.isFinite(generatedColumn)) return {};
+        const match = findSourceMapMapping(this._decodedMappings, generatedLine, generatedColumn);
+        if (!match) return {};
+        return {
+            name: match.name,
+            fileName: match.originalSource,
+            lineNumber: match.originalLine + 1,
+            columnNumber: match.originalColumn + (generatedColumn - match.generatedColumn) + 1,
+        };
+    }
+}
+
+function findSourceMap(path) {
+    const registry = getSimpleSourceMapRegistry();
+    return registry[String(path)];
+}
+
+function sourceMapLineLengths(source) {
+    return String(source).split(/\r\n|[\n\r\u2028\u2029]/).map(line => line.length);
+}
+
+function decodeInlineSourceMap(url) {
+    const marker = 'base64,';
+    const idx = url.indexOf(marker);
+    if (idx === -1) return null;
+    try {
+        const encoded = url.slice(idx + marker.length);
+        const decoded = buffer.Buffer.from(encoded, 'base64').toString('utf8');
+        return JSON.parse(decoded);
+    } catch (_) {
+        return null;
+    }
+}
+
+function registerSourceMapForCjs(filename, source) {
+    const registry = getSimpleSourceMapRegistry();
+    if (!isSourceMapsEnabled()) {
+        delete registry[filename];
+        return;
+    }
+
+    const sourceText = String(source);
+    const directiveRe = /\/\/[#@]\s*sourceMappingURL=([^\r\n]+)|\/\*[#@]\s*sourceMappingURL=([\s\S]*?)\*\//g;
+    let match;
+    let url = null;
+    while ((match = directiveRe.exec(sourceText)) !== null) {
+        url = (match[1] !== undefined ? match[1] : match[2]).trim();
+    }
+    if (url === null) {
+        delete registry[filename];
+        return;
+    }
+
+    let payload = null;
+    let sourceBasePath = pathModule.dirname(filename);
+    if (url.startsWith('data:')) {
+        payload = decodeInlineSourceMap(url);
+    } else {
+        const mapPath = pathModule.resolve(pathModule.dirname(filename), url);
+        sourceBasePath = pathModule.dirname(mapPath);
+        const content = tryReadFile(mapPath);
+        if (content !== null) {
+            try {
+                payload = JSON.parse(content);
+            } catch (_) {
+                payload = null;
+            }
+        }
+    }
+    if (payload === null) {
+        delete registry[filename];
+        return;
+    }
+    registry[filename] = new SourceMap(payload, {
+        lineLengths: sourceMapLineLengths(source),
+        sourceBasePath,
+    });
+}
+
 function countMatches(text, charCode) {
     let count = 0;
     for (let i = 0; i < text.length; i++) {
@@ -2331,7 +2637,7 @@ function compileCjs(filename, source) {
     source = stripImportAttributes(source, filename);
 
     const cjsLineOffsets = getCjsLineOffsetRegistry();
-    cjsLineOffsets[filename] = 2;
+    cjsLineOffsets[filename] = cjsLineOffset;
 
     const wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
     return _evalWithFilename(wrappedSource, filename);
@@ -2471,6 +2777,7 @@ function loadModule(resolvedFilename, source, parentModule) {
 
     // Cache before executing (handles circular dependencies)
     moduleCache[filename] = mod;
+    registerSourceMapForCjs(filename, source);
 
     if (parentModule && parentModule.children) {
         parentModule.children.push(mod);
@@ -3314,6 +3621,8 @@ const moduleExports = Object.assign(Module, {
     require: globalRequire,
     createRequire,
     findPackageJSON,
+    findSourceMap,
+    SourceMap,
     builtinModules: builtinModuleNames,
     syncBuiltinESMExports,
     isBuiltin: isBuiltinModule,

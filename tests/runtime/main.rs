@@ -36,6 +36,7 @@ mod path;
 mod pollable;
 mod response_constructor;
 mod response_static;
+mod source_map;
 mod sqlite;
 mod stateful1;
 mod streams;
@@ -85,6 +86,7 @@ tag_suite!(imports, group7);
 
 tag_suite!(response_static, group8);
 tag_suite!(v8_stack_trace, group8);
+tag_suite!(source_map, group8);
 tag_suite!(structured_clone, group8);
 tag_suite!(node_http, group8);
 tag_suite!(intl, group8);

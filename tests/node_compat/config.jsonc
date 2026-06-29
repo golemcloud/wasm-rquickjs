@@ -8209,19 +8209,17 @@
     "parallel/test-socket-writes-before-passed-to-tls-socket.js": { "category": "wasi-impossible", "reason": "requires TLS socket wrapping over raw net sockets" },
     "parallel/test-socketaddress.js": { "category": "node-internals", "reason": "requires internal/socketaddress and internal/test/binding" },
     "parallel/test-source-map-api.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_it_should_throw_with_invalid_args": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_01_findsourcemap_should_return_undefined_when_no_source_map_is_": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_02_non_exceptional_case": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_03_source_map_attached_to_error": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_05_error_when_receiving_a_malformed_mappings": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_07_test_various_known_decodings_to_ensure_decodevlq_works_corre": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" },
-        "block_08_observed_see_https_github_com_mozilla_source_map_pull_92": { "category": "known-gap", "reason": "module SourceMap/findSourceMap API is not fully implemented" }
+        "block_00_it_should_throw_with_invalid_args": {},
+        "block_01_findsourcemap_should_return_undefined_when_no_source_map_is_": {},
+        "block_02_non_exceptional_case": {},
+        "block_03_source_map_attached_to_error": { "category": "known-gap", "reason": "native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset" },
+        "block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p": {},
+        "block_05_error_when_receiving_a_malformed_mappings": {},
+        "block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec": {},
+        "block_07_test_various_known_decodings_to_ensure_decodevlq_works_corre": {},
+        "block_08_observed_see_https_github_com_mozilla_source_map_pull_92": {}
       }
     },
     "parallel/test-source-map-cjs-require-cache.js": { "category": "known-gap", "reason": "source-map cache eviction via findSourceMap()/GC is incomplete" },
