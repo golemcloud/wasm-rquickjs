@@ -6910,7 +6910,7 @@
     "parallel/test-mime-whatwg.js": { "category": "known-gap", "reason": "util.MIMEType parsing API is not implemented" },
     "parallel/test-module-builtin.js": { "category": "runnable" },
     "parallel/test-module-children.js": { "category": "runnable" },
-    "parallel/test-module-circular-symlinks.js": {},
+    "parallel/test-module-circular-symlinks.js": { "category": "runnable" },
     "parallel/test-module-create-require-multibyte.js": {
       "split": true,
       "subtests": {
@@ -6969,7 +6969,7 @@
         "test_08_striptypescripttypes_source_map_when_mode_is_transform_and_s": {}
       }
     },
-    "parallel/test-module-symlinked-peer-modules.js": {},
+    "parallel/test-module-symlinked-peer-modules.js": { "category": "runnable" },
     "parallel/test-module-version.js": {},
     "parallel/test-module-wrap.js": {},
     "parallel/test-module-wrapper.js": { "category": "runnable" },
