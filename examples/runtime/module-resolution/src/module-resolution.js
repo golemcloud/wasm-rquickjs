@@ -2055,6 +2055,246 @@ export const testFindPackageJson = async () => {
     }
 };
 
+export const testVmMainContextDefaultLoader = async () => {
+    try {
+        const vm = await import('node:vm');
+        const { default: assert } = await import('node:assert');
+        const { pathToFileURL } = await import('node:url');
+
+        fs.mkdirSync('/vm-default-loader-app/subdir', { recursive: true });
+        fs.mkdirSync('/vm-default-loader-app/other', { recursive: true });
+        fs.mkdirSync('/vm-default-loader-app/space dir', { recursive: true });
+        fs.writeFileSync('/vm-default-loader-app/subdir/message.mjs', [
+            'export const value = "from-subdir";',
+            'export default { value };',
+        ].join('\n'));
+        fs.writeFileSync('/vm-default-loader-app/other/message.mjs', [
+            'export const value = "from-other";',
+            'export default { value };',
+        ].join('\n'));
+        fs.writeFileSync('/vm-default-loader-app/space dir/message.mjs', [
+            'export const value = "from-space";',
+            'export default { value };',
+        ].join('\n'));
+        fs.writeFileSync('/vm-default-loader-app/message.mjs', [
+            'export const value = "from-cwd";',
+            'export default { value };',
+        ].join('\n'));
+
+        assert.strictEqual(typeof vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER, 'symbol');
+
+        const script = new vm.Script('import("./message.mjs")', {
+            filename: '/vm-default-loader-app/subdir/index.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await script.runInThisContext()).default, { value: 'from-subdir' });
+
+        const mutableOptions = {
+            filename: '/vm-default-loader-app/subdir/mutable.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        };
+        const mutableScript = new vm.Script('import("./message.mjs")', mutableOptions);
+        mutableOptions.filename = '/vm-default-loader-app/other/mutable.js';
+        assert.deepStrictEqual((await mutableScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const expressionScript = new vm.Script([
+            'const name = "message.mjs";',
+            'import("./" + name);',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/expression.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await expressionScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const templateScript = new vm.Script('import(`./message.mjs`)', {
+            filename: '/vm-default-loader-app/subdir/template.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await templateScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const commentScript = new vm.Script('import /* comment */ ("./message.mjs")', {
+            filename: '/vm-default-loader-app/subdir/comment.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await commentScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const templateExpressionScript = new vm.Script([
+            'let imported;',
+            '`${imported = import("./message.mjs")}`;',
+            'imported;',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/template-expression.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await templateExpressionScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const dataScript = new vm.Script([
+            'const literal = "import(\\"./message.mjs\\")";',
+            'const regex = /import\\("\\.\\/message\\.mjs"\\)/;',
+            'function readRegex() { return /import\\("\\.\\/message\\.mjs"\\)/; }',
+            'if (true) /import\\("\\.\\/message\\.mjs"\\)/.test(literal);',
+            'literal + String(regex) + String(readRegex());',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/string-regex.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.match(dataScript.runInThisContext(), /import/);
+
+        const divisionScript = new vm.Script([
+            'const a = 1, b = 2;',
+            'a / b;',
+            'import("./message.mjs");',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/division.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await divisionScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const propertyScript = new vm.Script([
+            'const obj = { "import"(specifier) { return specifier; } };',
+            'obj.import("./message.mjs");',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/property.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(propertyScript.runInThisContext(), './message.mjs');
+
+        const privatePropertyScript = new vm.Script([
+            'class C {',
+            '  #import(specifier) { return specifier; }',
+            '  m() { return this.#import("./message.mjs"); }',
+            '}',
+            'new C().m();',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/private-property.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(privatePropertyScript.runInThisContext(), './message.mjs');
+
+        const strictScript = new vm.Script([
+            '"use strict";',
+            'Promise.all([import("./message.mjs"), Promise.resolve((function() { return this; })())]);',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/strict.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        const [strictImport, strictThis] = await strictScript.runInThisContext();
+        assert.deepStrictEqual(strictImport.default, { value: 'from-subdir' });
+        assert.strictEqual(strictThis, undefined);
+
+        const collisionScript = new vm.Script([
+            'let __wasm_rquickjs_vm_import__ = 1;',
+            'import("./message.mjs");',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/collision.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await collisionScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const helperNameCollisionScript = new vm.Script([
+            'let __wasm_rquickjs_vm_default_loader_import__ = 1;',
+            'import("./message.mjs");',
+        ].join('\n'), {
+            filename: '/vm-default-loader-app/subdir/helper-name-collision.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await helperNameCollisionScript.runInThisContext()).default, { value: 'from-subdir' });
+
+        const builtinScript = new vm.Script('import("node:fs")', {
+            filename: '/vm-default-loader-app/subdir/builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual((await builtinScript.runInThisContext()).existsSync('/vm-default-loader-app'), true);
+
+        const fileUrlScript = new vm.Script('import("./message.mjs")', {
+            filename: pathToFileURL('/vm-default-loader-app/space dir/index.js').href + '?cache=1',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await fileUrlScript.runInThisContext()).default, { value: 'from-space' });
+
+        assert.deepStrictEqual((await vm.runInNewContext('import("./message.mjs")', {}, {
+            filename: '/vm-default-loader-app/subdir/run-in-new-context.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        })).default, { value: 'from-subdir' });
+
+        assert.deepStrictEqual((await vm.runInNewContext('import("./message.mjs")', { globalThis: {} }, {
+            filename: '/vm-default-loader-app/subdir/shadow-globalthis.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        })).default, { value: 'from-subdir' });
+
+        const newContextScript = new vm.Script('import("./message.mjs")', {
+            filename: '/vm-default-loader-app/subdir/script-new-context.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await newContextScript.runInNewContext({})).default, { value: 'from-subdir' });
+
+        const scriptContext = vm.createContext({});
+        const contextDefaultScript = new vm.Script('import("./message.mjs")', {
+            filename: '/vm-default-loader-app/subdir/script-context.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await contextDefaultScript.runInContext(scriptContext)).default, { value: 'from-subdir' });
+
+        const shadowGlobalContext = vm.createContext({ globalThis: {} });
+        const shadowGlobalContextScript = new vm.Script('import("./message.mjs")', {
+            filename: '/vm-default-loader-app/subdir/script-context-shadow-globalthis.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await shadowGlobalContextScript.runInContext(shadowGlobalContext)).default, { value: 'from-subdir' });
+
+        const context = vm.createContext({}, {
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        const contextScript = new vm.Script('import("./message.mjs")');
+        await assert.rejects(contextScript.runInContext(context));
+        const originalContextCwd = process.cwd();
+        try {
+            process.chdir('/vm-default-loader-app/subdir');
+            const contextEvalScript = new vm.Script('Promise.resolve("import(\\"./message.mjs\\")").then(eval)');
+            const contextEvalResult = await contextEvalScript.runInContext(context);
+            assert.strictEqual(JSON.stringify(contextEvalResult.default || contextEvalResult), '{"value":"from-subdir"}');
+        } finally {
+            process.chdir(originalContextCwd);
+        }
+
+        const compiled = vm.compileFunction('return import("./" + name)', ['name'], {
+            filename: '/vm-default-loader-app/subdir/function.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await compiled('message.mjs')).default, { value: 'from-subdir' });
+
+        const compiledMissing = vm.compileFunction('return import("./missing.mjs")', [], {
+            filename: '/vm-default-loader-app/subdir/function-missing.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        await assert.rejects(compiledMissing(), { code: 'ERR_MODULE_NOT_FOUND' });
+
+        const originalCwd = process.cwd();
+        try {
+            process.chdir('/vm-default-loader-app');
+            const cwdScript = new vm.Script('import("./message.mjs")', {
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
+            assert.deepStrictEqual((await cwdScript.runInThisContext()).default, { value: 'from-cwd' });
+        } finally {
+            process.chdir(originalCwd);
+        }
+
+        await assert.rejects(
+            new vm.Script('import("./missing.mjs")', {
+                filename: '/vm-default-loader-app/subdir/index.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }).runInThisContext(),
+            { code: 'ERR_MODULE_NOT_FOUND' },
+        );
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testRequireEsmErrorHandling = async () => {
     try {
         fs.mkdirSync('/require-esm-errors-app', { recursive: true });
