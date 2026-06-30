@@ -206,15 +206,17 @@ function parseSourceTextModuleDependencies(source) {
     return dependencies;
 }
 
-function compileSourceTextModuleEvaluator(source, names, dependencies) {
-    let hasImportedNames = false;
+function sourceTextModuleHasImportedNames(dependencies) {
     for (let i = 0; i < dependencies.length; i++) {
         for (let j = 0; j < dependencies[i].names.length; j++) {
-            hasImportedNames = true;
-            break;
+            return true;
         }
-        if (hasImportedNames) break;
     }
+    return false;
+}
+
+function compileSourceTextModuleEvaluator(source, names, dependencies, importMetaName, usesImportMeta) {
+    const hasImportedNames = sourceTextModuleHasImportedNames(dependencies);
     const executableSource = source
         .replace(/\bimport\s+['"][^'"]+['"]\s*;?/g, '')
         .replace(/\bimport\s*\{[^}]*\}\s*from\s*['"][^'"]+['"]\s*;?/g, '')
@@ -225,9 +227,109 @@ function compileSourceTextModuleEvaluator(source, names, dependencies) {
 
     if (hasImportedNames) {
         const importsParameterName = chooseInternalBindingName(source, '__wasm_rquickjs_vm_imports');
+        if (usesImportMeta) {
+            return new Function(importsParameterName, importMetaName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
+        }
         return new Function(importsParameterName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
     }
+    if (usesImportMeta) {
+        return new Function(importMetaName, '"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
+    }
     return new Function('"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
+}
+
+function rewriteImportMetaForEvaluation(code, replacementSource) {
+    code = String(code);
+    let changed = false;
+    let out = '';
+    let last = 0;
+    let i = 0;
+    while (i < code.length) {
+        const ch = code.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(code, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            const template = rewriteImportMetaTemplateLiteral(code, i, replacementSource);
+            if (template.changed) {
+                changed = true;
+                out += code.slice(last, i) + template.text;
+                last = template.end;
+            }
+            i = template.end;
+            continue;
+        }
+        if (ch === 0x2f && code.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < code.length && code.charCodeAt(i) !== 0x0a && code.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && code.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(code, i);
+            continue;
+        }
+        if (ch === 0x2f && (regexCanFollow(code, i) || (regexCanFollowParen(code, i) && isLikelyRegexLiteral(code, i)))) {
+            i = skipRegexLiteral(code, i);
+            continue;
+        }
+        if (code.startsWith('import', i)
+            && hasIdentifierBoundary(code, i, i + 6)
+            && previousSignificantChar(code, i) !== 0x2e
+            && previousSignificantChar(code, i) !== 0x23) {
+            const dot = skipWhitespaceAndComments(code, i + 6);
+            if (code.charCodeAt(dot) === 0x2e) {
+                const meta = skipWhitespaceAndComments(code, dot + 1);
+                if (code.startsWith('meta', meta) && hasIdentifierBoundary(code, meta, meta + 4)) {
+                    changed = true;
+                    out += code.slice(last, i) + replacementSource;
+                    last = meta + 4;
+                    i = meta + 4;
+                    continue;
+                }
+            }
+        }
+        i++;
+    }
+    if (last === 0) return { code, changed: false };
+    return { code: out + code.slice(last), changed };
+}
+
+function rewriteImportMetaTemplateLiteral(source, start, replacementSource) {
+    let i = start + 1;
+    let out = '`';
+    let chunkStart = i;
+    let changed = false;
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x5c) {
+            i += 2;
+            continue;
+        }
+        if (ch === 0x60) {
+            out += source.slice(chunkStart, i + 1);
+            return { end: i + 1, text: out, changed };
+        }
+        if (ch === 0x24 && source.charCodeAt(i + 1) === 0x7b) {
+            out += source.slice(chunkStart, i + 2);
+            const expressionStart = i + 2;
+            const expressionEnd = findTemplateExpressionEnd(source, expressionStart);
+            if (expressionEnd === -1) {
+                out += source.slice(expressionStart);
+                return { end: source.length, text: out, changed };
+            }
+            const expression = source.slice(expressionStart, expressionEnd);
+            const rewritten = rewriteImportMetaForEvaluation(expression, replacementSource);
+            if (rewritten.changed) changed = true;
+            out += rewritten.code + '}';
+            i = expressionEnd + 1;
+            chunkStart = i;
+            continue;
+        }
+        i++;
+    }
+    out += source.slice(chunkStart);
+    return { end: source.length, text: out, changed };
 }
 
 function chooseInternalBindingName(source, baseName) {
@@ -503,6 +605,13 @@ function validateImportModuleDynamicallyOption(value) {
     throwInvalidPropertyType('options.importModuleDynamically', 'function', value);
 }
 
+function validateInitializeImportMetaOption(value) {
+    if (value === undefined || typeof value === 'function') {
+        return;
+    }
+    throwInvalidPropertyType('options.initializeImportMeta', 'function', value);
+}
+
 function validateInt32Option(value, name) {
     if (value === undefined) return;
     if (typeof value !== 'number') {
@@ -753,6 +862,13 @@ function previousSignificantChar(source, i) {
             i--;
             continue;
         }
+        if (ch === 0x2f && source.charCodeAt(i - 1) === 0x2a) {
+            const start = source.lastIndexOf('/*', i - 2);
+            if (start >= 0) {
+                i = start - 1;
+                continue;
+            }
+        }
         return ch;
     }
     return 0;
@@ -765,6 +881,13 @@ function previousSignificantWord(source, i) {
         if (ch === 0x20 || ch === 0x09 || ch === 0x0a || ch === 0x0d || ch === 0x0b || ch === 0x0c) {
             i--;
             continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i - 1) === 0x2a) {
+            const start = source.lastIndexOf('/*', i - 2);
+            if (start >= 0) {
+                i = start - 1;
+                continue;
+            }
         }
         break;
     }
@@ -799,7 +922,8 @@ function regexCanFollow(source, i) {
     const word = previousSignificantWord(source, i);
     return word === 'return' || word === 'throw' || word === 'case' || word === 'delete' ||
         word === 'void' || word === 'typeof' || word === 'yield' || word === 'await' ||
-        word === 'else' || word === 'do' || word === 'in' || word === 'instanceof';
+        word === 'else' || word === 'do' || word === 'in' || word === 'instanceof' ||
+        word === 'of';
 }
 
 function isImportMethodDefinition(source, importStart, open) {
@@ -1354,13 +1478,16 @@ export class SourceTextModule {
         this._status = 'unlinked';
         this._error = undefined;
         this._options = snapshotVmOptions(options);
+        validateInitializeImportMetaOption(this._options.initializeImportMeta);
         this._context = this._options.context;
         this._identifier = this._options.identifier || 'vm:module(0)';
+        this._importMetaName = undefined;
         this._usesDynamicImportCallback = typeof this._options.importModuleDynamically === 'function' && vmModulesEnabled();
         this._usesMissingDynamicImportFlag = typeof this._options.importModuleDynamically === 'function' && !this._usesDynamicImportCallback;
 
         const declaredBindings = parseSourceTextModuleBindings(this._source);
         this._dependencies = parseSourceTextModuleDependencies(this._source);
+        this._usesImportedNames = sourceTextModuleHasImportedNames(this._dependencies);
         this._dependencySpecifiers = Object.freeze(this._dependencies.map((dependency) => dependency.specifier));
         this._bindings = Object.create(null);
         this._names = [];
@@ -1383,8 +1510,12 @@ export class SourceTextModule {
         } else {
             executableSource = rewriteMissingDynamicImportsForEvaluation(executableSource).code;
         }
+        this._importMetaName = chooseInternalBindingName(executableSource, '__wasm_rquickjs_vm_import_meta');
+        const importMetaRewrite = rewriteImportMetaForEvaluation(executableSource, this._importMetaName);
+        executableSource = importMetaRewrite.code;
+        this._usesImportMeta = importMetaRewrite.changed;
 
-        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._names, this._dependencies);
+        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._names, this._dependencies, this._importMetaName, this._usesImportMeta);
         this._namespace = createModuleNamespace(this);
     }
 
@@ -1499,7 +1630,19 @@ export class SourceTextModule {
                     });
                 }
             }
-            const evaluatedExports = this._evaluateSource(importedValues);
+            let evaluatedExports;
+            if (this._usesImportMeta) {
+                const importMeta = Object.create(null);
+                const initializeImportMeta = this._options.initializeImportMeta;
+                if (typeof initializeImportMeta === 'function') {
+                    initializeImportMeta(importMeta, this);
+                }
+                evaluatedExports = this._usesImportedNames
+                    ? this._evaluateSource(importedValues, importMeta)
+                    : this._evaluateSource(importMeta);
+            } else {
+                evaluatedExports = this._evaluateSource(importedValues);
+            }
             for (let i = 0; i < this._names.length; i++) {
                 const name = this._names[i];
                 const binding = this._bindings[name];

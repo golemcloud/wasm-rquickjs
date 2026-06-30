@@ -3136,6 +3136,70 @@ export const testVmMainContextDefaultLoader = async () => {
             name: 'TypeError',
             code: 'ERR_INVALID_ARG_TYPE',
         });
+        for (const invalidInitializeImportMeta of [null, {}, 0, Symbol.iterator, [], 'string', false]) {
+            assert.throws(() => new vm.SourceTextModule('', {
+                initializeImportMeta: invalidInitializeImportMeta,
+            }), {
+                name: 'TypeError',
+                code: 'ERR_INVALID_ARG_TYPE',
+            });
+        }
+
+        const importMetaModule = new vm.SourceTextModule('globalThis.vmImportMetaResult = import.meta;', {
+            initializeImportMeta(meta, module) {
+                assert.strictEqual(module, importMetaModule);
+                assert.strictEqual(this, undefined);
+                meta.prop = 42;
+            },
+        });
+        await importMetaModule.link(() => {});
+        await importMetaModule.evaluate();
+        assert.strictEqual(typeof globalThis.vmImportMetaResult, 'object');
+        assert.strictEqual(Object.getPrototypeOf(globalThis.vmImportMetaResult), null);
+        assert.deepStrictEqual(Reflect.ownKeys(globalThis.vmImportMetaResult), ['prop']);
+        assert.strictEqual(globalThis.vmImportMetaResult.prop, 42);
+        delete globalThis.vmImportMetaResult;
+
+        const importMetaSloppyThisModule = new vm.SourceTextModule('globalThis.vmImportMetaSloppyThis = import.meta.value;', {
+            initializeImportMeta: Function('meta', 'module', 'meta.value = this === globalThis;'),
+        });
+        await importMetaSloppyThisModule.link(() => {});
+        await importMetaSloppyThisModule.evaluate();
+        assert.strictEqual(globalThis.vmImportMetaSloppyThis, true);
+        delete globalThis.vmImportMetaSloppyThis;
+
+        const importMetaTemplateModule = new vm.SourceTextModule('globalThis.vmImportMetaTemplate = `${import.meta.prop}:${`${import.meta.prop}`}`;', {
+            initializeImportMeta(meta) {
+                meta.prop = 'template';
+            },
+        });
+        await importMetaTemplateModule.link(() => {});
+        await importMetaTemplateModule.evaluate();
+        assert.strictEqual(globalThis.vmImportMetaTemplate, 'template:template');
+        delete globalThis.vmImportMetaTemplate;
+
+        const importMetaFalsePositiveModule = new vm.SourceTextModule(`
+            globalThis.vmImportMetaFalsePositives = [
+                "import.meta",
+                /import.meta/.source,
+                Array.from(/import.meta/.source).join(""),
+                ({ import: { meta: 7 } }). /* comment */ import.meta,
+                typeof importMeta,
+            ];
+            // import.meta
+            /* import.meta */
+            for (const ch of /import.meta/.source) {}
+            for (const ch of /* comment */ /import.meta/.source) {}
+        `, {
+            initializeImportMeta() {
+                throw new Error('unreachable');
+            },
+        });
+        await importMetaFalsePositiveModule.link(() => {});
+        await importMetaFalsePositiveModule.evaluate();
+        assert.deepStrictEqual(globalThis.vmImportMetaFalsePositives, ['import.meta', 'import.meta', 'import.meta', 7, 'undefined']);
+        delete globalThis.vmImportMetaFalsePositives;
+
         const syntheticModule = new vm.SyntheticModule(['x'], function() {
             syntheticEvaluateCalled = true;
             this.setExport('x', 1);
