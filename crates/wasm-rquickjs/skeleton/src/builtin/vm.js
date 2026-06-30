@@ -11,6 +11,8 @@ const identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
 const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 const moduleNamespaceBrandSymbol = Symbol('wasm-rquickjs.vm.namespaceBrand');
+const vmDynamicImportReferrerSymbol = Symbol('wasm-rquickjs.vm.dynamicImportReferrer');
+const vmModuleInstanceBrandSymbol = Symbol('wasm-rquickjs.vm.moduleInstance');
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
 const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
@@ -127,8 +129,78 @@ function parseSourceTextModuleBindings(source) {
     return bindings;
 }
 
+function parseSourceTextModuleDependencies(source) {
+    const dependencies = [];
+    const seen = new Set();
+    let i = 0;
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteral(source, i);
+            continue;
+        }
+        if (ch === 0x2f && (source.charCodeAt(i + 1) === 0x2f || source.charCodeAt(i + 1) === 0x2a)) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (source.startsWith('import', i) && hasIdentifierBoundary(source, i, i + 6)) {
+            const afterImport = skipWhitespaceAndComments(source, i + 6);
+            if (source.charCodeAt(afterImport) === 0x28) {
+                i = afterImport + 1;
+                continue;
+            }
+            if (source.charCodeAt(afterImport) === 0x27 || source.charCodeAt(afterImport) === 0x22) {
+                const quote = source.charCodeAt(afterImport);
+                const end = skipStringLiteral(source, afterImport, quote);
+                const specifier = source.slice(afterImport + 1, end - 1);
+                if (!seen.has(specifier)) {
+                    seen.add(specifier);
+                    dependencies.push({ specifier, names: [] });
+                }
+                i = end;
+                continue;
+            }
+            if (source.charCodeAt(afterImport) === 0x7b) {
+                const close = source.indexOf('}', afterImport + 1);
+                if (close >= 0) {
+                    const fromIndex = skipWhitespaceAndComments(source, close + 1);
+                    if (source.startsWith('from', fromIndex) && hasIdentifierBoundary(source, fromIndex, fromIndex + 4)) {
+                        const specifierStart = skipWhitespaceAndComments(source, fromIndex + 4);
+                        const quote = source.charCodeAt(specifierStart);
+                        if (quote === 0x27 || quote === 0x22) {
+                            const end = skipStringLiteral(source, specifierStart, quote);
+                            const specifier = source.slice(specifierStart + 1, end - 1);
+                            const names = source.slice(afterImport + 1, close).split(',').map((part) => part.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
+                            let dependency = dependencies.find((entry) => entry.specifier === specifier);
+                            if (!dependency) {
+                                dependency = { specifier, names: [] };
+                                dependencies.push(dependency);
+                            }
+                            for (let j = 0; j < names.length; j++) {
+                                if (dependency.names.indexOf(names[j]) === -1) dependency.names.push(names[j]);
+                            }
+                            i = end;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+        i++;
+    }
+
+    return dependencies;
+}
+
 function compileSourceTextModuleEvaluator(source, names) {
-    const executableSource = source.replace(/\bexport\s+(?=(?:const|let|var)\b)/g, '');
+    const executableSource = source
+        .replace(/\bimport\s+['"][^'"]+['"]\s*;?/g, '')
+        .replace(/\bimport\s*\{[^}]*\}\s*from\s*['"][^'"]+['"]\s*;?/g, '')
+        .replace(/\bexport\s+(?=(?:const|let|var)\b)/g, '');
     const exportObjectEntries = names.map(function(name) {
         return JSON.stringify(name) + ': ' + name;
     }).join(', ');
@@ -139,6 +211,21 @@ function compileSourceTextModuleEvaluator(source, names) {
 function createModuleNamespace(module) {
     const namespaceTarget = Object.create(null);
     const names = module._names.slice().sort();
+
+    for (let i = 0; i < names.length; i++) {
+        const exportName = names[i];
+        Object.defineProperty(namespaceTarget, exportName, {
+            get: function() {
+                const binding = module._bindings[exportName];
+                if (!binding.initialized) {
+                    throw new ReferenceError(exportName + ' is not initialized');
+                }
+                return binding.value;
+            },
+            enumerable: true,
+            configurable: false,
+        });
+    }
 
     // QuickJS does not expose virtual export keys from this proxy via
     // Object.getOwnPropertyNames() while bindings are uninitialized.
@@ -190,20 +277,6 @@ function createModuleNamespace(module) {
             return Reflect.get(namespaceTarget, prop, receiver);
         },
         getOwnPropertyDescriptor: function(_target, prop) {
-            if (typeof prop === 'string' && module._bindings[prop] !== undefined) {
-                const binding = module._bindings[prop];
-                if (!binding.initialized) {
-                    throw new ReferenceError(prop + ' is not initialized');
-                }
-
-                return {
-                    value: binding.value,
-                    writable: true,
-                    enumerable: true,
-                    configurable: true,
-                };
-            }
-
             return Object.getOwnPropertyDescriptor(namespaceTarget, prop);
         },
     });
@@ -354,9 +427,14 @@ export function compileFunction(code, params, options) {
     if (options.importModuleDynamically === undefined) {
         code = rewriteMissingDynamicImportsForEvaluation(String(code)).code;
     } else if (typeof options.importModuleDynamically === 'function') {
-        code = (vmModulesEnabled()
-            ? rewriteVmDynamicImportCallbackForEvaluation(String(code), options.importModuleDynamically, undefined)
-            : rewriteMissingDynamicImportFlagForEvaluation(String(code))).code;
+        if (vmModulesEnabled()) {
+            const referrer = { [vmDynamicImportReferrerSymbol]: undefined };
+            code = rewriteVmDynamicImportCallbackForEvaluation(String(code), options.importModuleDynamically, referrer).code;
+            const fn = new Function(...params, code);
+            referrer[vmDynamicImportReferrerSymbol] = fn;
+            return fn;
+        }
+        code = rewriteMissingDynamicImportFlagForEvaluation(String(code)).code;
     }
     return new Function(...params, code);
 }
@@ -364,6 +442,17 @@ export function compileFunction(code, params, options) {
 function snapshotVmOptions(options) {
     options = validateOptionsObject(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
+    if (options.identifier !== undefined && typeof options.identifier !== 'string') {
+        throwInvalidPropertyType('options.identifier', 'string', options.identifier);
+    }
+    if (options.context !== undefined && !isContext(options.context)) {
+        throwInvalidPropertyType('options.context', 'vm.Context', options.context);
+    }
+    if (options.cachedData !== undefined && !ArrayBuffer.isView(options.cachedData)) {
+        const err = new TypeError('The "options.cachedData" property must be an instance of Buffer, TypedArray, or DataView.' + invalidArgTypeHelper(options.cachedData));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
     return Object.assign({}, options);
 }
 
@@ -379,7 +468,7 @@ function validateImportModuleDynamicallyOption(value) {
     if (value === undefined || value === USE_MAIN_CONTEXT_DEFAULT_LOADER || typeof value === 'function') {
         return;
     }
-    throwInvalidArgType('options.importModuleDynamically', 'function', value);
+    throwInvalidPropertyType('options.importModuleDynamically', 'function', value);
 }
 
 function validateInt32Option(value, name) {
@@ -727,7 +816,13 @@ function isImportMethodDefinition(source, importStart, open) {
 }
 
 function throwInvalidArgType(name, expected, value) {
-    const err = new TypeError('The "' + name + '" argument must be of type ' + expected + '. Received ' + formatReceived(value));
+    const err = new TypeError('The "' + name + '" argument must be of type ' + expected + '.' + formatReceivedType(value));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+function throwInvalidPropertyType(name, expected, value) {
+    const err = new TypeError('The "' + name + '" property must be of type ' + expected + '.' + formatReceivedType(value));
     err.code = 'ERR_INVALID_ARG_TYPE';
     throw err;
 }
@@ -743,6 +838,23 @@ function formatReceived(value) {
     if (typeof value === 'string') return "'" + value + "'";
     if (typeof value === 'symbol') return value.toString();
     return String(value);
+}
+
+function formatReceivedType(value) {
+    if (value === null) return ' Received null';
+    if (value === undefined) return ' Received undefined';
+    if (typeof value === 'string') return " Received type string ('" + value + "')";
+    return ' Received type ' + typeof value + ' (' + formatReceived(value) + ')';
+}
+
+function invalidArgTypeHelper(value) {
+    if (value === null) return ' Received null';
+    if (value === undefined) return ' Received undefined';
+    if (typeof value === 'function') return ' Received function ' + (value.name || '');
+    if (value && typeof value === 'object' && value.constructor && value.constructor.name) {
+        return ' Received an instance of ' + value.constructor.name;
+    }
+    return formatReceivedType(value);
 }
 
 function referrerFilenameFromOptions(options) {
@@ -868,8 +980,46 @@ function vmModuleNotModuleError() {
     return err;
 }
 
+function invalidArgValue(message) {
+    const err = new TypeError(message);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    return err;
+}
+
+function vmModuleStatusError(message) {
+    const err = new Error(message);
+    err.code = 'ERR_VM_MODULE_STATUS';
+    return err;
+}
+
+function throwInvalidModuleThis(value) {
+    const err = new TypeError('The "this" argument must be an instance of Module.' + invalidArgTypeHelper(value));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+function requireVmModuleThis(value) {
+    if (!value || value[vmModuleInstanceBrandSymbol] !== true) {
+        throwInvalidModuleThis(value);
+    }
+    return value;
+}
+
+function vmModuleDifferentContextError() {
+    const err = new Error('Linked modules must use the same context');
+    err.code = 'ERR_VM_MODULE_DIFFERENT_CONTEXT';
+    return err;
+}
+
+function vmModuleLinkFailureError(cause) {
+    const err = new Error('Module link failed');
+    err.code = 'ERR_VM_MODULE_LINK_FAILURE';
+    err.cause = cause;
+    return err;
+}
+
 function namespaceFromVmModule(module) {
-    if (!(module instanceof SourceTextModule)) {
+    if (!(module instanceof SourceTextModule) && !(module instanceof SyntheticModule)) {
         if (module && typeof module === 'object' && module[moduleNamespaceBrandSymbol] === true) {
             return module;
         }
@@ -882,8 +1032,11 @@ function defineVmDynamicImportCallbackBinding(helperName, callback, wrap) {
     Object.defineProperty(globalThis, helperName, {
         value: function(specifier, options) {
             let result;
+            const referrer = wrap && typeof wrap === 'object' && Object.prototype.hasOwnProperty.call(wrap, vmDynamicImportReferrerSymbol)
+                ? wrap[vmDynamicImportReferrerSymbol]
+                : wrap;
             try {
-                result = callback(String(specifier), wrap, dynamicImportAttributes(options));
+                result = callback(String(specifier), referrer, dynamicImportAttributes(options));
             } catch (err) {
                 return Promise.reject(err);
             }
@@ -1097,15 +1250,77 @@ export class Script {
     }
 }
 
+export function Module() {
+    throw new TypeError('Module is not a constructor');
+}
+
+Object.defineProperties(Module.prototype, {
+    status: {
+        get: function() {
+            return requireVmModuleThis(this)._status;
+        },
+        configurable: true,
+    },
+    error: {
+        get: function() {
+            const module = requireVmModuleThis(this);
+            if (module._status !== 'errored') {
+                throw vmModuleStatusError('Module status must be errored');
+            }
+            return module._error;
+        },
+        configurable: true,
+    },
+    namespace: {
+        get: function() {
+            const module = requireVmModuleThis(this);
+            if (module._status === 'unlinked' || module._status === 'linking') {
+                throw vmModuleStatusError('Module status must not be unlinked or linking');
+            }
+            return module._namespace;
+        },
+        configurable: true,
+    },
+    identifier: {
+        get: function() {
+            return requireVmModuleThis(this)._identifier;
+        },
+        configurable: true,
+    },
+    context: {
+        get: function() {
+            return requireVmModuleThis(this)._context;
+        },
+        configurable: true,
+    },
+});
+
+Module.prototype.link = async function link() {
+    requireVmModuleThis(this);
+};
+
+Module.prototype.evaluate = async function evaluate() {
+    requireVmModuleThis(this);
+};
+
 export class SourceTextModule {
     constructor(code, options) {
-        this._source = String(code);
+        if (typeof code !== 'string') {
+            throwInvalidArgType('code', 'string', code);
+        }
+        this._source = code;
+        this[vmModuleInstanceBrandSymbol] = true;
         this._status = 'unlinked';
+        this._error = undefined;
         this._options = snapshotVmOptions(options);
+        this._context = this._options.context;
+        this._identifier = this._options.identifier || 'vm:module(0)';
         this._usesDynamicImportCallback = typeof this._options.importModuleDynamically === 'function' && vmModulesEnabled();
         this._usesMissingDynamicImportFlag = typeof this._options.importModuleDynamically === 'function' && !this._usesDynamicImportCallback;
 
         const declaredBindings = parseSourceTextModuleBindings(this._source);
+        this._dependencies = parseSourceTextModuleDependencies(this._source);
+        this._dependencySpecifiers = Object.freeze(this._dependencies.map((dependency) => dependency.specifier));
         this._bindings = Object.create(null);
         this._names = [];
 
@@ -1133,26 +1348,87 @@ export class SourceTextModule {
     }
 
     get status() {
-        return this._status;
+        return requireVmModuleThis(this)._status;
     }
 
     get namespace() {
-        if (this._status === 'unlinked') {
-            throw new Error('Module status must be linked');
+        requireVmModuleThis(this);
+        if (this._status === 'unlinked' || this._status === 'linking') {
+            throw vmModuleStatusError('Module status must not be unlinked or linking');
         }
         return this._namespace;
     }
 
+    get error() {
+        requireVmModuleThis(this);
+        if (this._status !== 'errored') {
+            throw vmModuleStatusError('Module status must be errored');
+        }
+        return this._error;
+    }
+
+    get dependencySpecifiers() {
+        requireVmModuleThis(this);
+        return this._dependencySpecifiers;
+    }
+
     async link(linker) {
-        this._status = 'linked';
+        if (typeof linker !== 'function') {
+            throwInvalidArgType('linker', 'function', linker);
+        }
+        if (this._status === 'linked' || this._status === 'evaluated' || this._status === 'errored') {
+            const err = new Error('Module has already been linked');
+            err.code = 'ERR_VM_MODULE_ALREADY_LINKED';
+            throw err;
+        }
+        if (this._status !== 'unlinked') {
+            throw vmModuleStatusError('Module status must be unlinked');
+        }
+        this._status = 'linking';
+        try {
+            for (let i = 0; i < this._dependencies.length; i++) {
+                const dependency = this._dependencies[i];
+                const module = await linker(dependency.specifier, this);
+                if (!(module instanceof SourceTextModule) && !(module instanceof SyntheticModule)) {
+                    throw vmModuleNotModuleError();
+                }
+                if (this._context !== module._context) {
+                    throw vmModuleDifferentContextError();
+                }
+                if (module.status === 'errored') {
+                    throw vmModuleLinkFailureError(module.error);
+                }
+                for (let j = 0; j < dependency.names.length; j++) {
+                    if (!Object.prototype.hasOwnProperty.call(module._bindings, dependency.names[j])) {
+                        throw new SyntaxError("The requested module '" + dependency.specifier + "' does not provide an export named '" + dependency.names[j] + "'");
+                    }
+                }
+            }
+            await Promise.resolve();
+            this._status = 'linked';
+        } catch (err) {
+            this._error = err;
+            this._status = 'errored';
+            throw err;
+        }
     }
 
     async evaluate(options) {
-        if (this._status === 'unlinked') {
-            throw new Error('Module status must be linked before evaluate()');
+        options = validateOptionsObject(options);
+        if (options.breakOnSigint !== undefined && typeof options.breakOnSigint !== 'boolean') {
+            throwInvalidPropertyType('options.breakOnSigint', 'boolean', options.breakOnSigint);
+        }
+        if (options.timeout !== undefined) {
+            validateInt32Option(options.timeout, 'options.timeout');
+        }
+        if (this._status === 'unlinked' || this._status === 'linking') {
+            throw vmModuleStatusError('Module status must be one of linked, evaluated, or errored');
         }
         if (this._status === 'evaluated') {
             return undefined;
+        }
+        if (this._status === 'errored') {
+            throw this._error;
         }
 
         this._status = 'evaluating';
@@ -1168,11 +1444,138 @@ export class SourceTextModule {
             this._status = 'evaluated';
             return undefined;
         } catch (err) {
+            this._error = err;
             this._status = 'errored';
             throw err;
         }
     }
 }
+
+Object.setPrototypeOf(SourceTextModule.prototype, Module.prototype);
+Object.setPrototypeOf(SourceTextModule, Module);
+
+export class SyntheticModule {
+    constructor(exportNames, evaluateCallback, options) {
+        if (!Array.isArray(exportNames) || exportNames.some((name) => typeof name !== 'string')) {
+            const err = new TypeError('The "exportNames" argument must be an Array of unique strings. Received ' + formatReceived(exportNames));
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        const seen = new Set();
+        for (let i = 0; i < exportNames.length; i++) {
+            const name = exportNames[i];
+            if (seen.has(name)) {
+                throw invalidArgValue("The property 'exportNames." + name + "' is duplicated. Received '" + name + "'");
+            }
+            seen.add(name);
+        }
+        if (typeof evaluateCallback !== 'function') {
+            throwInvalidArgType('evaluateCallback', 'function', evaluateCallback);
+        }
+        this._options = snapshotVmOptions(options);
+        this[vmModuleInstanceBrandSymbol] = true;
+        this._context = this._options.context;
+        this._identifier = this._options.identifier || 'vm:module(0)';
+        this._status = 'unlinked';
+        this._error = undefined;
+        this._dependencySpecifiers = Object.freeze([]);
+        this._names = exportNames.slice();
+        this._bindings = Object.create(null);
+        for (let i = 0; i < this._names.length; i++) {
+            this._bindings[this._names[i]] = {
+                kind: 'const',
+                initialized: true,
+                value: undefined,
+            };
+        }
+        this._evaluateCallback = evaluateCallback;
+        this._namespace = createModuleNamespace(this);
+    }
+
+    get status() {
+        return requireVmModuleThis(this)._status;
+    }
+
+    get namespace() {
+        requireVmModuleThis(this);
+        if (this._status === 'unlinked' || this._status === 'linking') {
+            throw vmModuleStatusError('Module status must not be unlinked or linking');
+        }
+        return this._namespace;
+    }
+
+    get error() {
+        requireVmModuleThis(this);
+        if (this._status !== 'errored') {
+            throw vmModuleStatusError('Module status must be errored');
+        }
+        return this._error;
+    }
+
+    async link(linker) {
+        if (typeof linker !== 'function') {
+            throwInvalidArgType('linker', 'function', linker);
+        }
+        if (this._status === 'linked' || this._status === 'evaluated' || this._status === 'errored') {
+            const err = new Error('Module has already been linked');
+            err.code = 'ERR_VM_MODULE_ALREADY_LINKED';
+            throw err;
+        }
+        if (this._status !== 'unlinked') {
+            throw vmModuleStatusError('Module status must be unlinked');
+        }
+        this._status = 'linking';
+        await Promise.resolve();
+        this._status = 'linked';
+    }
+
+    setExport(name, value) {
+        requireVmModuleThis(this);
+        if (typeof name !== 'string') {
+            throw new TypeError('Export name must be a string');
+        }
+        if (this._status === 'unlinked' || this._status === 'linking') {
+            throw vmModuleStatusError('Module status must not be unlinked or linking');
+        }
+        const binding = this._bindings[name];
+        if (binding === undefined) {
+            throw new ReferenceError('Export ' + name + ' is not defined in module');
+        }
+        binding.value = value;
+    }
+
+    async evaluate(options) {
+        options = validateOptionsObject(options);
+        if (options.breakOnSigint !== undefined && typeof options.breakOnSigint !== 'boolean') {
+            throwInvalidPropertyType('options.breakOnSigint', 'boolean', options.breakOnSigint);
+        }
+        if (options.timeout !== undefined) {
+            validateInt32Option(options.timeout, 'options.timeout');
+        }
+        if (this._status === 'unlinked' || this._status === 'linking') {
+            throw vmModuleStatusError('Module status must be one of linked, evaluated, or errored');
+        }
+        if (this._status === 'evaluated') {
+            return undefined;
+        }
+        if (this._status === 'errored') {
+            throw this._error;
+        }
+        this._status = 'evaluating';
+        try {
+            this._evaluateCallback.call(this);
+            this._status = 'evaluated';
+            return undefined;
+        } catch (err) {
+            this._error = err;
+            this._status = 'errored';
+            throw err;
+        }
+    }
+}
+
+Object.setPrototypeOf(SyntheticModule.prototype, Module.prototype);
+Object.setPrototypeOf(SyntheticModule, Module);
 
 export function createScript(code, options) {
     return new Script(code, options);
@@ -1185,8 +1588,10 @@ const vmExports = {
     createContext,
     isContext,
     compileFunction,
+    Module,
     Script,
     SourceTextModule,
+    SyntheticModule,
     createScript,
     constants,
 };

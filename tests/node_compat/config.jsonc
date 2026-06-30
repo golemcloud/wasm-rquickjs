@@ -9210,7 +9210,7 @@
     "parallel/test-vm-module-cached-data.js": { "category": "engine-difference", "reason": "SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS" },
     "parallel/test-vm-module-dynamic-import.js": { "category": "runnable" },
     "parallel/test-vm-module-dynamic-namespace.js": { "category": "runnable" },
-    "parallel/test-vm-module-errors.js": { "category": "known-gap", "reason": "vm.Module/SourceTextModule state machine and Node-compatible error validation are incomplete" },
+    "parallel/test-vm-module-errors.js": { "category": "runnable" },
     "parallel/test-vm-module-import-meta.js": { "category": "known-gap", "reason": "SourceTextModule import.meta initialization hook is not implemented" },
     "parallel/test-vm-module-link.js": { "category": "known-gap", "reason": "SourceTextModule linker/dependency parsing semantics are incomplete (imports, cycles, and attributes)" },
     "parallel/test-vm-module-reevaluate.js": {},

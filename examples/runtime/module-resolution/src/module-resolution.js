@@ -3109,6 +3109,60 @@ export const testVmMainContextDefaultLoader = async () => {
         ].join('\n'));
 
         assert.strictEqual(typeof vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER, 'symbol');
+        assert.strictEqual(typeof vm.Module, 'function');
+        assert.strictEqual(typeof vm.SourceTextModule, 'function');
+        assert.strictEqual(typeof vm.SyntheticModule, 'function');
+        assert.throws(() => new vm.Module(), {
+            name: 'TypeError',
+            message: 'Module is not a constructor',
+        });
+        assert.throws(() => new vm.SourceTextModule(null), { code: 'ERR_INVALID_ARG_TYPE' });
+        assert.strictEqual(new vm.SourceTextModule('') instanceof vm.Module, true);
+        assert.throws(() => new vm.SyntheticModule(undefined, () => {}, {}), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+            message: 'The "exportNames" argument must be an Array of unique strings. Received undefined',
+        });
+        assert.throws(() => new vm.SyntheticModule(['x', 'x'], () => {}, {}), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_VALUE',
+            message: "The property 'exportNames.x' is duplicated. Received 'x'",
+        });
+        assert.throws(() => new vm.SyntheticModule([], undefined, {}), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+        });
+        assert.throws(() => new vm.SyntheticModule([], () => {}, null), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+        });
+        const syntheticModule = new vm.SyntheticModule(['x'], function() {
+            syntheticEvaluateCalled = true;
+            this.setExport('x', 1);
+        });
+        var syntheticEvaluateCalled = false;
+        assert.strictEqual(syntheticModule instanceof vm.Module, true);
+        assert.strictEqual(syntheticModule instanceof vm.SourceTextModule, false);
+        assert.strictEqual(typeof syntheticModule.setExport, 'function');
+        await syntheticModule.link(() => {});
+        assert.strictEqual(syntheticModule.namespace.x, undefined);
+        await syntheticModule.evaluate();
+        assert.strictEqual(syntheticEvaluateCalled, true);
+        assert.strictEqual(syntheticModule.namespace.x, 1);
+        assert.strictEqual(Object.getOwnPropertyDescriptor(syntheticModule.namespace, 'x').configurable, false);
+        assert.throws(() => syntheticModule.setExport(1, 2), TypeError);
+        assert.throws(() => syntheticModule.setExport('missing', 2), ReferenceError);
+
+        const prelinkedSynthetic = new vm.SyntheticModule(['x'], function() {});
+        assert.throws(() => prelinkedSynthetic.setExport('x', 1), {
+            code: 'ERR_VM_MODULE_STATUS',
+        });
+
+        const rejectedSynthetic = new vm.SyntheticModule([], function() {
+            return Promise.reject(new Error('ignored'));
+        });
+        await rejectedSynthetic.link(() => {});
+        assert.strictEqual(await rejectedSynthetic.evaluate(), undefined);
 
         const missingImportHelperCount = () => Object.getOwnPropertyNames(globalThis)
             .filter((name) => name.indexOf('__wasm_rquickjs_vm_missing_dynamic_import__') !== -1)
@@ -3232,6 +3286,54 @@ export const testVmMainContextDefaultLoader = async () => {
         await assert.rejects(globalThis.vmModuleImportResult, { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' });
         delete globalThis.vmModuleImportResult;
 
+        const stateModule = new vm.SourceTextModule('throw new Error("vm-state-error");');
+        assert.strictEqual(stateModule.status, 'unlinked');
+        assert.throws(() => stateModule.namespace, {
+            code: 'ERR_VM_MODULE_STATUS',
+            message: 'Module status must not be unlinked or linking',
+        });
+        assert.throws(() => stateModule.error, {
+            code: 'ERR_VM_MODULE_STATUS',
+            message: 'Module status must be errored',
+        });
+        await assert.rejects(stateModule.link(undefined), { code: 'ERR_INVALID_ARG_TYPE' });
+        await stateModule.link(() => {});
+        assert.strictEqual(stateModule.status, 'linked');
+        await assert.rejects(stateModule.link(() => {}), { code: 'ERR_VM_MODULE_ALREADY_LINKED' });
+        await assert.rejects(stateModule.evaluate(false), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            message: 'The "options" argument must be of type object. Received type boolean (false)',
+        });
+        await assert.rejects(stateModule.evaluate({ breakOnSigint: 'a-string' }), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            message: "The \"options.breakOnSigint\" property must be of type boolean. Received type string ('a-string')",
+        });
+        await assert.rejects(stateModule.evaluate(), { message: 'vm-state-error' });
+        assert.strictEqual(stateModule.status, 'errored');
+        assert.strictEqual(stateModule.error.message, 'vm-state-error');
+
+        const invalidLinkedModule = new vm.SourceTextModule('import "dep";');
+        assert.deepStrictEqual(invalidLinkedModule.dependencySpecifiers, ['dep']);
+        await assert.rejects(invalidLinkedModule.link(() => ({})), { code: 'ERR_VM_MODULE_NOT_MODULE' });
+        assert.strictEqual(invalidLinkedModule.status, 'errored');
+        assert.deepStrictEqual(new vm.SourceTextModule('// import "dep";').dependencySpecifiers, []);
+
+        const linkedContext = vm.createContext({});
+        const contextDepModule = new vm.SourceTextModule('', { context: linkedContext });
+        await contextDepModule.link(() => {});
+        const differentContextModule = new vm.SourceTextModule('import "dep";');
+        await assert.rejects(differentContextModule.link(() => contextDepModule), { code: 'ERR_VM_MODULE_DIFFERENT_CONTEXT' });
+        assert.strictEqual(differentContextModule.status, 'errored');
+
+        const erroredDep = new vm.SourceTextModule('throw new Error("dep-error");');
+        await erroredDep.link(() => {});
+        await assert.rejects(erroredDep.evaluate(), { message: 'dep-error' });
+        const rootWithErroredDep = new vm.SourceTextModule('import "dep";');
+        await assert.rejects(rootWithErroredDep.link(() => erroredDep), {
+            code: 'ERR_VM_MODULE_LINK_FAILURE',
+            cause: erroredDep.error,
+        });
+
         const originalExecArgv = process.execArgv.slice();
         try {
             process.execArgv.push('--experimental-vm-modules');
@@ -3276,7 +3378,7 @@ export const testVmMainContextDefaultLoader = async () => {
             const namespaceCallbackFunction = vm.compileFunction('return import("dep")', [], {
                 importModuleDynamically(specifier, wrap) {
                     assert.strictEqual(specifier, 'dep');
-                    assert.strictEqual(wrap, undefined);
+                    assert.strictEqual(wrap, namespaceCallbackFunction);
                     return vmDynamicDep.namespace;
                 },
             });
@@ -3306,7 +3408,7 @@ export const testVmMainContextDefaultLoader = async () => {
             const reusableFunction = vm.compileFunction('return import("dep")', [], {
                 importModuleDynamically(specifier, wrap) {
                     assert.strictEqual(specifier, 'dep');
-                    assert.strictEqual(wrap, undefined);
+                    assert.strictEqual(wrap, reusableFunction);
                     return vmDynamicDep;
                 },
             });
