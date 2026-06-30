@@ -9162,7 +9162,7 @@
     "parallel/test-vm-create-context-accessors.js": { "category": "known-gap", "reason": "vm.createContext does not preserve sandbox accessor properties during evaluation" },
     "parallel/test-vm-create-context-arg.js": { "category": "known-gap", "reason": "vm.createContext argument type validation and error codes are incomplete" },
     "parallel/test-vm-createcacheddata.js": { "category": "engine-difference", "reason": "vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS" },
-    "parallel/test-vm-dynamic-import-callback-missing-flag.js": { "category": "known-gap", "reason": "ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG behavior is not implemented" },
+    "parallel/test-vm-dynamic-import-callback-missing-flag.js": { "category": "runnable" },
     "parallel/test-vm-function-declaration.js": { "category": "known-gap", "reason": "function declaration/global binding semantics in vm contexts are incomplete" },
     "parallel/test-vm-function-redefinition.js": { "category": "known-gap", "reason": "function declarations are not persisted correctly across vm.runInContext calls" },
     "parallel/test-vm-getters.js": { "category": "known-gap", "reason": "vm context does not preserve sandbox getter descriptors on the global object" },

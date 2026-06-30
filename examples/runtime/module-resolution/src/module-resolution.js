@@ -3113,10 +3113,17 @@ export const testVmMainContextDefaultLoader = async () => {
         const missingImportHelperCount = () => Object.getOwnPropertyNames(globalThis)
             .filter((name) => name.indexOf('__wasm_rquickjs_vm_missing_dynamic_import__') !== -1)
             .length;
+        const missingImportFlagHelperCount = () => Object.getOwnPropertyNames(globalThis)
+            .filter((name) => name.indexOf('__wasm_rquickjs_vm_missing_dynamic_import_flag__') !== -1)
+            .length;
         const missingImportHelperCountBefore = missingImportHelperCount();
+        const missingImportFlagHelperCountBefore = missingImportFlagHelperCount();
         assert.strictEqual(new vm.Script('1 + 1').runInThisContext(), 2);
         assert.strictEqual(vm.compileFunction('return 1')(), 1);
+        assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
+        assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);
+        assert.strictEqual(missingImportFlagHelperCount(), missingImportFlagHelperCountBefore);
         assert.strictEqual(
             new vm.Script('"import(\\"node:fs\\")"; /import\\("node:fs"\\)/; ({ import() { return 3; } }).import();').runInThisContext(),
             3,
@@ -3124,6 +3131,30 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.strictEqual(
             new vm.Script('({ import(value = /[)]/) { return value.test(")"); } }).import();').runInThisContext(),
             true,
+        );
+        assert.strictEqual(
+            await new vm.Script('({ async import() { return 4; } }).import().then((value) => value);').runInThisContext(),
+            4,
+        );
+        assert.strictEqual(
+            new vm.Script('({ *import() { yield 5; } }).import().next().value;').runInThisContext(),
+            5,
+        );
+        assert.strictEqual(
+            await new vm.Script('({ async *import() { yield 6; } }).import().next().then((result) => result.value);').runInThisContext(),
+            6,
+        );
+        assert.strictEqual(
+            new vm.Script('const target = {}; ({ set import(value) { target.value = value; } }).import = 7; target.value;').runInThisContext(),
+            7,
+        );
+        assert.strictEqual(
+            new vm.Script('class Example { static import() { return 8; } } Example.import();').runInThisContext(),
+            8,
+        );
+        assert.strictEqual(
+            await new vm.Script('class Example { static async import() { return 9; } } Example.import();').runInThisContext(),
+            9,
         );
 
         await assert.rejects(
@@ -3135,6 +3166,56 @@ export const testVmMainContextDefaultLoader = async () => {
             vm.compileFunction('return import("./message.mjs")')(),
             { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' },
             'vm.compileFunction without importModuleDynamically rejects dynamic import',
+        );
+        await assert.rejects(
+            vm.runInThisContext('import("./message.mjs")'),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' },
+            'vm.runInThisContext without importModuleDynamically rejects dynamic import',
+        );
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")').runInNewContext({}),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' },
+            'vm.Script.runInNewContext without importModuleDynamically rejects dynamic import',
+        );
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")').runInContext(vm.createContext({})),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' },
+            'vm.Script.runInContext without importModuleDynamically rejects dynamic import',
+        );
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")', {
+                importModuleDynamically() { throw new Error('unreachable'); },
+            }).runInThisContext(),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' },
+            'vm.Script with importModuleDynamically callback rejects without VM modules flag',
+        );
+        await assert.rejects(
+            vm.compileFunction('return import("./message.mjs")', [], {
+                importModuleDynamically() { throw new Error('unreachable'); },
+            })(),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' },
+            'vm.compileFunction with importModuleDynamically callback rejects without VM modules flag',
+        );
+        await assert.rejects(
+            vm.runInThisContext('import("./message.mjs")', {
+                importModuleDynamically() { throw new Error('unreachable'); },
+            }),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' },
+            'vm.runInThisContext with importModuleDynamically callback rejects without VM modules flag',
+        );
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")', {
+                importModuleDynamically() { throw new Error('unreachable'); },
+            }).runInNewContext({}),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' },
+            'vm.Script.runInNewContext with importModuleDynamically callback rejects without VM modules flag',
+        );
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")', {
+                importModuleDynamically() { throw new Error('unreachable'); },
+            }).runInContext(vm.createContext({})),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' },
+            'vm.Script.runInContext with importModuleDynamically callback rejects without VM modules flag',
         );
 
         const script = new vm.Script('import("./message.mjs")', {

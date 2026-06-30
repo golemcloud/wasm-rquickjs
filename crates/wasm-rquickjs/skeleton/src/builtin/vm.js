@@ -13,6 +13,7 @@ const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBind
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
 const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
+const missingDynamicImportFlagHelper = '__wasm_rquickjs_vm_missing_dynamic_import_flag__';
 let defaultLoaderImportHelperCounter = 1;
 function defaultLoaderImportFunction(filename, specifier) {
     return import(resolveDefaultLoaderSpecifier(String(specifier), filename));
@@ -21,6 +22,12 @@ function defaultLoaderImportFunction(filename, specifier) {
 function missingDynamicImportFunction() {
     const err = new TypeError('A dynamic import callback was not specified.');
     err.code = 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING';
+    return Promise.reject(err);
+}
+
+function missingDynamicImportFlagFunction() {
+    const err = new TypeError('A dynamic import callback was invoked without --experimental-vm-modules');
+    err.code = 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG';
     return Promise.reject(err);
 }
 
@@ -203,6 +210,14 @@ export function runInNewContext(code, sandbox, options) {
         const rewritten = rewriteDefaultLoaderDynamicImportsForEvaluation(code, referrerFilenameFromOptions(options));
         code = rewritten.code;
         helperName = rewritten.helperName;
+    } else if (options.importModuleDynamically === undefined) {
+        const rewritten = rewriteMissingDynamicImportsForEvaluation(code);
+        code = rewritten.code;
+        helperName = rewritten.helperName;
+    } else if (typeof options.importModuleDynamically === 'function') {
+        const rewritten = rewriteMissingDynamicImportFlagForEvaluation(code);
+        code = rewritten.code;
+        helperName = rewritten.helperName;
     }
     return evalCodeInNewContext(code, sandbox, helperName);
 }
@@ -219,7 +234,6 @@ function evalCodeInNewContext(code, sandbox, helperName) {
         }
     }
     if (helperName) {
-        ensureDefaultLoaderImportBinding(helperName);
         keys.push(helperName);
         values.push(globalThis[helperName]);
     }
@@ -256,6 +270,14 @@ export function runInContext(code, context, options) {
         const rewritten = rewriteDefaultLoaderDynamicImportsForEvaluation(code, referrerFilenameFromOptions(options));
         code = rewritten.code;
         helperName = rewritten.helperName;
+    } else if (options.importModuleDynamically === undefined) {
+        const rewritten = rewriteMissingDynamicImportsForEvaluation(code);
+        code = rewritten.code;
+        helperName = rewritten.helperName;
+    } else if (typeof options.importModuleDynamically === 'function') {
+        const rewritten = rewriteMissingDynamicImportFlagForEvaluation(code);
+        code = rewritten.code;
+        helperName = rewritten.helperName;
     }
     return evalCodeInContext(code, context, helperName);
 }
@@ -271,7 +293,6 @@ function evalCodeInContext(code, context, helperName) {
         values.push(context[k]);
     }
     if (helperName) {
-        ensureDefaultLoaderImportBinding(helperName);
         keys.push(helperName);
         values.push(globalThis[helperName]);
     }
@@ -286,6 +307,12 @@ export function runInThisContext(code, options) {
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
         return evalWithFilename(rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename).code, filename);
+    }
+    if (options.importModuleDynamically === undefined) {
+        return (0, eval)(rewriteMissingDynamicImportsForEvaluation(code).code);
+    }
+    if (typeof options.importModuleDynamically === 'function') {
+        return (0, eval)(rewriteMissingDynamicImportFlagForEvaluation(code).code);
     }
     return (0, eval)(code);
 }
@@ -303,6 +330,8 @@ export function compileFunction(code, params, options) {
     }
     if (options.importModuleDynamically === undefined) {
         code = rewriteMissingDynamicImportsForEvaluation(String(code)).code;
+    } else if (typeof options.importModuleDynamically === 'function') {
+        code = rewriteMissingDynamicImportFlagForEvaluation(String(code)).code;
     }
     return new Function(...params, code);
 }
@@ -591,6 +620,19 @@ function previousSignificantWord(source, i) {
     return source.slice(i + 1, end);
 }
 
+function previousSignificantIndex(source, i) {
+    i--;
+    while (i >= 0) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x20 || ch === 0x09 || ch === 0x0a || ch === 0x0d || ch === 0x0b || ch === 0x0c) {
+            i--;
+            continue;
+        }
+        return i;
+    }
+    return -1;
+}
+
 function regexCanFollow(source, i) {
     const prev = previousSignificantChar(source, i);
     if (prev === 0 || prev === 0x28 || prev === 0x5b || prev === 0x7b || prev === 0x2c ||
@@ -607,8 +649,45 @@ function regexCanFollow(source, i) {
 }
 
 function isImportMethodDefinition(source, importStart, open) {
+    const isMethodDelimiter = (ch) => ch === 0x7b || ch === 0x2c;
     const before = previousSignificantChar(source, importStart);
-    if (before !== 0x7b && before !== 0x2c) return false;
+    let hasMethodPrefix = isMethodDelimiter(before);
+    if (!hasMethodPrefix) {
+        const prefixIndex = previousSignificantIndex(source, importStart);
+        if (before === 0x2a && prefixIndex >= 0) {
+            const beforeStar = previousSignificantChar(source, prefixIndex);
+            if (isMethodDelimiter(beforeStar)) {
+                hasMethodPrefix = true;
+            } else if (previousSignificantWord(source, prefixIndex) === 'async') {
+                const asyncEnd = previousSignificantIndex(source, prefixIndex) + 1;
+                const asyncStart = source.lastIndexOf('async', asyncEnd);
+                const beforeAsync = previousSignificantChar(source, asyncStart);
+                if (isMethodDelimiter(beforeAsync)) {
+                    hasMethodPrefix = true;
+                } else if (previousSignificantWord(source, asyncStart) === 'static') {
+                    const staticStart = source.lastIndexOf('static', asyncStart);
+                    hasMethodPrefix = isMethodDelimiter(previousSignificantChar(source, staticStart));
+                }
+            } else if (previousSignificantWord(source, prefixIndex) === 'static') {
+                const staticEnd = previousSignificantIndex(source, prefixIndex) + 1;
+                const staticStart = source.lastIndexOf('static', staticEnd);
+                hasMethodPrefix = isMethodDelimiter(previousSignificantChar(source, staticStart));
+            }
+        } else {
+            const word = previousSignificantWord(source, importStart);
+            if (word === 'async' || word === 'get' || word === 'set' || word === 'static') {
+                const wordStart = source.lastIndexOf(word, importStart);
+                const beforeWord = previousSignificantChar(source, wordStart);
+                if (isMethodDelimiter(beforeWord)) {
+                    hasMethodPrefix = true;
+                } else if (word !== 'static' && previousSignificantWord(source, wordStart) === 'static') {
+                    const staticStart = source.lastIndexOf('static', wordStart);
+                    hasMethodPrefix = isMethodDelimiter(previousSignificantChar(source, staticStart));
+                }
+            }
+        }
+    }
+    if (!hasMethodPrefix) return false;
     const close = findMatchingParen(source, open);
     if (close < 0) return false;
     return source.charCodeAt(skipWhitespaceAndComments(source, close + 1)) === 0x7b;
@@ -689,6 +768,16 @@ function ensureMissingDynamicImportBinding(helperName) {
     }
 }
 
+function ensureMissingDynamicImportFlagBinding(helperName) {
+    if (globalThis[helperName] !== missingDynamicImportFlagFunction) {
+        Object.defineProperty(globalThis, helperName, {
+            value: missingDynamicImportFlagFunction,
+            writable: false,
+            configurable: true,
+        });
+    }
+}
+
 function chooseDefaultLoaderImportHelperName(code) {
     let helperName;
     do {
@@ -705,11 +794,23 @@ function chooseMissingDynamicImportHelperName(code) {
     return helperName;
 }
 
+function chooseMissingDynamicImportFlagHelperName(code) {
+    let helperName;
+    do {
+        helperName = missingDynamicImportFlagHelper + '_' + defaultLoaderImportHelperCounter++;
+    } while (code.indexOf(helperName) !== -1);
+    return helperName;
+}
+
 function defaultLoaderImportSource(filename, helperName) {
     return helperName + '(' + JSON.stringify(filename) + ',';
 }
 
 function missingDynamicImportSource(helperName) {
+    return helperName + '(';
+}
+
+function missingDynamicImportFlagSource(helperName) {
     return helperName + '(';
 }
 
@@ -729,6 +830,17 @@ function rewriteMissingDynamicImportsForEvaluation(code) {
     const helperName = chooseMissingDynamicImportHelperName(code);
     const rewritten = rewriteDynamicImports(code, missingDynamicImportSource(helperName));
     if (rewritten.changed) ensureMissingDynamicImportBinding(helperName);
+    return {
+        code: rewritten.code,
+        helperName,
+    };
+}
+
+function rewriteMissingDynamicImportFlagForEvaluation(code) {
+    code = String(code);
+    const helperName = chooseMissingDynamicImportFlagHelperName(code);
+    const rewritten = rewriteDynamicImports(code, missingDynamicImportFlagSource(helperName));
+    if (rewritten.changed) ensureMissingDynamicImportFlagBinding(helperName);
     return {
         code: rewritten.code,
         helperName,
@@ -799,6 +911,7 @@ export class Script {
         this._options = snapshotVmOptions(options);
         this._usesDefaultLoader = this._options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER;
         this._usesMissingDynamicImportCallback = this._options.importModuleDynamically === undefined;
+        this._usesMissingDynamicImportFlag = typeof this._options.importModuleDynamically === 'function';
         this._defaultLoaderFilename = this._usesDefaultLoader
             ? referrerFilenameFromOptions(this._options)
             : undefined;
@@ -808,15 +921,27 @@ export class Script {
         const missingCallbackRewrite = this._usesMissingDynamicImportCallback
             ? rewriteMissingDynamicImportsForEvaluation(this._code)
             : undefined;
+        const missingFlagRewrite = this._usesMissingDynamicImportFlag
+            ? rewriteMissingDynamicImportFlagForEvaluation(this._code)
+            : undefined;
         this._defaultLoaderCode = defaultLoaderRewrite && defaultLoaderRewrite.code;
         this._defaultLoaderHelperName = defaultLoaderRewrite && defaultLoaderRewrite.helperName;
         this._missingCallbackCode = missingCallbackRewrite && missingCallbackRewrite.code;
+        this._missingCallbackHelperName = missingCallbackRewrite && missingCallbackRewrite.helperName;
+        this._missingFlagCode = missingFlagRewrite && missingFlagRewrite.code;
+        this._missingFlagHelperName = missingFlagRewrite && missingFlagRewrite.helperName;
     }
 
     runInNewContext(sandbox, options) {
         validateOptionsObject(options);
         if (this._usesDefaultLoader) {
             return evalCodeInNewContext(this._defaultLoaderCode, sandbox, this._defaultLoaderHelperName);
+        }
+        if (this._usesMissingDynamicImportCallback) {
+            return evalCodeInNewContext(this._missingCallbackCode, sandbox, this._missingCallbackHelperName);
+        }
+        if (this._usesMissingDynamicImportFlag) {
+            return evalCodeInNewContext(this._missingFlagCode, sandbox, this._missingFlagHelperName);
         }
         return runInNewContext(this._code, sandbox, {});
     }
@@ -829,6 +954,18 @@ export class Script {
             }
             return evalCodeInContext(this._defaultLoaderCode, context, this._defaultLoaderHelperName);
         }
+        if (this._usesMissingDynamicImportCallback) {
+            if (!isContext(context)) {
+                throw new TypeError('argument must be a vm.Context');
+            }
+            return evalCodeInContext(this._missingCallbackCode, context, this._missingCallbackHelperName);
+        }
+        if (this._usesMissingDynamicImportFlag) {
+            if (!isContext(context)) {
+                throw new TypeError('argument must be a vm.Context');
+            }
+            return evalCodeInContext(this._missingFlagCode, context, this._missingFlagHelperName);
+        }
         return runInContext(this._code, context, {});
     }
 
@@ -839,6 +976,9 @@ export class Script {
         }
         if (this._usesMissingDynamicImportCallback) {
             return (0, eval)(this._missingCallbackCode);
+        }
+        if (this._usesMissingDynamicImportFlag) {
+            return (0, eval)(this._missingFlagCode);
         }
         return runInThisContext(this._code, {});
     }
