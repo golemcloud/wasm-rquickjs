@@ -3200,6 +3200,58 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.deepStrictEqual(globalThis.vmImportMetaFalsePositives, ['import.meta', 'import.meta', 'import.meta', 7, 'undefined']);
         delete globalThis.vmImportMetaFalsePositives;
 
+        const sourceTextParserFalsePositiveModule = new vm.SourceTextModule(`
+            const text = "import { x } from 'dep'; export const wrong = 1;";
+            const regex = /import "dep"; export const wrong = 1;/;
+            // import "dep"; export const wrong = 1;
+            /* import "dep"; export const wrong = 1; */
+            globalThis.vmSourceTextParserFalsePositives = [text.includes("export const wrong"), regex.test('import "dep"; export const wrong = 1;')];
+        `);
+        assert.deepStrictEqual(sourceTextParserFalsePositiveModule.dependencySpecifiers, []);
+        await sourceTextParserFalsePositiveModule.link(() => {
+            throw new Error('unreachable');
+        });
+        await sourceTextParserFalsePositiveModule.evaluate();
+        assert.deepStrictEqual(globalThis.vmSourceTextParserFalsePositives, [true, true]);
+        delete globalThis.vmSourceTextParserFalsePositives;
+
+        const sourceTextExportRegexModule = new vm.SourceTextModule('export const r = /import "dep"; export const wrong = 1;/;');
+        assert.deepStrictEqual(sourceTextExportRegexModule.dependencySpecifiers, []);
+        await sourceTextExportRegexModule.link(() => {
+            throw new Error('unreachable');
+        });
+        await sourceTextExportRegexModule.evaluate();
+        assert.strictEqual(sourceTextExportRegexModule.namespace.r.test('import "dep"; export const wrong = 1;'), true);
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(sourceTextExportRegexModule.namespace, 'wrong'), false);
+
+        const sourceTextPropertyExportModule = new vm.SourceTextModule(`
+            const o = { export: 1 };
+            class C { export() { return 2; } }
+            globalThis.vmSourceTextPropertyExport = [o.export, new C().export()];
+        `);
+        await sourceTextPropertyExportModule.link(() => {});
+        await sourceTextPropertyExportModule.evaluate();
+        assert.deepStrictEqual(globalThis.vmSourceTextPropertyExport, [1, 2]);
+        delete globalThis.vmSourceTextPropertyExport;
+
+        const sourceTextMultilineExportModule = new vm.SourceTextModule(`
+            export const a = 1,
+                b = 2;
+        `);
+        await sourceTextMultilineExportModule.link(() => {});
+        await sourceTextMultilineExportModule.evaluate();
+        assert.strictEqual(sourceTextMultilineExportModule.namespace.a, 1);
+        assert.strictEqual(sourceTextMultilineExportModule.namespace.b, 2);
+
+        const sourceTextNestedTemplateModule = new vm.SourceTextModule('const s = `${`import "dep"; export const wrong = 1;`}`; globalThis.vmSourceTextNestedTemplate = s;');
+        assert.deepStrictEqual(sourceTextNestedTemplateModule.dependencySpecifiers, []);
+        await sourceTextNestedTemplateModule.link(() => {
+            throw new Error('unreachable');
+        });
+        await sourceTextNestedTemplateModule.evaluate();
+        assert.strictEqual(globalThis.vmSourceTextNestedTemplate, 'import "dep"; export const wrong = 1;');
+        delete globalThis.vmSourceTextNestedTemplate;
+
         const syntheticModule = new vm.SyntheticModule(['x'], function() {
             syntheticEvaluateCalled = true;
             this.setExport('x', 1);
