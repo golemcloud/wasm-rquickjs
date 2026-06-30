@@ -3433,6 +3433,13 @@ export const testVmMainContextDefaultLoader = async () => {
         } finally {
             Error.stackTraceLimit = oldStackTraceLimit;
         }
+        const runFilenameContext = vm.createContext({});
+        function hasVmFilenameStack(err) {
+            return typeof err.stack === 'string' && err.stack.startsWith('runtime-boom.js:1');
+        }
+        assert.throws(() => vm.runInThisContext('throw new Error("boom")', 'runtime-boom.js'), hasVmFilenameStack);
+        assert.throws(() => vm.runInNewContext('throw new Error("boom")', {}, 'runtime-boom.js'), hasVmFilenameStack);
+        assert.throws(() => vm.runInContext('throw new Error("boom")', runFilenameContext, 'runtime-boom.js'), hasVmFilenameStack);
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);

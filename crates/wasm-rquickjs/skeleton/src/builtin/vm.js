@@ -1085,7 +1085,7 @@ function createIndirectEvalSource(code) {
 export function runInNewContext(code, sandbox, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
-    options = validateOptionsObject(options);
+    options = normalizeRunOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
     let helperName;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
@@ -1103,7 +1103,7 @@ export function runInNewContext(code, sandbox, options) {
         code = rewritten.code;
         helperName = rewritten.helperName;
     }
-    return evalCodeInNewContext(code, sandbox, helperName);
+    return evalVmRunWithFilename(() => evalCodeInNewContext(code, sandbox, helperName), options.filename);
 }
 
 function evalCodeInNewContext(code, sandbox, helperName) {
@@ -1148,7 +1148,7 @@ export function runInContext(code, context, options) {
     }
     if (code === undefined || code === null) code = '';
     code = String(code);
-    options = validateOptionsObject(options);
+    options = normalizeRunOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
     let helperName;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
@@ -1166,7 +1166,7 @@ export function runInContext(code, context, options) {
         code = rewritten.code;
         helperName = rewritten.helperName;
     }
-    return evalCodeInContext(code, context, helperName);
+    return evalVmRunWithFilename(() => evalCodeInContext(code, context, helperName), options.filename);
 }
 
 function evalCodeInContext(code, context, helperName) {
@@ -1190,22 +1190,50 @@ function evalCodeInContext(code, context, helperName) {
 export function runInThisContext(code, options) {
     if (code === undefined || code === null) return undefined;
     code = String(code);
-    options = validateOptionsObject(options);
+    options = normalizeRunOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
-        return evalWithFilename(rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename).code, filename);
+        return evalVmRunWithFilename(() => evalWithFilename(rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename).code, filename), filename);
     }
     if (options.importModuleDynamically === undefined) {
-        return (0, eval)(rewriteMissingDynamicImportsForEvaluation(code).code);
+        const rewritten = rewriteMissingDynamicImportsForEvaluation(code).code;
+        return options.filename
+            ? evalVmRunWithFilename(() => evalWithFilename(rewritten, options.filename), options.filename)
+            : (0, eval)(rewritten);
     }
     if (typeof options.importModuleDynamically === 'function') {
         const rewritten = vmModulesEnabled()
             ? rewriteVmDynamicImportCallbackForEvaluation(code, options.importModuleDynamically, undefined)
             : rewriteMissingDynamicImportFlagForEvaluation(code);
-        return (0, eval)(rewritten.code);
+        return options.filename
+            ? evalVmRunWithFilename(() => evalWithFilename(rewritten.code, options.filename), options.filename)
+            : (0, eval)(rewritten.code);
     }
-    return (0, eval)(code);
+    return options.filename
+        ? evalVmRunWithFilename(() => evalWithFilename(code, options.filename), options.filename)
+        : (0, eval)(code);
+}
+
+function normalizeRunOptions(options) {
+    if (typeof options === 'string') {
+        return { filename: options };
+    }
+    return validateOptionsObject(options);
+}
+
+function evalVmRunWithFilename(fn, filename) {
+    try {
+        return fn();
+    } catch (err) {
+        normalizeVmRunFilenameStack(err, filename);
+        throw err;
+    }
+}
+
+function normalizeVmRunFilenameStack(err, filename) {
+    if (!filename || !err || typeof err !== 'object') return;
+    err.stack = String(filename) + ':1\n' + (err.name || 'Error') + ': ' + (err.message || '');
 }
 
 export function compileFunction(code, params, options) {

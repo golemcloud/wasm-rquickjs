@@ -9124,10 +9124,10 @@
       "subtests": {
         "block_00_vm_runinnewcontext": { "category": "known-gap", "reason": "vm.runInNewContext does not propagate global writes back to the sandbox object" },
         "block_01_vm_runincontext": { "category": "known-gap", "reason": "vm.runInContext contextification/write-back semantics are incomplete" },
-        "block_02_vm_runinthiscontext": { "category": "known-gap", "reason": "process object tagging differs from Node (Object.prototype.toString.call(process))" },
-        "block_03_vm_runinnewcontext": { "category": "known-gap", "reason": "vm.createContext options argument validation and error fidelity are incomplete" },
+        "block_02_vm_runinthiscontext": { "category": "runnable" },
+        "block_03_vm_runinnewcontext": { "category": "runnable" },
         "block_04_vm_createcontext": { "category": "known-gap", "reason": "vm.createContext argument validation and error codes are incomplete" },
-        "block_05_run_script_with_filename": { "category": "known-gap", "reason": "vm run* filename option does not set stack trace file locations correctly" },
+        "block_05_run_script_with_filename": { "category": "runnable" },
         "block_06_vm_compilefunction": { "category": "runnable" }
       }
     },
