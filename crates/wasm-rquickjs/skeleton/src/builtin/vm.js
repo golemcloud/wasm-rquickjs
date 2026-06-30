@@ -31,6 +31,11 @@ function missingDynamicImportFlagFunction() {
     return Promise.reject(err);
 }
 
+function vmModulesEnabled() {
+    const execArgv = globalThis.process && globalThis.process.execArgv;
+    return Array.isArray(execArgv) && execArgv.indexOf('--experimental-vm-modules') !== -1;
+}
+
 export const constants = {
     USE_MAIN_CONTEXT_DEFAULT_LOADER,
 };
@@ -205,6 +210,7 @@ export function runInNewContext(code, sandbox, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
     options = validateOptionsObject(options);
+    validateImportModuleDynamicallyOption(options.importModuleDynamically);
     let helperName;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const rewritten = rewriteDefaultLoaderDynamicImportsForEvaluation(code, referrerFilenameFromOptions(options));
@@ -215,7 +221,9 @@ export function runInNewContext(code, sandbox, options) {
         code = rewritten.code;
         helperName = rewritten.helperName;
     } else if (typeof options.importModuleDynamically === 'function') {
-        const rewritten = rewriteMissingDynamicImportFlagForEvaluation(code);
+        const rewritten = vmModulesEnabled()
+            ? rewriteVmDynamicImportCallbackForEvaluation(code, options.importModuleDynamically, undefined)
+            : rewriteMissingDynamicImportFlagForEvaluation(code);
         code = rewritten.code;
         helperName = rewritten.helperName;
     }
@@ -265,6 +273,7 @@ export function runInContext(code, context, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
     options = validateOptionsObject(options);
+    validateImportModuleDynamicallyOption(options.importModuleDynamically);
     let helperName;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const rewritten = rewriteDefaultLoaderDynamicImportsForEvaluation(code, referrerFilenameFromOptions(options));
@@ -275,7 +284,9 @@ export function runInContext(code, context, options) {
         code = rewritten.code;
         helperName = rewritten.helperName;
     } else if (typeof options.importModuleDynamically === 'function') {
-        const rewritten = rewriteMissingDynamicImportFlagForEvaluation(code);
+        const rewritten = vmModulesEnabled()
+            ? rewriteVmDynamicImportCallbackForEvaluation(code, options.importModuleDynamically, undefined)
+            : rewriteMissingDynamicImportFlagForEvaluation(code);
         code = rewritten.code;
         helperName = rewritten.helperName;
     }
@@ -304,6 +315,7 @@ export function runInThisContext(code, options) {
     if (code === undefined || code === null) return undefined;
     code = String(code);
     options = validateOptionsObject(options);
+    validateImportModuleDynamicallyOption(options.importModuleDynamically);
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
         return evalWithFilename(rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename).code, filename);
@@ -312,7 +324,10 @@ export function runInThisContext(code, options) {
         return (0, eval)(rewriteMissingDynamicImportsForEvaluation(code).code);
     }
     if (typeof options.importModuleDynamically === 'function') {
-        return (0, eval)(rewriteMissingDynamicImportFlagForEvaluation(code).code);
+        const rewritten = vmModulesEnabled()
+            ? rewriteVmDynamicImportCallbackForEvaluation(code, options.importModuleDynamically, undefined)
+            : rewriteMissingDynamicImportFlagForEvaluation(code);
+        return (0, eval)(rewritten.code);
     }
     return (0, eval)(code);
 }
@@ -320,6 +335,7 @@ export function runInThisContext(code, options) {
 export function compileFunction(code, params, options) {
     params = params || [];
     options = validateOptionsObject(options);
+    validateImportModuleDynamicallyOption(options.importModuleDynamically);
     validateInt32Option(options.lineOffset, 'options.lineOffset');
     validateInt32Option(options.columnOffset, 'options.columnOffset');
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
@@ -331,13 +347,16 @@ export function compileFunction(code, params, options) {
     if (options.importModuleDynamically === undefined) {
         code = rewriteMissingDynamicImportsForEvaluation(String(code)).code;
     } else if (typeof options.importModuleDynamically === 'function') {
-        code = rewriteMissingDynamicImportFlagForEvaluation(String(code)).code;
+        code = (vmModulesEnabled()
+            ? rewriteVmDynamicImportCallbackForEvaluation(String(code), options.importModuleDynamically, undefined)
+            : rewriteMissingDynamicImportFlagForEvaluation(String(code))).code;
     }
     return new Function(...params, code);
 }
 
 function snapshotVmOptions(options) {
     options = validateOptionsObject(options);
+    validateImportModuleDynamicallyOption(options.importModuleDynamically);
     return Object.assign({}, options);
 }
 
@@ -347,6 +366,13 @@ function validateOptionsObject(options) {
         throwInvalidArgType('options', 'object', options);
     }
     return options;
+}
+
+function validateImportModuleDynamicallyOption(value) {
+    if (value === undefined || value === USE_MAIN_CONTEXT_DEFAULT_LOADER || typeof value === 'function') {
+        return;
+    }
+    throwInvalidArgType('options.importModuleDynamically', 'function', value);
 }
 
 function validateInt32Option(value, name) {
@@ -814,6 +840,50 @@ function missingDynamicImportFlagSource(helperName) {
     return helperName + '(';
 }
 
+function vmDynamicImportCallbackSource(helperName) {
+    return helperName + '(';
+}
+
+function dynamicImportAttributes(options) {
+    const attributes = Object.create(null);
+    if (options && typeof options === 'object' && options.with && typeof options.with === 'object') {
+        const keys = Object.keys(options.with);
+        for (let i = 0; i < keys.length; i++) {
+            attributes[keys[i]] = options.with[keys[i]];
+        }
+    }
+    return attributes;
+}
+
+function vmModuleNotModuleError() {
+    const err = new TypeError('Provided module is not an instance of Module');
+    err.code = 'ERR_VM_MODULE_NOT_MODULE';
+    return err;
+}
+
+function namespaceFromVmModule(module) {
+    if (!(module instanceof SourceTextModule)) {
+        throw vmModuleNotModuleError();
+    }
+    return module.namespace;
+}
+
+function defineVmDynamicImportCallbackBinding(helperName, callback, wrap) {
+    Object.defineProperty(globalThis, helperName, {
+        value: function(specifier, options) {
+            let result;
+            try {
+                result = callback(String(specifier), wrap, dynamicImportAttributes(options));
+            } catch (err) {
+                return Promise.reject(err);
+            }
+            return Promise.resolve(result).then(namespaceFromVmModule);
+        },
+        writable: false,
+        configurable: true,
+    });
+}
+
 function rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename) {
     code = String(code);
     const helperName = chooseDefaultLoaderImportHelperName(code);
@@ -841,6 +911,17 @@ function rewriteMissingDynamicImportFlagForEvaluation(code) {
     const helperName = chooseMissingDynamicImportFlagHelperName(code);
     const rewritten = rewriteDynamicImports(code, missingDynamicImportFlagSource(helperName));
     if (rewritten.changed) ensureMissingDynamicImportFlagBinding(helperName);
+    return {
+        code: rewritten.code,
+        helperName,
+    };
+}
+
+function rewriteVmDynamicImportCallbackForEvaluation(code, callback, wrap) {
+    code = String(code);
+    const helperName = chooseDefaultLoaderImportHelperName(code);
+    const rewritten = rewriteDynamicImports(code, vmDynamicImportCallbackSource(helperName));
+    if (rewritten.changed) defineVmDynamicImportCallbackBinding(helperName, callback, wrap);
     return {
         code: rewritten.code,
         helperName,
@@ -911,7 +992,8 @@ export class Script {
         this._options = snapshotVmOptions(options);
         this._usesDefaultLoader = this._options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER;
         this._usesMissingDynamicImportCallback = this._options.importModuleDynamically === undefined;
-        this._usesMissingDynamicImportFlag = typeof this._options.importModuleDynamically === 'function';
+        this._usesDynamicImportCallback = typeof this._options.importModuleDynamically === 'function' && vmModulesEnabled();
+        this._usesMissingDynamicImportFlag = typeof this._options.importModuleDynamically === 'function' && !this._usesDynamicImportCallback;
         this._defaultLoaderFilename = this._usesDefaultLoader
             ? referrerFilenameFromOptions(this._options)
             : undefined;
@@ -924,12 +1006,17 @@ export class Script {
         const missingFlagRewrite = this._usesMissingDynamicImportFlag
             ? rewriteMissingDynamicImportFlagForEvaluation(this._code)
             : undefined;
+        const dynamicImportCallbackRewrite = this._usesDynamicImportCallback
+            ? rewriteVmDynamicImportCallbackForEvaluation(this._code, this._options.importModuleDynamically, this)
+            : undefined;
         this._defaultLoaderCode = defaultLoaderRewrite && defaultLoaderRewrite.code;
         this._defaultLoaderHelperName = defaultLoaderRewrite && defaultLoaderRewrite.helperName;
         this._missingCallbackCode = missingCallbackRewrite && missingCallbackRewrite.code;
         this._missingCallbackHelperName = missingCallbackRewrite && missingCallbackRewrite.helperName;
         this._missingFlagCode = missingFlagRewrite && missingFlagRewrite.code;
         this._missingFlagHelperName = missingFlagRewrite && missingFlagRewrite.helperName;
+        this._dynamicImportCallbackCode = dynamicImportCallbackRewrite && dynamicImportCallbackRewrite.code;
+        this._dynamicImportCallbackHelperName = dynamicImportCallbackRewrite && dynamicImportCallbackRewrite.helperName;
     }
 
     runInNewContext(sandbox, options) {
@@ -942,6 +1029,9 @@ export class Script {
         }
         if (this._usesMissingDynamicImportFlag) {
             return evalCodeInNewContext(this._missingFlagCode, sandbox, this._missingFlagHelperName);
+        }
+        if (this._usesDynamicImportCallback) {
+            return evalCodeInNewContext(this._dynamicImportCallbackCode, sandbox, this._dynamicImportCallbackHelperName);
         }
         return runInNewContext(this._code, sandbox, {});
     }
@@ -966,6 +1056,12 @@ export class Script {
             }
             return evalCodeInContext(this._missingFlagCode, context, this._missingFlagHelperName);
         }
+        if (this._usesDynamicImportCallback) {
+            if (!isContext(context)) {
+                throw new TypeError('argument must be a vm.Context');
+            }
+            return evalCodeInContext(this._dynamicImportCallbackCode, context, this._dynamicImportCallbackHelperName);
+        }
         return runInContext(this._code, context, {});
     }
 
@@ -979,6 +1075,9 @@ export class Script {
         }
         if (this._usesMissingDynamicImportFlag) {
             return (0, eval)(this._missingFlagCode);
+        }
+        if (this._usesDynamicImportCallback) {
+            return (0, eval)(this._dynamicImportCallbackCode);
         }
         return runInThisContext(this._code, {});
     }
