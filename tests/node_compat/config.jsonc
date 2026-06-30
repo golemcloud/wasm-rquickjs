@@ -2665,10 +2665,10 @@
     "parallel/test-http2-request-response-proto.js": {},
     "parallel/test-instanceof.js": {},
     "parallel/test-microtask-queue-integration.js": {},
-    "parallel/test-module-cache.js": {},
-    "parallel/test-module-circular-dependency-warning.js": {},
-    "parallel/test-module-loading-deprecated.js": {},
-    "parallel/test-module-parent-setter-deprecation.js": {},
+    "parallel/test-module-cache.js": { "category": "runnable" },
+    "parallel/test-module-circular-dependency-warning.js": { "category": "runnable" },
+    "parallel/test-module-loading-deprecated.js": { "category": "runnable" },
+    "parallel/test-module-parent-setter-deprecation.js": { "category": "runnable" },
     "parallel/test-net-autoselectfamily-ipv4first.js": {},
     "parallel/test-net-isip.js": {},
     "parallel/test-net-isipv4.js": {},
@@ -2997,12 +2997,12 @@
     "parallel/test-process-uptime.js": {},
     "parallel/test-promise-unhandled-issue-43655.js": {},
     "parallel/test-regression-object-prototype.js": {},
-    "parallel/test-require-empty-main.js": {},
-    "parallel/test-require-enoent-dir.js": {},
+    "parallel/test-require-empty-main.js": { "category": "runnable" },
+    "parallel/test-require-enoent-dir.js": { "category": "runnable" },
     "parallel/test-require-extension-over-directory.js": { "category": "runnable" },
-    "parallel/test-require-invalid-package.js": {},
-    "parallel/test-require-nul.js": {},
-    "parallel/test-require-process.js": {},
+    "parallel/test-require-invalid-package.js": { "category": "runnable" },
+    "parallel/test-require-nul.js": { "category": "runnable" },
+    "parallel/test-require-process.js": { "category": "runnable" },
     "parallel/test-runner-aliases.js": {},
     "parallel/test-runner-filter-warning.js": {},
     "parallel/test-runner-source-maps-invalid-json.js": {},
@@ -7613,8 +7613,8 @@
     "parallel/test-require-cache.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {}
+        "block_00_block_00": { "category": "runnable" },
+        "block_01_block_01": { "category": "runnable" }
       }
     },
     "parallel/test-require-delete-array-iterator.js": { "category": "runnable" },
@@ -7623,28 +7623,27 @@
     "parallel/test-require-extensions-main.js": { "category": "runnable" },
     "parallel/test-require-extensions-same-filename-as-dir-trailing-slash.js": { "category": "runnable" },
     "parallel/test-require-extensions-same-filename-as-dir.js": { "category": "runnable" },
-    "parallel/test-require-invalid-main-no-exports.js": {},
+    "parallel/test-require-invalid-main-no-exports.js": { "category": "runnable" },
     "parallel/test-require-json.js": { "category": "runnable" },
     "parallel/test-require-long-path.js": { "category": "wasi-impossible", "reason": "Windows-specific long-path behavior is not applicable in WASI" },
     "parallel/test-require-mjs.js": { "category": "runnable" },
     "parallel/test-require-node-prefix.js": {
       "split": true,
       "subtests": {
-        "block_00_all_kinds_of_specifiers_should_work_without_issue": {},
-        "block_01_node_prefixed_require_calls_bypass_the_require_cache": {}
+        "block_00_all_kinds_of_specifiers_should_work_without_issue": { "category": "runnable" },
+        "block_01_node_prefixed_require_calls_bypass_the_require_cache": { "category": "runnable" }
       }
     },
     "parallel/test-require-resolve-opts-paths-relative.js": {
       "split": true,
       "subtests": {
-        "block_00_parent_directory_paths_work_as_intended": {},
-        "block_01_current_directory_paths_work_as_intended": {},
-        "block_02_sub_directory_paths_work_as_intended": {}
+        "block_00_parent_directory_paths_work_as_intended": { "category": "runnable" },
+        "block_01_current_directory_paths_work_as_intended": { "category": "runnable" },
+        "block_02_sub_directory_paths_work_as_intended": { "category": "runnable" }
       }
     },
     "parallel/test-require-resolve.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
+      "category": "runnable",
       "split": true,
       "subtests": {
         "block_00_test_require_resolve_paths": { "category": "runnable" },
