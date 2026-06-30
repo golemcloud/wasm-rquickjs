@@ -1022,7 +1022,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | client does not emit information event for 100 Continue on custom createConnection streams | 1 | `parallel/test-http-parser-multiple-execute.js` |
 | clientError does not expose Node-compatible parse error details (missing code HPE_INVALID_TRANSFER_ENCODING) | 1 | `parallel/test-http-invalid-te.js` |
 | codeGeneration.wasm enforcement is incomplete and WebAssembly is unavailable in the context | 1 | `parallel/test-vm-codegen.js#block_02_block_02` |
-| common shim is missing ../common/fixtures.mjs and child_process execPath emulation does not fully support the ESM CLI modes this test exercises (--input-type/--import) | 1 | `es-module/test-esm-import-meta-resolve.mjs` |
 | common-shim expectWarning() behavior is not implemented | 1 | `parallel/test-common-expect-warning.js` |
 | common-shim mustCall/countdown failure output differs from Node in child-process emulation | 1 | `parallel/test-common-countdown.js` |
 | common-shim mustNotCall() error formatting differs from Node's test harness | 1 | `parallel/test-common-must-not-call.js` |
@@ -1240,6 +1239,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | runInNewContext sandbox binding and write-back semantics are incomplete | 1 | `parallel/test-vm-run-in-new-context.js` |
 | runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect | 1 | `parallel/test-vm-not-strict.js` |
 | same-component node:http client->server calls via wasi:http can deadlock in this scenario | 1 | `parallel/test-http-write-head-after-set-header.js` |
+| same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 1 | `es-module/test-esm-import-meta-resolve.mjs` |
 | sendBlockList connect path can crash in WASI UDP implementation | 1 | `parallel/test-dgram-blocklist.js#block_00_block_00` |
 | sendBlockList send() callback path is not Node-compatible and can hang | 1 | `parallel/test-dgram-blocklist.js#block_01_block_01` |
 | sequential path is stale in vendored suite; equivalent Upgrade timeout-disabling semantics are not Node-compatible | 1 | `sequential/test-http-server-request-timeout-upgrade.js` |

@@ -6516,7 +6516,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
 
     if init.include_resolve {
         props.push(format!(
-            "resolve:{{value:(s)=>globalThis.__wasm_rquickjs_import_meta_resolve(\"{}\",s),writable:true,enumerable:true,configurable:true}}",
+            "resolve:{{value:(s,p)=>{{if(p!==undefined){{if(typeof p==='string'){{return globalThis.__wasm_rquickjs_import_meta_resolve(p,s);}}if(p instanceof URL){{return globalThis.__wasm_rquickjs_import_meta_resolve(p.href,s);}}const e=new TypeError('The \"parentURL\" argument must be of type string or an instance of URL.');e.code='ERR_INVALID_ARG_TYPE';throw e;}}return globalThis.__wasm_rquickjs_import_meta_resolve(\"{}\",s);}},writable:true,enumerable:true,configurable:true}}",
             escape_js_string(&init.url)
         ));
     }

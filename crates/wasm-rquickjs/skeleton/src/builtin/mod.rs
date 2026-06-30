@@ -544,9 +544,21 @@ pub fn wire_builtins() -> String {
 }
 
 const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_resolve = function(baseUrl, specifier) {
+  baseUrl = String(baseUrl);
+  specifier = String(specifier);
   if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
   if (specifier.startsWith('node:')) return specifier;
   var NODE_BUILTINS = new Set(['fs','path','os','crypto','http','https','url','util','stream','events','buffer','querystring','string_decoder','zlib','assert','module','net','tls','child_process','timers','dns','dgram','cluster','constants','readline','tty','v8','vm','worker_threads','perf_hooks','async_hooks','diagnostics_channel','trace_events','inspector','punycode','console','process','test','sqlite','domain','http2','repl']);
+  function codedError(message, code, typeError) {
+    var err = typeError ? new TypeError(message) : new Error(message);
+    err.code = code;
+    return err;
+  }
+  function ensureSupportedBase() {
+    if (baseUrl.startsWith('data:')) {
+      throw codedError('Failed to resolve module specifier "' + specifier + '" from "' + baseUrl + '": Invalid relative URL or base scheme is not hierarchical.', 'ERR_UNSUPPORTED_RESOLVE_REQUEST', false);
+    }
+  }
   function normalizePath(p) {
     var parts = p.split('/'); var out = [];
     for (var i = 0; i < parts.length; i++) {
@@ -562,22 +574,34 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
     var end = query < 0 ? hash : (hash < 0 ? query : Math.min(query, hash));
     return end < 0 ? [value, ''] : [value.substring(0, end), value.substring(end)];
   }
+  function preserveTrailingSlash(path, original) {
+    return original.endsWith('/') && !path.endsWith('/') ? path + '/' : path;
+  }
   if (specifier.startsWith('/')) {
+    ensureSupportedBase();
     var parts = splitSuffix(specifier);
-    var path = normalizePath(parts[0]);
+    var path = preserveTrailingSlash(normalizePath(parts[0]), parts[0]);
     return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
   }
   if (specifier.startsWith('.')) {
+    ensureSupportedBase();
     var base = baseUrl;
     if (base.startsWith('file://')) base = base.slice(7);
     base = splitSuffix(base)[0];
     var dir = base.substring(0, base.lastIndexOf('/') + 1);
     var parts = splitSuffix(specifier);
-    var path = normalizePath(dir + parts[0]);
+    var path = preserveTrailingSlash(normalizePath(dir + parts[0]), parts[0]);
     return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
   }
   if (NODE_BUILTINS.has(specifier)) return 'node:' + specifier;
-  throw new Error('Cannot resolve bare specifier "' + specifier + '" from "' + baseUrl + '"');
+  ensureSupportedBase();
+  if (specifier.endsWith('/') && baseUrl.startsWith('file://')) {
+    var base = splitSuffix(baseUrl.slice(7))[0];
+    var dir = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
+    var resolved = normalizePath(dir + 'node_modules/' + specifier);
+    return 'file://' + (resolved.endsWith('/') ? resolved : resolved + '/');
+  }
+  throw codedError('Cannot find package "' + specifier + '" imported from ' + baseUrl, 'ERR_MODULE_NOT_FOUND', false);
 };"#;
 
 const IMPORT_ATTRS_VALIDATE_JS: &str = r#"

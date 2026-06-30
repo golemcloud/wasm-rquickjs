@@ -4071,7 +4071,7 @@
     "es-module/test-vm-compile-function-leak.js": {},
     "es-module/test-vm-contextified-script-leak.js": {},
     "es-module/test-esm-import-meta.mjs": {},
-    "es-module/test-esm-import-meta-resolve.mjs": { "category": "known-gap", "reason": "common shim is missing ../common/fixtures.mjs and child_process execPath emulation does not fully support the ESM CLI modes this test exercises (--input-type/--import)" },
+    "es-module/test-esm-import-meta-resolve.mjs": { "category": "known-gap", "reason": "same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes" },
 
     // === node:zlib tests ===
     "parallel/test-zlib-const.js": {},

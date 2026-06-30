@@ -45,6 +45,28 @@ function writeImportEntry(path, specifier) {
     fs.writeFileSync(path, `export default await import(${JSON.stringify(specifier)});`);
 }
 
+export const testImportMetaResolve = async () => {
+    const appDir = '/import-meta-resolve-app';
+    const entryUrl = `${pathToFileURL(`${appDir}/entry.mjs`).href}`;
+    fs.mkdirSync(`${appDir}/node_modules/pkg-dir`, { recursive: true });
+
+    assert.strictEqual(import.meta.resolve('./local.mjs', entryUrl), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
+    assert.strictEqual(import.meta.resolve('fs', entryUrl), 'node:fs');
+    assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
+    assert.throws(() => import.meta.resolve('does-not-exist', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });
+    assert.throws(() => import.meta.resolve('./relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
+    assert.throws(() => import.meta.resolve('does-not-exist', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
+
+    const resolvedFromData = await import('data:text/javascript,export default import.meta.resolve("http://example.com/value")');
+    assert.strictEqual(resolvedFromData.default, 'http://example.com/value');
+    await expectImportRejectsCode(
+        'data:text/javascript,export default import.meta.resolve("does-not-exist")',
+        'ERR_UNSUPPORTED_RESOLVE_REQUEST',
+    );
+    return true;
+};
+
 export const testEsmPackageMapEdgeCases = async () => {
     try {
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg', { recursive: true });
