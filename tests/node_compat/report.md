@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3199/4404 (72.6%)
+**Primary compatibility (CI-enforced):** 3196/4404 (72.6%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3199 | 72.6% | 55.9% | 46.7% |
-| 🧩 known gap | 1205 | 27.4% | 21.1% | 17.6% |
+| ✅ passing (runnable) | 3196 | 72.6% | 55.9% | 46.7% |
+| 🧩 known gap | 1208 | 27.4% | 21.1% | 17.7% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3199/5721 (55.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3196/5721 (55.9%)**.
 
 ## Inventory by Module
 
@@ -53,11 +53,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | http | 898 | 243 | 306 | 267 | 2 | 0 | 80 | 44.3% | 29.7% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 184 | 122 | 42 | 7 | 1 | 0 | 12 | 74.4% | 70.9% |
+| module | 184 | 120 | 44 | 7 | 1 | 0 | 12 | 73.2% | 69.8% |
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 169 | 133 | 85 | 11 | 0 | 183 | 56.0% | 42.5% |
+| other | 581 | 168 | 134 | 85 | 11 | 0 | 183 | 55.6% | 42.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1205)
+### known gap (1208)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1008,6 +1008,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output | 1 | `es-module/test-require-module-tla.js#block_01_block_01` |
 | child_process execPath emulation does not yet match Node CLI argument validation/exit codes | 1 | `parallel/test-cli-bad-options.js` |
 | child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js | 1 | `es-module/test-esm-cjs-exports.js` |
+| child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process CJS import/require interop is covered by module-interop runtime tests | 1 | `es-module/test-esm-cjs-main.js` |
+| child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process builtin and CJS interop are covered by runtime and node_compat tests | 1 | `es-module/test-esm-cjs-builtins.js` |
 | child_process execPath emulation has incomplete --require preload/argv handling | 1 | `parallel/test-preload-print-process-argv.js` |
 | child_process execPath emulation lacks full --import/--require preload semantics | 1 | `es-module/test-require-module-preload.js` |
 | child_process execPath emulation lacks full NODE_OPTIONS and CLI flag semantics | 1 | `parallel/test-cli-node-options.js` |
@@ -1229,6 +1231,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |
 | requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them | 1 | `parallel/test-http-multi-line-headers.js` |
 | requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle | 1 | `parallel/test-http-agent-keepalive.js` |
+| requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module | 1 | `es-module/test-disable-require-module-with-detection.js` |
 | requires simulated process.execPath / Node CLI module_timer and trace-event support | 1 | `parallel/test-module-print-timing.mjs` |
 | response writable state around aborted proxy close is not Node-compatible | 1 | `parallel/test-http-writable-true-after-close.js` |
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |
