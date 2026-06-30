@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3176/4404 (72.1%)
+**Primary compatibility (CI-enforced):** 3177/4404 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3176 | 72.1% | 55.5% | 46.4% |
-| 🧩 known gap | 1228 | 27.9% | 21.5% | 17.9% |
+| ✅ passing (runnable) | 3177 | 72.1% | 55.5% | 46.4% |
+| 🧩 known gap | 1227 | 27.9% | 21.4% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3176/5721 (55.5%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3177/5721 (55.5%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 29 | 80 | 3 | 9 | 0 | 0 | 26.6% | 24.0% |
+| vm | 121 | 30 | 79 | 3 | 9 | 0 | 0 | 27.5% | 24.8% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1228)
+### known gap (1227)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1078,7 +1078,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | dotenv CLI --env-file parsing is incomplete | 1 | `parallel/test-dotenv.js` |
 | dotenv CLI flags are incomplete in execPath child emulation | 1 | `parallel/test-dotenv-edge-cases.js` |
 | duplicate Set-Cookie response header handling/lifecycle is not fully Node-compatible | 1 | `parallel/test-http-set-cookies.js` |
-| dynamic import callback handling does not correctly support module namespace return values | 1 | `parallel/test-vm-module-dynamic-namespace.js` |
 | emulated child_process inline eval does not keep the child alive for dynamic import() resolution | 1 | `parallel/test-runner-import-no-scheme.js` |
 | events.EventEmitterAsyncResource API and ERR_INVALID_THIS branding are incomplete | 1 | `parallel/test-eventemitter-asyncresource.js` |
 | events.once() with EventTarget does not handle sequential waits correctly | 1 | `parallel/test-eventtarget-once-twice.js` |
@@ -1135,7 +1134,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | http.get({ createConnection }) callback/return-value and async error propagation semantics are incomplete | 1 | `parallel/test-http-createConnection.js` |
 | http.request host header formatting for IPv6 literals is incorrect (missing [::1]:port form) | 1 | `parallel/test-http-host-header-ipv6-fail.js` |
 | https socket lifecycle/unref semantics over wasi:http are incomplete | 1 | `parallel/test-https-agent-unref-socket.js` |
-| importModuleDynamically callback and error semantics are incomplete for vm.Script and vm.SourceTextModule | 1 | `parallel/test-vm-module-dynamic-import.js` |
+| importModuleDynamically callback and error semantics are incomplete for vm.Script and vm.SourceTextModule, including native ESM namespace returns | 1 | `parallel/test-vm-module-dynamic-import.js` |
 | importing scrypt-encrypted PKCS#8 keys traps in the WASM crypto backend | 1 | `parallel/test-crypto-key-objects.js#block_05_block_05` |
 | indexed property definitions on vm globals do not propagate to the sandbox | 1 | `parallel/test-vm-indexed-properties.js` |
 | inherited: Resolver#setLocalAddress validation/error behavior is not implemented | 1 | `parallel/test-dns-setlocaladdress.js#block_01_verify_that_setlocaladdress_throws_if_called_with_an_invalid` |

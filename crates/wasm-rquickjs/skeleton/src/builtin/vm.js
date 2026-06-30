@@ -10,6 +10,7 @@ const contextOptionsSymbol = Symbol('vm.context.options');
 const identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
 const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
+const moduleNamespaceBrandSymbol = Symbol('wasm-rquickjs.vm.namespaceBrand');
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
 const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
@@ -150,6 +151,12 @@ function createModuleNamespace(module) {
     });
     Object.defineProperty(namespaceTarget, moduleNamespaceBindingsSymbol, {
         value: module._bindings,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+    });
+    Object.defineProperty(namespaceTarget, moduleNamespaceBrandSymbol, {
+        value: true,
         enumerable: false,
         writable: false,
         configurable: false,
@@ -863,6 +870,9 @@ function vmModuleNotModuleError() {
 
 function namespaceFromVmModule(module) {
     if (!(module instanceof SourceTextModule)) {
+        if (module && typeof module === 'object' && module[moduleNamespaceBrandSymbol] === true) {
+            return module;
+        }
         throw vmModuleNotModuleError();
     }
     return module.namespace;
@@ -1091,6 +1101,9 @@ export class SourceTextModule {
     constructor(code, options) {
         this._source = String(code);
         this._status = 'unlinked';
+        this._options = snapshotVmOptions(options);
+        this._usesDynamicImportCallback = typeof this._options.importModuleDynamically === 'function' && vmModulesEnabled();
+        this._usesMissingDynamicImportFlag = typeof this._options.importModuleDynamically === 'function' && !this._usesDynamicImportCallback;
 
         const declaredBindings = parseSourceTextModuleBindings(this._source);
         this._bindings = Object.create(null);
@@ -1106,7 +1119,16 @@ export class SourceTextModule {
             };
         }
 
-        this._evaluateSource = compileSourceTextModuleEvaluator(this._source, this._names);
+        let executableSource = this._source;
+        if (this._usesDynamicImportCallback) {
+            executableSource = rewriteVmDynamicImportCallbackForEvaluation(executableSource, this._options.importModuleDynamically, this).code;
+        } else if (this._usesMissingDynamicImportFlag) {
+            executableSource = rewriteMissingDynamicImportFlagForEvaluation(executableSource).code;
+        } else {
+            executableSource = rewriteMissingDynamicImportsForEvaluation(executableSource).code;
+        }
+
+        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._names);
         this._namespace = createModuleNamespace(this);
     }
 

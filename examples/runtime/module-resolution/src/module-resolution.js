@@ -3218,6 +3218,126 @@ export const testVmMainContextDefaultLoader = async () => {
             'vm.Script.runInContext with importModuleDynamically callback rejects without VM modules flag',
         );
 
+        const missingSourceTextModule = new vm.SourceTextModule('globalThis.vmModuleImportResult = import("dep");');
+        await missingSourceTextModule.link(() => {});
+        await missingSourceTextModule.evaluate();
+        await assert.rejects(globalThis.vmModuleImportResult, { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' });
+        delete globalThis.vmModuleImportResult;
+
+        const missingFlagSourceTextModule = new vm.SourceTextModule('globalThis.vmModuleImportResult = import("dep");', {
+            importModuleDynamically() { throw new Error('unreachable'); },
+        });
+        await missingFlagSourceTextModule.link(() => {});
+        await missingFlagSourceTextModule.evaluate();
+        await assert.rejects(globalThis.vmModuleImportResult, { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG' });
+        delete globalThis.vmModuleImportResult;
+
+        const originalExecArgv = process.execArgv.slice();
+        try {
+            process.execArgv.push('--experimental-vm-modules');
+            const vmDynamicDep = new vm.SourceTextModule('export const value = 7;');
+            await vmDynamicDep.link(() => {});
+            await vmDynamicDep.evaluate();
+
+            const moduleCallbackSourceTextModule = new vm.SourceTextModule('globalThis.vmModuleImportResult = import("dep", { with: { kind: "runtime" } });', {
+                importModuleDynamically(specifier, wrap, attributes) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, moduleCallbackSourceTextModule);
+                    assert.deepStrictEqual(attributes, { __proto__: null, kind: 'runtime' });
+                    return vmDynamicDep;
+                },
+            });
+            await moduleCallbackSourceTextModule.link(() => {});
+            await moduleCallbackSourceTextModule.evaluate();
+            assert.strictEqual(await globalThis.vmModuleImportResult, vmDynamicDep.namespace);
+            delete globalThis.vmModuleImportResult;
+
+            const namespaceCallbackSourceTextModule = new vm.SourceTextModule('globalThis.vmModuleImportResult = import("dep");', {
+                importModuleDynamically(specifier, wrap) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, namespaceCallbackSourceTextModule);
+                    return vmDynamicDep.namespace;
+                },
+            });
+            await namespaceCallbackSourceTextModule.link(() => {});
+            await namespaceCallbackSourceTextModule.evaluate();
+            assert.strictEqual(await globalThis.vmModuleImportResult, vmDynamicDep.namespace);
+            delete globalThis.vmModuleImportResult;
+
+            const namespaceCallbackScript = new vm.Script('import("dep")', {
+                importModuleDynamically(specifier, wrap) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, namespaceCallbackScript);
+                    return vmDynamicDep.namespace;
+                },
+            });
+            assert.strictEqual(await namespaceCallbackScript.runInThisContext(), vmDynamicDep.namespace);
+
+            const namespaceCallbackFunction = vm.compileFunction('return import("dep")', [], {
+                importModuleDynamically(specifier, wrap) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, undefined);
+                    return vmDynamicDep.namespace;
+                },
+            });
+            assert.strictEqual(await namespaceCallbackFunction(), vmDynamicDep.namespace);
+
+            const namespaceBrand = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
+            const spoofedNamespaceSourceTextModule = new vm.SourceTextModule('globalThis.vmModuleImportResult = import("dep");', {
+                importModuleDynamically() {
+                    return { [namespaceBrand]: {} };
+                },
+            });
+            await spoofedNamespaceSourceTextModule.link(() => {});
+            await spoofedNamespaceSourceTextModule.evaluate();
+            await assert.rejects(globalThis.vmModuleImportResult, { code: 'ERR_VM_MODULE_NOT_MODULE' });
+            delete globalThis.vmModuleImportResult;
+
+            const reusableScript = new vm.Script('import("dep")', {
+                importModuleDynamically(specifier, wrap) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, reusableScript);
+                    return vmDynamicDep;
+                },
+            });
+            assert.strictEqual(await reusableScript.runInThisContext(), vmDynamicDep.namespace);
+            assert.strictEqual(await reusableScript.runInThisContext(), vmDynamicDep.namespace);
+
+            const reusableFunction = vm.compileFunction('return import("dep")', [], {
+                importModuleDynamically(specifier, wrap) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, undefined);
+                    return vmDynamicDep;
+                },
+            });
+            assert.strictEqual(await reusableFunction(), vmDynamicDep.namespace);
+            assert.strictEqual(await reusableFunction(), vmDynamicDep.namespace);
+
+            const sequentialSourceTextModule = new vm.SourceTextModule([
+                'globalThis.vmModuleImportResult = (async () => {',
+                '  const first = await import("dep");',
+                '  const second = await import("dep");',
+                '  return [first, second];',
+                '})();',
+            ].join('\n'), {
+                importModuleDynamically(specifier, wrap) {
+                    assert.strictEqual(specifier, 'dep');
+                    assert.strictEqual(wrap, sequentialSourceTextModule);
+                    return vmDynamicDep;
+                },
+            });
+            await sequentialSourceTextModule.link(() => {});
+            await sequentialSourceTextModule.evaluate();
+            assert.deepStrictEqual(await globalThis.vmModuleImportResult, [vmDynamicDep.namespace, vmDynamicDep.namespace]);
+            delete globalThis.vmModuleImportResult;
+        } finally {
+            process.execArgv.length = 0;
+            for (let i = 0; i < originalExecArgv.length; i++) {
+                process.execArgv.push(originalExecArgv[i]);
+            }
+            delete globalThis.vmModuleImportResult;
+        }
+
         const script = new vm.Script('import("./message.mjs")', {
             filename: '/vm-default-loader-app/subdir/index.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
