@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3179/4404 (72.2%)
+**Primary compatibility (CI-enforced):** 3180/4404 (72.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3179 | 72.2% | 55.6% | 46.5% |
-| 🧩 known gap | 1225 | 27.8% | 21.4% | 17.9% |
+| ✅ passing (runnable) | 3180 | 72.2% | 55.6% | 46.5% |
+| 🧩 known gap | 1224 | 27.8% | 21.4% | 17.9% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3179/5721 (55.6%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3180/5721 (55.6%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 32 | 77 | 3 | 9 | 0 | 0 | 29.4% | 26.4% |
+| vm | 121 | 33 | 76 | 3 | 9 | 0 | 0 | 30.3% | 27.3% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1225)
+### known gap (1224)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1331,7 +1331,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm run* filename option does not set stack trace file locations correctly | 1 | `parallel/test-vm-basic.js#block_05_run_script_with_filename` |
 | vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
 | vm.Script.sourceMapURL parsing for //# sourceMappingURL comments is not implemented | 1 | `parallel/test-vm-source-map-url.js` |
-| vm.SyntheticModule API behavior is missing/incomplete | 1 | `parallel/test-vm-module-synthetic.js` |
 | vm.compileFunction validation, options handling, and error fidelity are incomplete | 1 | `parallel/test-vm-basic.js#block_06_vm_compilefunction` |
 | vm.createContext argument type validation and error codes are incomplete | 1 | `parallel/test-vm-create-context-arg.js` |
 | vm.createContext argument validation and error codes are incomplete | 1 | `parallel/test-vm-basic.js#block_04_vm_createcontext` |

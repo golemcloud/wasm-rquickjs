@@ -3159,10 +3159,69 @@ export const testVmMainContextDefaultLoader = async () => {
         });
 
         const rejectedSynthetic = new vm.SyntheticModule([], function() {
-            return Promise.reject(new Error('ignored'));
+            const promise = Promise.reject(new Error('ignored'));
+            promise.catch(() => {});
+            return promise;
         });
         await rejectedSynthetic.link(() => {});
         assert.strictEqual(await rejectedSynthetic.evaluate(), undefined);
+
+        const liveSynthetic = new vm.SyntheticModule(['x'], function() {
+            liveSynthetic.setExport('x', 1);
+        });
+        const liveSyntheticUser = new vm.SourceTextModule('import { x } from "synthetic"; export const getX = () => x;');
+        await liveSyntheticUser.link((specifier) => {
+            assert.strictEqual(specifier, 'synthetic');
+            return liveSynthetic;
+        });
+        await liveSyntheticUser.evaluate();
+        assert.strictEqual(liveSyntheticUser.namespace.getX(), 1);
+        liveSynthetic.setExport('x', 42);
+        assert.strictEqual(liveSyntheticUser.namespace.getX(), 42);
+
+        const dedupedSyntheticUser = new vm.SourceTextModule('import { x } from "synthetic"; import "synthetic"; export const getX = () => x;');
+        assert.deepStrictEqual(dedupedSyntheticUser.dependencySpecifiers, ['synthetic']);
+        let dedupedSyntheticLinkCalls = 0;
+        await dedupedSyntheticUser.link((specifier) => {
+            dedupedSyntheticLinkCalls++;
+            assert.strictEqual(specifier, 'synthetic');
+            return liveSynthetic;
+        });
+        assert.strictEqual(dedupedSyntheticLinkCalls, 1);
+        await dedupedSyntheticUser.evaluate();
+        assert.strictEqual(dedupedSyntheticUser.namespace.getX(), 42);
+
+        const aliasSyntheticUser = new vm.SourceTextModule('import { x as y } from "synthetic"; export const getY = () => y;');
+        await aliasSyntheticUser.link(() => liveSynthetic);
+        await aliasSyntheticUser.evaluate();
+        assert.strictEqual(aliasSyntheticUser.namespace.getY(), 42);
+        liveSynthetic.setExport('x', 7);
+        assert.strictEqual(aliasSyntheticUser.namespace.getY(), 7);
+
+        const scopedSyntheticUser = new vm.SourceTextModule(`
+            import { x } from "synthetic";
+            export const shadow = (x) => x;
+            export const property = () => ({ x: 1 }).x;
+            export const shorthand = () => ({ x }).x;
+            export const regex = () => /x/.test("x");
+        `);
+        await scopedSyntheticUser.link(() => liveSynthetic);
+        await scopedSyntheticUser.evaluate();
+        assert.strictEqual(scopedSyntheticUser.namespace.shadow(3), 3);
+        assert.strictEqual(scopedSyntheticUser.namespace.property(), 1);
+        assert.strictEqual(scopedSyntheticUser.namespace.shorthand(), 7);
+        assert.strictEqual(scopedSyntheticUser.namespace.regex(), true);
+        liveSynthetic.setExport('x', 8);
+        assert.strictEqual(scopedSyntheticUser.namespace.shorthand(), 8);
+
+        const unicodeSyntheticUser = new vm.SourceTextModule('import { x as π } from "synthetic"; export const get = () => π;');
+        await unicodeSyntheticUser.link(() => liveSynthetic);
+        await unicodeSyntheticUser.evaluate();
+        assert.strictEqual(unicodeSyntheticUser.namespace.get(), 8);
+
+        const internalNameSyntheticUser = new vm.SourceTextModule('import { x } from "synthetic"; export const leak = __wasm_rquickjs_vm_imports;');
+        await internalNameSyntheticUser.link(() => liveSynthetic);
+        await assert.rejects(internalNameSyntheticUser.evaluate(), ReferenceError);
 
         const missingImportHelperCount = () => Object.getOwnPropertyNames(globalThis)
             .filter((name) => name.indexOf('__wasm_rquickjs_vm_missing_dynamic_import__') !== -1)

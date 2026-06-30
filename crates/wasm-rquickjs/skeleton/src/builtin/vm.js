@@ -131,7 +131,17 @@ function parseSourceTextModuleBindings(source) {
 
 function parseSourceTextModuleDependencies(source) {
     const dependencies = [];
-    const seen = new Set();
+    const bySpecifier = Object.create(null);
+    function getDependency(specifier) {
+        let dependency = bySpecifier[specifier];
+        if (!dependency) {
+            dependency = { specifier, names: [] };
+            bySpecifier[specifier] = dependency;
+            dependencies.push(dependency);
+        }
+        return dependency;
+    }
+
     let i = 0;
     while (i < source.length) {
         const ch = source.charCodeAt(i);
@@ -157,10 +167,7 @@ function parseSourceTextModuleDependencies(source) {
                 const quote = source.charCodeAt(afterImport);
                 const end = skipStringLiteral(source, afterImport, quote);
                 const specifier = source.slice(afterImport + 1, end - 1);
-                if (!seen.has(specifier)) {
-                    seen.add(specifier);
-                    dependencies.push({ specifier, names: [] });
-                }
+                getDependency(specifier);
                 i = end;
                 continue;
             }
@@ -174,14 +181,17 @@ function parseSourceTextModuleDependencies(source) {
                         if (quote === 0x27 || quote === 0x22) {
                             const end = skipStringLiteral(source, specifierStart, quote);
                             const specifier = source.slice(specifierStart + 1, end - 1);
-                            const names = source.slice(afterImport + 1, close).split(',').map((part) => part.trim().split(/\s+as\s+/)[0].trim()).filter(Boolean);
-                            let dependency = dependencies.find((entry) => entry.specifier === specifier);
-                            if (!dependency) {
-                                dependency = { specifier, names: [] };
-                                dependencies.push(dependency);
-                            }
+                            const names = source.slice(afterImport + 1, close).split(',').map((part) => {
+                                const pieces = part.trim().split(/\s+as\s+/);
+                                const imported = pieces[0] && pieces[0].trim();
+                                const local = (pieces[1] || pieces[0] || '').trim();
+                                return imported ? { imported, local } : null;
+                            }).filter(Boolean);
+                            const dependency = getDependency(specifier);
                             for (let j = 0; j < names.length; j++) {
-                                if (dependency.names.indexOf(names[j]) === -1) dependency.names.push(names[j]);
+                                if (!dependency.names.some((entry) => entry.local === names[j].local && entry.imported === names[j].imported)) {
+                                    dependency.names.push(names[j]);
+                                }
                             }
                             i = end;
                             continue;
@@ -196,7 +206,15 @@ function parseSourceTextModuleDependencies(source) {
     return dependencies;
 }
 
-function compileSourceTextModuleEvaluator(source, names) {
+function compileSourceTextModuleEvaluator(source, names, dependencies) {
+    let hasImportedNames = false;
+    for (let i = 0; i < dependencies.length; i++) {
+        for (let j = 0; j < dependencies[i].names.length; j++) {
+            hasImportedNames = true;
+            break;
+        }
+        if (hasImportedNames) break;
+    }
     const executableSource = source
         .replace(/\bimport\s+['"][^'"]+['"]\s*;?/g, '')
         .replace(/\bimport\s*\{[^}]*\}\s*from\s*['"][^'"]+['"]\s*;?/g, '')
@@ -205,7 +223,21 @@ function compileSourceTextModuleEvaluator(source, names) {
         return JSON.stringify(name) + ': ' + name;
     }).join(', ');
 
+    if (hasImportedNames) {
+        const importsParameterName = chooseInternalBindingName(source, '__wasm_rquickjs_vm_imports');
+        return new Function(importsParameterName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
+    }
     return new Function('"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
+}
+
+function chooseInternalBindingName(source, baseName) {
+    let name = baseName;
+    let suffix = 0;
+    while (source.indexOf(name) !== -1) {
+        suffix++;
+        name = baseName + '_' + suffix;
+    }
+    return name;
 }
 
 function createModuleNamespace(module) {
@@ -1005,6 +1037,15 @@ function requireVmModuleThis(value) {
     return value;
 }
 
+function requireSyntheticModuleThis(value) {
+    if (!value || value[vmModuleInstanceBrandSymbol] !== true || !(value instanceof SyntheticModule)) {
+        const err = new TypeError('The "this" argument must be an instance of SyntheticModule.' + invalidArgTypeHelper(value));
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+    }
+    return value;
+}
+
 function vmModuleDifferentContextError() {
     const err = new Error('Linked modules must use the same context');
     err.code = 'ERR_VM_MODULE_DIFFERENT_CONTEXT';
@@ -1343,7 +1384,7 @@ export class SourceTextModule {
             executableSource = rewriteMissingDynamicImportsForEvaluation(executableSource).code;
         }
 
-        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._names);
+        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._names, this._dependencies);
         this._namespace = createModuleNamespace(this);
     }
 
@@ -1395,14 +1436,18 @@ export class SourceTextModule {
                 if (this._context !== module._context) {
                     throw vmModuleDifferentContextError();
                 }
+                if (module.status === 'unlinked') {
+                    await module.link(linker);
+                }
                 if (module.status === 'errored') {
                     throw vmModuleLinkFailureError(module.error);
                 }
                 for (let j = 0; j < dependency.names.length; j++) {
-                    if (!Object.prototype.hasOwnProperty.call(module._bindings, dependency.names[j])) {
-                        throw new SyntaxError("The requested module '" + dependency.specifier + "' does not provide an export named '" + dependency.names[j] + "'");
+                    if (!Object.prototype.hasOwnProperty.call(module._bindings, dependency.names[j].imported)) {
+                        throw new SyntaxError("The requested module '" + dependency.specifier + "' does not provide an export named '" + dependency.names[j].imported + "'");
                     }
                 }
+                dependency.module = module;
             }
             await Promise.resolve();
             this._status = 'linked';
@@ -1434,7 +1479,27 @@ export class SourceTextModule {
         this._status = 'evaluating';
 
         try {
-            const evaluatedExports = this._evaluateSource();
+            for (let i = 0; i < this._dependencies.length; i++) {
+                const dependency = this._dependencies[i];
+                if (dependency.module.status === 'linked') {
+                    await dependency.module.evaluate();
+                }
+            }
+            const importedValues = Object.create(null);
+            for (let i = 0; i < this._dependencies.length; i++) {
+                const dependency = this._dependencies[i];
+                for (let j = 0; j < dependency.names.length; j++) {
+                    const binding = dependency.names[j];
+                    Object.defineProperty(importedValues, binding.local, {
+                        get: function() {
+                            return dependency.module.namespace[binding.imported];
+                        },
+                        enumerable: true,
+                        configurable: true,
+                    });
+                }
+            }
+            const evaluatedExports = this._evaluateSource(importedValues);
             for (let i = 0; i < this._names.length; i++) {
                 const name = this._names[i];
                 const binding = this._bindings[name];
@@ -1530,7 +1595,7 @@ export class SyntheticModule {
     }
 
     setExport(name, value) {
-        requireVmModuleThis(this);
+        requireSyntheticModuleThis(this);
         if (typeof name !== 'string') {
             throw new TypeError('Export name must be a string');
         }
