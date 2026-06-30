@@ -6922,7 +6922,7 @@
     "parallel/test-module-globalpaths-nodepath.js": { "category": "runnable" },
     "parallel/test-module-isBuiltin.js": { "category": "runnable" },
     "parallel/test-module-loading-error.js": { "category": "runnable" },
-    "parallel/test-module-loading-globalpaths.js": { "category": "known-gap", "reason": "node_compat harness does not provide ../common/shared-lib-util for this test setup" },
+    "parallel/test-module-loading-globalpaths.js": { "category": "known-gap", "reason": "requires child_process execFileSync with copied process.execPath and Node global module path layout" },
     "parallel/test-module-main-extension-lookup.js": { "category": "runnable" },
     "parallel/test-module-main-fail.js": { "category": "runnable" },
     "parallel/test-module-main-preserve-symlinks-fail.js": { "category": "runnable" },

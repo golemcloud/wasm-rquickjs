@@ -1176,7 +1176,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:vm does not yet support importModuleDynamically/SyntheticModule semantics used by this dynamic import lifetime test | 1 | `es-module/test-dynamic-import-script-lifetime.js` |
 | node_compat harness copies only the target test file, so required sibling ./test-tls-destroy-stream.js is missing | 1 | `parallel/test-tls-destroy-stream-12.js` |
 | node_compat harness copies only the target test file, so required sibling ./test-tls-net-socket-keepalive.js is missing | 1 | `parallel/test-tls-net-socket-keepalive-12.js` |
-| node_compat harness does not provide ../common/shared-lib-util for this test setup | 1 | `parallel/test-module-loading-globalpaths.js` |
 | node_compat test fixture module ../common/process-exit-code-cases is not resolved in this runtime | 1 | `parallel/test-process-exit-code.js` |
 | non-writable global property semantics in vm contexts are incomplete | 1 | `parallel/test-vm-global-non-writable-properties.js` |
 | options.agent validation/lifecycle is not fully Node-compatible | 1 | `parallel/test-http-client-reject-unexpected-agent.js` |
@@ -1232,6 +1231,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably | 1 | `parallel/test-gc-http-client-connaborted.js` |
 | requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably | 1 | `parallel/test-gc-net-timeout.js` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
+| requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
 | requires module.register loader hooks to remap and synthesize builtin named exports | 1 | `es-module/test-esm-named-exports.mjs` |
