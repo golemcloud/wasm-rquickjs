@@ -114,6 +114,23 @@ async fn loader_commonjs_source_named_exports(
 }
 
 #[test]
+async fn loader_module_source_validation(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-loader-module-source-validation",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn package_custom_conditions(
     #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

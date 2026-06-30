@@ -1296,6 +1296,91 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
     }
 };
 
+export const testLoaderModuleSourceValidation = async () => {
+    try {
+        const assert = require('node:assert');
+        const fs = require('node:fs');
+
+        fs.mkdirSync('/loader-module-source-app', { recursive: true });
+        fs.writeFileSync('/loader-module-source-app/as-module.ext', 'export default "from-ext"; export const named = 11;');
+        fs.writeFileSync('/loader-module-source-app/null-source.cjs', 'exports.marker = "null-source";');
+        fs.writeFileSync('/loader-module-source-app/inherited-null-source.cjs', 'exports.marker = "inherited-null-source";');
+        fs.writeFileSync('/loader-module-source-app/undefined-source.cjs', 'exports.marker = "undefined-source";');
+
+        await import('data:text/javascript,' + encodeURIComponent([
+            'import assert from "node:assert";',
+            'import { register } from "node:module";',
+            'function sourceView(text) {',
+            '  const bytes = new TextEncoder().encode(text);',
+            '  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);',
+            '}',
+            'async function expectReject(label, promise, code, message) {',
+            '  let rejected = false;',
+            '  try {',
+            '    await promise;',
+            '  } catch (error) {',
+            '    rejected = true;',
+            '    assert.strictEqual(error && error.code, code, label);',
+            '    if (message) assert.match(error && error.message, message, label);',
+            '  }',
+            '  if (!rejected) throw new Error("Missing expected rejection: " + label);',
+            '}',
+            'function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:module-source") return { shortCircuit: true, url: "virtual:module-source", format: "module" };',
+            '  if (specifier === "virtual:module-view") return { shortCircuit: true, url: "virtual:module-view", format: "module" };',
+            '  if (specifier === "virtual:invalid-result") return { shortCircuit: true, url: "virtual:invalid-result", format: "module" };',
+            '  if (specifier === "virtual:invalid-source") return { shortCircuit: true, url: "virtual:invalid-source", format: "module" };',
+            '  if (specifier === "virtual:bad-format") return { shortCircuit: true, url: "virtual:bad-format", format: "module" };',
+            '  if (specifier === "virtual:empty-format") return { shortCircuit: true, url: "virtual:empty-format", format: "module" };',
+            '  if (specifier === "virtual:resolve-esm-hint") return { shortCircuit: true, url: "virtual:resolve-esm-hint", format: "esm" };',
+            '  if (specifier === "virtual:bad-resolve-format") return { shortCircuit: true, url: "virtual:bad-resolve-format", format: false };',
+            '  if (specifier === "virtual:cjs-null-source") return { shortCircuit: true, url: "file:///loader-module-source-app/null-source.cjs", format: "commonjs" };',
+            '  if (specifier === "virtual:cjs-inherited-null-source") return { shortCircuit: true, url: "file:///loader-module-source-app/inherited-null-source.cjs", format: "commonjs" };',
+            '  if (specifier === "virtual:cjs-undefined-source") return { shortCircuit: true, url: "file:///loader-module-source-app/undefined-source.cjs", format: "commonjs" };',
+            '  if (specifier === "virtual:bad-cjs-source") return { shortCircuit: true, url: "virtual:bad-cjs-source", format: "commonjs" };',
+            '  return next(specifier, context);',
+            '}',
+            'function load(url, context, next) {',
+            '  if (url === "virtual:module-source") return { shortCircuit: true, format: "module", source: "export const named = 42; export default named;" };',
+            '  if (url === "virtual:module-view") return { shortCircuit: true, format: "module", source: sourceView("export default 7;") };',
+            '  if (url === "virtual:invalid-result") return "export default 0;";',
+            '  if (url === "virtual:invalid-source") return { shortCircuit: true, format: "module", source: [] };',
+            '  if (url === "virtual:bad-format") return { shortCircuit: true, format: "foo", source: "" };',
+            '  if (url === "virtual:empty-format") return { shortCircuit: true, format: "", source: "" };',
+            '  if (url === "virtual:resolve-esm-hint") return { shortCircuit: true, format: "module", source: "export default 19;" };',
+            '  if (url.endsWith("/null-source.cjs")) return { shortCircuit: true, format: "commonjs", source: null };',
+            '  if (url.endsWith("/inherited-null-source.cjs")) return { shortCircuit: true, source: null };',
+            '  if (url.endsWith("/undefined-source.cjs")) return { shortCircuit: true, format: "commonjs", source: undefined };',
+            '  if (url === "virtual:bad-cjs-source") return { shortCircuit: true, format: "commonjs", source: 1n };',
+            '  if (url.endsWith("/as-module.ext")) return next(url, { ...context, format: "module" });',
+            '  return next(url, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent(sourceView + "; export " + resolve + "; export " + load));',
+            'const sourced = await import("virtual:module-source");',
+            'assert.strictEqual(sourced.default, 42);',
+            'assert.strictEqual(sourced.named, 42);',
+            'assert.strictEqual((await import("virtual:module-view")).default, 7);',
+            'const ext = await import("/loader-module-source-app/as-module.ext");',
+            'assert.strictEqual(ext.default, "from-ext");',
+            'assert.strictEqual(ext.named, 11);',
+            'assert.strictEqual((await import("virtual:resolve-esm-hint")).default, 19);',
+            'assert.strictEqual((await import("virtual:cjs-null-source")).marker, "null-source");',
+            'assert.strictEqual((await import("virtual:cjs-inherited-null-source")).marker, "inherited-null-source");',
+            'assert.strictEqual((await import("virtual:cjs-undefined-source")).marker, "undefined-source");',
+            'await expectReject("load hook must return object", import("virtual:invalid-result"), "ERR_INVALID_RETURN_VALUE");',
+            'await expectReject("resolve format type", import("virtual:bad-resolve-format"), "ERR_INVALID_RETURN_PROPERTY_VALUE");',
+            'await expectReject("unknown module format", import("virtual:bad-format"), "ERR_UNKNOWN_MODULE_FORMAT");',
+            'await expectReject("empty module format", import("virtual:empty-format"), "ERR_UNKNOWN_MODULE_FORMAT");',
+            'await expectReject("invalid module source", import("virtual:invalid-source"), "ERR_INVALID_RETURN_PROPERTY_VALUE");',
+            'await expectReject("invalid commonjs source", import("virtual:bad-cjs-source"), "ERR_INVALID_RETURN_PROPERTY_VALUE", /"source".*\'load\'.*got type bigint/);',
+        ].join('\n')));
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testSyncBuiltinEsmExports = async () => {
     try {
         const module = await import('node:module');

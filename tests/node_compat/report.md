@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3164/4404 (71.8%)
+**Primary compatibility (CI-enforced):** 3167/4404 (71.9%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3164 | 71.8% | 55.3% | 46.2% |
-| 🧩 known gap | 1240 | 28.2% | 21.7% | 18.1% |
+| ✅ passing (runnable) | 3167 | 71.9% | 55.4% | 46.3% |
+| 🧩 known gap | 1237 | 28.1% | 21.6% | 18.1% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3164/5721 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3167/5721 (55.4%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 159 | 143 | 85 | 11 | 0 | 183 | 52.6% | 39.9% |
+| other | 581 | 162 | 140 | 85 | 11 | 0 | 183 | 53.6% | 40.7% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1240)
+### known gap (1237)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -691,7 +691,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
-| full Node ESM loader hooks remain incomplete beyond same-process dynamic JSON hooks | 12 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-loader-custom-condition.mjs`, `es-module/test-esm-loader-dependency.mjs`, ... (+9) |
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
 | full script module-loading test still exposes incomplete main-module/cache/package-main edge semantics | 11 | `sequential/test-module-loading.js#block_00_block_00`, `sequential/test-module-loading.js#block_01_block_01`, `sequential/test-module-loading.js#block_02_block_02`, ... (+8) |
@@ -706,6 +705,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stripTypeScriptTypes requires Amaro support, which is not implemented | 9 | `parallel/test-module-strip-types.js#test_00_striptypescripttypes`, `parallel/test-module-strip-types.js#test_01_striptypescripttypes_explicit`, `parallel/test-module-strip-types.js#test_02_striptypescripttypes_code_is_not_a_string`, ... (+6) |
 | vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling) | 9 | `parallel/test-vm-module-basic.js#block_00_check_inspection_of_the_instance`, `parallel/test-vm-module-basic.js#block_01_block_01`, `parallel/test-vm-module-basic.js#block_02_check_dependencies_getter_returns_same_object_every_time`, ... (+6) |
 | Intl is not available in current runtime | 8 | `parallel/test-intl-v8BreakIterator.js`, `parallel/test-intl.js`, `parallel/test-whatwg-encoding-custom-textdecoder-fatal.js`, ... (+5) |
+| full Node ESM loader hooks remain incomplete beyond same-process dynamic JSON hooks | 8 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-loader-custom-condition.mjs`, `es-module/test-esm-loader-dependency.mjs`, ... (+5) |
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
@@ -1216,6 +1216,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
+| registered loaders share the main module cache/context; Node isolates loader modules in a separate loader realm | 1 | `es-module/test-esm-loader.mjs` |
 | removing hop-by-hop/framing headers is not serialized with Node-compatible behavior | 1 | `parallel/test-http-remove-header-stays-removed.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
 | req.destroy() on server-side IncomingMessage does not propagate Node-compatible ECONNRESET client behavior | 1 | `parallel/test-http-server-incomingmessage-destroy.js` |

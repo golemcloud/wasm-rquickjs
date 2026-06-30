@@ -115,6 +115,23 @@ function packageConditionsFromFlags(flags) {
     return conditions;
 }
 
+function experimentalLoadersFromFlags(flags) {
+    var loaders = [];
+    for (var i = 0; i < flags.length; i++) {
+        var flag = String(flags[i]);
+        if (flag.indexOf('--experimental-loader=') === 0) {
+            loaders.push(flag.slice('--experimental-loader='.length));
+        } else if (flag.indexOf('--loader=') === 0) {
+            loaders.push(flag.slice('--loader='.length));
+        } else if (flag === '--experimental-loader' || flag === '--loader') {
+            if (i + 1 < flags.length) {
+                loaders.push(String(flags[++i]));
+            }
+        }
+    }
+    return loaders;
+}
+
 function applyTestFlagsToProcess(testPath) {
     if (!globalThis.process) return;
 
@@ -129,6 +146,39 @@ function applyTestFlagsToProcess(testPath) {
         globalThis.process.execArgv.push(flags[i]);
     }
     globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromFlags(flags);
+    return flags;
+}
+
+async function installExperimentalLoadersFromFlags(flags) {
+    var loaders = experimentalLoadersFromFlags(flags || []);
+    if (loaders.length === 0) return null;
+
+    var previousLoaders = globalThis.__wasm_rquickjs_registered_loaders;
+    var previousLoaderSnapshot = Array.isArray(previousLoaders) ? previousLoaders.slice() : null;
+    var moduleBuiltin = await import('node:module');
+    var urlBuiltin = require('node:url');
+    var cwd = globalThis.process && typeof globalThis.process.cwd === 'function'
+        ? globalThis.process.cwd()
+        : '/home/node';
+    var cwdUrl = urlBuiltin.pathToFileURL(cwd.endsWith('/') ? cwd : cwd + '/').href;
+
+    for (var i = 0; i < loaders.length; i++) {
+        moduleBuiltin.register(loaders[i], { parentURL: cwdUrl });
+    }
+
+    return function restoreExperimentalLoaders() {
+        if (previousLoaders === undefined) {
+            delete globalThis.__wasm_rquickjs_registered_loaders;
+        } else if (previousLoaderSnapshot) {
+            previousLoaders.length = 0;
+            for (var i = 0; i < previousLoaderSnapshot.length; i++) {
+                previousLoaders.push(previousLoaderSnapshot[i]);
+            }
+            globalThis.__wasm_rquickjs_registered_loaders = previousLoaders;
+        } else {
+            globalThis.__wasm_rquickjs_registered_loaders = previousLoaders;
+        }
+    };
 }
 
 function withSuppressedModuleRequireDiagnostics(fn) {
@@ -142,6 +192,7 @@ export const runTest = async (testPath) => {
     var restorePromise = null;
     var restoreArgv = null;
     var restoreCwd = null;
+    var restoreLoaders = null;
     var previousNodeTestEntryFile = globalThis.__wasm_rquickjs_node_test_entry_file;
     var hadPackageConditions = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_package_conditions');
     var previousPackageConditions = globalThis.__wasm_rquickjs_package_conditions;
@@ -177,7 +228,8 @@ export const runTest = async (testPath) => {
     }
 
     try {
-        applyTestFlagsToProcess(testPath);
+        var flags = applyTestFlagsToProcess(testPath) || [];
+        restoreLoaders = await installExperimentalLoadersFromFlags(flags);
 
         // Reset mustCall tracking for this test
         var commonMod;
@@ -264,6 +316,9 @@ export const runTest = async (testPath) => {
         var fullMsg = (e && e.message) ? (e.message + "\n" + msg) : msg;
         return "FAIL: " + fullMsg;
     } finally {
+        if (restoreLoaders) {
+            restoreLoaders();
+        }
         if (previousNodeTestEntryFile === undefined) {
             delete globalThis.__wasm_rquickjs_node_test_entry_file;
         } else {

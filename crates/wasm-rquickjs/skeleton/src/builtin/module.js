@@ -2832,14 +2832,92 @@ function makeModuleCompile(mod) {
     };
 }
 
+function loaderValueTypeName(value) {
+    if (value === null) return 'null';
+    const type = typeof value;
+    if (type !== 'object') return type;
+    if (Array.isArray(value)) return 'Array';
+    if (value && value.constructor && typeof value.constructor.name === 'string') return value.constructor.name;
+    return 'Object';
+}
+
+function makeLoaderInvalidReturnValueError(hookName, value) {
+    const err = new TypeError(`Expected an object to be returned from the '${hookName}' hook but got ${loaderValueTypeName(value)}.`);
+    err.code = 'ERR_INVALID_RETURN_VALUE';
+    return err;
+}
+
+function makeLoaderInvalidReturnPropertyValueError(propertyName, hookName, expected, value) {
+    const err = new TypeError(`Expected ${expected} for "${propertyName}" from the '${hookName}' hook but got type ${loaderValueTypeName(value)}.`);
+    err.code = 'ERR_INVALID_RETURN_PROPERTY_VALUE';
+    return err;
+}
+
+function makeLoaderUnknownModuleFormatError(format) {
+    const err = new RangeError(`Unknown module format: ${String(format)}`);
+    err.code = 'ERR_UNKNOWN_MODULE_FORMAT';
+    return err;
+}
+
+function isLoaderSourceValue(value) {
+    return typeof value === 'string' ||
+        value instanceof ArrayBuffer ||
+        (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) ||
+        ArrayBuffer.isView(value);
+}
+
+function validateRegisteredLoaderResult(result, hookName, context) {
+    if (!result || typeof result !== 'object') {
+        throw makeLoaderInvalidReturnValueError(hookName, result);
+    }
+    if (Object.prototype.hasOwnProperty.call(result, 'format')) {
+        const format = result.format;
+        if (format !== undefined && format !== null && typeof format !== 'string') {
+            throw makeLoaderInvalidReturnPropertyValueError('format', hookName, 'a string or nullish value', format);
+        }
+    }
+    if (hookName === 'load' && Object.prototype.hasOwnProperty.call(result, 'source')) {
+        const source = result.source;
+        if (source === null || source === undefined) {
+            if (result.format === 'commonjs' || (result.format === undefined && context && context.format === 'commonjs')) return result;
+            throw makeLoaderInvalidReturnPropertyValueError('source', hookName, 'a string, ArrayBuffer, or ArrayBufferView', source);
+        }
+        if (!isLoaderSourceValue(source)) {
+            throw makeLoaderInvalidReturnPropertyValueError('source', hookName, 'a string, ArrayBuffer, or ArrayBufferView', source);
+        }
+    }
+    return result;
+}
+
+function validateRegisteredLoaderLoadFormat(format) {
+    if (format === undefined || format === null) return undefined;
+    if (format === 'module' || format === 'commonjs' || format === 'json' || format === 'builtin' || format === 'wasm') {
+        return format;
+    }
+    throw makeLoaderUnknownModuleFormatError(format);
+}
+
 function loaderSourceToString(source) {
+    if (typeof source === 'string') {
+        return source;
+    }
     if (source instanceof ArrayBuffer) {
-        return new TextDecoder().decode(source);
+        return new TextDecoder().decode(new Uint8Array(source));
+    }
+    if (typeof SharedArrayBuffer !== 'undefined' && source instanceof SharedArrayBuffer) {
+        return new TextDecoder().decode(new Uint8Array(source));
     }
     if (ArrayBuffer.isView(source) && source.buffer instanceof ArrayBuffer) {
-        return new TextDecoder().decode(source);
+        return new TextDecoder().decode(new Uint8Array(source.buffer, source.byteOffset, source.byteLength));
     }
-    return String(source);
+    if (
+        typeof SharedArrayBuffer !== 'undefined' &&
+        ArrayBuffer.isView(source) &&
+        source.buffer instanceof SharedArrayBuffer
+    ) {
+        return new TextDecoder().decode(new Uint8Array(source.buffer, source.byteOffset, source.byteLength));
+    }
+    throw makeLoaderInvalidReturnPropertyValueError('source', 'load', 'a string, ArrayBuffer, or ArrayBufferView', source);
 }
 
 function loaderCommonJsFilename(url) {
@@ -3949,6 +4027,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (parentFilename !== null) {
                 const resolved = resolveEsmPackageForLoader(specifier, pathModule.dirname(parentFilename), parentFilename, conditionsForLoaderResolve(context));
                 if (resolved) return resolved;
+                throw makeEsmModuleNotFoundError(specifier);
             }
 
             let url = globalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
@@ -3974,7 +4053,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
                     );
                 };
-                const result = await module.resolve(nextSpecifier, context, nextResolve);
+                const result = validateRegisteredLoaderResult(await module.resolve(nextSpecifier, context, nextResolve), 'resolve', context);
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('resolve');
                 }
@@ -3986,6 +4065,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const resolved = await runResolve(modules.length - 1, specifier, baseContext);
         if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
         resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
+        const resolvedFormat = resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format);
 
         const defaultLoad = async (_nextUrl, context) => ({ format: context && context.format });
 
@@ -4002,7 +4082,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
                     );
                 };
-                const result = await module.load(nextUrl, context, nextLoad);
+                const result = validateRegisteredLoaderResult(await module.load(nextUrl, context, nextLoad), 'load', context);
+                if (result.format !== undefined && result.format !== null && result.format !== '') {
+                    validateRegisteredLoaderLoadFormat(result.format);
+                }
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('load');
                 }
@@ -4016,9 +4099,13 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
                 ? resolved.importAttributes
                 : baseContext.importAttributes,
-            format: resolved.format,
+            format: resolvedFormat,
         };
         const loaded = await runLoad(modules.length - 1, resolved.url, loadContext);
+        const loadedHasSource = loaded && Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== null && loaded.source !== undefined;
+        const loadedFormat = loaded && loaded.format !== undefined && loaded.format !== null
+            ? validateRegisteredLoaderLoadFormat(loaded.format)
+            : validateRegisteredLoaderLoadFormat(resolvedFormat);
 
         function skipLoaderWhitespaceAndComments(source, start) {
             let i = start;
@@ -4289,10 +4376,34 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return 'data:text/javascript,' + encodeURIComponent(lines.join('\n'));
         }
 
-        if (loaded && loaded.format === 'commonjs' && loaded.source !== undefined) {
+        function loaderFileUrlSource(url) {
+            if (!String(url).startsWith('file://')) return null;
+            try {
+                return tryReadFile(nodeUrl.fileURLToPath(url));
+            } catch (_) {
+                return null;
+            }
+        }
+
+        if (loadedHasSource && loadedFormat === 'module') {
+            return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(loaded.source));
+        }
+        if (!loadedHasSource && loadedFormat === 'module') {
+            const fileSource = loaderFileUrlSource(resolved.url);
+            if (fileSource !== null) {
+                return 'data:text/javascript,' + encodeURIComponent(fileSource);
+            }
+        }
+        if (loadedHasSource && loadedFormat === 'commonjs') {
             return loaderCommonJsSourceModule(loaded.source, resolved.url);
         }
-        if (loaded && loaded.format === 'json' && loaded.source !== undefined) {
+        if (!loadedHasSource && loadedFormat === 'commonjs') {
+            const fileSource = loaderFileUrlSource(resolved.url);
+            if (fileSource !== null) {
+                return loaderCommonJsSourceModule(fileSource, resolved.url);
+            }
+        }
+        if (loadedHasSource && loadedFormat === 'json') {
             return globalThis.__wasm_rquickjs_register_import_attr_rewrite(
                 'data:application/json,' + encodeURIComponent(loaderSourceToString(loaded.source)),
                 'json',
@@ -4392,7 +4503,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
                     );
                 };
-                const result = assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve');
+                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve'), 'resolve', context);
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('resolve');
                 }
@@ -4404,7 +4515,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const resolved = runResolve(modules.length - 1, specifier, baseContext);
         if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
         resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
-        if (resolveOnly) return { url: resolved.url, format: resolved.format };
+        const resolvedFormat = resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format);
+        if (resolveOnly) return { url: resolved.url, format: resolvedFormat };
 
         const defaultLoad = (_nextUrl, context) => ({ format: context && context.format });
         const runLoad = (index, nextUrl, context) => {
@@ -4420,7 +4532,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
                     );
                 };
-                const result = assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load');
+                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load'), 'load', context);
+                if (result.format !== undefined && result.format !== null && result.format !== '') {
+                    validateRegisteredLoaderLoadFormat(result.format);
+                }
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('load');
                 }
@@ -4434,13 +4549,24 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
                 ? resolved.importAttributes
                 : baseContext.importAttributes,
-            format: resolved.format,
+            format: resolvedFormat,
         });
-        if (resolved.format === 'builtin') return { url: resolved.url, format: resolved.format };
+        const finalFormat = loaded && loaded.format !== undefined && loaded.format !== null
+            ? validateRegisteredLoaderLoadFormat(loaded.format)
+            : validateRegisteredLoaderLoadFormat(resolvedFormat);
+        if (finalFormat === 'builtin') return { url: resolved.url, format: finalFormat };
         if (!loaded && resolved.source === undefined) return undefined;
-        const source = loaded && loaded.source !== undefined ? loaded.source : resolved.source;
+        let source = loaded && Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== null && loaded.source !== undefined
+            ? loaded.source
+            : resolved.source;
+        if (source === undefined && finalFormat === 'commonjs' && String(resolved.url).startsWith('file://')) {
+            try {
+                source = tryReadFile(nodeUrl.fileURLToPath(resolved.url));
+            } catch (_) {}
+        }
+        if (source === null) source = undefined;
         if (source === undefined) return undefined;
-        return { url: resolved.url, format: (loaded && loaded.format) || resolved.format, source };
+        return { url: resolved.url, format: finalFormat, source };
     };
 }
 
