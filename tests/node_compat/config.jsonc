@@ -9126,7 +9126,7 @@
         "block_01_vm_runincontext": { "category": "known-gap", "reason": "vm.runInContext contextification/write-back semantics are incomplete" },
         "block_02_vm_runinthiscontext": { "category": "runnable" },
         "block_03_vm_runinnewcontext": { "category": "runnable" },
-        "block_04_vm_createcontext": { "category": "known-gap", "reason": "vm.createContext argument validation and error codes are incomplete" },
+        "block_04_vm_createcontext": { "category": "runnable" },
         "block_05_run_script_with_filename": { "category": "runnable" },
         "block_06_vm_compilefunction": { "category": "runnable" }
       }
@@ -9161,7 +9161,7 @@
     "parallel/test-vm-context.js": { "category": "known-gap", "reason": "vm contextification write-back and runInContext semantics are incomplete" },
     "parallel/test-vm-create-and-run-in-context.js": { "category": "known-gap", "reason": "vm contextification does not propagate var/global writes correctly" },
     "parallel/test-vm-create-context-accessors.js": { "category": "known-gap", "reason": "vm.createContext does not preserve sandbox accessor properties during evaluation" },
-    "parallel/test-vm-create-context-arg.js": { "category": "known-gap", "reason": "vm.createContext argument type validation and error codes are incomplete" },
+    "parallel/test-vm-create-context-arg.js": { "category": "runnable" },
     "parallel/test-vm-createcacheddata.js": { "category": "engine-difference", "reason": "vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS" },
     "parallel/test-vm-dynamic-import-callback-missing-flag.js": { "category": "runnable" },
     "parallel/test-vm-function-declaration.js": { "category": "known-gap", "reason": "function declaration/global binding semantics in vm contexts are incomplete" },
@@ -9177,7 +9177,7 @@
     "parallel/test-vm-harmony-symbols.js": { "category": "known-gap", "reason": "per-context Symbol/global binding behavior is incomplete in vm contexts" },
     "parallel/test-vm-indexed-properties.js": { "category": "known-gap", "reason": "indexed property definitions on vm globals do not propagate to the sandbox" },
     "parallel/test-vm-inherited_properties.js": { "category": "known-gap", "reason": "runInNewContext own-vs-inherited property assignment semantics are incomplete" },
-    "parallel/test-vm-is-context.js": { "category": "known-gap", "reason": "vm.isContext argument validation and TypeError behavior are incomplete" },
+    "parallel/test-vm-is-context.js": { "category": "runnable" },
     "parallel/test-vm-low-stack-space.js": { "category": "known-gap", "reason": "stack-overflow recovery around vm.runInThisContext/runInNewContext traps in WASM" },
     "parallel/test-vm-measure-memory-lazy.js": {
       "category": "engine-difference",

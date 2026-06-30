@@ -1130,7 +1130,7 @@ export function createContext(sandbox, options) {
         sandbox = {};
     }
     if (typeof sandbox !== 'object') {
-        throw new TypeError('sandbox must be an object');
+        throwInvalidArgType('object', 'object', sandbox);
     }
     options = validateOptionsObject(options);
     sandbox[contextSymbol] = contextIdCounter++;
@@ -1139,6 +1139,13 @@ export function createContext(sandbox, options) {
 }
 
 export function isContext(obj) {
+    if (obj === null || obj === undefined || typeof obj !== 'object') {
+        throwInvalidArgType('object', 'object', obj);
+    }
+    return isContextObject(obj);
+}
+
+function isContextObject(obj) {
     return obj != null && typeof obj === 'object' && contextSymbol in obj;
 }
 
@@ -1283,7 +1290,7 @@ function validateCompileFunctionOptions(options) {
     if (options.produceCachedData !== undefined && typeof options.produceCachedData !== 'boolean') {
         throwInvalidPropertyType('options.produceCachedData', 'boolean', options.produceCachedData);
     }
-    if (options.parsingContext !== undefined && !isContext(options.parsingContext)) {
+    if (options.parsingContext !== undefined && !isContextObject(options.parsingContext)) {
         throwInvalidPropertyInstance('options.parsingContext', 'Context', options.parsingContext);
     }
     if (options.contextExtensions !== undefined && !Array.isArray(options.contextExtensions)) {

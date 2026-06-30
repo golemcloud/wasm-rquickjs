@@ -3440,6 +3440,16 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.throws(() => vm.runInThisContext('throw new Error("boom")', 'runtime-boom.js'), hasVmFilenameStack);
         assert.throws(() => vm.runInNewContext('throw new Error("boom")', {}, 'runtime-boom.js'), hasVmFilenameStack);
         assert.throws(() => vm.runInContext('throw new Error("boom")', runFilenameContext, 'runtime-boom.js'), hasVmFilenameStack);
+        assert.throws(() => vm.createContext('bad'), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => vm.createContext(function badSandbox() {}), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.strictEqual(vm.isContext({}), false);
+        assert.strictEqual(vm.isContext([]), false);
+        for (const invalidContext of ['string', null, undefined, 8.9, Symbol('sym'), true, function invalidContext() {}]) {
+            assert.throws(() => vm.isContext(invalidContext), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        }
+        const contextSandbox = {};
+        assert.strictEqual(vm.isContext(vm.createContext(contextSandbox)), true);
+        assert.strictEqual(vm.isContext(contextSandbox), true);
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);
