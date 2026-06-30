@@ -9212,7 +9212,7 @@
     "parallel/test-vm-module-dynamic-namespace.js": { "category": "runnable" },
     "parallel/test-vm-module-errors.js": { "category": "runnable" },
     "parallel/test-vm-module-import-meta.js": { "category": "runnable" },
-    "parallel/test-vm-module-link.js": { "category": "known-gap", "reason": "SourceTextModule linker/dependency parsing semantics are incomplete (imports, cycles, and attributes)" },
+    "parallel/test-vm-module-link.js": { "category": "runnable" },
     "parallel/test-vm-module-reevaluate.js": { "category": "runnable" },
     "parallel/test-vm-module-synthetic.js": { "category": "runnable" },
     "parallel/test-vm-new-script-new-context.js": {

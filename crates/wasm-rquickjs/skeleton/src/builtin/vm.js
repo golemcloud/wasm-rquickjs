@@ -17,6 +17,7 @@ const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_d
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
 const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
 const missingDynamicImportFlagHelper = '__wasm_rquickjs_vm_missing_dynamic_import_flag__';
+const sourceTextModuleExportCellsPlaceholder = '__wasm_rquickjs_vm_export_cells_placeholder__';
 let defaultLoaderImportHelperCounter = 1;
 function defaultLoaderImportFunction(filename, specifier) {
     return import(resolveDefaultLoaderSpecifier(String(specifier), filename));
@@ -170,10 +171,138 @@ function sourceTextModuleParseNamedImports(source, start, end) {
     }).filter(Boolean);
 }
 
+function sourceTextModuleFindFrom(source, start, end) {
+    let i = start;
+    let depth = 0;
+    while (i < end) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteralWithExpressions(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < end && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (ch === 0x3b && depth === 0) {
+            return -1;
+        }
+        if (ch === 0x28 || ch === 0x5b || ch === 0x7b) {
+            depth++;
+            i++;
+            continue;
+        }
+        if ((ch === 0x29 || ch === 0x5d || ch === 0x7d) && depth > 0) {
+            depth--;
+            i++;
+            continue;
+        }
+        if (depth === 0 && source.startsWith('from', i) && hasIdentifierBoundary(source, i, i + 4)) {
+            return i;
+        }
+        i++;
+    }
+    return -1;
+}
+
+function sourceTextModuleParseImportAttributes(source, start, end) {
+    const attributes = Object.create(null);
+    let pos = skipWhitespaceAndComments(source, start);
+    if (!source.startsWith('with', pos) || !hasIdentifierBoundary(source, pos, pos + 4)) {
+        return attributes;
+    }
+    pos = skipWhitespaceAndComments(source, pos + 4);
+    if (source.charCodeAt(pos) !== 0x7b) return attributes;
+    pos++;
+    while (pos < end) {
+        pos = skipWhitespaceAndComments(source, pos);
+        if (source.charCodeAt(pos) === 0x7d) break;
+        let key;
+        const keyQuote = source.charCodeAt(pos);
+        if (keyQuote === 0x27 || keyQuote === 0x22) {
+            const keyLiteral = sourceTextModuleReadStringSpecifier(source, pos);
+            if (!keyLiteral) break;
+            key = keyLiteral.value;
+            pos = keyLiteral.end;
+        } else {
+            const keyStart = pos;
+            while (pos < end && isIdentifierChar(source.charCodeAt(pos))) pos++;
+            key = source.slice(keyStart, pos);
+        }
+        pos = skipWhitespaceAndComments(source, pos);
+        if (!key || source.charCodeAt(pos) !== 0x3a) break;
+        pos = skipWhitespaceAndComments(source, pos + 1);
+        const value = sourceTextModuleReadStringSpecifier(source, pos);
+        if (!value) break;
+        attributes[key] = value.value;
+        pos = skipWhitespaceAndComments(source, value.end);
+        if (source.charCodeAt(pos) === 0x2c) {
+            pos++;
+            continue;
+        }
+        if (source.charCodeAt(pos) === 0x7d) break;
+    }
+    return attributes;
+}
+
+function sourceTextModuleParseImportClause(source, clauseStart, clauseEnd) {
+    const names = [];
+    let pos = skipWhitespaceAndComments(source, clauseStart);
+    if (pos >= clauseEnd) return names;
+
+    if (source.charCodeAt(pos) !== 0x7b && source.charCodeAt(pos) !== 0x2a) {
+        const localStart = pos;
+        while (pos < clauseEnd && isIdentifierChar(source.charCodeAt(pos))) pos++;
+        const local = source.slice(localStart, pos);
+        if (local) {
+            sourceTextModuleAddImportName({ names }, 'default', local);
+        }
+        pos = skipWhitespaceAndComments(source, pos);
+        if (source.charCodeAt(pos) === 0x2c) {
+            pos = skipWhitespaceAndComments(source, pos + 1);
+        }
+    }
+
+    if (source.charCodeAt(pos) === 0x7b) {
+        const close = source.indexOf('}', pos + 1);
+        if (close >= 0 && close <= clauseEnd) {
+            const named = sourceTextModuleParseNamedImports(source, pos + 1, close);
+            for (let i = 0; i < named.length; i++) {
+                sourceTextModuleAddImportName({ names }, named[i].imported, named[i].local);
+            }
+        }
+        return names;
+    }
+
+    if (source.charCodeAt(pos) === 0x2a) {
+        pos = skipWhitespaceAndComments(source, pos + 1);
+        if (source.startsWith('as', pos) && hasIdentifierBoundary(source, pos, pos + 2)) {
+            pos = skipWhitespaceAndComments(source, pos + 2);
+            const localStart = pos;
+            while (pos < clauseEnd && isIdentifierChar(source.charCodeAt(pos))) pos++;
+            const local = source.slice(localStart, pos);
+            if (local) {
+                sourceTextModuleAddImportName({ names }, '*', local);
+            }
+        }
+    }
+
+    return names;
+}
+
 function sourceTextModuleGetDependency(dependencies, bySpecifier, specifier) {
     let dependency = bySpecifier[specifier];
     if (!dependency) {
-        dependency = { specifier, names: [] };
+        dependency = { specifier, names: [], attributes: Object.create(null), exportAll: false };
         bySpecifier[specifier] = dependency;
         dependencies.push(dependency);
     }
@@ -184,6 +313,18 @@ function sourceTextModuleAddImportName(dependency, imported, local) {
     if (!dependency.names.some((entry) => entry.local === local && entry.imported === imported)) {
         dependency.names.push({ imported, local });
     }
+}
+
+function sourceTextModuleSetAttributes(dependency, attributes) {
+    const keys = Object.keys(attributes);
+    for (let i = 0; i < keys.length; i++) {
+        dependency.attributes[keys[i]] = attributes[keys[i]];
+    }
+}
+
+function sourceTextModuleExportSyncSource(name, localName) {
+    return '\n' + sourceTextModuleExportCellsPlaceholder + '[' + JSON.stringify(name) + '].initialized = true;' +
+        sourceTextModuleExportCellsPlaceholder + '[' + JSON.stringify(name) + '].value = ' + localName + ';\n';
 }
 
 function applySourceTextModuleEdits(source, edits) {
@@ -200,12 +341,361 @@ function applySourceTextModuleEdits(source, edits) {
     return out + source.slice(last);
 }
 
+function sourceTextModuleExportNamesByLocal(exportBindings) {
+    const byLocal = Object.create(null);
+    for (let i = 0; i < exportBindings.length; i++) {
+        const binding = exportBindings[i];
+        if (!byLocal[binding.localName]) byLocal[binding.localName] = [];
+        byLocal[binding.localName].push(binding.name);
+    }
+    return byLocal;
+}
+
+function sourceTextModuleAssignmentSyncSource(exportNames, localName) {
+    let out = '';
+    for (let i = 0; i < exportNames.length; i++) {
+        out += sourceTextModuleExportSyncSource(exportNames[i], localName);
+    }
+    return out;
+}
+
+function injectSourceTextModuleAssignmentSync(source, exportBindings) {
+    const byLocal = sourceTextModuleExportNamesByLocal(exportBindings);
+    const locals = Object.keys(byLocal).filter((name) => identifierPattern.test(name));
+    if (locals.length === 0) return source;
+    const edits = [];
+    sourceTextModuleScanAssignmentSyncRange(source, 0, source.length, byLocal, Object.create(null), edits);
+    return applySourceTextModuleEdits(source, edits);
+}
+
+function sourceTextModuleScanAssignmentSyncRange(source, start, end, byLocal, shadowed, edits) {
+    let i = start;
+    while (i < end) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteralWithExpressions(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (ch === 0x2f && (regexCanFollow(source, i) || (regexCanFollowParen(source, i) && isLikelyRegexLiteral(source, i)))) {
+            i = skipRegexLiteral(source, i);
+            continue;
+        }
+        if ((source.startsWith('function', i) && hasIdentifierBoundary(source, i, i + 8))
+            || (source.startsWith('class', i) && hasIdentifierBoundary(source, i, i + 5))) {
+            const declaration = sourceTextModuleDeclarationBody(source, i);
+            if (declaration) {
+                const bodyShadowed = sourceTextModuleMergeShadowed(shadowed, declaration.shadowed);
+                sourceTextModuleScanAssignmentSyncRange(source, declaration.bodyStart + 1, declaration.bodyEnd, byLocal, bodyShadowed, edits);
+                i = declaration.bodyEnd + 1;
+                continue;
+            }
+            i = end;
+            continue;
+        }
+        if (isIdentifierStart(ch) && !isIdentifierChar(source.charCodeAt(i - 1))) {
+            let end = i + 1;
+            while (end < source.length && isIdentifierChar(source.charCodeAt(end))) end++;
+            const localName = source.slice(i, end);
+            if (byLocal[localName] && !shadowed[localName] && sourceTextModuleCanRewriteLocalWrite(source, i)) {
+                const assignment = skipWhitespaceAndComments(source, end);
+                const assignmentEnd = sourceTextModuleAssignmentOperatorEnd(source, assignment);
+                if (assignmentEnd >= 0) {
+                    const statementEnd = sourceTextModuleAssignmentStatementEnd(source, assignmentEnd);
+                    edits.push({
+                        start: statementEnd,
+                        end: statementEnd,
+                        replacement: sourceTextModuleAssignmentSyncSource(byLocal[localName], localName),
+                    });
+                    i = statementEnd;
+                    continue;
+                }
+                const updateEnd = sourceTextModuleUpdateOperatorEnd(source, i, end);
+                if (updateEnd >= 0) {
+                    const statementEnd = sourceTextModuleAssignmentStatementEnd(source, updateEnd);
+                    edits.push({
+                        start: statementEnd,
+                        end: statementEnd,
+                        replacement: sourceTextModuleAssignmentSyncSource(byLocal[localName], localName),
+                    });
+                    i = statementEnd;
+                    continue;
+                }
+            }
+            i = end;
+            continue;
+        }
+        i++;
+    }
+}
+
+function sourceTextModuleCanRewriteLocalWrite(source, start) {
+    const previous = previousSignificantChar(source, start);
+    if (previous === 0x2e || previous === 0x23) return false;
+    const word = previousSignificantWord(source, start);
+    return word !== 'let' && word !== 'const' && word !== 'var' && word !== 'function' && word !== 'class';
+}
+
+function sourceTextModuleDeclarationBody(source, start) {
+    let i = start;
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    const paramsStart = source.indexOf('(', start);
+    const paramsEnd = paramsStart >= 0 ? findMatchingParen(source, paramsStart) : -1;
+    const shadowed = Object.create(null);
+    if (paramsStart >= 0 && paramsEnd >= 0) {
+        sourceTextModuleCollectBindingNames(source, paramsStart + 1, paramsEnd, shadowed);
+    }
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteralWithExpressions(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (ch === 0x28) parenDepth++;
+        else if (ch === 0x29 && parenDepth > 0) parenDepth--;
+        else if (ch === 0x5b) bracketDepth++;
+        else if (ch === 0x5d && bracketDepth > 0) bracketDepth--;
+        else if (ch === 0x7b && parenDepth === 0 && bracketDepth === 0) {
+            const bodyEnd = sourceTextModuleFindMatchingBrace(source, i);
+            sourceTextModuleCollectDeclaredNames(source, i + 1, bodyEnd, shadowed);
+            return { bodyStart: i, bodyEnd, shadowed };
+        }
+        i++;
+    }
+    return null;
+}
+
+function sourceTextModuleMergeShadowed(parent, child) {
+    const merged = Object.create(null);
+    for (const name of Object.keys(parent)) merged[name] = true;
+    for (const name of Object.keys(child)) merged[name] = true;
+    return merged;
+}
+
+function sourceTextModuleCollectBindingNames(source, start, end, out) {
+    let i = start;
+    while (i < end) {
+        if (isIdentifierStart(source.charCodeAt(i))) {
+            const nameStart = i;
+            i++;
+            while (i < end && isIdentifierChar(source.charCodeAt(i))) i++;
+            out[source.slice(nameStart, i)] = true;
+            continue;
+        }
+        i++;
+    }
+}
+
+function sourceTextModuleCollectDeclaredNames(source, start, end, out) {
+    let i = start;
+    while (i < end) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteralWithExpressions(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < end && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if ((source.startsWith('let', i) && hasIdentifierBoundary(source, i, i + 3))
+            || (source.startsWith('var', i) && hasIdentifierBoundary(source, i, i + 3))
+            || (source.startsWith('const', i) && hasIdentifierBoundary(source, i, i + 5))) {
+            const keywordEnd = source.startsWith('const', i) ? i + 5 : i + 3;
+            const statementEnd = findSourceTextModuleStatementEnd(source, keywordEnd);
+            sourceTextModuleCollectDeclarationListNames(source, keywordEnd, statementEnd, out);
+            i = statementEnd;
+            continue;
+        }
+        if ((source.startsWith('function', i) && hasIdentifierBoundary(source, i, i + 8))
+            || (source.startsWith('class', i) && hasIdentifierBoundary(source, i, i + 5))) {
+            const keywordEnd = source.startsWith('function', i) ? i + 8 : i + 5;
+            const nameStart = skipWhitespaceAndComments(source, keywordEnd);
+            let nameEnd = nameStart;
+            while (nameEnd < end && isIdentifierChar(source.charCodeAt(nameEnd))) nameEnd++;
+            if (nameEnd > nameStart) out[source.slice(nameStart, nameEnd)] = true;
+            const declaration = sourceTextModuleDeclarationBody(source, i);
+            i = declaration ? declaration.bodyEnd + 1 : keywordEnd;
+            continue;
+        }
+        i++;
+    }
+}
+
+function sourceTextModuleCollectDeclarationListNames(source, start, end, out) {
+    const declarations = source.slice(skipWhitespaceAndComments(source, start), end).replace(/;\s*$/, '');
+    const declarators = splitDeclarators(declarations);
+    for (let i = 0; i < declarators.length; i++) {
+        const eq = declarators[i].indexOf('=');
+        const name = (eq === -1 ? declarators[i] : declarators[i].slice(0, eq)).trim();
+        if (identifierPattern.test(name)) out[name] = true;
+    }
+}
+
+function sourceTextModuleFindMatchingBrace(source, open) {
+    let depth = 1;
+    let i = open + 1;
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteralWithExpressions(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (ch === 0x7b) depth++;
+        else if (ch === 0x7d) {
+            depth--;
+            if (depth === 0) return i;
+        }
+        i++;
+    }
+    return source.length - 1;
+}
+
+function sourceTextModuleAssignmentStatementEnd(source, start) {
+    let i = start;
+    let depth = 0;
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteralWithExpressions(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (ch === 0x2f && (regexCanFollow(source, i) || (regexCanFollowParen(source, i) && isLikelyRegexLiteral(source, i)))) {
+            i = skipRegexLiteral(source, i);
+            continue;
+        }
+        if (ch === 0x28 || ch === 0x5b || ch === 0x7b) {
+            depth++;
+        } else if ((ch === 0x29 || ch === 0x5d || ch === 0x7d) && depth > 0) {
+            depth--;
+        }
+        if (depth === 0 && ch === 0x3b) return i + 1;
+        if (depth === 0 && (ch === 0x0a || ch === 0x0d)) {
+            const previous = previousSignificantChar(source, i);
+            const next = nextSignificantChar(source, i + 1);
+            if (!sourceTextModuleExpressionContinues(previous, next)) return i;
+        }
+        i++;
+    }
+    return source.length;
+}
+
+function sourceTextModuleExpressionContinues(previous, next) {
+    if (previous === 0x2b || previous === 0x2d || previous === 0x2a || previous === 0x2f ||
+        previous === 0x25 || previous === 0x26 || previous === 0x7c || previous === 0x5e ||
+        previous === 0x3f || previous === 0x3a || previous === 0x2c || previous === 0x3d ||
+        previous === 0x3c || previous === 0x3e || previous === 0x21 || previous === 0x7e) {
+        return true;
+    }
+    return next === 0x2b || next === 0x2d || next === 0x2a || next === 0x2f ||
+        next === 0x25 || next === 0x26 || next === 0x7c || next === 0x5e ||
+        next === 0x3f || next === 0x3a || next === 0x2c || next === 0x2e ||
+        next === 0x28 || next === 0x5b;
+}
+
+function sourceTextModuleAssignmentOperatorEnd(source, pos) {
+    const ch = source.charCodeAt(pos);
+    const next = source.charCodeAt(pos + 1);
+    if (ch === 0x3d && next !== 0x3d && next !== 0x3e) return pos + 1;
+    if ((ch === 0x2b || ch === 0x2d || ch === 0x2a || ch === 0x2f || ch === 0x25 ||
+        ch === 0x26 || ch === 0x7c || ch === 0x5e) && next === 0x3d) {
+        return pos + 2;
+    }
+    if ((ch === 0x3c || ch === 0x3e) && next === ch && source.charCodeAt(pos + 2) === 0x3d) {
+        return pos + 3;
+    }
+    if (ch === 0x2a && next === 0x2a && source.charCodeAt(pos + 2) === 0x3d) {
+        return pos + 3;
+    }
+    if (ch === 0x3f && next === 0x3f && source.charCodeAt(pos + 2) === 0x3d) {
+        return pos + 3;
+    }
+    if (ch === 0x26 && next === 0x26 && source.charCodeAt(pos + 2) === 0x3d) {
+        return pos + 3;
+    }
+    if (ch === 0x7c && next === 0x7c && source.charCodeAt(pos + 2) === 0x3d) {
+        return pos + 3;
+    }
+    return -1;
+}
+
+function sourceTextModuleUpdateOperatorEnd(source, start, end) {
+    const before = previousSignificantIndex(source, start);
+    if (before >= 1 && source.charCodeAt(before) === 0x2b && source.charCodeAt(before - 1) === 0x2b) return end;
+    if (before >= 1 && source.charCodeAt(before) === 0x2d && source.charCodeAt(before - 1) === 0x2d) return end;
+    const after = skipWhitespaceAndComments(source, end);
+    if (source.charCodeAt(after) === 0x2b && source.charCodeAt(after + 1) === 0x2b) return after + 2;
+    if (source.charCodeAt(after) === 0x2d && source.charCodeAt(after + 1) === 0x2d) return after + 2;
+    return -1;
+}
+
 function analyzeSourceTextModule(source) {
     const dependencies = [];
     const bySpecifier = Object.create(null);
     const bindings = [];
     const edits = [];
     let sawExportKeyword = false;
+    let sawSupportedExport = false;
     let i = 0;
 
     function getDependency(specifier) {
@@ -250,32 +740,29 @@ function analyzeSourceTextModule(source) {
 
             const sideEffect = sourceTextModuleReadStringSpecifier(source, afterImport);
             if (sideEffect) {
-                getDependency(sideEffect.value);
                 const end = findSourceTextModuleStatementEnd(source, sideEffect.end);
+                const dependency = getDependency(sideEffect.value);
+                sourceTextModuleSetAttributes(dependency, sourceTextModuleParseImportAttributes(source, sideEffect.end, end));
                 edits.push({ start: i, end, replacement: '' });
                 i = end;
                 continue;
             }
 
-            if (source.charCodeAt(afterImport) === 0x7b) {
-                const close = source.indexOf('}', afterImport + 1);
-                if (close >= 0) {
-                    const fromIndex = skipWhitespaceAndComments(source, close + 1);
-                    if (source.startsWith('from', fromIndex) && hasIdentifierBoundary(source, fromIndex, fromIndex + 4)) {
-                        const specifierStart = skipWhitespaceAndComments(source, fromIndex + 4);
-                        const specifier = sourceTextModuleReadStringSpecifier(source, specifierStart);
-                        if (specifier) {
-                            const dependency = getDependency(specifier.value);
-                            const names = sourceTextModuleParseNamedImports(source, afterImport + 1, close);
-                            for (let j = 0; j < names.length; j++) {
-                                sourceTextModuleAddImportName(dependency, names[j].imported, names[j].local);
-                            }
-                            const end = findSourceTextModuleStatementEnd(source, specifier.end);
-                            edits.push({ start: i, end, replacement: '' });
-                            i = end;
-                            continue;
-                        }
+            const fromIndex = sourceTextModuleFindFrom(source, afterImport, source.length);
+            if (fromIndex >= 0) {
+                const specifierStart = skipWhitespaceAndComments(source, fromIndex + 4);
+                const specifier = sourceTextModuleReadStringSpecifier(source, specifierStart);
+                if (specifier) {
+                    const importStatementEnd = findSourceTextModuleStatementEnd(source, specifier.end);
+                    const dependency = getDependency(specifier.value);
+                    const names = sourceTextModuleParseImportClause(source, afterImport, fromIndex);
+                    for (let j = 0; j < names.length; j++) {
+                        sourceTextModuleAddImportName(dependency, names[j].imported, names[j].local);
                     }
+                    sourceTextModuleSetAttributes(dependency, sourceTextModuleParseImportAttributes(source, specifier.end, importStatementEnd));
+                    edits.push({ start: i, end: importStatementEnd, replacement: '' });
+                    i = importStatementEnd;
+                    continue;
                 }
             }
         }
@@ -286,6 +773,7 @@ function analyzeSourceTextModule(source) {
                 || source.startsWith('let', afterExport) && hasIdentifierBoundary(source, afterExport, afterExport + 3)
                 || source.startsWith('var', afterExport) && hasIdentifierBoundary(source, afterExport, afterExport + 3)) {
                 sawExportKeyword = true;
+                sawSupportedExport = true;
                 const kindEnd = source.startsWith('const', afterExport) ? afterExport + 5 : afterExport + 3;
                 const kind = source.slice(afterExport, kindEnd);
                 const statementEnd = findSourceTextModuleStatementEnd(source, kindEnd);
@@ -298,15 +786,68 @@ function analyzeSourceTextModule(source) {
                     if (!identifierPattern.test(bindingName)) {
                         throw new SyntaxError('Unsupported export declaration in vm.SourceTextModule');
                     }
-                    bindings.push({ name: bindingName, kind });
+                    bindings.push({ name: bindingName, localName: bindingName, kind });
                 }
                 edits.push({ start: i, end: afterExport, replacement: '' });
+                for (let j = 0; j < declarators.length; j++) {
+                    const bindingName = bindings[bindings.length - declarators.length + j].name;
+                    edits.push({ start: statementEnd, end: statementEnd, replacement: sourceTextModuleExportSyncSource(bindingName, bindingName) });
+                }
                 i = statementEnd;
                 continue;
             }
-            if (source.startsWith('default', afterExport) && hasIdentifierBoundary(source, afterExport, afterExport + 7)
-                || source.charCodeAt(afterExport) === 0x7b
-                || source.charCodeAt(afterExport) === 0x2a
+            if (source.startsWith('default', afterExport) && hasIdentifierBoundary(source, afterExport, afterExport + 7)) {
+                sawExportKeyword = true;
+                sawSupportedExport = true;
+                const valueStart = skipWhitespaceAndComments(source, afterExport + 7);
+                const defaultLocal = chooseInternalBindingName(source, '__wasm_rquickjs_vm_default_export');
+                if (source.startsWith('function', valueStart) && hasIdentifierBoundary(source, valueStart, valueStart + 8)
+                    || source.startsWith('class', valueStart) && hasIdentifierBoundary(source, valueStart, valueStart + 5)) {
+                    const keywordEnd = source.startsWith('function', valueStart) ? valueStart + 8 : valueStart + 5;
+                    const nameStart = skipWhitespaceAndComments(source, keywordEnd);
+                    let nameEnd = nameStart;
+                    while (nameEnd < source.length && isIdentifierChar(source.charCodeAt(nameEnd))) nameEnd++;
+                    const declarationName = source.slice(nameStart, nameEnd);
+                    const statementEnd = findSourceTextModuleStatementEnd(source, valueStart);
+                    if (declarationName) {
+                        bindings.push({ name: 'default', localName: declarationName, kind: 'const' });
+                        edits.push({ start: i, end: valueStart, replacement: '' });
+                        edits.push({ start: statementEnd, end: statementEnd, replacement: sourceTextModuleExportSyncSource('default', declarationName) });
+                    } else {
+                        bindings.push({ name: 'default', localName: defaultLocal, kind: 'const' });
+                        edits.push({ start: i, end: valueStart, replacement: 'const ' + defaultLocal + ' = ' });
+                        edits.push({ start: statementEnd, end: statementEnd, replacement: sourceTextModuleExportSyncSource('default', defaultLocal) });
+                    }
+                    i = statementEnd;
+                    continue;
+                }
+                const statementEnd = findSourceTextModuleStatementEnd(source, valueStart);
+                bindings.push({ name: 'default', localName: defaultLocal, kind: 'const' });
+                edits.push({ start: i, end: valueStart, replacement: 'const ' + defaultLocal + ' = ' });
+                edits.push({ start: statementEnd, end: statementEnd, replacement: sourceTextModuleExportSyncSource('default', defaultLocal) });
+                i = statementEnd;
+                continue;
+            }
+            if (source.charCodeAt(afterExport) === 0x2a) {
+                const fromIndex = sourceTextModuleFindFrom(source, afterExport + 1, source.length);
+                if (fromIndex >= 0) {
+                    const specifierStart = skipWhitespaceAndComments(source, fromIndex + 4);
+                    const specifier = sourceTextModuleReadStringSpecifier(source, specifierStart);
+                    if (specifier) {
+                        const statementEnd = findSourceTextModuleStatementEnd(source, specifier.end);
+                        sawExportKeyword = true;
+                        sawSupportedExport = true;
+                        const dependency = getDependency(specifier.value);
+                        dependency.exportAll = true;
+                        sourceTextModuleSetAttributes(dependency, sourceTextModuleParseImportAttributes(source, specifier.end, statementEnd));
+                        edits.push({ start: i, end: statementEnd, replacement: '' });
+                        i = statementEnd;
+                        continue;
+                    }
+                }
+                sawExportKeyword = true;
+            }
+            if (source.charCodeAt(afterExport) === 0x7b
                 || source.startsWith('class', afterExport) && hasIdentifierBoundary(source, afterExport, afterExport + 5)
                 || source.startsWith('function', afterExport) && hasIdentifierBoundary(source, afterExport, afterExport + 8)) {
                 sawExportKeyword = true;
@@ -316,7 +857,7 @@ function analyzeSourceTextModule(source) {
         i++;
     }
 
-    if (sawExportKeyword && bindings.length === 0) {
+    if (sawExportKeyword && !sawSupportedExport) {
         throw new SyntaxError('Unsupported export declaration in vm.SourceTextModule');
     }
 
@@ -336,24 +877,24 @@ function sourceTextModuleHasImportedNames(dependencies) {
     return false;
 }
 
-function compileSourceTextModuleEvaluator(source, names, dependencies, importMetaName, usesImportMeta) {
+function compileSourceTextModuleEvaluator(source, exportBindings, dependencies, importMetaName, exportCellsName, usesImportMeta) {
     const hasImportedNames = sourceTextModuleHasImportedNames(dependencies);
     const executableSource = source;
-    const exportObjectEntries = names.map(function(name) {
-        return JSON.stringify(name) + ': ' + name;
+    const exportObjectEntries = exportBindings.map(function(binding) {
+        return JSON.stringify(binding.name) + ': ' + binding.localName;
     }).join(', ');
 
     if (hasImportedNames) {
         const importsParameterName = chooseInternalBindingName(source, '__wasm_rquickjs_vm_imports');
         if (usesImportMeta) {
-            return new Function(importsParameterName, importMetaName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
+            return new Function(importsParameterName, importMetaName, exportCellsName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
         }
-        return new Function(importsParameterName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
+        return new Function(importsParameterName, exportCellsName, 'with (' + importsParameterName + ') {\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };\n}');
     }
     if (usesImportMeta) {
-        return new Function(importMetaName, '"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
+        return new Function(importMetaName, exportCellsName, '"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
     }
-    return new Function('"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
+    return new Function(exportCellsName, '"use strict";\n' + executableSource + '\nreturn { ' + exportObjectEntries + ' };');
 }
 
 function rewriteImportMetaForEvaluation(code, replacementSource) {
@@ -468,11 +1009,7 @@ function createModuleNamespace(module) {
         const exportName = names[i];
         Object.defineProperty(namespaceTarget, exportName, {
             get: function() {
-                const binding = module._bindings[exportName];
-                if (!binding.initialized) {
-                    throw new ReferenceError(exportName + ' is not initialized');
-                }
-                return binding.value;
+                return sourceTextModuleBindingValue(module._bindings[exportName], exportName);
             },
             enumerable: true,
             configurable: false,
@@ -520,11 +1057,7 @@ function createModuleNamespace(module) {
         },
         get: function(_target, prop, receiver) {
             if (typeof prop === 'string' && module._bindings[prop] !== undefined) {
-                const binding = module._bindings[prop];
-                if (!binding.initialized) {
-                    throw new ReferenceError(prop + ' is not initialized');
-                }
-                return binding.value;
+                return sourceTextModuleBindingValue(module._bindings[prop], prop);
             }
             return Reflect.get(namespaceTarget, prop, receiver);
         },
@@ -532,6 +1065,16 @@ function createModuleNamespace(module) {
             return Object.getOwnPropertyDescriptor(namespaceTarget, prop);
         },
     });
+}
+
+function sourceTextModuleBindingValue(binding, name) {
+    if (!binding.initialized) {
+        throw new ReferenceError(name + ' is not initialized');
+    }
+    if (binding.kind === 'reexport') {
+        return binding.module.namespace[binding.importName];
+    }
+    return binding.value;
 }
 
 function createIndirectEvalSource(code) {
@@ -752,6 +1295,13 @@ function hasIdentifierBoundary(source, start, end) {
 function isIdentifierChar(ch) {
     return ch === 0x5f || ch === 0x24 ||
         (ch >= 0x30 && ch <= 0x39) ||
+        (ch >= 0x41 && ch <= 0x5a) ||
+        (ch >= 0x61 && ch <= 0x7a) ||
+        ch >= 0x80;
+}
+
+function isIdentifierStart(ch) {
+    return ch === 0x5f || ch === 0x24 ||
         (ch >= 0x41 && ch <= 0x5a) ||
         (ch >= 0x61 && ch <= 0x7a) ||
         ch >= 0x80;
@@ -986,6 +1536,27 @@ function previousSignificantChar(source, i) {
                 i = start - 1;
                 continue;
             }
+        }
+        return ch;
+    }
+    return 0;
+}
+
+function nextSignificantChar(source, i) {
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x20 || ch === 0x09 || ch === 0x0a || ch === 0x0d || ch === 0x0b || ch === 0x0c) {
+            i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
         }
         return ch;
     }
@@ -1610,10 +2181,12 @@ export class SourceTextModule {
         this._dependencySpecifiers = Object.freeze(this._dependencies.map((dependency) => dependency.specifier));
         this._bindings = Object.create(null);
         this._names = [];
+        this._exportBindings = [];
 
         for (let i = 0; i < declaredBindings.length; i++) {
             const binding = declaredBindings[i];
             this._names.push(binding.name);
+            this._exportBindings.push(binding);
             this._bindings[binding.name] = {
                 kind: binding.kind,
                 initialized: binding.kind === 'var',
@@ -1633,8 +2206,11 @@ export class SourceTextModule {
         const importMetaRewrite = rewriteImportMetaForEvaluation(executableSource, this._importMetaName);
         executableSource = importMetaRewrite.code;
         this._usesImportMeta = importMetaRewrite.changed;
+        executableSource = injectSourceTextModuleAssignmentSync(executableSource, this._exportBindings);
+        this._exportCellsName = chooseInternalBindingName(executableSource, '__wasm_rquickjs_vm_export_cells');
+        executableSource = executableSource.split(sourceTextModuleExportCellsPlaceholder).join(this._exportCellsName);
 
-        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._names, this._dependencies, this._importMetaName, this._usesImportMeta);
+        this._evaluateSource = compileSourceTextModuleEvaluator(executableSource, this._exportBindings, this._dependencies, this._importMetaName, this._exportCellsName, this._usesImportMeta);
         this._namespace = createModuleNamespace(this);
     }
 
@@ -1679,7 +2255,8 @@ export class SourceTextModule {
         try {
             for (let i = 0; i < this._dependencies.length; i++) {
                 const dependency = this._dependencies[i];
-                const module = await linker(dependency.specifier, this);
+                const attributes = dependency.attributes || Object.create(null);
+                const module = await linker(dependency.specifier, this, { attributes, assert: attributes });
                 if (!(module instanceof SourceTextModule) && !(module instanceof SyntheticModule)) {
                     throw vmModuleNotModuleError();
                 }
@@ -1693,12 +2270,16 @@ export class SourceTextModule {
                     throw vmModuleLinkFailureError(module.error);
                 }
                 for (let j = 0; j < dependency.names.length; j++) {
+                    if (dependency.names[j].imported === '*') {
+                        continue;
+                    }
                     if (!Object.prototype.hasOwnProperty.call(module._bindings, dependency.names[j].imported)) {
                         throw new SyntaxError("The requested module '" + dependency.specifier + "' does not provide an export named '" + dependency.names[j].imported + "'");
                     }
                 }
                 dependency.module = module;
             }
+            this._resolveStarExports();
             await Promise.resolve();
             this._status = 'linked';
         } catch (err) {
@@ -1740,13 +2321,23 @@ export class SourceTextModule {
                 const dependency = this._dependencies[i];
                 for (let j = 0; j < dependency.names.length; j++) {
                     const binding = dependency.names[j];
-                    Object.defineProperty(importedValues, binding.local, {
-                        get: function() {
-                            return dependency.module.namespace[binding.imported];
-                        },
-                        enumerable: true,
-                        configurable: true,
-                    });
+                    if (binding.imported === '*') {
+                        Object.defineProperty(importedValues, binding.local, {
+                            get: function() {
+                                return dependency.module.namespace;
+                            },
+                            enumerable: true,
+                            configurable: true,
+                        });
+                    } else {
+                        Object.defineProperty(importedValues, binding.local, {
+                            get: function() {
+                                return dependency.module.namespace[binding.imported];
+                            },
+                            enumerable: true,
+                            configurable: true,
+                        });
+                    }
                 }
             }
             let evaluatedExports;
@@ -1757,13 +2348,15 @@ export class SourceTextModule {
                     initializeImportMeta(importMeta, this);
                 }
                 evaluatedExports = this._usesImportedNames
-                    ? this._evaluateSource(importedValues, importMeta)
-                    : this._evaluateSource(importMeta);
+                    ? this._evaluateSource(importedValues, importMeta, this._bindings)
+                    : this._evaluateSource(importMeta, this._bindings);
             } else {
-                evaluatedExports = this._evaluateSource(importedValues);
+                evaluatedExports = this._usesImportedNames
+                    ? this._evaluateSource(importedValues, this._bindings)
+                    : this._evaluateSource(this._bindings);
             }
-            for (let i = 0; i < this._names.length; i++) {
-                const name = this._names[i];
+            for (let i = 0; i < this._exportBindings.length; i++) {
+                const name = this._exportBindings[i].name;
                 const binding = this._bindings[name];
                 binding.initialized = true;
                 binding.value = evaluatedExports[name];
@@ -1776,6 +2369,68 @@ export class SourceTextModule {
             throw err;
         }
     }
+
+    _resolveStarExports() {
+        const ambiguous = Object.create(null);
+        const resolved = Object.create(null);
+        for (let i = 0; i < this._dependencies.length; i++) {
+            const dependency = this._dependencies[i];
+            if (!dependency.exportAll || !dependency.module) continue;
+            const names = dependency.module._names;
+            for (let j = 0; j < names.length; j++) {
+                const name = names[j];
+                if (name === 'default' || Object.prototype.hasOwnProperty.call(this._bindings, name)) {
+                    continue;
+                }
+                if (ambiguous[name]) {
+                    continue;
+                }
+                const resolution = sourceTextModuleResolveExport(dependency.module, name);
+                if (!resolution) {
+                    continue;
+                }
+                if (resolved[name] && !sourceTextModuleSameExportResolution(resolved[name], resolution)) {
+                    ambiguous[name] = true;
+                    delete resolved[name];
+                    continue;
+                }
+                resolved[name] = resolution;
+            }
+        }
+        const resolvedNames = Object.keys(resolved);
+        for (let i = 0; i < resolvedNames.length; i++) {
+            const name = resolvedNames[i];
+            if (ambiguous[name] || Object.prototype.hasOwnProperty.call(this._bindings, name)) continue;
+            const resolution = resolved[name];
+            this._names.push(name);
+            this._bindings[name] = {
+                kind: 'reexport',
+                initialized: true,
+                module: resolution.module,
+                importName: resolution.importName,
+            };
+        }
+        this._names = this._names.filter((name, index, names) => names.indexOf(name) === index);
+        this._namespace = createModuleNamespace(this);
+    }
+}
+
+function sourceTextModuleResolveExport(module, name, seen) {
+    seen = seen || [];
+    for (let i = 0; i < seen.length; i++) {
+        if (seen[i].module === module && seen[i].name === name) return null;
+    }
+    seen.push({ module, name });
+    const binding = module._bindings[name];
+    if (!binding) return null;
+    if (binding.kind === 'reexport') {
+        return sourceTextModuleResolveExport(binding.module, binding.importName, seen);
+    }
+    return { module, importName: name };
+}
+
+function sourceTextModuleSameExportResolution(left, right) {
+    return left.module === right.module && left.importName === right.importName;
 }
 
 Object.setPrototypeOf(SourceTextModule.prototype, Module.prototype);

@@ -3827,6 +3827,209 @@ export const testVmMainContextDefaultLoader = async () => {
     }
 };
 
+export const testVmSourceTextModuleLinkSemantics = async () => {
+    try {
+        const { SourceTextModule } = await import('node:vm');
+
+        const defaultSource = new SourceTextModule([
+            'const __wasm_rquickjs_vm_default_export = "local";',
+            'export default 5;',
+        ].join('\n'));
+        const defaultConsumer = new SourceTextModule([
+            'import five from "default-source";',
+            'export const value = five;',
+        ].join('\n'));
+        await defaultConsumer.link((specifier) => {
+            assert.strictEqual(specifier, 'default-source');
+            return defaultSource;
+        });
+        await defaultConsumer.evaluate();
+        assert.strictEqual(defaultConsumer.namespace.value, 5);
+
+        const namedDefault = new SourceTextModule([
+            'export default function getAnswer() { return 42; }',
+            'export const visible = getAnswer();',
+        ].join('\n'));
+        await namedDefault.link(() => {
+            throw new Error('unexpected dependency');
+        });
+        await namedDefault.evaluate();
+        assert.strictEqual(namedDefault.namespace.default(), 42);
+        assert.strictEqual(namedDefault.namespace.visible, 42);
+
+        const dependency = new SourceTextModule([
+            'export default "default-value";',
+            'export const named = "named-value";',
+        ].join('\n'));
+        const namespaceConsumer = new SourceTextModule([
+            'import value, { named } from "dependency";',
+            'import * as ns from "dependency";',
+            'export const combined = value + ":" + named + ":" + ns.default + ":" + ns.named;',
+        ].join('\n'));
+        await namespaceConsumer.link((specifier) => {
+            assert.strictEqual(specifier, 'dependency');
+            return dependency;
+        });
+        await namespaceConsumer.evaluate();
+        assert.strictEqual(namespaceConsumer.namespace.combined, 'default-value:named-value:default-value:named-value');
+
+        const ambiguousA = new SourceTextModule('export const shared = "a"; export const onlyA = "a";');
+        const ambiguousB = new SourceTextModule('export const shared = "b"; export const onlyB = "b";');
+        const star = new SourceTextModule('export * from "a"; export * from "b";');
+        await star.link((specifier) => specifier === 'a' ? ambiguousA : ambiguousB);
+        await star.evaluate();
+        assert.strictEqual('shared' in star.namespace, false);
+        assert.strictEqual(star.namespace.onlyA, 'a');
+        assert.strictEqual(star.namespace.onlyB, 'b');
+
+        const common = new SourceTextModule('export const x = 1;');
+        const starA = new SourceTextModule('export * from "common";');
+        const starB = new SourceTextModule('export * from "common";');
+        const duplicateSameBinding = new SourceTextModule('export * from "star-a"; export * from "star-b";');
+        await duplicateSameBinding.link((specifier) => {
+            if (specifier === 'common') return common;
+            if (specifier === 'star-a') return starA;
+            if (specifier === 'star-b') return starB;
+            throw new Error(`unexpected specifier: ${specifier}`);
+        });
+        await duplicateSameBinding.evaluate();
+        assert.strictEqual(duplicateSameBinding.namespace.x, 1);
+
+        const fromExport = new SourceTextModule('export const from = "from-name";');
+        const fromImport = new SourceTextModule('import { from as x } from "from-export"; export const value = x;');
+        await fromImport.link(() => fromExport);
+        await fromImport.evaluate();
+        assert.strictEqual(fromImport.namespace.value, 'from-name');
+
+        const multilineDependency = new SourceTextModule('export default "default"; export const a = "a";');
+        const multilineImport = new SourceTextModule([
+            'import value',
+            'from "multiline-dependency";',
+            'import { a }',
+            'from "multiline-dependency";',
+            'export const result = value + a;',
+        ].join('\n'));
+        await multilineImport.link(() => multilineDependency);
+        await multilineImport.evaluate();
+        assert.strictEqual(multilineImport.namespace.result, 'defaulta');
+
+        const multilineExport = new SourceTextModule([
+            'export *',
+            'from "multiline-dependency";',
+        ].join('\n'));
+        await multilineExport.link(() => multilineDependency);
+        await multilineExport.evaluate();
+        assert.strictEqual(multilineExport.namespace.a, 'a');
+        assert.strictEqual('default' in multilineExport.namespace, false);
+
+        let attributesSeen = null;
+        const attributes = new SourceTextModule('import "dep" with { n1: "v1", "n-two": "v2" };');
+        await attributes.link((specifier, _module, extra) => {
+            assert.strictEqual(specifier, 'dep');
+            attributesSeen = extra;
+            return new SourceTextModule('');
+        });
+        assert.strictEqual(attributesSeen.attributes.n1, 'v1');
+        assert.strictEqual(attributesSeen.assert.n1, 'v1');
+        assert.strictEqual(attributesSeen.attributes['n-two'], 'v2');
+
+        const cycleA = new SourceTextModule([
+            'import getValue from "cycle-b";',
+            'export let value = 1;',
+            'value = 2;',
+            'export default getValue();',
+        ].join('\n'));
+        const cycleB = new SourceTextModule([
+            'import { value } from "cycle-a";',
+            'export default function getValue() { return value; }',
+        ].join('\n'));
+        await cycleA.link((specifier) => specifier === 'cycle-b' ? cycleB : cycleA);
+        await cycleA.evaluate();
+        assert.strictEqual(cycleA.namespace.default, 2);
+
+        const compoundA = new SourceTextModule([
+            'import getValue from "compound-b";',
+            'export let value = 1;',
+            'value += 2;',
+            'value++;',
+            'if (true) { value = 7; }',
+            'export default getValue();',
+        ].join('\n'));
+        const compoundB = new SourceTextModule([
+            'import { value } from "compound-a";',
+            'export default function getValue() { return value; }',
+        ].join('\n'));
+        await compoundA.link((specifier) => specifier === 'compound-b' ? compoundB : compoundA);
+        await compoundA.evaluate();
+        assert.strictEqual(compoundA.namespace.default, 7);
+
+        const shadowA = new SourceTextModule([
+            'import getValue from "shadow-b";',
+            'export let value = 1;',
+            'function f(value) { value = 2; }',
+            'f(0);',
+            'export default getValue();',
+        ].join('\n'));
+        const shadowB = new SourceTextModule([
+            'import { value } from "shadow-a";',
+            'export default function getValue() { return value; }',
+        ].join('\n'));
+        await shadowA.link((specifier) => specifier === 'shadow-b' ? shadowB : shadowA);
+        await shadowA.evaluate();
+        assert.strictEqual(shadowA.namespace.default, 1);
+
+        const closureA = new SourceTextModule([
+            'import getValue from "closure-b";',
+            'export let value = 1;',
+            'function setValue() { value = 2; }',
+            'setValue();',
+            'export default getValue();',
+        ].join('\n'));
+        const closureB = new SourceTextModule([
+            'import { value } from "closure-a";',
+            'export default function getValue() { return value; }',
+        ].join('\n'));
+        await closureA.link((specifier) => specifier === 'closure-b' ? closureB : closureA);
+        await closureA.evaluate();
+        assert.strictEqual(closureA.namespace.default, 2);
+
+        const localShadowA = new SourceTextModule([
+            'import getValue from "local-shadow-b";',
+            'export let value = 1;',
+            'function f() { let value = 0; value = 2; }',
+            'f();',
+            'export default getValue();',
+        ].join('\n'));
+        const localShadowB = new SourceTextModule([
+            'import { value } from "local-shadow-a";',
+            'export default function getValue() { return value; }',
+        ].join('\n'));
+        await localShadowA.link((specifier) => specifier === 'local-shadow-b' ? localShadowB : localShadowA);
+        await localShadowA.evaluate();
+        assert.strictEqual(localShadowA.namespace.default, 1);
+
+        const multilineAssignmentA = new SourceTextModule([
+            'import getValue from "multiline-assignment-b";',
+            'export let value = 0;',
+            'value = 1',
+            '  + 2;',
+            'export default getValue();',
+        ].join('\n'));
+        const multilineAssignmentB = new SourceTextModule([
+            'import { value } from "multiline-assignment-a";',
+            'export default function getValue() { return value; }',
+        ].join('\n'));
+        await multilineAssignmentA.link((specifier) => specifier === 'multiline-assignment-b' ? multilineAssignmentB : multilineAssignmentA);
+        await multilineAssignmentA.evaluate();
+        assert.strictEqual(multilineAssignmentA.namespace.default, 3);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testRequireEsmErrorHandling = async () => {
     try {
         fs.mkdirSync('/require-esm-errors-app', { recursive: true });
