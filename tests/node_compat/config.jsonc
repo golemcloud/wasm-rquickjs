@@ -4066,7 +4066,7 @@
     "sequential/test-cluster-send-handle-large-payload.js": { "category": "wasi-impossible", "reason": "cluster requires process forking, not available in WASM" },
 
     // === es-module suite ===
-    "es-module/test-dynamic-import-script-lifetime.js": { "category": "known-gap", "reason": "node:vm does not yet support importModuleDynamically/SyntheticModule semantics used by this dynamic import lifetime test" },
+    "es-module/test-dynamic-import-script-lifetime.js": { "category": "runnable" },
     "es-module/test-esm-loader-cache-clearing.js": {},
     "es-module/test-vm-compile-function-leak.js": {},
     "es-module/test-vm-contextified-script-leak.js": {},

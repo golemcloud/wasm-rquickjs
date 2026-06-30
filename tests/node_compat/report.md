@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3182/4404 (72.3%)
+**Primary compatibility (CI-enforced):** 3183/4404 (72.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3182 | 72.3% | 55.6% | 46.5% |
-| 🧩 known gap | 1222 | 27.7% | 21.4% | 17.9% |
+| ✅ passing (runnable) | 3183 | 72.3% | 55.6% | 46.5% |
+| 🧩 known gap | 1221 | 27.7% | 21.3% | 17.8% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3182/5721 (55.6%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3183/5721 (55.6%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 168 | 134 | 85 | 11 | 0 | 183 | 55.6% | 42.2% |
+| other | 581 | 169 | 133 | 85 | 11 | 0 | 183 | 56.0% | 42.5% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1222)
+### known gap (1221)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1167,7 +1167,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:test standalone runner output/cancellation summary differs in WASM child emulation | 1 | `parallel/test-runner-misc.js` |
 | node:test t.assert.fileSnapshot validation behavior is incomplete | 1 | `parallel/test-runner-snapshot-file-tests.js#test_00_t_assert_filesnapshot_validation` |
 | node:test t.assert.ok does not preserve Node-compatible assertion stack formatting | 1 | `parallel/test-runner-assert.js#test_01_t_assert_ok_correctly_parses_the_stacktrace` |
-| node:vm does not yet support importModuleDynamically/SyntheticModule semantics used by this dynamic import lifetime test | 1 | `es-module/test-dynamic-import-script-lifetime.js` |
 | node_compat harness copies only the target test file, so required sibling ./test-tls-destroy-stream.js is missing | 1 | `parallel/test-tls-destroy-stream-12.js` |
 | node_compat harness copies only the target test file, so required sibling ./test-tls-net-socket-keepalive.js is missing | 1 | `parallel/test-tls-net-socket-keepalive-12.js` |
 | node_compat test fixture module ../common/process-exit-code-cases is not resolved in this runtime | 1 | `parallel/test-process-exit-code.js` |
