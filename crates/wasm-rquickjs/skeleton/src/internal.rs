@@ -21,6 +21,28 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use wstd::runtime::block_on;
 
+fn throw_native_coded_error<'js, T>(
+    ctx: &Ctx<'js>,
+    message: &str,
+    code: &str,
+    type_error: bool,
+) -> rquickjs::Result<T> {
+    let error_value = if type_error {
+        let _ = Exception::throw_type(ctx, message);
+        ctx.catch()
+    } else {
+        Exception::from_message(ctx.clone(), message)?.into_value()
+    };
+    let Some(error_obj) = error_value.clone().into_object() else {
+        return Err(ctx.throw(error_value));
+    };
+    error_obj.prop(
+        "code",
+        Property::from(code).writable().enumerable().configurable(),
+    )?;
+    Err(ctx.throw(error_obj.into_value()))
+}
+
 /// Resolver that passes `data:` URLs through as-is.
 struct DataUrlResolver;
 
@@ -2148,6 +2170,23 @@ impl FileUrlResolver {
         url.starts_with("file://") && Self::file_url_path_and_suffix(url).is_none()
     }
 
+    fn is_same_directory_file_import(normalized: &str, base: &str) -> bool {
+        let base_path = if let Some(path) = Self::file_url_to_path(base) {
+            path
+        } else if base.starts_with('/') {
+            module_filesystem_path(base).to_string()
+        } else {
+            return false;
+        };
+        let Some(base_parent) = std::path::Path::new(&base_path).parent() else {
+            return false;
+        };
+        let Some(target_parent) = std::path::Path::new(normalized).parent() else {
+            return false;
+        };
+        CjsEvalResolver::normalize_path(base_parent) == CjsEvalResolver::normalize_path(target_parent)
+    }
+
     fn hex_val(b: u8) -> Option<u8> {
         match b {
             b'0'..=b'9' => Some(b - b'0'),
@@ -2188,7 +2227,11 @@ impl Resolver for FileUrlResolver {
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
                     "ERR_UNSUPPORTED_DIR_IMPORT",
-                    NodeFileResolver::directory_import_message(&normalized, base, true),
+                    NodeFileResolver::directory_import_message(
+                        &normalized,
+                        base,
+                        !Self::is_same_directory_file_import(&normalized, base),
+                    ),
                     url,
                 );
             }
@@ -2613,7 +2656,7 @@ impl Resolver for NodeFileResolver {
         }
 
         let (name_path, suffix) = split_module_path_suffix(name);
-        let (candidate, url) = if name_path.starts_with('/') {
+        let (candidate, url, include_directory_suggestion) = if name_path.starts_with('/') {
             let encoded_path = CjsEvalResolver::normalize_path(std::path::Path::new(name_path));
             let url = Self::module_url_for_encoded_path(&encoded_path, suffix);
             let name_path = match Self::decode_module_path(ctx, base, name, name_path) {
@@ -2623,7 +2666,7 @@ impl Resolver for NodeFileResolver {
                     return Err(err);
                 }
             };
-            (std::path::PathBuf::from(name_path.as_ref()), url)
+            (std::path::PathBuf::from(name_path.as_ref()), url, true)
         } else if name_path.starts_with("./") || name_path.starts_with("../") {
             let base_path = if let Some(path) = FileUrlResolver::file_url_to_path(base) {
                 path
@@ -2651,7 +2694,7 @@ impl Resolver for NodeFileResolver {
                     return Err(err);
                 }
             };
-            (base_dir.join(name_path.as_ref()), url)
+            (base_dir.join(name_path.as_ref()), url, false)
         } else {
             discard_import_type_rewrite_token(name);
             return Err(Error::new_resolving(base, name));
@@ -2666,7 +2709,8 @@ impl Resolver for NodeFileResolver {
                 Self::directory_import_message(
                     &normalized,
                     base,
-                    name_path.starts_with('/'),
+                    include_directory_suggestion
+                        && !FileUrlResolver::is_same_directory_file_import(&normalized, base),
                 ),
                 url,
             );
@@ -2699,14 +2743,9 @@ impl Resolver for NodeModuleErrorResolver {
         _base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
-        let globals = ctx.globals();
-
         if name.starts_with("node:") {
             let msg = format!("No such built-in module: {}", name);
-            let type_error_ctor: Function = globals.get("TypeError")?;
-            let error_obj: Object = type_error_ctor.call((&msg,))?;
-            error_obj.set("code", "ERR_UNKNOWN_BUILTIN_MODULE")?;
-            return Err(ctx.throw(error_obj.into_value()));
+            return throw_native_coded_error(ctx, &msg, "ERR_UNKNOWN_BUILTIN_MODULE", true);
         }
 
         if let Some(scheme_end) = name.find("://") {
@@ -2716,18 +2755,12 @@ impl Resolver for NodeModuleErrorResolver {
                     "Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol '{}:'",
                     scheme
                 );
-                let error_ctor: Function = globals.get("Error")?;
-                let error_obj: Object = error_ctor.call((&msg,))?;
-                error_obj.set("code", "ERR_UNSUPPORTED_ESM_URL_SCHEME")?;
-                return Err(ctx.throw(error_obj.into_value()));
+                return throw_native_coded_error(ctx, &msg, "ERR_UNSUPPORTED_ESM_URL_SCHEME", false);
             }
         }
 
         let msg = format!("Cannot find module '{}'", name);
-        let error_ctor: Function = globals.get("Error")?;
-        let error_obj: Object = error_ctor.call((&msg,))?;
-        error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
-        Err(ctx.throw(error_obj.into_value()))
+        throw_native_coded_error(ctx, &msg, "ERR_MODULE_NOT_FOUND", false)
     }
 }
 
@@ -4146,11 +4179,7 @@ fn throw_node_package_resolve_error<'js>(
         ),
     };
 
-    let globals = ctx.globals();
-    let error_ctor: Function = globals.get(if type_error { "TypeError" } else { "Error" })?;
-    let error_obj: Object = error_ctor.call((message,))?;
-    error_obj.set("code", code)?;
-    Err(ctx.throw(error_obj.into_value()))
+    throw_native_coded_error(ctx, &message, code, type_error)
 }
 
 impl Resolver for NodeModulesResolver {
@@ -6505,7 +6534,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         props.join(",")
     );
     prologue.push_str(
-        r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){Object.defineProperty(globalThis,"__wasm_rquickjs_import_attr_specifier",{value:(s,t)=>{let v=String(s);let f=null;if(v.startsWith("data:")){const r=v.slice(5);const c=r.indexOf(",");const m=(c<0?r:r.slice(0,c)).split(";")[0].trim();if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else if(v.startsWith("node:"))f="module";else{const b=v.split(/[?#]/,1)[0];if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";}function er(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return er("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return er("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return er("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){if(v.startsWith("data:"))v=v.replace(/\"/g,"%22");return"data:text/javascript,"+encodeURIComponent("import value from "+JSON.stringify(v)+" with { type: \"json\" }; export default value;");}return v;},writable:true,configurable:true});}"##,
+        r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){globalThis.__wasm_rquickjs_import_attr_specifier=(s,t)=>{let v=String(s);let f=null;if(v.startsWith("data:")){const r=v.slice(5);const c=r.indexOf(",");const m=(c<0?r:r.slice(0,c)).split(";")[0].trim();if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else if(v.startsWith("node:"))f="module";else{const b=v.split(/[?#]/,1)[0];if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";}function er(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return er("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return er("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return er("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){if(v.startsWith("data:"))v=v.replace(/\"/g,"%22");return"data:text/javascript,"+encodeURIComponent("import value from "+JSON.stringify(v)+" with { type: \"json\" }; export default value;");}return v;};}"##,
     );
     if let Some(ref filename) = init.filename {
         prologue.push_str(&format!(
@@ -6516,6 +6545,18 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     if let Some(ref dirname) = init.dirname {
         prologue.push_str(&format!("var __dirname=\"{}\";", escape_js_string(dirname)));
     }
+
+    let main_expr = init
+        .filename
+        .as_ref()
+        .map(|filename| {
+            format!(
+                "!!(globalThis.process&&Array.isArray(globalThis.process.argv)&&globalThis.process.argv[1]===\"{}\")",
+                escape_js_string(filename)
+            )
+        })
+        .unwrap_or_else(|| "false".to_string());
+    let source = rewrite_import_meta_main(source, &main_expr);
 
     if let Some(rest) = source.strip_prefix("#!") {
         if let Some(newline_pos) = rest.find('\n') {
@@ -6529,6 +6570,31 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     } else {
         format!("{}\n{}", prologue, source)
     }
+}
+
+fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
+    let mut spans = Vec::new();
+    scan_code_positions(source, true, |i, _| {
+        if source[i..].starts_with("import.meta.main")
+            && is_ident_start_boundary(source.as_bytes(), i)
+            && is_ident_boundary(source.as_bytes(), i + "import.meta.main".len())
+        {
+            spans.push((i, i + "import.meta.main".len()));
+            ControlFlow::Continue(Some(i + "import.meta.main".len()))
+        } else {
+            ControlFlow::Continue(None)
+        }
+    });
+
+    if spans.is_empty() {
+        return source.to_string();
+    }
+
+    let mut rewritten = source.to_string();
+    for (start, end) in spans.into_iter().rev() {
+        rewritten.replace_range(start..end, replacement);
+    }
+    rewritten
 }
 
 struct ImportMetaLoader;

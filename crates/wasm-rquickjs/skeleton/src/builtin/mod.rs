@@ -746,11 +746,7 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, 
   var cache = globalThis.__wasm_rquickjs_import_attr_inflight;
   if (!cache) {
     cache = Object.create(null);
-    Object.defineProperty(globalThis, '__wasm_rquickjs_import_attr_inflight', {
-      value: cache,
-      writable: true,
-      configurable: true
-    });
+    globalThis.__wasm_rquickjs_import_attr_inflight = cache;
   }
   if (cache[completedKey] !== undefined) {
     var cached = cache[completedKey];

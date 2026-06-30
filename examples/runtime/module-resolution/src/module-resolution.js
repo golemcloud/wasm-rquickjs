@@ -2358,6 +2358,15 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'import { main as depMain } from "./entry-main-dep.mjs";',
             'export default { main: import.meta.main, depMain };',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/import-meta-main-false-positive.mjs', [
+            'const obj = { "import": { meta: { main: 1 } } };',
+            'export default [',
+            '  "import.meta.main",',
+            '  /import\\.meta\\.main/.source,',
+            '  obj["import"].meta.main,',
+            '  import.meta.main,',
+            '];',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/package-without-type/package.json', JSON.stringify({ main: 'index.js' }));
         fs.writeFileSync('/module-syntax-app/package-without-type/noext-esm', [
             'export default "extensionless-module";',
@@ -2503,6 +2512,12 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             process.argv[1] = '/module-syntax-app/entry-main.mjs';
             const esmMain = (await import('/module-syntax-app/entry-main.mjs')).default;
             assert.deepStrictEqual(esmMain, { main: true, depMain: false });
+            assert.deepStrictEqual(await import('/module-syntax-app/import-meta-main-false-positive.mjs').then((m) => m.default), [
+                'import.meta.main',
+                'import\\.meta\\.main',
+                1,
+                false,
+            ]);
         } finally {
             Object.assign(require.main, originalRequireMain);
             process.argv = originalArgv;
