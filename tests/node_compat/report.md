@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3171/4404 (72.0%)
+**Primary compatibility (CI-enforced):** 3174/4404 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3171 | 72.0% | 55.4% | 46.3% |
-| 🧩 known gap | 1233 | 28.0% | 21.6% | 18.0% |
+| ✅ passing (runnable) | 3174 | 72.1% | 55.5% | 46.4% |
+| 🧩 known gap | 1230 | 27.9% | 21.5% | 18.0% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3171/5721 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3174/5721 (55.5%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 165 | 137 | 85 | 11 | 0 | 183 | 54.6% | 41.5% |
+| other | 581 | 168 | 134 | 85 | 11 | 0 | 183 | 55.6% | 42.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1233)
+### known gap (1230)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -745,7 +745,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | crypto.X509Certificate API is not implemented | 3 | `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`, `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`, `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field` |
 | dgram send() callback overload path has JS/native argument conversion bugs | 3 | `parallel/test-dgram-send-callback-buffer-length-empty-address.js`, `parallel/test-dgram-send-callback-buffer-length.js`, `parallel/test-dgram-send-callback-buffer.js` |
 | dgram socket buffer size APIs may hang | 3 | `parallel/test-dgram-socket-buffer-size.js#block_02_block_02`, `parallel/test-dgram-socket-buffer-size.js#block_04_block_04`, `parallel/test-dgram-socket-buffer-size.js#block_05_block_05` |
-| full Node ESM loader hooks remain incomplete beyond same-process dynamic JSON hooks | 3 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-shared-loader-dep.mjs`, `es-module/test-loaders-unknown-builtin-module.mjs` |
 | global MessageEvent constructor/validation/inheritance semantics are not Node-compatible | 3 | `parallel/test-worker-message-event.js#block_00_block_00`, `parallel/test-worker-message-event.js#block_01_block_01`, `parallel/test-worker-message-event.js#block_02_block_02` |
 | inherited: common.canCreateSymLink shim always returns false, so traversal+symlink permission tests are skipped | 3 | `parallel/test-permission-fs-traversal-path.js#block_00_block_00`, `parallel/test-permission-fs-traversal-path.js#block_01_block_01`, `parallel/test-permission-fs-traversal-path.js#block_02_block_02` |
 | inherited: dgram AbortSignal validation and close semantics are incomplete | 3 | `parallel/test-dgram-close-signal.js#block_00_block_00`, `parallel/test-dgram-close-signal.js#block_01_block_01`, `parallel/test-dgram-close-signal.js#block_02_block_02` |
