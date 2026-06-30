@@ -2859,6 +2859,18 @@ function makeLoaderUnknownModuleFormatError(format) {
     return err;
 }
 
+function makeLoaderInvalidUrlError(hookName, loaderUrl, value) {
+    const err = new TypeError(`Expected a URL string to be returned for "url" from the '${hookName}' hook in ${String(loaderUrl)} but got ${JSON.stringify(String(value))}.`);
+    err.code = 'ERR_INVALID_RETURN_PROPERTY_VALUE';
+    return err;
+}
+
+function makeLoaderMissingUrlError(hookName, loaderUrl, value) {
+    const err = new TypeError(`Expected a URL string to be returned for "url" from the '${hookName}' hook in ${String(loaderUrl)} but got type ${loaderValueTypeName(value)}.`);
+    err.code = 'ERR_INVALID_RETURN_PROPERTY_VALUE';
+    return err;
+}
+
 function isLoaderSourceValue(value) {
     return typeof value === 'string' ||
         value instanceof ArrayBuffer ||
@@ -2895,6 +2907,17 @@ function validateRegisteredLoaderLoadFormat(format) {
         return format;
     }
     throw makeLoaderUnknownModuleFormatError(format);
+}
+
+function validateRegisteredLoaderResolveUrl(url, loaderUrl) {
+    if (typeof url !== 'string') {
+        throw makeLoaderMissingUrlError('resolve', loaderUrl, url);
+    }
+    try {
+        new URL(url);
+    } catch (_) {
+        throw makeLoaderInvalidUrlError('resolve', loaderUrl, url);
+    }
 }
 
 function loaderSourceToString(source) {
@@ -3864,6 +3887,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!loaders || loaders.length === 0) return undefined;
 
         const modules = [];
+        const moduleUrls = [];
         for (let i = 0; i < loaders.length; i++) {
             const loader = loaders[i];
             try {
@@ -3874,6 +3898,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
             if (loader.module) {
                 modules.push(loader.module);
+                moduleUrls.push(loader.url);
             }
         }
 
@@ -4054,6 +4079,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 };
                 const result = validateRegisteredLoaderResult(await module.resolve(nextSpecifier, context, nextResolve), 'resolve', context);
+                validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('resolve');
                 }
@@ -4432,6 +4458,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const modules = [];
+        const moduleUrls = [];
         for (let i = 0; i < loaders.length; i++) {
             const loader = loaders[i];
             if (!loader.initialized) {
@@ -4442,7 +4469,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 }
                 continue;
             }
-            if (loader.module) modules.push(loader.module);
+            if (loader.module) {
+                modules.push(loader.module);
+                moduleUrls.push(loader.url);
+            }
         }
         if (modules.length === 0) return undefined;
 
@@ -4504,6 +4534,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 };
                 const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve'), 'resolve', context);
+                validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('resolve');
                 }

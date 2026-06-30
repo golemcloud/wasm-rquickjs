@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3167/4404 (71.9%)
+**Primary compatibility (CI-enforced):** 3171/4404 (72.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3167 | 71.9% | 55.4% | 46.3% |
-| 🧩 known gap | 1237 | 28.1% | 21.6% | 18.1% |
+| ✅ passing (runnable) | 3171 | 72.0% | 55.4% | 46.3% |
+| 🧩 known gap | 1233 | 28.0% | 21.6% | 18.0% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3167/5721 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3171/5721 (55.4%)**.
 
 ## Inventory by Module
 
@@ -53,11 +53,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | http | 898 | 243 | 306 | 267 | 2 | 0 | 80 | 44.3% | 29.7% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 184 | 121 | 43 | 7 | 1 | 0 | 12 | 73.8% | 70.3% |
+| module | 184 | 122 | 42 | 7 | 1 | 0 | 12 | 74.4% | 70.9% |
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 162 | 140 | 85 | 11 | 0 | 183 | 53.6% | 40.7% |
+| other | 581 | 165 | 137 | 85 | 11 | 0 | 183 | 54.6% | 41.5% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1237)
+### known gap (1233)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -705,7 +705,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | stripTypeScriptTypes requires Amaro support, which is not implemented | 9 | `parallel/test-module-strip-types.js#test_00_striptypescripttypes`, `parallel/test-module-strip-types.js#test_01_striptypescripttypes_explicit`, `parallel/test-module-strip-types.js#test_02_striptypescripttypes_code_is_not_a_string`, ... (+6) |
 | vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling) | 9 | `parallel/test-vm-module-basic.js#block_00_check_inspection_of_the_instance`, `parallel/test-vm-module-basic.js#block_01_block_01`, `parallel/test-vm-module-basic.js#block_02_check_dependencies_getter_returns_same_object_every_time`, ... (+6) |
 | Intl is not available in current runtime | 8 | `parallel/test-intl-v8BreakIterator.js`, `parallel/test-intl.js`, `parallel/test-whatwg-encoding-custom-textdecoder-fatal.js`, ... (+5) |
-| full Node ESM loader hooks remain incomplete beyond same-process dynamic JSON hooks | 8 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-loader-custom-condition.mjs`, `es-module/test-esm-loader-dependency.mjs`, ... (+5) |
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
@@ -746,6 +745,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | crypto.X509Certificate API is not implemented | 3 | `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`, `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`, `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field` |
 | dgram send() callback overload path has JS/native argument conversion bugs | 3 | `parallel/test-dgram-send-callback-buffer-length-empty-address.js`, `parallel/test-dgram-send-callback-buffer-length.js`, `parallel/test-dgram-send-callback-buffer.js` |
 | dgram socket buffer size APIs may hang | 3 | `parallel/test-dgram-socket-buffer-size.js#block_02_block_02`, `parallel/test-dgram-socket-buffer-size.js#block_04_block_04`, `parallel/test-dgram-socket-buffer-size.js#block_05_block_05` |
+| full Node ESM loader hooks remain incomplete beyond same-process dynamic JSON hooks | 3 | `es-module/test-esm-example-loader.mjs`, `es-module/test-esm-shared-loader-dep.mjs`, `es-module/test-loaders-unknown-builtin-module.mjs` |
 | global MessageEvent constructor/validation/inheritance semantics are not Node-compatible | 3 | `parallel/test-worker-message-event.js#block_00_block_00`, `parallel/test-worker-message-event.js#block_01_block_01`, `parallel/test-worker-message-event.js#block_02_block_02` |
 | inherited: common.canCreateSymLink shim always returns false, so traversal+symlink permission tests are skipped | 3 | `parallel/test-permission-fs-traversal-path.js#block_00_block_00`, `parallel/test-permission-fs-traversal-path.js#block_01_block_01`, `parallel/test-permission-fs-traversal-path.js#block_02_block_02` |
 | inherited: dgram AbortSignal validation and close semantics are incomplete | 3 | `parallel/test-dgram-close-signal.js#block_00_block_00`, `parallel/test-dgram-close-signal.js#block_01_block_01`, `parallel/test-dgram-close-signal.js#block_02_block_02` |
@@ -1095,6 +1095,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
 | execSync is ENOSYS-stubbed; default maxBuffer behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execSync is ENOSYS-stubbed; maxBuffer overflow ENOBUFS behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
+| fixture depends on worker_threads MessageChannel receiveMessageOnPort support, unavailable in the WASM runtime | 1 | `es-module/test-esm-loader-mock.mjs` |
 | fork() IPC child.send/process.send emulation is not implemented | 1 | `parallel/test-cli-eval.js#block_03_regression_test_for_https_github_com_nodejs_node_issues_1194` |
 | fork() abort-listener lifecycle for timeout+signal is incomplete | 1 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03` |
 | fork() args/options parsing and ERR_INVALID_ARG_TYPE behavior are incomplete | 1 | `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null` |
@@ -1216,6 +1217,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
+| registered loaders are not yet applied to static ESM dependency resolution | 1 | `es-module/test-esm-loader-custom-condition.mjs` |
 | registered loaders share the main module cache/context; Node isolates loader modules in a separate loader realm | 1 | `es-module/test-esm-loader.mjs` |
 | removing hop-by-hop/framing headers is not serialized with Node-compatible behavior | 1 | `parallel/test-http-remove-header-stays-removed.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
@@ -1225,7 +1227,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | request drain captureRejections path hangs when request is never finalized with end() under wasi:http | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01` |
 | request header population/normalization (for example Accept) is incomplete | 1 | `parallel/test-http.js` |
 | request/response pause-resume flow control does not complete with Node-compatible behavior | 1 | `parallel/test-http-pause.js` |
-| requires --experimental-loader CLI wiring; same-process assertionless JSON resolve-hook behavior is covered by runtime tests | 1 | `es-module/test-esm-assertionless-json-import.js` |
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
 | requires Intl/timezone data support that is not available in the current runtime | 1 | `parallel/test-datetime-change-notify.js` |
