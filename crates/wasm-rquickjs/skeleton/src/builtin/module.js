@@ -1974,40 +1974,71 @@ function maybeSetArrowMessageOnSyntaxError(err, filename, source) {
     err[arrowMessageSymbol] = arrowMessage;
 }
 
-// Create a wrapper around an ESM namespace that adds __esModule: true
-// while still passing isModuleNamespaceObject checks.
 function wrapEsmNamespace(ns) {
     if (!ns || typeof ns !== 'object') return ns;
     if (!Object.hasOwn(ns, 'default') || Object.hasOwn(ns, '__esModule')) return ns;
-    // Try to add __esModule directly to the namespace
-    try {
-        Object.defineProperty(ns, '__esModule', {
-            value: true,
-            writable: false,
-            configurable: false,
-            enumerable: false,
-        });
-        return ns;
-    } catch (_) {}
-    // Namespace is sealed — create a plain wrapper that looks like a module namespace
     const wrapped = Object.create(null);
-    Object.defineProperty(wrapped, Symbol.toStringTag, { value: 'Module' });
-    const keys = Object.keys(ns);
-    for (let i = 0; i < keys.length; i++) {
-        const k = keys[i];
+    const namespaceKeys = Object.keys(ns);
+    Object.defineProperty(wrapped, '__esModule', {
+        value: true,
+        writable: true,
+        configurable: false,
+        enumerable: true,
+    });
+    for (let i = 0; i < namespaceKeys.length; i++) {
+        const k = namespaceKeys[i];
         Object.defineProperty(wrapped, k, {
-            get: (function(key) { return function() { return ns[key]; }; })(k),
+            value: ns[k],
+            writable: true,
             enumerable: true,
             configurable: false,
         });
     }
-    Object.defineProperty(wrapped, '__esModule', {
-        value: true,
+    Object.defineProperty(wrapped, Symbol.toStringTag, {
+        value: 'Module',
         writable: false,
         configurable: false,
         enumerable: false,
     });
-    return wrapped;
+    Object.preventExtensions(wrapped);
+    function namespaceDescriptor(prop) {
+        if (prop === '__esModule') {
+            return {
+                value: true,
+                writable: true,
+                enumerable: true,
+                configurable: false,
+            };
+        }
+        if (typeof prop === 'string' && Object.hasOwn(ns, prop)) {
+            return {
+                value: ns[prop],
+                writable: true,
+                enumerable: true,
+                configurable: false,
+            };
+        }
+        return Object.getOwnPropertyDescriptor(wrapped, prop);
+    }
+    return new Proxy(wrapped, {
+        get: function(target, prop, receiver) {
+            if (prop === '__esModule') return true;
+            if (typeof prop === 'string' && Object.hasOwn(ns, prop)) return ns[prop];
+            return Reflect.get(target, prop, receiver);
+        },
+        getOwnPropertyDescriptor: function(_target, prop) {
+            return namespaceDescriptor(prop);
+        },
+        set: function() {
+            return false;
+        },
+        defineProperty: function() {
+            return false;
+        },
+        deleteProperty: function() {
+            return false;
+        },
+    });
 }
 
 // Normalize QuickJS SyntaxError messages for ESM keywords to match Node.js/V8 format.
