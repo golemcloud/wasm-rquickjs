@@ -4217,11 +4217,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return i < source.length ? { value, end: i } : null;
         }
 
-        function readLoaderCjsExportTarget(source, pos) {
+        function readLoaderCjsExportTarget(source, pos, allowBareExports) {
             const previous = previousSignificantCharBefore(source, pos);
             if (previous === 0x2e || previous === 0x23) return null;
             let i = pos;
-            if (source.startsWith('exports', i) && hasIdentifierBoundary(source, i, i + 7)) {
+            if (allowBareExports !== false && source.startsWith('exports', i) && hasIdentifierBoundary(source, i, i + 7)) {
                 i += 7;
             } else if (source.startsWith('module', i) && hasIdentifierBoundary(source, i, i + 6)) {
                 i = skipLoaderWhitespaceAndComments(source, i + 6);
@@ -4341,7 +4341,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         function readLoaderModuleExportsRequire(source, pos) {
             if (!source.startsWith('module', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
-            const targetEnd = readLoaderCjsExportTarget(source, pos);
+            const targetEnd = readLoaderCjsExportTarget(source, pos, false);
             if (targetEnd === null) return null;
             let i = skipLoaderWhitespaceAndComments(source, targetEnd);
             if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
