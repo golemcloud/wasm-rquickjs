@@ -3118,6 +3118,33 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.throws(() => new vm.SourceTextModule(null), { code: 'ERR_INVALID_ARG_TYPE' });
         assert.strictEqual(new vm.SourceTextModule('') instanceof vm.Module, true);
+        const util = await import('node:util');
+        const inspectContext = vm.createContext({ foo: 'bar' });
+        const inspectSourceTextModule = new vm.SourceTextModule('1', { context: inspectContext });
+        assert.strictEqual(util.inspect(inspectSourceTextModule), [
+            'SourceTextModule {',
+            "  status: 'unlinked',",
+            "  identifier: 'vm:module(0)',",
+            "  context: { foo: 'bar' }",
+            '}',
+        ].join('\n'));
+        assert.strictEqual(util.inspect(inspectSourceTextModule, { depth: -1 }), '[SourceTextModule]');
+        const inspectSyntheticModule = new vm.SyntheticModule([], () => {}, { context: inspectContext });
+        assert.strictEqual(util.inspect(inspectSyntheticModule), [
+            'SyntheticModule {',
+            "  status: 'unlinked',",
+            "  identifier: 'vm:module(0)',",
+            "  context: { foo: 'bar' }",
+            '}',
+        ].join('\n'));
+        assert.strictEqual(util.inspect(inspectSyntheticModule, { depth: -1 }), '[SyntheticModule]');
+        for (const invalidThis of [null, { __proto__: null }, vm.SourceTextModule.prototype]) {
+            assert.throws(() => inspectSourceTextModule[util.inspect.custom].call(invalidThis), {
+                name: 'TypeError',
+                code: 'ERR_INVALID_ARG_TYPE',
+                message: /The "this" argument must be an instance of Module/,
+            });
+        }
         assert.throws(() => new vm.SyntheticModule(undefined, () => {}, {}), {
             name: 'TypeError',
             code: 'ERR_INVALID_ARG_TYPE',

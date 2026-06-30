@@ -9192,19 +9192,19 @@
     "parallel/test-vm-measure-memory-multi-context.js": { "category": "engine-difference", "reason": "vm.measureMemory depends on V8 heap introspection APIs unavailable in QuickJS" },
     "parallel/test-vm-measure-memory.js": { "category": "engine-difference", "reason": "vm.measureMemory depends on V8 heap introspection APIs unavailable in QuickJS" },
     "parallel/test-vm-module-basic.js": {
-      "category": "known-gap",
-      "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)",
+      "category": "runnable",
       "split": true,
+      "isolateBlockSubtests": true,
       "subtests": {
-        "block_00_check_inspection_of_the_instance": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_01_block_01": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_02_check_dependencies_getter_returns_same_object_every_time": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_03_check_the_impossibility_of_creating_an_abstract_instance_of_": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_04_check_to_throws_invalid_exportnames": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_05_https_github_com_nodejs_node_issues_32806": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_06_check_to_throws_invalid_evaluatecallback": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_07_check_to_throws_invalid_options": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" },
-        "block_08_test_compilefunction_importmoduledynamically": { "category": "known-gap", "reason": "vm.SourceTextModule/SyntheticModule behavior is incomplete (status transitions, validation, and timeout handling)" }
+        "block_00_check_inspection_of_the_instance": {},
+        "block_01_block_01": {},
+        "block_02_check_dependencies_getter_returns_same_object_every_time": {},
+        "block_03_check_the_impossibility_of_creating_an_abstract_instance_of_": {},
+        "block_04_check_to_throws_invalid_exportnames": {},
+        "block_05_https_github_com_nodejs_node_issues_32806": {},
+        "block_06_check_to_throws_invalid_evaluatecallback": {},
+        "block_07_check_to_throws_invalid_options": {},
+        "block_08_test_compilefunction_importmoduledynamically": {}
       }
     },
     "parallel/test-vm-module-cached-data.js": { "category": "engine-difference", "reason": "SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS" },

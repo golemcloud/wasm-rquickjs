@@ -6,7 +6,7 @@ mod common;
 
 use crate::common::js_subtest_parser::{
     BlockInfo, SubtestDiscovery, discover_subtests, discover_subtests_with_options,
-    rewrite_for_block, rewrite_for_node_test, sanitize_name,
+    rewrite_for_block, rewrite_for_block_with_options, rewrite_for_node_test, sanitize_name,
 };
 use test_r::test;
 
@@ -100,6 +100,22 @@ fn test_rewrite_for_block() {
     assert!(result.contains("assert(1)"));
     assert!(!result.contains("assert(2)"));
     assert!(!result.contains("assert(3)"));
+}
+
+#[test]
+fn test_rewrite_for_block_isolates_top_level_expressions() {
+    let source = "'use strict';\nconst common = require('../common');\n(async () => { assert(1); })();\n{ assert(2); }\n{ assert(3); }\n";
+    let blocks = match discover_subtests("test.js", source) {
+        SubtestDiscovery::Block(blocks) => blocks,
+        other => panic!("Expected block discovery, got {:?}", other),
+    };
+
+    let result = rewrite_for_block_with_options(source, &blocks, 1, true);
+    assert!(result.contains("'use strict'"));
+    assert!(result.contains("const common"));
+    assert!(!result.contains("assert(1)"));
+    assert!(!result.contains("assert(2)"));
+    assert!(result.contains("assert(3)"));
 }
 
 #[test]

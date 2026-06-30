@@ -19,7 +19,8 @@ mod common;
 
 use camino::Utf8Path;
 use common::js_subtest_parser::{
-    SubtestDiscovery, discover_subtests_with_options, rewrite_for_block, rewrite_for_node_test,
+    SubtestDiscovery, discover_subtests_with_options, rewrite_for_block_with_options,
+    rewrite_for_node_test,
 };
 use common::{
     CompiledTest, GolemPreparedComponent, NodeCompatCategory, TestInstance,
@@ -44,6 +45,7 @@ struct ValidationCase {
     timeout_secs: u64,
     subtest_index: Option<usize>,
     nested_node_test: bool,
+    isolate_block_subtests: bool,
 }
 
 #[derive(Debug)]
@@ -164,6 +166,7 @@ fn load_cases() -> anyhow::Result<Vec<ValidationCase>> {
                     timeout_secs: entry.timeout_secs,
                     subtest_index: Some(subtest.index),
                     nested_node_test: entry.nested_node_test,
+                    isolate_block_subtests: entry.isolate_block_subtests,
                 });
             }
         } else {
@@ -175,6 +178,7 @@ fn load_cases() -> anyhow::Result<Vec<ValidationCase>> {
                 timeout_secs: entry.timeout_secs,
                 subtest_index: None,
                 nested_node_test: entry.nested_node_test,
+                isolate_block_subtests: entry.isolate_block_subtests,
             });
         }
     }
@@ -227,7 +231,12 @@ async fn run_case(
             let (source, discovery) =
                 load_split_source(&case.path, case.nested_node_test, source_cache)?;
             let rewritten = match discovery {
-                SubtestDiscovery::Block(blocks) => rewrite_for_block(source, blocks, index),
+                SubtestDiscovery::Block(blocks) => rewrite_for_block_with_options(
+                    source,
+                    blocks,
+                    index,
+                    case.isolate_block_subtests,
+                ),
                 SubtestDiscovery::NodeTest(tests) => rewrite_for_node_test(source, tests, index),
                 SubtestDiscovery::None => source.to_string(),
             };

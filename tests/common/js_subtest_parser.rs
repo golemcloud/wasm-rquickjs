@@ -1,7 +1,7 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::*;
 use oxc_parser::Parser;
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 
 /// Info about a top-level `{ }` block.
 #[derive(Debug, Clone)]
@@ -348,9 +348,32 @@ pub fn discover_subtests_with_options(
 /// blocks.  Top-level non-block code is always preserved.
 /// Processes in reverse order to preserve byte offsets.
 pub fn rewrite_for_block(source: &str, blocks: &[BlockInfo], target_index: usize) -> String {
+    rewrite_for_block_with_options(source, blocks, target_index, false)
+}
+
+/// Rewrite source to run only `target_index`.
+///
+/// With `isolate_top_level_expressions`, non-declaration top-level executable
+/// statements are also removed. This is useful for legacy block-split fixtures
+/// that contain top-level IIFEs before the discoverable blocks.
+pub fn rewrite_for_block_with_options(
+    source: &str,
+    blocks: &[BlockInfo],
+    target_index: usize,
+    isolate_top_level_expressions: bool,
+) -> String {
     let bytes = source.as_bytes();
-    let mut result = bytes.to_vec();
-    for block in blocks.iter().rev() {
+    let mut edits: Vec<(usize, usize)> = Vec::new();
+
+    if isolate_top_level_expressions {
+        edits.extend(top_level_executable_statement_spans(
+            source,
+            blocks,
+            target_index,
+        ));
+    }
+
+    for block in blocks {
         if block.index != target_index {
             let start = block.span.0 as usize;
             let end = block.span.1 as usize;
@@ -365,11 +388,64 @@ pub fn rewrite_for_block(source: &str, blocks: &[BlockInfo], target_index: usize
             let inner_start = start + 1; // after '{'
             let inner_end = end - 1; // before '}'
             if inner_start < inner_end {
-                result.splice(inner_start..inner_end, std::iter::once(b' '));
+                edits.push((inner_start, inner_end));
             }
         }
     }
+
+    edits.sort_by_key(|(start, _)| *start);
+    let mut result = bytes.to_vec();
+    for (start, end) in edits.into_iter().rev() {
+        if start < end && end <= result.len() {
+            result.splice(start..end, std::iter::once(b' '));
+        }
+    }
     String::from_utf8(result).expect("UTF-8 source remained valid after block rewrite")
+}
+
+fn top_level_executable_statement_spans(
+    source: &str,
+    blocks: &[BlockInfo],
+    target_index: usize,
+) -> Vec<(usize, usize)> {
+    let source_type = SourceType::cjs();
+    let allocator = Allocator::default();
+    let ret = Parser::new(&allocator, source, source_type).parse();
+    let program = &ret.program;
+    let target_span = blocks
+        .iter()
+        .find(|block| block.index == target_index)
+        .map(|block| block.span);
+    let mut spans = Vec::new();
+
+    for stmt in &program.body {
+        if let Statement::BlockStatement(block) = stmt {
+            if Some((block.span.start, block.span.end)) == target_span {
+                continue;
+            }
+            continue;
+        }
+        if preserve_top_level_statement(stmt) {
+            continue;
+        }
+        let span = stmt.span();
+        spans.push((span.start as usize, span.end as usize));
+    }
+
+    spans
+}
+
+fn preserve_top_level_statement(stmt: &Statement) -> bool {
+    match stmt {
+        Statement::ImportDeclaration(_)
+        | Statement::VariableDeclaration(_)
+        | Statement::FunctionDeclaration(_)
+        | Statement::ClassDeclaration(_) => true,
+        Statement::ExpressionStatement(expr_stmt) => {
+            matches!(&expr_stmt.expression, Expression::StringLiteral(_))
+        }
+        _ => false,
+    }
 }
 
 /// Rewrite source to keep only the targeted discovered node:test call.

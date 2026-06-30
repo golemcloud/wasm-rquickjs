@@ -13,6 +13,7 @@ const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBind
 const moduleNamespaceBrandSymbol = Symbol('wasm-rquickjs.vm.namespaceBrand');
 const vmDynamicImportReferrerSymbol = Symbol('wasm-rquickjs.vm.dynamicImportReferrer');
 const vmModuleInstanceBrandSymbol = Symbol('wasm-rquickjs.vm.moduleInstance');
+const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
 const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
@@ -1699,6 +1700,7 @@ function invalidArgTypeHelper(value) {
     if (value && typeof value === 'object' && value.constructor && value.constructor.name) {
         return ' Received an instance of ' + value.constructor.name;
     }
+    if (value && typeof value === 'object') return ' Received an object';
     return formatReceivedType(value);
 }
 
@@ -1848,6 +1850,29 @@ function requireVmModuleThis(value) {
         throwInvalidModuleThis(value);
     }
     return value;
+}
+
+function vmModulePublicContext(context) {
+    if (!context || typeof context !== 'object') return context;
+    const result = {};
+    const keys = Object.keys(context);
+    for (let i = 0; i < keys.length; i++) {
+        result[keys[i]] = context[keys[i]];
+    }
+    return result;
+}
+
+function inspectVmModule(depth, options, inspect) {
+    'use strict';
+    const module = requireVmModuleThis(this);
+    const name = module instanceof SourceTextModule ? 'SourceTextModule' : 'SyntheticModule';
+    if (depth !== null && depth < 0) return '[' + name + ']';
+    const context = inspect(vmModulePublicContext(module._context), options);
+    return name + ' {\n'
+        + '  status: ' + inspect(module._status, options) + ',\n'
+        + '  identifier: ' + inspect(module._identifier, options) + ',\n'
+        + '  context: ' + context.replace(/\n/g, '\n  ') + '\n'
+        + '}';
 }
 
 function requireSyntheticModuleThis(value) {
@@ -2145,6 +2170,10 @@ Object.defineProperties(Module.prototype, {
         get: function() {
             return requireVmModuleThis(this)._context;
         },
+        configurable: true,
+    },
+    [customInspectSymbol]: {
+        value: inspectVmModule,
         configurable: true,
     },
 });

@@ -146,6 +146,7 @@ pub struct NodeCompatTestEntry {
     pub reason: Option<String>,
     pub split: bool,
     pub nested_node_test: bool,
+    pub isolate_block_subtests: bool,
     pub timeout_secs: u64,
     pub flaky: bool,
     pub subtests: Vec<NodeCompatSubtestEntry>,
@@ -294,6 +295,10 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             .get("nestedNodeTest")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let isolate_block_subtests = opts
+            .get("isolateBlockSubtests")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let timeout_secs = opts
             .get("timeout")
             .and_then(|v| v.as_u64())
@@ -331,6 +336,7 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             reason,
             split,
             nested_node_test,
+            isolate_block_subtests,
             timeout_secs,
             flaky,
             subtests,

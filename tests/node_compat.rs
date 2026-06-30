@@ -1,8 +1,8 @@
 test_r::enable!();
 
 use crate::common::js_subtest_parser::{
-    BlockInfo, SubtestDiscovery, TestInfo, discover_subtests_with_options, rewrite_for_block,
-    rewrite_for_node_test,
+    BlockInfo, SubtestDiscovery, TestInfo, discover_subtests_with_options,
+    rewrite_for_block_with_options, rewrite_for_node_test,
 };
 use crate::common::{
     CompiledTest, GolemPreparedComponent, TestInstance, load_node_compat_config,
@@ -244,6 +244,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 let path = path.clone();
                 let subtest_index = subtest.index;
                 let source = source.clone();
+                let isolate_block_subtests = entry.isolate_block_subtests;
                 let discovery_clone = match &discovery {
                     SubtestDiscovery::None => None,
                     SubtestDiscovery::Block(blocks) => Some(DiscoveryData::Block(blocks.clone())),
@@ -284,9 +285,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
                                     // Rewrite the test file to isolate the target subtest
                                     let rewritten = match &discovery_clone {
-                                        Some(DiscoveryData::Block(blocks)) => {
-                                            rewrite_for_block(&source, blocks, subtest_index)
-                                        }
+                                        Some(DiscoveryData::Block(blocks)) => rewrite_for_block_with_options(
+                                            &source,
+                                            blocks,
+                                            subtest_index,
+                                            isolate_block_subtests,
+                                        ),
                                         Some(DiscoveryData::NodeTest(tests)) => {
                                             rewrite_for_node_test(&source, tests, subtest_index)
                                         }
