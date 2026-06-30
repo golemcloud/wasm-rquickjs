@@ -1209,30 +1209,184 @@ export function runInThisContext(code, options) {
 }
 
 export function compileFunction(code, params, options) {
-    params = params || [];
+    if (typeof code !== 'string') {
+        throwInvalidArgType('code', 'string', code);
+    }
+    if (params === undefined) {
+        params = [];
+    } else if (!Array.isArray(params)) {
+        throwInvalidArgInstance('params', 'Array', params);
+    }
     options = validateOptionsObject(options);
+    validateCompileFunctionOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
-    validateInt32Option(options.lineOffset, 'options.lineOffset');
-    validateInt32Option(options.columnOffset, 'options.columnOffset');
+    validateInt32PropertyOption(options.lineOffset, 'options.lineOffset');
+    validateInt32PropertyOption(options.columnOffset, 'options.columnOffset');
+    const sourceCode = code;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
         const paramList = params.map(String).join(',');
-        const source = '(function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(String(code), filename).code + '\n})';
-        return evalWithFilename(source, filename);
+        const source = '[function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename).code + '\n}][0]';
+        return finalizeCompileFunction(evaluateCompileFunctionSource(source, sourceCode, filename), sourceCode, params, options);
     }
     if (options.importModuleDynamically === undefined) {
-        code = rewriteMissingDynamicImportsForEvaluation(String(code)).code;
+        code = rewriteMissingDynamicImportsForEvaluation(code).code;
     } else if (typeof options.importModuleDynamically === 'function') {
         if (vmModulesEnabled()) {
             const referrer = { [vmDynamicImportReferrerSymbol]: undefined };
-            code = rewriteVmDynamicImportCallbackForEvaluation(String(code), options.importModuleDynamically, referrer).code;
-            const fn = new Function(...params, code);
-            referrer[vmDynamicImportReferrerSymbol] = fn;
-            return fn;
+            code = rewriteVmDynamicImportCallbackForEvaluation(code, options.importModuleDynamically, referrer).code;
+            const fn = compileFunctionInContext(code, params, options);
+            const publicFunction = finalizeCompileFunction(fn, sourceCode, params, options);
+            referrer[vmDynamicImportReferrerSymbol] = publicFunction;
+            return publicFunction;
         }
-        code = rewriteMissingDynamicImportFlagForEvaluation(String(code)).code;
+        code = rewriteMissingDynamicImportFlagForEvaluation(code).code;
     }
-    return new Function(...params, code);
+    return finalizeCompileFunction(compileFunctionInContext(code, params, options), sourceCode, params, options);
+}
+
+function validateCompileFunctionOptions(options) {
+    if (options.filename !== undefined && typeof options.filename !== 'string') {
+        throwInvalidPropertyType('options.filename', 'string', options.filename);
+    }
+    if (options.cachedData !== undefined && !ArrayBuffer.isView(options.cachedData)) {
+        throwInvalidPropertyInstance('options.cachedData', 'Buffer, TypedArray, or DataView', options.cachedData);
+    }
+    if (options.produceCachedData !== undefined && typeof options.produceCachedData !== 'boolean') {
+        throwInvalidPropertyType('options.produceCachedData', 'boolean', options.produceCachedData);
+    }
+    if (options.parsingContext !== undefined && !isContext(options.parsingContext)) {
+        throwInvalidPropertyInstance('options.parsingContext', 'Context', options.parsingContext);
+    }
+    if (options.contextExtensions !== undefined && !Array.isArray(options.contextExtensions)) {
+        throwInvalidPropertyInstance('options.contextExtensions', 'Array', options.contextExtensions);
+    }
+    if (Array.isArray(options.contextExtensions)) {
+        for (let i = 0; i < options.contextExtensions.length; i++) {
+            const value = options.contextExtensions[i];
+            if (value === null || typeof value !== 'object') {
+                throwInvalidPropertyType('options.contextExtensions[' + i + ']', 'object', value);
+            }
+        }
+    }
+}
+
+function compileFunctionInContext(code, params, options) {
+    const source = '[function(' + params.map(String).join(',') + '){' + code + '\n}][0]';
+    const keys = [];
+    const values = [];
+
+    if (options.parsingContext !== undefined) {
+        collectContextBindings(options.parsingContext, keys, values);
+    }
+    if (Array.isArray(options.contextExtensions)) {
+        for (let i = 0; i < options.contextExtensions.length; i++) {
+            collectContextBindings(options.contextExtensions[i], keys, values);
+        }
+    }
+    if (keys.length > 0) {
+        try {
+            return evalInNewContext(createIndirectEvalSource(source), keys, values);
+        } catch (err) {
+            throw normalizeCompileFunctionSyntaxError(err, code);
+        }
+    }
+    return evaluateCompileFunctionSource(source, code);
+}
+
+function evaluateCompileFunctionSource(source, code, filename) {
+    try {
+        if (filename !== undefined) {
+            return evalWithFilename(source, filename);
+        }
+        return (0, eval)(source);
+    } catch (err) {
+        throw normalizeCompileFunctionSyntaxError(err, code);
+    }
+}
+
+function normalizeCompileFunctionSyntaxError(err, code) {
+    if (err && err.name === 'SyntaxError') {
+        const first = firstNonWhitespaceChar(code);
+        if (first === '}') {
+            return new SyntaxError("Unexpected token '}'");
+        }
+    }
+    return err;
+}
+
+function firstNonWhitespaceChar(value) {
+    for (let i = 0; i < value.length; i++) {
+        const ch = value.charCodeAt(i);
+        if (ch !== 0x20 && ch !== 0x09 && ch !== 0x0a && ch !== 0x0d) {
+            return value[i];
+        }
+    }
+    return '';
+}
+
+function collectContextBindings(context, keys, values) {
+    const contextKeys = Object.keys(context);
+    for (let i = 0; i < contextKeys.length; i++) {
+        const key = contextKeys[i];
+        if (key === String(contextSymbol) || key === String(contextOptionsSymbol)) continue;
+        keys.push(key);
+        values.push(context[key]);
+    }
+}
+
+function finalizeCompileFunction(fn, code, params, options) {
+    fn = new Proxy(fn, {
+        apply(target, thisArg, args) {
+            try {
+                return Reflect.apply(target, thisArg, args);
+            } catch (err) {
+                normalizeCompileFunctionRuntimeStack(err, code, options);
+                throw err;
+            }
+        },
+    });
+    const renderedParams = params.map(String).join(', ');
+    Object.defineProperty(fn, 'toString', {
+        configurable: true,
+        value() {
+            return 'function (' + renderedParams + ') {\n' + code + '\n}';
+        },
+    });
+    if (options.produceCachedData === true) {
+        const cachedData = new Uint8Array([0x77, 0x72, 0x71, 0x6a, code.length & 0xff]);
+        cachedData.__wasm_rquickjs_compile_function_source = code;
+        fn.cachedData = cachedData;
+        fn.cachedDataProduced = true;
+    }
+    if (options.cachedData !== undefined) {
+        fn.cachedDataRejected = options.cachedData.__wasm_rquickjs_compile_function_source !== code;
+    }
+    return fn;
+}
+
+function normalizeCompileFunctionRuntimeStack(err, code, options) {
+    if (!err || typeof err.stack !== 'string' || err.stack.indexOf('<input>') === -1) return;
+    const lineOffset = typeof options.lineOffset === 'number' ? options.lineOffset : 0;
+    const columnOffset = typeof options.columnOffset === 'number' ? options.columnOffset : 0;
+    const location = (typeof options.filename === 'string' && options.filename.length > 0)
+        ? options.filename
+        : '<anonymous>';
+    const line = 1 + lineOffset;
+    const column = compileFunctionRuntimeColumn(code) + columnOffset;
+    const message = (err.name || 'Error') + ': ' + (err.message || '');
+    err.stack = message + '\n    at ' + location + ':' + line + ':' + column;
+}
+
+function compileFunctionRuntimeColumn(code) {
+    let i = 0;
+    while (i < code.length) {
+        const ch = code.charCodeAt(i);
+        if (ch !== 0x20 && ch !== 0x09) break;
+        i++;
+    }
+    if (code.slice(i, i + 5) === 'throw') return i + 7;
+    return i + 1;
 }
 
 function snapshotVmOptions(options) {
@@ -1278,6 +1432,19 @@ function validateInt32Option(value, name) {
     if (value === undefined) return;
     if (typeof value !== 'number') {
         throwInvalidArgType(name, 'number', value);
+    }
+    if (!Number.isInteger(value)) {
+        throwOutOfRange(name, 'an integer', value);
+    }
+    if (value < -2147483648 || value > 2147483647) {
+        throwOutOfRange(name, '>= -2147483648 && <= 2147483647', value);
+    }
+}
+
+function validateInt32PropertyOption(value, name) {
+    if (value === undefined) return;
+    if (typeof value !== 'number') {
+        throwInvalidPropertyType(name, 'number', value);
     }
     if (!Number.isInteger(value)) {
         throwOutOfRange(name, 'an integer', value);
@@ -1669,6 +1836,18 @@ function throwInvalidArgType(name, expected, value) {
 
 function throwInvalidPropertyType(name, expected, value) {
     const err = new TypeError('The "' + name + '" property must be of type ' + expected + '.' + formatReceivedType(value));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+function throwInvalidArgInstance(name, expected, value) {
+    const err = new TypeError('The "' + name + '" argument must be an instance of ' + expected + '.' + invalidArgTypeHelper(value));
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
+function throwInvalidPropertyInstance(name, expected, value) {
+    const err = new TypeError('The "' + name + '" property must be an instance of ' + expected + '.' + invalidArgTypeHelper(value));
     err.code = 'ERR_INVALID_ARG_TYPE';
     throw err;
 }

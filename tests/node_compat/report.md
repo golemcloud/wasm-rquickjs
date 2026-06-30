@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3192/4404 (72.5%)
+**Primary compatibility (CI-enforced):** 3193/4404 (72.5%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3192 | 72.5% | 55.8% | 46.6% |
-| 🧩 known gap | 1212 | 27.5% | 21.2% | 17.7% |
+| ✅ passing (runnable) | 3193 | 72.5% | 55.8% | 46.7% |
+| 🧩 known gap | 1211 | 27.5% | 21.2% | 17.7% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3192/5721 (55.8%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3193/5721 (55.8%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 44 | 65 | 3 | 9 | 0 | 0 | 40.4% | 36.4% |
+| vm | 121 | 45 | 64 | 3 | 9 | 0 | 0 | 41.3% | 37.2% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -588,7 +588,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-v8-query-objects.js` | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | `test-v8-serdes.js` | 14 | 0 | 0 | 0 | 14 | 0 | 0 |
 | `test-validators.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `test-vm-basic.js` | 7 | 0 | 7 | 0 | 0 | 0 | 0 |
+| `test-vm-basic.js` | 7 | 1 | 6 | 0 | 0 | 0 | 0 |
 | `test-vm-codegen.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-vm-context-dont-contextify.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-vm-measure-memory-lazy.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1212)
+### known gap (1211)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1327,7 +1327,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm run* filename option does not set stack trace file locations correctly | 1 | `parallel/test-vm-basic.js#block_05_run_script_with_filename` |
 | vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
 | vm.Script.sourceMapURL parsing for //# sourceMappingURL comments is not implemented | 1 | `parallel/test-vm-source-map-url.js` |
-| vm.compileFunction validation, options handling, and error fidelity are incomplete | 1 | `parallel/test-vm-basic.js#block_06_vm_compilefunction` |
 | vm.createContext argument type validation and error codes are incomplete | 1 | `parallel/test-vm-create-context-arg.js` |
 | vm.createContext argument validation and error codes are incomplete | 1 | `parallel/test-vm-basic.js#block_04_vm_createcontext` |
 | vm.createContext does not preserve sandbox accessor properties during evaluation | 1 | `parallel/test-vm-create-context-accessors.js` |

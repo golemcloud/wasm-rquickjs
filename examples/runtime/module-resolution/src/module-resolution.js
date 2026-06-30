@@ -3391,6 +3391,48 @@ export const testVmMainContextDefaultLoader = async () => {
         const missingImportFlagHelperCountBefore = missingImportFlagHelperCount();
         assert.strictEqual(new vm.Script('1 + 1').runInThisContext(), 2);
         assert.strictEqual(vm.compileFunction('return 1')(), 1);
+        assert.strictEqual(vm.compileFunction('console.log("Hello, World!")').toString(), 'function () {\nconsole.log("Hello, World!")\n}');
+        assert.throws(() => vm.compileFunction('});\n\n(function() {\nthrow new Error("unreachable");\n})();\n\n(function() {'), {
+            name: 'SyntaxError',
+            message: "Unexpected token '}'",
+        });
+        assert.throws(() => vm.compileFunction('', undefined, { filename: null }), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+            message: 'The "options.filename" property must be of type string. Received null',
+        });
+        assert.throws(() => vm.compileFunction('', undefined, { columnOffset: null }), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+            message: 'The "options.columnOffset" property must be of type number. Received null',
+        });
+        assert.strictEqual(vm.compileFunction('return a;', undefined, { contextExtensions: [{ a: 5 }] })(), 5);
+        assert.strictEqual(vm.compileFunction('return varInContext', [], {
+            parsingContext: vm.createContext({ varInContext: 'abc' }),
+        })(), 'abc');
+        const cachedFunction = vm.compileFunction('return 3', [], { produceCachedData: true });
+        assert.strictEqual(cachedFunction.cachedDataProduced, true);
+        assert.ok(cachedFunction.cachedData.length > 0);
+        assert.strictEqual(vm.compileFunction('return 3', [], { cachedData: cachedFunction.cachedData }).cachedDataRejected, false);
+        assert.strictEqual(vm.compileFunction('return 4', [], { cachedData: cachedFunction.cachedData }).cachedDataRejected, true);
+        const oldStackTraceLimit = Error.stackTraceLimit;
+        Error.stackTraceLimit = 1;
+        try {
+            assert.throws(() => vm.compileFunction('throw new Error("Sample Error")')(), {
+                message: 'Sample Error',
+                stack: 'Error: Sample Error\n    at <anonymous>:1:7',
+            });
+            assert.throws(() => vm.compileFunction('throw new Error("Sample Error")', [], { lineOffset: 3 })(), {
+                message: 'Sample Error',
+                stack: 'Error: Sample Error\n    at <anonymous>:4:7',
+            });
+            assert.throws(() => vm.compileFunction('throw new Error("Sample Error")', [], { columnOffset: 3 })(), {
+                message: 'Sample Error',
+                stack: 'Error: Sample Error\n    at <anonymous>:1:10',
+            });
+        } finally {
+            Error.stackTraceLimit = oldStackTraceLimit;
+        }
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);
