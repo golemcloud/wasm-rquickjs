@@ -9228,7 +9228,7 @@
         "block_07_block_07": { "category": "known-gap", "reason": "Script.runInNewContext this-binding/type validation behavior does not match Node" }
       }
     },
-    "parallel/test-vm-no-dynamic-import-callback.js": { "category": "known-gap", "reason": "missing importModuleDynamically callback does not raise ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING" },
+    "parallel/test-vm-no-dynamic-import-callback.js": { "category": "runnable" },
     "parallel/test-vm-not-strict.js": { "category": "known-gap", "reason": "runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect" },
     "parallel/test-vm-options-validation.js": { "category": "known-gap", "reason": "vm.Script constructor/run option validation and error codes are incomplete" },
     "parallel/test-vm-ownkeys.js": { "category": "known-gap", "reason": "context marker Symbol(vm.context) leaks into sandbox property enumeration" },

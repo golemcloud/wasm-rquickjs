@@ -12,9 +12,16 @@ const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExpor
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
+const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
 let defaultLoaderImportHelperCounter = 1;
 function defaultLoaderImportFunction(filename, specifier) {
     return import(resolveDefaultLoaderSpecifier(String(specifier), filename));
+}
+
+function missingDynamicImportFunction() {
+    const err = new TypeError('A dynamic import callback was not specified.');
+    err.code = 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING';
+    return Promise.reject(err);
 }
 
 export const constants = {
@@ -294,6 +301,9 @@ export function compileFunction(code, params, options) {
         const source = '(function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(String(code), filename).code + '\n})';
         return evalWithFilename(source, filename);
     }
+    if (options.importModuleDynamically === undefined) {
+        code = rewriteMissingDynamicImportsForEvaluation(String(code)).code;
+    }
     return new Function(...params, code);
 }
 
@@ -388,7 +398,7 @@ function skipTemplateLiteral(source, i) {
     return i;
 }
 
-function rewriteTemplateLiteral(source, start, filename, helperName) {
+function rewriteTemplateLiteral(source, start, replacementOpenSource) {
     let i = start + 1;
     let out = '`';
     let chunkStart = i;
@@ -412,9 +422,9 @@ function rewriteTemplateLiteral(source, start, filename, helperName) {
                 return { end: source.length, text: out, changed };
             }
             const expression = source.slice(expressionStart, expressionEnd);
-            const rewritten = rewriteDefaultLoaderDynamicImports(expression, filename, helperName);
-            if (rewritten !== expression) changed = true;
-            out += rewritten + '}';
+            const rewritten = rewriteDynamicImports(expression, replacementOpenSource);
+            if (rewritten.changed) changed = true;
+            out += rewritten.code + '}';
             i = expressionEnd + 1;
             chunkStart = i;
             continue;
@@ -456,6 +466,43 @@ function findTemplateExpressionEnd(source, start) {
         } else if (ch === 0x7d) {
             if (depth === 0) return i;
             depth--;
+        }
+        i++;
+    }
+    return -1;
+}
+
+function findMatchingParen(source, open) {
+    let depth = 1;
+    let i = open + 1;
+    while (i < source.length) {
+        const ch = source.charCodeAt(i);
+        if (ch === 0x27 || ch === 0x22) {
+            i = skipStringLiteral(source, i, ch);
+            continue;
+        }
+        if (ch === 0x60) {
+            i = skipTemplateLiteral(source, i);
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (ch === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i = skipWhitespaceAndComments(source, i);
+            continue;
+        }
+        if (ch === 0x2f && regexCanFollow(source, i)) {
+            i = skipRegexLiteral(source, i);
+            continue;
+        }
+        if (ch === 0x28) {
+            depth++;
+        } else if (ch === 0x29) {
+            depth--;
+            if (depth === 0) return i;
         }
         i++;
     }
@@ -559,6 +606,14 @@ function regexCanFollow(source, i) {
         word === 'else' || word === 'do' || word === 'in' || word === 'instanceof';
 }
 
+function isImportMethodDefinition(source, importStart, open) {
+    const before = previousSignificantChar(source, importStart);
+    if (before !== 0x7b && before !== 0x2c) return false;
+    const close = findMatchingParen(source, open);
+    if (close < 0) return false;
+    return source.charCodeAt(skipWhitespaceAndComments(source, close + 1)) === 0x7b;
+}
+
 function throwInvalidArgType(name, expected, value) {
     const err = new TypeError('The "' + name + '" argument must be of type ' + expected + '. Received ' + formatReceived(value));
     err.code = 'ERR_INVALID_ARG_TYPE';
@@ -624,6 +679,16 @@ function ensureDefaultLoaderImportBinding(helperName) {
     }
 }
 
+function ensureMissingDynamicImportBinding(helperName) {
+    if (globalThis[helperName] !== missingDynamicImportFunction) {
+        Object.defineProperty(globalThis, helperName, {
+            value: missingDynamicImportFunction,
+            writable: false,
+            configurable: true,
+        });
+    }
+}
+
 function chooseDefaultLoaderImportHelperName(code) {
     let helperName;
     do {
@@ -632,23 +697,47 @@ function chooseDefaultLoaderImportHelperName(code) {
     return helperName;
 }
 
+function chooseMissingDynamicImportHelperName(code) {
+    let helperName;
+    do {
+        helperName = missingDynamicImportHelper + '_' + defaultLoaderImportHelperCounter++;
+    } while (code.indexOf(helperName) !== -1);
+    return helperName;
+}
+
 function defaultLoaderImportSource(filename, helperName) {
-    ensureDefaultLoaderImportBinding(helperName);
     return helperName + '(' + JSON.stringify(filename) + ',';
+}
+
+function missingDynamicImportSource(helperName) {
+    return helperName + '(';
 }
 
 function rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename) {
     code = String(code);
     const helperName = chooseDefaultLoaderImportHelperName(code);
+    const rewritten = rewriteDynamicImports(code, defaultLoaderImportSource(filename, helperName));
+    if (rewritten.changed) ensureDefaultLoaderImportBinding(helperName);
     return {
-        code: rewriteDefaultLoaderDynamicImports(code, filename, helperName),
+        code: rewritten.code,
         helperName,
     };
 }
 
-function rewriteDefaultLoaderDynamicImports(code, filename, helperName) {
+function rewriteMissingDynamicImportsForEvaluation(code) {
     code = String(code);
-    const helperSource = defaultLoaderImportSource(filename, helperName);
+    const helperName = chooseMissingDynamicImportHelperName(code);
+    const rewritten = rewriteDynamicImports(code, missingDynamicImportSource(helperName));
+    if (rewritten.changed) ensureMissingDynamicImportBinding(helperName);
+    return {
+        code: rewritten.code,
+        helperName,
+    };
+}
+
+function rewriteDynamicImports(code, replacementOpenSource) {
+    code = String(code);
+    let changed = false;
     let out = '';
     let last = 0;
     let i = 0;
@@ -659,8 +748,9 @@ function rewriteDefaultLoaderDynamicImports(code, filename, helperName) {
             continue;
         }
         if (ch === 0x60) {
-            const template = rewriteTemplateLiteral(code, i, filename, helperName);
+            const template = rewriteTemplateLiteral(code, i, replacementOpenSource);
             if (template.changed) {
+                changed = true;
                 out += code.slice(last, i) + template.text;
                 last = template.end;
             }
@@ -686,7 +776,12 @@ function rewriteDefaultLoaderDynamicImports(code, filename, helperName) {
             && previousSignificantChar(code, i) !== 0x23) {
             const open = skipWhitespaceAndComments(code, i + 6);
             if (code.charCodeAt(open) === 0x28) {
-                out += code.slice(last, i) + helperSource;
+                if (isImportMethodDefinition(code, i, open)) {
+                    i = open + 1;
+                    continue;
+                }
+                changed = true;
+                out += code.slice(last, i) + replacementOpenSource;
                 last = open + 1;
                 i = open + 1;
                 continue;
@@ -694,8 +789,8 @@ function rewriteDefaultLoaderDynamicImports(code, filename, helperName) {
         }
         i++;
     }
-    if (last === 0) return code;
-    return out + code.slice(last);
+    if (last === 0) return { code, changed: false };
+    return { code: out + code.slice(last), changed };
 }
 
 export class Script {
@@ -703,14 +798,19 @@ export class Script {
         this._code = String(code);
         this._options = snapshotVmOptions(options);
         this._usesDefaultLoader = this._options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER;
+        this._usesMissingDynamicImportCallback = this._options.importModuleDynamically === undefined;
         this._defaultLoaderFilename = this._usesDefaultLoader
             ? referrerFilenameFromOptions(this._options)
             : undefined;
         const defaultLoaderRewrite = this._usesDefaultLoader
             ? rewriteDefaultLoaderDynamicImportsForEvaluation(this._code, this._defaultLoaderFilename)
             : undefined;
+        const missingCallbackRewrite = this._usesMissingDynamicImportCallback
+            ? rewriteMissingDynamicImportsForEvaluation(this._code)
+            : undefined;
         this._defaultLoaderCode = defaultLoaderRewrite && defaultLoaderRewrite.code;
         this._defaultLoaderHelperName = defaultLoaderRewrite && defaultLoaderRewrite.helperName;
+        this._missingCallbackCode = missingCallbackRewrite && missingCallbackRewrite.code;
     }
 
     runInNewContext(sandbox, options) {
@@ -736,6 +836,9 @@ export class Script {
         validateOptionsObject(options);
         if (this._usesDefaultLoader) {
             return evalWithFilename(this._defaultLoaderCode, this._defaultLoaderFilename);
+        }
+        if (this._usesMissingDynamicImportCallback) {
+            return (0, eval)(this._missingCallbackCode);
         }
         return runInThisContext(this._code, {});
     }

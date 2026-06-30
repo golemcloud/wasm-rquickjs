@@ -3110,6 +3110,33 @@ export const testVmMainContextDefaultLoader = async () => {
 
         assert.strictEqual(typeof vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER, 'symbol');
 
+        const missingImportHelperCount = () => Object.getOwnPropertyNames(globalThis)
+            .filter((name) => name.indexOf('__wasm_rquickjs_vm_missing_dynamic_import__') !== -1)
+            .length;
+        const missingImportHelperCountBefore = missingImportHelperCount();
+        assert.strictEqual(new vm.Script('1 + 1').runInThisContext(), 2);
+        assert.strictEqual(vm.compileFunction('return 1')(), 1);
+        assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);
+        assert.strictEqual(
+            new vm.Script('"import(\\"node:fs\\")"; /import\\("node:fs"\\)/; ({ import() { return 3; } }).import();').runInThisContext(),
+            3,
+        );
+        assert.strictEqual(
+            new vm.Script('({ import(value = /[)]/) { return value.test(")"); } }).import();').runInThisContext(),
+            true,
+        );
+
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")').runInThisContext(),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' },
+            'vm.Script without importModuleDynamically rejects dynamic import',
+        );
+        await assert.rejects(
+            vm.compileFunction('return import("./message.mjs")')(),
+            { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' },
+            'vm.compileFunction without importModuleDynamically rejects dynamic import',
+        );
+
         const script = new vm.Script('import("./message.mjs")', {
             filename: '/vm-default-loader-app/subdir/index.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,

@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3174/4404 (72.1%)
+**Primary compatibility (CI-enforced):** 3175/4404 (72.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3174 | 72.1% | 55.5% | 46.4% |
-| 🧩 known gap | 1230 | 27.9% | 21.5% | 18.0% |
+| ✅ passing (runnable) | 3175 | 72.1% | 55.5% | 46.4% |
+| 🧩 known gap | 1229 | 27.9% | 21.5% | 18.0% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6843** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3174/5721 (55.5%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3175/5721 (55.5%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 27 | 82 | 3 | 9 | 0 | 0 | 24.8% | 22.3% |
+| vm | 121 | 28 | 81 | 3 | 9 | 0 | 0 | 25.7% | 23.1% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1230)
+### known gap (1229)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1148,7 +1148,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | maxRequestsPerSocket keep-alive header behavior (Keep-Alive/Connection framing) is not Node-compatible | 1 | `parallel/test-http-keep-alive-max-requests.js` |
-| missing importModuleDynamically callback does not raise ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING | 1 | `parallel/test-vm-no-dynamic-import-callback.js` |
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
 | moveMessagePortToContext cross-context object/prototype semantics are incomplete | 1 | `parallel/test-worker-message-port-move.js` |
 | native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
