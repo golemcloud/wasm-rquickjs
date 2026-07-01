@@ -4572,62 +4572,142 @@ fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usi
     let descriptor_start = i + 1;
     let end = find_matching_paren(source, pos)?;
     let descriptor = &source[descriptor_start..end];
-    if descriptor_has_value_property(descriptor) || is_safe_getter_descriptor(descriptor) {
+    if descriptor_has_named_property(descriptor) {
         Some((name, end + 1))
     } else {
         None
     }
 }
 
-fn descriptor_has_value_property(descriptor: &str) -> bool {
+enum DescriptorNamedProperty {
+    Value,
+    Getter,
+}
+
+fn descriptor_function_getter_end(source: &str, pos: usize, descriptor_end: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if !source[pos..].starts_with("function") || !is_ident_boundary(bytes, pos + 8) {
+        return None;
+    }
+    let mut next = skip_ws_comments(source, pos + 8);
+    if let Some((_, ident_end)) = read_ident(source, next) {
+        next = skip_ws_comments(source, ident_end);
+    }
+    if next >= descriptor_end || bytes[next] != b'(' {
+        return None;
+    }
+    let body = getter_body_after_empty_params(source, next, descriptor_end)?;
+    if !is_simple_getter_body(&source[body.0..body.1]) {
+        return None;
+    }
+    Some(body.1 + 1)
+}
+
+fn getter_body_after_empty_params(source: &str, params_open: usize, limit: usize) -> Option<(usize, usize)> {
+    let params_end = find_matching_paren(source, params_open)?;
+    if params_end > limit || skip_ws_comments(source, params_open + 1) != params_end {
+        return None;
+    }
+    let body_open = skip_ws_comments(source, params_end + 1);
+    if body_open >= limit || source.as_bytes()[body_open] != b'{' {
+        return None;
+    }
+    let body_end = find_matching_brace(source, body_open)?;
+    if body_end > limit {
+        return None;
+    }
+    Some((body_open + 1, body_end))
+}
+
+fn descriptor_has_named_property(descriptor: &str) -> bool {
     let bytes = descriptor.as_bytes();
-    let mut i = 0usize;
-    let mut depth = 0usize;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(descriptor, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
+    let descriptor_start = skip_ws_comments(descriptor, 0);
+    if descriptor_start >= bytes.len() || bytes[descriptor_start] != b'{' {
+        return false;
+    }
+    let Some(descriptor_end) = find_matching_brace(descriptor, descriptor_start) else {
+        return false;
+    };
+
+    let mut found: Option<DescriptorNamedProperty> = None;
+    let mut cursor = skip_ws_comments(descriptor, descriptor_start + 1);
+    while cursor < descriptor_end {
+        if bytes[cursor] == b',' {
+            cursor = skip_ws_comments(descriptor, cursor + 1);
+            continue;
+        }
+        if descriptor[cursor..].starts_with("...") {
+            return false;
+        }
+        if bytes[cursor] == b'[' {
+            if matches!(found, Some(DescriptorNamedProperty::Value)) {
+                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, cursor, descriptor_end));
+                if cursor < descriptor_end {
+                    if bytes[cursor] != b',' {
+                        return false;
+                    }
+                    cursor = skip_ws_comments(descriptor, cursor + 1);
                 }
                 continue;
             }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
+            return false;
+        }
+
+        let Some((name, key_is_ident, key_end)) = parse_exports_literal_key(descriptor, cursor) else {
+            return false;
+        };
+        let next = skip_ws_comments(descriptor, key_end);
+        if !key_is_ident && (name == "value" || name == "get") {
+            if matches!(found, Some(DescriptorNamedProperty::Value)) {
+                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+            } else {
+                return false;
+            }
+        } else if key_is_ident && name == "value" {
+            if next >= descriptor_end || bytes[next] != b':' {
+                return false;
+            }
+            if matches!(found, Some(DescriptorNamedProperty::Getter)) {
+                return false;
+            }
+            found = Some(DescriptorNamedProperty::Value);
+            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
+        } else if key_is_ident && name == "get" {
+            if found.is_some() {
+                return false;
+            }
+            if next < descriptor_end && bytes[next] == b'(' {
+                let Some((body_start, body_end)) = getter_body_after_empty_params(descriptor, next, descriptor_end) else {
+                    return false;
+                };
+                if !is_simple_getter_body(&descriptor[body_start..body_end]) {
+                    return false;
                 }
-                i = (i + 2).min(bytes.len());
-                continue;
+                found = Some(DescriptorNamedProperty::Getter);
+                cursor = skip_ws_comments(descriptor, body_end + 1);
+            } else if next < descriptor_end && bytes[next] == b':' {
+                let function_end = descriptor_function_getter_end(descriptor, skip_ws_comments(descriptor, next + 1), descriptor_end);
+                let Some(function_end) = function_end else {
+                    return false;
+                };
+                found = Some(DescriptorNamedProperty::Getter);
+                cursor = skip_ws_comments(descriptor, function_end);
+            } else {
+                return false;
             }
-            b'/' if is_regex_literal_start(descriptor, i) => {
-                i = skip_regex_literal(descriptor, i);
-                continue;
+        } else {
+            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+        }
+
+        if cursor < descriptor_end {
+            if bytes[cursor] != b',' {
+                return false;
             }
-            b'{' => {
-                depth += 1;
-                i += 1;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                i += 1;
-            }
-            b'v' if depth == 1
-                && is_free_ident_start(bytes, i)
-                && descriptor[i..].starts_with("value")
-                && is_ident_boundary(bytes, i + 5) =>
-            {
-                let next = skip_ws_comments(descriptor, i + 5);
-                return next < bytes.len() && bytes[next] == b':';
-            }
-            _ => i += 1,
+            cursor = skip_ws_comments(descriptor, cursor + 1);
         }
     }
-    false
+
+    found.is_some()
 }
 
 fn find_matching_paren(source: &str, start: usize) -> Option<usize> {
@@ -4710,94 +4790,6 @@ fn find_matching_brace(source: &str, start: usize) -> Option<usize> {
     None
 }
 
-
-fn is_safe_getter_descriptor(descriptor: &str) -> bool {
-    let Some((body_start, body_end)) = find_getter_body(descriptor) else {
-        return false;
-    };
-    is_simple_getter_body(&descriptor[body_start..body_end])
-}
-
-fn find_getter_body(source: &str) -> Option<(usize, usize)> {
-    let bytes = source.as_bytes();
-    let mut i = 0usize;
-    let mut depth = 0usize;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
-            b'{' => {
-                depth += 1;
-                i += 1;
-                continue;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                i += 1;
-                continue;
-            }
-            b'g' if depth == 1
-                && is_free_ident_start(bytes, i)
-                && source[i..].starts_with("get")
-                && is_ident_boundary(bytes, i + 3) =>
-            {
-                let mut j = skip_ws_comments(source, i + 3);
-                if j < bytes.len() && bytes[j] == b'(' {
-                    let params_end = find_matching_paren(source, j)?;
-                    j = skip_ws_comments(source, params_end + 1);
-                    if j < bytes.len() && bytes[j] == b'{' {
-                        let body_end = find_matching_brace(source, j)?;
-                        return Some((j + 1, body_end));
-                    }
-                } else if j < bytes.len() && bytes[j] == b':' {
-                    j = skip_ws_comments(source, j + 1);
-                    if !source[j..].starts_with("function") || !is_ident_boundary(bytes, j + 8) {
-                        i += 1;
-                        continue;
-                    }
-                    j = skip_ws_comments(source, j + 8);
-                    if let Some((_, next)) = read_ident(source, j) {
-                        j = skip_ws_comments(source, next);
-                    }
-                    if j >= bytes.len() || bytes[j] != b'(' {
-                        i += 1;
-                        continue;
-                    }
-                    let params_end = find_matching_paren(source, j)?;
-                    j = skip_ws_comments(source, params_end + 1);
-                    if j < bytes.len() && bytes[j] == b'{' {
-                        let body_end = find_matching_brace(source, j)?;
-                        return Some((j + 1, body_end));
-                    }
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    None
-}
 
 fn is_simple_getter_body(body: &str) -> bool {
     let return_pos = skip_ws_comments(body, 0);
@@ -5604,6 +5596,87 @@ fn parse_define_property_reexport(source: &str, pos: usize, binding: &str, key: 
     } else {
         None
     }
+}
+
+fn find_getter_body(source: &str) -> Option<(usize, usize)> {
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            b'{' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+                continue;
+            }
+            b'g' if depth == 1
+                && is_free_ident_start(bytes, i)
+                && source[i..].starts_with("get")
+                && is_ident_boundary(bytes, i + 3) =>
+            {
+                let mut j = skip_ws_comments(source, i + 3);
+                if j < bytes.len() && bytes[j] == b'(' {
+                    let params_end = find_matching_paren(source, j)?;
+                    j = skip_ws_comments(source, params_end + 1);
+                    if j < bytes.len() && bytes[j] == b'{' {
+                        let body_end = find_matching_brace(source, j)?;
+                        return Some((j + 1, body_end));
+                    }
+                } else if j < bytes.len() && bytes[j] == b':' {
+                    j = skip_ws_comments(source, j + 1);
+                    if !source[j..].starts_with("function") || !is_ident_boundary(bytes, j + 8) {
+                        i += 1;
+                        continue;
+                    }
+                    j = skip_ws_comments(source, j + 8);
+                    if let Some((_, next)) = read_ident(source, j) {
+                        j = skip_ws_comments(source, next);
+                    }
+                    if j >= bytes.len() || bytes[j] != b'(' {
+                        i += 1;
+                        continue;
+                    }
+                    let params_end = find_matching_paren(source, j)?;
+                    j = skip_ws_comments(source, params_end + 1);
+                    if j < bytes.len() && bytes[j] == b'{' {
+                        let body_end = find_matching_brace(source, j)?;
+                        return Some((j + 1, body_end));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
 }
 
 fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &str) -> bool {
@@ -7886,9 +7959,50 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "valueExport", { value: 4 });
                 Object.defineProperty(module.exports, "getterExport", { get() { return dep.value; } });
                 Object.defineProperty(exports, "functionGetter", { get: function () { return dep["other"]; } });
+                Object.defineProperty(exports, "valueThenValue", { value: "first", value: "second" });
+                Object.defineProperty(exports, "valueThenString", { value: "good", "value": "string-wins" });
+                Object.defineProperty(exports, "valueThenComputed", { value: "good", ["value"]: "computed-wins" });
             "#,
             true,
-            &["foo", "bar", "baz", "valueExport", "getterExport", "functionGetter"],
+            &[
+                "foo",
+                "bar",
+                "baz",
+                "valueExport",
+                "getterExport",
+                "functionGetter",
+                "valueThenValue",
+                "valueThenString",
+                "valueThenComputed",
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_cjs_define_property_descriptors() {
+        assert_analysis(
+            r#"
+                const dep = { value: "getter-value" };
+                const value = "shorthand-value";
+                Object.defineProperty(exports, "arrowGetter", { get: () => dep.value });
+                Object.defineProperty(exports, "stringKeyGetter", { "get": function () { return dep.value; } });
+                Object.defineProperty(exports, "stringKeyValue", { "value": "string-key-value" });
+                Object.defineProperty(exports, "shorthandValue", { value });
+                Object.defineProperty(exports, "computedValue", { ["value"]: "computed-value" });
+                Object.defineProperty(exports, "multiStatementGetter", { get() { const v = dep.value; return v; } });
+                Object.defineProperty(exports, "helperValueDescriptor", makeDescriptor({ value: dep.value }));
+                Object.defineProperty(exports, "parameterGetter", { get(a) { return dep.value; } });
+                Object.defineProperty(exports, "parameterFunctionGetter", { get: function (a) { return dep.value; } });
+                Object.defineProperty(exports, "helperDescriptor", makeDescriptor({ get() { return dep.value; } }));
+                Object.defineProperty(exports, "nestedMemberGetter", { get() { return dep.value.nested; } });
+                Object.defineProperty(exports, "nestedBracketGetter", { get() { return dep["value"]["nested"]; } });
+                Object.defineProperty(exports, "duplicateGet", { get() { return dep.value; }, get: function (a) { return dep.value; } });
+                Object.defineProperty(exports, "stringThenValue", { "value": "bad", value: dep.value });
+                Object.defineProperty(exports, "computedThenValue", { ["value"]: "bad", value: dep.value });
+            "#,
+            true,
+            &[],
             &[],
         );
     }
