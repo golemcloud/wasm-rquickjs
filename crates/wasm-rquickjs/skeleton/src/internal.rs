@@ -3628,7 +3628,7 @@ impl NodeModulesResolver {
                     no_exports_main: false,
                 });
             }
-            return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
+            return Self::resolve_package_target_with_context(
                 package_dir,
                 exports,
                 false,
@@ -3639,7 +3639,7 @@ impl NodeModulesResolver {
                 None,
                 importer,
                 warnings,
-            ), &key)
+            )
             .and_then(|resolution| {
                 Self::target_resolution_to_export_result(
                     resolution,
@@ -3652,7 +3652,7 @@ impl NodeModulesResolver {
 
         if let PackageTarget::Object(map) = exports {
             if let Some(target) = map.get(&key) {
-                return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
+                return Self::resolve_package_target_with_context(
                     package_dir,
                     target,
                     false,
@@ -3663,7 +3663,7 @@ impl NodeModulesResolver {
                     None,
                     importer,
                     warnings,
-                ), &key)
+                )
                 .and_then(|resolution| {
                     Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
                 });
@@ -3680,7 +3680,7 @@ impl NodeModulesResolver {
                         ),
                     });
                 }
-                return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
+                return Self::resolve_package_target_with_context(
                     package_dir,
                     target,
                     false,
@@ -3691,7 +3691,7 @@ impl NodeModulesResolver {
                     Some(pattern_key),
                     importer,
                     warnings,
-                ), &key)
+                )
                 .and_then(|resolution| {
                     Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
                 });
@@ -3740,7 +3740,7 @@ impl NodeModulesResolver {
                     specifier: specifier.to_string(),
                 });
             };
-            return Self::add_invalid_package_target_context(Self::resolve_package_target_value(
+            return Self::resolve_package_target_with_context(
                 package_dir,
                 target,
                 true,
@@ -3751,7 +3751,8 @@ impl NodeModulesResolver {
                 pattern_key,
                 importer,
                 warnings,
-            ), specifier).and_then(
+            )
+            .and_then(
                 |resolution| Self::target_resolution_to_import_result(resolution, specifier),
             );
         }
@@ -3802,6 +3803,35 @@ impl NodeModulesResolver {
 
     fn decode_package_target_path(target: &str) -> String {
         percent_decode(target).unwrap_or_else(|| target.to_string())
+    }
+
+    fn resolve_package_target_with_context(
+        package_dir: &std::path::Path,
+        target: &PackageTarget,
+        allow_bare_target: bool,
+        kind: &'static str,
+        conditions: &[String],
+        pattern_substitution: Option<&str>,
+        warning_specifier: &str,
+        warning_pattern_key: Option<&str>,
+        warning_importer: Option<&str>,
+        warnings: &mut Vec<NodePackageWarning>,
+    ) -> Result<PackageTargetResolution, NodePackageResolveError> {
+        Self::add_invalid_package_target_context(
+            Self::resolve_package_target_value(
+                package_dir,
+                target,
+                allow_bare_target,
+                kind,
+                conditions,
+                pattern_substitution,
+                warning_specifier,
+                warning_pattern_key,
+                warning_importer,
+                warnings,
+            ),
+            warning_specifier,
+        )
     }
 
     fn resolve_package_target_value(
