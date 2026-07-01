@@ -9126,7 +9126,7 @@
       "split": true,
       "isolateBlockSubtests": true,
       "subtests": {
-        "block_00_vm_runinnewcontext": { "category": "known-gap", "reason": "vm.runInNewContext does not propagate global writes back to the sandbox object" },
+        "block_00_vm_runinnewcontext": { "category": "runnable" },
         "block_01_vm_runincontext": { "category": "known-gap", "reason": "vm.runInContext contextification/write-back semantics are incomplete" },
         "block_02_vm_runinthiscontext": { "category": "runnable" },
         "block_03_vm_runinnewcontext": { "category": "runnable" },
@@ -9223,7 +9223,7 @@
         "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {},
-        "block_04_block_04": { "category": "known-gap", "reason": "runInNewContext does not propagate global writes back to the sandbox correctly" },
+        "block_04_block_04": { "category": "runnable" },
         "block_05_block_05": {},
         "block_06_block_06": {},
         "block_07_block_07": { "category": "runnable" }

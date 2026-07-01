@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3207/4395 (73.0%)
+**Primary compatibility (CI-enforced):** 3209/4395 (73.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3207 | 73.0% | 56.1% | 46.9% |
-| 🧩 known gap | 1188 | 27.0% | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3209 | 73.0% | 56.2% | 46.9% |
+| 🧩 known gap | 1186 | 27.0% | 20.8% | 17.4% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3207/5713 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3209/5713 (56.2%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 53 | 56 | 3 | 9 | 0 | 0 | 48.6% | 43.8% |
+| vm | 121 | 55 | 54 | 3 | 9 | 0 | 0 | 50.5% | 45.5% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -589,12 +589,12 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-v8-query-objects.js` | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | `test-v8-serdes.js` | 14 | 0 | 0 | 0 | 14 | 0 | 0 |
 | `test-validators.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `test-vm-basic.js` | 7 | 5 | 2 | 0 | 0 | 0 | 0 |
+| `test-vm-basic.js` | 7 | 6 | 1 | 0 | 0 | 0 | 0 |
 | `test-vm-codegen.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-vm-context-dont-contextify.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-vm-measure-memory-lazy.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
 | `test-vm-module-basic.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
-| `test-vm-new-script-new-context.js` | 8 | 7 | 1 | 0 | 0 | 0 | 0 |
+| `test-vm-new-script-new-context.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-constructors.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-derivebits.js` | 4 | 0 | 2 | 0 | 0 | 0 | 2 |
 | `test-webcrypto-derivekey.js` | 6 | 0 | 3 | 0 | 0 | 0 | 3 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1188)
+### known gap (1186)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1230,7 +1230,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |
 | runInContext does not preserve symbol/prototype property access on contextified objects | 1 | `parallel/test-vm-symbols.js` |
 | runInNewContext assignment with Proxy sandbox does not match Node trap behavior | 1 | `parallel/test-vm-set-property-proxy.js` |
-| runInNewContext does not propagate global writes back to the sandbox correctly | 1 | `parallel/test-vm-new-script-new-context.js#block_04_block_04` |
 | runInNewContext own-vs-inherited property assignment semantics are incomplete | 1 | `parallel/test-vm-inherited_properties.js` |
 | runInNewContext sandbox binding and write-back semantics are incomplete | 1 | `parallel/test-vm-run-in-new-context.js` |
 | runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect | 1 | `parallel/test-vm-not-strict.js` |
@@ -1322,7 +1321,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
 | vm.createContext does not preserve sandbox accessor properties during evaluation | 1 | `parallel/test-vm-create-context-accessors.js` |
 | vm.runInContext contextification/write-back semantics are incomplete | 1 | `parallel/test-vm-basic.js#block_01_vm_runincontext` |
-| vm.runInNewContext does not propagate global writes back to the sandbox object | 1 | `parallel/test-vm-basic.js#block_00_vm_runinnewcontext` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
 | wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-cr-no-lf.js` |

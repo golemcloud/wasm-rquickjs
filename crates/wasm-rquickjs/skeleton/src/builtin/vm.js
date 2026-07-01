@@ -1083,6 +1083,84 @@ function createIndirectEvalSource(code) {
     return '(0, eval)(' + JSON.stringify(code) + ')';
 }
 
+function createSandboxEvalSource(code, helperName, sandboxKeys) {
+    const sandboxKeyLiterals = [];
+    for (let i = 0; i < sandboxKeys.length; i++) {
+        sandboxKeyLiterals.push(JSON.stringify(sandboxKeys[i]));
+    }
+    return '(() => {' +
+        'const __wasm_rquickjs_vm_Object = ({}).constructor;' +
+        'const __wasm_rquickjs_vm_create = __wasm_rquickjs_vm_Object.create;' +
+        'const __wasm_rquickjs_vm_names_of = __wasm_rquickjs_vm_Object.getOwnPropertyNames;' +
+        'const __wasm_rquickjs_vm_get_desc = __wasm_rquickjs_vm_Object.getOwnPropertyDescriptor;' +
+        'const __wasm_rquickjs_vm_baseline = __wasm_rquickjs_vm_create(null);' +
+        'const __wasm_rquickjs_vm_baseline_keys = __wasm_rquickjs_vm_names_of(globalThis);' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_baseline_keys.length; __wasm_rquickjs_vm_i++) {' +
+        '__wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_baseline_keys[__wasm_rquickjs_vm_i]] = true;' +
+        '}' +
+        'const __wasm_rquickjs_vm_sandbox_key_list = [' + sandboxKeyLiterals.join(',') + '];' +
+        'const __wasm_rquickjs_vm_sandbox_keys = __wasm_rquickjs_vm_create(null);' +
+        'const __wasm_rquickjs_vm_represented_sandbox_keys = __wasm_rquickjs_vm_create(null);' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_key_list.length; __wasm_rquickjs_vm_i++) {' +
+        'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_sandbox_key_list[__wasm_rquickjs_vm_i];' +
+        '__wasm_rquickjs_vm_sandbox_keys[__wasm_rquickjs_vm_key] = true;' +
+        'if (__wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key) !== undefined) {' +
+        '__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key] = true;' +
+        '}' +
+        '}' +
+        'let __wasm_rquickjs_vm_result;' +
+        'let __wasm_rquickjs_vm_thrown;' +
+        'let __wasm_rquickjs_vm_ok = true;' +
+        'try {' +
+        '__wasm_rquickjs_vm_result = ' + createIndirectEvalSource(code) + ';' +
+        '} catch (__wasm_rquickjs_vm_error) {' +
+        '__wasm_rquickjs_vm_ok = false;' +
+        '__wasm_rquickjs_vm_thrown = __wasm_rquickjs_vm_error;' +
+        '}' +
+        'const __wasm_rquickjs_vm_updates = [];' +
+        'const __wasm_rquickjs_vm_keys = __wasm_rquickjs_vm_names_of(globalThis);' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_keys.length; __wasm_rquickjs_vm_i++) {' +
+        'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_keys[__wasm_rquickjs_vm_i];' +
+        (helperName ? 'if (__wasm_rquickjs_vm_key === ' + JSON.stringify(helperName) + ') continue;' : '') +
+        'if (!__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key] && __wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_key]) continue;' +
+        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, true, __wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key)];' +
+        '}' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_key_list.length; __wasm_rquickjs_vm_i++) {' +
+        'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_sandbox_key_list[__wasm_rquickjs_vm_i];' +
+        'if (!__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key]) continue;' +
+        'if (__wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key) === undefined) {' +
+        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, false, undefined];' +
+        '}' +
+        '}' +
+        'return [__wasm_rquickjs_vm_ok, __wasm_rquickjs_vm_ok ? __wasm_rquickjs_vm_result : __wasm_rquickjs_vm_thrown, __wasm_rquickjs_vm_updates];' +
+        '})()';
+}
+
+function applySandboxUpdates(sandbox, evaluation) {
+    const defineProperty = ({}).constructor.defineProperty;
+    const ok = evaluation[0];
+    const result = evaluation[1];
+    if (!sandbox || typeof sandbox !== 'object') {
+        if (!ok) throw result;
+        return result;
+    }
+    const updates = evaluation[2];
+    for (let i = 0; i < updates.length; i++) {
+        const update = updates[i];
+        try {
+            if (update[1]) {
+                defineProperty(sandbox, update[0], update[2]);
+            } else {
+                delete sandbox[update[0]];
+            }
+        } catch (_writeBackError) {
+            if (!ok) throw result;
+        }
+    }
+    if (!ok) throw result;
+    return result;
+}
+
 export function runInNewContext(code, sandbox, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
@@ -1123,7 +1201,7 @@ function evalCodeInNewContext(code, sandbox, helperName) {
         values.push(globalThis[helperName]);
     }
 
-    return evalInNewContext(createIndirectEvalSource(code), keys, values);
+    return applySandboxUpdates(sandbox, evalInNewContext(createSandboxEvalSource(code, helperName, keys), keys, values));
 }
 
 function createContextForRunInNewContext(sandbox) {
@@ -1234,7 +1312,7 @@ function evalCodeInContext(code, context, helperName) {
         values.push(globalThis[helperName]);
     }
 
-    return evalInNewContext(createIndirectEvalSource(code), keys, values);
+    return applySandboxUpdates(context, evalInNewContext(createSandboxEvalSource(code, helperName, keys), keys, values));
 }
 
 export function runInThisContext(code, options) {

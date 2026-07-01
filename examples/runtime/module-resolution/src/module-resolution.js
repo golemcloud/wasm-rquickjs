@@ -4037,6 +4037,71 @@ export const testVmMainContextDefaultLoader = async () => {
             name: 'TypeError',
             message: 'Illegal invocation',
         });
+        const sandboxWriteBack = { foo: 0, baz: 3 };
+        globalThis.vmWriteBackOuterFoo = 2;
+        assert.strictEqual(new vm.Script('foo = 1; bar = 2; if (baz !== 3) throw new Error("bad baz");').runInNewContext(sandboxWriteBack), undefined);
+        assert.strictEqual(sandboxWriteBack.foo, 1);
+        assert.strictEqual(sandboxWriteBack.bar, 2);
+        assert.strictEqual(globalThis.vmWriteBackOuterFoo, 2);
+        delete globalThis.vmWriteBackOuterFoo;
+        const directWriteBack = { foo: 0 };
+        assert.strictEqual(vm.runInNewContext('foo = 3; bar = 4; "ok"', directWriteBack), 'ok');
+        assert.deepStrictEqual(directWriteBack, { foo: 3, bar: 4 });
+        const throwWriteBack = { foo: 0 };
+        assert.throws(() => vm.runInNewContext('foo = 5; throw new Error("boom")', throwWriteBack), {
+            name: 'Error',
+            message: 'boom',
+        });
+        assert.strictEqual(throwWriteBack.foo, 5);
+        const deleteWriteBack = { foo: 0, bar: 1 };
+        assert.strictEqual(vm.runInNewContext('foo = 6; delete globalThis.foo; bar = 2', deleteWriteBack), 2);
+        assert.deepStrictEqual(deleteWriteBack, { bar: 2 });
+        const poisonedWriteBack = { foo: 0 };
+        assert.strictEqual(vm.runInNewContext('Object.keys = () => []; foo = 7; bar = 8', poisonedWriteBack), 8);
+        assert.deepStrictEqual(poisonedWriteBack, { foo: 7, bar: 8 });
+        const accessorWriteBack = {};
+        assert.strictEqual(vm.runInNewContext('Object.defineProperty(globalThis, "boom", { enumerable: true, configurable: true, get() { throw new Error("getter"); } }); "ok"', accessorWriteBack), 'ok');
+        const boomDescriptor = Object.getOwnPropertyDescriptor(accessorWriteBack, 'boom');
+        assert.strictEqual(boomDescriptor.enumerable, true);
+        assert.strictEqual(typeof boomDescriptor.get, 'function');
+        assert.throws(() => accessorWriteBack.boom, {
+            name: 'Error',
+            message: 'getter',
+        });
+        const nonEnumerableWriteBack = { x: 1 };
+        assert.strictEqual(vm.runInNewContext('delete globalThis.x; Object.defineProperty(globalThis, "x", { value: 2, configurable: true }); "ok"', nonEnumerableWriteBack), 'ok');
+        assert.deepStrictEqual(Object.getOwnPropertyDescriptor(nonEnumerableWriteBack, 'x'), {
+            value: 2,
+            writable: false,
+            enumerable: false,
+            configurable: true,
+        });
+        const callPoisonWriteBack = { foo: 0 };
+        assert.strictEqual(vm.runInNewContext('Function.prototype.call = () => { throw new Error("poison"); }; foo = 9; bar = 10', callPoisonWriteBack), 10);
+        assert.strictEqual(callPoisonWriteBack.foo, 9);
+        assert.strictEqual(callPoisonWriteBack.bar, 10);
+        const originalErrorWriteBack = {};
+        Object.defineProperty(originalErrorWriteBack, 'foo', {
+            value: 0,
+            writable: false,
+            enumerable: true,
+            configurable: false,
+        });
+        assert.throws(() => vm.runInNewContext('foo = 1; throw new Error("boom")', originalErrorWriteBack), {
+            name: 'Error',
+            message: 'boom',
+        });
+        assert.strictEqual(originalErrorWriteBack.foo, 0);
+        const readonlyWriteBack = {};
+        Object.defineProperty(readonlyWriteBack, 'foo', {
+            value: 0,
+            writable: false,
+            enumerable: true,
+            configurable: false,
+        });
+        assert.strictEqual(vm.runInNewContext('foo = 1; bar = 2', readonlyWriteBack), 2);
+        assert.strictEqual(readonlyWriteBack.foo, 0);
+        assert.strictEqual(readonlyWriteBack.bar, 2);
         assert.strictEqual(vm.compileFunction('return 1')(), 1);
         assert.strictEqual(vm.compileFunction('console.log("Hello, World!")').toString(), 'function () {\nconsole.log("Hello, World!")\n}');
         assert.throws(() => vm.compileFunction('});\n\n(function() {\nthrow new Error("unreachable");\n})();\n\n(function() {'), {
