@@ -548,7 +548,9 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
   specifier = String(specifier);
   if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
   if (specifier.startsWith('node:')) return specifier;
-  var NODE_BUILTINS = new Set(['fs','path','os','crypto','http','https','url','util','stream','events','buffer','querystring','string_decoder','zlib','assert','module','net','tls','child_process','timers','dns','dgram','cluster','constants','readline','tty','v8','vm','worker_threads','perf_hooks','async_hooks','diagnostics_channel','trace_events','inspector','punycode','console','process','test','sqlite','domain','http2','repl']);
+  var NODE_BUILTINS = new Set();
+  var NODE_BUILTIN_NAMES = 'fs,path,os,crypto,http,https,url,util,stream,events,buffer,querystring,string_decoder,zlib,assert,module,net,tls,child_process,timers,dns,dgram,cluster,constants,readline,tty,v8,vm,worker_threads,perf_hooks,async_hooks,diagnostics_channel,trace_events,inspector,punycode,console,process,test,sqlite,domain,http2,repl'.split(',');
+  for (var i = 0; i < NODE_BUILTIN_NAMES.length; i++) NODE_BUILTINS.add(NODE_BUILTIN_NAMES[i]);
   function codedError(message, code, typeError) {
     var err = typeError ? new TypeError(message) : new Error(message);
     err.code = code;
