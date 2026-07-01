@@ -910,11 +910,9 @@ dependencies = [
 
 [[package]]
 name = "golem-websocket"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e4308a46b018dfb8491bbc1f58b8da2617589b3e29a355dff8d124b2fabf5e8"
+version = "0.0.3"
+source = "git+https://github.com/golemcloud/wasm-rquickjs?rev=dda5a2ad5f6140544dc013a94a13a1c384c14c0c#dda5a2ad5f6140544dc013a94a13a1c384c14c0c"
 dependencies = [
- "wasip2",
  "wit-bindgen 0.51.0",
  "wit-bindgen-rt",
 ]

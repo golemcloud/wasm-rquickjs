@@ -6,6 +6,7 @@
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
 
+use futures::future::AbortHandle;
 use rquickjs::function::{Args, IntoArgs};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 use rquickjs::{
@@ -13,9 +14,10 @@ use rquickjs::{
     Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::AtomicUsize;
 use std::task::{Context as TaskContext, Poll};
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
@@ -30,6 +32,9 @@ pub struct JsState {
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
+    pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
+    pub last_abort_id: AtomicUsize,
+    pub unrefed_timers: RefCell<HashSet<usize>>,
 }
 
 pub struct CachedExportedFunction {
@@ -78,12 +83,16 @@ impl JsState {
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
             variant_case_tag_cache: RefCell::new(HashMap::new()),
+            abort_handles: RefCell::new(HashMap::new()),
+            last_abort_id: AtomicUsize::new(0),
+            unrefed_timers: RefCell::new(HashSet::new()),
         }
     }
 
-    /// Evaluate the user module (and any additional modules). Must run after
-    /// `STATE` is published so re-entrant `get_js_state()` calls find it.
-    async fn finish_init(&self) {
+    /// Phase 2a: initialize engine builtins — dispose symbols and builtin wiring.
+    /// Must run before user module code so bundled CJS-in-ESM shims see
+    /// `globalThis.require`, `Buffer`, `process`, timers, and related globals.
+    async fn init_engine(&self) {
         async_with!(self.ctx => |ctx| {
             // Resource classes generated for imported WIT resources wire `[Symbol.dispose]` onto
             // their prototype via the global `DISPOSE_SYMBOL`, so it must be defined before the
@@ -107,6 +116,26 @@ impl JsState {
             .catch(&ctx)
             .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
 
+            let wiring = crate::builtin::wire_builtins();
+            Module::evaluate(
+                ctx.clone(),
+                "__wasm_rquickjs_init_wiring",
+                wiring,
+            )
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
+        })
+        .await;
+        self.rt.idle().await;
+    }
+
+    /// Phase 2b: import and evaluate the user module. Must run after
+    /// `init_engine()`.
+    async fn init_user_module(&self) {
+        async_with!(self.ctx => |ctx| {
             Module::evaluate(
                 ctx.clone(),
                 "__wasm_rquickjs_init_entry",
@@ -135,6 +164,15 @@ impl JsState {
         })
         .await;
         self.rt.idle().await;
+    }
+
+    /// Evaluate all JavaScript — dispose symbols, builtin wiring, user module
+    /// import. Must run after `STATE` is published so re-entrant
+    /// `get_js_state()` calls (for example timers scheduled during module init)
+    /// find the already-published state instead of recursing.
+    async fn finish_init(&self) {
+        self.init_engine().await;
+        self.init_user_module().await;
     }
 }
 
@@ -200,6 +238,17 @@ pub async fn ensure_initialized() -> &'static JsState {
             }
         }
     }
+}
+
+/// Always `false` on the Preview 3 path.
+///
+/// Wizer pre-initialization is a Preview 2-only concept (see
+/// `crate::internal::is_wizer_active` in the P2 spine). The P3 path never runs a
+/// Wizer snapshot, so built-in modules that guard `std::fs`/`std::env` access
+/// during pre-init can share the same code across both targets.
+#[inline]
+pub fn is_wizer_active() -> bool {
+    false
 }
 
 /// Returns the already-initialized shared state. Only valid to call after
@@ -354,11 +403,16 @@ fn get_cached_js_export<'js>(
         .globals()
         .get("userModule")
         .expect("Failed to get userModule");
-    let (user_function_obj, parent): (Object, Object) =
-        get_path(&module, function_path).unwrap_or_else(|| {
+    let (user_function_obj, parent): (Object, Object) = get_path(&module, function_path)
+        .unwrap_or_else(|| {
             panic!(
                 "{}",
-                dump_cannot_find_export("exported JS function", function_path, &module, wit_package)
+                dump_cannot_find_export(
+                    "exported JS function",
+                    function_path,
+                    &module,
+                    wit_package
+                )
             )
         });
     let user_function = user_function_obj
@@ -428,7 +482,12 @@ fn get_path<'js, V: FromJs<'js>>(root: &Object<'js>, path: &[&str]) -> Option<(V
     }
 }
 
-fn dump_cannot_find_export(what: &str, path: &[&str], module: &Object, wit_package: &str) -> String {
+fn dump_cannot_find_export(
+    what: &str,
+    path: &[&str],
+    module: &Object,
+    wit_package: &str,
+) -> String {
     let mut panic_message = String::new();
     panic_message.push_str(&format!(
         "Cannot find {what} {} of WIT package {wit_package}",

@@ -48,14 +48,19 @@ fn change_package_name(context: &GeneratorContext, doc: &mut DocumentMut) {
     doc["package"]["name"] = value(crate_name);
 }
 
-/// Replaces `[features] default` with `["p3"]` for the Preview 3 target.
+/// Replaces `[features] default` with `["p3", "normal-p3"]` for the Preview 3 target.
 ///
 /// The skeleton defaults to the Preview 2 feature set (`["p2", "normal"]`); a Preview 3
-/// wrapper crate must instead enable only the `p3` feature, which selects the async runtime
-/// spine and the `wasip3` / renamed `wit-bindgen` dependencies.
+/// wrapper crate must instead select the `p3` runtime spine (which pulls in the `wasip3` /
+/// renamed `wit-bindgen` dependencies) together with the `normal-p3` capability tier. That
+/// tier mirrors the Preview 2 `normal` tier for capabilities that do not depend on the `p2`
+/// path — `crypto`, `zlib`, and `encoding` — while leaving Preview 2 HTTP (`fetch` /
+/// `node-http`), `logging`, and the heavier `sqlite` capability out of the default set. The
+/// heavier capabilities remain available through the `full-p3` tier.
 fn set_p3_default_features(doc: &mut DocumentMut) {
     let mut default = Array::new();
     default.push("p3");
+    default.push("normal-p3");
     doc["features"]["default"] = value(default);
 }
 

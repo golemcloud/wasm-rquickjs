@@ -31,6 +31,18 @@ normal = ["lite", "node-http", "crypto", "zlib", "logging", "encoding"]
 full = ["normal", "crypto-full", "brotli", "sqlite", "timezone"]
 full-no-logging = ["lite", "node-http", "crypto", "zlib", "encoding", "crypto-full", "brotli", "sqlite", "timezone"]
 
+# Preview 3 tier meta-features (cumulative). These mirror the Preview 2 tiers but only pull
+# in capabilities that do not depend on the `p2` path: `fetch`/`node-http` (Preview 2 HTTP)
+# are excluded, and `logging` / `websocket` are left opt-in because they each add a required
+# host import (`wasi:logging` / `golem:websocket`) that not every Preview 3 host provides.
+# The code generator sets the generated crate's default to `["p3", "normal-p3"]` for the
+# Preview 3 target. `full-p3` adds the heavier WASI-only capabilities (crypto-full, brotli,
+# sqlite, timezone). Like `logging`, `websocket` is intentionally NOT part of `full-p3` and must
+# be enabled explicitly (via `golem:websocket@1.5.0`, fully synchronous and Preview 3-portable),
+# because it adds a required `golem:websocket` host import that plain WASI hosts cannot satisfy.
+normal-p3 = ["p3", "crypto", "zlib", "encoding"]
+full-p3 = ["normal-p3", "crypto-full", "brotli", "sqlite", "timezone"]
+
 # Individual capabilities (Preview 2 only)
 fetch = ["p2", "dep:golem-wasi-http"]
 node-http = ["p2"]
@@ -62,7 +74,15 @@ crypto-full = [
 
 sqlite = ["dep:rusqlite"]
 timezone = ["dep:chrono-tz"]
-golem = ["p2", "dep:golem-context", "dep:golem-websocket"]
+
+# WebSocket support via `golem:websocket@1.5.0`. Target-agnostic: the interface is fully
+# synchronous (no `wasi:io/poll`), so it works on both the Preview 2 and Preview 3 paths.
+# Kept separate from `golem` so Preview 3 can enable WebSocket without dragging in the
+# Preview 2-only `golem-context` crate.
+websocket = ["dep:golem-websocket"]
+
+# Preview 2 Golem bundle: WebSocket + Golem context/diagnostics integration.
+golem = ["p2", "dep:golem-context", "websocket"]
 
 [dependencies]
 # Core dependencies
@@ -143,7 +163,7 @@ rusqlite = { version = "0.38", default-features = false, features = ["bundled", 
 
 # Golem
 golem-context = { version = "0.0.1", optional = true }
-golem-websocket = { version = "0.0.2", optional = true }
+golem-websocket = { version = "0.0.3", optional = true }
 
 # Patch rusqlite and libsqlite3-sys together for wasm32-wasi: the fork carries
 # both the serialize/deserialize flag typing fix and the session-enabled WASI
@@ -151,4 +171,10 @@ golem-websocket = { version = "0.0.2", optional = true }
 [patch.crates-io]
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
+# INTERIM: `golem-websocket` 0.0.3 (the fully synchronous `golem:websocket@1.5.0`
+# interface used on both the Preview 2 and Preview 3 paths) is not yet published to
+# crates.io — only 0.0.2 is. Point at the rev on this repo's `wasi-p3` branch so
+# generated crates can resolve the optional dependency. FINALIZE: publish 0.0.3 and
+# drop this patch entry.
+golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", rev = "dda5a2ad5f6140544dc013a94a13a1c384c14c0c" }
 

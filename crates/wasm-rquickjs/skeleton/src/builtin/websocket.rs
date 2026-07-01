@@ -2,7 +2,25 @@ use golem_websocket::{Error as WsError, Message, WebsocketConnection};
 use rquickjs::class::Trace;
 use rquickjs::{Ctx, Exception, JsLifetime};
 use std::cell::RefCell;
-use wstd::runtime::AsyncPollable;
+
+/// Upper bound (in milliseconds) that a single `receive_with_timeout` host call may block the
+/// single-threaded runtime while waiting for the next message. The host returns as soon as a
+/// message arrives, so this only bounds how long the event loop can stall while the socket is
+/// idle before the receive loop yields.
+const RECEIVE_POLL_TIMEOUT_MS: u64 = 50;
+
+/// Cooperative yield between receive polls. The new `golem:websocket` interface is fully
+/// synchronous (no `wasi:io/poll` pollables), so `receive` drives a bounded poll loop and
+/// yields to the async runtime between polls, using the same clock primitive as the timer
+/// subsystem so timers and other tasks keep making progress on both the Preview 2 and
+/// Preview 3 paths.
+async fn receive_poll_yield() {
+    #[cfg(feature = "p2")]
+    wstd::task::sleep(wstd::time::Duration::from_millis(0)).await;
+
+    #[cfg(feature = "p3")]
+    wasip3::clocks::monotonic_clock::wait_for(0).await;
+}
 
 #[rquickjs::module]
 pub mod native_module {
@@ -78,8 +96,11 @@ impl WsConnection {
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 
-    /// Async receive: waits for the next message using WASI pollables
-    /// instead of busy-polling with timeouts.
+    /// Async receive: drives a bounded cooperative poll loop over the synchronous
+    /// `receive_with_timeout` host call, yielding to the async runtime between polls so the
+    /// event loop (timers, other tasks) keeps making progress. The previous pollable-based
+    /// implementation is gone because the `golem:websocket` interface no longer exposes
+    /// `subscribe`/`wasi:io/poll`.
     ///
     /// Returns: [type, data]
     ///   "text"    → data is the string
@@ -87,37 +108,34 @@ impl WsConnection {
     ///   "closed"  → data is { code, reason }
     ///   "error"   → data is an error description string
     pub async fn receive<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-        let async_pollable = {
-            let inner = self.inner.borrow();
-            let conn = inner
-                .as_ref()
-                .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
-            AsyncPollable::new(conn.subscribe())
-        };
         loop {
-            async_pollable.wait_for().await;
-
             let result = {
                 let inner = self.inner.borrow();
                 let conn = inner
                     .as_ref()
                     .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
-                conn.receive()
+                conn.receive_with_timeout(RECEIVE_POLL_TIMEOUT_MS)
             };
 
             match result {
-                Ok(Message::Text(text)) => {
+                Ok(Some(Message::Text(text))) => {
                     let arr = rquickjs::Array::new(ctx.clone())?;
                     arr.set(0, "text")?;
                     arr.set(1, text)?;
                     return Ok(arr.into_value());
                 }
-                Ok(Message::Binary(data)) => {
+                Ok(Some(Message::Binary(data))) => {
                     let arr = rquickjs::Array::new(ctx.clone())?;
                     arr.set(0, "binary")?;
                     let ab = rquickjs::ArrayBuffer::new(ctx.clone(), data)?;
                     arr.set(1, ab)?;
                     return Ok(arr.into_value());
+                }
+                Ok(None) => {
+                    // No message arrived within the poll window. Yield so timers and other
+                    // async tasks run, then poll again.
+                    receive_poll_yield().await;
+                    continue;
                 }
                 Err(WsError::Closed(info)) => {
                     let arr = rquickjs::Array::new(ctx.clone())?;
