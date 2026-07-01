@@ -5336,14 +5336,16 @@ export let syncBuiltinESMExports = function() {
 };
 
 function Module(id, parent) {
-    this.id = id || '';
-    this.path = '';
+    this.id = id === undefined ? '' : id;
+    this.path = pathModule.dirname(this.id);
     this.exports = {};
     this.filename = null;
     this.loaded = false;
     this.children = [];
-    this.paths = [];
     this.parent = parent || null;
+    if (parent && parent.children) {
+        Array.prototype.push.call(parent.children, this);
+    }
 }
 
 Module.prototype.require = function require(id) {
