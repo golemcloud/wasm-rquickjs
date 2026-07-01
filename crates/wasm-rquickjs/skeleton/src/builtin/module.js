@@ -1249,6 +1249,13 @@ function resolveFilename(id, parentDir) {
     throw err;
 }
 
+function addRequireStackToModuleNotFound(err, request, parentFilename) {
+    if (!err || err.code !== 'MODULE_NOT_FOUND' || typeof parentFilename !== 'string') return err;
+    err.requireStack = [parentFilename];
+    err.message = "Cannot find module '" + request + "'\nRequire stack:\n- " + parentFilename;
+    return err;
+}
+
 function hasAllowNativesSyntaxFlag() {
     const runtimeFlags = globalThis.__wasm_rquickjs_v8_runtime_flags;
     if (runtimeFlags && runtimeFlags.allowNativesSyntax === true) {
@@ -3378,9 +3385,13 @@ function compileCjs(filename, source) {
 }
 
 function compileModuleInto(mod, source, filename, requireOverride) {
-    filename = filename || mod.filename;
+    filename = filename === undefined || filename === null ? mod.filename : filename;
+    const requireParentFilename = filename === '' && mod && typeof mod.filename === 'string'
+        ? mod.filename
+        : filename;
     const dirname = pathModule.dirname(filename);
-    const childRequire = requireOverride || makeRequire(dirname, mod);
+    const requireDirname = pathModule.dirname(requireParentFilename);
+    const childRequire = requireOverride || makeRequire(requireDirname, mod, requireParentFilename);
     const compiledFn = compileCjs(filename, String(source));
     const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
     globalThis.__wasm_rquickjs_current_module = {
@@ -3403,7 +3414,10 @@ function compileModuleInto(mod, source, filename, requireOverride) {
 
 function makeModuleCompile(mod) {
     return function _compile(content, filename) {
-        return compileModuleInto(mod, content, filename || mod.filename);
+        if (this !== mod) {
+            throw new ERR_INVALID_ARG_TYPE('mod', 'Module', this);
+        }
+        return compileModuleInto(mod, content, arguments.length > 1 ? filename : mod.filename);
     };
 }
 
@@ -4196,6 +4210,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
                     const resolved = resolveFilename(id, searchDir);
                     return toCjsCanonicalFilename(resolved.filename, false);
                 } catch (e) {
+                    addRequireStackToModuleNotFound(e, id, parentFilename);
                     // Try next path
                 }
             } else {
@@ -4206,11 +4221,15 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
         }
         const err = new Error("Cannot find module '" + id + "'");
         err.code = 'MODULE_NOT_FOUND';
-        throw err;
+        throw addRequireStackToModuleNotFound(err, id, parentFilename);
     }
     if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
-        const resolved = resolveFilename(id, parentDir);
-        return toCjsCanonicalFilename(resolved.filename, false);
+        try {
+            const resolved = resolveFilename(id, parentDir);
+            return toCjsCanonicalFilename(resolved.filename, false);
+        } catch (err) {
+            throw addRequireStackToModuleNotFound(err, id, parentFilename);
+        }
     }
     if (id.startsWith('#')) {
         try {
@@ -4297,7 +4316,12 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
 
         // Relative or absolute file paths
         if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
-            const resolved = resolveFilename(id, parentDir);
+            let resolved;
+            try {
+                resolved = resolveFilename(id, parentDir);
+            } catch (err) {
+                throw addRequireStackToModuleNotFound(err, id, parentFilename);
+            }
             const mod = loadModule(resolved.filename, resolved.content, parentModule || null);
             return mod.exports;
         }
@@ -5327,6 +5351,13 @@ Module.prototype.require = function require(id) {
         ? pathModule.dirname(this.filename)
         : '.';
     return makeRequire(baseDir, this || null)(id);
+};
+
+Module.prototype._compile = function _compile(content, filename) {
+    if (!(this instanceof Module)) {
+        throw new ERR_INVALID_ARG_TYPE('mod', 'Module', this);
+    }
+    return compileModuleInto(this, content, arguments.length > 1 ? filename : this.filename);
 };
 
 function moduleLoad(request, parent, isMain) {
