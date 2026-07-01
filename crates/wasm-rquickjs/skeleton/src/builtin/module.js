@@ -4388,19 +4388,20 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return decoded.value;
         }
 
-        function addLoaderCjsNames(names, source, filename, seen) {
+        function addLoaderCjsNames(names, nameSet, source, filename, seen) {
             if (seen && filename && seen[filename]) return;
             if (seen && filename) seen[filename] = true;
             scanSourceCodePositions(source, { skipRegex: true }, (i) => {
                 const name = readLoaderCjsExportName(source, i) || readLoaderDefinePropertyExportName(source, i);
-                if (name !== null && name !== 'default' && names.indexOf(name) < 0) {
+                if (name !== null && name !== 'default' && !nameSet.has(name)) {
+                    nameSet.add(name);
                     names.push(name);
                 }
                 const reexport = readLoaderModuleExportsRequire(source, i);
                 if (reexport !== null && filename && (reexport.startsWith('./') || reexport.startsWith('../') || reexport.startsWith('/'))) {
                     try {
                         const resolved = resolveFilename(reexport, pathModule.dirname(filename));
-                        addLoaderCjsNames(names, resolved.content, resolved.filename, seen || {});
+                        addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
                     } catch (_) {}
                 }
                 return undefined;
@@ -4409,7 +4410,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         function loaderCjsNamedExports(source, filename) {
             const names = [];
-            addLoaderCjsNames(names, source, filename, {});
+            addLoaderCjsNames(names, new Set(), source, filename, Object.create(null));
             return names;
         }
 
@@ -4425,7 +4426,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             for (let i = 0; i < names.length; i++) {
                 const local = '__wasm_rquickjs_loader_export_' + i;
                 const nameLiteral = JSON.stringify(names[i]);
-                lines.push('const ' + local + ' = __cjs_default[' + nameLiteral + '];');
+                lines.push('const ' + local + ' = Object.prototype.hasOwnProperty.call(__cjs_default, ' + nameLiteral + ') ? __cjs_default[' + nameLiteral + '] : undefined;');
                 lines.push('export { ' + local + ' as ' + nameLiteral + ' };');
             }
             return 'data:text/javascript,' + encodeURIComponent(lines.join('\n'));
