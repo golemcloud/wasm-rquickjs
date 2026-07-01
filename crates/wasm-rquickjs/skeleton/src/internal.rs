@@ -4657,22 +4657,30 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             return false;
         };
         let next = skip_ws_comments(descriptor, key_end);
-        if !key_is_ident && (name == "value" || name == "get") {
-            if matches!(found, Some(DescriptorNamedProperty::Value)) {
-                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
-            } else {
+        if !key_is_ident {
+            if !matches!(found, Some(DescriptorNamedProperty::Value)) {
                 return false;
             }
-        } else if key_is_ident && name == "value" {
-            if next >= descriptor_end || bytes[next] != b':' {
-                return false;
-            }
+            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+        } else if name == "value" {
             if matches!(found, Some(DescriptorNamedProperty::Getter)) {
                 return false;
             }
-            found = Some(DescriptorNamedProperty::Value);
-            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
-        } else if key_is_ident && name == "get" {
+            if matches!(found, Some(DescriptorNamedProperty::Value)) {
+                let value_start = if next < descriptor_end && bytes[next] == b':' {
+                    next + 1
+                } else {
+                    next
+                };
+                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, value_start, descriptor_end));
+            } else {
+                if next >= descriptor_end || bytes[next] != b':' {
+                    return false;
+                }
+                found = Some(DescriptorNamedProperty::Value);
+                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
+            }
+        } else if name == "get" {
             if found.is_some() {
                 return false;
             }
@@ -4695,8 +4703,17 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             } else {
                 return false;
             }
+        } else if name == "enumerable" {
+            if next >= descriptor_end || bytes[next] != b':' {
+                return false;
+            }
+            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
         } else {
-            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+            if matches!(found, Some(DescriptorNamedProperty::Value)) {
+                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+            } else {
+                return false;
+            }
         }
 
         if cursor < descriptor_end {
@@ -7962,6 +7979,10 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "valueThenValue", { value: "first", value: "second" });
                 Object.defineProperty(exports, "valueThenString", { value: "good", "value": "string-wins" });
                 Object.defineProperty(exports, "valueThenComputed", { value: "good", ["value"]: "computed-wins" });
+                Object.defineProperty(exports, "valueThenShorthand", { value: "first", value });
+                Object.defineProperty(exports, "valueThenMethod", { value: "first", value() { return "method-value"; } });
+                if (false) Object.defineProperty(exports, "objectMemberDescriptor", { value: "bad" }.descriptor);
+                if (false) Object.defineProperty(exports, "objectPlusDescriptor", { value: "bad" } + suffix);
             "#,
             true,
             &[
@@ -7974,6 +7995,10 @@ mod cjs_export_analyzer_tests {
                 "valueThenValue",
                 "valueThenString",
                 "valueThenComputed",
+                "valueThenShorthand",
+                "valueThenMethod",
+                "objectMemberDescriptor",
+                "objectPlusDescriptor",
             ],
             &[],
         );
@@ -8000,6 +8025,9 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "duplicateGet", { get() { return dep.value; }, get: function (a) { return dep.value; } });
                 Object.defineProperty(exports, "stringThenValue", { "value": "bad", value: dep.value });
                 Object.defineProperty(exports, "computedThenValue", { ["value"]: "bad", value: dep.value });
+                Object.defineProperty(exports, "writableThenValue", { writable: true, value: dep.value });
+                Object.defineProperty(exports, "configurableThenValue", { configurable: true, value: dep.value });
+                Object.defineProperty(exports, "quotedEnumerableThenValue", { "enumerable": true, value: dep.value });
             "#,
             true,
             &[],
