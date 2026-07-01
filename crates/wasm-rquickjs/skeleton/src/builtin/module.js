@@ -3148,6 +3148,12 @@ function makeLoaderMissingUrlError(hookName, loaderUrl, value) {
     return err;
 }
 
+function makeLoaderChainError(hook) {
+    const err = new Error(`${hook} hook did not call the next hook and did not explicitly short circuit`);
+    err.code = 'ERR_LOADER_CHAIN_INCOMPLETE';
+    return err;
+}
+
 function isLoaderSourceValue(value) {
     return typeof value === 'string' ||
         value instanceof ArrayBuffer ||
@@ -4193,12 +4199,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             importAttributes,
             parentURL: String(baseUrl),
         };
-
-        function makeLoaderChainError(hook) {
-            const err = new Error(`${hook} hook did not call the next hook and did not explicitly short circuit`);
-            err.code = 'ERR_LOADER_CHAIN_INCOMPLETE';
-            return err;
-        }
 
         function parentFilenameForLoaderResolve(parentURL) {
             parentURL = String(parentURL || baseUrl);
