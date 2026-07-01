@@ -2697,16 +2697,17 @@ function esmGraphReachesAny(filename, stack, seen) {
     const source = tryReadFile(filename);
     if (source === null) return false;
 
-    const specifiers = isEsmGraphFile(filename, source)
+    const isEsm = isEsmGraphFile(filename, source);
+    const specifiers = isEsm
         ? collectStaticEsmSpecifiers(source)
         : collectLiteralRequireSpecifiers(source);
-    const conditions = isEsmGraphFile(filename, source) ? esmPackageConditions() : cjsPackageConditions();
+    const conditions = isEsm ? esmPackageConditions() : cjsPackageConditions();
     for (let i = 0; i < specifiers.length; i++) {
         const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions);
         if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen)) return true;
     }
 
-    if (isEsmGraphFile(filename, source)) {
+    if (isEsm) {
         const factoryNames = collectCreateRequireFactoryNames(source);
         const aliases = collectCreateRequireAliases(source, factoryNames);
         const bridgeSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
@@ -2728,7 +2729,8 @@ function scanRequireEsmGraph(filename, marked, seen, stack) {
     const source = tryReadFile(filename);
     if (source === null) return;
 
-    if (!isEsmGraphFile(filename, source)) {
+    const isEsm = isEsmGraphFile(filename, source);
+    if (!isEsm) {
         const requireSpecifiers = collectLiteralRequireSpecifiers(source);
         for (let i = 0; i < requireSpecifiers.length; i++) {
             const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions());
