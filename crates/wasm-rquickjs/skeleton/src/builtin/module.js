@@ -3154,6 +3154,38 @@ function makeLoaderChainError(hook) {
     return err;
 }
 
+function makeEsmModuleNotFoundError(specifier) {
+    const err = new Error("Cannot find module '" + specifier + "'");
+    err.code = 'ERR_MODULE_NOT_FOUND';
+    return err;
+}
+
+function makeEsmUnsupportedDirImportError(filename) {
+    const err = new Error('Directory import ' + JSON.stringify(filename) + ' is not supported resolving ES modules');
+    err.code = 'ERR_UNSUPPORTED_DIR_IMPORT';
+    return err;
+}
+
+function isRelativeOrAbsoluteSpecifier(specifier) {
+    return specifier === '.' || specifier === '..' ||
+        specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/');
+}
+
+function resultForEsmFileUrl(url) {
+    const filename = nodeUrl.fileURLToPath(url);
+    const stat = _stat(filename);
+    if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
+    if (stat !== 0) throw makeEsmModuleNotFoundError(url.href);
+    return { url: url.href, format: filename.endsWith('.json') ? 'json' : undefined };
+}
+
+function resultForPackageFile(filename) {
+    const stat = _stat(filename);
+    if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
+    if (stat !== 0) throw makeEsmModuleNotFoundError(filename);
+    return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : undefined };
+}
+
 function isLoaderSourceValue(value) {
     return typeof value === 'string' ||
         value instanceof ArrayBuffer ||
@@ -4218,40 +4250,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return esmPackageConditions();
         }
 
-        function makeEsmModuleNotFoundError(specifier) {
-            const err = new Error("Cannot find module '" + specifier + "'");
-            err.code = 'ERR_MODULE_NOT_FOUND';
-            return err;
-        }
-
-        function makeEsmUnsupportedDirImportError(filename) {
-            const err = new Error('Directory import ' + JSON.stringify(filename) + ' is not supported resolving ES modules');
-            err.code = 'ERR_UNSUPPORTED_DIR_IMPORT';
-            return err;
-        }
-
-        function isRelativeOrAbsoluteSpecifier(specifier) {
-            return specifier === '.' || specifier === '..' ||
-                specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/');
-        }
-
         function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
             return resultForEsmFileUrl(new URL(specifier, parentURL));
-        }
-
-        function resultForEsmFileUrl(url) {
-            const filename = nodeUrl.fileURLToPath(url);
-            const stat = _stat(filename);
-            if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
-            if (stat !== 0) throw makeEsmModuleNotFoundError(url.href);
-            return { url: url.href, format: filename.endsWith('.json') ? 'json' : undefined };
-        }
-
-        function resultForPackageFile(filename) {
-            const stat = _stat(filename);
-            if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
-            if (stat !== 0) throw makeEsmModuleNotFoundError(filename);
-            return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : undefined };
         }
 
         function decodeEsmPackageSubpath(subpath) {
