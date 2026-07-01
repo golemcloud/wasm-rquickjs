@@ -10366,8 +10366,8 @@
     },
     "sequential/test-inspector-port-cluster.js": { "category": "wasi-impossible", "reason": "inspector/debugger is not available in WASM" },
     "sequential/test-module-loading.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
+      "category": "known-gap",
+      "reason": "split blocks remain blocked on full script module-loading main/cache/package-main semantics; same-process coverage exists in module_resolution::cjs_node_module_loading_compat and adjacent CJS runtime tests",
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "known-gap", "reason": "full script module-loading test still exposes incomplete main-module/cache/package-main edge semantics" },
