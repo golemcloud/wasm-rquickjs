@@ -1520,49 +1520,52 @@ fn is_cjs_js_file_for_named_import_error(filename: &str) -> bool {
 
 const CJS_GLOBAL_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
 
+fn skip_esm_cjs_global_scanner_span(source: &str, pos: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if let Some(next) = parse_object_method_span(source, pos) {
+        return Some(next);
+    }
+    match bytes[pos] {
+        b'\'' | b'"' | b'`' => Some(skip_string_or_template(source, pos)),
+        b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' => {
+            let mut i = pos + 2;
+            while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                i += 1;
+            }
+            Some(i)
+        }
+        b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
+            let mut i = pos + 2;
+            while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            Some((i + 2).min(bytes.len()))
+        }
+        b'/' if is_regex_literal_start(source, pos) => Some(skip_regex_literal(source, pos)),
+        _ => None,
+    }
+}
+
+fn add_declared_cjs_global_bindings(bindings: Vec<String>, names: &[&str], declared: &mut Vec<String>) {
+    for name in bindings {
+        if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+            declared.push(name);
+        }
+    }
+}
+
 fn collect_declared_cjs_globals_in_esm(source: &str) -> Vec<String> {
     let bytes = source.as_bytes();
     let mut i = 0usize;
     let mut declared = Vec::<String>::new();
     while i < bytes.len() {
-        if let Some(next) = parse_object_method_span(source, i) {
+        if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
         }
 
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
-            _ => {}
-        }
-
         if let Some((bindings, next)) = parse_import_declaration_bindings(source, i) {
-            for name in bindings {
-                if CJS_GLOBAL_NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                    declared.push(name);
-                }
-            }
+            add_declared_cjs_global_bindings(bindings, &CJS_GLOBAL_NAMES, &mut declared);
             i = next;
             continue;
         }
@@ -1573,11 +1576,7 @@ fn collect_declared_cjs_globals_in_esm(source: &str) -> Vec<String> {
         }
 
         if let Some((bindings, next)) = parse_declaration_span(source, i) {
-            for name in bindings {
-                if CJS_GLOBAL_NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                    declared.push(name);
-                }
-            }
+            add_declared_cjs_global_bindings(bindings, &CJS_GLOBAL_NAMES, &mut declared);
             i = next;
             continue;
         }
@@ -1596,44 +1595,13 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
     let mut i = 0usize;
     let mut declared = Vec::<String>::new();
     while i < bytes.len() {
-        if let Some(next) = parse_object_method_span(source, i) {
+        if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
         }
 
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
-            _ => {}
-        }
-
         if let Some((bindings, next)) = parse_import_declaration_bindings(source, i) {
-            for name in bindings {
-                if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                    declared.push(name);
-                }
-            }
+            add_declared_cjs_global_bindings(bindings, names, &mut declared);
             i = next;
             continue;
         }
@@ -1644,11 +1612,7 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
         }
 
         if let Some((bindings, _)) = parse_variable_declaration_span(source, i) {
-            for name in bindings {
-                if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                    declared.push(name);
-                }
-            }
+            add_declared_cjs_global_bindings(bindings, names, &mut declared);
             i = next_char_boundary(source, i);
             continue;
         }
@@ -1656,11 +1620,7 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
         if let Some((bindings, next)) = parse_function_declaration_span(source, i)
             .or_else(|| parse_class_declaration_span(source, i))
         {
-            for name in bindings {
-                if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
-                    declared.push(name);
-                }
-            }
+            add_declared_cjs_global_bindings(bindings, names, &mut declared);
             i = next;
             continue;
         }
