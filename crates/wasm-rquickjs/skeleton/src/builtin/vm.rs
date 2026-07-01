@@ -186,31 +186,25 @@ fn require_esm_impl<'js>(
         return Err(rquickjs::Error::Exception);
     }
 
-    let pending_tla = unsafe {
-        let eval_value = Value::from_raw(ctx.clone(), eval_result);
-        if let Ok(promise) = Promise::from_js(&ctx, eval_value.clone()) {
-            match promise.state() {
-                PromiseState::Pending => {
-                    attach_noop_promise_catch(ctx.clone(), eval_value.as_raw());
-                    true
-                }
-                PromiseState::Rejected => {
-                    attach_noop_promise_catch(ctx.clone(), eval_value.as_raw());
-                    mark_rejection_handled(&ctx, eval_value.clone());
-                    let count = globals
-                        .get::<_, i32>("__wasm_rquickjs_suppress_unhandled_rejection_count")
-                        .unwrap_or(0);
-                    let _ = globals.set("__wasm_rquickjs_suppress_unhandled_rejection_count", count + 1);
-                    let _ = promise.result::<Value<'js>>();
-                    let rejected = ctx.catch();
-                    leave_require_esm(&globals, filename, &file_url)?;
-                    return Err(ctx.throw(rejected));
-                }
-                PromiseState::Resolved => false,
+    let eval_value = unsafe { Value::from_raw(ctx.clone(), eval_result) };
+    let pending_tla = if let Ok(promise) = Promise::from_js(&ctx, eval_value.clone()) {
+        match promise.state() {
+            PromiseState::Pending => {
+                ignore_unhandled_rejection(&ctx, eval_value);
+                true
             }
-        } else {
-            false
+            PromiseState::Rejected => {
+                ignore_unhandled_rejection(&ctx, eval_value);
+                let _ = promise.result::<Value<'js>>();
+                let rejected = ctx.catch();
+                ignore_last_pending_unhandled_rejection(&ctx, rejected.clone());
+                leave_require_esm(&globals, filename, &file_url)?;
+                return Err(ctx.throw(rejected));
+            }
+            PromiseState::Resolved => false,
         }
+    } else {
+        false
     };
 
     leave_require_esm(&globals, filename, &file_url)?;
@@ -237,41 +231,21 @@ fn require_esm_impl<'js>(
     }
 }
 
-fn mark_rejection_handled<'js>(ctx: &rquickjs::Ctx<'js>, promise: Value<'js>) {
+fn ignore_unhandled_rejection<'js>(ctx: &rquickjs::Ctx<'js>, promise: Value<'js>) {
     if let Ok(handler) = ctx
         .globals()
-        .get::<_, rquickjs::Function>("__wasm_rquickjs_mark_rejection_handled")
+        .get::<_, rquickjs::Function>("__wasm_rquickjs_ignore_unhandled_rejection")
     {
         let _ = handler.call::<_, ()>((promise,));
     }
 }
 
-fn attach_noop_promise_catch(ctx: rquickjs::Ctx<'_>, val: qjs::JSValue) {
-    unsafe {
-        let catch_fn = qjs::JS_GetPropertyStr(ctx.as_raw().as_ptr(), val, c"catch".as_ptr());
-        if !qjs::JS_IsUndefined(catch_fn) && !qjs::JS_IsException(catch_fn) {
-            let noop_fn = qjs::JS_Eval(
-                ctx.as_raw().as_ptr(),
-                c"(function(){})".as_ptr(),
-                14,
-                c"<noop>".as_ptr(),
-                qjs::JS_EVAL_TYPE_GLOBAL as i32,
-            );
-            if !qjs::JS_IsException(noop_fn) {
-                let result = qjs::JS_Call(
-                    ctx.as_raw().as_ptr(),
-                    catch_fn,
-                    val,
-                    1,
-                    &noop_fn as *const _ as *mut _,
-                );
-                if !qjs::JS_IsException(result) {
-                    qjs::JS_FreeValue(ctx.as_raw().as_ptr(), result);
-                }
-                qjs::JS_FreeValue(ctx.as_raw().as_ptr(), noop_fn);
-            }
-            qjs::JS_FreeValue(ctx.as_raw().as_ptr(), catch_fn);
-        }
+fn ignore_last_pending_unhandled_rejection<'js>(ctx: &rquickjs::Ctx<'js>, reason: Value<'js>) {
+    if let Ok(handler) = ctx
+        .globals()
+        .get::<_, rquickjs::Function>("__wasm_rquickjs_ignore_last_pending_unhandled_rejection")
+    {
+        let _ = handler.call::<_, ()>((reason,));
     }
 }
 

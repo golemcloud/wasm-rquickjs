@@ -4763,6 +4763,80 @@ export const testRequireEsmTlaRetry = async () => {
     }
 };
 
+export const testRequireEsmRejectionTracking = async () => {
+    try {
+        fs.mkdirSync('/require-esm-rejection-app', { recursive: true });
+        fs.writeFileSync('/require-esm-rejection-app/pending-tla.mjs', [
+            'await new Promise(() => {});',
+            'export const value = 1;',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/throw-with-unhandled.mjs', [
+            'Promise.reject(new Error("side rejection"));',
+            'throw new Error("module failure");',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/shared-reason.mjs', [
+            'const shared = new Error("shared reason");',
+            'Promise.reject(shared);',
+            'throw shared;',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/saved-reason.mjs', [
+            'throw globalThis.__requireEsmSavedReason;',
+        ].join('\n'));
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire('/require-esm-rejection-app/main.cjs');
+
+        const originalCatch = Object.getOwnPropertyDescriptor(Promise.prototype, 'catch');
+        Object.defineProperty(Promise.prototype, 'catch', {
+            configurable: true,
+            get() {
+                throw new Error('poisoned Promise.prototype.catch');
+            },
+        });
+        try {
+            assert.throws(() => require('/require-esm-rejection-app/pending-tla.mjs'), {
+                code: 'ERR_REQUIRE_ASYNC_MODULE',
+            });
+        } finally {
+            Object.defineProperty(Promise.prototype, 'catch', originalCatch);
+        }
+
+        const unhandled = [];
+        const onUnhandled = (reason) => unhandled.push(reason && reason.message);
+        process.on('unhandledRejection', onUnhandled);
+        try {
+            assert.throws(() => require('/require-esm-rejection-app/throw-with-unhandled.mjs'), {
+                message: 'module failure',
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            assert.throws(() => require('/require-esm-rejection-app/shared-reason.mjs'), {
+                message: 'shared reason',
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            globalThis.__requireEsmSavedReason = new Error('saved reason');
+            assert.throws(() => require('/require-esm-rejection-app/saved-reason.mjs'), {
+                message: 'saved reason',
+            });
+            Promise.reject(globalThis.__requireEsmSavedReason);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+        } finally {
+            process.removeListener('unhandledRejection', onUnhandled);
+        }
+        assert.deepStrictEqual(unhandled, ['side rejection', 'shared reason', 'saved reason']);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testRequireEsmCycleGuards = async () => {
     try {
         fs.mkdirSync('/require-esm-cycle-app', { recursive: true });

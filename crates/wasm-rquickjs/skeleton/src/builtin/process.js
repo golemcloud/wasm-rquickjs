@@ -755,16 +755,24 @@ process._runExitHandlers = function _runExitHandlers(code) {
 // after a microtask turn, so that assert.rejects() and similar patterns
 // that handle the rejection synchronously don't cause false positives.
 const _pendingRejections = new Map();
+const _ignoredUnhandledRejections = new WeakSet();
+
+function _isIgnoredUnhandledRejection(promise) {
+    return _ignoredUnhandledRejections.has(promise);
+}
 
 globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandled) {
+    if (_isIgnoredUnhandledRejection(promise)) {
+        _pendingRejections.delete(promise);
+        return;
+    }
     if (!isHandled) {
         _pendingRejections.set(promise, reason);
         Promise.resolve().then(function() {
         Promise.resolve().then(function() {
             if (_pendingRejections.has(promise)) {
                 _pendingRejections.delete(promise);
-                if (globalThis.__wasm_rquickjs_suppress_unhandled_rejection_count > 0) {
-                    globalThis.__wasm_rquickjs_suppress_unhandled_rejection_count--;
+                if (_isIgnoredUnhandledRejection(promise)) {
                     return;
                 }
                 process.emit('unhandledRejection', reason, promise);
@@ -778,6 +786,24 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
 
 globalThis.__wasm_rquickjs_mark_rejection_handled = function(promise) {
     _pendingRejections.delete(promise);
+};
+
+globalThis.__wasm_rquickjs_ignore_unhandled_rejection = function(promise) {
+    _ignoredUnhandledRejections.add(promise);
+    _pendingRejections.delete(promise);
+};
+
+globalThis.__wasm_rquickjs_ignore_last_pending_unhandled_rejection = function(reason) {
+    let pendingPromise;
+    for (const [promise, pendingReason] of _pendingRejections) {
+        if (pendingReason === reason) {
+            pendingPromise = promise;
+        }
+    }
+    if (pendingPromise !== undefined) {
+        _ignoredUnhandledRejections.add(pendingPromise);
+        _pendingRejections.delete(pendingPromise);
+    }
 };
 
 // Named exports for import { argv } from 'node:process' style

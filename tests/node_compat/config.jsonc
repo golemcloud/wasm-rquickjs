@@ -6410,7 +6410,7 @@
     "parallel/test-diagnostics-channel-net.js": { "category": "known-gap", "reason": "diagnostics_channel integration for net events is incomplete" },
     "parallel/test-diagnostics-channel-process.js": { "category": "wasi-impossible", "reason": "cluster requires process forking, not available in WASM" },
     "parallel/test-diagnostics-channel-worker-threads.js": { "category": "known-gap", "reason": "diagnostics_channel integration for worker_threads events is missing in the worker shim" },
-    "parallel/test-directory-import.js": {},
+    "parallel/test-directory-import.js": { "category": "runnable" },
     "parallel/test-disable-proto-delete.js": { "category": "known-gap", "reason": "--disable-proto=delete semantics differ in QuickJS (__proto__ yields null)" },
     "parallel/test-disable-proto-throw.js": { "category": "known-gap", "reason": "--disable-proto=throw flag semantics are not implemented" },
     "parallel/test-disable-sigusr1.js": { "category": "wasi-impossible", "reason": "inspector/debugger is not available in WASM" },

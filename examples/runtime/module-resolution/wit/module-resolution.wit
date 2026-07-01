@@ -29,6 +29,7 @@ world module-resolution {
   export test-vm-source-text-module-link-semantics: func() -> bool;
   export test-require-esm-error-handling: func() -> bool;
   export test-require-esm-tla-retry: func() -> bool;
+  export test-require-esm-rejection-tracking: func() -> bool;
   export test-require-esm-cycle-guards: func() -> bool;
   export test-cjs-symlink-circular-cache: func() -> bool;
   export test-cjs-node-module-loading-compat: func() -> bool;
