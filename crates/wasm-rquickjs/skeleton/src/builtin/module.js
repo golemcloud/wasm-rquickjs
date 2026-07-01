@@ -2774,18 +2774,23 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
         const key = loaderDescriptorPropertyName(source, cursor);
         if (key === null) return false;
         let next = skipWhitespaceAndComments(source, key.end);
-        if (key.quoted && (key.name === 'value' || key.name === 'get')) {
+        if (key.quoted) {
             if (foundKind === 'value') {
                 cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
             } else {
                 return false;
             }
-        } else if (!key.quoted && key.name === 'value') {
-            if (source.charCodeAt(next) !== 0x3a) return false;
+        } else if (key.name === 'value') {
             if (foundKind === 'get') return false;
-            foundKind = 'value';
-            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
-        } else if (!key.quoted && key.name === 'get') {
+            if (foundKind === 'value') {
+                const valueStart = source.charCodeAt(next) === 0x3a ? next + 1 : next;
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, valueStart, descriptorEnd));
+            } else {
+                if (source.charCodeAt(next) !== 0x3a) return false;
+                foundKind = 'value';
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
+            }
+        } else if (key.name === 'get') {
             if (foundKind !== null) return false;
             if (source.charCodeAt(next) === 0x28) {
                 const body = loaderGetterBodyEnd(source, next, descriptorEnd);
@@ -2800,8 +2805,15 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
             } else {
                 return false;
             }
+        } else if (key.name === 'enumerable') {
+            if (source.charCodeAt(next) !== 0x3a) return false;
+            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
         } else {
-            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
+            if (foundKind === 'value') {
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
+            } else {
+                return false;
+            }
         }
         if (cursor < descriptorEnd) {
             if (source.charCodeAt(cursor) !== 0x2c) return false;
