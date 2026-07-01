@@ -386,7 +386,7 @@ impl Loader for DataUrlLoader {
             // - If valid, strip the `with { ... }` clause
             // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
             let source = process_static_import_attrs(&source, path);
-            if let Some(error_source) = esm_preflight_error_module_source(&source, false) {
+            if let Some(error_source) = esm_preflight_error_module_source(&source, false, false) {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
             if let Some(error_source) = data_url_simple_identifier_error_module_source(&source) {
@@ -1346,7 +1346,11 @@ fn throw_import_attr_type_incompatible<'js, T>(ctx: &Ctx<'js>) -> rquickjs::Resu
     Err(ctx.throw(error_obj.into_value()))
 }
 
-fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool) -> Option<String> {
+fn esm_preflight_error_module_source(
+    source: &str,
+    package_type_module_js: bool,
+    raw_cjs_global_messages: bool,
+) -> Option<String> {
     if package_type_module_js {
         let cjs_global = find_bare_cjs_global_in_esm(source);
         if cjs_global.is_none() {
@@ -1365,13 +1369,40 @@ fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool)
     let Some(name) = find_bare_cjs_global_in_esm(source) else {
         return None;
     };
-    let message = match name {
-        "require" => "require is not defined in ES module scope, you can use import instead",
-        "exports" => "exports is not defined in ES module scope",
-        "module" => "module is not defined in ES module scope",
-        "__filename" => "__filename is not defined in ES module scope",
-        "__dirname" => "__dirname is not defined in ES module scope",
-        _ => return None,
+    let message = if raw_cjs_global_messages {
+        match name {
+            "require" => "require is not defined",
+            "exports" => "exports is not defined",
+            "module" => "module is not defined",
+            "__filename" => "__filename is not defined",
+            "__dirname" => "__dirname is not defined",
+            _ => return None,
+        }
+    } else {
+        match name {
+            "require" => "require is not defined in ES module scope, you can use import instead",
+            "exports" => "exports is not defined in ES module scope",
+            "module" => "module is not defined in ES module scope",
+            "__filename" => "__filename is not defined in ES module scope",
+            "__dirname" => "__dirname is not defined in ES module scope",
+            _ => return None,
+        }
+    };
+    let escaped = DataUrlLoader::js_string_escape(message);
+    Some(format!(
+        "await Promise.reject(new ReferenceError('{escaped}'));\n"
+    ))
+}
+
+fn esm_require_global_preflight_error_module_source(
+    source: &str,
+    raw_cjs_global_messages: bool,
+) -> Option<String> {
+    find_bare_cjs_global_in_esm_among(source, &["require"])?;
+    let message = if raw_cjs_global_messages {
+        "require is not defined"
+    } else {
+        "require is not defined in ES module scope, you can use import instead"
     };
     let escaped = DataUrlLoader::js_string_escape(message);
     Some(format!(
@@ -1487,8 +1518,9 @@ fn is_cjs_js_file_for_named_import_error(filename: &str) -> bool {
     filename.ends_with(".js") && package_scope_type(filename).as_deref() != Some("module")
 }
 
-fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
-    const NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+const CJS_GLOBAL_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+
+fn collect_declared_cjs_globals_in_esm(source: &str) -> Vec<String> {
     let bytes = source.as_bytes();
     let mut i = 0usize;
     let mut declared = Vec::<String>::new();
@@ -1527,7 +1559,7 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
 
         if let Some((bindings, next)) = parse_import_declaration_bindings(source, i) {
             for name in bindings {
-                if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                if CJS_GLOBAL_NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
                     declared.push(name);
                 }
             }
@@ -1542,7 +1574,7 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
 
         if let Some((bindings, next)) = parse_declaration_span(source, i) {
             for name in bindings {
-                if NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                if CJS_GLOBAL_NAMES.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
                     declared.push(name);
                 }
             }
@@ -1550,11 +1582,95 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
             continue;
         }
 
-        for name in NAMES {
+        i = next_char_boundary(source, i);
+    }
+    declared
+}
+
+fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
+    find_bare_cjs_global_in_esm_among(source, &CJS_GLOBAL_NAMES)
+}
+
+fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str]) -> Option<&'static str> {
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut declared = Vec::<String>::new();
+    while i < bytes.len() {
+        if let Some(next) = parse_object_method_span(source, i) {
+            i = next;
+            continue;
+        }
+
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            _ => {}
+        }
+
+        if let Some((bindings, next)) = parse_import_declaration_bindings(source, i) {
+            for name in bindings {
+                if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                    declared.push(name);
+                }
+            }
+            i = next;
+            continue;
+        }
+
+        if let Some(next) = parse_arrow_function_span(source, i) {
+            i = next;
+            continue;
+        }
+
+        if let Some((bindings, _)) = parse_variable_declaration_span(source, i) {
+            for name in bindings {
+                if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                    declared.push(name);
+                }
+            }
+            i = next_char_boundary(source, i);
+            continue;
+        }
+
+        if let Some((bindings, next)) = parse_function_declaration_span(source, i)
+            .or_else(|| parse_class_declaration_span(source, i))
+        {
+            for name in bindings {
+                if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
+                    declared.push(name);
+                }
+            }
+            i = next;
+            continue;
+        }
+
+        for name in names {
             if source[i..].starts_with(name)
                 && is_ident_start_boundary(bytes, i)
                 && is_ident_boundary(bytes, i + name.len())
                 && previous_significant_byte(source, i) != Some(b'.')
+                && !is_typeof_operand(source, i)
                 && !declared.iter().any(|declared| declared == name)
             {
                 let next = skip_ws_comments(source, i + name.len());
@@ -1567,6 +1683,25 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
         i = next_char_boundary(source, i);
     }
     None
+}
+
+fn is_typeof_operand(source: &str, pos: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut end = pos;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    if end > 0 && bytes[end - 1] == b'(' {
+        end -= 1;
+        while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+            end -= 1;
+        }
+    }
+    let mut start = end;
+    while start > 0 && is_ident_continue(bytes[start - 1]) {
+        start -= 1;
+    }
+    start < end && &source[start..end] == "typeof" && is_ident_start_boundary(bytes, start)
 }
 
 fn find_statement_end(source: &str, pos: usize) -> usize {
@@ -1783,7 +1918,7 @@ fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<Stri
         {
             let start = skip_ws_comments(source, pos + keyword.len());
             let end = find_variable_declaration_end(source, start);
-            return Some((collect_cjs_global_names_in_span(source, start, end), end));
+            return Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end));
         }
     }
     None
@@ -1858,7 +1993,6 @@ fn parse_function_declaration_span(source: &str, pos: usize) -> Option<(Vec<Stri
     }
     if i < bytes.len() && bytes[i] == b'(' {
         let params_end = find_matching_paren(source, i)?;
-        bindings.extend(collect_cjs_global_names_in_span(source, i + 1, params_end));
         i = skip_ws_comments(source, params_end + 1);
         if i < bytes.len() && bytes[i] == b'{' {
             return Some((bindings, find_matching_brace(source, i)? + 1));
@@ -1976,6 +2110,73 @@ fn parse_class_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>
         return Some((bindings, find_matching_brace(source, i)? + 1));
     }
     Some((bindings, i))
+}
+
+fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start: usize, end: usize) -> Vec<String> {
+    let bytes = source.as_bytes();
+    let mut names = Vec::new();
+    let mut i = start;
+    let mut in_binding = true;
+    let mut paren = 0usize;
+    let mut brace = 0usize;
+    let mut bracket = 0usize;
+    while i < end && i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < end && i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < end && i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(end).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            b'(' => paren += 1,
+            b')' => paren = paren.saturating_sub(1),
+            b'{' => brace += 1,
+            b'}' => brace = brace.saturating_sub(1),
+            b'[' => bracket += 1,
+            b']' => bracket = bracket.saturating_sub(1),
+            b'=' if paren == 0 && brace == 0 && bracket == 0 => in_binding = false,
+            b',' if paren == 0 && brace == 0 && bracket == 0 => in_binding = true,
+            _ => {}
+        }
+
+        if in_binding {
+            for name in CJS_GLOBAL_NAMES {
+                if source[i..].starts_with(name)
+                    && is_ident_start_boundary(bytes, i)
+                    && is_ident_boundary(bytes, i + name.len())
+                    && !object_pattern_property_key_without_binding(source, i + name.len())
+                    && !names.iter().any(|existing| existing == name)
+                {
+                    names.push(name.to_string());
+                    break;
+                }
+            }
+        }
+        i = next_char_boundary(source, i);
+    }
+    names
+}
+
+fn object_pattern_property_key_without_binding(source: &str, pos: usize) -> bool {
+    let i = skip_ws_comments(source, pos);
+    i < source.len() && source.as_bytes()[i] == b':'
 }
 
 fn collect_cjs_global_names_in_span(source: &str, start: usize, end: usize) -> Vec<String> {
@@ -6165,6 +6366,7 @@ impl Loader for CjsCompatLoader {
         source = process_static_import_attrs(&source, path);
         let filename = Some(fs_abs_path.clone());
         let url = path_to_file_url(path);
+        let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &url);
 
         let init = ImportMetaInit {
             url,
@@ -6190,10 +6392,13 @@ impl Loader for CjsCompatLoader {
                     || !detected_analysis.reexports.is_empty()));
 
         if !is_cjs {
-            if fs_path.ends_with(".js")
-                && is_js_in_module_package_scope(&fs_abs_path)
-                && let Some(error_source) = esm_preflight_error_module_source(&source, true)
-            {
+            let package_type_module_js = fs_path.ends_with(".js") && is_js_in_module_package_scope(&fs_abs_path);
+            let preflight_error_source = if package_type_module_js {
+                esm_preflight_error_module_source(&source, true, raw_cjs_global_messages)
+            } else {
+                esm_require_global_preflight_error_module_source(&source, raw_cjs_global_messages)
+            };
+            if let Some(error_source) = preflight_error_source {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
             if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
@@ -6397,6 +6602,14 @@ fn split_module_path_suffix(path: &str) -> (&str, &str) {
 
 fn module_filesystem_path(path: &str) -> &str {
     split_module_path_suffix(path).0
+}
+
+fn require_esm_in_progress(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
+    let globals = ctx.globals();
+    let Ok(registry) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_in_progress") else {
+        return false;
+    };
+    registry.get::<_, bool>(filename).unwrap_or(false) || registry.get::<_, bool>(file_url).unwrap_or(false)
 }
 
 const LOADER_REALM_QUERY_PARAM: &str = "__wasm_rquickjs_loader_realm";
@@ -6733,9 +6946,6 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         escape_js_string(&init.url)
     ));
 
-    // Define import.meta properties and also shim __filename/__dirname as
-    // top-level variables. Many libraries (especially Rollup-bundled CJS→ESM)
-    // reference bare __dirname/__filename which don't exist in ESM scope.
     let mut prologue = format!(
         "Object.defineProperties(import.meta,{{{}}});",
         props.join(",")
@@ -6743,16 +6953,17 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     prologue.push_str(
         r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){globalThis.__wasm_rquickjs_import_attr_specifier=(s,t)=>{let v=String(s);let f=null;if(v.startsWith("data:")){const r=v.slice(5);const c=r.indexOf(",");const m=(c<0?r:r.slice(0,c)).split(";")[0].trim();if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else if(v.startsWith("node:"))f="module";else{const b=v.split(/[?#]/,1)[0];if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";}function er(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return er("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return er("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return er("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){if(v.startsWith("data:"))v=v.replace(/\"/g,"%22");return"data:text/javascript,"+encodeURIComponent("import value from "+JSON.stringify(v)+" with { type: \"json\" }; export default value;");}return v;};}"##,
     );
-    if let Some(ref filename) = init.filename {
-        prologue.push_str(&format!(
-            "var __filename=\"{}\";",
-            escape_js_string(filename)
-        ));
+    let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
+    let shadowed_cjs_globals: Vec<&str> = ["require"]
+        .iter()
+        .copied()
+        .filter(|name| !declared_cjs_globals.iter().any(|declared| declared == name))
+        .collect();
+    if !shadowed_cjs_globals.is_empty() {
+        prologue.push_str("var ");
+        prologue.push_str(&shadowed_cjs_globals.join(","));
+        prologue.push(';');
     }
-    if let Some(ref dirname) = init.dirname {
-        prologue.push_str(&format!("var __dirname=\"{}\";", escape_js_string(dirname)));
-    }
-
     let main_expr = init
         .filename
         .as_ref()
@@ -6853,6 +7064,7 @@ impl Loader for ImportMetaLoader {
         let filename = Some(fs_abs_path.clone());
         let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
         let url = path_to_file_url(path);
+        let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &url);
 
         let init = ImportMetaInit {
             url,
@@ -6873,6 +7085,11 @@ impl Loader for ImportMetaLoader {
             return Err(ctx.throw(cached_error));
         }
 
+        if let Some(error_source) =
+            esm_require_global_preflight_error_module_source(&source, raw_cjs_global_messages)
+        {
+            return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
+        }
         if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
             return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
         }
@@ -8393,6 +8610,7 @@ mod cjs_export_analyzer_tests {
     fn detects_free_cjs_globals_for_esm_diagnostics() {
         assert_cjs_global("require;", Some("require"));
         assert_cjs_global("require('x');", Some("require"));
+        assert_cjs_global("const x = require; export default x;", Some("require"));
         assert_cjs_global("exports = {};", Some("exports"));
         assert_cjs_global("module;", Some("module"));
         assert_cjs_global("__filename;", Some("__filename"));
@@ -8423,10 +8641,18 @@ mod cjs_export_analyzer_tests {
             "function f(require) { return require; } export default f(1);",
             None,
         );
+        assert_cjs_global(
+            "function f(require) { return require; } export default require;",
+            Some("require"),
+        );
         assert_cjs_global("const f = (require) => require; export default f(1);", None);
         assert_cjs_global("export default ((require) => require)(1);", None);
         assert_cjs_global(
             "const {\n  module\n} = { module: 1 };\nexport default module;",
+            None,
+        );
+        assert_cjs_global(
+            "const { require: localRequire } = { require: 1 };\nexport default localRequire;",
             None,
         );
         assert_cjs_global("const x = 0,\n  require = 1;\nexport default require;", None);
@@ -8453,6 +8679,7 @@ mod cjs_export_analyzer_tests {
                 export { exports as "module.exports" };
             "#,
             true,
+            false,
         )
         .is_none());
     }
@@ -8537,15 +8764,20 @@ mod cjs_export_analyzer_tests {
 
     #[test]
     fn package_type_diagnostics_use_first_cjs_global() {
-        let require_diag = esm_preflight_error_module_source("require('x');", true).unwrap();
+        let require_diag = esm_preflight_error_module_source("require('x');", true, false).unwrap();
         assert!(require_diag.contains("require is not defined"));
         assert!(require_diag.contains(".cjs"));
 
-        let filename_diag = esm_preflight_error_module_source("console.log(__filename);", true).unwrap();
+        let filename_diag = esm_preflight_error_module_source("console.log(__filename);", true, false).unwrap();
         assert!(filename_diag.contains("__filename is not defined"));
         assert!(filename_diag.contains(".cjs"));
 
-        assert!(esm_preflight_error_module_source("const require = 1; export default require;", true).is_none());
+        assert!(esm_preflight_error_module_source("const require = 1; export default require;", true, false).is_none());
+        assert!(esm_preflight_error_module_source("export default typeof require;", false, false).is_none());
+        assert!(esm_preflight_error_module_source("export default typeof (exports);", false, false).is_none());
+        let raw_exports_diag = esm_preflight_error_module_source("Object.keys(exports);", false, true).unwrap();
+        assert!(raw_exports_diag.contains("exports is not defined"));
+        assert!(!raw_exports_diag.contains("ES module scope"));
     }
 
     #[test]

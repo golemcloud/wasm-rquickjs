@@ -1248,6 +1248,106 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
     }
 };
 
+export const testEsmForbiddenCjsGlobals = async () => {
+    try {
+        const root = '/esm-forbidden-cjs-globals-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(
+            `${root}/main.mjs`,
+            [
+                'export default [',
+                '  typeof arguments,',
+                '  typeof this,',
+                '  typeof exports,',
+                '  typeof require,',
+                '  typeof module,',
+                '  typeof __filename,',
+                '  typeof __dirname,',
+                '];',
+                'export const meta = [typeof import.meta.url, typeof import.meta.filename, typeof import.meta.dirname];',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/declared.mjs`,
+            [
+                'const require = () => "local-require";',
+                'const exports = "local-exports";',
+                'const module = "local-module";',
+                'const __filename = "local-filename";',
+                'const __dirname = "local-dirname";',
+                'export default [require(), exports, module, __filename, __dirname];',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/bindings.mjs`,
+            [
+                'export const req = "imported-require";',
+                'export const exp = "imported-exports";',
+                'export const mod = "imported-module";',
+                'export const file = "imported-filename";',
+                'export const dir = "imported-dirname";',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/imported.mjs`,
+            [
+                'import { req as require, exp as exports, mod as module, file as __filename, dir as __dirname } from "./bindings.mjs";',
+                'export default [require, exports, module, __filename, __dirname];',
+            ].join('\n'),
+        );
+        fs.writeFileSync(`${root}/rhs-require.mjs`, 'const value = require; export default value;');
+        fs.writeFileSync(
+            `${root}/param-require.mjs`,
+            [
+                'function local(require) { return require; }',
+                'export default [local("local-require"), typeof require];',
+            ].join('\n'),
+        );
+        fs.writeFileSync(`${root}/direct.mjs`, 'Object.defineProperty(exports, "__esModule", { value: true });');
+        const imported = await import(pathToFileURL(`${root}/main.mjs`).href);
+        assert.deepStrictEqual(imported.default, [
+            'undefined',
+            'undefined',
+            'undefined',
+            'undefined',
+            'undefined',
+            'undefined',
+            'undefined',
+        ]);
+        assert.deepStrictEqual(imported.meta, ['string', 'string', 'string']);
+        assert.deepStrictEqual((await import(pathToFileURL(`${root}/declared.mjs`).href)).default, [
+            'local-require',
+            'local-exports',
+            'local-module',
+            'local-filename',
+            'local-dirname',
+        ]);
+        assert.deepStrictEqual((await import(pathToFileURL(`${root}/imported.mjs`).href)).default, [
+            'imported-require',
+            'imported-exports',
+            'imported-module',
+            'imported-filename',
+            'imported-dirname',
+        ]);
+        assert.deepStrictEqual((await import(pathToFileURL(`${root}/param-require.mjs`).href)).default, [
+            'local-require',
+            'undefined',
+        ]);
+        await assert.rejects(import(pathToFileURL(`${root}/rhs-require.mjs`).href), {
+            name: 'ReferenceError',
+            message: /require is not defined/,
+        });
+        await assert.rejects(import(pathToFileURL(`${root}/direct.mjs`).href), {
+            name: 'ReferenceError',
+            message: /exports is not defined/,
+        });
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDynamicImportAttributeScanner = async () => {
     try {
         fs.mkdirSync('/cjs-dynamic-import-attr-scanner', { recursive: true });

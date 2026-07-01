@@ -9,6 +9,8 @@
 //
 // The test does require('../common') which resolves naturally to /home/node/test/common/index.js.
 
+const require = globalThis.require;
+
 // Drain pending microtasks/timers by yielding multiple times.
 // Many stream tests need several event loop turns to complete.
 // Uses increasing delays to handle both quick microtask chains and slower timers.
