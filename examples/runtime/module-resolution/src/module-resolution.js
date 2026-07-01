@@ -807,7 +807,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             }),
         );
         fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/data.json', '{"fromPackage":true}');
-        fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/fallback.json', '{"fallback":true}');
+        fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/fallback.json', '{"nextResolvePackage":true}');
         fs.mkdirSync('/loader-next-app/node_modules/fs', { recursive: true });
         fs.writeFileSync(
             '/loader-next-app/node_modules/fs/package.json',
@@ -830,9 +830,10 @@ export const testEsmDataUrlImportAttributes = async () => {
                 'import assert from "node:assert";',
                 'import { register } from "node:module";',
                 'async function resolve(specifier, context, next) {',
+                '  assert.deepStrictEqual([...context.conditions].sort(), ["import", "module-sync", "node", "node-addons"]);',
                 '  if (specifier === "loader-next-pkg") {',
                 '    const result = await next(specifier, context);',
-                '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-next-pkg/data.json") throw new Error("nextResolve did not use package exports import condition: " + result.url);',
+                '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-next-pkg/fallback.json") throw new Error("nextResolve exposed runtime-only package conditions to loader context: " + result.url);',
                 '    return result;',
                 '  }',
                 '  if (specifier === "virtual:builtin-shadow") {',

@@ -743,6 +743,7 @@ function withSuppressedPackageDeprecationWarnings(callback) {
 
 const cjsDefaultPackageConditions = ['golem', 'node', 'require', 'module-sync', 'default'];
 const esmDefaultPackageConditions = ['golem', 'node', 'module-sync', 'import', 'default'];
+const loaderDefaultConditions = ['node', 'import', 'module-sync', 'node-addons'];
 
 function addPackageCondition(conditions, condition) {
     if (condition) conditions.add(condition);
@@ -768,6 +769,10 @@ function cjsPackageConditions() {
 
 function esmPackageConditions() {
     return packageConditions(esmDefaultPackageConditions);
+}
+
+function loaderHookConditions() {
+    return Array.from(packageConditions(loaderDefaultConditions));
 }
 const packageTargetNoMatch = { __packageTargetNoMatch: true };
 const packageTargetBlocked = { __packageTargetBlocked: true };
@@ -3199,7 +3204,9 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
 
 function conditionsForLoaderResolve(context) {
     if (context && Array.isArray(context.conditions)) {
-        return new Set(context.conditions.map((condition) => String(condition)));
+        const conditions = new Set(context.conditions.map((condition) => String(condition)));
+        conditions.add('default');
+        return conditions;
     }
     return esmPackageConditions();
 }
@@ -4299,9 +4306,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ? { type: attrs.typeValue }
             : {};
 
-        const esmConditions = Array.from(esmPackageConditions());
         const baseContext = {
-            conditions: esmConditions,
+            conditions: loaderHookConditions(),
             importAttributes,
             parentURL: String(baseUrl),
         };
