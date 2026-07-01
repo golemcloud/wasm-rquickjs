@@ -3913,6 +3913,22 @@ export const testVmMainContextDefaultLoader = async () => {
         const missingImportHelperCountBefore = missingImportHelperCount();
         const missingImportFlagHelperCountBefore = missingImportFlagHelperCount();
         assert.strictEqual(new vm.Script('1 + 1').runInThisContext(), 2);
+        assert.strictEqual(new vm.Script('1 + 1').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n// sourceMappingURL=wrong.map').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//#sourceMappingURL=nospace.map').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//#    sourceMappingURL=multi-space.map').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('const s = "//# sourceMappingURL=string.map";').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('const s = `//# sourceMappingURL=template.map`;').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('/[//# sourceMappingURL=regex.map]/;').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('/*\n//# sourceMappingURL=inside-block.map\n*/').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n/*# sourceMappingURL=block.map */').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=script.map').sourceMapURL, 'script.map');
+        assert.strictEqual(new vm.Script('1;\n//# sourceMappingURL=semi.map').sourceMapURL, 'semi.map');
+        assert.strictEqual(new vm.Script('1 + 1\n//#\tsourceMappingURL=tab.map').sourceMapURL, 'tab.map');
+        assert.strictEqual(new vm.Script('1 + 1\n//#\vsourceMappingURL=vertical-tab.map').sourceMapURL, 'vertical-tab.map');
+        assert.strictEqual(new vm.Script('1 + 1\n//#\fsourceMappingURL=form-feed.map').sourceMapURL, 'form-feed.map');
+        assert.strictEqual(new vm.Script('1 + 1\n//#\u00a0sourceMappingURL=nbsp.map').sourceMapURL, 'nbsp.map');
+        assert.strictEqual(new vm.Script('const s = `${1 //# sourceMappingURL=expr.map\n}`;').sourceMapURL, 'expr.map');
         assert.strictEqual(vm.compileFunction('return 1')(), 1);
         assert.strictEqual(vm.compileFunction('console.log("Hello, World!")').toString(), 'function () {\nconsole.log("Hello, World!")\n}');
         assert.throws(() => vm.compileFunction('});\n\n(function() {\nthrow new Error("unreachable");\n})();\n\n(function() {'), {

@@ -9243,7 +9243,7 @@
     "parallel/test-vm-set-property-proxy.js": { "category": "known-gap", "reason": "runInNewContext assignment with Proxy sandbox does not match Node trap behavior" },
     "parallel/test-vm-sigint-existing-handler.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },
     "parallel/test-vm-sigint.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },
-    "parallel/test-vm-source-map-url.js": { "category": "known-gap", "reason": "vm.Script.sourceMapURL parsing for //# sourceMappingURL comments is not implemented" },
+    "parallel/test-vm-source-map-url.js": { "category": "runnable" },
     "parallel/test-vm-strict-assign.js": { "category": "known-gap", "reason": "contextified assignment semantics for strict/non-strict writes to non-writable globals are incorrect" },
     "parallel/test-vm-strict-mode.js": { "category": "known-gap", "reason": "strict-mode assignment semantics in vm contexts differ from Node" },
     "parallel/test-vm-symbols.js": { "category": "known-gap", "reason": "runInContext does not preserve symbol/prototype property access on contextified objects" },

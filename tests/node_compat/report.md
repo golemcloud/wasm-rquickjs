@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-01 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-07-02 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3205/4395 (72.9%)
+**Primary compatibility (CI-enforced):** 3206/4395 (72.9%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3205 | 72.9% | 56.1% | 46.9% |
-| 🧩 known gap | 1190 | 27.1% | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3206 | 72.9% | 56.1% | 46.9% |
+| 🧩 known gap | 1189 | 27.1% | 20.8% | 17.4% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3205/5713 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3206/5713 (56.1%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 51 | 58 | 3 | 9 | 0 | 0 | 46.8% | 42.1% |
+| vm | 121 | 52 | 57 | 3 | 9 | 0 | 0 | 47.7% | 43.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1190)
+### known gap (1189)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1321,7 +1321,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm contexts do not provide the expected per-context Proxy behavior | 1 | `parallel/test-vm-proxies.js` |
 | vm global getter/setter descriptors are not exposed correctly on contextified objects | 1 | `parallel/test-vm-global-setter.js` |
 | vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
-| vm.Script.sourceMapURL parsing for //# sourceMappingURL comments is not implemented | 1 | `parallel/test-vm-source-map-url.js` |
 | vm.createContext does not preserve sandbox accessor properties during evaluation | 1 | `parallel/test-vm-create-context-accessors.js` |
 | vm.runInContext contextification/write-back semantics are incomplete | 1 | `parallel/test-vm-basic.js#block_01_vm_runincontext` |
 | vm.runInNewContext does not propagate global writes back to the sandbox object | 1 | `parallel/test-vm-basic.js#block_00_vm_runinnewcontext` |
