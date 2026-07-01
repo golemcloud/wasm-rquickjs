@@ -1164,6 +1164,22 @@ function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions
     throw makePackagePathNotExportedError(packageName, subpath, key === '.' && isPackageExportsConditionsObject(exportsField));
 }
 
+function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions) {
+    if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
+    validatePackageExportsMap(pkgJsonPath, pkg.exports);
+    const resolved = resolvePackageExports(parts.name, packageDir, pkg, parts.subpath, conditions);
+    if (resolved !== undefined) {
+        resolved.packageDir = packageDir;
+    }
+    return resolved;
+}
+
+function resolvePackageSelfReference(parts, parentDir, conditions) {
+    const scope = findPackageScope(parentDir);
+    if (!scope || !scope.pkg || scope.pkg.name !== parts.name) return undefined;
+    return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, scope.pkgJsonPath, conditions);
+}
+
 const packageScopeCache = Object.create(null);
 
 function findPackageScope(startDir) {
@@ -3498,14 +3514,10 @@ function resolveEsmPackageForLoader(id, parentDir, parentFilename, conditions) {
     const parts = splitPackageName(id);
     const hasSubpath = parts.subpath.length > 0;
 
-    const scope = findPackageScope(parentDir);
-    if (scope && scope.pkg && scope.pkg.name === parts.name && Object.prototype.hasOwnProperty.call(scope.pkg, 'exports')) {
-        validatePackageExportsMap(scope.pkgJsonPath, scope.pkg.exports);
-        const selfResolved = resolvePackageExports(parts.name, scope.dir, scope.pkg, parts.subpath, conditions);
-        if (selfResolved !== undefined) {
-            if (selfResolved.builtin) return { url: selfResolved.builtin };
-            return resultForPackageFile(selfResolved.filename);
-        }
+    const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions);
+    if (selfResolved !== undefined) {
+        if (selfResolved.builtin) return { url: selfResolved.builtin };
+        return resultForPackageFile(selfResolved.filename);
     }
 
     const dirs = _nodeModulePaths(parentDir);
@@ -3516,13 +3528,10 @@ function resolveEsmPackageForLoader(id, parentDir, parentFilename, conditions) {
         if (packageJsonEntry === null) continue;
 
         const pkg = packageJsonEntry.pkg;
-        if (pkg && Object.prototype.hasOwnProperty.call(pkg, 'exports')) {
-            validatePackageExportsMap(pkgJsonPath, pkg.exports);
-            const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
-            if (exportsResolved !== undefined) {
-                if (exportsResolved.builtin) return { url: exportsResolved.builtin };
-                return resultForPackageFile(exportsResolved.filename);
-            }
+        const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, pkg, pkgJsonPath, conditions);
+        if (exportsResolved !== undefined) {
+            if (exportsResolved.builtin) return { url: exportsResolved.builtin };
+            return resultForPackageFile(exportsResolved.filename);
         }
 
         if (hasSubpath) {
@@ -3978,14 +3987,9 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
     const parts = splitPackageName(id);
     const hasSubpath = parts.subpath.length > 0;
 
-    const scope = findPackageScope(parentDir);
-    if (scope && scope.pkg && scope.pkg.name === parts.name && Object.prototype.hasOwnProperty.call(scope.pkg, 'exports')) {
-        validatePackageExportsMap(scope.pkgJsonPath, scope.pkg.exports);
-        const selfResolved = resolvePackageExports(parts.name, scope.dir, scope.pkg, parts.subpath, conditions);
-        if (selfResolved !== undefined) {
-            selfResolved.packageDir = scope.dir;
-            return selfResolved;
-        }
+    const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions);
+    if (selfResolved !== undefined) {
+        return selfResolved;
     }
 
     for (let i = 0; i < dirs.length; i++) {
@@ -3997,12 +4001,8 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
             const packageJsonEntry = readPackageJson(pkgJsonPath);
             if (packageJsonEntry !== null) {
                 pkg = packageJsonEntry.pkg;
-                if (pkg && Object.prototype.hasOwnProperty.call(pkg, 'exports')) {
-                    validatePackageExportsMap(pkgJsonPath, pkg.exports);
-                }
-                const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
+                const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, pkg, pkgJsonPath, conditions);
                 if (exportsResolved !== undefined) {
-                    exportsResolved.packageDir = pkgDir;
                     return exportsResolved;
                 }
             }
