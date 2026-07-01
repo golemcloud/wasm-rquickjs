@@ -6018,7 +6018,7 @@
     "es-module/test-esm-json.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-live-binding.mjs": { "category": "runnable" },
     "es-module/test-esm-loader-chaining.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-loader-custom-condition.mjs": { "category": "known-gap", "reason": "registered loaders are not yet applied to static ESM dependency resolution" },
+    "es-module/test-esm-loader-custom-condition.mjs": { "category": "known-gap", "reason": "static ESM resolution supports already-initialized synchronous registered loader hooks, but this fixture requires an async resolve hook to add package conditions" },
     "es-module/test-esm-loader-default-resolver.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-dependency.mjs": { "category": "runnable" },
     "es-module/test-esm-loader-entry-url.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },

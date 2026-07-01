@@ -2253,6 +2253,36 @@ impl Resolver for FileUrlResolver {
     }
 }
 
+struct RegisteredLoaderResolver;
+
+impl Resolver for RegisteredLoaderResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        let globals = ctx.globals();
+        let Ok(resolve_fn) =
+            globals.get::<_, Function>("__wasm_rquickjs_resolve_static_registered_loader")
+        else {
+            return Err(Error::new_resolving(base, name));
+        };
+        let base_url =
+            if base.starts_with("data:") || base.starts_with("file://") || base.starts_with("node:")
+            {
+                base.to_string()
+            } else {
+                path_to_file_url(base)
+            };
+        let resolved: Option<String> = resolve_fn.call((base_url, name.to_string()))?;
+        match resolved {
+            Some(resolved) if !resolved.is_empty() => Ok(resolved),
+            _ => Err(Error::new_resolving(base, name)),
+        }
+    }
+}
+
 /// Resolver that handles bare specifier imports by walking up the directory tree
 /// looking for `node_modules/<name>/` directories, reading their `package.json`
 /// to find the entry point.
@@ -6915,6 +6945,7 @@ impl JsState {
                 MockModuleResolver,
                 DataUrlResolver,
                 FileUrlResolver,
+                RegisteredLoaderResolver,
                 builtin_resolver,
                 NodeModulesResolver,
                 NodeFileResolver,

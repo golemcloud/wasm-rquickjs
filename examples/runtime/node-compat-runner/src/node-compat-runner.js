@@ -161,9 +161,18 @@ async function installExperimentalLoadersFromFlags(flags) {
         ? globalThis.process.cwd()
         : '/home/node';
     var cwdUrl = urlBuiltin.pathToFileURL(cwd.endsWith('/') ? cwd : cwd + '/').href;
+    var loaderStartIndex = Array.isArray(globalThis.__wasm_rquickjs_registered_loaders)
+        ? globalThis.__wasm_rquickjs_registered_loaders.length
+        : 0;
 
     for (var i = 0; i < loaders.length; i++) {
         moduleBuiltin.register(loaders[i], { parentURL: cwdUrl });
+    }
+    if (typeof globalThis.__wasm_rquickjs_start_registered_loader === 'function') {
+        var registeredLoaders = globalThis.__wasm_rquickjs_registered_loaders || [];
+        for (var j = loaderStartIndex; j < registeredLoaders.length; j++) {
+            await globalThis.__wasm_rquickjs_start_registered_loader(registeredLoaders[j]);
+        }
     }
 
     return function restoreExperimentalLoaders() {

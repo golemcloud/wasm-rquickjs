@@ -1207,7 +1207,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
-| registered loaders are not yet applied to static ESM dependency resolution | 1 | `es-module/test-esm-loader-custom-condition.mjs` |
 | registered loaders share the main module cache/context; Node isolates loader modules in a separate loader realm | 1 | `es-module/test-esm-loader.mjs` |
 | removing hop-by-hop/framing headers is not serialized with Node-compatible behavior | 1 | `parallel/test-http-remove-header-stays-removed.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
@@ -1287,6 +1286,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | spawnSync() maxBuffer limit is not enforced in WASM child emulation | 1 | `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
 | spawned process does not honor --max-http-header-size (http.maxHeaderSize mismatch) | 1 | `parallel/test-http-max-header-size.js` |
 | stack-overflow recovery around vm.runInThisContext/runInNewContext traps in WASM | 1 | `parallel/test-vm-low-stack-space.js` |
+| static ESM resolution supports already-initialized synchronous registered loader hooks, but this fixture requires an async resolve hook to add package conditions | 1 | `es-module/test-esm-loader-custom-condition.mjs` |
 | stdout redirection to file not implemented | 1 | `parallel/test-stdout-to-file.js` |
 | stream.finished hangs in destroyed-stream callback ordering path | 1 | `parallel/test-stream-finished.js#block_34_block_34` |
 | stream.finished() behavior for destroyed IncomingMessage is not Node-compatible | 1 | `parallel/test-http-client-finished.js` |
