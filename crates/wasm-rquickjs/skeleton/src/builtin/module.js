@@ -3186,6 +3186,80 @@ function resultForPackageFile(filename) {
     return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : undefined };
 }
 
+function parentFilenameForLoaderResolve(parentURL, baseUrl) {
+    parentURL = String(parentURL || baseUrl);
+    if (parentURL.startsWith('file://')) {
+        return nodeUrl.fileURLToPath(parentURL);
+    }
+    if (parentURL.startsWith('/')) {
+        return parentURL;
+    }
+    return null;
+}
+
+function conditionsForLoaderResolve(context) {
+    if (context && Array.isArray(context.conditions)) {
+        return new Set(context.conditions.map((condition) => String(condition)));
+    }
+    return esmPackageConditions();
+}
+
+function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
+    return resultForEsmFileUrl(new URL(specifier, parentURL));
+}
+
+function decodeEsmPackageSubpath(subpath) {
+    if (hasEncodedSlashOrBackslash(subpath)) {
+        throw makeInvalidModuleSpecifierError(subpath, 'must not include encoded "/" or "\\" characters');
+    }
+    try {
+        return decodeURIComponent(subpath);
+    } catch (_) {
+        return subpath;
+    }
+}
+
+function resolveEsmPackageForLoader(id, parentDir, parentFilename, conditions) {
+    const parts = splitPackageName(id);
+    const hasSubpath = parts.subpath.length > 0;
+
+    const scope = findPackageScope(parentDir);
+    if (scope && scope.pkg && scope.pkg.name === parts.name && Object.prototype.hasOwnProperty.call(scope.pkg, 'exports')) {
+        validatePackageExportsMap(scope.pkgJsonPath, scope.pkg.exports);
+        const selfResolved = resolvePackageExports(parts.name, scope.dir, scope.pkg, parts.subpath, conditions);
+        if (selfResolved !== undefined) {
+            if (selfResolved.builtin) return { url: selfResolved.builtin };
+            return resultForPackageFile(selfResolved.filename);
+        }
+    }
+
+    const dirs = _nodeModulePaths(parentDir);
+    for (let i = 0; i < dirs.length; i++) {
+        const pkgDir = pathModule.join(dirs[i], parts.name);
+        const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
+        const packageJsonEntry = readPackageJson(pkgJsonPath);
+        if (packageJsonEntry === null) continue;
+
+        const pkg = packageJsonEntry.pkg;
+        if (pkg && Object.prototype.hasOwnProperty.call(pkg, 'exports')) {
+            validatePackageExportsMap(pkgJsonPath, pkg.exports);
+            const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
+            if (exportsResolved !== undefined) {
+                if (exportsResolved.builtin) return { url: exportsResolved.builtin };
+                return resultForPackageFile(exportsResolved.filename);
+            }
+        }
+
+        if (hasSubpath) {
+            return resultForPackageFile(pathModule.join(pkgDir, decodeEsmPackageSubpath(parts.subpath)));
+        }
+
+        return resolveFromNodeModules(id, parentDir, parentFilename, conditions);
+    }
+
+    return null;
+}
+
 function isLoaderSourceValue(value) {
     return typeof value === 'string' ||
         value instanceof ArrayBuffer ||
@@ -4232,80 +4306,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             parentURL: String(baseUrl),
         };
 
-        function parentFilenameForLoaderResolve(parentURL) {
-            parentURL = String(parentURL || baseUrl);
-            if (parentURL.startsWith('file://')) {
-                return nodeUrl.fileURLToPath(parentURL);
-            }
-            if (parentURL.startsWith('/')) {
-                return parentURL;
-            }
-            return null;
-        }
-
-        function conditionsForLoaderResolve(context) {
-            if (context && Array.isArray(context.conditions)) {
-                return new Set(context.conditions.map((condition) => String(condition)));
-            }
-            return esmPackageConditions();
-        }
-
-        function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
-            return resultForEsmFileUrl(new URL(specifier, parentURL));
-        }
-
-        function decodeEsmPackageSubpath(subpath) {
-            if (hasEncodedSlashOrBackslash(subpath)) {
-                throw makeInvalidModuleSpecifierError(subpath, 'must not include encoded "/" or "\\" characters');
-            }
-            try {
-                return decodeURIComponent(subpath);
-            } catch (_) {
-                return subpath;
-            }
-        }
-
-        function resolveEsmPackageForLoader(id, parentDir, parentFilename, conditions) {
-            const parts = splitPackageName(id);
-            const hasSubpath = parts.subpath.length > 0;
-
-            const scope = findPackageScope(parentDir);
-            if (scope && scope.pkg && scope.pkg.name === parts.name && Object.prototype.hasOwnProperty.call(scope.pkg, 'exports')) {
-                validatePackageExportsMap(scope.pkgJsonPath, scope.pkg.exports);
-                const selfResolved = resolvePackageExports(parts.name, scope.dir, scope.pkg, parts.subpath, conditions);
-                if (selfResolved !== undefined) {
-                    if (selfResolved.builtin) return { url: selfResolved.builtin };
-                    return resultForPackageFile(selfResolved.filename);
-                }
-            }
-
-            const dirs = _nodeModulePaths(parentDir);
-            for (let i = 0; i < dirs.length; i++) {
-                const pkgDir = pathModule.join(dirs[i], parts.name);
-                const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
-                const packageJsonEntry = readPackageJson(pkgJsonPath);
-                if (packageJsonEntry === null) continue;
-
-                const pkg = packageJsonEntry.pkg;
-                if (pkg && Object.prototype.hasOwnProperty.call(pkg, 'exports')) {
-                    validatePackageExportsMap(pkgJsonPath, pkg.exports);
-                    const exportsResolved = resolvePackageExports(parts.name, pkgDir, pkg, parts.subpath, conditions);
-                    if (exportsResolved !== undefined) {
-                        if (exportsResolved.builtin) return { url: exportsResolved.builtin };
-                        return resultForPackageFile(exportsResolved.filename);
-                    }
-                }
-
-                if (hasSubpath) {
-                    return resultForPackageFile(pathModule.join(pkgDir, decodeEsmPackageSubpath(parts.subpath)));
-                }
-
-                return resolveFromNodeModules(id, parentDir, parentFilename, conditions);
-            }
-
-            return null;
-        }
-
         function resolveEsmDefaultForLoader(specifier, parentURL, context) {
             if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
                 return { url: specifier };
@@ -4314,7 +4314,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 return resultForEsmFileUrl(new URL(specifier));
             }
 
-            const parentFilename = parentFilenameForLoaderResolve(parentURL);
+            const parentFilename = parentFilenameForLoaderResolve(parentURL, baseUrl);
             if (publicBuiltinWithoutSchemeSet.has(specifier)) {
                 return { url: 'node:' + specifier };
             }
