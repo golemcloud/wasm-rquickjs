@@ -1222,10 +1222,10 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably | 1 | `parallel/test-gc-http-client-connaborted.js` |
 | requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably | 1 | `parallel/test-gc-net-timeout.js` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
+| requires async registered loader resolve hooks during static ESM resolution to remap builtins before synthesizing named exports | 1 | `es-module/test-esm-named-exports.mjs` |
 | requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
-| requires module.register loader hooks to remap and synthesize builtin named exports | 1 | `es-module/test-esm-named-exports.mjs` |
 | requires net.createServer with pauseOnConnect and socket.localPort; wasi:http does not expose socket-level properties | 1 | `parallel/test-http-agent-reuse-drained-socket-only.js` |
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |
 | requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them | 1 | `parallel/test-http-multi-line-headers.js` |

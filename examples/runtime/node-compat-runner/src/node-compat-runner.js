@@ -132,6 +132,21 @@ function experimentalLoadersFromFlags(flags) {
     return loaders;
 }
 
+function preloadImportsFromFlags(flags) {
+    var imports = [];
+    for (var i = 0; i < flags.length; i++) {
+        var flag = String(flags[i]);
+        if (flag.indexOf('--import=') === 0) {
+            imports.push(flag.slice('--import='.length));
+        } else if (flag === '--import') {
+            if (i + 1 < flags.length) {
+                imports.push(String(flags[++i]));
+            }
+        }
+    }
+    return imports;
+}
+
 function applyTestFlagsToProcess(testPath) {
     if (!globalThis.process) return;
 
@@ -147,6 +162,47 @@ function applyTestFlagsToProcess(testPath) {
     }
     globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromFlags(flags);
     return flags;
+}
+
+async function awaitRegisteredLoadersFrom(startIndex) {
+    if (typeof globalThis.__wasm_rquickjs_start_registered_loader !== 'function') return;
+    var registeredLoaders = globalThis.__wasm_rquickjs_registered_loaders || [];
+    for (var i = startIndex; i < registeredLoaders.length; i++) {
+        await globalThis.__wasm_rquickjs_start_registered_loader(registeredLoaders[i]);
+    }
+}
+
+function resolvePreloadImport(specifier, cwd, cwdUrl) {
+    var value = String(specifier);
+    if (/^(?:data|file|node):/.test(value)) return value;
+    if (value[0] === '/' || value.indexOf('./') === 0 || value.indexOf('../') === 0) {
+        var pathBuiltin = require('node:path');
+        var urlBuiltin = require('node:url');
+        return urlBuiltin.pathToFileURL(pathBuiltin.resolve(cwd, value)).href;
+    }
+    if (typeof globalThis.__wasm_rquickjs_import_meta_resolve === 'function') {
+        return globalThis.__wasm_rquickjs_import_meta_resolve(cwdUrl, value);
+    }
+    return value;
+}
+
+async function installPreloadImportsFromFlags(flags) {
+    var imports = preloadImportsFromFlags(flags || []);
+    if (imports.length === 0) return;
+
+    var urlBuiltin = require('node:url');
+    var cwd = globalThis.process && typeof globalThis.process.cwd === 'function'
+        ? globalThis.process.cwd()
+        : '/home/node';
+    var cwdUrl = urlBuiltin.pathToFileURL(cwd.endsWith('/') ? cwd : cwd + '/').href;
+
+    for (var i = 0; i < imports.length; i++) {
+        var loaderStartIndex = Array.isArray(globalThis.__wasm_rquickjs_registered_loaders)
+            ? globalThis.__wasm_rquickjs_registered_loaders.length
+            : 0;
+        await import(resolvePreloadImport(imports[i], cwd, cwdUrl));
+        await awaitRegisteredLoadersFrom(loaderStartIndex);
+    }
 }
 
 async function installExperimentalLoadersFromFlags(flags) {
@@ -168,12 +224,7 @@ async function installExperimentalLoadersFromFlags(flags) {
     for (var i = 0; i < loaders.length; i++) {
         moduleBuiltin.register(loaders[i], { parentURL: cwdUrl });
     }
-    if (typeof globalThis.__wasm_rquickjs_start_registered_loader === 'function') {
-        var registeredLoaders = globalThis.__wasm_rquickjs_registered_loaders || [];
-        for (var j = loaderStartIndex; j < registeredLoaders.length; j++) {
-            await globalThis.__wasm_rquickjs_start_registered_loader(registeredLoaders[j]);
-        }
-    }
+    await awaitRegisteredLoadersFrom(loaderStartIndex);
 
     return function restoreExperimentalLoaders() {
         if (previousLoaders === undefined) {
@@ -239,6 +290,7 @@ export const runTest = async (testPath) => {
     try {
         var flags = applyTestFlagsToProcess(testPath) || [];
         restoreLoaders = await installExperimentalLoadersFromFlags(flags);
+        await installPreloadImportsFromFlags(flags);
 
         // Reset mustCall tracking for this test
         var commonMod;

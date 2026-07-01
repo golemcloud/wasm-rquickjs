@@ -6039,7 +6039,7 @@
     "es-module/test-esm-loader.mjs": { "category": "known-gap", "reason": "registered loaders share the main module cache/context; Node isolates loader modules in a separate loader realm" },
     "es-module/test-esm-main-lookup.mjs": { "category": "runnable" },
     "es-module/test-esm-module-not-found-commonjs-hint.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-named-exports.mjs": { "category": "known-gap", "reason": "requires module.register loader hooks to remap and synthesize builtin named exports" },
+    "es-module/test-esm-named-exports.mjs": { "category": "known-gap", "reason": "requires async registered loader resolve hooks during static ESM resolution to remap builtins before synthesizing named exports" },
     "es-module/test-esm-namespace.mjs": { "category": "runnable" },
     "es-module/test-esm-no-addons.mjs": { "category": "wasi-impossible", "reason": "requires worker_threads/native addon process isolation semantics, which are not available in single-threaded WASM" },
     "es-module/test-esm-non-js.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },

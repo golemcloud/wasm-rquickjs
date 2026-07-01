@@ -4749,9 +4749,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return value && (typeof value === 'object' || typeof value === 'function') && typeof value.then === 'function';
     }
 
-    function assertSyncLoaderResult(value, hookName) {
+    function assertSyncLoaderResult(value, hookName, operation) {
         if (isLoaderThenable(value)) {
-            const err = new Error('Async registered loader ' + hookName + ' hooks are not supported from CommonJS require()');
+            const err = new Error('Async registered loader ' + hookName + ' hooks are not supported from ' + (operation || 'CommonJS require()'));
             err.code = 'ERR_REQUIRE_ASYNC_MODULE';
             throw err;
         }
@@ -4858,7 +4858,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve'), 'resolve', context);
+                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve', isImportMode ? 'static ES module resolution' : undefined), 'resolve', context);
                 validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
                 if (!nextCalled && (!result || result.shortCircuit !== true)) {
                     throw makeLoaderChainError('resolve');
@@ -4888,7 +4888,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load'), 'load', context);
+                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined), 'load', context);
                 if (result.format !== undefined && result.format !== null && result.format !== '') {
                     validateRegisteredLoaderLoadFormat(result.format);
                 }

@@ -55,6 +55,46 @@ fn prepare_node_compat_full(
     )))
 }
 
+#[test_r::test]
+async fn runner_import_preload_flag(prepared: &Arc<FullPreparedComponent>) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("preload-smoke-preload.mjs"),
+        "globalThis.__nodeCompatPreloadValue = 41;\n",
+    )?;
+    fs::write(
+        suite_dir.join("preload-smoke.mjs"),
+        [
+            "// Flags: --import ./test/es-module/preload-smoke-preload.mjs",
+            "if (globalThis.__nodeCompatPreloadValue !== 41) {",
+            "  throw new Error('preload did not run before entry');",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/preload-smoke.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
 // --- Helper types and functions ---
 
 /// Cloneable representation of discovery data for use in test closures.
