@@ -2886,7 +2886,7 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             data: { one: 1 },
             dataWithQuery: { one: 1 },
             sameAsCjs: true,
-            querySameAsCjs: true,
+            querySameAsCjs: false,
         });
         assert.deepStrictEqual((await import('/module-syntax-app/attr-data-url-entry.mjs')).default, { two: 2 });
         await expectImportRejectsCode('/module-syntax-app/attr-missing.mjs', 'ERR_IMPORT_ATTRIBUTE_MISSING');

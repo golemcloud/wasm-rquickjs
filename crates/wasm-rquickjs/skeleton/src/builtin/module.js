@@ -2088,6 +2088,13 @@ function isIdentifierContinueCode(code) {
         code >= 0x80;
 }
 
+function isIdentifierStartCode(code) {
+    return code === 0x5f || code === 0x24 || // _ $
+        (code >= 0x41 && code <= 0x5a) ||
+        (code >= 0x61 && code <= 0x7a) ||
+        code >= 0x80;
+}
+
 function hasIdentifierBoundary(source, start, end) {
     return (start === 0 || !isIdentifierContinueCode(source.charCodeAt(start - 1))) &&
         (end >= source.length || !isIdentifierContinueCode(source.charCodeAt(end)));
@@ -2330,7 +2337,7 @@ function isStaticImportSyntax(source, pos) {
     if (source.charCodeAt(next) === 0x28 || source.charCodeAt(next) === 0x3a) return false; // dynamic import(...) or property label
     const ch = source.charCodeAt(next);
     return ch === 0x27 || ch === 0x22 || ch === 0x7b || ch === 0x2a ||
-        (ch === 0x5f || ch === 0x24 || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a) || ch >= 0x80);
+        isIdentifierStartCode(ch);
 }
 
 function looksLikeEsmSource(source) {
@@ -2569,7 +2576,7 @@ function readLoaderCjsExportName(source, pos) {
         i = skipWhitespaceAndComments(source, i + 1);
         const start = i;
         const first = source.charCodeAt(i);
-        if (!(first === 0x5f || first === 0x24 || (first >= 0x41 && first <= 0x5a) || (first >= 0x61 && first <= 0x7a) || first >= 0x80)) return null;
+        if (!isIdentifierStartCode(first)) return null;
         i++;
         while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
         name = source.substring(start, i);
@@ -2667,8 +2674,7 @@ function readLoaderObjectLiteralKey(source, pos) {
         if (decoded === null) return null;
         return { name: decoded.value, keyIsIdent: false, end: decoded.end + 1 };
     }
-    const first = ch;
-    if (!(first === 0x5f || first === 0x24 || (first >= 0x41 && first <= 0x5a) || (first >= 0x61 && first <= 0x7a) || first >= 0x80)) {
+    if (!isIdentifierStartCode(ch)) {
         return null;
     }
     let i = pos + 1;
@@ -2678,7 +2684,7 @@ function readLoaderObjectLiteralKey(source, pos) {
 
 function loaderObjectLiteralValueExport(source, pos, objectEnd) {
     const first = source.charCodeAt(pos);
-    if (!(first === 0x5f || first === 0x24 || (first >= 0x41 && first <= 0x5a) || (first >= 0x61 && first <= 0x7a) || first >= 0x80)) {
+    if (!isIdentifierStartCode(first)) {
         return null;
     }
     let i = pos + 1;
@@ -2855,7 +2861,7 @@ function loaderSimpleGetterBody(source, start, end) {
     if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return false;
     i = skipWhitespaceAndComments(source, i + 6);
     const first = source.charCodeAt(i);
-    if (!(first === 0x5f || first === 0x24 || (first >= 0x41 && first <= 0x5a) || (first >= 0x61 && first <= 0x7a) || first >= 0x80)) {
+    if (!isIdentifierStartCode(first)) {
         return false;
     }
     i++;
@@ -2864,7 +2870,7 @@ function loaderSimpleGetterBody(source, start, end) {
     if (source.charCodeAt(i) === 0x2e) {
         i = skipWhitespaceAndComments(source, i + 1);
         const ch = source.charCodeAt(i);
-        if (!(ch === 0x5f || ch === 0x24 || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a) || ch >= 0x80)) return false;
+        if (!isIdentifierStartCode(ch)) return false;
         i++;
         while (i < end && isIdentifierContinueCode(source.charCodeAt(i))) i++;
     } else if (source.charCodeAt(i) === 0x5b) {
