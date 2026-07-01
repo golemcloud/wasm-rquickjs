@@ -2219,6 +2219,30 @@ function skipWhitespace(source, start) {
     return i;
 }
 
+function skipWhitespaceAndComments(source, start) {
+    let i = start;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d) {
+            i++;
+            continue;
+        }
+        if (code === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        break;
+    }
+    return i;
+}
+
 function startsWithKeywordAt(source, keyword, pos) {
     return source.startsWith(keyword, pos) && hasIdentifierBoundary(source, pos, pos + keyword.length);
 }
@@ -2442,6 +2466,58 @@ function readStaticSpecifierString(source, start) {
         }
     }
     return null;
+}
+
+function decodeStringLiteral(source, start, quote) {
+    let value = '';
+    let i = start;
+    while (i < source.length && source.charCodeAt(i) !== quote) {
+        let ch = source.charCodeAt(i);
+        if (ch !== 0x5c) {
+            value += source[i++];
+            continue;
+        }
+        i++;
+        if (i >= source.length) return null;
+        ch = source.charCodeAt(i++);
+        if (ch === 0x6e) value += '\n';
+        else if (ch === 0x72) value += '\r';
+        else if (ch === 0x74) value += '\t';
+        else if (ch === 0x62) value += '\b';
+        else if (ch === 0x66) value += '\f';
+        else if (ch === 0x76) value += '\v';
+        else if (ch === 0x78 && i + 2 <= source.length) {
+            const hex = source.substring(i, i + 2);
+            if (!/^[0-9a-fA-F]{2}$/.test(hex)) return null;
+            value += String.fromCharCode(parseInt(hex, 16));
+            i += 2;
+        } else if (ch === 0x75 && source.charCodeAt(i) === 0x7b) {
+            const end = source.indexOf('}', i + 1);
+            if (end < 0) return null;
+            const hex = source.substring(i + 1, end);
+            if (!/^[0-9a-fA-F]+$/.test(hex)) return null;
+            const codePoint = parseInt(hex, 16);
+            if (codePoint > 0x10ffff) return null;
+            value += String.fromCodePoint(codePoint);
+            i = end + 1;
+        } else if (ch === 0x75 && i + 4 <= source.length) {
+            const hex = source.substring(i, i + 4);
+            if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null;
+            value += String.fromCharCode(parseInt(hex, 16));
+            i += 4;
+        } else if (ch >= 0x30 && ch <= 0x37) {
+            let octal = String.fromCharCode(ch);
+            while (octal.length < 3 && i < source.length) {
+                const next = source.charCodeAt(i);
+                if (next < 0x30 || next > 0x37) break;
+                octal += source[i++];
+            }
+            value += String.fromCharCode(parseInt(octal, 8));
+        } else {
+            value += String.fromCharCode(ch);
+        }
+    }
+    return i < source.length ? { value, end: i } : null;
 }
 
 function statementEndForStaticImport(source, start) {
@@ -4170,100 +4246,16 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ? validateRegisteredLoaderLoadFormat(loaded.format)
             : validateRegisteredLoaderLoadFormat(resolvedFormat);
 
-        function skipLoaderWhitespaceAndComments(source, start) {
-            let i = start;
-            while (i < source.length) {
-                const code = source.charCodeAt(i);
-                if (code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d) {
-                    i++;
-                    continue;
-                }
-                if (code === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
-                    i += 2;
-                    while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-                    continue;
-                }
-                if (code === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
-                    i += 2;
-                    while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-                    i = Math.min(i + 2, source.length);
-                    continue;
-                }
-                break;
-            }
-            return i;
-        }
-
-        function previousSignificantCharBefore(source, pos) {
-            for (let i = pos - 1; i >= 0; i--) {
-                const ch = source.charCodeAt(i);
-                if (ch !== 0x20 && ch !== 0x09 && ch !== 0x0a && ch !== 0x0d) return ch;
-            }
-            return -1;
-        }
-
-        function decodeLoaderStringLiteral(source, start, quote) {
-            let value = '';
-            let i = start;
-            while (i < source.length && source.charCodeAt(i) !== quote) {
-                let ch = source.charCodeAt(i);
-                if (ch !== 0x5c) {
-                    value += source[i++];
-                    continue;
-                }
-                i++;
-                if (i >= source.length) return null;
-                ch = source.charCodeAt(i++);
-                if (ch === 0x6e) value += '\n';
-                else if (ch === 0x72) value += '\r';
-                else if (ch === 0x74) value += '\t';
-                else if (ch === 0x62) value += '\b';
-                else if (ch === 0x66) value += '\f';
-                else if (ch === 0x76) value += '\v';
-                else if (ch === 0x78 && i + 2 <= source.length) {
-                    const hex = source.substring(i, i + 2);
-                    if (!/^[0-9a-fA-F]{2}$/.test(hex)) return null;
-                    value += String.fromCharCode(parseInt(hex, 16));
-                    i += 2;
-                } else if (ch === 0x75 && source.charCodeAt(i) === 0x7b) {
-                    const end = source.indexOf('}', i + 1);
-                    if (end < 0) return null;
-                    const hex = source.substring(i + 1, end);
-                    if (!/^[0-9a-fA-F]+$/.test(hex)) return null;
-                    const codePoint = parseInt(hex, 16);
-                    if (codePoint > 0x10ffff) return null;
-                    value += String.fromCodePoint(codePoint);
-                    i = end + 1;
-                } else if (ch === 0x75 && i + 4 <= source.length) {
-                    const hex = source.substring(i, i + 4);
-                    if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null;
-                    value += String.fromCharCode(parseInt(hex, 16));
-                    i += 4;
-                } else if (ch >= 0x30 && ch <= 0x37) {
-                    let octal = String.fromCharCode(ch);
-                    while (octal.length < 3 && i < source.length) {
-                        const next = source.charCodeAt(i);
-                        if (next < 0x30 || next > 0x37) break;
-                        octal += source[i++];
-                    }
-                    value += String.fromCharCode(parseInt(octal, 8));
-                } else {
-                    value += String.fromCharCode(ch);
-                }
-            }
-            return i < source.length ? { value, end: i } : null;
-        }
-
         function readLoaderCjsExportTarget(source, pos, allowBareExports) {
-            const previous = previousSignificantCharBefore(source, pos);
+            const previous = previousSignificantChar(source, pos);
             if (previous === 0x2e || previous === 0x23) return null;
             let i = pos;
             if (allowBareExports !== false && source.startsWith('exports', i) && hasIdentifierBoundary(source, i, i + 7)) {
                 i += 7;
             } else if (source.startsWith('module', i) && hasIdentifierBoundary(source, i, i + 6)) {
-                i = skipLoaderWhitespaceAndComments(source, i + 6);
+                i = skipWhitespaceAndComments(source, i + 6);
                 if (source.charCodeAt(i) !== 0x2e) return null;
-                i = skipLoaderWhitespaceAndComments(source, i + 1);
+                i = skipWhitespaceAndComments(source, i + 1);
                 if (!source.startsWith('exports', i) || !hasIdentifierBoundary(source, i, i + 7)) return null;
                 i += 7;
             } else {
@@ -4276,10 +4268,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             let i = readLoaderCjsExportTarget(source, pos);
             if (i === null) return null;
 
-            i = skipLoaderWhitespaceAndComments(source, i);
+            i = skipWhitespaceAndComments(source, i);
             let name;
             if (source.charCodeAt(i) === 0x2e) {
-                i = skipLoaderWhitespaceAndComments(source, i + 1);
+                i = skipWhitespaceAndComments(source, i + 1);
                 const start = i;
                 const first = source.charCodeAt(i);
                 if (!(first === 0x5f || first === 0x24 || (first >= 0x41 && first <= 0x5a) || (first >= 0x61 && first <= 0x7a) || first >= 0x80)) return null;
@@ -4287,20 +4279,20 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
                 name = source.substring(start, i);
             } else if (source.charCodeAt(i) === 0x5b) {
-                i = skipLoaderWhitespaceAndComments(source, i + 1);
+                i = skipWhitespaceAndComments(source, i + 1);
                 const quote = source.charCodeAt(i);
                 if (quote !== 0x27 && quote !== 0x22) return null;
-                const decoded = decodeLoaderStringLiteral(source, i + 1, quote);
+                const decoded = decodeStringLiteral(source, i + 1, quote);
                 if (decoded === null) return null;
                 name = decoded.value;
-                i = skipLoaderWhitespaceAndComments(source, decoded.end + 1);
+                i = skipWhitespaceAndComments(source, decoded.end + 1);
                 if (source.charCodeAt(i) !== 0x5d) return null;
                 i++;
             } else {
                 return null;
             }
 
-            i = skipLoaderWhitespaceAndComments(source, i);
+            i = skipWhitespaceAndComments(source, i);
             if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) {
                 return null;
             }
@@ -4340,7 +4332,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 if (ch === 0x7b) depth++;
                 else if (ch === 0x7d) depth = Math.max(0, depth - 1);
                 else if (depth === 1 && source.startsWith('value', i) && hasIdentifierBoundary(source, i, i + 5)) {
-                    const next = skipLoaderWhitespaceAndComments(source, i + 5);
+                    const next = skipWhitespaceAndComments(source, i + 5);
                     return source.charCodeAt(next) === 0x3a;
                 }
                 i++;
@@ -4349,27 +4341,27 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
 
         function readLoaderDefinePropertyExportName(source, pos) {
-            const previous = previousSignificantCharBefore(source, pos);
+            const previous = previousSignificantChar(source, pos);
             if (previous === 0x2e || previous === 0x23) return null;
             if (!source.startsWith('Object', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
-            let i = skipLoaderWhitespaceAndComments(source, pos + 6);
+            let i = skipWhitespaceAndComments(source, pos + 6);
             if (source.charCodeAt(i) !== 0x2e) return null;
-            i = skipLoaderWhitespaceAndComments(source, i + 1);
+            i = skipWhitespaceAndComments(source, i + 1);
             if (!source.startsWith('defineProperty', i) || !hasIdentifierBoundary(source, i, i + 14)) return null;
-            i = skipLoaderWhitespaceAndComments(source, i + 14);
+            i = skipWhitespaceAndComments(source, i + 14);
             if (source.charCodeAt(i) !== 0x28) return null;
             const open = i;
-            i = skipLoaderWhitespaceAndComments(source, i + 1);
+            i = skipWhitespaceAndComments(source, i + 1);
             i = readLoaderCjsExportTarget(source, i);
             if (i === null) return null;
-            i = skipLoaderWhitespaceAndComments(source, i);
+            i = skipWhitespaceAndComments(source, i);
             if (source.charCodeAt(i) !== 0x2c) return null;
-            i = skipLoaderWhitespaceAndComments(source, i + 1);
+            i = skipWhitespaceAndComments(source, i + 1);
             const quote = source.charCodeAt(i);
             if (quote !== 0x27 && quote !== 0x22) return null;
-            const decoded = decodeLoaderStringLiteral(source, i + 1, quote);
+            const decoded = decodeStringLiteral(source, i + 1, quote);
             if (decoded === null) return null;
-            i = skipLoaderWhitespaceAndComments(source, decoded.end + 1);
+            i = skipWhitespaceAndComments(source, decoded.end + 1);
             if (source.charCodeAt(i) !== 0x2c) return null;
             const close = loaderFindMatchingParen(source, open);
             if (close < 0 || !loaderDescriptorHasValueProperty(source, i + 1, close)) return null;
@@ -4380,18 +4372,18 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (!source.startsWith('module', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
             const targetEnd = readLoaderCjsExportTarget(source, pos, false);
             if (targetEnd === null) return null;
-            let i = skipLoaderWhitespaceAndComments(source, targetEnd);
+            let i = skipWhitespaceAndComments(source, targetEnd);
             if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
-            i = skipLoaderWhitespaceAndComments(source, i + 1);
+            i = skipWhitespaceAndComments(source, i + 1);
             if (!source.startsWith('require', i) || !hasIdentifierBoundary(source, i, i + 7)) return null;
-            i = skipLoaderWhitespaceAndComments(source, i + 7);
+            i = skipWhitespaceAndComments(source, i + 7);
             if (source.charCodeAt(i) !== 0x28) return null;
-            i = skipLoaderWhitespaceAndComments(source, i + 1);
+            i = skipWhitespaceAndComments(source, i + 1);
             const quote = source.charCodeAt(i);
             if (quote !== 0x27 && quote !== 0x22) return null;
-            const decoded = decodeLoaderStringLiteral(source, i + 1, quote);
+            const decoded = decodeStringLiteral(source, i + 1, quote);
             if (decoded === null) return null;
-            i = skipLoaderWhitespaceAndComments(source, decoded.end + 1);
+            i = skipWhitespaceAndComments(source, decoded.end + 1);
             if (source.charCodeAt(i) !== 0x29) return null;
             return decoded.value;
         }
