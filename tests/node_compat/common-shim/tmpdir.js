@@ -128,3 +128,8 @@ const tmpdir = {
 };
 
 module.exports = tmpdir;
+module.exports.fileURL = tmpdir.fileURL;
+module.exports.hasEnoughSpace = tmpdir.hasEnoughSpace;
+module.exports.path = tmpdir.path;
+module.exports.refresh = tmpdir.refresh;
+module.exports.resolve = tmpdir.resolve;

@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3197/4394 (72.8%)
+**Primary compatibility (CI-enforced):** 3194/4396 (72.7%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3197 | 72.8% | 56.0% | 46.8% |
-| 🧩 known gap | 1197 | 27.2% | 21.0% | 17.5% |
+| ✅ passing (runnable) | 3194 | 72.7% | 55.9% | 46.7% |
+| 🧩 known gap | 1202 | 27.3% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
-| **Total** | **6833** |  |  | **100.0%** |
+| **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3197/5711 (56.0%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3194/5713 (55.9%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 581 | 168 | 134 | 85 | 11 | 0 | 183 | 55.6% | 42.2% |
+| other | 583 | 165 | 139 | 85 | 11 | 0 | 183 | 54.3% | 41.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -92,6 +92,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 | File | Subtests | Passing | Gap | WASI-impossible | Engine diff | Unevaluated | Internals |
 |------|----------|----------|-----|-----------------|-------------|-------------|-----------|
+| `test-esm-json.mjs` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
 | `test-esm-loader-modulemap.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
 | `test-require-module-conditional-exports.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-cjs-esm-esm.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
@@ -680,12 +681,12 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1197)
+### known gap (1202)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
-| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 36 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-dynamic-import-mutating-fs.mjs`, ... (+33) |
+| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 35 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-dynamic-import-mutating-fs.mjs`, ... (+32) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
@@ -757,6 +758,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | node_compat common shim is missing ../common/wpt harness | 3 | `parallel/test-whatwg-events-event-constructors.js`, `parallel/test-whatwg-events-eventtarget-this-of-listener.js`, `parallel/test-whatwg-url-custom-searchparams-sort.js` |
 | perf_hooks incomplete | 3 | `parallel/test-performance-gc.js#block_00_adding_an_observer_should_force_at_least_one_gc_to_appear`, `parallel/test-performance-measure-detail.js`, `parallel/test-performance-measure.js` |
 | perf_hooks.monitorEventLoopDelay is not implemented | 3 | `sequential/test-performance-eventloopdelay.js#block_00_block_00`, `sequential/test-performance-eventloopdelay.js#block_01_block_01`, `sequential/test-performance-eventloopdelay.js#block_02_block_02` |
+| requires async registered loader resolve hooks during static ES module resolution | 3 | `es-module/test-esm-loader-dependency.mjs`, `es-module/test-esm-loader-invalid-format.mjs`, `es-module/test-esm-loader-invalid-url.mjs` |
 | setUncaughtExceptionCaptureCallback does not fully intercept thrown uncaught exceptions | 3 | `parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring.js`, `parallel/test-process-exception-capture-should-abort-on-uncaught.js`, `parallel/test-process-exception-capture.js` |
 | spawn() stdio validation/pipe semantics are not Node-compatible in WASM emulation | 3 | `parallel/test-child-process-stdio.js#block_00_test_stdio_piping`, `parallel/test-child-process-stdio.js#block_02_asset_options_invariance`, `parallel/test-child-process-stdio.js#block_03_test_stdout_buffering` |
 | test runner edge case | 3 | `parallel/test-runner-filetest-location.js`, `parallel/test-runner-root-after-with-refed-handles.js`, `parallel/test-runner-todo-skip-tests.js` |
@@ -997,6 +999,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks promise lifecycle/context propagation is incomplete | 1 | `parallel/test-async-hooks-async-await.js` |
 | async_hooks promise triggerAsyncId tracking is incomplete | 1 | `parallel/test-async-hooks-promise-triggerid.js` |
 | async_hooks runInAsyncScope triggerAsyncId stack behavior is incomplete | 1 | `parallel/test-async-hooks-recursive-stack-runInAsyncScope.js` |
+| builtin module namespace exports include runtime shim internals and do not exactly match Node | 1 | `es-module/test-esm-namespace.mjs` |
 | captureRejections propagation from outgoing-message drain to socket/request errors is not Node-compatible | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00` |
 | checkContinue/write callback ordering and completion semantics are incomplete | 1 | `parallel/test-http-write-callbacks.js` |
 | child_process -p/process.title behavior is incomplete in WASM child emulation | 1 | `sequential/test-process-title.js` |
@@ -1205,6 +1208,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
+| registered loader static ESM resolution does not yet preserve Node's loader hook specifier/base semantics for the example loader | 1 | `es-module/test-esm-example-loader.mjs` |
 | registered loaders share the main module cache/context; Node isolates loader modules in a separate loader realm | 1 | `es-module/test-esm-loader.mjs` |
 | removing hop-by-hop/framing headers is not serialized with Node-compatible behavior | 1 | `parallel/test-http-remove-header-stays-removed.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
@@ -1229,6 +1233,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them | 1 | `parallel/test-http-multi-line-headers.js` |
 | requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle | 1 | `parallel/test-http-agent-keepalive.js` |
 | requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module | 1 | `es-module/test-disable-require-module-with-detection.js` |
+| requires simulated process.execPath / Node CLI mode support for child-process JSON module warning assertions | 1 | `es-module/test-esm-json.mjs#test_01_should_not_print_an_experimental_warning` |
 | requires simulated process.execPath / Node CLI module_timer and trace-event support | 1 | `parallel/test-module-print-timing.mjs` |
 | response writable state around aborted proxy close is not Node-compatible | 1 | `parallel/test-http-writable-true-after-close.js` |
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |

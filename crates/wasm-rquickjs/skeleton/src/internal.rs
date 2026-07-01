@@ -6856,17 +6856,22 @@ impl Loader for JsonFileLoader {
             )
         } else if DataUrlLoader::is_valid_json(&source) {
             let escaped = DataUrlLoader::js_string_escape(&source);
-            format!(
-                "import {{ createRequire as __wasm_rquickjs_createRequire }} from 'node:module';\nconst __wasm_rquickjs_require = __wasm_rquickjs_createRequire(\"{}\");\nconst __wasm_rquickjs_filename = \"{}\";\nconst __wasm_rquickjs_cached = __wasm_rquickjs_require.cache[__wasm_rquickjs_filename];\nconst __wasm_rquickjs_value = __wasm_rquickjs_cached ? __wasm_rquickjs_cached.exports : JSON.parse('{escaped}');\nif (!__wasm_rquickjs_cached) __wasm_rquickjs_require.cache[__wasm_rquickjs_filename] = {{ id: __wasm_rquickjs_filename, filename: __wasm_rquickjs_filename, path: \"{}\", exports: __wasm_rquickjs_value, loaded: true, parent: null, children: [], paths: [] }};\nexport default __wasm_rquickjs_value;\n",
-                escape_js_string(fs_path),
-                escape_js_string(fs_path),
-                escape_js_string(
-                    std::path::Path::new(fs_path)
-                        .parent()
-                        .and_then(|path| path.to_str())
-                        .unwrap_or("/")
+            let original_path = strip_import_type_rewrite_token(path);
+            if split_module_path_suffix(&original_path).1.is_empty() {
+                format!(
+                    "const __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require(\"{}\");\nconst __wasm_rquickjs_filename = \"{}\";\nconst __wasm_rquickjs_cached = __wasm_rquickjs_require.cache[__wasm_rquickjs_filename];\nconst __wasm_rquickjs_value = __wasm_rquickjs_cached ? __wasm_rquickjs_cached.exports : JSON.parse('{escaped}');\nif (!__wasm_rquickjs_cached) __wasm_rquickjs_require.cache[__wasm_rquickjs_filename] = {{ id: __wasm_rquickjs_filename, filename: __wasm_rquickjs_filename, path: \"{}\", exports: __wasm_rquickjs_value, loaded: true, parent: null, children: [], paths: [] }};\nexport default __wasm_rquickjs_value;\n",
+                    escape_js_string(fs_path),
+                    escape_js_string(fs_path),
+                    escape_js_string(
+                        std::path::Path::new(fs_path)
+                            .parent()
+                            .and_then(|path| path.to_str())
+                            .unwrap_or("/")
+                    )
                 )
-            )
+            } else {
+                format!("export default JSON.parse('{escaped}');\n")
+            }
         } else {
             DataUrlLoader::make_json_error_module(&source)
         };

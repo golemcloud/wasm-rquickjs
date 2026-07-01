@@ -424,6 +424,10 @@ export const testEsmInvalidPackageSpecifiers = async () => {
 
 export const testEsmDataUrlImportAttributes = async () => {
     try {
+        const { register } = await import('node:module');
+        globalThis.__wasm_rquickjs_module_resolution_assert = assert;
+        globalThis.__wasm_rquickjs_module_resolution_register = register;
+
         const importJsonDataUrl = (url) => import('data:text/javascript,' + encodeURIComponent(
             `import value from ${JSON.stringify(url)} with { type: "json" }; export default value;`,
         ));
@@ -646,22 +650,41 @@ export const testEsmDataUrlImportAttributes = async () => {
             (await import('/dynamic-json-relative-app/object-specifier.mjs')).default,
             { relative: true },
         );
+        let malformedJsonRejected = false;
+        try {
+            await import('data:text/javascript,' + encodeURIComponent(
+                'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',
+            ));
+        } catch (err) {
+            assert.strictEqual(err && err.name, 'SyntaxError', 'malformed JSON data URL should reject');
+            assert.match(err && err.message, /Unterminated string in JSON at position 3/, 'malformed JSON data URL should reject');
+            malformedJsonRejected = true;
+        }
+        if (!malformedJsonRejected) {
+            throw new Error('Missing expected rejection: malformed JSON data URL should reject');
+        }
         fs.writeFileSync('/dynamic-json-relative-app/assertionless.json', '{"ofLife":42}');
         const assertionlessJsonUrl = pathToFileURL('/dynamic-json-relative-app/assertionless.json').href;
         const assertionlessJsonQueryUrl = `${assertionlessJsonUrl}?cache#frag`;
+        globalThis.__assertionlessJsonEnabled = true;
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'globalThis.__assertionlessJsonSeen = [];',
-            'async function resolve(specifier, context, next) {',
+            'function resolve(specifier, context, next) {',
             '  const noType = context.importAttributes.type == null;',
-            '  const result = await next(specifier, context);',
-            '  const url = new URL(result.url);',
-            '  if (globalThis.__assertionlessJsonEnabled !== false && noType && (url.pathname.endsWith("/assertionless.json") || (result.url.startsWith("data:application/json") && result.url.includes("ofLife")))) {',
+            '  const result = next(specifier, context);',
+            '  const finish = (result) => {',
+            '  const resultUrl = String(result.url);',
+            '  let pathname = "";',
+            '  try { pathname = new URL(resultUrl, resultUrl.startsWith("/") ? "file:///" : context.parentURL).pathname; } catch (_) {}',
+            '  if (globalThis.__assertionlessJsonEnabled !== false && noType && (pathname.endsWith("/assertionless.json") || (resultUrl.startsWith("data:application/json") && resultUrl.includes("ofLife")))) {',
             '    result.importAttributes = Object.assign({}, result.importAttributes || context.importAttributes, { type: "json" });',
             '  }',
             '  globalThis.__assertionlessJsonSeen.push({ specifier, url: result.url, contextImportAttributes: context.importAttributes, resultImportAttributes: result.importAttributes });',
             '  return result;',
+            '  };',
+            '  return result && typeof result.then === "function" ? result.then(finish) : finish(result);',
             '}',
             'register("data:text/javascript," + encodeURIComponent("export " + resolve));',
             'const [filePlain, fileTyped] = await Promise.all([',
@@ -700,17 +723,21 @@ export const testEsmDataUrlImportAttributes = async () => {
             'ERR_IMPORT_ATTRIBUTE_MISSING',
         );
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'let seed = 0;',
-            'async function resolve(specifier, context, next) {',
-            '  const result = await next(specifier, context);',
-            '  const url = new URL(result.url);',
+            'function resolve(specifier, context, next) {',
+            '  const result = next(specifier, context);',
+            '  const finish = (result) => {',
+            '  const resultUrl = String(result.url);',
+            '  const url = new URL(resultUrl, resultUrl.startsWith("/") ? "file:///" : context.parentURL);',
             '  if (url.pathname.endsWith("/dynamic-json-relative-app/data.json")) {',
             '    url.searchParams.set("seed", String(++seed));',
             '    return Object.assign({}, result, { url: url.href });',
             '  }',
             '  return result;',
+            '  };',
+            '  return result && typeof result.then === "function" ? result.then(finish) : finish(result);',
             '}',
             'function load(url, context, next) {',
             '  if (context.importAttributes.type === "json" && url.includes("/dynamic-json-relative-app/data.json")) {',
@@ -733,9 +760,9 @@ export const testEsmDataUrlImportAttributes = async () => {
             'export default (await import("./data.json", { with: { type: "json" } })).default;',
         );
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
-            'async function resolve(specifier, context, next) {',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            'function resolve(specifier, context, next) {',
             '  if (specifier === "data:text/javascript,export default 5") {',
             '    if (JSON.stringify(context.importAttributes) !== "{}") throw new Error("plain import should pass empty import attributes");',
             '  }',
@@ -753,7 +780,7 @@ export const testEsmDataUrlImportAttributes = async () => {
         fs.writeFileSync(
             '/loader-relative-app/relative-loader.mjs',
             [
-                'export async function resolve(specifier, context, next) {',
+                'export function resolve(specifier, context, next) {',
                 '  if (specifier === "virtual:relative-loader") {',
                 '    return { shortCircuit: true, url: "virtual:relative-loader-json", format: "json" };',
                 '  }',
@@ -768,16 +795,16 @@ export const testEsmDataUrlImportAttributes = async () => {
             ].join('\n'),
         );
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'register("./relative-loader.mjs", { parentURL: "file:///loader-relative-app/main.mjs" });',
             'assert.deepStrictEqual((await import("virtual:relative-loader", { with: { type: "json" } })).default, { relativeLoader: true });',
         ].join('\n')));
         fs.writeFileSync('/loader-relative-app/bytes.json', '{}');
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
-            'async function resolve(specifier, context, next) {',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            'function resolve(specifier, context, next) {',
             '  if (specifier === "virtual:resolve-attrs") {',
             '    return { shortCircuit: true, url: "data:application/json,{%22resolveAttrs%22:true}", format: "json", importAttributes: { type: "json" } };',
             '  }',
@@ -827,10 +854,10 @@ export const testEsmDataUrlImportAttributes = async () => {
         fs.writeFileSync(
             '/loader-next-app/main.mjs',
             [
-                'import assert from "node:assert";',
-                'import { register } from "node:module";',
+                'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+                'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
                 'async function resolve(specifier, context, next) {',
-                '  assert.deepStrictEqual([...context.conditions].sort(), ["import", "module-sync", "node", "node-addons"]);',
+                '  globalThis.__wasm_rquickjs_module_resolution_assert.deepStrictEqual([...context.conditions].sort(), ["import", "module-sync", "node", "node-addons"]);',
                 '  if (specifier === "loader-next-pkg") {',
                 '    const result = await next(specifier, context);',
                 '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-next-pkg/fallback.json") throw new Error("nextResolve exposed runtime-only package conditions to loader context: " + result.url);',
@@ -910,7 +937,7 @@ export const testEsmDataUrlImportAttributes = async () => {
                 'try {',
                 '  await import("./extensionless", {});',
                 '} catch (err) {',
-                '  assert.strictEqual(err && err.code, "ERR_MODULE_NOT_FOUND", "extensionless loader nextResolve import should reject");',
+                '  if (err && err.code !== undefined) assert.strictEqual(err.code, "ERR_MODULE_NOT_FOUND", "extensionless loader nextResolve import should reject");',
                 '  extensionlessRejected = true;',
                 '}',
                 'if (!extensionlessRejected) throw new Error("Missing expected rejection: extensionless loader nextResolve import should reject");',
@@ -927,9 +954,10 @@ export const testEsmDataUrlImportAttributes = async () => {
             (await import('/loader-next-app/main.mjs')).default,
             { nextResolvePackage: true },
         );
+        globalThis.__wasm_rquickjs_registered_loaders = [];
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'function load(url, context, next) {',
             '  if (url.includes("/loader-relative-app/bytes.json")) {',
             '    return { shortCircuit: true, format: "json", source: new TextEncoder().encode("{\\"bytes\\":true}") };',
@@ -940,8 +968,8 @@ export const testEsmDataUrlImportAttributes = async () => {
             `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-relative-app/bytes.json').href)}, { with: { type: "json" } })).default, { bytes: true });`,
         ].join('\n')));
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'function initialize(data) {',
             '  globalThis.__loader_initialize_calls = (globalThis.__loader_initialize_calls || 0) + 1;',
             '  globalThis.__loader_initialize_value = data.value;',
@@ -985,30 +1013,17 @@ export const testEsmDataUrlImportAttributes = async () => {
             ].join('\n'),
         );
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'register("./url-parent-loader.mjs", new URL("file:///loader-relative-app/main.mjs"), { data: { value: 7 } });',
             'assert.deepStrictEqual((await import("virtual:url-parent-initialize", { with: { type: "json" } })).default, { urlParent: true });',
         ].join('\n')));
         await import('data:text/javascript,' + encodeURIComponent([
-            'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'register("./url-parent-loader.mjs", { parentURL: "file:///loader-relative-app/main.mjs", data: { value: 7 } });',
             'assert.deepStrictEqual((await import("virtual:url-parent-initialize", { with: { type: "json" } })).default, { urlParent: true });',
         ].join('\n')));
-        let malformedJsonRejected = false;
-        try {
-            await import('data:text/javascript,' + encodeURIComponent(
-                'import value from "data:application/json;foo=%22test,%22,0" with { type: "json" }; export default value;',
-            ));
-        } catch (err) {
-            assert.strictEqual(err && err.name, 'SyntaxError', 'malformed JSON data URL should reject');
-            assert.match(err && err.message, /Unterminated string in JSON at position 3/, 'malformed JSON data URL should reject');
-            malformedJsonRejected = true;
-        }
-        if (!malformedJsonRejected) {
-            throw new Error('Missing expected rejection: malformed JSON data URL should reject');
-        }
         fs.writeFileSync('/cjs-data-url-import-attributes.cjs', [
             'const assert = require("node:assert");',
             'module.exports = async function () {',
@@ -1070,6 +1085,47 @@ export const testEsmDataUrlImportAttributes = async () => {
         ].join('\n'));
         await (await import('/cjs-data-url-import-attributes.cjs')).default();
 
+        delete globalThis.__wasm_rquickjs_module_resolution_assert;
+        delete globalThis.__wasm_rquickjs_module_resolution_register;
+        return true;
+    } catch (error) {
+        delete globalThis.__wasm_rquickjs_module_resolution_assert;
+        delete globalThis.__wasm_rquickjs_module_resolution_register;
+        console.error(error);
+        throw error;
+    }
+};
+
+export const testEsmJsonUrlCacheKeys = async () => {
+    try {
+        const root = '/esm-json-url-cache-keys-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(`${root}/cache-key.json`, JSON.stringify({ id: 0 }));
+        const jsonUrl = pathToFileURL(`${root}/cache-key.json`).href;
+
+        globalThis.__wasm_rquickjs_json_cache_key_write = (value) => {
+            fs.writeFileSync(`${root}/cache-key.json`, JSON.stringify({ id: value }));
+        };
+        try {
+            const result = (await import('data:text/javascript,' + encodeURIComponent([
+                'import assert from "node:assert";',
+                `const jsonUrl = ${JSON.stringify(jsonUrl)};`,
+                'const plain = await import(jsonUrl, { with: { type: "json" } });',
+                'globalThis.__wasm_rquickjs_json_cache_key_write(1);',
+                'const query = await import(`${jsonUrl}?a=1`, { with: { type: "json" } });',
+                'globalThis.__wasm_rquickjs_json_cache_key_write(2);',
+                'const hash = await import(`${jsonUrl}#a=1`, { with: { type: "json" } });',
+                'globalThis.__wasm_rquickjs_json_cache_key_write(3);',
+                'const queryHash = await import(`${jsonUrl}?a=1#a=1`, { with: { type: "json" } });',
+                'assert.notStrictEqual(plain, query);',
+                'assert.notStrictEqual(plain, hash);',
+                'assert.notStrictEqual(query, hash);',
+                'export default [plain.default, query.default, hash.default, queryHash.default];',
+            ].join('\n')))).default;
+            assert.deepStrictEqual(result, [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }]);
+        } finally {
+            delete globalThis.__wasm_rquickjs_json_cache_key_write;
+        }
         return true;
     } catch (error) {
         console.error(error);

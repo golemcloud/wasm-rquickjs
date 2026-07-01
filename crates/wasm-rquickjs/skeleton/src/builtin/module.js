@@ -4360,6 +4360,11 @@ export let createRequire = function createRequire(filename) {
     return makeRequire(dir, syntheticParent, filepath);
 };
 
+Object.defineProperty(globalThis, '__wasm_rquickjs_create_require', {
+    value: createRequire,
+    configurable: true,
+});
+
 function isUrlInstance(value) {
     return value instanceof URL ||
         (value !== null && typeof value === 'object' &&
