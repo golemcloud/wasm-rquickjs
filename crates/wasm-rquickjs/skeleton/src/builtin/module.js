@@ -4037,9 +4037,9 @@ function splitPackageName(id) {
     return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
 }
 
-function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
+function resolveFromNodeModules(id, parentDir, parentFilename, conditions, lookupPaths) {
     conditions = conditions || cjsPackageConditions();
-    const dirs = _nodeModulePaths(parentDir);
+    const dirs = Array.isArray(lookupPaths) ? lookupPaths : _nodeModulePaths(parentDir);
 
     // Split into package name and subpath for packages with subpath specifiers
     const parts = splitPackageName(id);
@@ -4164,6 +4164,9 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions) {
 
 function makeRequire(parentDir, parentModule, parentFilenameOverride) {
     const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
+    const parentLookupPaths = parentModule && Array.isArray(parentModule.paths)
+        ? parentModule.paths.concat(globalPaths)
+        : null;
     function localRequire(id) {
         if (typeof id !== 'string') {
             throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
@@ -4235,7 +4238,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
                 if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
                     throw err;
                 }
-                const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
+                const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
                 if (nmResolved) {
                     const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
                     return mod.exports;
@@ -4245,7 +4248,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
 
         // node_modules resolution for bare specifiers
-        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
         if (nmResolved) {
             const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
             return mod.exports;
@@ -4319,13 +4322,13 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
                 if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
                     throw err;
                 }
-                const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
+                const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
                 if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
                 throw err;
             }
         }
         // node_modules resolution for bare specifiers
-        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename);
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
         if (nmResolved) {
             return toCjsCanonicalFilename(nmResolved.filename, false);
         }
@@ -5316,13 +5319,18 @@ function Module(id, parent) {
 }
 
 Module.prototype.require = function require(id) {
-    return globalRequire(id);
+    const baseDir = this && typeof this.filename === 'string'
+        ? pathModule.dirname(this.filename)
+        : '.';
+    return makeRequire(baseDir, this || null)(id);
 };
 
 function moduleLoad(request, parent, isMain) {
-    void parent;
     void isMain;
-    return globalRequire(request);
+    if (parent && typeof parent.filename === 'string') {
+        return makeRequire(pathModule.dirname(parent.filename), parent)(request);
+    }
+    return makeRequire('.', parent || null)(request);
 }
 
 const moduleExports = Object.assign(Module, {

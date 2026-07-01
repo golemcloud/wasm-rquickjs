@@ -160,6 +160,82 @@ async fn runner_static_registered_loader_async_resolve(
     handle_test_result(result, &stdout, &stderr)
 }
 
+#[test_r::test]
+async fn runner_module_load_uses_parent_resolution(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("module-load-parent.mjs"),
+        [
+            "import Module from 'node:module';",
+            "const parent = new Module('/home/node/test/es-module/parent.cjs');",
+            "parent.filename = '/home/node/test/es-module/parent.cjs';",
+            "parent.path = '/home/node/test/es-module';",
+            "parent.paths = Module._nodeModulePaths('/home/node/test/es-module');",
+            "parent.require = () => { throw new Error('Module._load must not call parent.require'); };",
+            "const loaded = Module._load('./module-load-dep.cjs', parent);",
+            "if (loaded.marker !== 42) throw new Error('Module._load did not resolve relative to parent');",
+            "const viaPrototype = Module.prototype.require.call(parent, './module-load-dep.cjs');",
+            "if (viaPrototype.marker !== 42) throw new Error('Module.prototype.require did not resolve relative to receiver');",
+            "const customParent = new Module('synthetic-parent');",
+            "customParent.path = '/not-used-for-bare-resolution';",
+            "customParent.paths = ['/home/node/test/es-module/custom_lookup'];",
+            "const packageLoaded = Module._load('parent-only-pkg', customParent);",
+            "if (packageLoaded.marker !== 84) throw new Error('Module._load did not honor parent.paths');",
+            "const packageViaPrototype = Module.prototype.require.call(customParent, 'parent-only-pkg');",
+            "if (packageViaPrototype.marker !== 84) throw new Error('Module.prototype.require did not honor receiver.paths');",
+            "const pathOnlyParent = new Module('path-only-parent');",
+            "pathOnlyParent.path = '/home/node/test/es-module/path_only_base';",
+            "pathOnlyParent.paths = [];",
+            "assertModuleNotFound(() => Module._load('./path-only-dep.cjs', pathOnlyParent));",
+            "assertModuleNotFound(() => Module.prototype.require.call(pathOnlyParent, './path-only-dep.cjs'));",
+            "function assertModuleNotFound(fn) {",
+            "  try { fn(); } catch (err) { if (err && err.code === 'MODULE_NOT_FOUND') return; throw err; }",
+            "  throw new Error('expected MODULE_NOT_FOUND');",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("module-load-dep.cjs"),
+        "module.exports = { marker: 42 };\n",
+    )?;
+    let package_dir = suite_dir.join("custom_lookup").join("parent-only-pkg");
+    fs::create_dir_all(&package_dir)?;
+    fs::write(
+        package_dir.join("index.js"),
+        "module.exports = { marker: 84 };\n",
+    )?;
+    let path_only_dir = suite_dir.join("path_only_base");
+    fs::create_dir_all(&path_only_dir)?;
+    fs::write(
+        path_only_dir.join("path-only-dep.cjs"),
+        "module.exports = { marker: 168 };\n",
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/module-load-parent.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
 // --- Helper types and functions ---
 
 /// Cloneable representation of discovery data for use in test closures.
