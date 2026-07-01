@@ -1090,6 +1090,17 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
     throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
 }
 
+function resolvePackageTargetWithContext(packageDir, target, conditions, allowBareTarget, patternSubstitution, warningContext) {
+    try {
+        return resolvePackageTargetValue(packageDir, target, conditions, undefined, allowBareTarget, patternSubstitution, warningContext);
+    } catch (err) {
+        if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
+            throw addPackageErrorContext(err, warningContext.specifier);
+        }
+        throw err;
+    }
+}
+
 function isPackageExportsConditionsObject(exportsField) {
     if (!exportsField || typeof exportsField !== 'object' || Array.isArray(exportsField)) return false;
     const keys = Object.keys(exportsField);
@@ -1121,39 +1132,18 @@ function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions
 
     if (typeof exportsField === 'string' || Array.isArray(exportsField) || isPackageExportsConditionsObject(exportsField)) {
         if (key === '.') {
-            try {
-                resolved = resolvePackageTargetValue(packageDir, exportsField, conditions, undefined, false, undefined, { kind: 'exports', specifier: key });
-            } catch (err) {
-                if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
-                    throw addPackageErrorContext(err, key);
-                }
-                throw err;
-            }
+            resolved = resolvePackageTargetWithContext(packageDir, exportsField, conditions, false, undefined, { kind: 'exports', specifier: key });
         }
     } else if (exportsField && typeof exportsField === 'object') {
         if (Object.prototype.hasOwnProperty.call(exportsField, key)) {
-            try {
-                resolved = resolvePackageTargetValue(packageDir, exportsField[key], conditions, undefined, false, undefined, { kind: 'exports', specifier: key });
-            } catch (err) {
-                if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
-                    throw addPackageErrorContext(err, key);
-                }
-                throw err;
-            }
+            resolved = resolvePackageTargetWithContext(packageDir, exportsField[key], conditions, false, undefined, { kind: 'exports', specifier: key });
         } else {
             const pattern = findBestPackagePattern(exportsField, key);
             if (pattern !== null) {
                 if (isInvalidPackagePatternSubstitution(pattern.substitution)) {
                     throw makeInvalidModuleSpecifierError(key, invalidPackagePatternSubstitutionMessage(pattern.substitution, 'is not a valid match in pattern'));
                 }
-                try {
-                    resolved = resolvePackageTargetValue(packageDir, exportsField[pattern.key], conditions, undefined, false, pattern.substitution, { kind: 'exports', specifier: key, patternKey: pattern.key });
-                } catch (err) {
-                    if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
-                        throw addPackageErrorContext(err, key);
-                    }
-                    throw err;
-                }
+                resolved = resolvePackageTargetWithContext(packageDir, exportsField[pattern.key], conditions, false, pattern.substitution, { kind: 'exports', specifier: key, patternKey: pattern.key });
             }
         }
     } else if (exportsField !== null) {
@@ -1223,15 +1213,7 @@ function resolvePackageImports(id, parentDir, conditions) {
         patternSubstitution = pattern.substitution;
         patternKey = pattern.key;
     }
-    let resolved;
-    try {
-        resolved = resolvePackageTargetValue(scope.dir, target, conditions, undefined, true, patternSubstitution, { kind: 'imports', specifier: id, patternKey });
-    } catch (err) {
-        if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
-            throw addPackageErrorContext(err, id);
-        }
-        throw err;
-    }
+    const resolved = resolvePackageTargetWithContext(scope.dir, target, conditions, true, patternSubstitution, { kind: 'imports', specifier: id, patternKey });
     if (resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
     throw makePackageImportNotDefinedError(id);
 }
