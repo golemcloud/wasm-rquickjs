@@ -2752,33 +2752,50 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
     if (source.charCodeAt(descriptorStart) !== 0x7b) return false;
     const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
     if (descriptorEnd < 0 || descriptorEnd > end) return false;
-    let found = false;
+    let foundKind = null;
     let cursor = skipWhitespaceAndComments(source, descriptorStart + 1);
     while (cursor < descriptorEnd) {
         if (source.charCodeAt(cursor) === 0x2c) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
             continue;
         }
-        if (source.startsWith('...', cursor) || source.charCodeAt(cursor) === 0x5b) return false;
+        if (source.startsWith('...', cursor)) return false;
+        if (source.charCodeAt(cursor) === 0x5b) {
+            if (foundKind === 'value') {
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, cursor, descriptorEnd));
+                if (cursor < descriptorEnd) {
+                    if (source.charCodeAt(cursor) !== 0x2c) return false;
+                    cursor = skipWhitespaceAndComments(source, cursor + 1);
+                }
+                continue;
+            }
+            return false;
+        }
         const key = loaderDescriptorPropertyName(source, cursor);
         if (key === null) return false;
         let next = skipWhitespaceAndComments(source, key.end);
-        if (key.quoted && (key.name === 'value' || key.name === 'get')) return false;
-        if (!key.quoted && key.name === 'value') {
-            if (found || source.charCodeAt(next) !== 0x3a) return false;
-            found = true;
+        if (key.quoted && (key.name === 'value' || key.name === 'get')) {
+            if (foundKind === 'value') {
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
+            } else {
+                return false;
+            }
+        } else if (!key.quoted && key.name === 'value') {
+            if (source.charCodeAt(next) !== 0x3a) return false;
+            if (foundKind === 'get') return false;
+            foundKind = 'value';
             cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
         } else if (!key.quoted && key.name === 'get') {
-            if (found) return false;
+            if (foundKind !== null) return false;
             if (source.charCodeAt(next) === 0x28) {
                 const body = loaderGetterBodyEnd(source, next, descriptorEnd);
                 if (body === null || !loaderSimpleGetterBody(source, body.start, body.end)) return false;
-                found = true;
+                foundKind = 'get';
                 cursor = skipWhitespaceAndComments(source, body.end + 1);
             } else if (source.charCodeAt(next) === 0x3a) {
                 const functionEnd = loaderDescriptorFunctionGetterEnd(source, skipWhitespaceAndComments(source, next + 1), descriptorEnd);
                 if (functionEnd === null) return false;
-                found = true;
+                foundKind = 'get';
                 cursor = skipWhitespaceAndComments(source, functionEnd);
             } else {
                 return false;
@@ -2791,7 +2808,7 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
         }
     }
-    return found;
+    return foundKind !== null;
 }
 
 function loaderSimpleGetterBody(source, start, end) {
