@@ -63,7 +63,7 @@ mod formdata_node;
 mod fs;
 #[path = "builtin/gc.rs"]
 mod gc;
-#[path = "builtin/http_disabled.rs"]
+#[path = "builtin/http_p3.rs"]
 mod http;
 #[path = "builtin/http2.rs"]
 mod http2;
@@ -182,6 +182,8 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/timeout_native")
         .with_module("__wasm_rquickjs_builtin/timeout")
         .with_module("__wasm_rquickjs_builtin/gc_native")
+        .with_module("__wasm_rquickjs_builtin/http_native")
+        .with_module("__wasm_rquickjs_builtin/http")
         .with_module("__wasm_rquickjs_builtin/http_blob")
         .with_module("__wasm_rquickjs_builtin/http_form_data")
         .with_module("__wasm_rquickjs_builtin/streams")
@@ -350,6 +352,10 @@ pub fn module_loader() -> (
         )
         .with_module("__wasm_rquickjs_builtin/gc_native", gc::js_native_module)
         .with_module(
+            "__wasm_rquickjs_builtin/http_native",
+            http::js_native_module,
+        )
+        .with_module(
             "__wasm_rquickjs_builtin/encoding_native",
             encoding::js_native_module,
         )
@@ -405,6 +411,7 @@ pub fn module_loader() -> (
         )
         .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
         .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
+        .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
         .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
         .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
         .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
@@ -559,6 +566,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
     writeln!(result, "{}", gc::WIRE_JS).unwrap();
+    writeln!(result, "{}", http::WIRE_JS).unwrap();
     writeln!(result, "{}", webstreams::WIRE_JS).unwrap();
     writeln!(result, "{}", encoding::WIRE_JS).unwrap();
     writeln!(result, "{}", intl::WIRE_JS).unwrap();
