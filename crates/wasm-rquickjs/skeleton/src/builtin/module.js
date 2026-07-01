@@ -4162,6 +4162,80 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
     return null;
 }
 
+function resolveForRequire(id, options, parentDir, parentFilename, parentLookupPaths) {
+    if (typeof id !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('request', 'string', id);
+    }
+    if (isBuiltin(id)) {
+        return id;
+    }
+    if (id.startsWith('node:')) {
+        const err = new Error("Cannot find module '" + id + "'");
+        err.code = 'MODULE_NOT_FOUND';
+        throw err;
+    }
+    // If paths option is provided, resolve relative to each path
+    if (options && options.paths !== undefined) {
+        const searchPaths = options.paths;
+        if (!Array.isArray(searchPaths)) {
+            const argErr = new TypeError("The argument 'paths' must be an array of strings. Received " + typeof searchPaths);
+            argErr.code = 'ERR_INVALID_ARG_VALUE';
+            throw argErr;
+        }
+        const isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
+        for (let pi = 0; pi < searchPaths.length; pi++) {
+            if (typeof searchPaths[pi] !== 'string') {
+                const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
+                argErr.code = 'ERR_INVALID_ARG_VALUE';
+                throw argErr;
+            }
+            const searchDir = pathModule.resolve(searchPaths[pi]);
+            if (isRelative) {
+                // Relative/absolute: resolve directly against the search path
+                try {
+                    const resolved = resolveFilename(id, searchDir);
+                    return toCjsCanonicalFilename(resolved.filename, false);
+                } catch (e) {
+                    // Try next path
+                }
+            } else {
+                // Bare specifier: use node_modules resolution from search path
+                const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
+                if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
+            }
+        }
+        const err = new Error("Cannot find module '" + id + "'");
+        err.code = 'MODULE_NOT_FOUND';
+        throw err;
+    }
+    if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
+        const resolved = resolveFilename(id, parentDir);
+        return toCjsCanonicalFilename(resolved.filename, false);
+    }
+    if (id.startsWith('#')) {
+        try {
+            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions());
+            if (importsResolved.builtin) return importsResolved.builtin;
+            return toCjsCanonicalFilename(importsResolved.filename, false);
+        } catch (err) {
+            if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
+                throw err;
+            }
+            const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
+            if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
+            throw err;
+        }
+    }
+    // node_modules resolution for bare specifiers
+    const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
+    if (nmResolved) {
+        return toCjsCanonicalFilename(nmResolved.filename, false);
+    }
+    const err = new Error("Cannot find module '" + id + "'");
+    err.code = 'MODULE_NOT_FOUND';
+    throw err;
+}
+
 function makeRequire(parentDir, parentModule, parentFilenameOverride) {
     const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     const parentLookupPaths = parentModule && Array.isArray(parentModule.paths)
@@ -4264,77 +4338,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
     localRequire.extensions = requireExtensions;
 
     localRequire.resolve = function resolve(id, options) {
-        if (typeof id !== 'string') {
-            throw new ERR_INVALID_ARG_TYPE('request', 'string', id);
-        }
-        if (isBuiltin(id)) {
-            return id;
-        }
-        if (id.startsWith('node:')) {
-            const err = new Error("Cannot find module '" + id + "'");
-            err.code = 'MODULE_NOT_FOUND';
-            throw err;
-        }
-        // If paths option is provided, resolve relative to each path
-        if (options && options.paths !== undefined) {
-            const searchPaths = options.paths;
-            if (!Array.isArray(searchPaths)) {
-                const argErr = new TypeError("The argument 'paths' must be an array of strings. Received " + typeof searchPaths);
-                argErr.code = 'ERR_INVALID_ARG_VALUE';
-                throw argErr;
-            }
-            const isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
-            for (let pi = 0; pi < searchPaths.length; pi++) {
-                if (typeof searchPaths[pi] !== 'string') {
-                    const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
-                    argErr.code = 'ERR_INVALID_ARG_VALUE';
-                    throw argErr;
-                }
-                const searchDir = pathModule.resolve(searchPaths[pi]);
-                if (isRelative) {
-                    // Relative/absolute: resolve directly against the search path
-                    try {
-                        const resolved = resolveFilename(id, searchDir);
-                        return toCjsCanonicalFilename(resolved.filename, false);
-                    } catch (e) {
-                        // Try next path
-                    }
-                } else {
-                    // Bare specifier: use node_modules resolution from search path
-                    const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
-                    if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
-                }
-            }
-            const err = new Error("Cannot find module '" + id + "'");
-            err.code = 'MODULE_NOT_FOUND';
-            throw err;
-        }
-        if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
-            const resolved = resolveFilename(id, parentDir);
-            return toCjsCanonicalFilename(resolved.filename, false);
-        }
-        if (id.startsWith('#')) {
-            try {
-                const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions());
-                if (importsResolved.builtin) return importsResolved.builtin;
-                return toCjsCanonicalFilename(importsResolved.filename, false);
-            } catch (err) {
-                if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
-                    throw err;
-                }
-                const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
-                if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
-                throw err;
-            }
-        }
-        // node_modules resolution for bare specifiers
-        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
-        if (nmResolved) {
-            return toCjsCanonicalFilename(nmResolved.filename, false);
-        }
-        const err = new Error("Cannot find module '" + id + "'");
-        err.code = 'MODULE_NOT_FOUND';
-        throw err;
+        return resolveForRequire(id, options, parentDir, parentFilename, parentLookupPaths);
     };
 
     localRequire.resolve.paths = function paths(request) {
@@ -5338,7 +5342,13 @@ function moduleResolveFilename(request, parent, isMain, options) {
     const baseDir = parent && typeof parent.filename === 'string'
         ? pathModule.dirname(parent.filename)
         : '.';
-    return makeRequire(baseDir, parent || null).resolve(request, options);
+    const parentFilename = parent && typeof parent.filename === 'string'
+        ? parent.filename
+        : null;
+    const parentLookupPaths = parent && Array.isArray(parent.paths)
+        ? parent.paths.concat(globalPaths)
+        : null;
+    return resolveForRequire(request, options, baseDir, parentFilename, parentLookupPaths);
 }
 
 const moduleExports = Object.assign(Module, {

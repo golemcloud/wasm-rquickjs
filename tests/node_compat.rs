@@ -196,6 +196,8 @@ async fn runner_module_load_uses_parent_resolution(
             "if (packageLoaded.marker !== 84) throw new Error('Module._load did not honor parent.paths');",
             "const packageResolved = Module._resolveFilename('parent-only-pkg', customParent);",
             "if (!packageResolved.endsWith('/custom_lookup/parent-only-pkg/index.js')) throw new Error('Module._resolveFilename did not honor parent.paths: ' + packageResolved);",
+            "const pathsOptionResolved = Module._resolveFilename('paths-option-pkg', customParent, false, { paths: ['/home/node/test/es-module/paths_option'] });",
+            "if (!pathsOptionResolved.endsWith('/paths_option/node_modules/paths-option-pkg/index.js')) throw new Error('Module._resolveFilename did not honor options.paths: ' + pathsOptionResolved);",
             "const packageViaPrototype = Module.prototype.require.call(customParent, 'parent-only-pkg');",
             "if (packageViaPrototype.marker !== 84) throw new Error('Module.prototype.require did not honor receiver.paths');",
             "if (Module._resolveFilename('node:module') !== 'node:module') throw new Error('Module._resolveFilename changed node: builtin specifier');",
@@ -228,6 +230,15 @@ async fn runner_module_load_uses_parent_resolution(
     fs::write(
         package_dir.join("index.js"),
         "module.exports = { marker: 84 };\n",
+    )?;
+    let paths_option_package_dir = suite_dir
+        .join("paths_option")
+        .join("node_modules")
+        .join("paths-option-pkg");
+    fs::create_dir_all(&paths_option_package_dir)?;
+    fs::write(
+        paths_option_package_dir.join("index.js"),
+        "module.exports = { marker: 126 };\n",
     )?;
     let path_only_dir = suite_dir.join("path_only_base");
     fs::create_dir_all(&path_only_dir)?;
