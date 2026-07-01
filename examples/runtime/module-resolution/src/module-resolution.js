@@ -835,6 +835,21 @@ export const testEsmDataUrlImportAttributes = async () => {
         );
         fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/data.json', '{"fromPackage":true}');
         fs.writeFileSync('/loader-next-app/node_modules/loader-next-pkg/fallback.json', '{"nextResolvePackage":true}');
+        fs.mkdirSync('/loader-next-app/node_modules/loader-sparse-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/loader-next-app/node_modules/loader-sparse-pkg/package.json',
+            JSON.stringify({
+                name: 'loader-sparse-pkg',
+                exports: {
+                    '.': {
+                        undefined: './bad.json',
+                        default: './sparse-default.json',
+                    },
+                },
+            }),
+        );
+        fs.writeFileSync('/loader-next-app/node_modules/loader-sparse-pkg/bad.json', '{"sparseConditions":"bad"}');
+        fs.writeFileSync('/loader-next-app/node_modules/loader-sparse-pkg/sparse-default.json', '{"sparseConditions":"default"}');
         fs.mkdirSync('/loader-next-app/node_modules/fs', { recursive: true });
         fs.writeFileSync(
             '/loader-next-app/node_modules/fs/package.json',
@@ -861,6 +876,16 @@ export const testEsmDataUrlImportAttributes = async () => {
                 '  if (specifier === "loader-next-pkg") {',
                 '    const result = await next(specifier, context);',
                 '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-next-pkg/fallback.json") throw new Error("nextResolve exposed runtime-only package conditions to loader context: " + result.url);',
+                '    return result;',
+                '  }',
+                '  if (specifier === "virtual:sparse-conditions") {',
+                '    const result = await next("loader-sparse-pkg", { ...context, conditions: Array(1) });',
+                '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-sparse-pkg/sparse-default.json") throw new Error("nextResolve treated sparse condition holes as string undefined: " + result.url);',
+                '    return result;',
+                '  }',
+                '  if (specifier === "virtual:undefined-condition") {',
+                '    const result = await next("loader-sparse-pkg", { ...context, conditions: [undefined] });',
+                '    if (new URL(result.url).pathname !== "/loader-next-app/node_modules/loader-sparse-pkg/sparse-default.json") throw new Error("nextResolve treated explicit undefined as string undefined: " + result.url);',
                 '    return result;',
                 '  }',
                 '  if (specifier === "virtual:builtin-shadow") {',
@@ -912,6 +937,12 @@ export const testEsmDataUrlImportAttributes = async () => {
                 '    if (context.format !== "json") throw new Error("nextResolve did not pass json format to load");',
                 '    return { shortCircuit: true, format: "json", source: "{\\"nextResolvePackage\\":true}" };',
                 '  }',
+                '  if (new URL(url).pathname === "/loader-next-app/node_modules/loader-sparse-pkg/sparse-default.json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"sparseConditions\\":\\"default\\"}" };',
+                '  }',
+                '  if (new URL(url).pathname === "/loader-next-app/node_modules/loader-sparse-pkg/bad.json") {',
+                '    return { shortCircuit: true, format: "json", source: "{\\"sparseConditions\\":\\"bad\\"}" };',
+                '  }',
                 '  if (url === "virtual:builtin-shadow-json") {',
                 '    return { shortCircuit: true, format: "json", source: "{\\"builtinShadow\\":true}" };',
                 '  }',
@@ -941,6 +972,8 @@ export const testEsmDataUrlImportAttributes = async () => {
                 '  extensionlessRejected = true;',
                 '}',
                 'if (!extensionlessRejected) throw new Error("Missing expected rejection: extensionless loader nextResolve import should reject");',
+                'assert.deepStrictEqual((await import("virtual:sparse-conditions", { with: { type: "json" } })).default, { sparseConditions: "default" });',
+                'assert.deepStrictEqual((await import("virtual:undefined-condition", { with: { type: "json" } })).default, { sparseConditions: "default" });',
                 'assert.deepStrictEqual((await import("virtual:builtin-shadow", { with: { type: "json" } })).default, { builtinShadow: true });',
                 'assert.deepStrictEqual((await import("virtual:package-subpath-no-extension", { with: { type: "json" } })).default, { packageSubpath: true });',
                 'assert.deepStrictEqual((await import("virtual:encoded-space-subpath", { with: { type: "json" } })).default, { encodedSpaceSubpath: true });',
@@ -4868,12 +4901,18 @@ export const testRequireEsmCycleGuards = async () => {
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-cycle-app/main.cjs');
 
-        const ns = require('/require-esm-cycle-app/a.mjs');
-        assert.strictEqual(ns.value, 1);
-        assert.strictEqual(ns.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
-        const detected = require('/require-esm-cycle-app/syntax-detected.js');
-        assert.strictEqual(detected.value, 2);
-        assert.strictEqual(detected.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+        const arrayIterator = Array.prototype[Symbol.iterator];
+        delete Array.prototype[Symbol.iterator];
+        try {
+            const ns = require('/require-esm-cycle-app/a.mjs');
+            assert.strictEqual(ns.value, 1);
+            assert.strictEqual(ns.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const detected = require('/require-esm-cycle-app/syntax-detected.js');
+            assert.strictEqual(detected.value, 2);
+            assert.strictEqual(detected.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+        } finally {
+            Array.prototype[Symbol.iterator] = arrayIterator;
+        }
         return true;
     } catch (error) {
         console.error(error);

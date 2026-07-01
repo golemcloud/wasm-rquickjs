@@ -525,8 +525,16 @@ const builtinModuleNames = Object.keys(builtinModuleMap).filter(
     (name) => !name.startsWith('node:') && !name.startsWith('internal/') && !name.startsWith('_')
 );
 
+function setFromArray(values, mapper) {
+    const set = new Set();
+    for (let i = 0; i < values.length; i++) {
+        set.add(mapper ? mapper(values, i) : values[i]);
+    }
+    return set;
+}
+
 // Modules that require the 'node:' prefix (cannot be required as bare specifiers)
-const schemelessBlockList = new Set(['test', 'sqlite']);
+const schemelessBlockList = setFromArray(['test', 'sqlite']);
 
 // Build public module ID sets matching Node.js semantics
 const publicBuiltinIdSet = new Set();
@@ -594,7 +602,7 @@ const requireExtensions = Object.create(null);
 requireExtensions['.js'] = function _defaultJs(mod, filename) { /* built-in */ };
 requireExtensions['.json'] = function _defaultJson(mod, filename) { /* built-in */ };
 requireExtensions['.node'] = function _defaultNode(mod, filename) { /* built-in */ };
-const _defaultExtHandlers = new Set([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
+const _defaultExtHandlers = setFromArray([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
 
 // Path cache (settable; used by tests to reset resolution state)
 let _pathCache = Object.create(null);
@@ -750,7 +758,7 @@ function addPackageCondition(conditions, condition) {
 }
 
 function packageConditions(defaults) {
-    const conditions = new Set(defaults);
+    const conditions = setFromArray(defaults);
     const userConditions = globalThis.__wasm_rquickjs_package_conditions;
     if (!Array.isArray(userConditions)) {
         return conditions;
@@ -3195,11 +3203,14 @@ function addRequireEsmGraphMark(filename, marked) {
     globalThis.__wasm_rquickjs_require_esm_graph_in_progress = graph;
     globalThis.__wasm_rquickjs_require_esm_graph_counts = counts;
 
-    for (const key of [filename, fileUrlForPath(filename)]) {
-        counts[key] = (counts[key] || 0) + 1;
-        graph[key] = true;
-        marked.push(key);
-    }
+    counts[filename] = (counts[filename] || 0) + 1;
+    graph[filename] = true;
+    marked.push(filename);
+
+    const fileUrl = fileUrlForPath(filename);
+    counts[fileUrl] = (counts[fileUrl] || 0) + 1;
+    graph[fileUrl] = true;
+    marked.push(fileUrl);
 }
 
 function stackContains(stack, filename) {
@@ -3476,7 +3487,7 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
 
 function conditionsForLoaderResolve(context) {
     if (context && Array.isArray(context.conditions)) {
-        const conditions = new Set(context.conditions.map((condition) => String(condition)));
+        const conditions = setFromArray(context.conditions);
         conditions.add('default');
         return conditions;
     }
