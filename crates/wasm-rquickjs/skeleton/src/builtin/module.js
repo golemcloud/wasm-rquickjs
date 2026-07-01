@@ -2742,6 +2742,90 @@ function loaderDescriptorHasValueProperty(source, start, end) {
     return false;
 }
 
+function loaderSimpleGetterBody(source, start, end) {
+    let i = skipWhitespaceAndComments(source, start);
+    if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return false;
+    i = skipWhitespaceAndComments(source, i + 6);
+    const first = source.charCodeAt(i);
+    if (!(first === 0x5f || first === 0x24 || (first >= 0x41 && first <= 0x5a) || (first >= 0x61 && first <= 0x7a) || first >= 0x80)) {
+        return false;
+    }
+    i++;
+    while (i < end && isIdentifierContinueCode(source.charCodeAt(i))) i++;
+    while (i < end) {
+        i = skipWhitespaceAndComments(source, i);
+        if (source.charCodeAt(i) === 0x2e) {
+            i = skipWhitespaceAndComments(source, i + 1);
+            const ch = source.charCodeAt(i);
+            if (!(ch === 0x5f || ch === 0x24 || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a) || ch >= 0x80)) return false;
+            i++;
+            while (i < end && isIdentifierContinueCode(source.charCodeAt(i))) i++;
+            continue;
+        }
+        if (source.charCodeAt(i) === 0x5b) {
+            i = skipWhitespaceAndComments(source, i + 1);
+            const quote = source.charCodeAt(i);
+            if (quote !== 0x27 && quote !== 0x22) return false;
+            const decoded = decodeStringLiteral(source, i + 1, quote);
+            if (decoded === null) return false;
+            i = skipWhitespaceAndComments(source, decoded.end + 1);
+            if (source.charCodeAt(i) !== 0x5d) return false;
+            i++;
+            continue;
+        }
+        break;
+    }
+    i = skipWhitespaceAndComments(source, i);
+    if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
+    return i >= end;
+}
+
+function loaderGetterBodyEnd(source, paramsOpen, limit) {
+    const paramsEnd = loaderFindMatchingParen(source, paramsOpen);
+    if (paramsEnd < 0 || paramsEnd > limit) return null;
+    let i = skipWhitespaceAndComments(source, paramsEnd + 1);
+    if (source.charCodeAt(i) !== 0x7b) return null;
+    const bodyEnd = loaderFindMatchingBrace(source, i);
+    return bodyEnd >= 0 && bodyEnd <= limit ? { start: i + 1, end: bodyEnd } : null;
+}
+
+function loaderDescriptorHasGetterProperty(source, start, end) {
+    let depth = 0;
+    let i = start;
+    while (i < end) {
+        const skipped = skipNonCode(source, i, true);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+        const ch = source.charCodeAt(i);
+        if (ch === 0x7b) depth++;
+        else if (ch === 0x7d) depth = Math.max(0, depth - 1);
+        else if (depth === 1 && source.startsWith('get', i) && hasIdentifierBoundary(source, i, i + 3)) {
+            let next = skipWhitespaceAndComments(source, i + 3);
+            if (source.charCodeAt(next) === 0x28) {
+                const body = loaderGetterBodyEnd(source, next, end);
+                return body !== null && loaderSimpleGetterBody(source, body.start, body.end);
+            }
+            if (source.charCodeAt(next) === 0x3a) {
+                next = skipWhitespaceAndComments(source, next + 1);
+                if (!source.startsWith('function', next) || !hasIdentifierBoundary(source, next, next + 8)) return false;
+                next = skipWhitespaceAndComments(source, next + 8);
+                if (isIdentifierContinueCode(source.charCodeAt(next))) {
+                    next++;
+                    while (next < end && isIdentifierContinueCode(source.charCodeAt(next))) next++;
+                    next = skipWhitespaceAndComments(source, next);
+                }
+                if (source.charCodeAt(next) !== 0x28) return false;
+                const body = loaderGetterBodyEnd(source, next, end);
+                return body !== null && loaderSimpleGetterBody(source, body.start, body.end);
+            }
+        }
+        i++;
+    }
+    return false;
+}
+
 function readLoaderDefinePropertyExportName(source, pos) {
     const previous = previousSignificantChar(source, pos);
     if (previous === 0x2e || previous === 0x23) return null;
@@ -2766,7 +2850,7 @@ function readLoaderDefinePropertyExportName(source, pos) {
     i = skipWhitespaceAndComments(source, decoded.end + 1);
     if (source.charCodeAt(i) !== 0x2c) return null;
     const close = loaderFindMatchingParen(source, open);
-    if (close < 0 || !loaderDescriptorHasValueProperty(source, i + 1, close)) return null;
+    if (close < 0 || !(loaderDescriptorHasValueProperty(source, i + 1, close) || loaderDescriptorHasGetterProperty(source, i + 1, close))) return null;
     return decoded.value;
 }
 
