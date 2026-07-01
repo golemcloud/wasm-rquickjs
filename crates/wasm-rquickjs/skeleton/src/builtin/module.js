@@ -2721,29 +2721,77 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
     return { names, end: objectEnd + 1 };
 }
 
-function loaderDescriptorHasValueProperty(source, start, end) {
-    let descriptorStart = skipWhitespaceAndComments(source, start);
+function loaderDescriptorPropertyName(source, pos) {
+    const ch = source.charCodeAt(pos);
+    if (ch === 0x27 || ch === 0x22) {
+        const decoded = decodeStringLiteral(source, pos + 1, ch);
+        if (decoded === null) return null;
+        return { name: decoded.value, quoted: true, end: decoded.end + 1 };
+    }
+    const ident = readLoaderObjectLiteralKey(source, pos);
+    if (ident === null || !ident.keyIsIdent) return null;
+    return { name: ident.name, quoted: false, end: ident.end };
+}
+
+function loaderDescriptorFunctionGetterEnd(source, pos, descriptorEnd) {
+    if (!source.startsWith('function', pos) || !hasIdentifierBoundary(source, pos, pos + 8)) return null;
+    let next = skipWhitespaceAndComments(source, pos + 8);
+    if (isIdentifierContinueCode(source.charCodeAt(next))) {
+        next++;
+        while (next < descriptorEnd && isIdentifierContinueCode(source.charCodeAt(next))) next++;
+        next = skipWhitespaceAndComments(source, next);
+    }
+    if (source.charCodeAt(next) !== 0x28) return null;
+    const body = loaderGetterBodyEnd(source, next, descriptorEnd);
+    if (body === null || !loaderSimpleGetterBody(source, body.start, body.end)) return null;
+    return body.end + 1;
+}
+
+function loaderDescriptorHasNamedProperty(source, start, end) {
+    const descriptorStart = skipWhitespaceAndComments(source, start);
     if (source.charCodeAt(descriptorStart) !== 0x7b) return false;
     const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
     if (descriptorEnd < 0 || descriptorEnd > end) return false;
-    let depth = 0;
-    let i = descriptorStart;
-    while (i <= descriptorEnd) {
-        const skipped = skipNonCode(source, i, true);
-        if (skipped !== null) {
-            i = skipped;
+    let found = false;
+    let cursor = skipWhitespaceAndComments(source, descriptorStart + 1);
+    while (cursor < descriptorEnd) {
+        if (source.charCodeAt(cursor) === 0x2c) {
+            cursor = skipWhitespaceAndComments(source, cursor + 1);
             continue;
         }
-        const ch = source.charCodeAt(i);
-        if (ch === 0x7b) depth++;
-        else if (ch === 0x7d) depth = Math.max(0, depth - 1);
-        else if (depth === 1 && source.startsWith('value', i) && hasIdentifierBoundary(source, i, i + 5)) {
-            const next = skipWhitespaceAndComments(source, i + 5);
-            return source.charCodeAt(next) === 0x3a;
+        if (source.startsWith('...', cursor) || source.charCodeAt(cursor) === 0x5b) return false;
+        const key = loaderDescriptorPropertyName(source, cursor);
+        if (key === null) return false;
+        let next = skipWhitespaceAndComments(source, key.end);
+        if (key.quoted && (key.name === 'value' || key.name === 'get')) return false;
+        if (!key.quoted && key.name === 'value') {
+            if (found || source.charCodeAt(next) !== 0x3a) return false;
+            found = true;
+            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
+        } else if (!key.quoted && key.name === 'get') {
+            if (found) return false;
+            if (source.charCodeAt(next) === 0x28) {
+                const body = loaderGetterBodyEnd(source, next, descriptorEnd);
+                if (body === null || !loaderSimpleGetterBody(source, body.start, body.end)) return false;
+                found = true;
+                cursor = skipWhitespaceAndComments(source, body.end + 1);
+            } else if (source.charCodeAt(next) === 0x3a) {
+                const functionEnd = loaderDescriptorFunctionGetterEnd(source, skipWhitespaceAndComments(source, next + 1), descriptorEnd);
+                if (functionEnd === null) return false;
+                found = true;
+                cursor = skipWhitespaceAndComments(source, functionEnd);
+            } else {
+                return false;
+            }
+        } else {
+            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
         }
-        i++;
+        if (cursor < descriptorEnd) {
+            if (source.charCodeAt(cursor) !== 0x2c) return false;
+            cursor = skipWhitespaceAndComments(source, cursor + 1);
+        }
     }
-    return false;
+    return found;
 }
 
 function loaderSimpleGetterBody(source, start, end) {
@@ -2788,47 +2836,6 @@ function loaderGetterBodyEnd(source, paramsOpen, limit) {
     return bodyEnd >= 0 && bodyEnd <= limit ? { start: i + 1, end: bodyEnd } : null;
 }
 
-function loaderDescriptorHasGetterProperty(source, start, end) {
-    const descriptorStart = skipWhitespaceAndComments(source, start);
-    if (source.charCodeAt(descriptorStart) !== 0x7b) return false;
-    const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
-    if (descriptorEnd < 0 || descriptorEnd > end) return false;
-    let depth = 0;
-    let i = descriptorStart;
-    while (i <= descriptorEnd) {
-        const skipped = skipNonCode(source, i, true);
-        if (skipped !== null) {
-            i = skipped;
-            continue;
-        }
-        const ch = source.charCodeAt(i);
-        if (ch === 0x7b) depth++;
-        else if (ch === 0x7d) depth = Math.max(0, depth - 1);
-        else if (depth === 1 && source.startsWith('get', i) && hasIdentifierBoundary(source, i, i + 3)) {
-            let next = skipWhitespaceAndComments(source, i + 3);
-            if (source.charCodeAt(next) === 0x28) {
-                const body = loaderGetterBodyEnd(source, next, end);
-                return body !== null && loaderSimpleGetterBody(source, body.start, body.end);
-            }
-            if (source.charCodeAt(next) === 0x3a) {
-                next = skipWhitespaceAndComments(source, next + 1);
-                if (!source.startsWith('function', next) || !hasIdentifierBoundary(source, next, next + 8)) return false;
-                next = skipWhitespaceAndComments(source, next + 8);
-                if (isIdentifierContinueCode(source.charCodeAt(next))) {
-                    next++;
-                    while (next < end && isIdentifierContinueCode(source.charCodeAt(next))) next++;
-                    next = skipWhitespaceAndComments(source, next);
-                }
-                if (source.charCodeAt(next) !== 0x28) return false;
-                const body = loaderGetterBodyEnd(source, next, end);
-                return body !== null && loaderSimpleGetterBody(source, body.start, body.end);
-            }
-        }
-        i++;
-    }
-    return false;
-}
-
 function readLoaderDefinePropertyExportName(source, pos) {
     const previous = previousSignificantChar(source, pos);
     if (previous === 0x2e || previous === 0x23) return null;
@@ -2853,7 +2860,7 @@ function readLoaderDefinePropertyExportName(source, pos) {
     i = skipWhitespaceAndComments(source, decoded.end + 1);
     if (source.charCodeAt(i) !== 0x2c) return null;
     const close = loaderFindMatchingParen(source, open);
-    if (close < 0 || !(loaderDescriptorHasValueProperty(source, i + 1, close) || loaderDescriptorHasGetterProperty(source, i + 1, close))) return null;
+    if (close < 0 || !loaderDescriptorHasNamedProperty(source, i + 1, close)) return null;
     return decoded.value;
 }
 
