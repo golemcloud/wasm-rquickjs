@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3194/4396 (72.7%)
+**Primary compatibility (CI-enforced):** 3195/4396 (72.7%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3194 | 72.7% | 55.9% | 46.7% |
-| 🧩 known gap | 1202 | 27.3% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3195 | 72.7% | 55.9% | 46.7% |
+| 🧩 known gap | 1201 | 27.3% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3194/5713 (55.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3195/5713 (55.9%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 583 | 165 | 139 | 85 | 11 | 0 | 183 | 54.3% | 41.2% |
+| other | 583 | 166 | 138 | 85 | 11 | 0 | 183 | 54.6% | 41.5% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1202)
+### known gap (1201)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -999,7 +999,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks promise lifecycle/context propagation is incomplete | 1 | `parallel/test-async-hooks-async-await.js` |
 | async_hooks promise triggerAsyncId tracking is incomplete | 1 | `parallel/test-async-hooks-promise-triggerid.js` |
 | async_hooks runInAsyncScope triggerAsyncId stack behavior is incomplete | 1 | `parallel/test-async-hooks-recursive-stack-runInAsyncScope.js` |
-| builtin module namespace exports include runtime shim internals and do not exactly match Node | 1 | `es-module/test-esm-namespace.mjs` |
 | captureRejections propagation from outgoing-message drain to socket/request errors is not Node-compatible | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00` |
 | checkContinue/write callback ordering and completion semantics are incomplete | 1 | `parallel/test-http-write-callbacks.js` |
 | child_process -p/process.title behavior is incomplete in WASM child emulation | 1 | `sequential/test-process-title.js` |

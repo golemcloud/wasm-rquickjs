@@ -15,7 +15,10 @@ function installLongPathFsShim() {
     if (fs.__wasmLongPathShimInstalled) {
         return;
     }
-    fs.__wasmLongPathShimInstalled = true;
+    Object.defineProperty(fs, '__wasmLongPathShimInstalled', {
+        value: true,
+        configurable: true,
+    });
 
     const originalMkdirSync = fs.mkdirSync.bind(fs);
     const originalExistsSync = fs.existsSync.bind(fs);
