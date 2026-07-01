@@ -5328,11 +5328,13 @@ enum ObjectLiteralValueExport {
 }
 
 fn named_export_object_literal_value(source: &str, pos: usize, object_end: usize) -> Option<ObjectLiteralValueExport> {
-    let Some((_, mut next)) = read_ident(source, pos) else {
+    let Some((ident, mut next)) = read_ident(source, pos) else {
         return None;
     };
     next = skip_ws_comments(source, next);
     if next >= object_end || source.as_bytes()[next] == b',' {
+        Some(ObjectLiteralValueExport::NamedContinue)
+    } else if matches!(ident.as_str(), "true" | "false" | "null" | "undefined") {
         Some(ObjectLiteralValueExport::NamedContinue)
     } else {
         Some(ObjectLiteralValueExport::NamedStop)

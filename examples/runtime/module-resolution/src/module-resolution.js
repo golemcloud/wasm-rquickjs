@@ -2067,6 +2067,16 @@ export const testCjsDirectNamedExports = async () => {
         fs.writeFileSync('/cjs-named-export-app/define-only.js', [
             'Object.defineProperty(exports, "definedOnly", { value: "defined" });',
         ].join('\n'));
+        fs.writeFileSync('/cjs-named-export-app/object-primitives.cjs', [
+            'const value = "after";',
+            'module.exports = {',
+            '  yes: true,',
+            '  no: false,',
+            '  empty: null,',
+            '  missing: undefined,',
+            '  after: value,',
+            '};',
+        ].join('\n'));
         fs.writeFileSync('/cjs-named-export-app/false-positives.cjs', [
             'const myexports = {};',
             'myexports.fake1 = "no";',
@@ -2084,10 +2094,12 @@ export const testCjsDirectNamedExports = async () => {
             'import def, { foo, bar, baz, π, package as packageExport } from "./direct.cjs";',
             'import { bracketOnly } from "./bracket-only.js";',
             'import { definedOnly } from "./define-only.js";',
+            'import { yes, no, empty, missing, after } from "./object-primitives.cjs";',
             'import * as ns from "./direct.cjs";',
             'import * as fp from "./false-positives.cjs";',
             'export default {',
             '  def, foo, bar, baz, pi: π, packageExport, bracketOnly, definedOnly,',
+            '  yes, no, empty, missing, after,',
             '  invalidIdentifier: ns["invalid identifier"],',
             '  questionInvalid: ns["?invalid"],',
             '  hasCommentOnly: Object.prototype.hasOwnProperty.call(ns, "commentOnly"),',
@@ -2106,6 +2118,11 @@ export const testCjsDirectNamedExports = async () => {
         assert.strictEqual(result.packageExport, 'reserved');
         assert.strictEqual(result.bracketOnly, 'bracket');
         assert.strictEqual(result.definedOnly, 'defined');
+        assert.strictEqual(result.yes, true);
+        assert.strictEqual(result.no, false);
+        assert.strictEqual(result.empty, null);
+        assert.strictEqual(result.missing, undefined);
+        assert.strictEqual(result.after, 'after');
         assert.strictEqual(result.invalidIdentifier, 'invalid');
         assert.strictEqual(result.questionInvalid, 'question');
         assert.strictEqual(result.def.foo, 'foo');
