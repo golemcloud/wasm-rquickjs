@@ -3114,14 +3114,14 @@ impl NodeModulesResolver {
         if let Some(package) = package {
             if subpath.is_empty()
                 && let Some(main) = package.main.as_ref()
-                && let Some(resolved) = Self::resolve_cjs_analysis_main(package_path, main)
+                && let Some(resolved) = Self::resolve_cjs_analysis_file_or_directory(package_path, main)
             {
                 return Some(resolved);
             }
         }
 
         if !subpath.is_empty()
-            && let Some(resolved) = Self::resolve_cjs_analysis_subpath(package_path, subpath)
+            && let Some(resolved) = Self::resolve_cjs_analysis_file_or_directory(package_path, subpath)
         {
             return Some(resolved);
         }
@@ -3354,12 +3354,7 @@ impl NodeModulesResolver {
         ]
     }
 
-    fn resolve_cjs_analysis_main(package_dir: &std::path::Path, target: &str) -> Option<String> {
-        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        Self::first_existing_normalized(Self::cjs_analysis_file_or_directory_candidates(&target_path))
-    }
-
-    fn resolve_cjs_analysis_subpath(package_dir: &std::path::Path, target: &str) -> Option<String> {
+    fn resolve_cjs_analysis_file_or_directory(package_dir: &std::path::Path, target: &str) -> Option<String> {
         let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
         Self::first_existing_normalized(Self::cjs_analysis_file_or_directory_candidates(&target_path))
     }
@@ -3391,7 +3386,7 @@ impl NodeModulesResolver {
             match Self::read_package_json_optional(&pkg_path) {
                 Ok(Some(package)) => {
                     if let Some(main) = package.main.as_ref()
-                        && let Some(resolved) = Self::resolve_cjs_analysis_main(target_path, main)
+                        && let Some(resolved) = Self::resolve_cjs_analysis_file_or_directory(target_path, main)
                     {
                         return Some(resolved);
                     }
