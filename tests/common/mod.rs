@@ -418,7 +418,9 @@ impl FeatureCombination {
 
     pub fn cargo_args(&self) -> Vec<&'static str> {
         match self {
-            FeatureCombination::None => vec!["--no-default-features"],
+            // The skeleton now requires exactly one WASI target feature (`p2` or `p3`), so the
+            // minimal Preview 2 build must still enable `p2` even with no other features.
+            FeatureCombination::None => vec!["--no-default-features", "--features", "p2"],
             FeatureCombination::Lite => {
                 vec!["--no-default-features", "--features", "lite"]
             }

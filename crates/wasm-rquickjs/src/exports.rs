@@ -12,7 +12,9 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::{Lit, LitStr};
-use wit_parser::{Function, FunctionKind, Interface, InterfaceId, TypeId, WorldItem, WorldKey};
+use wit_parser::{
+    Function, FunctionKind, Interface, InterfaceId, TypeDefKind, TypeId, WorldItem, WorldKey,
+};
 
 /// Generates the `<output>/src/lib.rs` file for the wrapper crate, implementing the component exports
 /// and providing the general Rust module declarations.
@@ -26,18 +28,54 @@ pub fn generate_export_impls(
     let world_name_lit = LitStr::new(&context.world_name, Span::call_site());
     let with_block = generate_wasi_remaps(context);
 
-    let lib_tokens = quote! {
-        #[allow(unsafe_op_in_unsafe_fn)]
-        pub(crate) mod bindings {
-            wit_bindgen::generate!({
-                path: "wit",
-                world: #world_name_lit,
-                ownership: Owning,
-                generate_all,
-                #with_block
-            });
+    // The Preview 3 path enables the component-model async ABI. It uses a renamed
+    // `wit-bindgen` dependency (`wit-bindgen-p3`, compiled with the
+    // `async`/`macros`/`inter-task-wakeup` features) so that it can coexist with the Preview 2
+    // `wit-bindgen` in the single shared skeleton; `runtime_path` points the generated bindings
+    // at that renamed crate's runtime module. The Preview 2 `ownership: Owning, generate_all`
+    // options are intentionally not used here.
+    let bindings_module = if context.target.is_p3() {
+        quote! {
+            #[allow(unsafe_op_in_unsafe_fn)]
+            pub(crate) mod bindings {
+                wit_bindgen_p3::generate!({
+                    path: "wit",
+                    world: #world_name_lit,
+                    runtime_path: "wit_bindgen_p3::rt",
+                    #with_block
+                });
+            }
         }
-        mod builtin;
+    } else {
+        quote! {
+            #[allow(unsafe_op_in_unsafe_fn)]
+            pub(crate) mod bindings {
+                wit_bindgen::generate!({
+                    path: "wit",
+                    world: #world_name_lit,
+                    ownership: Owning,
+                    generate_all,
+                    #with_block
+                });
+            }
+        }
+    };
+
+    // In the Preview 3 path the Node.js builtin tree (`builtin/`) is not compiled at all;
+    // `mod builtin` is bound to the minimal `builtin_p3.rs` stub instead, so none of the
+    // P2-only builtin dependencies are pulled in. See `builtin_p3.rs`.
+    let builtin_module = if context.target.is_p3() {
+        quote! {
+            #[path = "builtin_p3.rs"]
+            mod builtin;
+        }
+    } else {
+        quote! { mod builtin; }
+    };
+
+    let lib_tokens = quote! {
+        #bindings_module
+        #builtin_module
         mod conversions;
         #[allow(unused)]
         mod internal;
@@ -133,6 +171,29 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
     Ok(result)
 }
 
+/// Returns whether `type_id` ultimately denotes a `resource`, following `use` re-exports and
+/// type aliases (`TypeDefKind::Type(Type::Id(..))`) to their target. A direct resource has its
+/// kind set to `Resource`, but an interface that re-exports a resource via `use other.{r};`
+/// stores it as an alias, so a naive `kind == Resource` check would miss it.
+fn type_resolves_to_resource(
+    context: &GeneratorContext<'_>,
+    type_id: TypeId,
+) -> anyhow::Result<bool> {
+    let mut current = type_id;
+    loop {
+        let typ = context
+            .resolve
+            .types
+            .get(current)
+            .ok_or_else(|| anyhow!("Unknown type id {current:?}"))?;
+        match &typ.kind {
+            TypeDefKind::Resource => return Ok(true),
+            TypeDefKind::Type(wit_parser::Type::Id(next)) => current = *next,
+            _ => return Ok(false),
+        }
+    }
+}
+
 /// Generates the implementation of a `Guest` trait for the component, implementing the exported functions.
 ///
 /// The `guest_trait` parameter is a Rust snippet containing the fully-qualified path to the `Guest` trait to
@@ -150,10 +211,41 @@ fn generate_guest_impl(
     let mut resource_impls = Vec::new();
     let mut resource_functions = BTreeMap::new();
 
+    let is_p3 = context.target.is_p3();
+
+    // The Preview 3 path does not support exported resources. A resource without any
+    // constructor/method/static functions produces no entries in `exports`, so it would slip
+    // past the per-function rejection below; reject at the type level here so methodless
+    // exported resources are caught too.
+    if is_p3 && let Some((_, iface, _)) = interface {
+        for (_, type_id) in &iface.types {
+            if type_resolves_to_resource(context, *type_id)? {
+                let typ = context
+                    .resolve
+                    .types
+                    .get(*type_id)
+                    .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+                let resource_name = typ.name.as_deref().unwrap_or("<anonymous>");
+                return Err(anyhow!(
+                    "Exported resources are not supported by the WASI Preview 3 generation path yet (resource '{resource_name}')"
+                ));
+            }
+        }
+    }
+
     for (name, function) in exports {
         match &function.kind {
             FunctionKind::Freestanding => {
-                if name == "wizer-initialize" {
+                if is_p3 {
+                    // The Preview 3 path has no Wizer pre-initialization (the
+                    // `wizer-initialize` export is never injected for P3) and does not support
+                    // synchronous exports at all. Reject every sync freestanding export here,
+                    // including a user-declared `wizer-initialize`, before the Preview 2
+                    // Wizer special-case below could accept it.
+                    return Err(anyhow!(
+                        "Synchronous exported functions are not supported by the WASI Preview 3 generation path (function '{name}'); declare it as `async func`"
+                    ));
+                } else if name == "wizer-initialize" {
                     // wizer-initialize calls directly into the skeleton's
                     // pre-init function instead of dispatching to JS
                     func_impls.push(quote! {
@@ -167,14 +259,26 @@ fn generate_guest_impl(
                     func_impls.push(func_impl);
                 }
             }
-            FunctionKind::AsyncFreestanding
-            | FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_) => {
-                Err(anyhow!("Async exported functions are not supported yet"))?
+            FunctionKind::AsyncFreestanding => {
+                if is_p3 {
+                    let func_impl =
+                        generate_exported_function_impl(context, interface, name, function)?;
+                    func_impls.push(func_impl);
+                } else {
+                    return Err(anyhow!("Async exported functions are not supported yet"));
+                }
+            }
+            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
+                return Err(anyhow!("Async exported functions are not supported yet"));
             }
             FunctionKind::Method(type_id)
             | FunctionKind::Static(type_id)
             | FunctionKind::Constructor(type_id) => {
+                if is_p3 {
+                    return Err(anyhow!(
+                        "Exported resources are not supported by the WASI Preview 3 generation path yet (function '{name}')"
+                    ));
+                }
                 resource_functions
                     .entry(type_id)
                     .or_insert_with(Vec::new)
@@ -388,17 +492,33 @@ fn generate_exported_function_impl(
     } else {
         quote! { call_js_export }
     };
-    let func_impl = quote! {
-       fn #func_name(#(#func_arg_list),*) -> #original_result {
-           crate::internal::async_exported_function(async move {
+    // In the Preview 3 path the generated `Guest` trait method is itself `async fn`, so the JS
+    // dispatch is awaited directly. In the Preview 2 path the trait method is synchronous and the
+    // future is driven to completion by `async_exported_function` (which blocks on the executor).
+    let func_impl = if context.target.is_p3() {
+        quote! {
+           async fn #func_name(#(#func_arg_list),*) -> #original_result {
                let result: #wrapped_result = crate::internal::#call(
                    #wit_package_lit,
                    #js_func_path,
                    #param_refs_tuple
                ).await;
                #unwrap_result
-           })
-       }
+           }
+        }
+    } else {
+        quote! {
+           fn #func_name(#(#func_arg_list),*) -> #original_result {
+               crate::internal::async_exported_function(async move {
+                   let result: #wrapped_result = crate::internal::#call(
+                       #wit_package_lit,
+                       #js_func_path,
+                       #param_refs_tuple
+                   ).await;
+                   #unwrap_result
+               })
+           }
+        }
     };
     Ok(func_impl)
 }
@@ -774,6 +894,23 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
 /// Only interfaces that are actually used by the resolved world are included,
 /// because unused `with:` entries cause compilation errors.
 fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
+    // Preview 3 remaps: only the clock interfaces are remapped to the `wasip3` crate for now
+    // (Phase 1). Any other WASI interface present in the world keeps the bindings generated by
+    // `wit_bindgen::generate!`. The actual `with:` entries use the fully-versioned names from the
+    // resolved world, so the exact `@0.3.0-rc-...` snapshot is picked up automatically.
+    // The WASI Preview 3 `clocks` package (`wasi:clocks@0.3.x`) exposes `types`,
+    // `monotonic-clock` and `system-clock` (there is no `wall-clock`; that was the Preview 2
+    // name). Each maps to the corresponding `wasip3::clocks::*` module. Only interfaces that
+    // are actually used by the world get a `with:` entry, so listing all of them is safe.
+    static WASI_REMAPS_P3: &[(&str, &str)] = &[
+        ("wasi:clocks/types", "wasip3::clocks::types"),
+        (
+            "wasi:clocks/monotonic-clock",
+            "wasip3::clocks::monotonic_clock",
+        ),
+        ("wasi:clocks/system-clock", "wasip3::clocks::system_clock"),
+    ];
+
     // Static mapping from unversioned WIT interface names to wasip2 Rust module paths.
     // The actual `with:` entries use the fully-versioned names from the resolved world.
     static WASI_REMAPS: &[(&str, &str)] = &[
@@ -845,10 +982,16 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
         }
     }
 
+    let remaps: &[(&str, &str)] = if context.target.is_p3() {
+        WASI_REMAPS_P3
+    } else {
+        WASI_REMAPS
+    };
+
     // Build with: entries only for WASI interfaces that are actually used,
     // using the fully-versioned WIT name as the key
     let mut entries = Vec::new();
-    for (wit_name, rust_path) in WASI_REMAPS {
+    for (wit_name, rust_path) in remaps {
         if let Some(versioned_name) = used_interfaces.get(*wit_name) {
             let wit_lit = LitStr::new(versioned_name, Span::call_site());
             let rust_path: syn::Path = syn::parse_str(rust_path)

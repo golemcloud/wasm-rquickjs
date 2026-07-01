@@ -1,0 +1,11 @@
+package test:async-io;
+
+interface host {
+  host-delay: async func(ms: u32) -> u32;
+}
+
+world async-io {
+  import host;
+
+  export run: async func(ms: u32) -> u32;
+}

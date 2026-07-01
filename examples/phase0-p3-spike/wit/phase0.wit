@@ -1,0 +1,21 @@
+package wasm-rquickjs:phase0;
+
+interface host {
+  host-delay: async func(ms: u32) -> u32;
+}
+
+world p3-spike {
+  import host;
+  import wasi:clocks/monotonic-clock@0.3.0-rc-2026-03-15;
+
+  export run: async func() -> string;
+  export event-loop: async func() -> string;
+  export host-delay-check: async func() -> string;
+  export concurrency-probe: async func() -> string;
+
+  // Concurrency overlap probe: `warmup` initializes the single shared runtime
+  // once; `probe-task` runs an unguarded JS task (enter / await sleep / exit)
+  // against that shared runtime so the host can drive two of them concurrently.
+  export warmup: async func() -> string;
+  export probe-task: async func(id: u32, ms: u32) -> string;
+}

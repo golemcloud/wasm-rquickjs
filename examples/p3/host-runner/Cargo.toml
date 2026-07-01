@@ -1,0 +1,13 @@
+[package]
+name = "p3-host-runner"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+anyhow = "1.0"
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "time"] }
+wasmtime = { version = "=45.0.0", features = ["component-model", "component-model-async", "runtime", "cranelift"] }
+wasmtime-wasi = { version = "=45.0.0", features = ["p3"] }
+serde_json = "1.0"

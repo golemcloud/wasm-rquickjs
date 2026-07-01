@@ -11,7 +11,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::LitStr;
-use wit_parser::{FunctionKind, TypeDefKind, WorldItem, WorldKey};
+use wit_parser::{Function, FunctionKind, TypeDefKind, WorldItem, WorldKey};
 
 /// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
 /// directory.
@@ -19,6 +19,51 @@ use wit_parser::{FunctionKind, TypeDefKind, WorldItem, WorldKey};
 /// imported WIT interfaces as JavaScript modules.
 pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
     let (global, interfaces) = collect_imported_interfaces(context)?;
+
+    // Functions and resources declared directly in the world (rather than inside an interface)
+    // are a documented limitation ("only whole interfaces" are supported for imports). Such
+    // functions - including the constructor/methods/statics of a world-level resource - end up in
+    // the synthetic global import module, which is never registered with the QuickJS module
+    // resolver/loader (only imported interfaces are), so they could never be imported from
+    // JavaScript: under Preview 3 a freestanding async import would build but trap at runtime, and
+    // a world-level resource would fail to compile. A resource declared in the world is also
+    // unusable any other way (interfaces cannot reference world-level types, and exported
+    // resources are rejected separately), so reject both explicitly on the Preview 3 path with a
+    // clear, actionable message instead of silently emitting a broken or dead crate.
+    if context.target.is_p3() {
+        let mut offending = global
+            .functions
+            .iter()
+            .map(|(name, _)| (*name).to_string())
+            .collect::<Vec<_>>();
+
+        let world = &context.resolve.worlds[context.world];
+        for (key, item) in &world.imports {
+            if let WorldItem::Type { id, .. } = item {
+                let typ = context
+                    .resolve
+                    .types
+                    .get(*id)
+                    .ok_or_else(|| anyhow!("Unknown world-level type id {id:?}"))?;
+                if typ.kind == TypeDefKind::Resource {
+                    let name = typ.name.clone().unwrap_or_else(|| match key {
+                        WorldKey::Name(name) => name.clone(),
+                        WorldKey::Interface(_) => "<resource>".to_string(),
+                    });
+                    offending.push(name);
+                }
+            }
+        }
+
+        if !offending.is_empty() {
+            let offending = offending.join(", ");
+            return Err(anyhow!(
+                "Functions or resources declared directly in the world are not supported by the \
+                 WASI Preview 3 generation path ({offending}); declare them inside an imported \
+                 interface instead"
+            ));
+        }
+    }
 
     for interface in &interfaces {
         let module_name = interface.module_name()?;
@@ -86,6 +131,119 @@ pub fn collect_imported_interfaces<'a>(
     };
 
     Ok((global, interfaces))
+}
+
+/// The three token fragments that wire one imported function into the generated rquickjs
+/// native module: its `decl.declare(...)`, its `exports.export(...)`, and the bridge function
+/// item itself.
+struct FreestandingImportBridge {
+    declaration: TokenStream,
+    export: TokenStream,
+    bridge_fn: TokenStream,
+}
+
+/// Builds the rquickjs bridge for a freestanding imported WIT function.
+///
+/// `is_async` selects between a synchronous bridge (`fn ...`, used by the Preview 2 target and
+/// for synchronous Preview 3 imports) and an async bridge (`async fn ... .await`, used for
+/// async Preview 3 imports). The async variant relies on rquickjs' `#[function]` macro support
+/// for `async fn`s: the macro wraps the body in a `Promised` future, so the JavaScript side
+/// receives a function that returns a promise, and the host async import is awaited on the
+/// component-model async executor. For the `result<_, _>` case the bridge throws on the error
+/// arm, which `Promised` turns into a rejected promise.
+fn build_freestanding_import_bridge(
+    context: &GeneratorContext<'_>,
+    import: &ImportedInterface<'_>,
+    name: &str,
+    function: &Function,
+    is_async: bool,
+) -> anyhow::Result<FreestandingImportBridge> {
+    let rust_fn = RustWitFunction::new(context, name, function);
+
+    let rust_function_name = &rust_fn.function_name;
+    let rust_function_ident = rust_fn.function_name_ident();
+
+    let js_function_name = escape_js_ident(name.to_lower_camel_case());
+    let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
+    let js_bridge_name = format!("js_{rust_function_name}");
+    let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
+
+    let declaration = quote! { decl.declare(#js_function_lit)? };
+    let export = quote! { exports.export(#js_function_lit, #js_bridge_ident)? };
+
+    let bindgen_path = ident_in_imported_interface_or_global(
+        context,
+        rust_function_ident.clone(),
+        import.name_and_interface(),
+    );
+
+    let parameters = function
+        .params
+        .iter()
+        .zip(rust_fn.export_parameters.clone())
+        .zip(rust_fn.import_parameters.clone())
+        .map(|((param, export_parameter), import_parameter)| {
+            process_parameter(
+                context,
+                &param.name,
+                &param.ty,
+                &export_parameter,
+                &import_parameter,
+            )
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
+    let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
+    let return_types = get_return_type(context, function, name, &rust_fn)?;
+    let original_result = &return_types.wit_level_ret.original_type_ref;
+    let wrapped_result = &return_types.func_ret.wrapped_type_ref;
+    let wrap = &return_types.func_ret.wrap;
+    let wrap_result = wrap.run(quote! { result });
+
+    let maybe_async = if is_async {
+        quote! { async }
+    } else {
+        quote! {}
+    };
+    let maybe_await = if is_async {
+        quote! { .await }
+    } else {
+        quote! {}
+    };
+
+    let bridge_fn = if let Some(exception) = &return_types.expected_exception {
+        let wrapped_exception = &exception.wrapped_type_ref;
+        let wrap_exception = exception.wrap.run(quote! { error });
+
+        quote! {
+            #[rquickjs::function]
+            #maybe_async fn #rust_function_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                match result {
+                    Ok(result) => Ok(#wrap_result),
+                    Err(error) => {
+                        let error: #wrapped_exception = #wrap_exception;
+                        Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                    }
+                }
+            }
+        }
+    } else {
+        quote! {
+            #[rquickjs::function]
+            #maybe_async fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
+                let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                #wrap_result
+            }
+        }
+    };
+
+    Ok(FreestandingImportBridge {
+        declaration,
+        export,
+        bridge_fn,
+    })
 }
 
 fn generate_import_module(
@@ -163,82 +321,34 @@ fn generate_import_module(
     for (name, function) in &import.functions {
         match &function.kind {
             FunctionKind::Freestanding => {
-                let rust_fn = RustWitFunction::new(context, name, function);
-
-                let rust_function_name = &rust_fn.function_name;
-                let rust_function_ident = rust_fn.function_name_ident();
-
-                let js_function_name = escape_js_ident(name.to_lower_camel_case());
-                let js_function_lit = LitStr::new(&js_function_name, Span::call_site());
-                let js_bridge_name = format!("js_{rust_function_name}");
-                let js_bridge_ident = Ident::new(&js_bridge_name, Span::call_site());
-
-                declarations.push(quote! { decl.declare(#js_function_lit)? });
-
-                exports.push(quote! { exports.export(#js_function_lit, #js_bridge_ident)? });
-
-                let bindgen_path = ident_in_imported_interface_or_global(
-                    context,
-                    rust_function_ident.clone(),
-                    import.name_and_interface(),
-                );
-
-                let parameters = function
-                    .params
-                    .iter()
-                    .zip(rust_fn.export_parameters.clone())
-                    .zip(rust_fn.import_parameters.clone())
-                    .map(|((param, export_parameter), import_parameter)| {
-                        process_parameter(
-                            context,
-                            &param.name,
-                            &param.ty,
-                            &export_parameter,
-                            &import_parameter,
-                        )
-                    })
-                    .collect::<anyhow::Result<Vec<_>>>()?;
-
-                let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
-
-                let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
-                let return_types = get_return_type(context, function, name, &rust_fn)?;
-                let original_result = &return_types.wit_level_ret.original_type_ref;
-                let wrapped_result = &return_types.func_ret.wrapped_type_ref;
-                let wrap = &return_types.func_ret.wrap;
-                let wrap_result = wrap.run(quote! { result });
-
-                if let Some(exception) = &return_types.expected_exception {
-                    let wrapped_exception = &exception.wrapped_type_ref;
-                    let wrap_exception = exception.wrap.run(quote! { error });
-
-                    bridge_functions.push(quote! {
-                        #[rquickjs::function]
-                        fn #rust_function_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
-                            let result: #original_result = #bindgen_path(#(#param_refs),*);
-                            match result {
-                                Ok(result) => Ok(#wrap_result),
-                                Err(error) => {
-                                    let error: #wrapped_exception = #wrap_exception;
-                                    Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    bridge_functions.push(quote! {
-                        #[rquickjs::function]
-                        fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
-                            let result: #original_result = #bindgen_path(#(#param_refs),*);
-                            #wrap_result
-                        }
-                    });
-                }
+                // A synchronous imported function. Generates a synchronous rquickjs bridge that
+                // calls the wit-bindgen import directly. Valid for both the Preview 2 and
+                // Preview 3 targets.
+                let bridge = build_freestanding_import_bridge(
+                    context, import, name, function, /* is_async */ false,
+                )?;
+                declarations.push(bridge.declaration);
+                exports.push(bridge.export);
+                bridge_functions.push(bridge.bridge_fn);
             }
-            FunctionKind::AsyncFreestanding
-            | FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_) => {
-                Err(anyhow!("Async imported functions are not supported yet"))?
+            FunctionKind::AsyncFreestanding => {
+                // An async imported function. Only the Preview 3 target supports these: the bridge
+                // is an `async fn` that `.await`s the component-model async import; the rquickjs
+                // `#[function]` macro turns it into a JS function returning a promise.
+                if !context.target.is_p3() {
+                    return Err(anyhow!("Async imported functions are not supported yet"));
+                }
+                let bridge = build_freestanding_import_bridge(
+                    context, import, name, function, /* is_async */ true,
+                )?;
+                declarations.push(bridge.declaration);
+                exports.push(bridge.export);
+                bridge_functions.push(bridge.bridge_fn);
+            }
+            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
+                return Err(anyhow!(
+                    "Async imported resource methods are not supported yet"
+                ));
             }
             FunctionKind::Method(type_id)
             | FunctionKind::Static(type_id)
@@ -430,7 +540,13 @@ fn generate_import_module(
         }
 
         let mut special_methods = Vec::new();
-        if resource_name == "pollable"
+        // The `wasi:io/poll.pollable` async helpers (`promise` / `abortable_promise`) are driven
+        // by P2 pollables (`wasip2::io::poll` + `wstd::runtime::AsyncPollable`), so they only
+        // exist on the Preview 2 path. The Preview 3 path must not use P2 pollables (it drives
+        // async via the component-model async ABI instead), and those deps are not even compiled
+        // under the `p3` feature, so these helpers are never emitted there.
+        if !context.target.is_p3()
+            && resource_name == "pollable"
             && &import.name == "poll"
             && import
                 .package_name

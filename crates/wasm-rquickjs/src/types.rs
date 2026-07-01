@@ -29,7 +29,10 @@ pub fn to_type_ref(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::Result
         Type::F64 => Ok(quote! { f64 }),
         Type::Char => Ok(quote! { char }),
         Type::String => Ok(quote! { String }),
-        Type::ErrorContext => Ok(quote! { wit_bindgen_rt::async_support::ErrorContext }),
+        Type::ErrorContext => {
+            let rt = context.wit_bindgen_rt_path();
+            Ok(quote! { #rt::async_support::ErrorContext })
+        }
         Type::Id(type_id) => {
             context.record_visited_type(*type_id);
 
@@ -227,7 +230,8 @@ pub fn ident_in_imported_interface(
         Span::call_site(),
     );
 
-    // Check if this interface belongs to a WASI package remapped to wasip2::
+    // Check if this interface belongs to a WASI package remapped to the WASI runtime crate
+    // (`wasip2::` for Preview 2, `wasip3::` for Preview 3).
     if let Some(package_id) = interface.package
         && context.is_wasi_remapped_package(package_id)
     {
@@ -236,7 +240,8 @@ pub fn ident_in_imported_interface(
             &escape_rust_ident(&package.name.name.to_snake_case()),
             Span::call_site(),
         );
-        return quote! { wasip2::#pkg_name_ident::#name_ident::#ident };
+        let wasi_crate = context.wasi_remap_crate_ident();
+        return quote! { #wasi_crate::#pkg_name_ident::#name_ident::#ident };
     }
 
     let mut path = Vec::new();

@@ -1,0 +1,16 @@
+package test:res;
+
+interface host {
+  resource counter {
+    constructor(initial: u32);
+    increment: func(by: u32) -> u32;
+    get: func() -> u32;
+    %static-zero: static func() -> u32;
+  }
+}
+
+world res {
+  import host;
+
+  export run: async func() -> u32;
+}
