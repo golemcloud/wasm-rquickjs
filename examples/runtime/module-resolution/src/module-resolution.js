@@ -3929,6 +3929,114 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.strictEqual(new vm.Script('1 + 1\n//#\fsourceMappingURL=form-feed.map').sourceMapURL, 'form-feed.map');
         assert.strictEqual(new vm.Script('1 + 1\n//#\u00a0sourceMappingURL=nbsp.map').sourceMapURL, 'nbsp.map');
         assert.strictEqual(new vm.Script('const s = `${1 //# sourceMappingURL=expr.map\n}`;').sourceMapURL, 'expr.map');
+        const receiverScript = new vm.Script('');
+        assert.throws(() => receiverScript.runInNewContext.call('hello'), {
+            name: 'TypeError',
+            message: 'this.runInContext is not a function',
+        });
+        assert.throws(() => receiverScript.runInNewContext.call(null), {
+            name: 'TypeError',
+            message: "Cannot read properties of null (reading 'runInContext')",
+        });
+        assert.throws(() => receiverScript.runInNewContext.call(undefined), {
+            name: 'TypeError',
+            message: "Cannot read properties of undefined (reading 'runInContext')",
+        });
+        const overriddenReceiverScript = new vm.Script('41');
+        overriddenReceiverScript.runInContext = function(context, options) {
+            assert.strictEqual(vm.isContext(context), true);
+            assert.deepStrictEqual(options, { displayErrors: false });
+            return 99;
+        };
+        assert.strictEqual(overriddenReceiverScript.runInNewContext({}, { displayErrors: false }), 99);
+        for (const invalidSandbox of [null, 1, 'x']) {
+            assert.throws(() => receiverScript.runInNewContext(invalidSandbox), {
+                name: 'TypeError',
+                code: 'ERR_INVALID_ARG_TYPE',
+            });
+        }
+        const genericReceiverSandbox = {};
+        assert.strictEqual(vm.Script.prototype.runInNewContext.call({
+            runInContext(context, options) {
+                assert.strictEqual(context, genericReceiverSandbox);
+                assert.strictEqual(vm.isContext(context), true);
+                assert.deepStrictEqual(options, { displayErrors: false });
+                return 42;
+            },
+        }, genericReceiverSandbox, { displayErrors: false }), 42);
+        let genericReceiverWasCalled = false;
+        assert.strictEqual(vm.Script.prototype.runInNewContext.call({
+            runInContext(context) {
+                genericReceiverWasCalled = true;
+                assert.strictEqual(vm.isContext(context), true);
+                return 43;
+            },
+        }), 43);
+        assert.strictEqual(genericReceiverWasCalled, true);
+        for (const invalidSandbox of [null, 1, 'x']) {
+            genericReceiverWasCalled = false;
+            assert.throws(() => vm.Script.prototype.runInNewContext.call({
+                runInContext() {
+                    genericReceiverWasCalled = true;
+                },
+            }, invalidSandbox), {
+                name: 'TypeError',
+                code: 'ERR_INVALID_ARG_TYPE',
+            });
+            assert.strictEqual(genericReceiverWasCalled, false);
+        }
+        for (const invalidOptions of [
+            { contextName: null },
+            { contextOrigin: null },
+            { contextCodeGeneration: null },
+            { contextCodeGeneration: 1 },
+            { contextCodeGeneration: { strings: null } },
+            { contextCodeGeneration: { strings: 1 } },
+            { contextCodeGeneration: { wasm: null } },
+            { contextCodeGeneration: { wasm: 1 } },
+            { microtaskMode: 'bad' },
+        ]) {
+            genericReceiverWasCalled = false;
+            const expectedCode = invalidOptions.microtaskMode === 'bad' ? 'ERR_INVALID_ARG_VALUE' : 'ERR_INVALID_ARG_TYPE';
+            assert.throws(() => vm.Script.prototype.runInNewContext.call({
+                runInContext() {
+                    genericReceiverWasCalled = true;
+                },
+            }, {}, invalidOptions), {
+                name: 'TypeError',
+                code: expectedCode,
+            });
+            assert.strictEqual(genericReceiverWasCalled, false);
+            assert.throws(() => receiverScript.runInNewContext({}, invalidOptions), {
+                name: 'TypeError',
+                code: expectedCode,
+            });
+        }
+        assert.throws(() => receiverScript.runInNewContext(null, { microtaskMode: 'bad' }), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+        });
+        assert.throws(() => receiverScript.runInNewContext(null, { contextCodeGeneration: 1 }), {
+            name: 'TypeError',
+            code: 'ERR_INVALID_ARG_TYPE',
+        });
+        assert.throws(() => receiverScript.runInContext.call('hello', vm.createContext({})), {
+            name: 'TypeError',
+            message: 'Illegal invocation',
+        });
+        assert.throws(() => receiverScript.runInThisContext.call('hello'), {
+            name: 'TypeError',
+            message: 'Illegal invocation',
+        });
+        assert.throws(() => receiverScript.createCachedData.call('hello'), {
+            name: 'TypeError',
+            message: 'Illegal invocation',
+        });
+        assert.deepStrictEqual(Object.getOwnPropertySymbols(receiverScript), []);
+        assert.throws(() => vm.Script.prototype.runInThisContext.call({ _code: '40 + 2' }), {
+            name: 'TypeError',
+            message: 'Illegal invocation',
+        });
         assert.strictEqual(vm.compileFunction('return 1')(), 1);
         assert.strictEqual(vm.compileFunction('console.log("Hello, World!")').toString(), 'function () {\nconsole.log("Hello, World!")\n}');
         assert.throws(() => vm.compileFunction('});\n\n(function() {\nthrow new Error("unreachable");\n})();\n\n(function() {'), {

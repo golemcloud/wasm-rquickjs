@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3206/4395 (72.9%)
+**Primary compatibility (CI-enforced):** 3207/4395 (73.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3206 | 72.9% | 56.1% | 46.9% |
-| 🧩 known gap | 1189 | 27.1% | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3207 | 73.0% | 56.1% | 46.9% |
+| 🧩 known gap | 1188 | 27.0% | 20.8% | 17.4% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3206/5713 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3207/5713 (56.1%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 52 | 57 | 3 | 9 | 0 | 0 | 47.7% | 43.0% |
+| vm | 121 | 53 | 56 | 3 | 9 | 0 | 0 | 48.6% | 43.8% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -594,7 +594,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-vm-context-dont-contextify.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-vm-measure-memory-lazy.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
 | `test-vm-module-basic.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
-| `test-vm-new-script-new-context.js` | 8 | 6 | 2 | 0 | 0 | 0 | 0 |
+| `test-vm-new-script-new-context.js` | 8 | 7 | 1 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-constructors.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-derivebits.js` | 4 | 0 | 2 | 0 | 0 | 0 | 2 |
 | `test-webcrypto-derivekey.js` | 6 | 0 | 3 | 0 | 0 | 0 | 3 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1189)
+### known gap (1188)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -937,7 +937,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Resolver.cancel() behavior for in-flight reverse lookups is not implemented | 1 | `parallel/test-dns-cancel-reverse-lookup.js` |
 | Resolver.cancel() for callback-based in-flight queries is not implemented | 1 | `parallel/test-dns-channel-cancel.js` |
 | Resolver.cancel() for promise-based in-flight queries is not implemented | 1 | `parallel/test-dns-channel-cancel-promise.js` |
-| Script.runInNewContext this-binding/type validation behavior does not match Node | 1 | `parallel/test-vm-new-script-new-context.js#block_07_block_07` |
 | ServerResponse.addTrailers()/IncomingMessage.trailers behavior is incomplete | 1 | `parallel/test-http-set-trailers.js` |
 | ServerResponse.end() repeated-call error/callback behavior is not Node-compatible | 1 | `parallel/test-http-outgoing-end-multiple.js` |
 | ServerResponse.getHeaders() returns a plain object instead of a null-prototype object | 1 | `parallel/test-http-set-header-chain.js` |

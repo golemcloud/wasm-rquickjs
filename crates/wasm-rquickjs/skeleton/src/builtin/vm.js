@@ -12,6 +12,7 @@ const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExpor
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 const moduleNamespaceBrandSymbol = Symbol('wasm-rquickjs.vm.namespaceBrand');
 const vmDynamicImportReferrerSymbol = Symbol('wasm-rquickjs.vm.dynamicImportReferrer');
+const scriptBrandSet = new WeakSet();
 const vmModuleInstanceBrandSymbol = Symbol('wasm-rquickjs.vm.moduleInstance');
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');
@@ -1123,6 +1124,48 @@ function evalCodeInNewContext(code, sandbox, helperName) {
     }
 
     return evalInNewContext(createIndirectEvalSource(code), keys, values);
+}
+
+function createContextForRunInNewContext(sandbox) {
+    if (sandbox === undefined) {
+        return createContext({});
+    }
+    if (sandbox === null || typeof sandbox !== 'object') {
+        throwInvalidArgType('object', 'object', sandbox);
+    }
+    return createContext(sandbox);
+}
+
+function validateRunInNewContextPreSandboxOptions(options) {
+    if (options === null || typeof options !== 'object') {
+        return;
+    }
+    if (options.contextName !== undefined && typeof options.contextName !== 'string') {
+        throwInvalidPropertyType('options.contextName', 'string', options.contextName);
+    }
+    if (options.contextOrigin !== undefined && typeof options.contextOrigin !== 'string') {
+        throwInvalidPropertyType('options.contextOrigin', 'string', options.contextOrigin);
+    }
+    if (options.contextCodeGeneration !== undefined) {
+        if (options.contextCodeGeneration === null || typeof options.contextCodeGeneration !== 'object') {
+            throwInvalidPropertyType('options.contextCodeGeneration', 'object', options.contextCodeGeneration);
+        }
+        if (options.contextCodeGeneration.strings !== undefined && typeof options.contextCodeGeneration.strings !== 'boolean') {
+            throwInvalidPropertyType('options.contextCodeGeneration.strings', 'boolean', options.contextCodeGeneration.strings);
+        }
+        if (options.contextCodeGeneration.wasm !== undefined && typeof options.contextCodeGeneration.wasm !== 'boolean') {
+            throwInvalidPropertyType('options.contextCodeGeneration.wasm', 'boolean', options.contextCodeGeneration.wasm);
+        }
+    }
+}
+
+function validateRunInNewContextPostSandboxOptions(options) {
+    if (options === null || typeof options !== 'object') {
+        return;
+    }
+    if (options.microtaskMode !== undefined && options.microtaskMode !== 'afterEvaluate') {
+        throw invalidArgValue("The property 'options.microtaskMode' must be one of: 'afterEvaluate', undefined. Received " + formatReceived(options.microtaskMode));
+    }
 }
 
 export function createContext(sandbox, options) {
@@ -2326,6 +2369,7 @@ function extractSourceMapURL(code) {
 
 export class Script {
     constructor(code, options) {
+        scriptBrandSet.add(this);
         this._code = String(code);
         this.sourceMapURL = extractSourceMapURL(this._code);
         this._options = snapshotVmOptions(options);
@@ -2359,23 +2403,23 @@ export class Script {
     }
 
     runInNewContext(sandbox, options) {
-        validateOptionsObject(options);
-        if (this._usesDefaultLoader) {
-            return evalCodeInNewContext(this._defaultLoaderCode, sandbox, this._defaultLoaderHelperName);
+        if (this === null || this === undefined) {
+            throw new TypeError("Cannot read properties of " + this + " (reading 'runInContext')");
         }
-        if (this._usesMissingDynamicImportCallback) {
-            return evalCodeInNewContext(this._missingCallbackCode, sandbox, this._missingCallbackHelperName);
+        const runInContext = this.runInContext;
+        if (typeof runInContext !== 'function') {
+            throw new TypeError('this.runInContext is not a function');
         }
-        if (this._usesMissingDynamicImportFlag) {
-            return evalCodeInNewContext(this._missingFlagCode, sandbox, this._missingFlagHelperName);
-        }
-        if (this._usesDynamicImportCallback) {
-            return evalCodeInNewContext(this._dynamicImportCallbackCode, sandbox, this._dynamicImportCallbackHelperName);
-        }
-        return runInNewContext(this._code, sandbox, {});
+        validateRunInNewContextPreSandboxOptions(options);
+        const context = createContextForRunInNewContext(sandbox);
+        validateRunInNewContextPostSandboxOptions(options);
+        return runInContext.call(this, context, options);
     }
 
     runInContext(context, options) {
+        if (!this || !scriptBrandSet.has(this)) {
+            throw new TypeError('Illegal invocation');
+        }
         validateOptionsObject(options);
         if (this._usesDefaultLoader) {
             if (!isContext(context)) {
@@ -2405,6 +2449,9 @@ export class Script {
     }
 
     runInThisContext(options) {
+        if (!this || !scriptBrandSet.has(this)) {
+            throw new TypeError('Illegal invocation');
+        }
         validateOptionsObject(options);
         if (this._usesDefaultLoader) {
             return evalWithFilename(this._defaultLoaderCode, this._defaultLoaderFilename);
@@ -2422,6 +2469,9 @@ export class Script {
     }
 
     createCachedData() {
+        if (!this || !scriptBrandSet.has(this)) {
+            throw new TypeError('Illegal invocation');
+        }
         return new Uint8Array(0);
     }
 }
