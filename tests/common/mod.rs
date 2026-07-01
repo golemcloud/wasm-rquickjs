@@ -573,6 +573,10 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
         copy_dir_recursive(fixtures_src, fixtures_dst.as_std_path())?;
     }
 
+    if test_rel_path == "sequential/test-module-loading.js" && vendored_fixtures_src.exists() {
+        copy_dir_recursive(vendored_fixtures_src, fixtures_dst.as_std_path())?;
+    }
+
     Ok(())
 }
 

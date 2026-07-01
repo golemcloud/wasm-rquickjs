@@ -3684,6 +3684,12 @@ function isMainEntryFilename(resolvedFilename) {
     }
 }
 
+function unlinkModuleFromParent(parentModule, mod) {
+    if (!parentModule || !parentModule.children) return;
+    const index = parentModule.children.indexOf(mod);
+    if (index !== -1) parentModule.children.splice(index, 1);
+}
+
 function loadModule(resolvedFilename, source, parentModule) {
     const isMainModuleLoad = isMainEntryFilename(resolvedFilename);
     const filename = toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
@@ -3749,10 +3755,12 @@ function loadModule(resolvedFilename, source, parentModule) {
             handler(mod, filename);
         } catch (err) {
             delete moduleCache[filename];
+            unlinkModuleFromParent(parentModule, mod);
             throw err;
         }
     } else if (filename.endsWith('.node')) {
         delete moduleCache[filename];
+        unlinkModuleFromParent(parentModule, mod);
         const err = new Error("Native .node modules are not supported in WASM: '" + filename + "'");
         err.code = 'ERR_DLOPEN_FAILED';
         throw err;
@@ -3764,6 +3772,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             mod.exports = JSON.parse(source);
         } catch (e) {
             delete moduleCache[filename];
+            unlinkModuleFromParent(parentModule, mod);
             const err = new SyntaxError(filename + ': ' + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
@@ -3773,6 +3782,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             (filename.endsWith('.js') && getPackageScopeType(filename) === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
             delete moduleCache[filename];
+            unlinkModuleFromParent(parentModule, mod);
             const esmErr = new Error(
                 "require() of ES Module " + filename + " not supported. " +
                 "Instead change the require of " + filename + " to a dynamic " +
@@ -3786,6 +3796,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 mod.exports = requireEsmWithCacheGuard(mod, filename);
             } catch (err) {
                 delete moduleCache[filename];
+                unlinkModuleFromParent(parentModule, mod);
                 throw err;
             }
         } else {
@@ -3812,6 +3823,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                     cjsSyntaxError = err;
                 } else {
                     delete moduleCache[filename];
+                    unlinkModuleFromParent(parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
@@ -3819,6 +3831,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             if (cjsSyntaxError || cjsWrapperRequireRedeclaration) {
                 if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
                     delete moduleCache[filename];
+                    unlinkModuleFromParent(parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
@@ -3827,6 +3840,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                     mod.exports = requireEsmWithCacheGuard(mod, filename);
                 } catch (esmErr) {
                     delete moduleCache[filename];
+                    unlinkModuleFromParent(parentModule, mod);
                     if (cjsSourceLooksEsm || cjsWrapperRequireRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
@@ -3847,6 +3861,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                     compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);
                 } catch (err) {
                     delete moduleCache[filename];
+                    unlinkModuleFromParent(parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 } finally {

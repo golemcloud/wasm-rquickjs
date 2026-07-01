@@ -4682,6 +4682,8 @@ export const testCjsModuleChildrenGraph = async () => {
         fs.writeFileSync(`${root}/data.json`, JSON.stringify({ name: 'json' }));
         fs.writeFileSync(`${root}/custom.test`, 'module.exports.name = "custom";');
         fs.writeFileSync(`${root}/module-require-target.js`, 'exports.name = "module-require-target";');
+        fs.writeFileSync(`${root}/throws.js`, 'throw new Error("failed child");');
+        fs.writeFileSync(`${root}/native.node`, 'not a native module');
         fs.writeFileSync(`${root}/entry.js`, [
             'require.extensions[".test"] = function(mod, filename) {',
             '  mod._compile(require("fs").readFileSync(filename, "utf8"), filename);',
@@ -4691,6 +4693,8 @@ export const testCjsModuleChildrenGraph = async () => {
             'exports.json = require("./data.json");',
             'exports.custom = require("./custom.test");',
             'exports.moduleRequireTarget = module.require("./module-require-target");',
+            'try { require("./throws"); } catch (err) { exports.throwCode = err.message; }',
+            'try { require("./native.node"); } catch (err) { exports.nativeCode = err.code; }',
             'exports.module = module;',
         ].join('\n'));
 
@@ -4701,6 +4705,8 @@ export const testCjsModuleChildrenGraph = async () => {
         assert.strictEqual(entry.json.name, 'json');
         assert.strictEqual(entry.custom.name, 'custom');
         assert.strictEqual(entry.moduleRequireTarget.name, 'module-require-target');
+        assert.strictEqual(entry.throwCode, 'failed child');
+        assert.strictEqual(entry.nativeCode, 'ERR_DLOPEN_FAILED');
 
         const childIds = entry.module.children.map((child) => child.filename);
         assert.deepStrictEqual(childIds, [
@@ -4709,6 +4715,8 @@ export const testCjsModuleChildrenGraph = async () => {
             `${root}/custom.test`,
             `${root}/module-require-target.js`,
         ]);
+        assert.strictEqual(childIds.includes(`${root}/throws.js`), false);
+        assert.strictEqual(childIds.includes(`${root}/native.node`), false);
         assert.strictEqual(childIds.filter((filename) => filename === `${root}/nested/child.js`).length, 1);
 
         const nestedChildIds = entry.child.module.children.map((child) => child.filename);

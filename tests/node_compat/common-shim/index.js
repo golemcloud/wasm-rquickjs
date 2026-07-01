@@ -5,6 +5,7 @@
 'use strict';
 
 var { inspect } = require('util');
+require('./tmpdir');
 var noop = function() {};
 var _mustCallChecks = [];
 
