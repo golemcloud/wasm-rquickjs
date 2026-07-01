@@ -5127,8 +5127,19 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
         }
 
         if source[cursor..].starts_with("...") {
-            let (specifier, next) = parse_require_string_loose(source, skip_ws_comments(source, cursor + 3))?;
-            add_unique(&mut reexports, specifier);
+            let spread_start = skip_ws_comments(source, cursor + 3);
+            let next = if let Some((specifier, next)) = parse_require_string_loose(source, spread_start) {
+                add_unique(&mut reexports, specifier);
+                next
+            } else if let Some((_, next)) = read_ident(source, spread_start) {
+                let after_ident = skip_ws_comments(source, next);
+                if after_ident < object_end && bytes[after_ident] != b',' {
+                    break;
+                }
+                after_ident
+            } else {
+                break;
+            };
             cursor = skip_ws_comments(source, next);
             if cursor < object_end {
                 if bytes[cursor] != b',' {
@@ -8179,6 +8190,29 @@ mod cjs_export_analyzer_tests {
             true,
             &["a", "c"],
             &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                const a = 1;
+                const b = 2;
+                const other = {};
+                module.exports = { a, ...other, b };
+            "#,
+            true,
+            &["a", "b"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                module.exports = { a, ...other(), b };
+                module.exports = { c, ...(other), d };
+                module.exports = { e, ...ns.other, f };
+            "#,
+            true,
+            &["a", "c", "e"],
+            &[],
         );
 
         assert_analysis(
