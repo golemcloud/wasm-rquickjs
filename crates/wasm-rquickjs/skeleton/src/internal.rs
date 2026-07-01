@@ -2170,6 +2170,10 @@ impl FileUrlResolver {
         url.starts_with("file://") && Self::file_url_path_and_suffix(url).is_none()
     }
 
+    fn with_loader_realm_suffix(base: &str, suffix: &str) -> String {
+        append_loader_realm_param(suffix, loader_realm_param(base).as_deref())
+    }
+
     fn is_same_directory_file_import(normalized: &str, base: &str) -> bool {
         let base_path = if let Some(path) = Self::file_url_to_path(base) {
             path
@@ -2244,7 +2248,11 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            let resolved = format!("{normalized}{suffix}");
+            let resolved = format!(
+                "{}{}",
+                normalized,
+                Self::with_loader_realm_suffix(base, suffix)
+            );
             transfer_import_type_rewrite_token(name, &resolved);
             Ok(resolved)
         } else {
@@ -2746,7 +2754,8 @@ impl Resolver for NodeFileResolver {
             );
         }
 
-        if let Some(resolved) = Self::resolve_candidate(candidate, suffix) {
+        let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
+        if let Some(resolved) = Self::resolve_candidate(candidate, &suffix) {
             transfer_import_type_rewrite_token(name, &resolved);
             return Ok(resolved);
         }
@@ -4229,6 +4238,7 @@ impl Resolver for NodeModulesResolver {
         emit_node_package_deprecation_warnings(ctx, &warnings)?;
         match result {
             Ok(Some(resolved)) => {
+                let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
                 let resolved = if suffix.is_empty() {
                     resolved
                 } else {
@@ -6237,7 +6247,8 @@ fn ensure_absolute_path(path: &str) -> String {
 }
 
 fn path_to_file_url(path: &str) -> String {
-    let abs_path = ensure_absolute_path(path);
+    let stripped_path = strip_loader_realm_param(path);
+    let abs_path = ensure_absolute_path(&stripped_path);
     let (abs_path, suffix) = split_module_path_suffix(&abs_path);
     let mut url = path_without_suffix_to_file_url(abs_path);
     url.push_str(suffix);
@@ -6386,6 +6397,76 @@ fn split_module_path_suffix(path: &str) -> (&str, &str) {
 
 fn module_filesystem_path(path: &str) -> &str {
     split_module_path_suffix(path).0
+}
+
+const LOADER_REALM_QUERY_PARAM: &str = "__wasm_rquickjs_loader_realm";
+
+fn loader_realm_param(path_or_suffix: &str) -> Option<String> {
+    let suffix = if path_or_suffix.starts_with('?') || path_or_suffix.starts_with('#') {
+        path_or_suffix
+    } else {
+        split_module_path_suffix(path_or_suffix).1
+    };
+    let query = suffix.strip_prefix('?')?;
+    let query = query.split_once('#').map_or(query, |(query, _)| query);
+    for part in query.split('&') {
+        if part
+            .split_once('=')
+            .is_some_and(|(key, _)| key == LOADER_REALM_QUERY_PARAM)
+        {
+            return Some(part.to_string());
+        }
+    }
+    None
+}
+
+fn append_loader_realm_param(suffix: &str, param: Option<&str>) -> String {
+    let Some(param) = param else {
+        return suffix.to_string();
+    };
+    if loader_realm_param(suffix).is_some() {
+        return suffix.to_string();
+    }
+    let hash_start = suffix.find('#').unwrap_or(suffix.len());
+    let (before_hash, hash) = suffix.split_at(hash_start);
+    let separator = if before_hash.contains('?') { '&' } else { '?' };
+    format!("{before_hash}{separator}{param}{hash}")
+}
+
+fn strip_loader_realm_param_from_suffix(suffix: &str) -> String {
+    let Some(query) = suffix.strip_prefix('?') else {
+        return suffix.to_string();
+    };
+    let (query, hash) = query
+        .split_once('#')
+        .map_or((query, ""), |(query, hash)| (query, hash));
+    let kept: Vec<&str> = query
+        .split('&')
+        .filter(|part| {
+            !part
+                .split_once('=')
+                .is_some_and(|(key, _)| key == LOADER_REALM_QUERY_PARAM)
+        })
+        .collect();
+    let mut stripped = String::new();
+    if !kept.is_empty() {
+        stripped.push('?');
+        stripped.push_str(&kept.join("&"));
+    }
+    if !hash.is_empty() {
+        stripped.push('#');
+        stripped.push_str(hash);
+    } else if suffix.contains('#') && suffix.ends_with('#') {
+        stripped.push('#');
+    }
+    stripped
+}
+
+fn strip_loader_realm_param(path: &str) -> String {
+    let (path, suffix) = split_module_path_suffix(path);
+    let mut stripped = path.to_string();
+    stripped.push_str(&strip_loader_realm_param_from_suffix(suffix));
+    stripped
 }
 
 fn escape_js_string(s: &str) -> String {

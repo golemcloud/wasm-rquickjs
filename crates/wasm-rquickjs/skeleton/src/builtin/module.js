@@ -4533,7 +4533,9 @@ export let register = function register(specifier, parentURL, options) {
     parent = parent === undefined ? undefined : String(parent);
     const loaders = globalThis.__wasm_rquickjs_registered_loaders ||
         (globalThis.__wasm_rquickjs_registered_loaders = []);
-    const loader = { url, parent, data, module: undefined, initialized: false, initializing: undefined };
+    const realm = globalThis.__wasm_rquickjs_registered_loader_realm_counter =
+        (globalThis.__wasm_rquickjs_registered_loader_realm_counter || 0) + 1;
+    const loader = { url, parent, data, realm, module: undefined, initialized: false, initializing: undefined };
     loaders.push(loader);
     if (typeof globalThis.__wasm_rquickjs_start_registered_loader === 'function') {
         globalThis.__wasm_rquickjs_start_registered_loader(loader);
@@ -4556,10 +4558,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function resolveRegisteredLoaderUrl(loader) {
-        if (loader.parent !== undefined) {
-            return normalizeLoaderResolvedUrl(globalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url));
-        }
-        return loader.url;
+        const url = loader.parent !== undefined
+            ? normalizeLoaderResolvedUrl(globalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url))
+            : loader.url;
+        return loaderRealmUrl(url, loader.realm);
+    }
+
+    function loaderRealmUrl(url, realm) {
+        if (!url.startsWith('file://')) return url;
+        const hashIndex = url.indexOf('#');
+        const beforeHash = hashIndex < 0 ? url : url.slice(0, hashIndex);
+        const hash = hashIndex < 0 ? '' : url.slice(hashIndex);
+        const separator = beforeHash.includes('?') ? '&' : '?';
+        return beforeHash + separator + '__wasm_rquickjs_loader_realm=' + encodeURIComponent(String(realm)) + hash;
     }
 
     globalThis.__wasm_rquickjs_start_registered_loader = function startRegisteredLoader(loader) {

@@ -6044,7 +6044,7 @@
     "es-module/test-esm-loader-thenable.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-with-source.mjs": { "category": "runnable" },
     "es-module/test-esm-loader-with-syntax-error.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-loader.mjs": { "category": "known-gap", "reason": "registered loaders share the main module cache/context; Node isolates loader modules in a separate loader realm" },
+    "es-module/test-esm-loader.mjs": { "category": "runnable" },
     "es-module/test-esm-main-lookup.mjs": { "category": "runnable" },
     "es-module/test-esm-module-not-found-commonjs-hint.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-named-exports.mjs": { "category": "known-gap", "reason": "requires async registered loader resolve hooks during static ESM resolution; current static bridge supports only already-initialized synchronous hooks" },

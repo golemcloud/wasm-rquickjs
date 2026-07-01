@@ -1170,6 +1170,84 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
     }
 };
 
+export const testRegisteredLoaderModuleRealmIsolation = async () => {
+    try {
+        const root = '/registered-loader-realm-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(
+            `${root}/stateful.mjs`,
+            [
+                'let value = 0;',
+                'export function count() { return ++value; }',
+            ].join('\n'),
+        );
+        fs.mkdirSync(`${root}/node_modules/loader-realm-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-pkg/package.json`,
+            JSON.stringify({ name: 'loader-realm-pkg', exports: './index.mjs' }),
+        );
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-pkg/index.mjs`,
+            [
+                'let value = 0;',
+                'export function count() { return ++value; }',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/app.mjs`,
+            [
+                'import { count as stateCount } from "./stateful.mjs";',
+                'import { count as packageCount } from "loader-realm-pkg";',
+                'export default [stateCount(), packageCount()];',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/loader.mjs`,
+            [
+                'import { count } from "./stateful.mjs";',
+                'import { count as packageCount } from "loader-realm-pkg";',
+                'if (import.meta.url.includes("__wasm_rquickjs_loader_realm")) {',
+                '  throw new Error("loader realm marker leaked through import.meta.url");',
+                '}',
+                'const loaderCount = count();',
+                'const loaderPackageCount = packageCount();',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:loader-realm-count") {',
+                '    return { shortCircuit: true, url: "virtual:loader-realm-count-json", format: "json" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "virtual:loader-realm-count-json") {',
+                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ loaderCount, loaderPackageCount }) };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        globalThis.__wasm_rquickjs_module_resolution_assert = assert;
+        globalThis.__wasm_rquickjs_module_resolution_register = (await import('node:module')).register;
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(pathToFileURL(`${root}/loader.mjs`).href)});`,
+            'assert.deepStrictEqual((await import("virtual:loader-realm-count", { with: { type: "json" } })).default, { loaderCount: 1, loaderPackageCount: 1 });',
+            `const userState = await import(${JSON.stringify(pathToFileURL(`${root}/stateful.mjs`).href)});`,
+            'assert.strictEqual(userState.count(), 1);',
+            `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL(`${root}/app.mjs`).href)})).default, [2, 1]);`,
+        ].join('\n')));
+        delete globalThis.__wasm_rquickjs_module_resolution_assert;
+        delete globalThis.__wasm_rquickjs_module_resolution_register;
+        return true;
+    } catch (error) {
+        delete globalThis.__wasm_rquickjs_module_resolution_assert;
+        delete globalThis.__wasm_rquickjs_module_resolution_register;
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDynamicImportAttributeScanner = async () => {
     try {
         fs.mkdirSync('/cjs-dynamic-import-attr-scanner', { recursive: true });
