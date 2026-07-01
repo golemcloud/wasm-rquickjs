@@ -1195,9 +1195,8 @@ dependencies = [
 
 [[package]]
 name = "golem-websocket"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
- "wasip2",
  "wit-bindgen 0.51.0",
  "wit-bindgen-rt",
 ]

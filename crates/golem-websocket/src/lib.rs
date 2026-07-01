@@ -6,9 +6,6 @@ mod bindings {
         generate_all,
         pub_export_macro: true,
         default_bindings_module: "crate::bindings",
-        with: {
-            "wasi:io/poll@0.2.3": wasip2::io::poll,
-        },
     });
 }
 
