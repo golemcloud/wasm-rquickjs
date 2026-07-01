@@ -5333,6 +5333,14 @@ function moduleLoad(request, parent, isMain) {
     return makeRequire('.', parent || null)(request);
 }
 
+function moduleResolveFilename(request, parent, isMain, options) {
+    void isMain;
+    const baseDir = parent && typeof parent.filename === 'string'
+        ? pathModule.dirname(parent.filename)
+        : '.';
+    return makeRequire(baseDir, parent || null).resolve(request, options);
+}
+
 const moduleExports = Object.assign(Module, {
     require: globalRequire,
     createRequire,
@@ -5348,6 +5356,7 @@ const moduleExports = Object.assign(Module, {
     runMain: runMain,
     _nodeModulePaths: _nodeModulePaths,
     _resolveLookupPaths: _resolveLookupPaths,
+    _resolveFilename: moduleResolveFilename,
     _load: moduleLoad,
     _initPaths: _initPaths,
     _pathCache: _pathCache,
@@ -5361,5 +5370,10 @@ moduleExports.Module = Module;
 // Add self-reference so require('module') works
 builtinModuleMap['module'] = moduleExports;
 builtinModuleMap['node:module'] = moduleExports;
+if (!builtinModuleNames.includes('module')) {
+    builtinModuleNames.push('module');
+}
+publicBuiltinIdSet.add('module');
+publicBuiltinWithoutSchemeSet.add('module');
 
 export default moduleExports;
