@@ -3152,6 +3152,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             let compiledFn;
             let cjsSyntaxError = null;
             const cjsWrapperRequireRedeclaration = !filename.endsWith('.cjs') && hasCjsWrapperRequireRedeclaration(source);
+            let cjsSourceLooksEsm = false;
             try {
                 compiledFn = compileCjs(filename, source);
             } catch (err) {
@@ -3162,7 +3163,10 @@ function loadModule(resolvedFilename, source, parentModule) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError' && (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration)) {
+                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
+                    cjsSourceLooksEsm = looksLikeEsmSource(source);
+                }
+                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperRequireRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
                     delete moduleCache[filename];
@@ -3181,7 +3185,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                     mod.exports = requireEsmWithCacheGuard(mod, filename);
                 } catch (esmErr) {
                     delete moduleCache[filename];
-                    if (looksLikeEsmSource(source) || cjsWrapperRequireRedeclaration) {
+                    if (cjsSourceLooksEsm || cjsWrapperRequireRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
                     }

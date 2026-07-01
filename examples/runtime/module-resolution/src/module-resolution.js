@@ -56,10 +56,13 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
     assert.throws(() => import.meta.resolve('does-not-exist', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });
     assert.throws(() => import.meta.resolve('./relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
+    assert.throws(() => import.meta.resolve('../relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
     assert.throws(() => import.meta.resolve('does-not-exist', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
 
     const resolvedFromData = await import('data:text/javascript,export default import.meta.resolve("http://example.com/value")');
     assert.strictEqual(resolvedFromData.default, 'http://example.com/value');
+    const fileResolvedFromData = await import('data:text/javascript,export default import.meta.resolve("file:///tmp/value.mjs")');
+    assert.strictEqual(fileResolvedFromData.default, 'file:///tmp/value.mjs');
     await expectImportRejectsCode(
         'data:text/javascript,export default import.meta.resolve("does-not-exist")',
         'ERR_UNSUPPORTED_RESOLVE_REQUEST',
@@ -604,10 +607,11 @@ export const testEsmDataUrlImportAttributes = async () => {
             'ERR_MODULE_NOT_FOUND',
         );
         fs.writeFileSync('/dynamic-json-attrs.json', '{"file":true}');
+        const dynamicJsonUrl = pathToFileURL('/dynamic-json-attrs.json').href;
         const dynamicModule = await import('data:text/javascript,' + encodeURIComponent([
             'let optionsCount = 0;',
             'const options = () => { optionsCount++; return { with: { type: "json" } }; };',
-            'const jsonPath = "/dynamic-json-attrs.json";',
+            `const jsonPath = ${JSON.stringify(dynamicJsonUrl)};`,
             'const fileJson = await import(jsonPath, options());',
             'const dataJson = await import("data:application/json,4", options());',
             'export default { file: fileJson.default.file, data: dataJson.default, optionsCount };',
@@ -643,6 +647,8 @@ export const testEsmDataUrlImportAttributes = async () => {
             { relative: true },
         );
         fs.writeFileSync('/dynamic-json-relative-app/assertionless.json', '{"ofLife":42}');
+        const assertionlessJsonUrl = pathToFileURL('/dynamic-json-relative-app/assertionless.json').href;
+        const assertionlessJsonQueryUrl = `${assertionlessJsonUrl}?cache#frag`;
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
             'import { register } from "node:module";',
@@ -659,19 +665,19 @@ export const testEsmDataUrlImportAttributes = async () => {
             '}',
             'register("data:text/javascript," + encodeURIComponent("export " + resolve));',
             'const [filePlain, fileTyped] = await Promise.all([',
-            '  import("/dynamic-json-relative-app/assertionless.json"),',
-            '  import("/dynamic-json-relative-app/assertionless.json", { with: { type: "json" } }),',
+            `  import(${JSON.stringify(assertionlessJsonUrl)}),`,
+            `  import(${JSON.stringify(assertionlessJsonUrl)}, { with: { type: "json" } }),`,
             ']);',
             'assert.strictEqual(filePlain, fileTyped, JSON.stringify(globalThis.__assertionlessJsonSeen));',
             'assert.strictEqual(filePlain.default, fileTyped.default, JSON.stringify(globalThis.__assertionlessJsonSeen));',
             'assert.deepStrictEqual(filePlain.default, { ofLife: 42 });',
-            'const filePlainAgain = await import("/dynamic-json-relative-app/assertionless.json");',
-            'const fileTypedAgain = await import("/dynamic-json-relative-app/assertionless.json", { with: { type: "json" } });',
+            `const filePlainAgain = await import(${JSON.stringify(assertionlessJsonUrl)});`,
+            `const fileTypedAgain = await import(${JSON.stringify(assertionlessJsonUrl)}, { with: { type: "json" } });`,
             'assert.strictEqual(filePlainAgain, filePlain);',
             'assert.strictEqual(fileTypedAgain, filePlain);',
             'const [queryPlain, queryTyped] = await Promise.all([',
-            '  import("/dynamic-json-relative-app/assertionless.json?cache#frag"),',
-            '  import("/dynamic-json-relative-app/assertionless.json?cache#frag", { with: { type: "json" } }),',
+            `  import(${JSON.stringify(assertionlessJsonQueryUrl)}),`,
+            `  import(${JSON.stringify(assertionlessJsonQueryUrl)}, { with: { type: "json" } }),`,
             ']);',
             'assert.strictEqual(queryPlain, queryTyped);',
             'assert.deepStrictEqual(queryPlain.default, { ofLife: 42 });',
@@ -714,8 +720,8 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  return next(url, context);',
             '}',
             'register("data:text/javascript," + encodeURIComponent("let seed = 0; export " + resolve + ";export " + load));',
-            'const first = await import("/dynamic-json-relative-app/data.json", { with: { type: "json" } });',
-            'const second = await import("/dynamic-json-relative-app/data.json", { with: { type: "json" } });',
+            `const first = await import(${JSON.stringify(pathToFileURL('/dynamic-json-relative-app/data.json').href)}, { with: { type: "json" } });`,
+            `const second = await import(${JSON.stringify(pathToFileURL('/dynamic-json-relative-app/data.json').href)}, { with: { type: "json" } });`,
             'assert.notDeepStrictEqual(first.default, second.default);',
             'assert.deepStrictEqual(first.default, { value: "1" });',
             'assert.deepStrictEqual(second.default, { value: "2" });',
@@ -740,7 +746,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  return next(specifier, context);',
             '}',
             'register("data:text/javascript," + encodeURIComponent("export " + resolve));',
-            'assert.deepStrictEqual((await import("/loader-relative-app/main.mjs")).default, { hookRelative: true });',
+            `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-relative-app/main.mjs').href)})).default, { hookRelative: true });`,
             'assert.strictEqual(globalThis.__loader_relative_seen, true);',
             'assert.strictEqual((await import("data:text/javascript,export default 5", {})).default, 5);',
         ].join('\n')));
@@ -767,6 +773,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             'register("./relative-loader.mjs", { parentURL: "file:///loader-relative-app/main.mjs" });',
             'assert.deepStrictEqual((await import("virtual:relative-loader", { with: { type: "json" } })).default, { relativeLoader: true });',
         ].join('\n')));
+        fs.writeFileSync('/loader-relative-app/bytes.json', '{}');
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
             'import { register } from "node:module";',
@@ -929,7 +936,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  return next(url, context);',
             '}',
             'register("data:text/javascript," + encodeURIComponent("export " + load));',
-            'assert.deepStrictEqual((await import("/loader-relative-app/bytes.json", { with: { type: "json" } })).default, { bytes: true });',
+            `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-relative-app/bytes.json').href)}, { with: { type: "json" } })).default, { bytes: true });`,
         ].join('\n')));
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
@@ -1385,7 +1392,7 @@ export const testLoaderModuleSourceValidation = async () => {
             'assert.strictEqual(sourced.default, 42);',
             'assert.strictEqual(sourced.named, 42);',
             'assert.strictEqual((await import("virtual:module-view")).default, 7);',
-            'const ext = await import("/loader-module-source-app/as-module.ext");',
+            'const ext = await import("file:///loader-module-source-app/as-module.ext");',
             'assert.strictEqual(ext.default, "from-ext");',
             'assert.strictEqual(ext.named, 11);',
             'assert.strictEqual((await import("virtual:resolve-esm-hint")).default, 19);',
