@@ -8,13 +8,13 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3198/4396 (72.7%)
+**Primary compatibility (CI-enforced):** 3198/4395 (72.8%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3198 | 72.7% | 56.0% | 46.8% |
-| 🧩 known gap | 1198 | 27.3% | 21.0% | 17.5% |
-| 🚫 WASI-impossible (excluded) | 1155 | — | 20.2% | 16.9% |
+| ✅ passing (runnable) | 3198 | 72.8% | 56.0% | 46.8% |
+| 🧩 known gap | 1197 | 27.2% | 21.0% | 17.5% |
+| 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 583 | 169 | 135 | 85 | 11 | 0 | 183 | 55.6% | 42.2% |
+| other | 583 | 169 | 134 | 86 | 11 | 0 | 183 | 55.8% | 42.2% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1198)
+### known gap (1197)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1088,7 +1088,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
 | execSync is ENOSYS-stubbed; default maxBuffer behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execSync is ENOSYS-stubbed; maxBuffer overflow ENOBUFS behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
-| fixture depends on worker_threads MessageChannel receiveMessageOnPort support, unavailable in the WASM runtime | 1 | `es-module/test-esm-loader-mock.mjs` |
 | fork() IPC child.send/process.send emulation is not implemented | 1 | `parallel/test-cli-eval.js#block_03_regression_test_for_https_github_com_nodejs_node_issues_1194` |
 | fork() abort-listener lifecycle for timeout+signal is incomplete | 1 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03` |
 | fork() args/options parsing and ERR_INVALID_ARG_TYPE behavior are incomplete | 1 | `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null` |
@@ -1349,7 +1348,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1155)
+### WASI-impossible (1156)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1433,6 +1432,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | depends on real worker_threads exit-event behavior across a separate JS context, which is not available in single-threaded WASM | 1 | `parallel/test-worker-on-process-exit.js` |
 | depends on real worker_threads terminate() interrupting an in-flight DNS query, which is not available in single-threaded WASM | 1 | `parallel/test-worker-dns-terminate-during-query.js` |
 | depends on worker_threads-based event loop utilization behavior | 1 | `parallel/test-performance-eventlooputil.js` |
+| fixture depends on worker_threads MessageChannel and receiveMessageOnPort support, unavailable in the single-threaded WASM runtime | 1 | `es-module/test-esm-loader-mock.mjs` |
 | host signal delivery and SIGINT interruption semantics are not available in WASI | 1 | `parallel/test-sigint-infinite-loop.js` |
 | http2 is not implemented | 1 | `parallel/test-http2-compat-client-upload-reject.js` |
 | https.createServer (TLS server) is not supported in WebAssembly environment | 1 | `sequential/test-https-connect-localport.js` |

@@ -6035,7 +6035,7 @@
     "es-module/test-esm-loader-http-imports.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-invalid-format.mjs": { "category": "known-gap", "reason": "requires async registered loader resolve hooks during static ESM resolution; current static bridge supports only already-initialized synchronous hooks" },
     "es-module/test-esm-loader-invalid-url.mjs": { "category": "known-gap", "reason": "requires async registered loader resolve hooks during static ESM resolution; current static bridge supports only already-initialized synchronous hooks" },
-    "es-module/test-esm-loader-mock.mjs": { "category": "known-gap", "reason": "fixture depends on worker_threads MessageChannel receiveMessageOnPort support, unavailable in the WASM runtime" },
+    "es-module/test-esm-loader-mock.mjs": { "category": "wasi-impossible", "reason": "fixture depends on worker_threads MessageChannel and receiveMessageOnPort support, unavailable in the single-threaded WASM runtime" },
     "es-module/test-esm-loader-not-found.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-programmatically.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-resolve-type.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
