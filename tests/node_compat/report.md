@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3198/4395 (72.8%)
+**Primary compatibility (CI-enforced):** 3205/4395 (72.9%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3198 | 72.8% | 56.0% | 46.8% |
-| 🧩 known gap | 1197 | 27.2% | 21.0% | 17.5% |
+| ✅ passing (runnable) | 3205 | 72.9% | 56.1% | 46.9% |
+| 🧩 known gap | 1190 | 27.1% | 20.8% | 17.4% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3198/5713 (56.0%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3205/5713 (56.1%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 583 | 169 | 134 | 86 | 11 | 0 | 183 | 55.8% | 42.2% |
+| other | 583 | 176 | 127 | 86 | 11 | 0 | 183 | 58.1% | 44.0% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1197)
+### known gap (1190)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -707,7 +707,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
 | inherited: Intl is not available in current runtime | 7 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+4) |
-| requires async registered loader resolve hooks during static ESM resolution; current static bridge supports only already-initialized synchronous hooks | 7 | `es-module/test-esm-loader-custom-condition.mjs`, `es-module/test-esm-loader-dependency.mjs`, `es-module/test-esm-loader-invalid-format.mjs`, ... (+4) |
 | WebAssembly global is missing in current runtime | 6 | `es-module/test-wasm-memory-out-of-bound.js`, `es-module/test-wasm-simple.js`, `es-module/test-wasm-web-api.js`, ... (+3) |
 | fork() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 6 | `parallel/test-child-process-fork-abort-signal.js#block_00_block_00`, `parallel/test-child-process-fork-abort-signal.js#block_01_block_01`, `parallel/test-child-process-fork-abort-signal.js#block_02_block_02`, ... (+3) |
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |

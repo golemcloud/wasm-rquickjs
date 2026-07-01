@@ -95,6 +95,71 @@ async fn runner_import_preload_flag(prepared: &Arc<FullPreparedComponent>) -> an
     handle_test_result(result, &stdout, &stderr)
 }
 
+#[test_r::test]
+async fn runner_static_registered_loader_async_resolve(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("async-static-loader.mjs"),
+        [
+            "export async function resolve(specifier, context, nextResolve) {",
+            "  if (specifier === './dep.mjs') {",
+            "    return nextResolve('./real.mjs', context);",
+            "  }",
+            "  if (specifier === './generated.mjs') {",
+            "    return { shortCircuit: true, url: 'virtual:generated', format: 'module' };",
+            "  }",
+            "  if (specifier === 'virtual:child') {",
+            "    return { shortCircuit: true, url: new URL('./child.mjs', import.meta.url).href, format: 'module' };",
+            "  }",
+            "  return nextResolve(specifier, context);",
+            "}",
+            "export async function load(url, context, nextLoad) {",
+            "  if (url === 'virtual:generated') {",
+            "    return { shortCircuit: true, format: 'module', source: 'import value from \"virtual:child\"; export default value;' };",
+            "  }",
+            "  return nextLoad(url, context);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("async-static-entry.mjs"),
+        [
+            "// Flags: --experimental-loader ./test/es-module/async-static-loader.mjs",
+            "import value from './dep.mjs';",
+            "import generated from './generated.mjs';",
+            "if (value !== 42) throw new Error('static async loader resolve did not run');",
+            "if (generated !== 7) throw new Error('loader source child import was not prepared');",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(suite_dir.join("real.mjs"), "export default 42;\n")?;
+    fs::write(suite_dir.join("child.mjs"), "export default 7;\n")?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/async-static-entry.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
 // --- Helper types and functions ---
 
 /// Cloneable representation of discovery data for use in test closures.

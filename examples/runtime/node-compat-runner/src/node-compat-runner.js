@@ -250,6 +250,23 @@ function withSuppressedModuleRequireDiagnostics(fn) {
     return fn();
 }
 
+async function prepareStaticRegisteredLoaderGraph(testPath) {
+    if (
+        !Array.isArray(globalThis.__wasm_rquickjs_registered_loaders) ||
+        globalThis.__wasm_rquickjs_registered_loaders.length === 0 ||
+        typeof globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph !== 'function'
+    ) {
+        return;
+    }
+    globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
+    var urlBuiltin = require('node:url');
+    await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(
+        urlBuiltin.pathToFileURL(testPath).href,
+        testPath,
+        import.meta.url,
+    );
+}
+
 export const runTest = async (testPath) => {
     var restorePromise = null;
     var restoreArgv = null;
@@ -309,6 +326,7 @@ export const runTest = async (testPath) => {
         restorePromise = installRejectionTracking();
 
         if (testPath.endsWith('.mjs')) {
+            await prepareStaticRegisteredLoaderGraph(testPath);
             await import(testPath);
         } else {
             // Use createRequire('/') so the test module gets parent: null,
