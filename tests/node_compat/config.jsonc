@@ -5995,7 +5995,7 @@
     "es-module/test-esm-dynamic-import-commonjs.mjs": { "category": "runnable" },
     "es-module/test-esm-dynamic-import-mutating-fs.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-encoded-path.mjs": { "category": "runnable" },
-    "es-module/test-esm-example-loader.mjs": { "category": "known-gap", "reason": "registered loader static ESM resolution does not yet preserve Node's loader hook specifier/base semantics for the example loader" },
+    "es-module/test-esm-example-loader.mjs": { "category": "runnable" },
     "es-module/test-esm-experimental-warnings.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-export-not-found.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-exports-deprecations.mjs": { "category": "runnable" },

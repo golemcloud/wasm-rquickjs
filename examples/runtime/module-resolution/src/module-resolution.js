@@ -1133,6 +1133,43 @@ export const testEsmJsonUrlCacheKeys = async () => {
     }
 };
 
+export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
+    try {
+        const root = '/static-loader-absolute-entry-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(`${root}/entry.mjs`, 'export default true;');
+        const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
+            'export function resolve(specifier, context, next) {',
+            '  if (specifier.startsWith("/")) throw new Error("static loader received absolute path: " + specifier);',
+            '  if (specifier.startsWith("file://") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
+            '    globalThis.__static_loader_absolute_entry_seen = specifier;',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+        ].join('\n'));
+        await import(loaderUrl);
+        const { register } = await import('node:module');
+        register(loaderUrl);
+        await import('data:text/javascript,export default 0');
+        assert.strictEqual(
+            (await import('data:text/javascript,' + encodeURIComponent(
+                `import value from ${JSON.stringify(`${root}/entry.mjs?cache#frag`)}; export default value;`,
+            ))).default,
+            true,
+        );
+        assert.strictEqual(
+            globalThis.__static_loader_absolute_entry_seen,
+            `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
+        );
+        delete globalThis.__static_loader_absolute_entry_seen;
+        return true;
+    } catch (error) {
+        delete globalThis.__static_loader_absolute_entry_seen;
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDynamicImportAttributeScanner = async () => {
     try {
         fs.mkdirSync('/cjs-dynamic-import-attr-scanner', { recursive: true });

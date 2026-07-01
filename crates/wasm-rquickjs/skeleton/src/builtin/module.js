@@ -4888,7 +4888,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const resolved = runResolve(modules.length - 1, specifier, baseContext);
+        const initialSpecifier = isImportMode && typeof specifier === 'string'
+            ? normalizeLoaderResolvedUrl(specifier)
+            : specifier;
+        const resolved = runResolve(modules.length - 1, initialSpecifier, baseContext);
         if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
         resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
         const resolvedFormat = resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format);

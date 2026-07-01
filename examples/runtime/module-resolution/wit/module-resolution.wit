@@ -6,6 +6,7 @@ world module-resolution {
   export test-esm-invalid-package-specifiers: func() -> bool;
   export test-esm-data-url-import-attributes: func() -> bool;
   export test-esm-json-url-cache-keys: func() -> bool;
+  export test-static-loader-absolute-entry-specifier: func() -> bool;
   export test-import-meta-resolve: func() -> bool;
   export test-cjs-dynamic-import-attribute-scanner: func() -> bool;
   export test-loader-commonjs-source-named-exports: func() -> bool;
