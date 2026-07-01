@@ -2694,7 +2694,18 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
             continue;
         }
         if (source.startsWith('...', cursor)) {
-            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, cursor + 3, objectEnd));
+            const spreadStart = skipWhitespaceAndComments(source, cursor + 3);
+            if (source.startsWith('require', spreadStart) && hasIdentifierBoundary(source, spreadStart, spreadStart + 7)) {
+                const afterRequire = skipWhitespaceAndComments(source, spreadStart + 7);
+                if (source.charCodeAt(afterRequire) !== 0x28) break;
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, spreadStart, objectEnd));
+            } else {
+                const spreadKey = readLoaderObjectLiteralKey(source, spreadStart);
+                if (spreadKey === null || !spreadKey.keyIsIdent) break;
+                const afterIdent = skipWhitespaceAndComments(source, spreadKey.end);
+                if (afterIdent < objectEnd && source.charCodeAt(afterIdent) !== 0x2c) break;
+                cursor = afterIdent;
+            }
         } else {
             const key = readLoaderObjectLiteralKey(source, cursor);
             if (key === null) break;
