@@ -3418,12 +3418,14 @@ function loaderCallbackHasReexport(source, binding, key) {
 }
 
 function readLoaderObjectKeysReexport(source, pos, requireBindings) {
-    if (!source.startsWith('Object', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
-    let i = skipWhitespaceAndComments(source, pos + 6);
+    const objectEnd = readLoaderNamedIdentifier(source, pos, 'Object');
+    if (objectEnd === null) return null;
+    let i = skipWhitespaceAndComments(source, objectEnd);
     if (source.charCodeAt(i) !== 0x2e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('keys', i) || !hasIdentifierBoundary(source, i, i + 4)) return null;
-    i = skipWhitespaceAndComments(source, i + 4);
+    const keysEnd = readLoaderNamedIdentifier(source, i, 'keys');
+    if (keysEnd === null) return null;
+    i = skipWhitespaceAndComments(source, keysEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     i = skipWhitespaceAndComments(source, i + 1);
     const parsedBinding = readLoaderIdentifier(source, i);
@@ -3436,14 +3438,16 @@ function readLoaderObjectKeysReexport(source, pos, requireBindings) {
     i = skipWhitespaceAndComments(source, i + 1);
     if (source.charCodeAt(i) !== 0x2e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('forEach', i) || !hasIdentifierBoundary(source, i, i + 7)) return null;
-    i = skipWhitespaceAndComments(source, i + 7);
+    const forEachEnd = readLoaderNamedIdentifier(source, i, 'forEach');
+    if (forEachEnd === null) return null;
+    i = skipWhitespaceAndComments(source, forEachEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     const callEnd = loaderFindMatchingParen(source, i);
     if (callEnd < 0) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('function', i) || !hasIdentifierBoundary(source, i, i + 8)) return null;
-    i = skipWhitespaceAndComments(source, i + 8);
+    const functionEnd = readLoaderNamedIdentifier(source, i, 'function');
+    if (functionEnd === null) return null;
+    i = skipWhitespaceAndComments(source, functionEnd);
     const functionName = readLoaderIdentifier(source, i);
     if (functionName !== null) {
         i = skipWhitespaceAndComments(source, functionName.end);
