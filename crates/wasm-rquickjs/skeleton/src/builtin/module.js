@@ -2384,11 +2384,11 @@ function isStaticImportSyntax(source, pos) {
 function looksLikeEsmSource(source) {
     let found = false;
     scanSourceCodePositions(source, { skipRegex: true }, (i) => {
-        if (source.startsWith('export', i) && hasIdentifierBoundary(source, i, i + 6) && isStaticExportSyntax(source, i)) {
+        if (startsWithKeywordAt(source, 'export', i) && isStaticExportSyntax(source, i)) {
             found = true;
             return false;
         }
-        if (source.startsWith('import', i) && hasIdentifierBoundary(source, i, i + 6)) {
+        if (startsWithKeywordAt(source, 'import', i)) {
             if (isStaticImportSyntax(source, i)) {
                 found = true;
                 return false;
