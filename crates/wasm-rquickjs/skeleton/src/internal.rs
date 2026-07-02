@@ -4770,21 +4770,15 @@ enum CjsExportTarget {
 
 fn parse_exports_target(source: &str, pos: usize) -> Option<(CjsExportTarget, usize)> {
     let bytes = source.as_bytes();
-    if is_free_ident_start(bytes, pos)
-        && source[pos..].starts_with("exports")
-        && is_ident_boundary(bytes, pos + 7)
-    {
-        return Some((CjsExportTarget::Exports, pos + 7));
+    if let Some(exports_end) = parse_free_ident_name(source, pos, "exports") {
+        return Some((CjsExportTarget::Exports, exports_end));
     }
-    if is_free_ident_start(bytes, pos)
-        && source[pos..].starts_with("module")
-        && is_ident_boundary(bytes, pos + 6)
-    {
-        let mut i = skip_ws_comments(source, pos + 6);
+    if let Some(module_end) = parse_free_ident_name(source, pos, "module") {
+        let mut i = skip_ws_comments(source, module_end);
         if i < bytes.len() && bytes[i] == b'.' {
             i = skip_ws_comments(source, i + 1);
-            if source[i..].starts_with("exports") && is_ident_boundary(bytes, i + 7) {
-                return Some((CjsExportTarget::ModuleExports, i + 7));
+            if let Some(exports_end) = parse_ident_name(source, i, "exports") {
+                return Some((CjsExportTarget::ModuleExports, exports_end));
             }
         }
     }
@@ -4834,13 +4828,12 @@ fn parse_require_string_loose(source: &str, pos: usize) -> Option<(String, usize
 
 fn parse_require_call_string(source: &str, pos: usize, require_free_start: bool) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
-    if (require_free_start && !is_free_ident_start(bytes, pos))
-        || !source[pos..].starts_with("require")
-        || !is_ident_boundary(bytes, pos + 7)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 7);
+    let require_end = if require_free_start {
+        parse_free_ident_name(source, pos, "require")?
+    } else {
+        parse_ident_name(source, pos, "require")?
+    };
+    let mut i = skip_ws_comments(source, require_end);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
@@ -4861,10 +4854,7 @@ fn parse_object_define_property_call(source: &str, pos: usize) -> Option<usize> 
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if !source[i..].starts_with("defineProperty") || !is_ident_boundary(bytes, i + 14) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 14);
+    i = skip_ws_comments(source, parse_ident_name(source, i, "defineProperty")?);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
