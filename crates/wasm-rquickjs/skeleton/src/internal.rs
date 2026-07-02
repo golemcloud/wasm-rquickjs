@@ -904,18 +904,6 @@ fn rewrite_dynamic_import_call(
     None
 }
 
-fn previous_non_whitespace_byte(source: &str, pos: usize) -> Option<u8> {
-    let bytes = source.as_bytes();
-    let mut i = pos;
-    while i > 0 {
-        i -= 1;
-        if !bytes[i].is_ascii_whitespace() {
-            return Some(bytes[i]);
-        }
-    }
-    None
-}
-
 fn previous_non_whitespace_pos(source: &str, pos: usize) -> Option<usize> {
     let bytes = source.as_bytes();
     let mut i = pos;
@@ -975,13 +963,6 @@ fn matching_paren_end(source: &str, open_paren: usize) -> Option<usize> {
         i += 1;
     }
     None
-}
-
-fn method_prefix_boundary(source: &str, pos: usize) -> bool {
-    matches!(
-        previous_non_whitespace_byte(source, pos),
-        None | Some(b'{') | Some(b',') | Some(b';')
-    )
 }
 
 fn is_object_method_shorthand_import(source: &str, import_start: usize, open_paren: usize) -> bool {
@@ -2686,14 +2667,6 @@ impl NodeFileResolver {
         }
 
         None
-    }
-
-    fn module_url_for_path(path: &str, suffix: &str) -> String {
-        format!(
-            "{}{}",
-            path_without_suffix_to_file_url(path),
-            serialize_url_preserving_escapes(suffix)
-        )
     }
 
     fn module_url_for_encoded_path(path: &str, suffix: &str) -> String {
