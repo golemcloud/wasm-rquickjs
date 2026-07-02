@@ -5818,12 +5818,8 @@ fn parse_object_has_own_property_call(
 }
 
 fn parse_key_in_export_target_condition(source: &str, pos: usize, key: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, key)?);
-    if !source[i..].starts_with("in") || !is_ident_boundary(bytes, i + 2) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 2);
+    i = skip_ws_comments(source, parse_free_ident_name(source, i, "in")?);
     let (_, next) = parse_exports_target(source, i)?;
     Some(next)
 }
