@@ -3691,6 +3691,11 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'import "./static-source.mjs";',
             'export default "side-effect-import";',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-import-commented.js', [
+            'globalThis.__moduleSyntaxCommentedImport = "before";',
+            'import /* comment */ "./static-source.mjs";',
+            'globalThis.__moduleSyntaxCommentedImport = "after";',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/static-import-default.js', [
             'import value from "./static-source.mjs";',
             'export default value;',
@@ -3706,6 +3711,9 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/static-export-list.js', [
             'const listed = "listed";',
             'export { listed as default };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/static-export-commented.js', [
+            'export /* comment */ default "commented-export";',
         ].join('\n'));
         fs.writeFileSync('/module-syntax-app/static-export-star.js', [
             'export * from "./static-source.mjs";',
@@ -3904,10 +3912,14 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
 
         assert.strictEqual(require('/module-syntax-app/loose.js').default, 'loose-module');
         assert.strictEqual(require('/module-syntax-app/static-import-side-effect.js').default, 'side-effect-import');
+        globalThis.__moduleSyntaxCommentedImport = undefined;
+        require('/module-syntax-app/static-import-commented.js');
+        assert.strictEqual(globalThis.__moduleSyntaxCommentedImport, 'after');
         assert.strictEqual(require('/module-syntax-app/static-import-default.js').default, 'source-default');
         assert.strictEqual(require('/module-syntax-app/static-import-named.js').default, 'named');
         assert.strictEqual(require('/module-syntax-app/static-import-namespace.js').default, 'named');
         assert.strictEqual(require('/module-syntax-app/static-export-list.js').default, 'listed');
+        assert.strictEqual(require('/module-syntax-app/static-export-commented.js').default, 'commented-export');
         assert.strictEqual(require('/module-syntax-app/static-export-star.js').named, 'named');
         assert.strictEqual(require('/module-syntax-app/package-without-type/noext-esm').default, 'extensionless-module');
         assert.deepStrictEqual(require('/module-syntax-app/false-positive.cjs'), { value: 'cjs' });
@@ -6281,6 +6293,22 @@ export const testRequireEsmCycleGuards = async () => {
             'export const value = 4;',
             'export { cycleCode };',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/commented-static-edge-a.mjs', [
+            'import { cycleCode } from /* graph edge */ "./commented-static-edge-b.mjs";',
+            'export const value = 5;',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/commented-static-edge-b.mjs', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("./commented-static-edge-b.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export { cycleCode };',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-cycle-app/main.cjs');
@@ -6300,6 +6328,9 @@ export const testRequireEsmCycleGuards = async () => {
             const stringNameAlias = require('/require-esm-cycle-app/string-name-alias.mjs');
             assert.strictEqual(stringNameAlias.value, 4);
             assert.strictEqual(stringNameAlias.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const commentedStaticEdge = require('/require-esm-cycle-app/commented-static-edge-a.mjs');
+            assert.strictEqual(commentedStaticEdge.value, 5);
+            assert.strictEqual(commentedStaticEdge.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
         } finally {
             Array.prototype[Symbol.iterator] = arrayIterator;
         }

@@ -2402,7 +2402,7 @@ function scanSourceCodePositions(source, options, visitor) {
 
 function isStaticExportSyntax(source, pos) {
     if (previousSignificantCharOnSameLine(source, pos) === 0x2e) return false; // member property
-    const next = skipWhitespace(source, pos + 6);
+    const next = skipWhitespaceAndComments(source, pos + 6);
     if (source.charCodeAt(next) === 0x3a) return false; // object label/property
     const ch = source.charCodeAt(next);
     if (ch === 0x7b || ch === 0x2a) return true; // { or *
@@ -2416,7 +2416,7 @@ function isStaticExportSyntax(source, pos) {
 
 function isStaticImportSyntax(source, pos) {
     if (previousSignificantCharOnSameLine(source, pos) === 0x2e) return false; // member property
-    const next = skipWhitespace(source, pos + 6);
+    const next = skipWhitespaceAndComments(source, pos + 6);
     if (source.charCodeAt(next) === 0x28 || source.charCodeAt(next) === 0x3a) return false; // dynamic import(...) or property label
     const ch = source.charCodeAt(next);
     return ch === 0x27 || ch === 0x22 || ch === 0x7b || ch === 0x2a ||
@@ -2571,7 +2571,7 @@ function hasCjsWrapperRequireRedeclaration(source) {
 }
 
 function readStaticSpecifierString(source, start) {
-    const i = skipWhitespace(source, start);
+    const i = skipWhitespaceAndComments(source, start);
     const quote = source.charCodeAt(i);
     if (quote !== 0x27 && quote !== 0x22) return null;
     let value = '';
@@ -3644,7 +3644,7 @@ function statementEndForStaticImport(source, start) {
 
 function staticImportEdgeAt(source, pos) {
     if (startsWithKeywordAt(source, 'import', pos)) {
-        const afterImport = skipWhitespace(source, pos + 6);
+        const afterImport = skipWhitespaceAndComments(source, pos + 6);
         const bare = readStaticSpecifierString(source, afterImport);
         if (bare) {
             return { specifier: bare.value };
