@@ -3752,6 +3752,10 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'const require = createRequire(import/*x*/.meta.url);',
             'globalThis.__moduleSyntaxAmbiguousCommented = require.resolve("./false-positive.cjs");',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-ambiguous-commented-binding.js', [
+            'const require /*b*/ = /*c*/ createRequire /*d*/ (import/*x*/.meta.url);',
+            'globalThis.__moduleSyntaxAmbiguousCommentedBinding = require.resolve("./false-positive.cjs");',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js', [
             'const require = createRequire(import.meta.urlx);',
             'globalThis.__moduleSyntaxAmbiguousUrlPrefix = require.resolve("./false-positive.cjs");',
@@ -3928,12 +3932,15 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         globalThis.createRequire = createRequire;
         globalThis.__moduleSyntaxAmbiguousSpaced = undefined;
         globalThis.__moduleSyntaxAmbiguousCommented = undefined;
+        globalThis.__moduleSyntaxAmbiguousCommentedBinding = undefined;
         globalThis.__moduleSyntaxAmbiguousUrlPrefix = undefined;
         assert.throws(() => require('/module-syntax-app/create-require-ambiguous-spaced.js'), /import\.meta|unexpected|SyntaxError/i);
         assert.throws(() => require('/module-syntax-app/create-require-ambiguous-commented.js'), /import\.meta|unexpected|SyntaxError/i);
+        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-commented-binding.js'), /import\.meta|unexpected|SyntaxError/i);
         assert.throws(() => require('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js'), /urlx|undefined/i);
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousSpaced, undefined);
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommented, undefined);
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommentedBinding, undefined);
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousUrlPrefix, undefined);
         delete globalThis.createRequire;
 

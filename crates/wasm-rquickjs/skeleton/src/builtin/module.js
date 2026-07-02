@@ -2519,16 +2519,16 @@ function sourceHasTopLevelAwait(source) {
 }
 
 function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
-    let next = skipWhitespace(source, requirePos + 7);
+    let next = skipWhitespaceAndComments(source, requirePos + 7);
     if (source.charCodeAt(next) !== 0x3d) return false;
-    next = skipWhitespace(source, next + 1);
+    next = skipWhitespaceAndComments(source, next + 1);
     const createRequireEnd = readLoaderNamedIdentifier(source, next, 'createRequire');
     if (createRequireEnd === null) {
         return false;
     }
-    next = skipWhitespace(source, createRequireEnd);
+    next = skipWhitespaceAndComments(source, createRequireEnd);
     if (source.charCodeAt(next) !== 0x28) return false;
-    next = skipWhitespace(source, next + 1);
+    next = skipWhitespaceAndComments(source, next + 1);
     return readImportMetaUrl(source, next) !== null;
 }
 
@@ -2556,7 +2556,7 @@ function hasCjsWrapperRequireRedeclaration(source) {
         if (braceDepth === 0) {
             const declarationEnd = readKeywordAt(source, 'const', i) || readKeywordAt(source, 'let', i);
             if (declarationEnd === null) return undefined;
-            let next = skipWhitespace(source, declarationEnd);
+            let next = skipWhitespaceAndComments(source, declarationEnd);
             const requireEnd = readLoaderNamedIdentifier(source, next, 'require');
             if (requireEnd !== null) {
                 if (!isCreateRequireImportMetaUrlDeclaration(source, next)) {
