@@ -2962,12 +2962,14 @@ function readLoaderDefinePropertyCall(source, pos, rejectMemberAccess) {
         const previous = previousSignificantChar(source, pos);
         if (previous === 0x2e || previous === 0x23) return null;
     }
-    if (!source.startsWith('Object', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
-    let i = skipWhitespaceAndComments(source, pos + 6);
+    const objectEnd = readLoaderNamedIdentifier(source, pos, 'Object');
+    if (objectEnd === null) return null;
+    let i = skipWhitespaceAndComments(source, objectEnd);
     if (source.charCodeAt(i) !== 0x2e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('defineProperty', i) || !hasIdentifierBoundary(source, i, i + 14)) return null;
-    i = skipWhitespaceAndComments(source, i + 14);
+    const definePropertyEnd = readLoaderNamedIdentifier(source, i, 'defineProperty');
+    if (definePropertyEnd === null) return null;
+    i = skipWhitespaceAndComments(source, definePropertyEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     const open = i;
     i = skipWhitespaceAndComments(source, i + 1);
@@ -2996,14 +2998,15 @@ function readLoaderDefinePropertyExportName(source, pos) {
 }
 
 function readLoaderModuleExportsRequire(source, pos) {
-    if (!source.startsWith('module', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
+    if (readLoaderNamedIdentifier(source, pos, 'module') === null) return null;
     const targetEnd = readLoaderCjsExportTarget(source, pos, false);
     if (targetEnd === null) return null;
     let i = skipWhitespaceAndComments(source, targetEnd);
     if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('require', i) || !hasIdentifierBoundary(source, i, i + 7)) return null;
-    i = skipWhitespaceAndComments(source, i + 7);
+    const requireEnd = readLoaderNamedIdentifier(source, i, 'require');
+    if (requireEnd === null) return null;
+    i = skipWhitespaceAndComments(source, requireEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     i = skipWhitespaceAndComments(source, i + 1);
     const quote = source.charCodeAt(i);
@@ -3016,9 +3019,10 @@ function readLoaderModuleExportsRequire(source, pos) {
 }
 
 function readLoaderRequireString(source, pos, allowSpreadPrefix) {
-    if (!source.startsWith('require', pos) || !hasIdentifierBoundary(source, pos, pos + 7)) return null;
+    const requireEnd = readLoaderNamedIdentifier(source, pos, 'require');
+    if (requireEnd === null) return null;
     if (!allowSpreadPrefix && previousSignificantChar(source, pos) === 0x2e) return null;
-    let i = skipWhitespaceAndComments(source, pos + 7);
+    let i = skipWhitespaceAndComments(source, requireEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     i = skipWhitespaceAndComments(source, i + 1);
     const quote = source.charCodeAt(i);
