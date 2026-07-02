@@ -3417,15 +3417,12 @@ function readLoaderObjectKeysReexport(source, pos, requireBindings) {
     i = skipWhitespaceAndComments(source, i + 4);
     if (source.charCodeAt(i) !== 0x28) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    const first = source.charCodeAt(i);
-    if (!isIdentifierStartCode(first)) return null;
-    const bindingStart = i;
-    i++;
-    while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    const binding = source.substring(bindingStart, i);
+    const parsedBinding = readLoaderIdentifier(source, i);
+    if (parsedBinding === null) return null;
+    const binding = parsedBinding.name;
     const specifier = requireBindings[binding];
     if (specifier === undefined) return null;
-    i = skipWhitespaceAndComments(source, i);
+    i = skipWhitespaceAndComments(source, parsedBinding.end);
     if (source.charCodeAt(i) !== 0x29) return null;
     i = skipWhitespaceAndComments(source, i + 1);
     if (source.charCodeAt(i) !== 0x2e) return null;
@@ -3438,21 +3435,18 @@ function readLoaderObjectKeysReexport(source, pos, requireBindings) {
     i = skipWhitespaceAndComments(source, i + 1);
     if (!source.startsWith('function', i) || !hasIdentifierBoundary(source, i, i + 8)) return null;
     i = skipWhitespaceAndComments(source, i + 8);
-    if (isIdentifierStartCode(source.charCodeAt(i))) {
-        i++;
-        while (i < callEnd && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-        i = skipWhitespaceAndComments(source, i);
+    const functionName = readLoaderIdentifier(source, i);
+    if (functionName !== null) {
+        i = skipWhitespaceAndComments(source, functionName.end);
     }
     if (source.charCodeAt(i) !== 0x28) return null;
     const paramsEnd = loaderFindMatchingParen(source, i);
     if (paramsEnd < 0 || paramsEnd > callEnd) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    const keyStart = i;
-    if (!isIdentifierStartCode(source.charCodeAt(i))) return null;
-    i++;
-    while (i < paramsEnd && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    const key = source.substring(keyStart, i);
-    if (skipWhitespaceAndComments(source, i) !== paramsEnd) return null;
+    const parsedKey = readLoaderIdentifier(source, i);
+    if (parsedKey === null) return null;
+    const key = parsedKey.name;
+    if (skipWhitespaceAndComments(source, parsedKey.end) !== paramsEnd) return null;
     i = skipWhitespaceAndComments(source, paramsEnd + 1);
     if (source.charCodeAt(i) !== 0x7b) return null;
     const bodyEnd = loaderFindMatchingBrace(source, i);
