@@ -3110,17 +3110,9 @@ function loaderIsStatementBoundary(source, pos) {
 }
 
 function readLoaderRequireBinding(source, pos) {
-    let keywordLen = 0;
-    if (readLoaderNamedIdentifier(source, pos, 'var') !== null) {
-        keywordLen = 3;
-    } else if (readLoaderNamedIdentifier(source, pos, 'let') !== null) {
-        keywordLen = 3;
-    } else if (readLoaderNamedIdentifier(source, pos, 'const') !== null) {
-        keywordLen = 5;
-    } else {
-        return null;
-    }
-    let i = skipWhitespaceAndComments(source, pos + keywordLen);
+    const declarationEnd = readVariableDeclarationKeyword(source, pos);
+    if (declarationEnd === null) return null;
+    let i = skipWhitespaceAndComments(source, declarationEnd);
     const parsedBinding = readLoaderIdentifier(source, i);
     if (parsedBinding === null) return null;
     const binding = parsedBinding.name;
