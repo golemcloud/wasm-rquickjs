@@ -5723,23 +5723,14 @@ fn is_export_star_has_own_guard_condition(condition: &str, key: &str) -> bool {
 }
 
 fn parse_key_equals_string(source: &str, pos: usize, key: &str) -> Option<(String, usize)> {
-    let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with(key)
-        || !is_ident_boundary(bytes, pos + key.len())
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + key.len());
-    if i + 3 > bytes.len() || &source[i..i + 3] != "===" {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 3);
-    let (value, next) = read_js_string(source, i)?;
-    Some((value, next))
+    parse_key_string_comparison(source, pos, key, "===")
 }
 
 fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(String, usize)> {
+    parse_key_string_comparison(source, pos, key, "!==")
+}
+
+fn parse_key_string_comparison(source: &str, pos: usize, key: &str, operator: &str) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     if !is_free_ident_start(bytes, pos)
         || !source[pos..].starts_with(key)
@@ -5748,10 +5739,10 @@ fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(S
         return None;
     }
     let mut i = skip_ws_comments(source, pos + key.len());
-    if i + 3 > bytes.len() || &source[i..i + 3] != "!==" {
+    if i + operator.len() > bytes.len() || &source[i..i + operator.len()] != operator {
         return None;
     }
-    i = skip_ws_comments(source, i + 3);
+    i = skip_ws_comments(source, i + operator.len());
     let (value, next) = read_js_string(source, i)?;
     Some((value, next))
 }
