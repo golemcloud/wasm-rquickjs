@@ -1254,10 +1254,8 @@ function resolveFilename(id, parentDir) {
         if (resolved !== null) return resolved;
     }
 
-    if (forceDirectory || isPathDirectory(candidate)) {
-        resolved = loadAsDirectory(candidate, id, parentDir);
-        if (resolved !== null) return resolved;
-    }
+    resolved = loadAsDirectory(candidate, id, parentDir);
+    if (resolved !== null) return resolved;
 
     const err = new Error("Cannot find module '" + id + "' from '" + parentDir + "'");
     err.code = 'MODULE_NOT_FOUND';
@@ -1266,6 +1264,7 @@ function resolveFilename(id, parentDir) {
 
 function addRequireStackToModuleNotFound(err, request, parentFilename) {
     if (!err || err.code !== 'MODULE_NOT_FOUND' || typeof parentFilename !== 'string') return err;
+    if (typeof err.path === 'string' && typeof err.requestPath === 'string') return err;
     err.requireStack = [parentFilename];
     err.message = "Cannot find module '" + request + "'\nRequire stack:\n- " + parentFilename;
     return err;
@@ -3081,38 +3080,24 @@ function readLoaderBracketIdentifier(source, pos, ident) {
     return i + 1;
 }
 
-function readLoaderKeyEqualsString(source, pos, key) {
-    if (source.startsWith(key, pos) && hasIdentifierBoundary(source, pos, pos + key.length)) {
-        let i = skipWhitespaceAndComments(source, pos + key.length);
-        if (source.substring(i, i + 3) !== '===') return null;
-        i = skipWhitespaceAndComments(source, i + 3);
-        const quote = source.charCodeAt(i);
-        if (quote !== 0x27 && quote !== 0x22) return null;
-        const decoded = decodeStringLiteral(source, i + 1, quote);
-        if (decoded === null) return null;
-        return { value: decoded.value, end: decoded.end + 1 };
-    }
-    const quote = source.charCodeAt(pos);
-    if (quote !== 0x27 && quote !== 0x22) return null;
-    const decoded = decodeStringLiteral(source, pos + 1, quote);
-    if (decoded === null) return null;
-    let i = skipWhitespaceAndComments(source, decoded.end + 1);
-    if (source.substring(i, i + 3) !== '===') return null;
-    i = skipWhitespaceAndComments(source, i + 3);
-    if (!source.startsWith(key, i) || !hasIdentifierBoundary(source, i, i + key.length)) return null;
-    return { value: decoded.value, end: i + key.length };
-}
-
-function readLoaderKeyNotEqualsString(source, pos, key) {
+function readLoaderKeyStringComparison(source, pos, key, operator) {
     if (!source.startsWith(key, pos) || !hasIdentifierBoundary(source, pos, pos + key.length)) return null;
     let i = skipWhitespaceAndComments(source, pos + key.length);
-    if (source.substring(i, i + 3) !== '!==') return null;
-    i = skipWhitespaceAndComments(source, i + 3);
+    if (source.substring(i, i + operator.length) !== operator) return null;
+    i = skipWhitespaceAndComments(source, i + operator.length);
     const quote = source.charCodeAt(i);
     if (quote !== 0x27 && quote !== 0x22) return null;
     const decoded = decodeStringLiteral(source, i + 1, quote);
     if (decoded === null) return null;
     return { value: decoded.value, end: decoded.end + 1 };
+}
+
+function readLoaderKeyEqualsString(source, pos, key) {
+    return readLoaderKeyStringComparison(source, pos, key, '===');
+}
+
+function readLoaderKeyNotEqualsString(source, pos, key) {
+    return readLoaderKeyStringComparison(source, pos, key, '!==');
 }
 
 function readLoaderDotMember(source, pos, name) {
