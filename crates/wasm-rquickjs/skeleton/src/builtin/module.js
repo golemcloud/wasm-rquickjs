@@ -3294,18 +3294,21 @@ function readLoaderDirectReexportAssignment(source, pos, binding, key) {
     i = skipWhitespaceAndComments(source, i);
     if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith(binding, i) || !hasIdentifierBoundary(source, i, i + binding.length)) return null;
-    i = skipWhitespaceAndComments(source, i + binding.length);
+    const bindingEnd = readLoaderNamedIdentifier(source, i, binding);
+    if (bindingEnd === null) return null;
+    i = skipWhitespaceAndComments(source, bindingEnd);
     i = readLoaderBracketIdentifier(source, i, key);
     return i;
 }
 
 function loaderGetterReturnsBindingKey(source, start, end, binding, key) {
     let i = skipWhitespaceAndComments(source, start);
-    if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return false;
-    i = skipWhitespaceAndComments(source, i + 6);
-    if (!source.startsWith(binding, i) || !hasIdentifierBoundary(source, i, i + binding.length)) return false;
-    i = skipWhitespaceAndComments(source, i + binding.length);
+    const returnEnd = readLoaderNamedIdentifier(source, i, 'return');
+    if (returnEnd === null) return false;
+    i = skipWhitespaceAndComments(source, returnEnd);
+    const bindingEnd = readLoaderNamedIdentifier(source, i, binding);
+    if (bindingEnd === null) return false;
+    i = skipWhitespaceAndComments(source, bindingEnd);
     i = readLoaderBracketIdentifier(source, i, key);
     if (i === null) return false;
     i = skipWhitespaceAndComments(source, i);
@@ -3343,9 +3346,10 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
         if (property.name === 'enumerable') {
             if (seenEnumerable || found || source.charCodeAt(next) !== 0x3a) return false;
             const valueStart = skipWhitespaceAndComments(source, next + 1);
-            if (!source.startsWith('true', valueStart) || !hasIdentifierBoundary(source, valueStart, valueStart + 4)) return false;
+            const trueEnd = readLoaderNamedIdentifier(source, valueStart, 'true');
+            if (trueEnd === null) return false;
             seenEnumerable = true;
-            cursor = skipWhitespaceAndComments(source, valueStart + 4);
+            cursor = skipWhitespaceAndComments(source, trueEnd);
         } else if (property.name === 'get') {
             if (found) return false;
             if (source.charCodeAt(next) === 0x28) {
@@ -3380,8 +3384,9 @@ function readLoaderDefinePropertyReexport(source, pos, binding, key) {
     i = skipWhitespaceAndComments(source, i);
     if (source.charCodeAt(i) !== 0x2c) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith(key, i) || !hasIdentifierBoundary(source, i, i + key.length)) return null;
-    i = skipWhitespaceAndComments(source, i + key.length);
+    const keyEnd = readLoaderNamedIdentifier(source, i, key);
+    if (keyEnd === null) return null;
+    i = skipWhitespaceAndComments(source, keyEnd);
     if (source.charCodeAt(i) !== 0x2c) return null;
     const close = loaderFindMatchingParen(source, open);
     if (close < 0) return null;
