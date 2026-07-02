@@ -2593,16 +2593,18 @@ function readLoaderCjsExportTarget(source, pos, allowBareExports) {
     const previous = previousSignificantChar(source, pos);
     if (previous === 0x2e || previous === 0x23) return null;
     let i = pos;
-    if (allowBareExports !== false && source.startsWith('exports', i) && hasIdentifierBoundary(source, i, i + 7)) {
-        i += 7;
-    } else if (source.startsWith('module', i) && hasIdentifierBoundary(source, i, i + 6)) {
-        i = skipWhitespaceAndComments(source, i + 6);
+    const exportsEnd = readLoaderNamedIdentifier(source, i, 'exports');
+    if (allowBareExports !== false && exportsEnd !== null) {
+        i = exportsEnd;
+    } else {
+        const moduleEnd = readLoaderNamedIdentifier(source, i, 'module');
+        if (moduleEnd === null) return null;
+        i = skipWhitespaceAndComments(source, moduleEnd);
         if (source.charCodeAt(i) !== 0x2e) return null;
         i = skipWhitespaceAndComments(source, i + 1);
-        if (!source.startsWith('exports', i) || !hasIdentifierBoundary(source, i, i + 7)) return null;
-        i += 7;
-    } else {
-        return null;
+        const moduleExportsEnd = readLoaderNamedIdentifier(source, i, 'exports');
+        if (moduleExportsEnd === null) return null;
+        i = moduleExportsEnd;
     }
     return i;
 }
@@ -3078,11 +3080,11 @@ function loaderIsStatementBoundary(source, pos) {
 
 function readLoaderRequireBinding(source, pos) {
     let keywordLen = 0;
-    if (source.startsWith('var', pos) && hasIdentifierBoundary(source, pos, pos + 3)) {
+    if (readLoaderNamedIdentifier(source, pos, 'var') !== null) {
         keywordLen = 3;
-    } else if (source.startsWith('let', pos) && hasIdentifierBoundary(source, pos, pos + 3)) {
+    } else if (readLoaderNamedIdentifier(source, pos, 'let') !== null) {
         keywordLen = 3;
-    } else if (source.startsWith('const', pos) && hasIdentifierBoundary(source, pos, pos + 5)) {
+    } else if (readLoaderNamedIdentifier(source, pos, 'const') !== null) {
         keywordLen = 5;
     } else {
         return null;
@@ -3099,8 +3101,9 @@ function readLoaderRequireBinding(source, pos) {
         if (!loaderIsStatementBoundary(source, required.end)) return null;
         return { binding, specifier: required.specifier, end: required.end };
     }
-    if (!source.startsWith('_interopRequireWildcard', i) || !hasIdentifierBoundary(source, i, i + 23)) return null;
-    i = skipWhitespaceAndComments(source, i + 23);
+    const interopEnd = readLoaderNamedIdentifier(source, i, '_interopRequireWildcard');
+    if (interopEnd === null) return null;
+    i = skipWhitespaceAndComments(source, interopEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     required = readLoaderRequireString(source, skipWhitespaceAndComments(source, i + 1));
     if (required === null) return null;
@@ -3113,8 +3116,9 @@ function readLoaderRequireBinding(source, pos) {
 function readLoaderBracketIdentifier(source, pos, ident) {
     if (source.charCodeAt(pos) !== 0x5b) return null;
     let i = skipWhitespaceAndComments(source, pos + 1);
-    if (!source.startsWith(ident, i) || !hasIdentifierBoundary(source, i, i + ident.length)) return null;
-    i = skipWhitespaceAndComments(source, i + ident.length);
+    const identEnd = readLoaderNamedIdentifier(source, i, ident);
+    if (identEnd === null) return null;
+    i = skipWhitespaceAndComments(source, identEnd);
     if (source.charCodeAt(i) !== 0x5d) return null;
     return i + 1;
 }
