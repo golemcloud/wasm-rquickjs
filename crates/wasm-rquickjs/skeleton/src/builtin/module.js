@@ -2745,6 +2745,7 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
     if (objectEnd < 0) return null;
 
     const names = [];
+    const reexports = [];
     let cursor = skipWhitespaceAndComments(source, i + 1);
     while (cursor < objectEnd) {
         if (source.charCodeAt(cursor) === 0x2c) {
@@ -2756,7 +2757,15 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
             if (source.startsWith('require', spreadStart) && hasIdentifierBoundary(source, spreadStart, spreadStart + 7)) {
                 const afterRequire = skipWhitespaceAndComments(source, spreadStart + 7);
                 if (source.charCodeAt(afterRequire) !== 0x28) break;
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, spreadStart, objectEnd));
+                const requireCall = readLoaderRequireString(source, spreadStart, true);
+                if (requireCall !== null) {
+                    reexports.push(requireCall.specifier);
+                    const afterRequireCall = skipWhitespaceAndComments(source, requireCall.end);
+                    if (afterRequireCall < objectEnd && source.charCodeAt(afterRequireCall) !== 0x2c) break;
+                    cursor = afterRequireCall;
+                } else {
+                    cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, spreadStart, objectEnd));
+                }
             } else {
                 const spreadKey = readLoaderObjectLiteralKey(source, spreadStart);
                 if (spreadKey === null || !spreadKey.keyIsIdent) break;
@@ -2787,7 +2796,7 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
         }
     }
-    return { names, end: objectEnd + 1 };
+    return { names, reexports, end: objectEnd + 1 };
 }
 
 function loaderDescriptorPropertyName(source, pos) {
@@ -3002,9 +3011,9 @@ function readLoaderModuleExportsRequire(source, pos) {
     return decoded.value;
 }
 
-function readLoaderRequireString(source, pos) {
+function readLoaderRequireString(source, pos, allowSpreadPrefix) {
     if (!source.startsWith('require', pos) || !hasIdentifierBoundary(source, pos, pos + 7)) return null;
-    if (previousSignificantChar(source, pos) === 0x2e) return null;
+    if (!allowSpreadPrefix && previousSignificantChar(source, pos) === 0x2e) return null;
     let i = skipWhitespaceAndComments(source, pos + 7);
     if (source.charCodeAt(i) !== 0x28) return null;
     i = skipWhitespaceAndComments(source, i + 1);
@@ -3536,6 +3545,17 @@ function addLoaderCjsNames(names, nameSet, source, filename, seen) {
                 if (objectName !== 'default' && !nameSet.has(objectName)) {
                     nameSet.add(objectName);
                     names.push(objectName);
+                }
+            }
+            if (filename) {
+                for (let j = 0; j < objectLiteral.reexports.length; j++) {
+                    const reexport = objectLiteral.reexports[j];
+                    if (reexport.startsWith('./') || reexport.startsWith('../') || reexport.startsWith('/')) {
+                        try {
+                            const resolved = resolveFilename(reexport, pathModule.dirname(filename));
+                            addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
+                        } catch (_) {}
+                    }
                 }
             }
             return objectLiteral.end;
