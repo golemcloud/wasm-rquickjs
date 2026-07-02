@@ -3092,13 +3092,10 @@ function readLoaderRequireBinding(source, pos) {
         return null;
     }
     let i = skipWhitespaceAndComments(source, pos + keywordLen);
-    const first = source.charCodeAt(i);
-    if (!isIdentifierStartCode(first)) return null;
-    const bindingStart = i;
-    i++;
-    while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    const binding = source.substring(bindingStart, i);
-    i = skipWhitespaceAndComments(source, i);
+    const parsedBinding = readLoaderIdentifier(source, i);
+    if (parsedBinding === null) return null;
+    const binding = parsedBinding.name;
+    i = skipWhitespaceAndComments(source, parsedBinding.end);
     if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
     let required = readLoaderRequireString(source, i);
