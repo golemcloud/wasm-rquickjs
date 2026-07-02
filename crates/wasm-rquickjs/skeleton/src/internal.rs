@@ -4545,6 +4545,17 @@ fn read_ident(source: &str, mut pos: usize) -> Option<(String, usize)> {
     Some((source[start..pos].to_string(), pos))
 }
 
+fn parse_free_ident_name(source: &str, pos: usize, name: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with(name)
+        || !is_ident_boundary(bytes, pos + name.len())
+    {
+        return None;
+    }
+    Some(pos + name.len())
+}
+
 fn read_js_string(source: &str, pos: usize) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     if pos >= bytes.len() || !matches!(bytes[pos], b'\'' | b'"') {
@@ -4744,13 +4755,7 @@ fn parse_require_call_string(source: &str, pos: usize, require_free_start: bool)
 
 fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("Object")
-        || !is_ident_boundary(bytes, pos + 6)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 6);
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "Object")?);
     if i >= bytes.len() || bytes[i] != b'.' {
         return None;
     }
@@ -5571,13 +5576,7 @@ fn parse_export_star_conditional_reexport(source: &str, pos: usize, binding: &st
 
 fn parse_export_star_return_guard(source: &str, pos: usize, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("if")
-        || !is_ident_boundary(bytes, pos + 2)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 2);
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "if")?);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
@@ -5587,24 +5586,12 @@ fn parse_export_star_return_guard(source: &str, pos: usize, key: &str) -> Option
         return None;
     }
     i = skip_ws_comments(source, condition_end + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with("return")
-        || !is_ident_boundary(bytes, i + 6)
-    {
-        return None;
-    }
-    Some(i + 6)
+    parse_free_ident_name(source, i, "return")
 }
 
 fn parse_duplicate_export_return_guard(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("if")
-        || !is_ident_boundary(bytes, pos + 2)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 2);
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "if")?);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
@@ -5614,13 +5601,7 @@ fn parse_duplicate_export_return_guard(source: &str, pos: usize, binding: &str, 
         return None;
     }
     i = skip_ws_comments(source, condition_end + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with("return")
-        || !is_ident_boundary(bytes, i + 6)
-    {
-        return None;
-    }
-    Some(i + 6)
+    parse_free_ident_name(source, i, "return")
 }
 
 fn is_duplicate_export_guard_condition(condition: &str, binding: &str, key: &str) -> bool {
@@ -5707,13 +5688,7 @@ fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(S
 
 fn parse_key_string_comparison(source: &str, pos: usize, key: &str, operator: &str) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with(key)
-        || !is_ident_boundary(bytes, pos + key.len())
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + key.len());
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, key)?);
     if i + operator.len() > bytes.len() || &source[i..i + operator.len()] != operator {
         return None;
     }
@@ -5750,13 +5725,7 @@ fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Opt
             return None;
         }
         i = skip_ws_comments(source, i + 1);
-        if !is_free_ident_start(bytes, i)
-            || !source[i..].starts_with(key)
-            || !is_ident_boundary(bytes, i + key.len())
-        {
-            return None;
-        }
-        i = skip_ws_comments(source, i + key.len());
+        i = skip_ws_comments(source, parse_free_ident_name(source, i, key)?);
         if i >= bytes.len() || bytes[i] != b')' {
             return None;
         }
@@ -5793,13 +5762,7 @@ fn parse_object_has_own_property_call(
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with(key)
-        || !is_ident_boundary(bytes, i + key.len())
-    {
-        return None;
-    }
-    i = skip_ws_comments(source, i + key.len());
+    i = skip_ws_comments(source, parse_free_ident_name(source, i, key)?);
     if i >= bytes.len() || bytes[i] != b')' {
         return None;
     }
@@ -5808,13 +5771,7 @@ fn parse_object_has_own_property_call(
 
 fn parse_key_in_export_target_condition(source: &str, pos: usize, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with(key)
-        || !is_ident_boundary(bytes, pos + key.len())
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + key.len());
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, key)?);
     if !source[i..].starts_with("in") || !is_ident_boundary(bytes, i + 2) {
         return None;
     }
@@ -5829,14 +5786,7 @@ fn parse_export_target_bracket_key(source: &str, pos: usize, key: &str) -> Optio
 }
 
 fn parse_binding_bracket_key(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with(binding)
-        || !is_ident_boundary(bytes, pos + binding.len())
-    {
-        return None;
-    }
-    parse_bracket_key(source, pos + binding.len(), key)
+    parse_bracket_key(source, parse_free_ident_name(source, pos, binding)?, key)
 }
 
 fn parse_bracket_key(source: &str, pos: usize, key: &str) -> Option<usize> {
@@ -5846,13 +5796,7 @@ fn parse_bracket_key(source: &str, pos: usize, key: &str) -> Option<usize> {
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with(key)
-        || !is_ident_boundary(bytes, i + key.len())
-    {
-        return None;
-    }
-    i = skip_ws_comments(source, i + key.len());
+    i = skip_ws_comments(source, parse_free_ident_name(source, i, key)?);
     if i >= bytes.len() || bytes[i] != b']' {
         return None;
     }
@@ -5894,14 +5838,7 @@ fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with(key)
-        || !is_ident_boundary(bytes, i + key.len())
-    {
-        return None;
-    }
-    let next = i + key.len();
-    i = skip_ws_comments(source, next);
+    i = skip_ws_comments(source, parse_free_ident_name(source, i, key)?);
     if i >= bytes.len() || bytes[i] != b']' {
         return None;
     }
