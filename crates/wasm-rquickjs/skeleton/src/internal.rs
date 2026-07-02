@@ -2208,7 +2208,6 @@ fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String
 }
 
 fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
-    let bytes = source.as_bytes();
     let mut found = false;
     let mut brace_depth = 0usize;
     scan_code_positions(source, true, |i, byte| {
@@ -2248,19 +2247,21 @@ fn is_create_require_import_meta_url_declaration(source: &str, require_pos: usiz
         return false;
     }
     next = skip_ws_comments(source, next + 1);
-    if !source[next..].starts_with("createRequire")
-        || !is_ident_start_boundary(source.as_bytes(), next)
-        || !is_ident_boundary(source.as_bytes(), next + "createRequire".len())
-    {
+    let Some(create_require_end) = parse_ident_name(source, next, "createRequire") else {
         return false;
-    }
-    next = skip_ws_comments(source, next + "createRequire".len());
+    };
+    next = skip_ws_comments(source, create_require_end);
     if source.as_bytes().get(next) != Some(&b'(') {
         return false;
     }
     next = skip_ws_comments(source, next + 1);
-    source[next..].starts_with("import.meta.url")
-        && is_ident_boundary(source.as_bytes(), next + "import.meta.url".len())
+    parse_import_meta_url(source, next).is_some()
+}
+
+fn parse_import_meta_url(source: &str, pos: usize) -> Option<usize> {
+    let i = parse_ident_name(source, pos, "import")?;
+    let i = parse_dot_member_name(source, i, "meta")?;
+    parse_dot_member_name(source, i, "url")
 }
 
 fn is_ascii_js_identifier(value: &str) -> bool {
@@ -5859,10 +5860,7 @@ fn parse_dot_member_name(source: &str, pos: usize, name: &str) -> Option<usize> 
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if i >= bytes.len() || !source[i..].starts_with(name) || !is_ident_boundary(bytes, i + name.len()) {
-        return None;
-    }
-    Some(skip_ws_comments(source, i + name.len()))
+    Some(skip_ws_comments(source, parse_ident_name(source, i, name)?))
 }
 
 fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
@@ -8802,6 +8800,21 @@ mod cjs_export_analyzer_tests {
     fn require_redeclaration_scanner_skips_non_code() {
         assert!(has_cjs_wrapper_require_redeclaration("const require = 1;"));
         assert!(has_cjs_wrapper_require_redeclaration("let /*x*/ require = 1;"));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "const require = createRequire(import.meta.url);"
+        ));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "const require = createRequire(import . meta . url);"
+        ));
+        assert!(!has_cjs_wrapper_require_redeclaration(
+            "const require = createRequire(import/*x*/.meta.url);"
+        ));
+        assert!(has_cjs_wrapper_require_redeclaration(
+            "const require = createRequire(import.meta.urls);"
+        ));
+        assert!(has_cjs_wrapper_require_redeclaration(
+            "const require = createRequire(import.meta.urlx);"
+        ));
         assert!(!has_cjs_wrapper_require_redeclaration(
             "const text = `const require = 1`; export default text;"
         ));
