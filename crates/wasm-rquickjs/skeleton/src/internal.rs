@@ -1954,13 +1954,7 @@ fn find_variable_declaration_end(source: &str, pos: usize) -> usize {
 
 fn parse_function_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
     let bytes = source.as_bytes();
-    if !source[pos..].starts_with("function")
-        || !is_ident_start_boundary(bytes, pos)
-        || !is_ident_boundary(bytes, pos + 8)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 8);
+    let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "function")?);
     if i < bytes.len() && bytes[i] == b'*' {
         i = skip_ws_comments(source, i + 1);
     }
@@ -2069,13 +2063,7 @@ fn previous_significant_byte_before_method(source: &str, pos: usize) -> Option<u
 
 fn parse_class_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
     let bytes = source.as_bytes();
-    if !source[pos..].starts_with("class")
-        || !is_ident_start_boundary(bytes, pos)
-        || !is_ident_boundary(bytes, pos + 5)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 5);
+    let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "class")?);
     let mut bindings = Vec::new();
     if let Some((name, next)) = read_ident(source, i) {
         bindings.push(name);
