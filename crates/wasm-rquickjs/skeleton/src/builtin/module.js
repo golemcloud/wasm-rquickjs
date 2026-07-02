@@ -3183,14 +3183,24 @@ function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) 
     return { target: target.name, end: i + 1 };
 }
 
-function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
+function readLoaderIfCondition(source, pos) {
     const ifEnd = readLoaderNamedIdentifier(source, pos, 'if');
     if (ifEnd === null) return null;
     let i = skipWhitespaceAndComments(source, ifEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     const conditionEnd = loaderFindMatchingParen(source, i);
     if (conditionEnd < 0) return null;
-    let c = skipWhitespaceAndComments(source, i + 1);
+    return {
+        start: i + 1,
+        end: conditionEnd,
+        after: skipWhitespaceAndComments(source, conditionEnd + 1),
+    };
+}
+
+function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
+    const condition = readLoaderIfCondition(source, pos);
+    if (condition === null) return null;
+    let c = skipWhitespaceAndComments(source, condition.start);
     const first = readLoaderKeyEqualsString(source, c, key);
     if (first === null || first.value !== 'default') return null;
     c = skipWhitespaceAndComments(source, first.end);
@@ -3198,9 +3208,8 @@ function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
     c = skipWhitespaceAndComments(source, c + 2);
     const second = readLoaderKeyEqualsString(source, c, key);
     if (second === null || second.value !== '__esModule') return null;
-    if (skipWhitespaceAndComments(source, second.end) !== conditionEnd) return null;
-    i = skipWhitespaceAndComments(source, conditionEnd + 1);
-    return readLoaderNamedIdentifier(source, i, 'return');
+    if (skipWhitespaceAndComments(source, second.end) !== condition.end) return null;
+    return readLoaderNamedIdentifier(source, condition.after, 'return');
 }
 
 function readLoaderHasOwnPropertyKey(source, pos, key) {
@@ -3227,22 +3236,19 @@ function readLoaderExportsHasOwnPropertyKey(source, pos, key) {
 }
 
 function readLoaderDuplicateExportReturnGuard(source, pos, binding, key) {
-    if (!source.startsWith('if', pos) || !hasIdentifierBoundary(source, pos, pos + 2)) return null;
-    let i = skipWhitespaceAndComments(source, pos + 2);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    const conditionEnd = loaderFindMatchingParen(source, i);
-    if (conditionEnd < 0) return null;
-    let c = skipWhitespaceAndComments(source, i + 1);
+    const condition = readLoaderIfCondition(source, pos);
+    if (condition === null) return null;
+    let c = skipWhitespaceAndComments(source, condition.start);
     const hasOwnEnd = readLoaderExportsHasOwnPropertyKey(source, c, key);
-    if (hasOwnEnd !== null && skipWhitespaceAndComments(source, hasOwnEnd) === conditionEnd) {
-        i = skipWhitespaceAndComments(source, conditionEnd + 1);
-        if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return null;
-        return i + 6;
+    if (hasOwnEnd !== null && skipWhitespaceAndComments(source, hasOwnEnd) === condition.end) {
+        return readLoaderNamedIdentifier(source, condition.after, 'return');
     }
-    if (!source.startsWith(key, c) || !hasIdentifierBoundary(source, c, c + key.length)) return null;
-    c = skipWhitespaceAndComments(source, c + key.length);
-    if (!source.startsWith('in', c) || !hasIdentifierBoundary(source, c, c + 2)) return null;
-    c = skipWhitespaceAndComments(source, c + 2);
+    const keyEnd = readLoaderNamedIdentifier(source, c, key);
+    if (keyEnd === null) return null;
+    c = skipWhitespaceAndComments(source, keyEnd);
+    const inEnd = readLoaderNamedIdentifier(source, c, 'in');
+    if (inEnd === null) return null;
+    c = skipWhitespaceAndComments(source, inEnd);
     let targetEnd = readLoaderCjsExportTarget(source, c);
     if (targetEnd === null) return null;
     c = skipWhitespaceAndComments(source, targetEnd);
@@ -3259,19 +3265,14 @@ function readLoaderDuplicateExportReturnGuard(source, pos, binding, key) {
     if (!source.startsWith(binding, c) || !hasIdentifierBoundary(source, c, c + binding.length)) return null;
     c = skipWhitespaceAndComments(source, c + binding.length);
     c = readLoaderBracketIdentifier(source, c, key);
-    if (c === null || skipWhitespaceAndComments(source, c) !== conditionEnd) return null;
-    i = skipWhitespaceAndComments(source, conditionEnd + 1);
-    if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return null;
-    return i + 6;
+    if (c === null || skipWhitespaceAndComments(source, c) !== condition.end) return null;
+    return readLoaderNamedIdentifier(source, condition.after, 'return');
 }
 
 function readLoaderHasOwnConditionalReexport(source, pos, binding, key) {
-    if (!source.startsWith('if', pos) || !hasIdentifierBoundary(source, pos, pos + 2)) return null;
-    let i = skipWhitespaceAndComments(source, pos + 2);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    const conditionEnd = loaderFindMatchingParen(source, i);
-    if (conditionEnd < 0) return null;
-    let c = skipWhitespaceAndComments(source, i + 1);
+    const condition = readLoaderIfCondition(source, pos);
+    if (condition === null) return null;
+    let c = skipWhitespaceAndComments(source, condition.start);
     const keyCheck = readLoaderKeyNotEqualsString(source, c, key);
     if (keyCheck === null || keyCheck.value !== 'default') return null;
     c = skipWhitespaceAndComments(source, keyCheck.end);
@@ -3280,9 +3281,8 @@ function readLoaderHasOwnConditionalReexport(source, pos, binding, key) {
     if (source.charCodeAt(c) !== 0x21) return null;
     c = skipWhitespaceAndComments(source, c + 1);
     const hasOwnEnd = readLoaderHasOwnPropertyKey(source, c, key);
-    if (hasOwnEnd === null || skipWhitespaceAndComments(source, hasOwnEnd) !== conditionEnd) return null;
-    i = skipWhitespaceAndComments(source, conditionEnd + 1);
-    return readLoaderDirectReexportAssignment(source, i, binding, key);
+    if (hasOwnEnd === null || skipWhitespaceAndComments(source, hasOwnEnd) !== condition.end) return null;
+    return readLoaderDirectReexportAssignment(source, condition.after, binding, key);
 }
 
 function readLoaderDirectReexportAssignment(source, pos, binding, key) {
