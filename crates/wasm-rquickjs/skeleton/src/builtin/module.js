@@ -2920,9 +2920,11 @@ function loaderGetterBodyEnd(source, paramsOpen, limit) {
     return bodyEnd >= 0 && bodyEnd <= limit ? { start: i + 1, end: bodyEnd } : null;
 }
 
-function readLoaderDefinePropertyExportName(source, pos) {
-    const previous = previousSignificantChar(source, pos);
-    if (previous === 0x2e || previous === 0x23) return null;
+function readLoaderDefinePropertyCall(source, pos, rejectMemberAccess) {
+    if (rejectMemberAccess) {
+        const previous = previousSignificantChar(source, pos);
+        if (previous === 0x2e || previous === 0x23) return null;
+    }
     if (!source.startsWith('Object', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
     let i = skipWhitespaceAndComments(source, pos + 6);
     if (source.charCodeAt(i) !== 0x2e) return null;
@@ -2932,6 +2934,14 @@ function readLoaderDefinePropertyExportName(source, pos) {
     if (source.charCodeAt(i) !== 0x28) return null;
     const open = i;
     i = skipWhitespaceAndComments(source, i + 1);
+    return { open, next: i };
+}
+
+function readLoaderDefinePropertyExportName(source, pos) {
+    const call = readLoaderDefinePropertyCall(source, pos, true);
+    if (call === null) return null;
+    const open = call.open;
+    let i = call.next;
     i = readLoaderCjsExportTarget(source, i);
     if (i === null) return null;
     i = skipWhitespaceAndComments(source, i);
@@ -3347,15 +3357,10 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
 }
 
 function readLoaderDefinePropertyReexport(source, pos, binding, key) {
-    if (!source.startsWith('Object', pos) || !hasIdentifierBoundary(source, pos, pos + 6)) return null;
-    let i = skipWhitespaceAndComments(source, pos + 6);
-    if (source.charCodeAt(i) !== 0x2e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('defineProperty', i) || !hasIdentifierBoundary(source, i, i + 14)) return null;
-    i = skipWhitespaceAndComments(source, i + 14);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    const open = i;
-    i = skipWhitespaceAndComments(source, i + 1);
+    const call = readLoaderDefinePropertyCall(source, pos, false);
+    if (call === null) return null;
+    const open = call.open;
+    let i = call.next;
     i = readLoaderCjsExportTarget(source, i);
     if (i === null) return null;
     i = skipWhitespaceAndComments(source, i);
