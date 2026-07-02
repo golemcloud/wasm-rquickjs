@@ -1,7 +1,8 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
 use indexmap::IndexMap;
-use rquickjs::function::{Args, Constructor};
+use rquickjs::convert::Coerced;
+use rquickjs::function::{Args, Constructor, This};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::object::Property;
 use rquickjs::{
@@ -4374,15 +4375,11 @@ fn emit_node_package_deprecation_warnings<'js>(
     if warnings.is_empty() {
         return Ok(());
     }
-    let emit_package_warning = match ctx
-        .globals()
-        .get::<_, Function>("__wasm_rquickjs_emit_package_deprecation_warning")
-    {
-        Ok(emit_package_warning) => emit_package_warning,
+    let process_object = match ctx.globals().get::<_, Object>("process") {
+        Ok(process_object) => process_object,
         Err(_) => {
             let error_ctor: Function = ctx.globals().get("Error")?;
-            let error_obj: Object =
-                error_ctor.call(("Internal package deprecation warning emitter is not initialized",))?;
+            let error_obj: Object = error_ctor.call(("Internal process object is not initialized",))?;
             return Err(ctx.throw(error_obj.into_value()));
         }
     };
@@ -4398,10 +4395,18 @@ fn emit_node_package_deprecation_warnings<'js>(
         {
             continue;
         }
-        let emitted: bool = emit_package_warning.call((warning.message.as_str(), warning.code, key))?;
-        if emitted
-            && let Some(warning_key) = warning_key
-        {
+        let no_deprecation = process_object.get::<_, Coerced<bool>>("noDeprecation")?.0;
+        if no_deprecation {
+            continue;
+        }
+        let emit_warning: Function = process_object.get("emitWarning")?;
+        let _: Value = emit_warning.call((
+            This(process_object.clone()),
+            warning.message.as_str(),
+            "DeprecationWarning",
+            warning.code,
+        ))?;
+        if let Some(warning_key) = warning_key {
             NODE_PACKAGE_DEPRECATION_WARNINGS.with(|seen| {
                 seen.borrow_mut().insert(warning_key);
             });

@@ -734,12 +734,13 @@ function emitPackageDeprecationWarning(message, code, key) {
     if (packageDeprecationWarningsSuppressed > 0) return;
     const warningKey = code === 'DEP0155' ? String(code) + ':' + String(key || message) : null;
     if (warningKey && packageDeprecationWarnings[warningKey]) return;
-    const emitWarning = globalThis.__wasm_rquickjs_emit_package_deprecation_warning;
-    if (typeof emitWarning !== 'function') {
-        throw new Error('Internal package deprecation warning emitter is not initialized');
+    const processObject = globalThis.process;
+    if (processObject && processObject.noDeprecation) return;
+    if (!processObject || typeof processObject.emitWarning !== 'function') {
+        throw new Error('Internal process warning emitter is not initialized');
     }
-    const emitted = emitWarning(message, code, key);
-    if (warningKey && emitted !== false) {
+    processObject.emitWarning(message, 'DeprecationWarning', code);
+    if (warningKey) {
         packageDeprecationWarnings[warningKey] = true;
     }
 }

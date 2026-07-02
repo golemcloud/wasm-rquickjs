@@ -670,19 +670,6 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     });
 };
 
-Object.defineProperty(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning', {
-    value: function emitPackageDeprecationWarning(message, code, key) {
-        if (process.noDeprecation) {
-            return false;
-        }
-        process.emitWarning(message, 'DeprecationWarning', code);
-        return true;
-    },
-    configurable: false,
-    enumerable: false,
-    writable: false,
-});
-
 process.exit = function exit(code) {
     if (code !== undefined) {
         process.exitCode = code;

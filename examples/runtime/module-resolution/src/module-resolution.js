@@ -86,6 +86,10 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './trailing-pattern-slash*': './trailing-pattern-slash*index.mjs',
                 './folder-pattern*': './folder-pattern*index.mjs',
                 './tamper-pattern*': './tamper-pattern*index.mjs',
+                './tamper-require*': './tamper-require*index.cjs',
+                './suppressed-pattern*': './suppressed-pattern*index.mjs',
+                './suppressed-require*': './suppressed-require*index.cjs',
+                './throwing-pattern*': './throwing-pattern*index.mjs',
                 './condition-order': {
                     default: './default.mjs',
                     import: './import.mjs',
@@ -135,6 +139,14 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash/index.mjs', 'export default { trailingPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-pattern-slash', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-pattern-slash/index.mjs', 'export default { tamperPattern: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-require-slash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-require-slash/index.cjs', 'module.exports = { tamperRequire: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash/index.mjs', 'export default { suppressedPattern: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-require-slash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-require-slash/index.cjs', 'module.exports = { suppressedRequire: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/throwing-pattern-slash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/throwing-pattern-slash/index.mjs', 'export default { throwingPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo/index.mjs', 'export default { folderPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subpath/dir1', { recursive: true });
@@ -164,16 +176,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
 
-        const packageWarningEmitterDescriptor = Object.getOwnPropertyDescriptor(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning');
-        assert.strictEqual(typeof packageWarningEmitterDescriptor.value, 'function');
-        assert.strictEqual(packageWarningEmitterDescriptor.configurable, false);
-        assert.strictEqual(packageWarningEmitterDescriptor.enumerable, false);
-        assert.strictEqual(packageWarningEmitterDescriptor.writable, false);
-        assert.throws(
-            () => Object.defineProperty(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning', { value: () => {} }),
-            TypeError,
-        );
-        assert.strictEqual(Object.getOwnPropertyDescriptor(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning').value, packageWarningEmitterDescriptor.value);
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning'), false);
 
         const genericDeprecationWarnings = [];
         const onGenericDeprecationWarning = (warning) => {
@@ -194,6 +197,10 @@ export const testEsmPackageMapEdgeCases = async () => {
         const packageWarnings = [];
         const onPackageWarning = (warning) => packageWarnings.push(warning);
         process.on('warning', onPackageWarning);
+        const originalNoDeprecation = process.noDeprecation;
+        const originalNoDeprecationDescriptor = Object.getOwnPropertyDescriptor(process, 'noDeprecation');
+        const originalEmitWarning = process.emitWarning;
+        const originalBoolean = globalThis.Boolean;
         try {
             writeImportEntry('/esm-package-map-edge-app/deprecated-double-subpath.mjs', 'exported-pkg/deprecated-double');
             writeImportEntry('/esm-package-map-edge-app/pattern-slash-subpath.mjs', 'exported-pkg/pattern-slash/dir1/dir1');
@@ -201,34 +208,81 @@ export const testEsmPackageMapEdgeCases = async () => {
             writeImportEntry('/esm-package-map-edge-app/trailing-pattern-slash-subpath-duplicate.mjs', 'exported-pkg/trailing-pattern-slash/');
             writeImportEntry('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs', 'exported-pkg/folder-pattern/foo/');
             writeImportEntry('/esm-package-map-edge-app/tamper-pattern-slash-subpath.mjs', 'exported-pkg/tamper-pattern-slash/');
+            writeImportEntry('/esm-package-map-edge-app/suppressed-pattern-slash-subpath.mjs', 'exported-pkg/suppressed-pattern-slash/');
+            writeImportEntry('/esm-package-map-edge-app/suppressed-pattern-slash-subpath-after.mjs', 'exported-pkg/suppressed-pattern-slash/');
+            writeImportEntry('/esm-package-map-edge-app/throwing-pattern-slash-subpath.mjs', 'exported-pkg/throwing-pattern-slash/');
             globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings = 100;
             globalThis.__wasm_rquickjs_package_deprecation_warnings = {
                 'DEP0155:/esm-package-map-edge-app/node_modules/exported-pkg:./tamper-pattern-slash/': true,
             };
-            const originalNoDeprecation = process.noDeprecation;
+            globalThis.__wasm_rquickjs_emit_package_deprecation_warning = () => {
+                throw new Error('userland package warning helper must not be called');
+            };
             try {
-                process.noDeprecation = true;
-                globalThis.__wasm_rquickjs_emit_package_deprecation_warning(
-                    'fake package warning',
-                    'DEP0155',
-                    '/esm-package-map-edge-app/node_modules/exported-pkg:./tamper-pattern-slash/',
+                process.noDeprecation = 'yes';
+                process.emitWarning = undefined;
+                globalThis.Boolean = () => {
+                    throw new Error('userland Boolean must not be used for noDeprecation coercion');
+                };
+                assert.strictEqual(
+                    import.meta.resolve(
+                        'exported-pkg/suppressed-pattern-slash/',
+                        pathToFileURL('/esm-package-map-edge-app/suppressed-resolve-parent.mjs').href,
+                    ),
+                    'file:///esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash/',
                 );
+                const requireSuppressed = createRequire('/esm-package-map-edge-app/suppressed-require-entry.cjs');
+                assert.deepStrictEqual(requireSuppressed('exported-pkg/suppressed-require-slash/'), { suppressedRequire: true });
             } finally {
                 process.noDeprecation = originalNoDeprecation;
+                process.emitWarning = originalEmitWarning;
+                globalThis.Boolean = originalBoolean;
             }
+            Object.defineProperty(process, 'noDeprecation', {
+                configurable: true,
+                get() {
+                    throw new Error('noDeprecation getter failed');
+                },
+            });
+            await assert.rejects(
+                () => import('/esm-package-map-edge-app/throwing-pattern-slash-subpath.mjs'),
+                /noDeprecation getter failed/,
+            );
+            Object.defineProperty(process, 'noDeprecation', originalNoDeprecationDescriptor || {
+                configurable: true,
+                enumerable: true,
+                writable: true,
+                value: originalNoDeprecation,
+            });
+            process.emitWarning = function emitWarningWithProcessThis(...args) {
+                assert.strictEqual(this, process);
+                return originalEmitWarning.apply(this, args);
+            };
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/deprecated-double-subpath.mjs')).default.default, { public: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/pattern-slash-subpath.mjs')).default.default, { patternSlash: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs')).default.default, { trailingPattern: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath-duplicate.mjs')).default.default, { trailingPattern: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs')).default.default, { folderPattern: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/tamper-pattern-slash-subpath.mjs')).default.default, { tamperPattern: true });
+            assert.deepStrictEqual((await import('/esm-package-map-edge-app/suppressed-pattern-slash-subpath-after.mjs')).default.default, { suppressedPattern: true });
+            const require = createRequire('/esm-package-map-edge-app/require-entry.cjs');
+            assert.deepStrictEqual(require('exported-pkg/tamper-require-slash/'), { tamperRequire: true });
             await new Promise((resolve) => process.nextTick(resolve));
         } finally {
             delete globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings;
             delete globalThis.__wasm_rquickjs_package_deprecation_warnings;
+            delete globalThis.__wasm_rquickjs_emit_package_deprecation_warning;
+            Object.defineProperty(process, 'noDeprecation', originalNoDeprecationDescriptor || {
+                configurable: true,
+                enumerable: true,
+                writable: true,
+                value: originalNoDeprecation,
+            });
+            process.emitWarning = originalEmitWarning;
+            globalThis.Boolean = originalBoolean;
             process.removeListener('warning', onPackageWarning);
         }
-        assert.deepStrictEqual(packageWarnings.map((warning) => warning.code), ['DEP0166', 'DEP0166', 'DEP0155', 'DEP0155', 'DEP0155']);
+        assert.deepStrictEqual(packageWarnings.map((warning) => warning.code), ['DEP0166', 'DEP0166', 'DEP0155', 'DEP0155', 'DEP0155', 'DEP0155', 'DEP0155']);
         assert.match(packageWarnings[0].stack, /DeprecationWarning: Use of deprecated double slash/);
         assert.match(packageWarnings[0].message, /package\.json imported from \/esm-package-map-edge-app\/deprecated-double-subpath\.mjs\./);
         assert.match(packageWarnings[1].message, /matched to "\.\/pattern-slash\*"/);
@@ -239,6 +293,10 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.match(packageWarnings[3].message, /package\.json imported from \/esm-package-map-edge-app\/folder-pattern-trailing-subpath\.mjs\./);
         assert.match(packageWarnings[4].message, /tamper-pattern-slash\//);
         assert.match(packageWarnings[4].message, /package\.json imported from \/esm-package-map-edge-app\/tamper-pattern-slash-subpath\.mjs\./);
+        assert.match(packageWarnings[5].message, /suppressed-pattern-slash\//);
+        assert.match(packageWarnings[5].message, /package\.json imported from \/esm-package-map-edge-app\/suppressed-pattern-slash-subpath-after\.mjs\./);
+        assert.match(packageWarnings[6].message, /tamper-require-slash\//);
+        assert.match(packageWarnings[6].message, /package\.json\./);
 
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/no-exports-warn', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/no-exports-warn/package.json', JSON.stringify({
