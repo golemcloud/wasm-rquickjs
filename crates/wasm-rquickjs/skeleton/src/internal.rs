@@ -3048,8 +3048,18 @@ struct NodePackageWarning {
     dedupe_key: Option<String>,
 }
 
-thread_local! {
-    static NODE_PACKAGE_DEPRECATION_WARNINGS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+pub(crate) fn node_package_deprecation_warning_seen(key: &str) -> bool {
+    get_js_state()
+        .node_package_deprecation_warnings
+        .borrow()
+        .contains(key)
+}
+
+pub(crate) fn mark_node_package_deprecation_warning_seen(key: String) {
+    get_js_state()
+        .node_package_deprecation_warnings
+        .borrow_mut()
+        .insert(key);
 }
 
 struct NodeModulesResolver;
@@ -4381,14 +4391,17 @@ fn emit_node_package_deprecation_warnings<'js>(
         } else {
             None
         };
-        if let Some(warning_key) = warning_key.as_deref()
-            && NODE_PACKAGE_DEPRECATION_WARNINGS.with(|seen| seen.borrow().contains(warning_key))
-        {
-            continue;
-        }
         let no_deprecation = process_object.get::<_, Coerced<bool>>("noDeprecation")?.0;
         if no_deprecation {
             continue;
+        }
+        if let Some(warning_key) = warning_key.as_deref()
+            && node_package_deprecation_warning_seen(warning_key)
+        {
+            continue;
+        }
+        if let Some(warning_key) = warning_key.as_ref() {
+            mark_node_package_deprecation_warning_seen(warning_key.clone());
         }
         let emit_warning: Function = process_object.get("emitWarning")?;
         let _: Value = emit_warning.call((
@@ -4397,11 +4410,6 @@ fn emit_node_package_deprecation_warnings<'js>(
             "DeprecationWarning",
             warning.code,
         ))?;
-        if let Some(warning_key) = warning_key {
-            NODE_PACKAGE_DEPRECATION_WARNINGS.with(|seen| {
-                seen.borrow_mut().insert(warning_key);
-            });
-        }
     }
     Ok(())
 }
@@ -7220,6 +7228,7 @@ pub struct JsState {
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
     pub unrefed_timers: RefCell<HashSet<usize>>,
+    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
@@ -7388,6 +7397,7 @@ impl JsState {
             abort_handles: RefCell::new(HashMap::new()),
             last_abort_id: AtomicUsize::new(0),
             unrefed_timers: RefCell::new(HashSet::new()),
+            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
             gc_pending: std::sync::atomic::AtomicBool::new(false),
         }
     }

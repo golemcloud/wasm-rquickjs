@@ -61,6 +61,10 @@ import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
+import {
+    package_deprecation_warning_seen as _packageDeprecationWarningSeen,
+    mark_package_deprecation_warning_seen as _markPackageDeprecationWarningSeen,
+} from '__wasm_rquickjs_builtin/internal/binding/util_native';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -728,21 +732,20 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
 }
 
 let packageDeprecationWarningsSuppressed = 0;
-const packageDeprecationWarnings = Object.create(null);
 
 function emitPackageDeprecationWarning(message, code, key) {
     if (packageDeprecationWarningsSuppressed > 0) return;
     const warningKey = code === 'DEP0155' ? String(code) + ':' + String(key || message) : null;
-    if (warningKey && packageDeprecationWarnings[warningKey]) return;
     const processObject = globalThis.process;
     if (processObject && processObject.noDeprecation) return;
+    if (warningKey && _packageDeprecationWarningSeen(warningKey)) return;
+    if (warningKey) {
+        _markPackageDeprecationWarningSeen(warningKey);
+    }
     if (!processObject || typeof processObject.emitWarning !== 'function') {
         throw new Error('Internal process warning emitter is not initialized');
     }
     processObject.emitWarning(message, 'DeprecationWarning', code);
-    if (warningKey) {
-        packageDeprecationWarnings[warningKey] = true;
-    }
 }
 
 function withSuppressedPackageDeprecationWarnings(callback) {

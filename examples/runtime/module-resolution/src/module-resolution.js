@@ -87,6 +87,10 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './folder-pattern*': './folder-pattern*index.mjs',
                 './tamper-pattern*': './tamper-pattern*index.mjs',
                 './tamper-require*': './tamper-require*index.cjs',
+                './shared-warning*': {
+                    import: './shared-warning*index.mjs',
+                    require: './shared-warning*index.cjs',
+                },
                 './suppressed-pattern*': './suppressed-pattern*index.mjs',
                 './suppressed-require*': './suppressed-require*index.cjs',
                 './throwing-pattern*': './throwing-pattern*index.mjs',
@@ -141,6 +145,9 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-pattern-slash/index.mjs', 'export default { tamperPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-require-slash', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/tamper-require-slash/index.cjs', 'module.exports = { tamperRequire: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/shared-warning-slash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/shared-warning-slash/index.mjs', 'export default { sharedWarning: "esm" };');
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/shared-warning-slash/index.cjs', 'module.exports = { sharedWarning: "cjs" };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash/index.mjs', 'export default { suppressedPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/suppressed-require-slash', { recursive: true });
@@ -211,6 +218,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             writeImportEntry('/esm-package-map-edge-app/suppressed-pattern-slash-subpath.mjs', 'exported-pkg/suppressed-pattern-slash/');
             writeImportEntry('/esm-package-map-edge-app/suppressed-pattern-slash-subpath-after.mjs', 'exported-pkg/suppressed-pattern-slash/');
             writeImportEntry('/esm-package-map-edge-app/throwing-pattern-slash-subpath.mjs', 'exported-pkg/throwing-pattern-slash/');
+            writeImportEntry('/esm-package-map-edge-app/shared-warning-subpath.mjs', 'exported-pkg/shared-warning-slash/');
             globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings = 100;
             globalThis.__wasm_rquickjs_package_deprecation_warnings = {
                 'DEP0155:/esm-package-map-edge-app/node_modules/exported-pkg:./tamper-pattern-slash/': true,
@@ -254,6 +262,18 @@ export const testEsmPackageMapEdgeCases = async () => {
                 writable: true,
                 value: originalNoDeprecation,
             });
+            process.emitWarning = () => {
+                throw new Error('package warning emit failed');
+            };
+            const requireThrowingWarning = createRequire('/esm-package-map-edge-app/shared-warning-require-entry.cjs');
+            assert.throws(
+                () => requireThrowingWarning('exported-pkg/shared-warning-slash/'),
+                /package warning emit failed/,
+            );
+            assert.deepStrictEqual(
+                (await import('/esm-package-map-edge-app/shared-warning-subpath.mjs')).default.default,
+                { sharedWarning: 'esm' },
+            );
             process.emitWarning = function emitWarningWithProcessThis(...args) {
                 assert.strictEqual(this, process);
                 return originalEmitWarning.apply(this, args);
