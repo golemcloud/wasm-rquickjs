@@ -2111,10 +2111,8 @@ fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start:
 
         if in_binding {
             for name in CJS_GLOBAL_NAMES {
-                if source[i..].starts_with(name)
-                    && is_ident_start_boundary(bytes, i)
-                    && is_ident_boundary(bytes, i + name.len())
-                    && !object_pattern_property_key_without_binding(source, i + name.len())
+                if let Some(name_end) = parse_ident_name(source, i, name)
+                    && !object_pattern_property_key_without_binding(source, name_end)
                     && !names.iter().any(|existing| existing == name)
                 {
                     names.push(name.to_string());
@@ -2130,54 +2128,6 @@ fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start:
 fn object_pattern_property_key_without_binding(source: &str, pos: usize) -> bool {
     let i = skip_ws_comments(source, pos);
     i < source.len() && source.as_bytes()[i] == b':'
-}
-
-fn collect_cjs_global_names_in_span(source: &str, start: usize, end: usize) -> Vec<String> {
-    const NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
-    let bytes = source.as_bytes();
-    let mut names = Vec::new();
-    let mut i = start;
-    while i < end && i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < end && i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < end && i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(end).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
-            _ => {}
-        }
-
-        for name in NAMES {
-            if source[i..].starts_with(name)
-                && is_ident_start_boundary(bytes, i)
-                && is_ident_boundary(bytes, i + name.len())
-                && !names.iter().any(|existing| existing == name)
-            {
-                names.push(name.to_string());
-                break;
-            }
-        }
-        i = next_char_boundary(source, i);
-    }
-    names
 }
 
 fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String> {
