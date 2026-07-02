@@ -4162,6 +4162,20 @@ export const testVmMainContextDefaultLoader = async () => {
         const contextSandbox = {};
         assert.strictEqual(vm.isContext(vm.createContext(contextSandbox)), true);
         assert.strictEqual(vm.isContext(contextSandbox), true);
+        assert.strictEqual(vm.isContext(Object.create(contextSandbox)), false);
+        assert.deepStrictEqual(Reflect.ownKeys(contextSandbox), []);
+        const contextSymbolA = Symbol('context-a');
+        const contextSymbolB = Symbol('context-b');
+        const keyedContextSandbox = {
+            visible: true,
+            [contextSymbolA]: true,
+        };
+        Object.defineProperty(keyedContextSandbox, 'hidden', { value: true });
+        Object.defineProperty(keyedContextSandbox, contextSymbolB, { value: true });
+        vm.createContext(keyedContextSandbox);
+        assert.deepStrictEqual(Reflect.ownKeys(keyedContextSandbox), ['visible', 'hidden', contextSymbolA, contextSymbolB]);
+        assert.deepStrictEqual(Object.getOwnPropertyNames(keyedContextSandbox), ['visible', 'hidden']);
+        assert.deepStrictEqual(Object.getOwnPropertySymbols(keyedContextSandbox), [contextSymbolA, contextSymbolB]);
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);

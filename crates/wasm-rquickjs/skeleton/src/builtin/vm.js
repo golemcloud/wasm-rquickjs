@@ -5,8 +5,8 @@ import {
 import * as pathModule from 'node:path';
 
 let contextIdCounter = 1;
-const contextSymbol = Symbol('vm.context');
-const contextOptionsSymbol = Symbol('vm.context.options');
+const contextIds = new WeakMap();
+const contextOptions = new WeakMap();
 const identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
 const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
@@ -1254,8 +1254,8 @@ export function createContext(sandbox, options) {
         throwInvalidArgType('object', 'object', sandbox);
     }
     options = validateOptionsObject(options);
-    sandbox[contextSymbol] = contextIdCounter++;
-    sandbox[contextOptionsSymbol] = snapshotVmOptions(options);
+    contextIds.set(sandbox, contextIdCounter++);
+    contextOptions.set(sandbox, snapshotVmOptions(options));
     return sandbox;
 }
 
@@ -1267,7 +1267,7 @@ export function isContext(obj) {
 }
 
 function isContextObject(obj) {
-    return obj != null && typeof obj === 'object' && contextSymbol in obj;
+    return obj != null && typeof obj === 'object' && contextIds.has(obj);
 }
 
 export function runInContext(code, context, options) {
@@ -1301,9 +1301,6 @@ function evalCodeInContext(code, context, helperName) {
     const keys = [];
     const values = [];
     for (const k of Object.keys(context)) {
-        if (typeof context[contextSymbol] !== 'undefined' && k === String(contextSymbol)) {
-            continue;
-        }
         keys.push(k);
         values.push(context[k]);
     }
@@ -1485,7 +1482,6 @@ function collectContextBindings(context, keys, values) {
     const contextKeys = Object.keys(context);
     for (let i = 0; i < contextKeys.length; i++) {
         const key = contextKeys[i];
-        if (key === String(contextSymbol) || key === String(contextOptionsSymbol)) continue;
         keys.push(key);
         values.push(context[key]);
     }
@@ -2268,7 +2264,7 @@ function rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename) {
     if (rewritten.changed) ensureDefaultLoaderImportBinding(helperName);
     return {
         code: rewritten.code,
-        helperName,
+        helperName: rewritten.changed ? helperName : undefined,
     };
 }
 
@@ -2279,7 +2275,7 @@ function rewriteMissingDynamicImportsForEvaluation(code) {
     if (rewritten.changed) ensureMissingDynamicImportBinding(helperName);
     return {
         code: rewritten.code,
-        helperName,
+        helperName: rewritten.changed ? helperName : undefined,
     };
 }
 
@@ -2290,7 +2286,7 @@ function rewriteMissingDynamicImportFlagForEvaluation(code) {
     if (rewritten.changed) ensureMissingDynamicImportFlagBinding(helperName);
     return {
         code: rewritten.code,
-        helperName,
+        helperName: rewritten.changed ? helperName : undefined,
     };
 }
 
@@ -2301,7 +2297,7 @@ function rewriteVmDynamicImportCallbackForEvaluation(code, callback, wrap) {
     if (rewritten.changed) defineVmDynamicImportCallbackBinding(helperName, callback, wrap);
     return {
         code: rewritten.code,
-        helperName,
+        helperName: rewritten.changed ? helperName : undefined,
     };
 }
 

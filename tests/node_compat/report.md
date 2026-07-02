@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3209/4395 (73.0%)
+**Primary compatibility (CI-enforced):** 3210/4395 (73.0%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3209 | 73.0% | 56.2% | 46.9% |
-| 🧩 known gap | 1186 | 27.0% | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3210 | 73.0% | 56.2% | 47.0% |
+| 🧩 known gap | 1185 | 27.0% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3209/5713 (56.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3210/5713 (56.2%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 55 | 54 | 3 | 9 | 0 | 0 | 50.5% | 45.5% |
+| vm | 121 | 56 | 53 | 3 | 9 | 0 | 0 | 51.4% | 46.3% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -589,7 +589,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-v8-query-objects.js` | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | `test-v8-serdes.js` | 14 | 0 | 0 | 0 | 14 | 0 | 0 |
 | `test-validators.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `test-vm-basic.js` | 7 | 6 | 1 | 0 | 0 | 0 | 0 |
+| `test-vm-basic.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
 | `test-vm-codegen.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-vm-context-dont-contextify.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-vm-measure-memory-lazy.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1186)
+### known gap (1185)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -739,7 +739,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process.spawn pipe mode does not provide functional child.stdin | 3 | `parallel/test-stdin-pipe-large.js`, `parallel/test-stdin-pipe-resume.js`, `parallel/test-stdin-script-child-option.js` |
 | common.canCreateSymLink shim always returns false, so symlink tests are skipped | 3 | `parallel/test-fs-symlink-buffer-path.js`, `parallel/test-fs-symlink-dir.js`, `parallel/test-fs-symlink.js` |
 | common/gc async_hooks-based GC tracking is not implemented in the WASM test shim | 3 | `sequential/test-gc-http-client-onerror.js`, `sequential/test-gc-http-client-timeout.js`, `sequential/test-gc-http-client.js` |
-| context marker Symbol(vm.context) leaks into sandbox property enumeration | 3 | `parallel/test-vm-ownkeys.js`, `parallel/test-vm-ownpropertynames.js`, `parallel/test-vm-ownpropertysymbols.js` |
 | crypto.X509Certificate API is not implemented | 3 | `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`, `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`, `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field` |
 | dgram send() callback overload path has JS/native argument conversion bugs | 3 | `parallel/test-dgram-send-callback-buffer-length-empty-address.js`, `parallel/test-dgram-send-callback-buffer-length.js`, `parallel/test-dgram-send-callback-buffer.js` |
 | dgram socket buffer size APIs may hang | 3 | `parallel/test-dgram-socket-buffer-size.js#block_02_block_02`, `parallel/test-dgram-socket-buffer-size.js#block_04_block_04`, `parallel/test-dgram-socket-buffer-size.js#block_05_block_05` |
@@ -1320,7 +1319,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm global getter/setter descriptors are not exposed correctly on contextified objects | 1 | `parallel/test-vm-global-setter.js` |
 | vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
 | vm.createContext does not preserve sandbox accessor properties during evaluation | 1 | `parallel/test-vm-create-context-accessors.js` |
-| vm.runInContext contextification/write-back semantics are incomplete | 1 | `parallel/test-vm-basic.js#block_01_vm_runincontext` |
+| vm.runInContext does not project non-enumerable or symbol sandbox properties into the evaluated global object | 1 | `parallel/test-vm-ownkeys.js` |
+| vm.runInContext does not project non-enumerable sandbox properties into the evaluated global object | 1 | `parallel/test-vm-ownpropertynames.js` |
+| vm.runInContext does not project symbol sandbox properties into the evaluated global object | 1 | `parallel/test-vm-ownpropertysymbols.js` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
 | wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-cr-no-lf.js` |
