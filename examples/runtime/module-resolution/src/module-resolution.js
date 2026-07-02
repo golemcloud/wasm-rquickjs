@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 async function expectImportError(specifier, code) {
@@ -1799,9 +1800,6 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
 
 export const testLoaderModuleSourceValidation = async () => {
     try {
-        const assert = require('node:assert');
-        const fs = require('node:fs');
-
         fs.mkdirSync('/loader-module-source-app', { recursive: true });
         fs.writeFileSync('/loader-module-source-app/as-module.ext', 'export default "from-ext"; export const named = 11;');
         fs.writeFileSync('/loader-module-source-app/null-source.cjs', 'exports.marker = "null-source";');
@@ -3196,6 +3194,7 @@ export const testPackageCustomConditions = async () => {
 export const testCjsPackageJsonParseCache = async () => {
     try {
         const root = '/package-json-cache-app';
+        const require = createRequire(`${root}/entry.cjs`);
         fs.mkdirSync(`${root}/node_modules/cached-pkg`, { recursive: true });
         fs.writeFileSync(`${root}/node_modules/cached-pkg/package.json`, JSON.stringify({
             exports: './entry.js',
