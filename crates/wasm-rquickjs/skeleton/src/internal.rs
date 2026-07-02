@@ -5709,34 +5709,71 @@ fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Opt
         return None;
     }
     let mut i = skip_ws_comments(source, pos + 1);
-    i = parse_member_name(source, i, "Object")?;
-    i = parse_member_name(source, i, "prototype")?;
-    i = parse_member_name(source, i, "hasOwnProperty")?;
-    i = parse_member_name(source, i, "call")?;
-    if i >= bytes.len() || bytes[i] != b'(' {
-        return None;
+
+    let (receiver, next) = read_ident(source, i)?;
+    if receiver == "Object" {
+        let mut object_call = next;
+        if let Some(next) = parse_dot_member_name(source, object_call, "prototype") {
+            object_call = next;
+        }
+        if let Some(mut object_call) = parse_dot_member_name(source, object_call, "hasOwnProperty")
+            .and_then(|next| parse_dot_member_name(source, next, "call"))
+        {
+            if object_call >= bytes.len() || bytes[object_call] != b'(' {
+                return None;
+            }
+            object_call = skip_ws_comments(source, object_call + 1);
+            let (_, next) = read_ident(source, object_call)?;
+            object_call = skip_ws_comments(source, next);
+            if object_call >= bytes.len() || bytes[object_call] != b',' {
+                return None;
+            }
+            object_call = skip_ws_comments(source, object_call + 1);
+            if !is_free_ident_start(bytes, object_call)
+                || !source[object_call..].starts_with(key)
+                || !is_ident_boundary(bytes, object_call + key.len())
+            {
+                return None;
+            }
+            object_call = skip_ws_comments(source, object_call + key.len());
+            if object_call >= bytes.len() || bytes[object_call] != b')' {
+                return None;
+            }
+            return Some(object_call + 1);
+        }
     }
-    i = skip_ws_comments(source, i + 1);
-    let (target, next) = parse_exports_target(source, i)?;
-    if target != CjsExportTarget::Exports {
-        return None;
-    }
-    i = skip_ws_comments(source, next);
-    if i >= bytes.len() || bytes[i] != b',' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with(key)
-        || !is_ident_boundary(bytes, i + key.len())
+
     {
+        i = parse_dot_member_name(source, next, "hasOwnProperty")?;
+        if i >= bytes.len() || bytes[i] != b'(' {
+            return None;
+        }
+        i = skip_ws_comments(source, i + 1);
+        if !is_free_ident_start(bytes, i)
+            || !source[i..].starts_with(key)
+            || !is_ident_boundary(bytes, i + key.len())
+        {
+            return None;
+        }
+        i = skip_ws_comments(source, i + key.len());
+        if i >= bytes.len() || bytes[i] != b')' {
+            return None;
+        }
+        return Some(i + 1);
+    }
+}
+
+fn parse_dot_member_name(source: &str, pos: usize, name: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = skip_ws_comments(source, pos);
+    if i >= bytes.len() || bytes[i] != b'.' {
         return None;
     }
-    i = skip_ws_comments(source, i + key.len());
-    if i >= bytes.len() || bytes[i] != b')' {
+    i = skip_ws_comments(source, i + 1);
+    if i >= bytes.len() || !source[i..].starts_with(name) || !is_ident_boundary(bytes, i + name.len()) {
         return None;
     }
-    Some(i + 1)
+    Some(skip_ws_comments(source, i + name.len()))
 }
 
 fn parse_member_name(source: &str, pos: usize, name: &str) -> Option<usize> {
@@ -8925,6 +8962,74 @@ mod cjs_export_analyzer_tests {
                 var dep = require("./dep.cjs");
                 Object.keys(dep).forEach(function (key) {
                     if (key !== "default" && !Object.prototype.hasOwnProperty.call(exports, key)) exports[key] = dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                Object.keys(dep).forEach(function (key) {
+                    if (key !== "default" && !exports.hasOwnProperty(key)) exports[key] = dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                Object.keys(dep).forEach(function (key) {
+                    if (key !== "default" && !Object.hasOwnProperty.call(exports, key)) exports[key] = dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                var ignored = {};
+                Object.keys(dep).forEach(function (key) {
+                    if (key !== "default" && !ignored.hasOwnProperty(key)) exports[key] = dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                var ignored = {};
+                Object.keys(dep).forEach(function (key) {
+                    if (key !== "default" && !Object.hasOwnProperty.call(ignored, key)) exports[key] = dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                var ignored = {};
+                Object.keys(dep).forEach(function (key) {
+                    if (key !== "default" && !Object.prototype.hasOwnProperty.call(ignored, key)) exports[key] = dep[key];
                 });
                 exports.own = "own";
             "#,
