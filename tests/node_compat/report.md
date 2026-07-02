@@ -1007,6 +1007,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process CJS import/require interop is covered by module-interop runtime tests | 1 | `es-module/test-esm-cjs-main.js` |
 | child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process builtin and CJS interop are covered by runtime and node_compat tests | 1 | `es-module/test-esm-cjs-builtins.js` |
 | child_process execPath emulation has incomplete --require preload/argv handling | 1 | `parallel/test-preload-print-process-argv.js` |
+| child_process execPath emulation lacks cwd-relative --require preload resolution for self-referential packages | 1 | `parallel/test-preload-self-referential.js` |
 | child_process execPath emulation lacks full --import/--require preload semantics | 1 | `es-module/test-require-module-preload.js` |
 | child_process execPath emulation lacks full NODE_OPTIONS and CLI flag semantics | 1 | `parallel/test-cli-node-options.js` |
 | child_process fork IPC/stdout stream behavior is incomplete | 1 | `parallel/test-process-external-stdio-close.js` |
@@ -1173,7 +1174,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | postMessage function cloning should throw DataCloneError | 1 | `parallel/test-worker-message-port-transfer-native.js#block_00_block_00` |
 | postMessage transferList argument validation is not Node-compatible yet | 1 | `parallel/test-worker-message-port.js#block_05_block_05` |
 | posting a port to its target and channel-loss warning semantics are incomplete | 1 | `parallel/test-worker-message-port-transfer-target.js` |
-| preload module handling edge case | 1 | `parallel/test-preload-self-referential.js` |
 | process 'multipleResolves' event semantics are not implemented | 1 | `parallel/test-promise-swallowed-event.js` |
 | process prototype chain is not fully Node-compatible (prototype is not EventEmitter-based) | 1 | `parallel/test-process-prototype.js` |
 | process uncaughtException handling inside http client callbacks is incomplete | 1 | `parallel/test-http-catch-uncaughtexception.js` |
