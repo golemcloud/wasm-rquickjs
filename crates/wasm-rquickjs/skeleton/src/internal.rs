@@ -6965,18 +6965,10 @@ fn source_looks_like_esm(source: &str) -> bool {
     }
 
     scan_code_positions(source, true, |i, _| {
-        if source[i..].starts_with("export")
-            && is_ident_start_boundary(source.as_bytes(), i)
-            && is_ident_boundary(source.as_bytes(), i + "export".len())
-            && is_static_export_syntax(source, i)
-        {
+        if parse_ident_name(source, i, "export").is_some() && is_static_export_syntax(source, i) {
             return ControlFlow::Break(());
         }
-        if source[i..].starts_with("import")
-            && is_ident_start_boundary(source.as_bytes(), i)
-            && is_ident_boundary(source.as_bytes(), i + "import".len())
-            && is_static_import_syntax(source, i)
-        {
+        if parse_ident_name(source, i, "import").is_some() && is_static_import_syntax(source, i) {
             return ControlFlow::Break(());
         }
         ControlFlow::Continue(None)
@@ -6996,10 +6988,7 @@ fn is_static_export_syntax(source: &str, pos: usize) -> bool {
         Some(b'{' | b'*') => true,
         _ => ["default", "const", "let", "var", "function", "class"]
             .iter()
-            .any(|keyword| {
-                source[next..].starts_with(keyword)
-                    && is_ident_boundary(source.as_bytes(), next + keyword.len())
-            }),
+            .any(|keyword| parse_ident_name(source, next, keyword).is_some()),
     }
 }
 
