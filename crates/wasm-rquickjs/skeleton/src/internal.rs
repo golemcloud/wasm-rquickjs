@@ -4489,37 +4489,23 @@ fn is_free_ident_start(source: &[u8], pos: usize) -> bool {
     is_ident_start_boundary(source, pos) && (pos == 0 || source[pos - 1] != b'.')
 }
 
-fn skip_ws_comments(source: &str, mut pos: usize) -> usize {
-    let bytes = source.as_bytes();
-    loop {
-        while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-            pos += 1;
-        }
-        if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'/' {
-            pos += 2;
-            while pos < bytes.len() && !matches!(bytes[pos], b'\n' | b'\r') {
-                pos += 1;
-            }
-            continue;
-        }
-        if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'*' {
-            pos += 2;
-            while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
-                pos += 1;
-            }
-            pos = (pos + 2).min(bytes.len());
-            continue;
-        }
-        return pos;
-    }
+fn skip_ws_comments(source: &str, pos: usize) -> usize {
+    skip_ws_comments_impl::<false>(source, pos).0
 }
 
-fn skip_ws_comments_with_line_terminator(source: &str, mut pos: usize) -> (usize, bool) {
+fn skip_ws_comments_with_line_terminator(source: &str, pos: usize) -> (usize, bool) {
+    skip_ws_comments_impl::<true>(source, pos)
+}
+
+fn skip_ws_comments_impl<const TRACK_LINE_TERMINATOR: bool>(
+    source: &str,
+    mut pos: usize,
+) -> (usize, bool) {
     let bytes = source.as_bytes();
     let mut has_line_terminator = false;
     loop {
         while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-            if matches!(bytes[pos], b'\n' | b'\r') {
+            if TRACK_LINE_TERMINATOR && matches!(bytes[pos], b'\n' | b'\r') {
                 has_line_terminator = true;
             }
             pos += 1;
@@ -4534,7 +4520,7 @@ fn skip_ws_comments_with_line_terminator(source: &str, mut pos: usize) -> (usize
         if pos + 1 < bytes.len() && bytes[pos] == b'/' && bytes[pos + 1] == b'*' {
             pos += 2;
             while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
-                if matches!(bytes[pos], b'\n' | b'\r') {
+                if TRACK_LINE_TERMINATOR && matches!(bytes[pos], b'\n' | b'\r') {
                     has_line_terminator = true;
                 }
                 pos += 1;
