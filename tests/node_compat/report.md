@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3218/4395 (73.2%)
+**Primary compatibility (CI-enforced):** 3224/4395 (73.4%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3218 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1177 | 26.8% | 20.6% | 17.2% |
+| ✅ passing (runnable) | 3224 | 73.4% | 56.4% | 47.2% |
+| 🧩 known gap | 1171 | 26.6% | 20.5% | 17.1% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3218/5713 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3224/5713 (56.4%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 64 | 45 | 3 | 9 | 0 | 0 | 58.7% | 52.9% |
+| vm | 121 | 70 | 39 | 3 | 9 | 0 | 0 | 64.2% | 57.9% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1177)
+### known gap (1171)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1037,7 +1037,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | decoding empty-passphrase encrypted PEM traps in the WASM crypto backend | 1 | `parallel/test-crypto-keygen-empty-passphrase-no-prompt.js` |
 | deep async recursion intended to exercise V8 stack recovery can trap the QuickJS/WASM runtime before JavaScript can catch and log the RangeError | 1 | `parallel/test-ttywrap-stack.js` |
 | default clientError path does not send/close with Node-compatible 400 Bad Request behavior | 1 | `parallel/test-http-server-destroy-socket-on-client-error.js` |
-| defining global accessor properties in vm contexts does not round-trip to the sandbox correctly | 1 | `parallel/test-vm-global-define-property.js` |
 | depends on WebCrypto ECDH P-521 deriveKey support | 1 | `parallel/test-webcrypto-derivekey.js#block_03_test_default_key_lengths` |
 | destroying zlib Transform with in-flight pipe data has callback/event ordering differences | 1 | `parallel/test-zlib-destroy-pipe.js` |
 | dgram bind path does not invoke default dns.lookup | 1 | `parallel/test-dgram-custom-lookup.js#block_01_block_01` |
@@ -1104,8 +1103,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs.writeFile(fd, ...) on read-only descriptor does not callback with EBADF | 1 | `parallel/test-fs-writefile-with-fd.js#block_02_test_read_only_file_descriptor` |
 | fs.writeFileSync accepts invalid data types instead of ERR_INVALID_ARG_TYPE | 1 | `parallel/test-fs-write-file-sync.js#block_05_test_writefilesync_with_an_invalid_input` |
 | fs/promises FileHandle.readableWebStream support is missing or incomplete | 1 | `parallel/test-filehandle-readablestream.js` |
-| function declaration/global binding semantics in vm contexts are incomplete | 1 | `parallel/test-vm-function-declaration.js` |
-| function declarations are not persisted correctly across vm.runInContext calls | 1 | `parallel/test-vm-function-redefinition.js` |
 | global performance object lacks Node perf_hooks API surface | 1 | `parallel/test-performance-global.js` |
 | global process/Buffer accessor setter semantics are incomplete | 1 | `parallel/test-global-setters.js` |
 | global property descriptor/interceptor behavior in vm contexts is incomplete | 1 | `parallel/test-vm-global-property-interceptors.js` |
@@ -1126,7 +1123,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | http.request host header formatting for IPv6 literals is incorrect (missing [::1]:port form) | 1 | `parallel/test-http-host-header-ipv6-fail.js` |
 | https socket lifecycle/unref semantics over wasi:http are incomplete | 1 | `parallel/test-https-agent-unref-socket.js` |
 | importing scrypt-encrypted PKCS#8 keys traps in the WASM crypto backend | 1 | `parallel/test-crypto-key-objects.js#block_05_block_05` |
-| indexed property definitions on vm globals do not propagate to the sandbox | 1 | `parallel/test-vm-indexed-properties.js` |
 | inherited: Resolver#setLocalAddress validation/error behavior is not implemented | 1 | `parallel/test-dns-setlocaladdress.js#block_01_verify_that_setlocaladdress_throws_if_called_with_an_invalid` |
 | invalid EC private keys do not raise Node-compatible DataError | 1 | `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys` |
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
@@ -1163,7 +1159,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | node_compat harness copies only the target test file, so required sibling ./test-tls-destroy-stream.js is missing | 1 | `parallel/test-tls-destroy-stream-12.js` |
 | node_compat harness copies only the target test file, so required sibling ./test-tls-net-socket-keepalive.js is missing | 1 | `parallel/test-tls-net-socket-keepalive-12.js` |
 | node_compat test fixture module ../common/process-exit-code-cases is not resolved in this runtime | 1 | `parallel/test-process-exit-code.js` |
-| non-writable global property semantics in vm contexts are incomplete | 1 | `parallel/test-vm-global-non-writable-properties.js` |
+| non-writable vm global assignment throws QuickJS read-only wording instead of Node's Cannot redefine property message | 1 | `parallel/test-vm-global-setter.js` |
 | options.agent validation/lifecycle is not fully Node-compatible | 1 | `parallel/test-http-client-reject-unexpected-agent.js` |
 | passive listener semantics are incomplete (test currently self-skips) | 1 | `parallel/test-whatwg-events-add-event-listener-options-passive.js#block_01_block_01` |
 | per-context Symbol/global binding behavior is incomplete in vm contexts | 1 | `parallel/test-vm-harmony-symbols.js` |
@@ -1280,6 +1276,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream.finished() behavior for destroyed IncomingMessage is not Node-compatible | 1 | `parallel/test-http-client-finished.js` |
 | stream.write()/console.log tick scheduling is not fully Node-compatible | 1 | `parallel/test-stream-writable-samecb-singletick.js` |
 | stream/web compression constructor error codes are not Node-compatible yet | 1 | `parallel/test-whatwg-webstreams-compression.js` |
+| strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message | 1 | `parallel/test-vm-global-non-writable-properties.js` |
 | subtle.digest unsupported-algorithm error semantics do not match Node | 1 | `parallel/test-webcrypto-digest.js` |
 | timeout option does not reliably emit request timeout before close | 1 | `parallel/test-http-client-timeout-option.js` |
 | timers/promises scheduler constructor and error-code semantics are not fully Node-compatible | 1 | `parallel/test-timers-promises-scheduler.js` |
@@ -1303,15 +1300,12 @@ Secondary full-public compatibility, including public tests that are currently e
 | v8.setFlagsFromString argument validation error fidelity is incomplete | 1 | `parallel/test-v8-flag-type-check.js` |
 | valid EC key vectors fail to import | 1 | `parallel/test-webcrypto-export-import-ec.js#block_00_block_00` |
 | verify() returns non-Node error code/message for unsupported key types | 1 | `parallel/test-crypto-sign-verify.js#block_18_block_18` |
-| vm context does not preserve sandbox getter descriptors on the global object | 1 | `parallel/test-vm-getters.js` |
 | vm context global object identity/proxy semantics differ from Node | 1 | `parallel/test-vm-global-identity.js` |
 | vm context global property enumeration includes unexpected runtime globals | 1 | `parallel/test-vm-global-property-enumerator.js` |
-| vm context property descriptor behavior is incomplete for sandbox accessors | 1 | `parallel/test-vm-attributes-property-not-on-sandbox.js` |
 | vm context property forwarding and indexed descriptor behavior are incomplete | 1 | `parallel/test-vm-context-property-forwarding.js` |
 | vm context prototype chain and own-property lookup semantics are incomplete | 1 | `parallel/test-vm-global-property-prototype.js` |
 | vm contextification write-back and runInContext semantics are incomplete | 1 | `parallel/test-vm-context.js` |
 | vm contexts do not provide the expected per-context Proxy behavior | 1 | `parallel/test-vm-proxies.js` |
-| vm global getter/setter descriptors are not exposed correctly on contextified objects | 1 | `parallel/test-vm-global-setter.js` |
 | vm inherited sandbox property lookup/assignment semantics require contextified global proxy behavior | 1 | `parallel/test-vm-inherited_properties.js` |
 | vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype | 1 | `parallel/test-vm-symbols.js` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
