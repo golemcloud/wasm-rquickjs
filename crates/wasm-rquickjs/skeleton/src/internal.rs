@@ -4727,30 +4727,19 @@ fn parse_export_member(source: &str, pos: usize) -> Option<(String, usize)> {
 }
 
 fn parse_require_string(source: &str, pos: usize) -> Option<(String, usize)> {
-    let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("require")
-        || !is_ident_boundary(bytes, pos + 7)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 7);
-    if i >= bytes.len() || bytes[i] != b'(' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    let (specifier, next) = read_js_string(source, i)?;
-    i = skip_ws_comments(source, next);
-    if i < bytes.len() && bytes[i] == b')' {
-        Some((specifier, i + 1))
-    } else {
-        None
-    }
+    parse_require_call_string(source, pos, true)
 }
 
 fn parse_require_string_loose(source: &str, pos: usize) -> Option<(String, usize)> {
+    parse_require_call_string(source, pos, false)
+}
+
+fn parse_require_call_string(source: &str, pos: usize, require_free_start: bool) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
-    if !source[pos..].starts_with("require") || !is_ident_boundary(bytes, pos + 7) {
+    if (require_free_start && !is_free_ident_start(bytes, pos))
+        || !source[pos..].starts_with("require")
+        || !is_ident_boundary(bytes, pos + 7)
+    {
         return None;
     }
     let mut i = skip_ws_comments(source, pos + 7);
