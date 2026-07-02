@@ -3158,6 +3158,32 @@ function readLoaderIdentifier(source, pos) {
     return { name: source.substring(pos, i), end: i };
 }
 
+function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) {
+    const receiver = readLoaderIdentifier(source, pos);
+    if (receiver === null || receiver.name !== 'Object') return null;
+    let i = receiver.end;
+    const prototype = readLoaderDotMember(source, i, 'prototype');
+    if (prototype !== null) {
+        i = prototype;
+    } else if (requirePrototype) {
+        return null;
+    }
+    i = readLoaderDotMember(source, i, 'hasOwnProperty');
+    if (i === null) return null;
+    i = readLoaderDotMember(source, i, 'call');
+    if (i === null || source.charCodeAt(i) !== 0x28) return null;
+    i = skipWhitespaceAndComments(source, i + 1);
+    const target = readLoaderIdentifier(source, i);
+    if (target === null) return null;
+    i = skipWhitespaceAndComments(source, target.end);
+    if (source.charCodeAt(i) !== 0x2c) return null;
+    i = skipWhitespaceAndComments(source, i + 1);
+    if (!source.startsWith(key, i) || !hasIdentifierBoundary(source, i, i + key.length)) return null;
+    i = skipWhitespaceAndComments(source, i + key.length);
+    if (source.charCodeAt(i) !== 0x29) return null;
+    return { target: target.name, end: i + 1 };
+}
+
 function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
     if (!source.startsWith('if', pos) || !hasIdentifierBoundary(source, pos, pos + 2)) return null;
     let i = skipWhitespaceAndComments(source, pos + 2);
@@ -3182,24 +3208,8 @@ function readLoaderHasOwnPropertyKey(source, pos, key) {
     const receiver = readLoaderIdentifier(source, pos);
     if (receiver === null) return null;
     if (receiver.name === 'Object') {
-        let objectCall = receiver.end;
-        const prototype = readLoaderDotMember(source, objectCall, 'prototype');
-        if (prototype !== null) objectCall = prototype;
-        objectCall = readLoaderDotMember(source, objectCall, 'hasOwnProperty');
-        if (objectCall !== null) objectCall = readLoaderDotMember(source, objectCall, 'call');
-        if (objectCall !== null) {
-            if (source.charCodeAt(objectCall) !== 0x28) return null;
-            objectCall = skipWhitespaceAndComments(source, objectCall + 1);
-            const target = readLoaderIdentifier(source, objectCall);
-            if (target === null) return null;
-            objectCall = skipWhitespaceAndComments(source, target.end);
-            if (source.charCodeAt(objectCall) !== 0x2c) return null;
-            objectCall = skipWhitespaceAndComments(source, objectCall + 1);
-            if (!source.startsWith(key, objectCall) || !hasIdentifierBoundary(source, objectCall, objectCall + key.length)) return null;
-            objectCall = skipWhitespaceAndComments(source, objectCall + key.length);
-            if (source.charCodeAt(objectCall) !== 0x29) return null;
-            return objectCall + 1;
-        }
+        const objectCall = readLoaderObjectHasOwnPropertyCall(source, pos, key, false);
+        if (objectCall !== null) return objectCall.end;
     }
 
     let i = readLoaderDotMember(source, receiver.end, 'hasOwnProperty');
@@ -3212,23 +3222,8 @@ function readLoaderHasOwnPropertyKey(source, pos, key) {
 }
 
 function readLoaderExportsHasOwnPropertyKey(source, pos, key) {
-    const objectIdent = readLoaderIdentifier(source, pos);
-    if (objectIdent === null || objectIdent.name !== 'Object') return null;
-    let i = readLoaderDotMember(source, objectIdent.end, 'prototype');
-    if (i === null) return null;
-    i = readLoaderDotMember(source, i, 'hasOwnProperty');
-    if (i === null) return null;
-    i = readLoaderDotMember(source, i, 'call');
-    if (i === null || source.charCodeAt(i) !== 0x28) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith('exports', i) || !hasIdentifierBoundary(source, i, i + 7)) return null;
-    i = skipWhitespaceAndComments(source, i + 7);
-    if (source.charCodeAt(i) !== 0x2c) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith(key, i) || !hasIdentifierBoundary(source, i, i + key.length)) return null;
-    i = skipWhitespaceAndComments(source, i + key.length);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    return i + 1;
+    const objectCall = readLoaderObjectHasOwnPropertyCall(source, pos, key, true);
+    return objectCall !== null && objectCall.target === 'exports' ? objectCall.end : null;
 }
 
 function readLoaderDuplicateExportReturnGuard(source, pos, binding, key) {
