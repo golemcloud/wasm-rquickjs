@@ -1419,7 +1419,7 @@ fn cjs_named_import_error_module_source(ctx: &Ctx<'_>, filename: &str, source: &
 
 fn find_cjs_named_import_error(filename: &str, source: &str, conditions: &[String]) -> Option<String> {
     let mut result = None;
-    scan_code_positions(source, true, |i, _| {
+    let _ = scan_code_positions(source, true, |i, _| {
         if let Some((specifier, named_imports, next)) = parse_static_named_import(source, i) {
             if let Some(message) = cjs_named_import_error_message(filename, &specifier, &named_imports, conditions) {
                 result = Some(message);
@@ -2114,7 +2114,7 @@ fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String
 fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
     let mut found = false;
     let mut brace_depth = 0usize;
-    scan_code_positions(source, true, |i, byte| {
+    let _ = scan_code_positions(source, true, |i, byte| {
         match byte {
             b'{' => {
                 brace_depth += 1;
@@ -5478,7 +5478,7 @@ fn extract_for_each_callback_body(source: &str, start: usize, end: usize) -> Opt
 fn callback_has_transpiler_reexport(callback: &str, binding: &str, key: &str) -> bool {
     let mut found = false;
     let statement_starts = statement_starts(callback);
-    scan_code_positions_with_brace_depth(callback, true, |i, _, brace_depth| {
+    let _ = scan_code_positions_with_brace_depth(callback, true, |i, _, brace_depth| {
         if brace_depth != 0 {
             return ControlFlow::Continue(None);
         }
@@ -6117,7 +6117,7 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     let mut analysis = CjsExportAnalysis::default();
     let mut require_bindings = HashMap::<String, String>::new();
     let statement_starts = statement_starts(source);
-    scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
+    let _ = scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
         if let Some((name, next)) = parse_export_member(source, i) {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
@@ -6910,7 +6910,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
 
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
     let mut spans = Vec::new();
-    scan_code_positions(source, true, |i, _| {
+    let _ = scan_code_positions(source, true, |i, _| {
         if let Some(end) = parse_import_meta_main_span(source, i) {
             spans.push((i, end));
             ControlFlow::Continue(Some(end))
