@@ -4938,7 +4938,23 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             if next >= descriptor_end || bytes[next] != b':' {
                 return false;
             }
-            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
+            if matches!(found, Some(DescriptorNamedProperty::Value)) {
+                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
+                if cursor < descriptor_end {
+                    if bytes[cursor] != b',' {
+                        return false;
+                    }
+                    cursor = skip_ws_comments(descriptor, cursor + 1);
+                }
+                continue;
+            }
+            let value_start = skip_ws_comments(descriptor, next + 1);
+            if !descriptor[value_start..].starts_with("true")
+                || !is_ident_boundary(bytes, value_start + 4)
+            {
+                return false;
+            }
+            cursor = skip_ws_comments(descriptor, value_start + 4);
         } else {
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
                 cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
@@ -8355,6 +8371,7 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "valueThenComputed", { value: "good", ["value"]: "computed-wins" });
                 Object.defineProperty(exports, "valueThenShorthand", { value: "first", value });
                 Object.defineProperty(exports, "valueThenMethod", { value: "first", value() { return "method-value"; } });
+                Object.defineProperty(exports, "valueThenFalseEnumerable", { value: dep.value, enumerable: false });
                 if (false) Object.defineProperty(exports, "objectMemberDescriptor", { value: "bad" }.descriptor);
                 if (false) Object.defineProperty(exports, "objectPlusDescriptor", { value: "bad" } + suffix);
             "#,
@@ -8837,6 +8854,8 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "setterOnly", { set(v) { return dep.value; } });
                 Object.defineProperty(exports, "unrelated", { other: function () { return dep.value; } });
                 Object.defineProperty(exports, "regexDescriptor", { enumerable: /value:/ });
+                Object.defineProperty(exports, "hiddenGetter", { enumerable: false, get() { return dep.value; } });
+                Object.defineProperty(exports, "truthyEnumerableGetter", { enumerable: 1, get() { return dep.value; } });
                 Object.defineProperty(exports, "multipleReturn", { get() { return dep.value; return dynamic(); } });
                 Object.defineProperty(exports, "conditionalReturn", { get() { if (dep) return dep.value; return dynamic(); } });
             "#,
