@@ -829,9 +829,7 @@ fn rewrite_dynamic_import_call(
     let bytes = source.as_bytes();
     let len = bytes.len();
     let mut i = open_paren + 1;
-    while i < len && bytes[i].is_ascii_whitespace() {
-        i += 1;
-    }
+    i = skip_ws_comments(source, i);
     if i >= len || (bytes[i] != b'"' && bytes[i] != b'\'') {
         return rewrite_dynamic_import_expression_call(source, open_paren);
     }
@@ -840,9 +838,7 @@ fn rewrite_dynamic_import_call(
         read_closed_import_specifier_literal(source, i)?;
     i = spec_literal_end;
 
-    while i < len && bytes[i].is_ascii_whitespace() {
-        i += 1;
-    }
+    i = skip_ws_comments(source, i);
 
     if i < len && bytes[i] == b')' {
         return Some((

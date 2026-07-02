@@ -1576,9 +1576,10 @@ export const testCjsDynamicImportAttributeScanner = async () => {
             '  const imported = await import("./data.json", { with: { type: "json" } });',
             '  const spaced = await import ("./data.json", { with: { type: "json" } });',
             '  const commented = await import /* scanner comment */ ("./data.json", { with: { type: "json" } });',
+            '  const commentedInside = await import( /* inside call */ "./data.json" /* before options */, { with: { type: "json" } });',
             '  const templateImported = await `${(await import("./data.json", { with: { type: "json" } })).default.fromCjs}`;',
             '  const nested = await import((await import("./name.json", { with: { type: "json" } })).default.name, { with: { type: "json" } });',
-            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), json: imported.default, spaced: spaced.default, commented: commented.default, templateImported, nested: nested.default };',
+            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), json: imported.default, spaced: spaced.default, commented: commented.default, commentedInside: commentedInside.default, templateImported, nested: nested.default };',
             '};',
         ].join('\n'));
         fs.writeFileSync('/cjs-dynamic-import-attr-scanner/name.json', '{"name":"./data.json"}');
@@ -1599,6 +1600,7 @@ export const testCjsDynamicImportAttributeScanner = async () => {
         assert.deepStrictEqual(value.json, { fromCjs: true });
         assert.deepStrictEqual(value.spaced, { fromCjs: true });
         assert.deepStrictEqual(value.commented, { fromCjs: true });
+        assert.deepStrictEqual(value.commentedInside, { fromCjs: true });
         assert.strictEqual(value.templateImported, 'true');
         assert.deepStrictEqual(value.nested, { fromCjs: true });
         return true;
