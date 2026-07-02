@@ -1205,6 +1205,16 @@ function resolvePackageSelfReference(parts, parentDir, conditions) {
     return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, scope.pkgJsonPath, conditions);
 }
 
+function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions) {
+    const packageJsonEntry = readPackageJson(pkgJsonPath);
+    if (packageJsonEntry === null) return null;
+    const pkg = packageJsonEntry.pkg;
+    return {
+        pkg,
+        exportsResolved: resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions),
+    };
+}
+
 function readCjsPackageCandidate(filename, packageDir) {
     const content = tryReadFile(filename);
     return content === null ? null : { filename, content, packageDir };
@@ -4187,14 +4197,12 @@ function resolveEsmPackageForLoader(id, parentDir, parentFilename, conditions) {
     for (let i = 0; i < dirs.length; i++) {
         const pkgDir = pathModule.join(dirs[i], parts.name);
         const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
-        const packageJsonEntry = readPackageJson(pkgJsonPath);
-        if (packageJsonEntry === null) continue;
+        const packageEntry = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
+        if (packageEntry === null) continue;
 
-        const pkg = packageJsonEntry.pkg;
-        const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, pkg, pkgJsonPath, conditions);
-        if (exportsResolved !== undefined) {
-            if (exportsResolved.builtin) return { url: exportsResolved.builtin };
-            return resultForPackageFile(exportsResolved.filename);
+        if (packageEntry.exportsResolved !== undefined) {
+            if (packageEntry.exportsResolved.builtin) return { url: packageEntry.exportsResolved.builtin };
+            return resultForPackageFile(packageEntry.exportsResolved.filename);
         }
 
         if (hasSubpath) {
@@ -4703,12 +4711,11 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
         let pkg = null;
 
         try {
-            const packageJsonEntry = readPackageJson(pkgJsonPath);
-            if (packageJsonEntry !== null) {
-                pkg = packageJsonEntry.pkg;
-                const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, pkg, pkgJsonPath, conditions);
-                if (exportsResolved !== undefined) {
-                    return exportsResolved;
+            const packageEntry = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
+            if (packageEntry !== null) {
+                pkg = packageEntry.pkg;
+                if (packageEntry.exportsResolved !== undefined) {
+                    return packageEntry.exportsResolved;
                 }
             }
         } catch (e) {

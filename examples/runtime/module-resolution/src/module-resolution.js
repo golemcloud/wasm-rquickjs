@@ -6313,6 +6313,12 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         fs.writeFileSync(`${root}/node_modules/no-exports-cjs/subdir/index.js`, 'module.exports = { value: "directory" };');
         fs.writeFileSync(`${root}/node_modules/no-exports-cjs/sp%20ce.js`, 'module.exports = { value: "encoded" };');
         fs.writeFileSync(`${root}/node_modules/no-exports-cjs/native.node`, 'not a native addon');
+        fs.mkdirSync(`${root}/node_modules/exports-blocks-cjs`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/exports-blocks-cjs/package.json`, JSON.stringify({
+            exports: './public.js',
+        }));
+        fs.writeFileSync(`${root}/node_modules/exports-blocks-cjs/public.js`, 'module.exports = { value: "public" };');
+        fs.writeFileSync(`${root}/node_modules/exports-blocks-cjs/private.js`, 'module.exports = { value: "private" };');
         fs.mkdirSync(`${root}/node_modules/native-main`, { recursive: true });
         fs.writeFileSync(`${root}/node_modules/native-main/package.json`, JSON.stringify({ main: 'addon' }));
         fs.writeFileSync(`${root}/node_modules/native-main/addon.node`, 'not a native addon');
@@ -6324,6 +6330,8 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         assert.deepStrictEqual(require('no-exports-cjs/sp%20ce.js'), { value: 'encoded' });
         assert.throws(() => require('no-exports-cjs/empty-dir'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => require('no-exports-cjs/native'), { code: 'ERR_DLOPEN_FAILED', message: /native\.node/ });
+        assert.deepStrictEqual(require('exports-blocks-cjs'), { value: 'public' });
+        assert.throws(() => require('exports-blocks-cjs/private.js'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
         assert.throws(() => require('native-main'), { code: 'ERR_DLOPEN_FAILED', message: /addon\.node/ });
         assert.throws(() => require('native-index'), { code: 'ERR_DLOPEN_FAILED', message: /index\.node/ });
 
