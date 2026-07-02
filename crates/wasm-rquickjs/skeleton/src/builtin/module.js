@@ -2811,6 +2811,20 @@ function loaderDescriptorPropertyName(source, pos) {
     return { name: ident.name, quoted: false, end: ident.end };
 }
 
+function readLoaderDescriptorObject(source, start, end) {
+    const descriptorStart = skipWhitespaceAndComments(source, start);
+    if (source.charCodeAt(descriptorStart) !== 0x7b) return null;
+    const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
+    if (descriptorEnd < 0 || descriptorEnd > end) return null;
+    return { cursor: skipWhitespaceAndComments(source, descriptorStart + 1), end: descriptorEnd };
+}
+
+function nextLoaderDescriptorEntry(source, cursor, descriptorEnd) {
+    if (cursor >= descriptorEnd) return descriptorEnd;
+    if (source.charCodeAt(cursor) !== 0x2c) return null;
+    return skipWhitespaceAndComments(source, cursor + 1);
+}
+
 function loaderDescriptorFunctionGetterEnd(source, pos, descriptorEnd) {
     if (!source.startsWith('function', pos) || !hasIdentifierBoundary(source, pos, pos + 8)) return null;
     let next = skipWhitespaceAndComments(source, pos + 8);
@@ -2826,12 +2840,11 @@ function loaderDescriptorFunctionGetterEnd(source, pos, descriptorEnd) {
 }
 
 function loaderDescriptorHasNamedProperty(source, start, end) {
-    const descriptorStart = skipWhitespaceAndComments(source, start);
-    if (source.charCodeAt(descriptorStart) !== 0x7b) return false;
-    const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
-    if (descriptorEnd < 0 || descriptorEnd > end) return false;
+    const descriptor = readLoaderDescriptorObject(source, start, end);
+    if (descriptor === null) return false;
     let foundKind = null;
-    let cursor = skipWhitespaceAndComments(source, descriptorStart + 1);
+    let cursor = descriptor.cursor;
+    const descriptorEnd = descriptor.end;
     while (cursor < descriptorEnd) {
         if (source.charCodeAt(cursor) === 0x2c) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
@@ -2841,10 +2854,8 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
         if (source.charCodeAt(cursor) === 0x5b) {
             if (foundKind === 'value') {
                 cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, cursor, descriptorEnd));
-                if (cursor < descriptorEnd) {
-                    if (source.charCodeAt(cursor) !== 0x2c) return false;
-                    cursor = skipWhitespaceAndComments(source, cursor + 1);
-                }
+                cursor = nextLoaderDescriptorEntry(source, cursor, descriptorEnd);
+                if (cursor === null) return false;
                 continue;
             }
             return false;
@@ -2903,10 +2914,8 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
                 return false;
             }
         }
-        if (cursor < descriptorEnd) {
-            if (source.charCodeAt(cursor) !== 0x2c) return false;
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-        }
+        cursor = nextLoaderDescriptorEntry(source, cursor, descriptorEnd);
+        if (cursor === null) return false;
     }
     return foundKind !== null;
 }
@@ -3321,13 +3330,12 @@ function loaderDynamicReexportGetterBody(source, paramsOpen, limit, binding, key
 }
 
 function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, key) {
-    const descriptorStart = skipWhitespaceAndComments(source, start);
-    if (source.charCodeAt(descriptorStart) !== 0x7b) return false;
-    const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
-    if (descriptorEnd < 0 || descriptorEnd > end) return false;
+    const descriptor = readLoaderDescriptorObject(source, start, end);
+    if (descriptor === null) return false;
     let seenEnumerable = false;
     let found = false;
-    let cursor = skipWhitespaceAndComments(source, descriptorStart + 1);
+    let cursor = descriptor.cursor;
+    const descriptorEnd = descriptor.end;
     while (cursor < descriptorEnd) {
         if (source.charCodeAt(cursor) === 0x2c) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
@@ -3369,10 +3377,8 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
         } else {
             return false;
         }
-        if (cursor < descriptorEnd) {
-            if (source.charCodeAt(cursor) !== 0x2c) return false;
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-        }
+        cursor = nextLoaderDescriptorEntry(source, cursor, descriptorEnd);
+        if (cursor === null) return false;
     }
     return found && seenEnumerable;
 }
