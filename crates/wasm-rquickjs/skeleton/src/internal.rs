@@ -2226,15 +2226,9 @@ fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
 
         if brace_depth == 0 {
             for keyword in ["const", "let"] {
-                if source[i..].starts_with(keyword)
-                    && is_ident_start_boundary(bytes, i)
-                    && is_ident_boundary(bytes, i + keyword.len())
-                {
-                    let next = skip_ws_comments(source, i + keyword.len());
-                    if source[next..].starts_with("require")
-                        && is_ident_start_boundary(bytes, next)
-                        && is_ident_boundary(bytes, next + 7)
-                    {
+                if let Some(keyword_end) = parse_ident_name(source, i, keyword) {
+                    let next = skip_ws_comments(source, keyword_end);
+                    if parse_ident_name(source, next, "require").is_some() {
                         if !is_create_require_import_meta_url_declaration(source, next) {
                             found = true;
                             return ControlFlow::Break(());
@@ -5899,14 +5893,10 @@ fn parse_define_property_reexport(source: &str, pos: usize, binding: &str, key: 
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with(key)
-        || !is_ident_boundary(bytes, i + key.len())
-    {
+    let Some(key_end) = parse_free_ident_name(source, i, key) else {
         return None;
-    }
-    let next = i + key.len();
-    i = skip_ws_comments(source, next);
+    };
+    i = skip_ws_comments(source, key_end);
     if i >= bytes.len() || bytes[i] != b',' {
         return None;
     }
@@ -6005,24 +5995,18 @@ fn getter_body_returns_binding_key(body: &str, binding: &str, key: &str) -> bool
         return false;
     };
     i = skip_ws_comments(body, return_end);
-    if !body[i..].starts_with(binding)
-        || !is_free_ident_start(bytes, i)
-        || !is_ident_boundary(bytes, i + binding.len())
-    {
+    let Some(binding_end) = parse_free_ident_name(body, i, binding) else {
         return false;
-    }
-    i = skip_ws_comments(body, i + binding.len());
+    };
+    i = skip_ws_comments(body, binding_end);
     if i >= bytes.len() || bytes[i] != b'[' {
         return false;
     }
     i = skip_ws_comments(body, i + 1);
-    if !body[i..].starts_with(key)
-        || !is_free_ident_start(bytes, i)
-        || !is_ident_boundary(bytes, i + key.len())
-    {
+    let Some(key_end) = parse_free_ident_name(body, i, key) else {
         return false;
-    }
-    i = skip_ws_comments(body, i + key.len());
+    };
+    i = skip_ws_comments(body, key_end);
     if i >= bytes.len() || bytes[i] != b']' {
         return false;
     }
