@@ -1197,6 +1197,29 @@ function resolvePackageSelfReference(parts, parentDir, conditions) {
     return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, scope.pkgJsonPath, conditions);
 }
 
+function readCjsPackageCandidate(filename, packageDir) {
+    const content = tryReadFile(filename);
+    return content === null ? null : { filename, content, packageDir };
+}
+
+function readCjsPackageFileCandidates(candidate, packageDir) {
+    let resolved = readCjsPackageCandidate(candidate, packageDir);
+    if (resolved !== null) return resolved;
+    resolved = readCjsPackageCandidate(candidate + '.js', packageDir);
+    if (resolved !== null) return resolved;
+    resolved = readCjsPackageCandidate(candidate + '.json', packageDir);
+    if (resolved !== null) return resolved;
+    return readCjsPackageCandidate(candidate + '.node', packageDir);
+}
+
+function readCjsPackageIndexCandidates(candidate, packageDir) {
+    let resolved = readCjsPackageCandidate(pathModule.join(candidate, 'index.js'), packageDir);
+    if (resolved !== null) return resolved;
+    resolved = readCjsPackageCandidate(pathModule.join(candidate, 'index.json'), packageDir);
+    if (resolved !== null) return resolved;
+    return readCjsPackageCandidate(pathModule.join(candidate, 'index.node'), packageDir);
+}
+
 const packageScopeCache = Object.create(null);
 
 function findPackageScope(startDir) {
@@ -4649,35 +4672,15 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
         // If there's a subpath, try resolving it relative to the package directory
         if (hasSubpath) {
             const subCandidate = pathModule.join(pkgDir, parts.subpath);
-            // Try exact subpath
-            let content = tryReadFile(subCandidate);
-            if (content !== null) return { filename: subCandidate, content: content, packageDir: pkgDir };
-            // Try with extensions
-            content = tryReadFile(subCandidate + '.js');
-            if (content !== null) return { filename: subCandidate + '.js', content: content, packageDir: pkgDir };
-            content = tryReadFile(subCandidate + '.json');
-            if (content !== null) return { filename: subCandidate + '.json', content: content, packageDir: pkgDir };
-            content = tryReadFile(subCandidate + '.node');
-            if (content !== null) return { filename: subCandidate + '.node', content: content, packageDir: pkgDir };
+            // Try exact subpath, then extension fallbacks.
+            let resolved = readCjsPackageFileCandidates(subCandidate, pkgDir);
+            if (resolved !== null) return resolved;
             // Try as directory
-            content = tryReadFile(pathModule.join(subCandidate, 'index.js'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.js'), content: content, packageDir: pkgDir };
-            content = tryReadFile(pathModule.join(subCandidate, 'index.json'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.json'), content: content, packageDir: pkgDir };
-            content = tryReadFile(pathModule.join(subCandidate, 'index.node'));
-            if (content !== null) return { filename: pathModule.join(subCandidate, 'index.node'), content: content, packageDir: pkgDir };
+            resolved = readCjsPackageIndexCandidates(subCandidate, pkgDir);
+            if (resolved !== null) return resolved;
         } else {
-            let content = tryReadFile(pkgDir);
-            if (content !== null) return { filename: pkgDir, content: content, packageDir: pkgDir };
-
-            content = tryReadFile(pkgDir + '.js');
-            if (content !== null) return { filename: pkgDir + '.js', content: content, packageDir: pkgDir };
-
-            content = tryReadFile(pkgDir + '.json');
-            if (content !== null) return { filename: pkgDir + '.json', content: content, packageDir: pkgDir };
-
-            content = tryReadFile(pkgDir + '.node');
-            if (content !== null) return { filename: pkgDir + '.node', content: content, packageDir: pkgDir };
+            const resolved = readCjsPackageFileCandidates(pkgDir, pkgDir);
+            if (resolved !== null) return resolved;
         }
 
         const candidate = pkgDir;
@@ -4687,19 +4690,10 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
             try {
                 if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string') {
                     const mainPath = pathModule.resolve(candidate, pkg.main);
-                    const mainCandidates = [
-                        mainPath,
-                        mainPath + '.js',
-                        mainPath + '.json',
-                        mainPath + '.node',
-                        pathModule.join(mainPath, 'index.js'),
-                        pathModule.join(mainPath, 'index.json'),
-                        pathModule.join(mainPath, 'index.node'),
-                    ];
-                    for (let m = 0; m < mainCandidates.length; m++) {
-                        const content = tryReadFile(mainCandidates[m]);
-                        if (content !== null) return { filename: mainCandidates[m], content: content, packageDir: pkgDir };
-                    }
+                    let resolved = readCjsPackageFileCandidates(mainPath, pkgDir);
+                    if (resolved !== null) return resolved;
+                    resolved = readCjsPackageIndexCandidates(mainPath, pkgDir);
+                    if (resolved !== null) return resolved;
                 }
             } catch (e) {
                 const fromPart = parentFilename || parentDir;
@@ -4714,17 +4708,8 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
         }
 
         // Try as directory: index.js / index.json
-        const indexJs = pathModule.join(candidate, 'index.js');
-        let content = tryReadFile(indexJs);
-        if (content !== null) return { filename: indexJs, content: content, packageDir: pkgDir };
-
-        const indexJson = pathModule.join(candidate, 'index.json');
-        content = tryReadFile(indexJson);
-        if (content !== null) return { filename: indexJson, content: content, packageDir: pkgDir };
-
-        const indexNode = pathModule.join(candidate, 'index.node');
-        content = tryReadFile(indexNode);
-        if (content !== null) return { filename: indexNode, content: content, packageDir: pkgDir };
+        const indexResolved = readCjsPackageIndexCandidates(candidate, pkgDir);
+        if (indexResolved !== null) return indexResolved;
 
     }
     return null;
