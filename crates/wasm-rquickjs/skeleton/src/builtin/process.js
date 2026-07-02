@@ -672,14 +672,11 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning', {
     value: function emitPackageDeprecationWarning(message, code, key) {
-        if (code === 'DEP0155') {
-            const warningKey = String(code) + ':' + String(key || message);
-            const seenWarnings = globalThis.__wasm_rquickjs_package_deprecation_warnings ||
-                (globalThis.__wasm_rquickjs_package_deprecation_warnings = Object.create(null));
-            if (seenWarnings[warningKey]) return;
-            seenWarnings[warningKey] = true;
+        if (process.noDeprecation) {
+            return false;
         }
         process.emitWarning(message, 'DeprecationWarning', code);
+        return true;
     },
     configurable: false,
     enumerable: false,

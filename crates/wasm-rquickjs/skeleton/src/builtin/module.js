@@ -728,14 +728,20 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
 }
 
 let packageDeprecationWarningsSuppressed = 0;
+const packageDeprecationWarnings = Object.create(null);
 
 function emitPackageDeprecationWarning(message, code, key) {
     if (packageDeprecationWarningsSuppressed > 0) return;
+    const warningKey = code === 'DEP0155' ? String(code) + ':' + String(key || message) : null;
+    if (warningKey && packageDeprecationWarnings[warningKey]) return;
     const emitWarning = globalThis.__wasm_rquickjs_emit_package_deprecation_warning;
     if (typeof emitWarning !== 'function') {
         throw new Error('Internal package deprecation warning emitter is not initialized');
     }
-    emitWarning(message, code, key);
+    const emitted = emitWarning(message, code, key);
+    if (warningKey && emitted !== false) {
+        packageDeprecationWarnings[warningKey] = true;
+    }
 }
 
 function withSuppressedPackageDeprecationWarnings(callback) {

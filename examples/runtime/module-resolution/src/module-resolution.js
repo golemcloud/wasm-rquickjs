@@ -202,6 +202,20 @@ export const testEsmPackageMapEdgeCases = async () => {
             writeImportEntry('/esm-package-map-edge-app/folder-pattern-trailing-subpath.mjs', 'exported-pkg/folder-pattern/foo/');
             writeImportEntry('/esm-package-map-edge-app/tamper-pattern-slash-subpath.mjs', 'exported-pkg/tamper-pattern-slash/');
             globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings = 100;
+            globalThis.__wasm_rquickjs_package_deprecation_warnings = {
+                'DEP0155:/esm-package-map-edge-app/node_modules/exported-pkg:./tamper-pattern-slash/': true,
+            };
+            const originalNoDeprecation = process.noDeprecation;
+            try {
+                process.noDeprecation = true;
+                globalThis.__wasm_rquickjs_emit_package_deprecation_warning(
+                    'fake package warning',
+                    'DEP0155',
+                    '/esm-package-map-edge-app/node_modules/exported-pkg:./tamper-pattern-slash/',
+                );
+            } finally {
+                process.noDeprecation = originalNoDeprecation;
+            }
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/deprecated-double-subpath.mjs')).default.default, { public: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/pattern-slash-subpath.mjs')).default.default, { patternSlash: true });
             assert.deepStrictEqual((await import('/esm-package-map-edge-app/trailing-pattern-slash-subpath.mjs')).default.default, { trailingPattern: true });
@@ -211,6 +225,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             await new Promise((resolve) => process.nextTick(resolve));
         } finally {
             delete globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings;
+            delete globalThis.__wasm_rquickjs_package_deprecation_warnings;
             process.removeListener('warning', onPackageWarning);
         }
         assert.deepStrictEqual(packageWarnings.map((warning) => warning.code), ['DEP0166', 'DEP0166', 'DEP0155', 'DEP0155', 'DEP0155']);

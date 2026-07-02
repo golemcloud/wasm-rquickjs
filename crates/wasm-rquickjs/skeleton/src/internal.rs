@@ -3056,6 +3056,10 @@ struct NodePackageWarning {
     dedupe_key: Option<String>,
 }
 
+thread_local! {
+    static NODE_PACKAGE_DEPRECATION_WARNINGS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
 struct NodeModulesResolver;
 
 enum NodePackageResolveMode {
@@ -4384,7 +4388,24 @@ fn emit_node_package_deprecation_warnings<'js>(
     };
     for warning in warnings {
         let key = warning.dedupe_key.as_deref().unwrap_or(warning.message.as_str());
-        let _: Value = emit_package_warning.call((warning.message.as_str(), warning.code, key))?;
+        let warning_key = if warning.code == "DEP0155" {
+            Some(format!("{}:{}", warning.code, key))
+        } else {
+            None
+        };
+        if let Some(warning_key) = warning_key.as_deref()
+            && NODE_PACKAGE_DEPRECATION_WARNINGS.with(|seen| seen.borrow().contains(warning_key))
+        {
+            continue;
+        }
+        let emitted: bool = emit_package_warning.call((warning.message.as_str(), warning.code, key))?;
+        if emitted
+            && let Some(warning_key) = warning_key
+        {
+            NODE_PACKAGE_DEPRECATION_WARNINGS.with(|seen| {
+                seen.borrow_mut().insert(warning_key);
+            });
+        }
     }
     Ok(())
 }
