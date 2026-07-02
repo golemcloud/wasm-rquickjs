@@ -5536,21 +5536,12 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
 
 fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<String, String>) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("Object")
-        || !is_ident_boundary(bytes, pos + 6)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 6);
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "Object")?);
     if i >= bytes.len() || bytes[i] != b'.' {
         return None;
     }
     i = skip_ws_comments(source, i + 1);
-    if !source[i..].starts_with("keys") || !is_ident_boundary(bytes, i + 4) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 4);
+    i = skip_ws_comments(source, parse_ident_name(source, i, "keys")?);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
@@ -5566,10 +5557,8 @@ fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<Strin
         return None;
     }
     let for_each_pos = skip_ws_comments(source, after_keys + 1);
-    if !source[for_each_pos..].starts_with("forEach") || !is_ident_boundary(bytes, for_each_pos + 7) {
-        return None;
-    }
-    let end = find_matching_paren(source, for_each_pos + 7).unwrap_or(for_each_pos + 7);
+    let for_each_end = parse_ident_name(source, for_each_pos, "forEach")?;
+    let end = find_matching_paren(source, for_each_end).unwrap_or(for_each_end);
     let (callback_key, callback_body) = extract_for_each_callback_body(source, for_each_pos, end)?;
     if callback_has_transpiler_reexport(callback_body, &binding, &callback_key) {
         Some((specifier, end + 1))
@@ -5582,13 +5571,7 @@ fn extract_for_each_callback_body(source: &str, start: usize, end: usize) -> Opt
     let bytes = source.as_bytes();
     let call_open = source[start..end].find('(')? + start;
     let mut i = skip_ws_comments(source, call_open + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with("function")
-        || !is_ident_boundary(bytes, i + 8)
-    {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 8);
+    i = skip_ws_comments(source, parse_free_ident_name(source, i, "function")?);
     if i < end && is_ident_start(bytes[i]) {
         let (_, next) = read_ident(source, i)?;
         i = skip_ws_comments(source, next);
