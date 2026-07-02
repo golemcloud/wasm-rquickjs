@@ -2379,6 +2379,7 @@ function skipNonCode(source, pos, skipRegex) {
 function scanSourceCodePositions(source, options, visitor) {
     const skipRegex = !options || options.skipRegex !== false;
     let i = 0;
+    let previousCode = -1;
     while (i < source.length) {
         const skipped = skipNonCode(source, i, skipRegex);
         if (skipped !== null) {
@@ -2386,8 +2387,10 @@ function scanSourceCodePositions(source, options, visitor) {
             continue;
         }
 
-        const next = visitor(i, source.charCodeAt(i));
+        const code = source.charCodeAt(i);
+        const next = visitor(i, code, previousCode);
         if (next === false) return false;
+        if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) previousCode = code;
         if (typeof next === 'number') {
             i = next;
         } else {
@@ -3704,11 +3707,11 @@ function collectStaticEsmSpecifiers(source) {
 function collectLiteralRequireSpecifiers(source, names) {
     names = names || ['require'];
     const specifiers = [];
-    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
+    scanSourceCodePositions(source, { skipRegex: true }, (i, _, previousCode) => {
         for (let n = 0; n < names.length; n++) {
             const name = names[n];
-            if (startsWithKeywordAt(source, name, i) && previousSignificantChar(source, i) !== 0x2e) {
-                const open = skipWhitespace(source, i + name.length);
+            if (startsWithKeywordAt(source, name, i) && previousCode !== 0x2e) {
+                const open = skipWhitespaceAndComments(source, i + name.length);
                 if (source.charCodeAt(open) === 0x28) {
                     const spec = readStaticSpecifierString(source, open + 1);
                     if (spec) specifiers.push(spec.value);
@@ -3720,26 +3723,66 @@ function collectLiteralRequireSpecifiers(source, names) {
     return specifiers;
 }
 
+function collectCreateRequireNamesFromImport(source, pos, end) {
+    let i = skipWhitespaceAndComments(source, pos + 6);
+    if (source.charCodeAt(i) !== 0x7b) return null;
+    const namedEnd = loaderFindMatchingBrace(source, i);
+    if (namedEnd < 0 || namedEnd > end) return null;
+
+    let afterNamed = skipWhitespaceAndComments(source, namedEnd + 1);
+    const fromEnd = readLoaderNamedIdentifier(source, afterNamed, 'from');
+    if (fromEnd === null) return null;
+    afterNamed = skipWhitespaceAndComments(source, fromEnd);
+    const spec = readStaticSpecifierString(source, afterNamed);
+    if (spec === null || spec.end > end || (spec.value !== 'module' && spec.value !== 'node:module')) return null;
+
+    const names = [];
+    let cursor = skipWhitespaceAndComments(source, i + 1);
+    while (cursor < namedEnd) {
+        if (source.charCodeAt(cursor) === 0x2c) {
+            cursor = skipWhitespaceAndComments(source, cursor + 1);
+            continue;
+        }
+        let importedName;
+        const quote = source.charCodeAt(cursor);
+        if (quote === 0x27 || quote === 0x22) {
+            const decoded = decodeStringLiteral(source, cursor + 1, quote);
+            if (decoded === null) return names;
+            importedName = decoded.value;
+            cursor = skipWhitespaceAndComments(source, decoded.end + 1);
+        } else {
+            const imported = readLoaderIdentifier(source, cursor);
+            if (imported === null) return names;
+            importedName = imported.name;
+            cursor = skipWhitespaceAndComments(source, imported.end);
+        }
+
+        let local = importedName;
+        const asEnd = readLoaderNamedIdentifier(source, cursor, 'as');
+        if (asEnd !== null) {
+            cursor = skipWhitespaceAndComments(source, asEnd);
+            const alias = readLoaderIdentifier(source, cursor);
+            if (alias === null) return names;
+            local = alias.name;
+            cursor = skipWhitespaceAndComments(source, alias.end);
+        } else if (quote === 0x27 || quote === 0x22) {
+            return names;
+        }
+
+        if (importedName === 'createRequire') names.push(local);
+        if (cursor < namedEnd && source.charCodeAt(cursor) !== 0x2c) return names;
+    }
+    return names;
+}
+
 function collectCreateRequireFactoryNames(source) {
     const names = [];
     scanSourceCodePositions(source, { skipRegex: false }, (i) => {
         if (startsWithKeywordAt(source, 'import', i)) {
             const end = statementEndForStaticImport(source, i + 6);
-            const statement = source.slice(i, end);
-            if (/from\s*['"](?:node:)?module['"]/.test(statement)) {
-                const m = statement.match(/\{([\s\S]*?)\}/);
-                if (m) {
-                    const parts = m[1].split(',');
-                    for (let p = 0; p < parts.length; p++) {
-                        const part = parts[p].trim();
-                        const alias = part.match(/^createRequire\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/);
-                        if (alias) {
-                            names.push(alias[1]);
-                        } else if (part === 'createRequire') {
-                            names.push('createRequire');
-                        }
-                    }
-                }
+            const parsed = collectCreateRequireNamesFromImport(source, i, end);
+            if (parsed !== null) {
+                for (let p = 0; p < parsed.length; p++) names.push(parsed[p]);
             }
             return end;
         }
@@ -3755,17 +3798,17 @@ function collectCreateRequireAliases(source, factoryNames) {
     scanSourceCodePositions(source, { skipRegex: false }, (i) => {
         const declarationEnd = readVariableDeclarationKeyword(source, i);
         if (declarationEnd !== null) {
-            let p = skipWhitespace(source, declarationEnd);
-            const identMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(p));
-            if (identMatch) {
-                const name = identMatch[0];
-                p = skipWhitespace(source, p + name.length);
+            let p = skipWhitespaceAndComments(source, declarationEnd);
+            const ident = readLoaderIdentifier(source, p);
+            if (ident !== null) {
+                const name = ident.name;
+                p = skipWhitespaceAndComments(source, ident.end);
                 if (source.charCodeAt(p) === 0x3d) {
-                    p = skipWhitespace(source, p + 1);
+                    p = skipWhitespaceAndComments(source, p + 1);
                     for (let f = 0; f < factoryNames.length; f++) {
                         const factory = factoryNames[f];
                         if (startsWithKeywordAt(source, factory, p)) {
-                            const open = skipWhitespace(source, p + factory.length);
+                            const open = skipWhitespaceAndComments(source, p + factory.length);
                             if (source.charCodeAt(open) === 0x28) {
                                 aliases.push(name);
                             }
@@ -3783,15 +3826,15 @@ function collectCreateRequireCallSpecifiers(source, factoryNames) {
     factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
     const specifiers = [];
     if (factoryNames.length === 0) return specifiers;
-    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
+    scanSourceCodePositions(source, { skipRegex: true }, (i, _, previousCode) => {
         for (let f = 0; f < factoryNames.length; f++) {
             const factory = factoryNames[f];
-            if (startsWithKeywordAt(source, factory, i) && previousSignificantChar(source, i) !== 0x2e) {
-                const firstOpen = skipWhitespace(source, i + factory.length);
+            if (startsWithKeywordAt(source, factory, i) && previousCode !== 0x2e) {
+                const firstOpen = skipWhitespaceAndComments(source, i + factory.length);
                 if (source.charCodeAt(firstOpen) === 0x28) {
-                    const firstClose = source.indexOf(')', firstOpen + 1);
-                    if (firstClose !== -1) {
-                        const secondOpen = skipWhitespace(source, firstClose + 1);
+                    const firstClose = loaderFindMatchingParen(source, firstOpen);
+                    if (firstClose >= 0) {
+                        const secondOpen = skipWhitespaceAndComments(source, firstClose + 1);
                         if (source.charCodeAt(secondOpen) === 0x28) {
                             const spec = readStaticSpecifierString(source, secondOpen + 1);
                             if (spec) specifiers.push(spec.value);

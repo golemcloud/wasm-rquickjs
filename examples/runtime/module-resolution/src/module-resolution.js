@@ -6250,6 +6250,30 @@ export const testRequireEsmCycleGuards = async () => {
             'export const value = 2;',
             'export { cycleCode };',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/commented-alias.mjs', [
+            'import { createRequire /* comment */ as makeRequire } from "node:module";',
+            'const require = makeRequire /* comment */ (import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("./commented-alias.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export const value = 3;',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/string-name-alias.mjs', [
+            'import { "createRequire" as makeRequire } from "node:module";',
+            'const require = makeRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("./string-name-alias.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export const value = 4;',
+            'export { cycleCode };',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-cycle-app/main.cjs');
@@ -6263,6 +6287,12 @@ export const testRequireEsmCycleGuards = async () => {
             const detected = require('/require-esm-cycle-app/syntax-detected.js');
             assert.strictEqual(detected.value, 2);
             assert.strictEqual(detected.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const commentedAlias = require('/require-esm-cycle-app/commented-alias.mjs');
+            assert.strictEqual(commentedAlias.value, 3);
+            assert.strictEqual(commentedAlias.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const stringNameAlias = require('/require-esm-cycle-app/string-name-alias.mjs');
+            assert.strictEqual(stringNameAlias.value, 4);
+            assert.strictEqual(stringNameAlias.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
         } finally {
             Array.prototype[Symbol.iterator] = arrayIterator;
         }
