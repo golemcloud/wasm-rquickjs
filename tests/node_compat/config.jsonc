@@ -9244,7 +9244,7 @@
     "parallel/test-vm-sigint-existing-handler.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },
     "parallel/test-vm-sigint.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },
     "parallel/test-vm-source-map-url.js": { "category": "runnable" },
-    "parallel/test-vm-strict-assign.js": { "category": "known-gap", "reason": "contextified assignment semantics for strict/non-strict writes to non-writable globals are incorrect" },
+    "parallel/test-vm-strict-assign.js": { "category": "known-gap", "reason": "strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message" },
     "parallel/test-vm-strict-mode.js": { "category": "runnable" },
     "parallel/test-vm-symbols.js": { "category": "known-gap", "reason": "vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype" },
     "parallel/test-vm-syntax-error-message.js": { "category": "runnable" },

@@ -797,6 +797,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | promisified exec()/execFile() rejection errors miss stdout/stderr fields | 2 | `parallel/test-child-process-promisified.js#block_04_block_04`, `parallel/test-child-process-promisified.js#block_05_block_05` |
 | requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_async_resolve_hook_registered` |
 | spawn() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01` |
+| strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message | 2 | `parallel/test-vm-global-non-writable-properties.js`, `parallel/test-vm-strict-assign.js` |
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
 | vm timeout interrupt is surfaced as a wasm trap instead of ERR_SCRIPT_EXECUTION_TIMEOUT | 2 | `parallel/test-vm-timeout.js`, `sequential/test-vm-timeout-rethrow.js` |
@@ -1031,7 +1032,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | common/gc onGC callback tracking is not implemented in the WASM test shim | 1 | `parallel/test-primitive-timer-leak.js` |
 | console.* does not publish diagnostics_channel events yet | 1 | `parallel/test-console-diagnostics-channels.js` |
 | contextCodeGeneration/codeGeneration options do not block string eval with the expected EvalError | 1 | `parallel/test-vm-codegen.js#block_01_block_01` |
-| contextified assignment semantics for strict/non-strict writes to non-writable globals are incorrect | 1 | `parallel/test-vm-strict-assign.js` |
 | contextified global proxy identity/property fallback semantics are incomplete | 1 | `parallel/test-vm-property-not-on-sandbox.js` |
 | createContext incorrectly triggers Proxy getOwnPropertyDescriptor traps | 1 | `parallel/test-vm-proxy-failure-CP.js` |
 | decoding empty-passphrase encrypted PEM traps in the WASM crypto backend | 1 | `parallel/test-crypto-keygen-empty-passphrase-no-prompt.js` |
@@ -1276,7 +1276,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream.finished() behavior for destroyed IncomingMessage is not Node-compatible | 1 | `parallel/test-http-client-finished.js` |
 | stream.write()/console.log tick scheduling is not fully Node-compatible | 1 | `parallel/test-stream-writable-samecb-singletick.js` |
 | stream/web compression constructor error codes are not Node-compatible yet | 1 | `parallel/test-whatwg-webstreams-compression.js` |
-| strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message | 1 | `parallel/test-vm-global-non-writable-properties.js` |
 | subtle.digest unsupported-algorithm error semantics do not match Node | 1 | `parallel/test-webcrypto-digest.js` |
 | timeout option does not reliably emit request timeout before close | 1 | `parallel/test-http-client-timeout-option.js` |
 | timers/promises scheduler constructor and error-code semantics are not fully Node-compatible | 1 | `parallel/test-timers-promises-scheduler.js` |
