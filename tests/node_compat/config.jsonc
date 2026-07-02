@@ -9176,7 +9176,7 @@
     "parallel/test-vm-global-setter.js": { "category": "known-gap", "reason": "vm global getter/setter descriptors are not exposed correctly on contextified objects" },
     "parallel/test-vm-harmony-symbols.js": { "category": "known-gap", "reason": "per-context Symbol/global binding behavior is incomplete in vm contexts" },
     "parallel/test-vm-indexed-properties.js": { "category": "known-gap", "reason": "indexed property definitions on vm globals do not propagate to the sandbox" },
-    "parallel/test-vm-inherited_properties.js": { "category": "known-gap", "reason": "runInNewContext own-vs-inherited property assignment semantics are incomplete" },
+    "parallel/test-vm-inherited_properties.js": { "category": "known-gap", "reason": "vm inherited sandbox property lookup/assignment semantics require contextified global proxy behavior" },
     "parallel/test-vm-is-context.js": { "category": "runnable" },
     "parallel/test-vm-low-stack-space.js": { "category": "known-gap", "reason": "stack-overflow recovery around vm.runInThisContext/runInNewContext traps in WASM" },
     "parallel/test-vm-measure-memory-lazy.js": {
@@ -9246,7 +9246,7 @@
     "parallel/test-vm-source-map-url.js": { "category": "runnable" },
     "parallel/test-vm-strict-assign.js": { "category": "known-gap", "reason": "contextified assignment semantics for strict/non-strict writes to non-writable globals are incorrect" },
     "parallel/test-vm-strict-mode.js": { "category": "known-gap", "reason": "strict-mode assignment semantics in vm contexts differ from Node" },
-    "parallel/test-vm-symbols.js": { "category": "known-gap", "reason": "runInContext does not preserve symbol/prototype property access on contextified objects" },
+    "parallel/test-vm-symbols.js": { "category": "known-gap", "reason": "vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype" },
     "parallel/test-vm-syntax-error-message.js": { "category": "runnable" },
     "parallel/test-vm-syntax-error-stderr.js": { "category": "runnable" },
     "parallel/test-vm-timeout-escape-promise-2.js": { "category": "known-gap", "reason": "timeout enforcement with microtaskMode='afterEvaluate' is incomplete" },
