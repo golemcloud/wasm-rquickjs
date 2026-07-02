@@ -1238,6 +1238,48 @@ function readCjsPackageIndexCandidates(candidate, packageDir) {
     return readCjsPackageCandidate(pathModule.join(candidate, 'index.node'), packageDir);
 }
 
+function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause) {
+    const pkgErr = new Error(
+        'Invalid package config ' + pkgJsonPath +
+        ' while importing "' + id + '" from ' + fromPart + '.' +
+        (cause && cause.message ? ' ' + cause.message : '')
+    );
+    pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
+    return pkgErr;
+}
+
+function resolveCjsPackageMain(pkgDir, pkg, pkgJsonPath, id, fromPart) {
+    if (pkg === null || !Object.prototype.hasOwnProperty.call(pkg, 'main') || typeof pkg.main !== 'string') {
+        return null;
+    }
+
+    try {
+        const mainPath = pathModule.resolve(pkgDir, pkg.main);
+        let resolved = readCjsPackageFileCandidates(mainPath, pkgDir);
+        if (resolved !== null) return resolved;
+        return readCjsPackageIndexCandidates(mainPath, pkgDir);
+    } catch (e) {
+        throw makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, e);
+    }
+}
+
+function resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, fromPart) {
+    if (parts.subpath.length > 0) {
+        const subCandidate = pathModule.join(pkgDir, parts.subpath);
+        let resolved = readCjsPackageFileCandidates(subCandidate, pkgDir);
+        if (resolved !== null) return resolved;
+        return readCjsPackageIndexCandidates(subCandidate, pkgDir);
+    }
+
+    let resolved = readCjsPackageFileCandidates(pkgDir, pkgDir);
+    if (resolved !== null) return resolved;
+
+    resolved = resolveCjsPackageMain(pkgDir, pkg, pkgJsonPath, id, fromPart);
+    if (resolved !== null) return resolved;
+
+    return readCjsPackageIndexCandidates(pkgDir, pkgDir);
+}
+
 const packageScopeCache = Object.create(null);
 
 function findPackageScope(startDir) {
@@ -4720,7 +4762,6 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
 
     // Split into package name and subpath for packages with subpath specifiers
     const parts = splitPackageName(id);
-    const hasSubpath = parts.subpath.length > 0;
 
     const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions);
     if (selfResolved !== undefined) {
@@ -4744,57 +4785,11 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
             if (e && e.code) {
                 throw e;
             }
-            const fromPart = parentFilename || parentDir;
-            const pkgErr = new Error(
-                'Invalid package config ' + pkgJsonPath +
-                ' while importing "' + id + '" from ' + fromPart + '.' +
-                (e.message ? ' ' + e.message : '')
-            );
-            pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
-            throw pkgErr;
+            throw makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, parentFilename || parentDir, e);
         }
 
-        // If there's a subpath, try resolving it relative to the package directory
-        if (hasSubpath) {
-            const subCandidate = pathModule.join(pkgDir, parts.subpath);
-            // Try exact subpath, then extension fallbacks.
-            let resolved = readCjsPackageFileCandidates(subCandidate, pkgDir);
-            if (resolved !== null) return resolved;
-            // Try as directory
-            resolved = readCjsPackageIndexCandidates(subCandidate, pkgDir);
-            if (resolved !== null) return resolved;
-        } else {
-            const resolved = readCjsPackageFileCandidates(pkgDir, pkgDir);
-            if (resolved !== null) return resolved;
-        }
-
-        const candidate = pkgDir;
-
-        // Try as directory: check package.json "main" field
-        if (pkg !== null) {
-            try {
-                if (Object.prototype.hasOwnProperty.call(pkg, 'main') && typeof pkg.main === 'string') {
-                    const mainPath = pathModule.resolve(candidate, pkg.main);
-                    let resolved = readCjsPackageFileCandidates(mainPath, pkgDir);
-                    if (resolved !== null) return resolved;
-                    resolved = readCjsPackageIndexCandidates(mainPath, pkgDir);
-                    if (resolved !== null) return resolved;
-                }
-            } catch (e) {
-                const fromPart = parentFilename || parentDir;
-                const pkgErr = new Error(
-                    'Invalid package config ' + pkgJsonPath +
-                    ' while importing "' + id + '" from ' + fromPart + '.' +
-                    (e.message ? ' ' + e.message : '')
-                );
-                pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
-                throw pkgErr;
-            }
-        }
-
-        // Try as directory: index.js / index.json
-        const indexResolved = readCjsPackageIndexCandidates(candidate, pkgDir);
-        if (indexResolved !== null) return indexResolved;
+        const fallbackResolved = resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, parentFilename || parentDir);
+        if (fallbackResolved !== null) return fallbackResolved;
 
     }
     return null;
