@@ -4571,7 +4571,7 @@ fn is_ident_start_boundary(source: &[u8], pos: usize) -> bool {
 }
 
 fn is_free_ident_start(source: &[u8], pos: usize) -> bool {
-    is_ident_start_boundary(source, pos) && (pos == 0 || source[pos - 1] != b'.')
+    is_ident_start_boundary(source, pos) && (pos == 0 || !matches!(source[pos - 1], b'.' | b'#'))
 }
 
 fn skip_ws_comments(source: &str, pos: usize) -> usize {
@@ -8697,6 +8697,9 @@ mod cjs_export_analyzer_tests {
             None,
         );
         assert_cjs_global("const x = 0,\n  require = 1;\nexport default require;", None);
+        assert_cjs_global("class C { #require = 1; get() { return this.#require; } } export default C;", None);
+        assert_cjs_global("class C { #exports = 1; get() { return this.#exports; } } export default C;", None);
+        assert_cjs_global("class C { #module = 1; get() { return this.#module; } } export default C;", None);
         assert_cjs_global(
             "export default { require() { return 1; }, f(module) { return module; } }.f(2);",
             None,
@@ -8868,6 +8871,14 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "truthyEnumerableGetter", { enumerable: 1, get() { return dep.value; } });
                 Object.defineProperty(exports, "multipleReturn", { get() { return dep.value; return dynamic(); } });
                 Object.defineProperty(exports, "conditionalReturn", { get() { if (dep) return dep.value; return dynamic(); } });
+                class PrivateNames {
+                    #exports = {};
+                    #module = { exports: {} };
+                    write() {
+                        this.#exports.privateExport = 1;
+                        this.#module.exports.privateModuleExport = 1;
+                    }
+                }
             "#,
             false,
             &[],
