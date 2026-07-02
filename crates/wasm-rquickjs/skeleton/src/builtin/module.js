@@ -2644,15 +2644,17 @@ function decodeStringLiteral(source, start, quote) {
 }
 
 function readLoaderCjsExportTarget(source, pos, allowBareExports) {
-    const previous = previousSignificantChar(source, pos);
-    if (previous === 0x2e || previous === 0x23) return null;
     let i = pos;
     const exportsEnd = readLoaderNamedIdentifier(source, i, 'exports');
     if (allowBareExports !== false && exportsEnd !== null) {
+        const previous = previousSignificantChar(source, pos);
+        if (previous === 0x2e || previous === 0x23) return null;
         i = exportsEnd;
     } else {
         const moduleEnd = readLoaderNamedIdentifier(source, i, 'module');
         if (moduleEnd === null) return null;
+        const previous = previousSignificantChar(source, pos);
+        if (previous === 0x2e || previous === 0x23) return null;
         i = skipWhitespaceAndComments(source, moduleEnd);
         if (source.charCodeAt(i) !== 0x2e) return null;
         i = skipWhitespaceAndComments(source, i + 1);
@@ -3018,12 +3020,12 @@ function loaderGetterBodyEnd(source, paramsOpen, limit) {
 }
 
 function readLoaderDefinePropertyCall(source, pos, rejectMemberAccess) {
+    const objectEnd = readLoaderNamedIdentifier(source, pos, 'Object');
+    if (objectEnd === null) return null;
     if (rejectMemberAccess) {
         const previous = previousSignificantChar(source, pos);
         if (previous === 0x2e || previous === 0x23) return null;
     }
-    const objectEnd = readLoaderNamedIdentifier(source, pos, 'Object');
-    if (objectEnd === null) return null;
     let i = skipWhitespaceAndComments(source, objectEnd);
     if (source.charCodeAt(i) !== 0x2e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
