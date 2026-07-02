@@ -3094,6 +3094,12 @@ enum CjsAnalysisPackageFallbackStep {
     RootDirectory,
 }
 
+enum CjsAnalysisDirectoryFallbackStep {
+    RootFile,
+    PackageMain,
+    RootDirectory,
+}
+
 impl NodeModulesResolver {
     fn try_resolve(
         &self,
@@ -3370,17 +3376,23 @@ impl NodeModulesResolver {
     ) -> Option<String> {
         match step {
             CjsAnalysisPackageFallbackStep::RootFile => {
-                subpath
-                    .is_empty()
-                    .then(|| Self::resolve_cjs_analysis_package_root_file(package_path))
-                    .flatten()
+                subpath.is_empty().then(|| {
+                    Self::resolve_cjs_analysis_directory_fallback_step(
+                        CjsAnalysisDirectoryFallbackStep::RootFile,
+                        package_path,
+                        package,
+                    )
+                }).flatten()
             }
             CjsAnalysisPackageFallbackStep::PackageMain => {
                 if !subpath.is_empty() {
                     return None;
                 }
-                let main = package.and_then(|package| package.main.as_ref())?;
-                Self::resolve_cjs_analysis_file_or_directory(package_path, main)
+                Self::resolve_cjs_analysis_directory_fallback_step(
+                    CjsAnalysisDirectoryFallbackStep::PackageMain,
+                    package_path,
+                    package,
+                )
             }
             CjsAnalysisPackageFallbackStep::Subpath => {
                 if subpath.is_empty() {
@@ -3390,10 +3402,13 @@ impl NodeModulesResolver {
                 }
             }
             CjsAnalysisPackageFallbackStep::RootDirectory => {
-                subpath
-                    .is_empty()
-                    .then(|| Self::resolve_cjs_analysis_package_root_directory(package_path))
-                    .flatten()
+                subpath.is_empty().then(|| {
+                    Self::resolve_cjs_analysis_directory_fallback_step(
+                        CjsAnalysisDirectoryFallbackStep::RootDirectory,
+                        package_path,
+                        package,
+                    )
+                }).flatten()
             }
         }
     }
@@ -3639,26 +3654,51 @@ impl NodeModulesResolver {
         ])
     }
 
+    fn resolve_cjs_analysis_directory_fallback_step(
+        step: CjsAnalysisDirectoryFallbackStep,
+        directory_path: &std::path::Path,
+        package: Option<&PackageJson>,
+    ) -> Option<String> {
+        match step {
+            CjsAnalysisDirectoryFallbackStep::RootFile => {
+                Self::resolve_cjs_analysis_package_root_file(directory_path)
+            }
+            CjsAnalysisDirectoryFallbackStep::PackageMain => {
+                let main = package.and_then(|package| package.main.as_ref())?;
+                Self::resolve_cjs_analysis_file_or_directory(directory_path, main)
+            }
+            CjsAnalysisDirectoryFallbackStep::RootDirectory => {
+                Self::resolve_cjs_analysis_package_root_directory(directory_path)
+            }
+        }
+    }
+
     fn resolve_cjs_analysis_relative(target_path: &std::path::Path) -> Option<String> {
-        if let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(target_path) {
+        if let Some(resolved) = Self::resolve_cjs_analysis_directory_fallback_step(
+            CjsAnalysisDirectoryFallbackStep::RootFile,
+            target_path,
+            None,
+        ) {
             return Some(resolved);
         }
 
-        if target_path.is_dir() {
-            let pkg_path = target_path.join("package.json");
-            match Self::read_package_json_optional(&pkg_path) {
-                Ok(Some(package)) => {
-                    if let Some(main) = package.main.as_ref()
-                        && let Some(resolved) = Self::resolve_cjs_analysis_file_or_directory(target_path, main)
-                    {
-                        return Some(resolved);
-                    }
-                }
-                Ok(None) => {}
-                Err(_) => return None,
-            }
+        if !target_path.is_dir() {
+            return None;
+        }
 
-            if let Some(resolved) = Self::resolve_cjs_analysis_package_root_directory(target_path) {
+        let pkg_path = target_path.join("package.json");
+        let package = match Self::read_package_json_optional(&pkg_path) {
+            Ok(package) => package,
+            Err(_) => return None,
+        };
+        let steps = [
+            CjsAnalysisDirectoryFallbackStep::PackageMain,
+            CjsAnalysisDirectoryFallbackStep::RootDirectory,
+        ];
+        for step in steps {
+            if let Some(resolved) =
+                Self::resolve_cjs_analysis_directory_fallback_step(step, target_path, package.as_deref())
+            {
                 return Some(resolved);
             }
         }
