@@ -4278,6 +4278,21 @@ export const testVmMainContextDefaultLoader = async () => {
                 [hiddenName]: { marker: hiddenName },
             })), hiddenName);
         }
+        const baselineGlobalSandbox = {};
+        assert.strictEqual(vm.runInNewContext('Object.defineProperty(this, "encodeURI", { value: 42, configurable: true }); "ok"', baselineGlobalSandbox), 'ok');
+        assert.strictEqual(baselineGlobalSandbox.encodeURI, 42);
+        const baselineGlobalDescriptor = Object.getOwnPropertyDescriptor(baselineGlobalSandbox, 'encodeURI');
+        assert.strictEqual(baselineGlobalDescriptor.value, 42);
+        assert.strictEqual(baselineGlobalDescriptor.configurable, true);
+        const untouchedGlobalSandbox = {};
+        assert.strictEqual(vm.runInNewContext('1 + 1', untouchedGlobalSandbox), 2);
+        assert.strictEqual(Object.hasOwn(untouchedGlobalSandbox, 'encodeURI'), false);
+        const deletedBaselineGlobalSandbox = vm.createContext({});
+        assert.strictEqual(vm.runInContext('delete this.encodeURI', deletedBaselineGlobalSandbox), true);
+        assert.strictEqual(vm.runInContext('typeof encodeURI', deletedBaselineGlobalSandbox), 'undefined');
+        assert.strictEqual(vm.runInContext('this.encodeURI = 7; encodeURI', deletedBaselineGlobalSandbox), 7);
+        assert.strictEqual(deletedBaselineGlobalSandbox.encodeURI, 7);
+        assert.strictEqual(vm.runInContext('encodeURI', deletedBaselineGlobalSandbox), 7);
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);

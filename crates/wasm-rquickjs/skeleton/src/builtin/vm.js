@@ -7,6 +7,7 @@ import * as pathModule from 'node:path';
 let contextIdCounter = 1;
 const contextIds = new WeakMap();
 const contextOptions = new WeakMap();
+const contextDeletedGlobals = new WeakMap();
 const identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
 const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
@@ -1087,10 +1088,14 @@ function createIndirectEvalSource(code) {
     return '(0, eval)(' + JSON.stringify(code) + ')';
 }
 
-function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelperName, symbolHelperName) {
+function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelperName, symbolHelperName, deletedGlobalKeys) {
     const sandboxKeyLiterals = [];
     for (let i = 0; i < sandboxKeys.length; i++) {
         sandboxKeyLiterals.push(JSON.stringify(sandboxKeys[i]));
+    }
+    const deletedGlobalKeyLiterals = [];
+    for (let i = 0; i < deletedGlobalKeys.length; i++) {
+        deletedGlobalKeyLiterals.push(JSON.stringify(deletedGlobalKeys[i]));
     }
     return '(() => {' +
         'const __wasm_rquickjs_vm_Object = ({}).constructor;' +
@@ -1099,11 +1104,17 @@ function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelper
         'const __wasm_rquickjs_vm_symbols_of = __wasm_rquickjs_vm_Object.getOwnPropertySymbols;' +
         'const __wasm_rquickjs_vm_get_desc = __wasm_rquickjs_vm_Object.getOwnPropertyDescriptor;' +
         'const __wasm_rquickjs_vm_define = __wasm_rquickjs_vm_Object.defineProperty;' +
+        'const __wasm_rquickjs_vm_is = __wasm_rquickjs_vm_Object.is;' +
+        'const __wasm_rquickjs_vm_same_desc = (__wasm_rquickjs_vm_a, __wasm_rquickjs_vm_b) => __wasm_rquickjs_vm_a === __wasm_rquickjs_vm_b || (__wasm_rquickjs_vm_a !== undefined && __wasm_rquickjs_vm_b !== undefined && __wasm_rquickjs_vm_is(__wasm_rquickjs_vm_a.value, __wasm_rquickjs_vm_b.value) && __wasm_rquickjs_vm_is(__wasm_rquickjs_vm_a.get, __wasm_rquickjs_vm_b.get) && __wasm_rquickjs_vm_is(__wasm_rquickjs_vm_a.set, __wasm_rquickjs_vm_b.set) && __wasm_rquickjs_vm_a.writable === __wasm_rquickjs_vm_b.writable && __wasm_rquickjs_vm_a.enumerable === __wasm_rquickjs_vm_b.enumerable && __wasm_rquickjs_vm_a.configurable === __wasm_rquickjs_vm_b.configurable);' +
         'const __wasm_rquickjs_vm_descriptors = ' + (descriptorHelperName ? 'globalThis[' + JSON.stringify(descriptorHelperName) + ']' : 'undefined') + ';' +
         (descriptorHelperName ? 'delete globalThis[' + JSON.stringify(descriptorHelperName) + '];' : '') +
         'const __wasm_rquickjs_vm_symbol_bindings = ' + (symbolHelperName ? 'globalThis[' + JSON.stringify(symbolHelperName) + ']' : 'undefined') + ';' +
         (symbolHelperName ? 'delete globalThis[' + JSON.stringify(symbolHelperName) + '];' : '') +
         'const __wasm_rquickjs_vm_sandbox_key_list = [' + sandboxKeyLiterals.join(',') + '];' +
+        'const __wasm_rquickjs_vm_deleted_global_list = [' + deletedGlobalKeyLiterals.join(',') + '];' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_deleted_global_list.length; __wasm_rquickjs_vm_i++) {' +
+        'delete globalThis[__wasm_rquickjs_vm_deleted_global_list[__wasm_rquickjs_vm_i]];' +
+        '}' +
         'if (__wasm_rquickjs_vm_descriptors !== undefined) {' +
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_key_list.length; __wasm_rquickjs_vm_i++) {' +
         'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_sandbox_key_list[__wasm_rquickjs_vm_i];' +
@@ -1125,7 +1136,8 @@ function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelper
         'const __wasm_rquickjs_vm_baseline = __wasm_rquickjs_vm_create(null);' +
         'const __wasm_rquickjs_vm_baseline_keys = __wasm_rquickjs_vm_names_of(globalThis);' +
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_baseline_keys.length; __wasm_rquickjs_vm_i++) {' +
-        '__wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_baseline_keys[__wasm_rquickjs_vm_i]] = true;' +
+        'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_baseline_keys[__wasm_rquickjs_vm_i];' +
+        '__wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_key] = __wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key);' +
         '}' +
         'const __wasm_rquickjs_vm_sandbox_keys = __wasm_rquickjs_vm_create(null);' +
         'const __wasm_rquickjs_vm_represented_sandbox_keys = __wasm_rquickjs_vm_create(null);' +
@@ -1156,14 +1168,22 @@ function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelper
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_keys.length; __wasm_rquickjs_vm_i++) {' +
         'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_keys[__wasm_rquickjs_vm_i];' +
         (helperName ? 'if (__wasm_rquickjs_vm_key === ' + JSON.stringify(helperName) + ') continue;' : '') +
-        'if (!__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key] && __wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_key]) continue;' +
-        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, true, __wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key)];' +
+        'const __wasm_rquickjs_vm_desc = __wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key);' +
+        'if (!__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key] && __wasm_rquickjs_vm_same_desc(__wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_key], __wasm_rquickjs_vm_desc)) continue;' +
+        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, true, __wasm_rquickjs_vm_desc];' +
+        '}' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_baseline_keys.length; __wasm_rquickjs_vm_i++) {' +
+        'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_baseline_keys[__wasm_rquickjs_vm_i];' +
+        'if (__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key]) continue;' +
+        'if (__wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key) === undefined) {' +
+        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, false, undefined, true];' +
+        '}' +
         '}' +
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_key_list.length; __wasm_rquickjs_vm_i++) {' +
         'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_sandbox_key_list[__wasm_rquickjs_vm_i];' +
         'if (!__wasm_rquickjs_vm_represented_sandbox_keys[__wasm_rquickjs_vm_key]) continue;' +
         'if (__wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key) === undefined) {' +
-        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, false, undefined];' +
+        '__wasm_rquickjs_vm_updates[__wasm_rquickjs_vm_updates.length] = [__wasm_rquickjs_vm_key, false, undefined, false];' +
         '}' +
         '}' +
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_symbol_list.length; __wasm_rquickjs_vm_i++) {' +
@@ -1189,13 +1209,26 @@ function applySandboxUpdates(sandbox, evaluation) {
         return result;
     }
     const updates = evaluation[2];
+    let deletedGlobals = contextDeletedGlobals.get(sandbox);
     for (let i = 0; i < updates.length; i++) {
         const update = updates[i];
         try {
             if (update[1]) {
                 defineProperty(sandbox, update[0], update[2]);
+                if (deletedGlobals) {
+                    delete deletedGlobals[update[0]];
+                }
             } else {
                 delete sandbox[update[0]];
+                if (update[3]) {
+                    if (!deletedGlobals) {
+                        deletedGlobals = Object.create(null);
+                        contextDeletedGlobals.set(sandbox, deletedGlobals);
+                    }
+                    deletedGlobals[update[0]] = true;
+                } else if (deletedGlobals) {
+                    delete deletedGlobals[update[0]];
+                }
             }
         } catch (_writeBackError) {
             if (!ok) throw result;
@@ -1236,9 +1269,12 @@ function evalCodeInNewContext(code, sandbox, helperName) {
     let descriptorHelperName;
     let symbolHelperName;
 
+    let deletedGlobalKeys = [];
+
     if (sandbox && typeof sandbox === 'object') {
         const bindings = collectSandboxBindings(sandbox);
         sandboxKeys = bindings.keys;
+        deletedGlobalKeys = bindings.deletedGlobalKeys;
         for (let i = 0; i < bindings.keys.length; i++) {
             keys.push(bindings.keys[i]);
             values.push(bindings.values[i]);
@@ -1259,7 +1295,7 @@ function evalCodeInNewContext(code, sandbox, helperName) {
         values.push(globalThis[helperName]);
     }
 
-    return applySandboxUpdates(sandbox, evalInNewContext(createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelperName, symbolHelperName), keys, values));
+    return applySandboxUpdates(sandbox, evalInNewContext(createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelperName, symbolHelperName, deletedGlobalKeys), keys, values));
 }
 
 function createContextForRunInNewContext(sandbox) {
@@ -1380,7 +1416,7 @@ function evalCodeInContext(code, context, helperName) {
         values.push(globalThis[helperName]);
     }
 
-    return applySandboxUpdates(context, evalInNewContext(createSandboxEvalSource(code, helperName, bindings.keys, descriptorHelperName, symbolHelperName), keys, values));
+    return applySandboxUpdates(context, evalInNewContext(createSandboxEvalSource(code, helperName, bindings.keys, descriptorHelperName, symbolHelperName, bindings.deletedGlobalKeys), keys, values));
 }
 
 export function runInThisContext(code, options) {
@@ -1602,6 +1638,8 @@ function collectSandboxBindings(sandbox) {
     const descriptors = Object.create(null);
     const keys = Object.getOwnPropertyNames(sandbox);
     const values = [];
+    const deletedGlobals = contextDeletedGlobals.get(sandbox);
+    const deletedGlobalKeys = deletedGlobals ? Object.getOwnPropertyNames(deletedGlobals).filter((key) => keys.indexOf(key) === -1) : [];
     for (let i = 0; i < keys.length; i++) {
         const descriptor = Object.getOwnPropertyDescriptor(sandbox, keys[i]);
         descriptors[keys[i]] = descriptor;
@@ -1612,7 +1650,7 @@ function collectSandboxBindings(sandbox) {
     for (let i = 0; i < symbolKeys.length; i++) {
         symbolDescriptors.push(Object.getOwnPropertyDescriptor(sandbox, symbolKeys[i]));
     }
-    return { keys, values, descriptors, symbolKeys, symbolDescriptors };
+    return { keys, values, descriptors, symbolKeys, symbolDescriptors, deletedGlobalKeys };
 }
 
 function finalizeCompileFunction(fn, code, params, options) {

@@ -1105,7 +1105,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs/promises FileHandle.readableWebStream support is missing or incomplete | 1 | `parallel/test-filehandle-readablestream.js` |
 | global performance object lacks Node perf_hooks API surface | 1 | `parallel/test-performance-global.js` |
 | global process/Buffer accessor setter semantics are incomplete | 1 | `parallel/test-global-setters.js` |
-| global property descriptor/interceptor behavior in vm contexts is incomplete | 1 | `parallel/test-vm-global-property-interceptors.js` |
 | global web streams and node:stream/web exports are inconsistent | 1 | `parallel/test-global-webstreams.js` |
 | globalThis shape differs from Node.js | 1 | `parallel/test-global.js` |
 | half-open/pipelined HTTP/1.1 server behavior is not fully Node-compatible | 1 | `parallel/test-http-server.js` |
@@ -1304,6 +1303,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm contextification write-back and runInContext semantics are incomplete | 1 | `parallel/test-vm-context.js` |
 | vm contexts do not provide the expected per-context Proxy behavior | 1 | `parallel/test-vm-proxies.js` |
 | vm inherited sandbox property lookup/assignment semantics require contextified global proxy behavior | 1 | `parallel/test-vm-inherited_properties.js` |
+| vm non-configurable global redefine throws QuickJS wording instead of Node's Cannot redefine property message | 1 | `parallel/test-vm-global-property-interceptors.js` |
 | vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype | 1 | `parallel/test-vm-symbols.js` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
