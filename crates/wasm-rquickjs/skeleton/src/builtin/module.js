@@ -5215,6 +5215,49 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return loader.initializing;
     };
 
+    function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
+        if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
+            return { url: specifier };
+        }
+        if (specifier.startsWith('file://')) {
+            return resultForEsmFileUrl(new URL(specifier));
+        }
+        const parentFilename = parentFilenameForLoaderResolve(parentURL, baseUrl);
+        if (specifier.startsWith('/')) {
+            if (parentFilename === null && !allowRootedWithoutFileParent) {
+                if (missingAsUndefined) return undefined;
+                throw makeEsmModuleNotFoundError(specifier);
+            }
+            return resultForEsmFileUrl(new URL(normalizeLoaderResolvedUrl(specifier)));
+        }
+
+        if (publicBuiltinWithoutSchemeSet.has(specifier)) {
+            return { url: 'node:' + specifier };
+        }
+        if (parentFilename !== null && isRelativeOrAbsoluteSpecifier(specifier)) {
+            return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
+        }
+
+        if (parentFilename !== null && specifier.startsWith('#')) {
+            const resolved = resolvePackageImports(specifier, pathModule.dirname(parentFilename), conditionsForLoaderResolve(context));
+            if (resolved && resolved.builtin) return { url: resolved.builtin };
+            if (resolved && resolved.filename) {
+                return { url: nodeUrl.pathToFileURL(resolved.filename).href, format: resolved.filename.endsWith('.json') ? 'json' : undefined };
+            }
+        }
+
+        if (parentFilename !== null) {
+            const resolved = resolveEsmPackageForLoader(specifier, pathModule.dirname(parentFilename), parentFilename, conditionsForLoaderResolve(context));
+            if (resolved) return resolved;
+            if (missingAsUndefined) return undefined;
+            throw makeEsmModuleNotFoundError(specifier);
+        }
+        if (missingAsUndefined) return undefined;
+
+        let url = globalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
+        return { url: normalizeLoaderResolvedUrl(url) };
+    }
+
     globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(baseUrl, specifier, attrs, mode) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
@@ -5245,47 +5288,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             parentURL: String(baseUrl),
         };
 
-        function resolveEsmDefaultForLoader(specifier, parentURL, context) {
-            if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
-                return { url: specifier };
-            }
-            if (specifier.startsWith('file://')) {
-                return resultForEsmFileUrl(new URL(specifier));
-            }
-            if (specifier.startsWith('/')) {
-                return resultForEsmFileUrl(new URL(normalizeLoaderResolvedUrl(specifier)));
-            }
-
-            const parentFilename = parentFilenameForLoaderResolve(parentURL, baseUrl);
-            if (publicBuiltinWithoutSchemeSet.has(specifier)) {
-                return { url: 'node:' + specifier };
-            }
-            if (parentFilename !== null && isRelativeOrAbsoluteSpecifier(specifier)) {
-                return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
-            }
-
-            if (parentFilename !== null && specifier.startsWith('#')) {
-                const resolved = resolvePackageImports(specifier, pathModule.dirname(parentFilename), conditionsForLoaderResolve(context));
-                if (resolved && resolved.builtin) return { url: resolved.builtin };
-                if (resolved && resolved.filename) {
-                    return { url: nodeUrl.pathToFileURL(resolved.filename).href, format: resolved.filename.endsWith('.json') ? 'json' : undefined };
-                }
-            }
-
-            if (parentFilename !== null) {
-                const resolved = resolveEsmPackageForLoader(specifier, pathModule.dirname(parentFilename), parentFilename, conditionsForLoaderResolve(context));
-                if (resolved) return resolved;
-                throw makeEsmModuleNotFoundError(specifier);
-            }
-
-            let url = globalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
-            return { url: normalizeLoaderResolvedUrl(url) };
-        }
-
         const defaultResolve = async (nextSpecifier, context) => {
             const specifierString = String(nextSpecifier);
             const parentURL = context && context.parentURL ? String(context.parentURL) : String(baseUrl);
-            return resolveEsmDefaultForLoader(specifierString, parentURL, context);
+            return resolveEsmDefaultForLoader(specifierString, parentURL, context, baseUrl, false, true);
         };
 
         const runResolve = async (index, nextSpecifier, context) => {
@@ -5450,6 +5456,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (isBuiltin(specifierString)) {
                 return { url: 'node:' + specifierString, format: isImportMode ? undefined : 'builtin' };
             }
+            if (isImportMode) {
+                return resolveEsmDefaultForLoader(specifierString, parentURL, context, baseContext.parentURL, true, false);
+            }
             let parentFilename = null;
             if (parentURL.startsWith('file://')) {
                 parentFilename = nodeUrl.fileURLToPath(parentURL);
@@ -5457,31 +5466,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 parentFilename = parentURL;
             }
             const parentDir = parentFilename ? pathModule.dirname(parentFilename) : '/';
-            if (isImportMode) {
-                if (specifierString.startsWith('data:')) return { url: specifierString };
-                if (specifierString.startsWith('file://')) return resultForEsmFileUrl(new URL(specifierString));
-                if (parentFilename && isRelativeOrAbsoluteSpecifier(specifierString)) {
-                    return resultForRelativeOrAbsoluteSpecifier(specifierString, parentURL);
-                }
-                if (specifierString.startsWith('#') && parentFilename) {
-                    const importsResolved = resolvePackageImports(specifierString, parentDir, conditionsForLoaderResolve(baseContext));
-                    if (importsResolved.builtin) return { url: importsResolved.builtin };
-                    return { url: nodeUrl.pathToFileURL(importsResolved.filename).href, format: importsResolved.filename.endsWith('.json') ? 'json' : undefined };
-                }
-                if (parentFilename) {
-                    const resolved = resolveEsmPackageForLoader(specifierString, parentDir, parentFilename, conditionsForLoaderResolve(baseContext));
-                    if (resolved) return resolved;
-                }
-                return undefined;
-            }
             if (specifierString.startsWith('file://')) {
                 const filename = nodeUrl.fileURLToPath(specifierString);
                 const source = tryReadFile(filename);
                 if (source === null) return undefined;
                 return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : 'commonjs', source };
-            }
-            if (isImportMode && specifierString.startsWith('/')) {
-                return resultForEsmFileUrl(new URL(normalizeLoaderResolvedUrl(specifierString)));
             }
             if (specifierString === '.' || specifierString === '..' || specifierString.startsWith('./') || specifierString.startsWith('../') || specifierString.startsWith('/')) {
                 const resolved = resolveFilename(specifierString, parentDir);

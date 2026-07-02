@@ -1182,12 +1182,38 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
     try {
         const root = '/static-loader-absolute-entry-app';
         fs.mkdirSync(root, { recursive: true });
+        fs.mkdirSync(`${root}/node_modules/static-condition-pkg`, { recursive: true });
         fs.writeFileSync(`${root}/entry.mjs`, 'export default true;');
+        fs.writeFileSync(
+            `${root}/node_modules/static-condition-pkg/package.json`,
+            JSON.stringify({
+                name: 'static-condition-pkg',
+                exports: {
+                    customStatic: './custom.mjs',
+                    default: './default.mjs',
+                },
+            }),
+        );
+        fs.writeFileSync(`${root}/node_modules/static-condition-pkg/custom.mjs`, 'export default "custom";');
+        fs.writeFileSync(`${root}/node_modules/static-condition-pkg/default.mjs`, 'export default "default";');
+        fs.writeFileSync(`${root}/from-data-parent.mjs`, 'export default "should-not-resolve";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
             '  if (specifier.startsWith("/")) throw new Error("static loader received absolute path: " + specifier);',
             '  if (specifier.startsWith("file://") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
+            '  }',
+            '  if (specifier === "virtual:static-condition") {',
+            '    return next("static-condition-pkg", { ...context, conditions: ["customStatic"] });',
+            '  }',
+            '  if (specifier === "virtual:rooted-data-parent") {',
+            `    const resolved = next(${JSON.stringify(`${root}/from-data-parent.mjs`)}, { ...context, parentURL: "data:text/javascript,export%20default%200" });`,
+            '    if (resolved !== undefined) throw new Error("nextResolve resolved rooted specifier under data: parent: " + resolved.url);',
+            '    const relative = next("./relative-from-data.mjs", { ...context, parentURL: "data:text/javascript,export%20default%200" });',
+            '    if (relative !== undefined) throw new Error("nextResolve resolved relative specifier under data: parent: " + relative.url);',
+            '    const bare = next("definitely-not-installed-static-loader-pkg", { ...context, parentURL: "data:text/javascript,export%20default%200" });',
+            '    if (bare !== undefined) throw new Error("nextResolve resolved bare specifier under data: parent: " + bare.url);',
+            '    return { shortCircuit: true, url: "data:text/javascript,export default true", format: "module" };',
             '  }',
             '  return next(specifier, context);',
             '}',
@@ -1205,6 +1231,20 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         assert.strictEqual(
             globalThis.__static_loader_absolute_entry_seen,
             `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
+        );
+        assert.strictEqual(
+            globalThis.__wasm_rquickjs_resolve_static_registered_loader(
+                pathToFileURL(`${root}/entry.mjs`).href,
+                'virtual:static-condition',
+            ),
+            `${root}/node_modules/static-condition-pkg/custom.mjs`,
+        );
+        assert.strictEqual(
+            globalThis.__wasm_rquickjs_resolve_static_registered_loader(
+                pathToFileURL(`${root}/entry.mjs`).href,
+                'virtual:rooted-data-parent',
+            ),
+            'data:text/javascript,export default true',
         );
         delete globalThis.__static_loader_absolute_entry_seen;
         return true;
