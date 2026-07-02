@@ -2800,6 +2800,15 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '});',
             'exports.own = "own";',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-hasown-return-guard.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  if (Object.hasOwnProperty.call(exports, key)) return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/skip-map-duplicate-shape-return-guard.cjs', [
             'var _dep = require("./dep.cjs");',
             'var skip = {};',
@@ -2958,6 +2967,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as duplicateReturnGuardReexport from "./duplicate-return-guard-reexport.cjs";',
             'import * as moduleExportsDuplicateReturnGuardReexport from "./module-exports-duplicate-return-guard-reexport.cjs";',
             'import * as skipMapReturnGuard from "./skip-map-return-guard.cjs";',
+            'import * as objectHasOwnReturnGuard from "./object-hasown-return-guard.cjs";',
             'import * as skipMapDuplicateShapeReturnGuard from "./skip-map-duplicate-shape-return-guard.cjs";',
             'import * as otherBindingDuplicateShapeReturnGuard from "./other-binding-duplicate-shape-return-guard.cjs";',
             'import * as asiReexport from "./asi-reexport.cjs";',
@@ -3004,6 +3014,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  duplicateReturnGuardAlpha: duplicateReturnGuardReexport.alpha,',
             '  moduleExportsDuplicateReturnGuardAlpha: moduleExportsDuplicateReturnGuardReexport.alpha,',
             '  skipMapReturnGuardKeys: Object.keys(skipMapReturnGuard).filter((key) => key !== "default" && key !== "own"),',
+            '  objectHasOwnReturnGuardKeys: Object.keys(objectHasOwnReturnGuard).filter((key) => key !== "default" && key !== "own"),',
             '  skipMapDuplicateShapeReturnGuardKeys: Object.keys(skipMapDuplicateShapeReturnGuard).filter((key) => key !== "default" && key !== "own"),',
             '  otherBindingDuplicateShapeReturnGuardKeys: Object.keys(otherBindingDuplicateShapeReturnGuard).filter((key) => key !== "default" && key !== "own"),',
             '  asiAlpha: asiReexport.alpha,',
@@ -3059,6 +3070,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.strictEqual(result.duplicateReturnGuardAlpha, 'alpha');
         assert.strictEqual(result.moduleExportsDuplicateReturnGuardAlpha, 'alpha');
         assert.deepStrictEqual(result.skipMapReturnGuardKeys, []);
+        assert.deepStrictEqual(result.objectHasOwnReturnGuardKeys, []);
         assert.deepStrictEqual(result.skipMapDuplicateShapeReturnGuardKeys, []);
         assert.deepStrictEqual(result.otherBindingDuplicateShapeReturnGuardKeys, []);
         assert.strictEqual(result.asiAlpha, 'alpha');

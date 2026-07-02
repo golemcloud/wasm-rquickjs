@@ -5757,38 +5757,11 @@ fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(S
 }
 
 fn parse_exports_has_own_key(source: &str, pos: usize, key: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
-    let (receiver, next) = read_ident(source, pos)?;
-    if receiver != "Object" {
+    let (target, next) = parse_object_has_own_property_call(source, pos, key, true)?;
+    if target != "exports" {
         return None;
     }
-    let mut i = parse_dot_member_name(source, next, "prototype")?;
-    i = parse_dot_member_name(source, i, "hasOwnProperty")?;
-    i = parse_dot_member_name(source, i, "call")?;
-    if i >= bytes.len() || bytes[i] != b'(' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    let (target, next) = parse_exports_target(source, i)?;
-    if target != CjsExportTarget::Exports {
-        return None;
-    }
-    i = skip_ws_comments(source, next);
-    if i >= bytes.len() || bytes[i] != b',' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    if !is_free_ident_start(bytes, i)
-        || !source[i..].starts_with(key)
-        || !is_ident_boundary(bytes, i + key.len())
-    {
-        return None;
-    }
-    i = skip_ws_comments(source, i + key.len());
-    if i >= bytes.len() || bytes[i] != b')' {
-        return None;
-    }
-    Some(i + 1)
+    Some(next)
 }
 
 fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Option<usize> {
@@ -5800,34 +5773,8 @@ fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Opt
 
     let (receiver, next) = read_ident(source, i)?;
     if receiver == "Object" {
-        let mut object_call = next;
-        if let Some(next) = parse_dot_member_name(source, object_call, "prototype") {
-            object_call = next;
-        }
-        if let Some(mut object_call) = parse_dot_member_name(source, object_call, "hasOwnProperty")
-            .and_then(|next| parse_dot_member_name(source, next, "call"))
-        {
-            if object_call >= bytes.len() || bytes[object_call] != b'(' {
-                return None;
-            }
-            object_call = skip_ws_comments(source, object_call + 1);
-            let (_, next) = read_ident(source, object_call)?;
-            object_call = skip_ws_comments(source, next);
-            if object_call >= bytes.len() || bytes[object_call] != b',' {
-                return None;
-            }
-            object_call = skip_ws_comments(source, object_call + 1);
-            if !is_free_ident_start(bytes, object_call)
-                || !source[object_call..].starts_with(key)
-                || !is_ident_boundary(bytes, object_call + key.len())
-            {
-                return None;
-            }
-            object_call = skip_ws_comments(source, object_call + key.len());
-            if object_call >= bytes.len() || bytes[object_call] != b')' {
-                return None;
-            }
-            return Some(object_call + 1);
+        if let Some((_, next)) = parse_object_has_own_property_call(source, i, key, false) {
+            return Some(next);
         }
     }
 
@@ -5849,6 +5796,48 @@ fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Opt
         }
         return Some(i + 1);
     }
+}
+
+fn parse_object_has_own_property_call(
+    source: &str,
+    pos: usize,
+    key: &str,
+    require_prototype: bool,
+) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let (receiver, next) = read_ident(source, pos)?;
+    if receiver != "Object" {
+        return None;
+    }
+    let mut i = next;
+    if let Some(next) = parse_dot_member_name(source, i, "prototype") {
+        i = next;
+    } else if require_prototype {
+        return None;
+    }
+    i = parse_dot_member_name(source, i, "hasOwnProperty")?;
+    i = parse_dot_member_name(source, i, "call")?;
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (target, next) = read_ident(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b',' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !is_free_ident_start(bytes, i)
+        || !source[i..].starts_with(key)
+        || !is_ident_boundary(bytes, i + key.len())
+    {
+        return None;
+    }
+    i = skip_ws_comments(source, i + key.len());
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+    Some((target, i + 1))
 }
 
 fn parse_key_in_export_target_condition(source: &str, pos: usize, key: &str) -> Option<usize> {
