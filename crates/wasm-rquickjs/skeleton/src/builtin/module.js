@@ -2715,25 +2715,17 @@ function readLoaderObjectLiteralKey(source, pos) {
         if (decoded === null) return null;
         return { name: decoded.value, keyIsIdent: false, end: decoded.end + 1 };
     }
-    if (!isIdentifierStartCode(ch)) {
-        return null;
-    }
-    let i = pos + 1;
-    while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    return { name: source.substring(pos, i), keyIsIdent: true, end: i };
+    const ident = readLoaderIdentifier(source, pos);
+    if (ident === null) return null;
+    return { name: ident.name, keyIsIdent: true, end: ident.end };
 }
 
 function loaderObjectLiteralValueExport(source, pos, objectEnd) {
-    const first = source.charCodeAt(pos);
-    if (!isIdentifierStartCode(first)) {
-        return null;
-    }
-    let i = pos + 1;
-    while (i < objectEnd && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    const ident = source.substring(pos, i);
-    i = skipWhitespaceAndComments(source, i);
+    const ident = readLoaderIdentifier(source, pos);
+    if (ident === null) return null;
+    let i = skipWhitespaceAndComments(source, ident.end);
     if (i >= objectEnd || source.charCodeAt(i) === 0x2c) return { named: true, stop: false };
-    if (ident === 'true' || ident === 'false' || ident === 'null' || ident === 'undefined') {
+    if (ident.name === 'true' || ident.name === 'false' || ident.name === 'null' || ident.name === 'undefined') {
         return { named: true, stop: false };
     }
     return { named: true, stop: true };
