@@ -4187,6 +4187,32 @@ export const testVmMainContextDefaultLoader = async () => {
             name: 'TypeError',
             message: /contextifiedObject.*vm\.Context/,
         });
+        function assertEmptyVmRunDoesNotTouchProxy(run) {
+            const emptyRunProxyTraps = { ownKeys: 0, getOwnPropertyDescriptor: 0, get: 0 };
+            const descriptorThrowingProxy = new Proxy({ foo: 'bar' }, {
+                ownKeys() {
+                    emptyRunProxyTraps.ownKeys++;
+                    throw new Error('ownKeys trap should not run');
+                },
+                getOwnPropertyDescriptor() {
+                    emptyRunProxyTraps.getOwnPropertyDescriptor++;
+                    throw new Error('descriptor trap should not run');
+                },
+                get() {
+                    emptyRunProxyTraps.get++;
+                    throw new Error('get trap should not run');
+                },
+            });
+            assert.strictEqual(run(descriptorThrowingProxy), undefined);
+            assert.deepStrictEqual(emptyRunProxyTraps, { ownKeys: 0, getOwnPropertyDescriptor: 0, get: 0 });
+        }
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => vm.runInContext('', vm.createContext(proxy)));
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => vm.runInContext(' \n/* comment */\n// line comment', vm.createContext(proxy)));
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => vm.runInContext('\uFEFF\u00A0\u2028', vm.createContext(proxy)));
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => vm.runInContext('#!/usr/bin/env node', vm.createContext(proxy)));
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => vm.runInContext('<!-- html comment\n--> html close comment', vm.createContext(proxy)));
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => vm.runInNewContext('', proxy));
+        assertEmptyVmRunDoesNotTouchProxy((proxy) => new vm.Script('/* script comment */').runInContext(vm.createContext(proxy)));
         const vmRegex = vm.runInNewContext('/hello/');
         assert.throws(() => { throw 'hello world'; }, vmRegex);
         assert.throws(() => assert.match('hello', { [Symbol.toStringTag]: 'RegExp', test() { return true; } }), {

@@ -1267,6 +1267,8 @@ export function runInNewContext(code, sandbox, options) {
 }
 
 function evalCodeInNewContext(code, sandbox, helperName) {
+    if (isEmptyVmSourceText(code)) return undefined;
+
     const keys = [];
     const values = [];
     let sandboxKeys = [];
@@ -1397,6 +1399,8 @@ export function runInContext(code, context, options) {
 }
 
 function evalCodeInContext(code, context, helperName) {
+    if (isEmptyVmSourceText(code)) return undefined;
+
     const keys = [];
     const values = [];
     const bindings = collectSandboxBindings(context);
@@ -1637,6 +1641,86 @@ function firstNonWhitespaceChar(value) {
         }
     }
     return '';
+}
+
+function isEmptyVmSourceText(value) {
+    let i = 0;
+    let lineStart = true;
+    while (i < value.length) {
+        const ch = value.charCodeAt(i);
+        if (i === 0 && ch === 0x23 && value.charCodeAt(i + 1) === 0x21) {
+            i += 2;
+            while (i < value.length) {
+                const lineCh = value.charCodeAt(i);
+                if (isVmSourceLineTerminator(lineCh)) break;
+                i++;
+            }
+            continue;
+        }
+        if (ch === 0x2f && value.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < value.length) {
+                const lineCh = value.charCodeAt(i);
+                if (isVmSourceLineTerminator(lineCh)) break;
+                i++;
+            }
+            continue;
+        }
+        if (ch === 0x2f && value.charCodeAt(i + 1) === 0x2a) {
+            const end = value.indexOf('*/', i + 2);
+            if (end === -1) return false;
+            for (let j = i + 2; j < end; j++) {
+                if (isVmSourceLineTerminator(value.charCodeAt(j))) {
+                    lineStart = true;
+                }
+            }
+            i = end + 2;
+            continue;
+        }
+        if (ch === 0x3c && value.charCodeAt(i + 1) === 0x21 && value.charCodeAt(i + 2) === 0x2d && value.charCodeAt(i + 3) === 0x2d) {
+            i += 4;
+            while (i < value.length) {
+                const lineCh = value.charCodeAt(i);
+                if (isVmSourceLineTerminator(lineCh)) break;
+                i++;
+            }
+            continue;
+        }
+        if (lineStart && ch === 0x2d && value.charCodeAt(i + 1) === 0x2d && value.charCodeAt(i + 2) === 0x3e) {
+            i += 3;
+            while (i < value.length) {
+                const lineCh = value.charCodeAt(i);
+                if (isVmSourceLineTerminator(lineCh)) break;
+                i++;
+            }
+            continue;
+        }
+        if (!isVmSourceWhitespace(ch)) return false;
+        if (isVmSourceLineTerminator(ch)) {
+            lineStart = true;
+        }
+        i++;
+    }
+    return true;
+}
+
+function isVmSourceWhitespace(ch) {
+    return isVmSourceLineTerminator(ch) ||
+        ch === 0x09 ||
+        ch === 0x0b ||
+        ch === 0x0c ||
+        ch === 0x20 ||
+        ch === 0xa0 ||
+        ch === 0x1680 ||
+        ch === 0x202f ||
+        ch === 0x205f ||
+        ch === 0x3000 ||
+        ch === 0xfeff ||
+        (ch >= 0x2000 && ch <= 0x200a);
+}
+
+function isVmSourceLineTerminator(ch) {
+    return ch === 0x0a || ch === 0x0d || ch === 0x2028 || ch === 0x2029;
 }
 
 function collectContextBindings(context, keys, values) {
