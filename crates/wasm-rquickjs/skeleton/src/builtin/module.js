@@ -2837,7 +2837,17 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
             }
         } else if (key.name === 'enumerable') {
             if (source.charCodeAt(next) !== 0x3a) return false;
-            cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
+            if (foundKind === 'value') {
+                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
+            } else if (foundKind === 'get') {
+                return false;
+            } else {
+                const valueStart = skipWhitespaceAndComments(source, next + 1);
+                if (!source.startsWith('true', valueStart) || !hasIdentifierBoundary(source, valueStart, valueStart + 4)) {
+                    return false;
+                }
+                cursor = skipWhitespaceAndComments(source, valueStart + 4);
+            }
         } else {
             if (foundKind === 'value') {
                 cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));

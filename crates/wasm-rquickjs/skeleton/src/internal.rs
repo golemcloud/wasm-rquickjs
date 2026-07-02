@@ -4948,6 +4948,9 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
                 }
                 continue;
             }
+            if matches!(found, Some(DescriptorNamedProperty::Getter)) {
+                return false;
+            }
             let value_start = skip_ws_comments(descriptor, next + 1);
             if !descriptor[value_start..].starts_with("true")
                 || !is_ident_boundary(bytes, value_start + 4)
