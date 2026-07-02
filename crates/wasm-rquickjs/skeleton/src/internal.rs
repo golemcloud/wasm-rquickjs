@@ -2000,8 +2000,8 @@ fn parse_object_method_span(source: &str, pos: usize) -> Option<usize> {
     }
     let bytes = source.as_bytes();
     let mut i = pos;
-    if source[i..].starts_with("async") && is_ident_boundary(bytes, i + 5) {
-        let next = skip_ws_comments(source, i + 5);
+    if let Some(async_end) = parse_ident_name(source, i, "async") {
+        let next = skip_ws_comments(source, async_end);
         if next < bytes.len() && bytes[next] != b':' {
             i = next;
         }
@@ -2009,10 +2009,8 @@ fn parse_object_method_span(source: &str, pos: usize) -> Option<usize> {
     if i < bytes.len() && bytes[i] == b'*' {
         i = skip_ws_comments(source, i + 1);
     }
-    if (source[i..].starts_with("get") && is_ident_boundary(bytes, i + 3))
-        || (source[i..].starts_with("set") && is_ident_boundary(bytes, i + 3))
-    {
-        let next = skip_ws_comments(source, i + 3);
+    if let Some(accessor_end) = parse_ident_name(source, i, "get").or_else(|| parse_ident_name(source, i, "set")) {
+        let next = skip_ws_comments(source, accessor_end);
         if next < bytes.len() && bytes[next] != b':' {
             i = next;
         }
