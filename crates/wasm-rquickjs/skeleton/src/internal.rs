@@ -5695,54 +5695,40 @@ fn skip_statement_separator(source: &str, pos: usize) -> usize {
     i
 }
 
-fn parse_export_star_conditional_reexport(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+fn parse_if_condition(source: &str, pos: usize) -> Option<(&str, usize)> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("if")
-        || !is_ident_boundary(bytes, pos + 2)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 2);
+    let i = skip_ws_comments(source, parse_free_ident_name(source, pos, "if")?);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
     let condition_end = find_matching_paren(source, i)?;
-    let condition = &source[i + 1..condition_end];
+    Some((
+        &source[i + 1..condition_end],
+        skip_ws_comments(source, condition_end + 1),
+    ))
+}
+
+fn parse_export_star_conditional_reexport(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+    let (condition, i) = parse_if_condition(source, pos)?;
     if !is_export_star_has_own_guard_condition(condition, key) {
         return None;
     }
-    i = skip_ws_comments(source, condition_end + 1);
     parse_direct_exports_reexport_assignment(source, i, binding, key)
 }
 
 fn parse_export_star_return_guard(source: &str, pos: usize, key: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
-    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "if")?);
-    if i >= bytes.len() || bytes[i] != b'(' {
-        return None;
-    }
-    let condition_end = find_matching_paren(source, i)?;
-    let condition = &source[i + 1..condition_end];
+    let (condition, i) = parse_if_condition(source, pos)?;
     if !is_export_star_guard_condition(condition, key) {
         return None;
     }
-    i = skip_ws_comments(source, condition_end + 1);
     parse_free_ident_name(source, i, "return")
 }
 
 fn parse_duplicate_export_return_guard(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
-    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "if")?);
-    if i >= bytes.len() || bytes[i] != b'(' {
-        return None;
-    }
-    let condition_end = find_matching_paren(source, i)?;
-    let condition = &source[i + 1..condition_end];
+    let (condition, i) = parse_if_condition(source, pos)?;
     if !is_duplicate_export_guard_condition(condition, binding, key) {
         return None;
     }
-    i = skip_ws_comments(source, condition_end + 1);
     parse_free_ident_name(source, i, "return")
 }
 
