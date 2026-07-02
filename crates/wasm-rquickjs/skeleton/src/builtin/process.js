@@ -670,16 +670,21 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     });
 };
 
-globalThis.__wasm_rquickjs_emit_package_deprecation_warning = function emitPackageDeprecationWarning(message, code, key) {
-    if (code === 'DEP0155') {
-        const warningKey = String(code) + ':' + String(key || message);
-        const seenWarnings = globalThis.__wasm_rquickjs_package_deprecation_warnings ||
-            (globalThis.__wasm_rquickjs_package_deprecation_warnings = Object.create(null));
-        if (seenWarnings[warningKey]) return;
-        seenWarnings[warningKey] = true;
-    }
-    process.emitWarning(message, 'DeprecationWarning', code);
-};
+Object.defineProperty(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning', {
+    value: function emitPackageDeprecationWarning(message, code, key) {
+        if (code === 'DEP0155') {
+            const warningKey = String(code) + ':' + String(key || message);
+            const seenWarnings = globalThis.__wasm_rquickjs_package_deprecation_warnings ||
+                (globalThis.__wasm_rquickjs_package_deprecation_warnings = Object.create(null));
+            if (seenWarnings[warningKey]) return;
+            seenWarnings[warningKey] = true;
+        }
+        process.emitWarning(message, 'DeprecationWarning', code);
+    },
+    configurable: false,
+    enumerable: false,
+    writable: false,
+});
 
 process.exit = function exit(code) {
     if (code !== undefined) {

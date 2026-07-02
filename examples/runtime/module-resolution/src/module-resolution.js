@@ -161,6 +161,17 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
 
+        const packageWarningEmitterDescriptor = Object.getOwnPropertyDescriptor(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning');
+        assert.strictEqual(typeof packageWarningEmitterDescriptor.value, 'function');
+        assert.strictEqual(packageWarningEmitterDescriptor.configurable, false);
+        assert.strictEqual(packageWarningEmitterDescriptor.enumerable, false);
+        assert.strictEqual(packageWarningEmitterDescriptor.writable, false);
+        assert.throws(
+            () => Object.defineProperty(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning', { value: () => {} }),
+            TypeError,
+        );
+        assert.strictEqual(Object.getOwnPropertyDescriptor(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning').value, packageWarningEmitterDescriptor.value);
+
         const genericDeprecationWarnings = [];
         const onGenericDeprecationWarning = (warning) => {
             if (warning.code === 'DEP0155' && warning.message === 'generic dep0155') {
