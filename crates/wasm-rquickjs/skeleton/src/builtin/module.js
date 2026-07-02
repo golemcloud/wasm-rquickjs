@@ -2301,11 +2301,17 @@ function skipWhitespace(source, start) {
     return i;
 }
 
-function skipWhitespaceAndComments(source, start) {
+function skipWhitespaceAndCommentsImpl(source, start, trackLineTerminator) {
     let i = start;
+    let hasLineTerminator = false;
     while (i < source.length) {
         const code = source.charCodeAt(i);
-        if (code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d) {
+        if (code === 0x0a || code === 0x0d) {
+            hasLineTerminator = true;
+            i++;
+            continue;
+        }
+        if (code === 0x20 || code === 0x09) {
             i++;
             continue;
         }
@@ -2316,13 +2322,21 @@ function skipWhitespaceAndComments(source, start) {
         }
         if (code === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
             i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) {
+                if (source.charCodeAt(i) === 0x0a || source.charCodeAt(i) === 0x0d) hasLineTerminator = true;
+                i++;
+            }
             i = Math.min(i + 2, source.length);
             continue;
         }
         break;
     }
+    if (trackLineTerminator) return { pos: i, hasLineTerminator };
     return i;
+}
+
+function skipWhitespaceAndComments(source, start) {
+    return skipWhitespaceAndCommentsImpl(source, start, false);
 }
 
 function startsWithKeywordAt(source, keyword, pos) {
@@ -3078,36 +3092,7 @@ function readLoaderRequireString(source, pos, allowSpreadPrefix) {
 }
 
 function skipWhitespaceAndCommentsWithLineTerminator(source, start) {
-    let i = start;
-    let hasLineTerminator = false;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x0a || code === 0x0d) {
-            hasLineTerminator = true;
-            i++;
-            continue;
-        }
-        if (code === 0x20 || code === 0x09) {
-            i++;
-            continue;
-        }
-        if (code === 0x2f && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) {
-                if (source.charCodeAt(i) === 0x0a || source.charCodeAt(i) === 0x0d) hasLineTerminator = true;
-                i++;
-            }
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        break;
-    }
-    return { pos: i, hasLineTerminator };
+    return skipWhitespaceAndCommentsImpl(source, start, true);
 }
 
 function loaderIsStatementBoundary(source, pos) {
