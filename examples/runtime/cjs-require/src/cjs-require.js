@@ -460,7 +460,7 @@ export const testRequirePackageMapEdgeCases = () => {
             imports: {
                 '#app-alias': './app-alias.js',
                 '#external': 'external-pkg',
-                '#fs': 'node:fs',
+                '#builtin': 'node:fs',
             },
         }));
         fs.writeFileSync('/package-map-edge-app/app-alias.js', 'module.exports = { appAlias: true };');
@@ -469,7 +469,7 @@ export const testRequirePackageMapEdgeCases = () => {
         ].join('\n'));
 
         assert.deepStrictEqual(appRequire('#external'), { external: true });
-        assert.strictEqual(typeof appRequire('#fs').readFileSync, 'function');
+        assert.throws(() => appRequire('#builtin'), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         const dep = appRequire('dep');
         assert.throws(() => dep.loadAppAlias(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
 

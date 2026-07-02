@@ -1069,9 +1069,6 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
         if (hasEncodedSlashOrBackslash(target)) {
             throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');
         }
-        if (allowBareTarget && target.startsWith('node:') && builtinModuleMap[target] !== undefined) {
-            return { builtin: target };
-        }
         if (allowBareTarget && isBarePackageSpecifier(target)) {
             const resolved = resolveFromNodeModules(target, packageDir, pathModule.join(packageDir, 'package.json'), conditions);
             if (resolved !== null) return resolved;

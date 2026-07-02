@@ -451,7 +451,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             imports: {
                 '#app-alias': './app-alias.mjs',
                 '#external': 'external-pkg',
-                '#fs': 'node:fs',
+                '#builtin': 'node:fs',
                 '#false-target': false,
                 '#array-false-fallback': [
                     false,
@@ -463,10 +463,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/imports-entry.mjs', [
             'import external from "#external";',
             'import arrayFalseFallback from "#array-false-fallback";',
-            'import fs from "#fs";',
             'export default external;',
             'export const arrayFalseFallbackValue = arrayFalseFallback;',
-            'export const readFileSyncType = typeof fs.readFileSync;',
         ].join('\n'));
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/dep/package.json', JSON.stringify({
             type: 'module',
@@ -481,7 +479,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         const importsEntry = await import('/esm-package-map-edge-app/imports-entry.mjs');
         assert.deepStrictEqual(importsEntry.default, { external: true });
         assert.deepStrictEqual(importsEntry.arrayFalseFallbackValue, { appAlias: true });
-        assert.strictEqual(importsEntry.readFileSyncType, 'function');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-builtin-entry.mjs', 'export default await import("#builtin");');
+        await expectImportError('/esm-package-map-edge-app/imports-builtin-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         fs.writeFileSync('/esm-package-map-edge-app/imports-false-entry.mjs', 'export default await import("#false-target");');
         await expectImportError('/esm-package-map-edge-app/imports-false-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/imports-boundary-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');

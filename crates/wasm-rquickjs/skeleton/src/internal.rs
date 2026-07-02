@@ -3859,9 +3859,6 @@ impl NodeModulesResolver {
                         request: target_str,
                     });
                 }
-                if ctx.allow_bare_target && target_str.starts_with("node:") {
-                    return Ok(PackageTargetResolution::Resolved(target_str));
-                }
                 if Self::has_encoded_slash_or_backslash(&target_str) {
                     return Err(NodePackageResolveError::InvalidPackagePatternMatch {
                         specifier: target_str,
