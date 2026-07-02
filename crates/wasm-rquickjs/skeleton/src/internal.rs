@@ -1847,14 +1847,15 @@ fn parse_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usiz
 }
 
 fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
-    for keyword in ["const", "let", "var"] {
-        if let Some(keyword_end) = parse_free_ident_name(source, pos, keyword) {
-            let start = skip_ws_comments(source, keyword_end);
-            let end = find_variable_declaration_end(source, start);
-            return Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end));
-        }
-    }
-    None
+    let start = skip_ws_comments(source, parse_variable_declaration_keyword(source, pos)?);
+    let end = find_variable_declaration_end(source, start);
+    Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+}
+
+fn parse_variable_declaration_keyword(source: &str, pos: usize) -> Option<usize> {
+    parse_free_ident_name(source, pos, "const")
+        .or_else(|| parse_free_ident_name(source, pos, "let"))
+        .or_else(|| parse_free_ident_name(source, pos, "var"))
 }
 
 fn find_variable_declaration_end(source: &str, pos: usize) -> usize {
@@ -5100,23 +5101,18 @@ fn parse_exports_assign_require_value(source: &str, pos: usize) -> Option<(Strin
 }
 
 fn parse_require_binding(source: &str, pos: usize) -> Option<(String, String, usize)> {
-    for keyword in ["var", "let", "const"] {
-        if let Some(keyword_end) = parse_free_ident_name(source, pos, keyword) {
-            let mut i = skip_ws_comments(source, keyword_end);
-            let (name, next) = read_ident(source, i)?;
-            i = skip_ws_comments(source, next);
-            if i >= source.len() || source.as_bytes()[i] != b'=' {
-                return None;
-            }
-            i = skip_ws_comments(source, i + 1);
-            let (specifier, next) = parse_exports_assign_require_value(source, i)?;
-            if !is_statement_boundary(source, next) {
-                return None;
-            }
-            return Some((name, specifier, next));
-        }
+    let mut i = skip_ws_comments(source, parse_variable_declaration_keyword(source, pos)?);
+    let (name, next) = read_ident(source, i)?;
+    i = skip_ws_comments(source, next);
+    if i >= source.len() || source.as_bytes()[i] != b'=' {
+        return None;
     }
-    None
+    i = skip_ws_comments(source, i + 1);
+    let (specifier, next) = parse_exports_assign_require_value(source, i)?;
+    if !is_statement_boundary(source, next) {
+        return None;
+    }
+    Some((name, specifier, next))
 }
 
 fn is_statement_boundary(source: &str, pos: usize) -> bool {
