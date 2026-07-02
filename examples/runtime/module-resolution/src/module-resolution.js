@@ -2602,6 +2602,8 @@ export const testSyncBuiltinEsmExports = async () => {
         } catch (error) {
             assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND');
         }
+        assert.throws(() => import.meta.resolve('__wasm_rquickjs_builtin/vm_native'), { code: 'ERR_MODULE_NOT_FOUND' });
+        assert.throws(() => module.createRequire(import.meta.url)('__wasm_rquickjs_builtin/vm_native'), { code: 'MODULE_NOT_FOUND' });
 
         async function expectPrivateBuiltinRejected(label, promise) {
             try {
