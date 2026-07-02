@@ -3116,8 +3116,9 @@ function readLoaderBracketIdentifier(source, pos, ident) {
 }
 
 function readLoaderKeyStringComparison(source, pos, key, operator) {
-    if (!source.startsWith(key, pos) || !hasIdentifierBoundary(source, pos, pos + key.length)) return null;
-    let i = skipWhitespaceAndComments(source, pos + key.length);
+    const keyEnd = readLoaderNamedIdentifier(source, pos, key);
+    if (keyEnd === null) return null;
+    let i = skipWhitespaceAndComments(source, keyEnd);
     if (source.substring(i, i + operator.length) !== operator) return null;
     i = skipWhitespaceAndComments(source, i + operator.length);
     const quote = source.charCodeAt(i);
@@ -3139,8 +3140,8 @@ function readLoaderDotMember(source, pos, name) {
     let i = skipWhitespaceAndComments(source, pos);
     if (source.charCodeAt(i) !== 0x2e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith(name, i) || !hasIdentifierBoundary(source, i, i + name.length)) return null;
-    return skipWhitespaceAndComments(source, i + name.length);
+    const end = readLoaderNamedIdentifier(source, i, name);
+    return end === null ? null : skipWhitespaceAndComments(source, end);
 }
 
 function readLoaderIdentifier(source, pos) {
@@ -3150,10 +3151,15 @@ function readLoaderIdentifier(source, pos) {
     return { name: source.substring(pos, i), end: i };
 }
 
+function readLoaderNamedIdentifier(source, pos, name) {
+    return source.startsWith(name, pos) && hasIdentifierBoundary(source, pos, pos + name.length)
+        ? pos + name.length
+        : null;
+}
+
 function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) {
-    const receiver = readLoaderIdentifier(source, pos);
-    if (receiver === null || receiver.name !== 'Object') return null;
-    let i = receiver.end;
+    let i = readLoaderNamedIdentifier(source, pos, 'Object');
+    if (i === null) return null;
     const prototype = readLoaderDotMember(source, i, 'prototype');
     if (prototype !== null) {
         i = prototype;
@@ -3170,15 +3176,17 @@ function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) 
     i = skipWhitespaceAndComments(source, target.end);
     if (source.charCodeAt(i) !== 0x2c) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith(key, i) || !hasIdentifierBoundary(source, i, i + key.length)) return null;
-    i = skipWhitespaceAndComments(source, i + key.length);
+    const keyEnd = readLoaderNamedIdentifier(source, i, key);
+    if (keyEnd === null) return null;
+    i = skipWhitespaceAndComments(source, keyEnd);
     if (source.charCodeAt(i) !== 0x29) return null;
     return { target: target.name, end: i + 1 };
 }
 
 function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
-    if (!source.startsWith('if', pos) || !hasIdentifierBoundary(source, pos, pos + 2)) return null;
-    let i = skipWhitespaceAndComments(source, pos + 2);
+    const ifEnd = readLoaderNamedIdentifier(source, pos, 'if');
+    if (ifEnd === null) return null;
+    let i = skipWhitespaceAndComments(source, ifEnd);
     if (source.charCodeAt(i) !== 0x28) return null;
     const conditionEnd = loaderFindMatchingParen(source, i);
     if (conditionEnd < 0) return null;
@@ -3192,8 +3200,7 @@ function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
     if (second === null || second.value !== '__esModule') return null;
     if (skipWhitespaceAndComments(source, second.end) !== conditionEnd) return null;
     i = skipWhitespaceAndComments(source, conditionEnd + 1);
-    if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return null;
-    return i + 6;
+    return readLoaderNamedIdentifier(source, i, 'return');
 }
 
 function readLoaderHasOwnPropertyKey(source, pos, key) {
@@ -3207,8 +3214,9 @@ function readLoaderHasOwnPropertyKey(source, pos, key) {
     let i = readLoaderDotMember(source, receiver.end, 'hasOwnProperty');
     if (i === null || source.charCodeAt(i) !== 0x28) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    if (!source.startsWith(key, i) || !hasIdentifierBoundary(source, i, i + key.length)) return null;
-    i = skipWhitespaceAndComments(source, i + key.length);
+    const keyEnd = readLoaderNamedIdentifier(source, i, key);
+    if (keyEnd === null) return null;
+    i = skipWhitespaceAndComments(source, keyEnd);
     if (source.charCodeAt(i) !== 0x29) return null;
     return i + 1;
 }
