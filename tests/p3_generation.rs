@@ -8,7 +8,7 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 use wasm_rquickjs::{
-    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
+    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_dts, generate_wrapper_crate_with_target,
 };
 
 /// Starts a minimal single-threaded HTTP/1.1 test server on an ephemeral loopback port and
@@ -2116,5 +2116,510 @@ fn p3_streaming_fetch_truncated_final_body_rejects_like_buffered_path() -> anyho
     let result = run_p3_string_export(&wasm_path, "run")?;
 
     assert_eq!(result, "buffered=rejected;streaming=rejected");
+    Ok(())
+}
+
+#[test]
+fn p3_rejects_nested_future_in_record() -> anyhow::Result<()> {
+    // `future<T>` / `stream<T>` are only supported as a *direct* function parameter or return
+    // type (the four JS ⇄ component async-value boundaries). A future/stream nested inside another
+    // type (here a record field) has no lowering through the normal `WrappedType` pipeline, so
+    // generation must reject it up front with a clear message rather than emit a broken crate.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:nested-future;
+
+            world nested-future {
+              record wrap { f: future<u32> }
+              export run: async func() -> wrap;
+            }
+        "#},
+        "export async function run() { return { f: Promise.resolve(1) }; }\n",
+    )?;
+
+    let err = generate_p3(temp.path())
+        .expect_err("P3 generation must reject a future<T> nested inside a record");
+    let message = format!("{err:#}");
+    assert!(
+        message.contains("only supported as a direct function parameter or return type"),
+        "unexpected error message: {message}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_rejects_nested_stream_in_list() -> anyhow::Result<()> {
+    // The same restriction applies to `stream<T>`: a `list<stream<u8>>` return type is a nested
+    // occurrence and must be rejected.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:nested-stream;
+
+            world nested-stream {
+              export run: async func() -> list<stream<u8>>;
+            }
+        "#},
+        "export async function run() { return []; }\n",
+    )?;
+
+    let err = generate_p3(temp.path())
+        .expect_err("P3 generation must reject a stream<T> nested inside a list");
+    let message = format!("{err:#}");
+    assert!(
+        message.contains("only supported as a direct function parameter or return type"),
+        "unexpected error message: {message}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_rejects_nested_future_in_record() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-nested-future;
+
+            world dts-nested-future {
+              record wrap { f: future<u32> }
+              export run: func() -> wrap;
+            }
+        "#},
+        "export function run() { return { f: Promise.resolve(1) }; }\n",
+    )?;
+
+    let err = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)
+        .expect_err("DTS generation must reject a future<T> nested inside a record");
+    let message = format!("{err:#}");
+    assert!(
+        message.contains("only supported as a direct function parameter or return type"),
+        "unexpected error message: {message}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_rejects_nested_future_alias_in_record() -> anyhow::Result<()> {
+    // The nested-use restriction must also hold when the `future<T>` is named through a WIT alias:
+    // a record field of an alias-to-future type is still a nested async value and has no TypeScript
+    // representation, so DTS generation must reject it just like the anonymous nested case.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-nested-future-alias;
+
+            world dts-nested-future-alias {
+              type aliased-future = future<u32>;
+              record wrap { f: aliased-future }
+              export run: func() -> wrap;
+            }
+        "#},
+        "export function run() { return { f: Promise.resolve(1) }; }\n",
+    )?;
+
+    let err = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)
+        .expect_err("DTS generation must reject a future<T> alias nested inside a record");
+    let message = format!("{err:#}");
+    assert!(
+        message.contains("only supported as a direct function parameter or return type"),
+        "unexpected error message: {message}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_maps_direct_future_and_stream_boundaries() -> anyhow::Result<()> {
+    // The counterpart to the nested-rejection tests: a `future<T>` / `stream<T>` used *directly*
+    // as a function parameter or return type is a supported async-value boundary and must be
+    // reflected in the generated `.d.ts` as `Promise<T>` / `AsyncIterable<T>`. This is checked for
+    // all four boundaries — export param/return and import param/return.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-async-values;
+
+            interface host {
+              make-future: func(x: u32) -> future<u32>;
+              consume-stream: func(s: stream<u8>) -> u32;
+            }
+
+            world dts-async-values {
+              import host;
+              export run-future: func() -> future<u32>;
+              export take-stream: func(s: stream<u8>) -> u32;
+            }
+        "#},
+        "export function runFuture() { return Promise.resolve(1); }\n\
+         export function takeStream() { return 0; }\n",
+    )?;
+
+    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let mut combined = String::new();
+    for path in &generated {
+        combined.push_str(&std::fs::read_to_string(path)?);
+        combined.push('\n');
+    }
+
+    // export return `future<u32>` and import return `future<u32>` -> `Promise<number>`
+    assert!(
+        combined.contains("Promise<number>"),
+        "expected a direct future<u32> boundary to map to Promise<number>; generated:\n{combined}"
+    );
+    // export param `stream<u8>` and import param `stream<u8>` -> `AsyncIterable<number>`
+    assert!(
+        combined.contains("AsyncIterable<number>"),
+        "expected a direct stream<u8> boundary to map to AsyncIterable<number>; \
+         generated:\n{combined}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_exported_future_return_is_not_double_wrapped() -> anyhow::Result<()> {
+    // Exported JS functions are already declared as Promise-returning by the DTS writer. A direct
+    // component `future<T>` export return is implemented by returning a `T`/`Promise<T>` payload
+    // from JS, so the declaration must expose `Promise<T>`, not `Promise<Promise<T>>`.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-export-future-return;
+
+            world dts-export-future-return {
+              export run-future: func() -> future<u32>;
+            }
+        "#},
+        "export function runFuture() { return Promise.resolve(1); }\n",
+    )?;
+
+    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
+
+    assert!(
+        exports.contains("export function runFuture(): Promise<number>;"),
+        "expected exported future<T> return to be declared as Promise<T>; generated:\n{exports}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_maps_direct_future_and_stream_alias_boundaries() -> anyhow::Result<()> {
+    // Direct function-boundary async values remain direct even when named through a WIT alias.
+    // DTS generation should follow those aliases and emit Promise<T> / AsyncIterable<T> at the
+    // function boundary rather than treating the alias declaration as a forbidden nested use.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-async-value-aliases;
+
+            interface host {
+              type aliased-future = future<u32>;
+              type aliased-stream = stream<u8>;
+
+              make-future: func() -> aliased-future;
+              consume-stream: func(s: aliased-stream) -> u32;
+            }
+
+            world dts-async-value-aliases {
+              import host;
+
+              type exported-future = future<u32>;
+              type exported-stream = stream<u8>;
+
+              export run-future: func() -> exported-future;
+              export take-stream: func(s: exported-stream) -> u32;
+            }
+        "#},
+        "export function runFuture() { return Promise.resolve(1); }\n\
+         export function takeStream() { return 0; }\n",
+    )?;
+
+    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let mut combined = String::new();
+    for path in &generated {
+        combined.push_str(&std::fs::read_to_string(path)?);
+        combined.push('\n');
+    }
+
+    assert!(
+        combined.contains("Promise<number>"),
+        "expected a direct future<u32> alias boundary to map to Promise<number>; \
+         generated:\n{combined}"
+    );
+    assert!(
+        combined.contains("AsyncIterable<number>"),
+        "expected a direct stream<u8> alias boundary to map to AsyncIterable<number>; \
+         generated:\n{combined}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_emits_payload_type_definitions_for_async_value_boundaries() -> anyhow::Result<()> {
+    // Named payload types used only inside direct `future<T>` / `stream<T>` function boundaries are
+    // still part of the public TypeScript surface. The generated declarations must define them;
+    // otherwise the boundary signatures reference undeclared `Rec` / `Result` types.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-async-payload-types;
+
+            interface host {
+              record rec { n: u32 }
+
+              make-result: func() -> future<result<u32, string>>;
+              take-result: func(s: stream<result<u32, string>>);
+
+              resource thing {
+                get-result: func() -> future<result<u32, string>>;
+              }
+            }
+
+            world dts-async-payload-types {
+              import host;
+
+              record rec { n: u32 }
+
+              export run-future: func() -> future<rec>;
+              export take-stream: func(s: stream<rec>);
+              export run-result: func() -> future<result<u32, string>>;
+              export take-result: func(s: stream<result<u32, string>>);
+            }
+        "#},
+        "export function runFuture() { return Promise.resolve({ n: 1 }); }\n\
+         export function takeStream() {}\n\
+         export function runResult() { return Promise.resolve({ tag: 'ok', val: 1 }); }\n\
+         export function takeResult() {}\n",
+    )?;
+
+    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
+    let host_path = generated
+        .iter()
+        .find(|path| path.file_name() != Some("exports.d.ts"))
+        .expect("import interface .d.ts should be generated");
+    let host = std::fs::read_to_string(host_path)?;
+
+    let expected = [
+        (
+            "future<rec> return boundary signature",
+            "export function runFuture(): Promise<Rec>;",
+        ),
+        (
+            "stream<rec> parameter boundary signature",
+            "export function takeStream(s: AsyncIterable<Rec>): Promise<void>;",
+        ),
+        (
+            "future<result<_, _>> return boundary signature",
+            "export function runResult(): Promise<Result<number, string>>;",
+        ),
+        (
+            "stream<result<_, _>> parameter boundary signature",
+            "export function takeResult(s: AsyncIterable<Result<number, string>>): Promise<void>;",
+        ),
+        (
+            "named async-value payload type declaration",
+            "export type Rec =",
+        ),
+        (
+            "async-value result payload helper",
+            "export type Result<T, E> =",
+        ),
+    ];
+    let missing = expected
+        .iter()
+        .filter_map(|(description, needle)| (!exports.contains(needle)).then_some(*description))
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "missing expected DTS entries for {}; generated:\n{exports}",
+        missing.join(", ")
+    );
+    assert!(
+        host.contains("export type Result<T, E> ="),
+        "expected the Result helper for result payloads used by import functions/resource methods; \
+         generated:\n{host}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_accepts_async_func_async_value_boundaries() -> anyhow::Result<()> {
+    // The Preview 3 generation path supports `async func` exports/imports, and `future<T>` /
+    // `stream<T>` are supported as direct async-value function boundaries. DTS generation should
+    // therefore be able to describe the same valid P3 surface instead of accepting only the sync
+    // `func() -> future<T>` spelling used by some host-side helpers.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-async-func-async-values;
+
+            interface host {
+              make-future: async func() -> future<u32>;
+              consume-stream: async func(s: stream<u8>);
+            }
+
+            world dts-async-func-async-values {
+              import host;
+
+              export run-future: async func() -> future<u32>;
+              export take-stream: async func(s: stream<u8>);
+            }
+        "#},
+        "export async function runFuture() { return 1; }\n\
+         export async function takeStream() {}\n",
+    )?;
+
+    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
+
+    assert!(
+        exports.contains("export function runFuture(): Promise<number>;"),
+        "expected exported async future<T> return to be declared as Promise<T>; generated:\n{exports}"
+    );
+    assert!(
+        exports.contains("export function takeStream(s: AsyncIterable<number>): Promise<void>;"),
+        "expected exported async stream<T> parameter to be declared as AsyncIterable<T>; generated:\n{exports}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_collects_dependencies_through_imported_async_value_aliases() -> anyhow::Result<()> {
+    // A direct function boundary remains direct when the boundary type is a world-local `use` alias
+    // of an imported interface's alias-to-future. The generated signature references the imported
+    // payload type and Result helper, so dependency collection must not stop at the async alias.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-imported-async-alias;
+
+            interface host {
+              record rec { n: u32 }
+              type fut-rec = future<rec>;
+              type fut-result = future<result<u32, string>>;
+            }
+
+            world dts-imported-async-alias {
+              import host;
+              use host.{fut-rec, fut-result};
+
+              export get-rec: func() -> fut-rec;
+              export get-result: func() -> fut-result;
+            }
+        "#},
+        "export function getRec() { return Promise.resolve({ n: 1 }); }\n\
+         export function getResult() { return Promise.resolve({ tag: 'ok', val: 1 }); }\n",
+    )?;
+
+    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
+
+    assert!(
+        exports.contains(
+            "import * as bugDtsImportedAsyncAliasHost from 'bug:dts-imported-async-alias/host';"
+        ),
+        "expected an import for the host namespace referenced by the async-value payload; \
+         generated:\n{exports}"
+    );
+    assert!(
+        exports.contains("export function getRec(): Promise<bugDtsImportedAsyncAliasHost.Rec>;"),
+        "expected imported record payload type to be qualified in the future<T> boundary; \
+         generated:\n{exports}"
+    );
+    assert!(
+        exports.contains("export function getResult(): Promise<Result<number, string>>;"),
+        "expected imported async alias with result payload to use the Result helper; \
+         generated:\n{exports}"
+    );
+    assert!(
+        exports.contains("export type Result<T, E> ="),
+        "expected Result helper to be emitted for result payload behind imported async alias; \
+         generated:\n{exports}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_generates_for_async_values_examples() -> anyhow::Result<()> {
+    // End-to-end ground truth for Phase 3 part 2: the committed async-value examples use real P3
+    // `async func` boundaries. DTS generation must succeed on them and produce the settled
+    // `Promise<T>` / `AsyncIterable<T>` mappings (this is the surface a real user would consume).
+    let out = Utf8TempDir::new()?;
+
+    // Export-side example: future/stream at both export return and export parameter positions.
+    let export_dts = out.path().join("export");
+    generate_dts(
+        Utf8Path::new("examples/p3/async-values/wit"),
+        &export_dts,
+        None,
+    )?;
+    let exports = std::fs::read_to_string(export_dts.join("exports.d.ts"))?;
+    for needle in [
+        "export function runFuture(): Promise<number>;",
+        "export function runStream(): Promise<AsyncIterable<number>>;",
+        "export function takeFuture(f: Promise<number>): Promise<number>;",
+        "export function takeStream(s: AsyncIterable<number>): Promise<number>;",
+    ] {
+        assert!(
+            exports.contains(needle),
+            "missing `{needle}` in generated exports.d.ts:\n{exports}"
+        );
+    }
+
+    // Import-side example: future/stream at both import return and import parameter positions,
+    // across sync `func` and `async func` imports.
+    let import_dts = out.path().join("import");
+    let generated = generate_dts(
+        Utf8Path::new("examples/p3/async-values-import/wit"),
+        &import_dts,
+        None,
+    )?;
+    let host_path = generated
+        .iter()
+        .find(|path| path.file_name().is_some_and(|name| name.contains("host")))
+        .expect("host import interface .d.ts should be generated");
+    let host = std::fs::read_to_string(host_path)?;
+    for needle in [
+        // sync `func` import returning future/stream: no outer Promise wrapper
+        "export function makeFuture(x: number): Promise<number>;",
+        "export function makeStream(n: number): AsyncIterable<number>;",
+        // `async func` import: Promise-wrapped return, future param stays Promise<T>
+        "export function consumeFuture(f: Promise<number>): Promise<number>;",
+        "export function consumeStream(s: AsyncIterable<number>): Promise<number>;",
+        "export function storeFuture(f: Promise<number>): Promise<void>;",
+        "export function readStoredFuture(): Promise<number>;",
+    ] {
+        assert!(
+            host.contains(needle),
+            "missing `{needle}` in generated host.d.ts:\n{host}"
+        );
+    }
     Ok(())
 }

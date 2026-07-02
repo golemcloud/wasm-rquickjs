@@ -430,26 +430,41 @@ fn generate_exported_function_impl(
     let rust_fn = RustWitFunction::new(context, name, function);
     let func_name = rust_fn.function_name_ident();
 
-    let param_ident_type: Vec<_> = function
+    // Build the guest-trait argument list and the arguments forwarded to the JS export. A
+    // `future<T>` / `stream<T>` parameter is special-cased: the guest receives a component reader
+    // and the JS export is handed a lazily-created `Promise` / async-iterable
+    // (`reader_to_js_expr`). All other parameters flow through the normal `WrappedType` pipeline.
+    let mut func_arg_list: Vec<TokenStream> = Vec::new();
+    let mut param_refs: Vec<TokenStream> = Vec::new();
+    for ((param, export_parameter), import_parameter) in function
         .params
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(|((param, export_parameter), import_parameter)| {
-            process_parameter(
+    {
+        if let Some(async_value) = crate::async_values::detect(context, &param.ty)? {
+            let ident = Ident::new(&export_parameter.name, Span::call_site());
+            let reader_type = crate::async_values::reader_type(context, &async_value)?;
+            func_arg_list.push(quote! { #ident: #reader_type });
+            param_refs.push(crate::async_values::reader_to_js_expr(
+                context,
+                &async_value,
+                quote! { #ident },
+            )?);
+        } else {
+            let processed = process_parameter(
                 context,
                 &param.name,
                 &param.ty,
                 &export_parameter,
                 &import_parameter,
-            )
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+            )?;
+            let slice = std::slice::from_ref(&processed);
+            func_arg_list.extend(to_original_func_arg_list(slice));
+            param_refs.extend(to_wrapped_param_refs(slice));
+        }
+    }
 
-    let func_arg_list = to_original_func_arg_list(&param_ident_type);
-    let return_types = get_return_type(context, function, name, &rust_fn)?;
-
-    let param_refs = to_wrapped_param_refs(&param_ident_type);
     let param_refs_tuple = param_refs_as_tuple(&param_refs);
 
     let js_func_name_str = Lit::Str(LitStr::new(
@@ -482,6 +497,34 @@ fn generate_exported_function_impl(
             Lit::Str(LitStr::new(&context.root_package_name(), Span::call_site())),
         ),
     };
+
+    // A `future<T>` / `stream<T>` return type is special-cased: the JS export's raw return value
+    // (a `Promise` / async-iterable) is captured without awaiting it, a component future/stream
+    // is created, and a background writer task resolves the JS value and writes it into the
+    // component reader that is handed back to the host immediately (`js_to_reader_expr`).
+    if let Some(async_value) = function
+        .result
+        .as_ref()
+        .map(|typ| crate::async_values::detect(context, typ))
+        .transpose()?
+        .flatten()
+    {
+        let reader_type = crate::async_values::reader_type(context, &async_value)?;
+        let build_reader =
+            crate::async_values::js_to_reader_expr(context, &async_value, quote! { __js_result })?;
+        return Ok(quote! {
+            async fn #func_name(#(#func_arg_list),*) -> #reader_type {
+                let __js_result = crate::internal::call_js_export_raw(
+                    #wit_package_lit,
+                    #js_func_path,
+                    #param_refs_tuple
+                ).await;
+                #build_reader
+            }
+        });
+    }
+
+    let return_types = get_return_type(context, function, name, &rust_fn)?;
 
     let original_result = &return_types.wit_level_ret.original_type_ref;
     let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;

@@ -177,29 +177,87 @@ fn build_freestanding_import_bridge(
         import.name_and_interface(),
     );
 
-    let parameters = function
+    // A `future<T>` / `stream<T>` return value is special-cased: the wit-bindgen import returns a
+    // component reader, which the bridge lifts into a JS `Promise` / async-iterable and returns as
+    // a plain JS `Value`.
+    let async_return = function
+        .result
+        .as_ref()
+        .map(|typ| crate::async_values::detect(context, typ))
+        .transpose()?
+        .flatten();
+
+    // Whether any parameter is a `future<T>` / `stream<T>`, which must be lowered from a JS value
+    // by a background writer.
+    let has_async_value_params = function
+        .params
+        .iter()
+        .map(|param| crate::async_values::detect(context, &param.ty))
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .into_iter()
+        .any(|detected| detected.is_some());
+
+    // An async import that lowers JS `future<T>` / `stream<T>` parameters cannot use the plain
+    // `#[rquickjs::function] async fn` (`Promised`/`ctx.spawn`) shape: while the root exported call
+    // is parked awaiting its result promise it is the sole rquickjs runtime driver, and a writer
+    // that drives the runtime via `async_with!` from another task clobbers that single scheduler
+    // driver waker, causing a cross-executor lost-wakeup deadlock. Instead, generate a synchronous
+    // bridge that returns a deferred JS promise, lowers each async-value parameter into a component
+    // reader whose writer is fed purely from JS callbacks + a component-only write task (see
+    // `js_to_reader_pure_expr`), and settles the promise from a single wit-bindgen task.
+    if is_async && has_async_value_params {
+        let bridge_fn = build_deferred_import_bridge(
+            context,
+            &rust_fn,
+            name,
+            function,
+            &rust_function_ident,
+            &bindgen_path,
+            async_return.as_ref(),
+        )?;
+        return Ok(FreestandingImportBridge {
+            declaration,
+            export,
+            bridge_fn,
+        });
+    }
+
+    // Build the rquickjs bridge parameter list and the arguments forwarded to the wit-bindgen
+    // import. A `future<T>` / `stream<T>` parameter is special-cased: the bridge receives the raw
+    // JS value and lowers it into a component future/stream via `js_to_reader_expr` (which spawns
+    // a background writer). Such parameters (and future/stream return values) need a `Ctx`, which
+    // forces a shared `'js` lifetime on the bridge function.
+    let mut param_list: Vec<TokenStream> = Vec::new();
+    let mut param_refs: Vec<TokenStream> = Vec::new();
+    let mut needs_ctx = false;
+    for ((param, export_parameter), import_parameter) in function
         .params
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(|((param, export_parameter), import_parameter)| {
-            process_parameter(
+    {
+        if let Some(async_value) = crate::async_values::detect(context, &param.ty)? {
+            needs_ctx = true;
+            let ident = Ident::new(&export_parameter.name, Span::call_site());
+            param_list.push(quote! { #ident: rquickjs::Value<'js> });
+            param_refs.push(crate::async_values::js_to_reader_expr(
+                context,
+                &async_value,
+                quote! { rquickjs::Persistent::save(&ctx, #ident) },
+            )?);
+        } else {
+            let processed = process_parameter(
                 context,
                 &param.name,
                 &param.ty,
                 &export_parameter,
                 &import_parameter,
-            )
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-
-    let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
-    let param_refs: Vec<TokenStream> = to_unwrapped_param_refs(&parameters);
-    let return_types = get_return_type(context, function, name, &rust_fn)?;
-    let original_result = &return_types.wit_level_ret.original_type_ref;
-    let wrapped_result = &return_types.func_ret.wrapped_type_ref;
-    let wrap = &return_types.func_ret.wrap;
-    let wrap_result = wrap.run(quote! { result });
+            )?;
+            let slice = std::slice::from_ref(&processed);
+            param_list.extend(to_wrapped_func_arg_list(slice));
+            param_refs.extend(to_unwrapped_param_refs(slice));
+        }
+    }
 
     let maybe_async = if is_async {
         quote! { async }
@@ -212,29 +270,56 @@ fn build_freestanding_import_bridge(
         quote! {}
     };
 
-    let bridge_fn = if let Some(exception) = &return_types.expected_exception {
-        let wrapped_exception = &exception.wrapped_type_ref;
-        let wrap_exception = exception.wrap.run(quote! { error });
-
+    let bridge_fn = if let Some(async_value) = async_return {
+        let reader_type = crate::async_values::reader_type(context, &async_value)?;
+        let reader_to_js =
+            crate::async_values::reader_to_js_expr(context, &async_value, quote! { result })?;
         quote! {
             #[rquickjs::function]
-            #maybe_async fn #rust_function_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
-                let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
-                match result {
-                    Ok(result) => Ok(#wrap_result),
-                    Err(error) => {
-                        let error: #wrapped_exception = #wrap_exception;
-                        Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
-                    }
-                }
+            #maybe_async fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<rquickjs::Value<'js>> {
+                let result: #reader_type = #bindgen_path(#(#param_refs),*) #maybe_await;
+                rquickjs::IntoJs::into_js(#reader_to_js, &ctx)
             }
         }
     } else {
-        quote! {
-            #[rquickjs::function]
-            #maybe_async fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
-                let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
-                #wrap_result
+        let return_types = get_return_type(context, function, name, &rust_fn)?;
+        let original_result = &return_types.wit_level_ret.original_type_ref;
+        let wrapped_result = &return_types.func_ret.wrapped_type_ref;
+        let wrap = &return_types.func_ret.wrap;
+        let wrap_result = wrap.run(quote! { result });
+
+        if let Some(exception) = &return_types.expected_exception {
+            let wrapped_exception = &exception.wrapped_type_ref;
+            let wrap_exception = exception.wrap.run(quote! { error });
+
+            quote! {
+                #[rquickjs::function]
+                #maybe_async fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                    let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                    match result {
+                        Ok(result) => Ok(#wrap_result),
+                        Err(error) => {
+                            let error: #wrapped_exception = #wrap_exception;
+                            Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                        }
+                    }
+                }
+            }
+        } else if needs_ctx {
+            quote! {
+                #[rquickjs::function]
+                #maybe_async fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> #wrapped_result {
+                    let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                    #wrap_result
+                }
+            }
+        } else {
+            quote! {
+                #[rquickjs::function]
+                #maybe_async fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
+                    let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                    #wrap_result
+                }
             }
         }
     };
@@ -243,6 +328,174 @@ fn build_freestanding_import_bridge(
         declaration,
         export,
         bridge_fn,
+    })
+}
+
+/// Builds the bridge function for an **async import that lowers JS `future<T>` / `stream<T>`
+/// parameters**.
+///
+/// Such a bridge cannot use the ordinary `#[rquickjs::function] async fn` shape (whose body is
+/// wrapped by rquickjs into a `Promised`/`ctx.spawn` task): while the root exported call is parked
+/// awaiting its result promise it is the sole rquickjs runtime driver, and a writer that drives the
+/// runtime via `async_with!` from another task clobbers that single scheduler driver waker, causing
+/// a cross-executor lost-wakeup deadlock in which the guest promise never resumes.
+///
+/// Instead this generates a **synchronous** bridge that:
+///
+/// 1. creates a deferred JS promise (`Promise::new`) and immediately returns it to JS;
+/// 2. lowers each `future<T>` / `stream<T>` parameter into a component reader whose writer is fed
+///    entirely from JS (promise `.then` callbacks / a JS async pump) plus a *pure* component-only
+///    write task (see [`crate::async_values::js_to_reader_pure_expr`] /
+///    `crate::internal::future_writer_from_js` / `crate::internal::stream_writer_from_js`), so no
+///    background task ever drives the rquickjs runtime — this works whether the host consumes the
+///    reader during the import call or stores it and consumes it from a later call;
+/// 3. spawns a single wit-bindgen task that awaits the component import and then settles the
+///    deferred promise ([`crate::internal::settle_import_promise`], which also pumps the QuickJS
+///    job queue so the awaiting JS continuation resumes).
+fn build_deferred_import_bridge(
+    context: &GeneratorContext<'_>,
+    rust_fn: &RustWitFunction,
+    name: &str,
+    function: &Function,
+    rust_function_ident: &Ident,
+    bindgen_path: &TokenStream,
+    async_return: Option<&crate::async_values::AsyncValue>,
+) -> anyhow::Result<TokenStream> {
+    // The JS-facing bridge parameter list.
+    let mut param_list: Vec<TokenStream> = Vec::new();
+    // `let` bindings evaluated in the synchronous bridge body (while a `Ctx` is available), before
+    // the background task is spawned. For a `future<T>` / `stream<T>` parameter this lowers the JS
+    // value into a component reader and pushes the writer future onto `__writers`; for an ordinary
+    // parameter this binds the owned wit-bindgen value (so it can be moved into the `'static`
+    // background task; the possibly-borrowing import-arg conversion is applied *inside* the task,
+    // where the owned local outlives the borrow).
+    let mut arg_bindings: Vec<TokenStream> = Vec::new();
+    // The expressions passed to the wit-bindgen import call inside the background task.
+    let mut arg_exprs: Vec<TokenStream> = Vec::new();
+
+    for (index, ((param, export_parameter), import_parameter)) in function
+        .params
+        .iter()
+        .zip(rust_fn.export_parameters.clone())
+        .zip(rust_fn.import_parameters.clone())
+        .enumerate()
+    {
+        let arg_ident = Ident::new(&format!("__async_arg{index}"), Span::call_site());
+        if let Some(async_value) = crate::async_values::detect(context, &param.ty)? {
+            let name = Ident::new(&export_parameter.name, Span::call_site());
+            param_list.push(quote! { #name: rquickjs::Value<'js> });
+            // Lower the JS value into a component reader synchronously (a `Ctx` is available in the
+            // bridge body). The writer is fed by JS promise `.then` callbacks / a JS async pump and
+            // a pure component-model write task, so it never drives the rquickjs runtime and works
+            // whether the host consumes the reader during or after the import call.
+            let reader_expr = crate::async_values::js_to_reader_pure_expr(
+                context,
+                &async_value,
+                quote! { &ctx },
+                quote! { #name },
+            )?;
+            arg_bindings.push(quote! { let #arg_ident = #reader_expr; });
+            arg_exprs.push(quote! { #arg_ident });
+        } else {
+            let processed = process_parameter(
+                context,
+                &param.name,
+                &param.ty,
+                &export_parameter,
+                &import_parameter,
+            )?;
+            let slice = std::slice::from_ref(&processed);
+            param_list.extend(to_wrapped_func_arg_list(slice));
+
+            let wrapped = processed
+                .wrapped_type
+                .as_ref()
+                .expect("process_parameter always produces a wrapped type");
+            let owned = wrapped.unwrap.run(quote! { #arg_ident });
+            let param_ident = &processed.ident;
+            // Bind the JS-wrapped parameter to an owned wit-bindgen value.
+            arg_bindings.push(quote! {
+                let #arg_ident = #param_ident;
+                let #arg_ident = #owned;
+            });
+            // Apply the (possibly borrowing) export->import conversion at the call site inside the
+            // task, where the owned `#arg_ident` local outlives the borrow.
+            let conversion = processed
+                .export_parameter
+                .typ
+                .conversion_into_type(&processed.import_parameter.typ)
+                .run(quote! { #arg_ident });
+            arg_exprs.push(conversion);
+        }
+    }
+
+    let (result_ty, produce_body) = if let Some(async_value) = async_return {
+        let reader_type = crate::async_values::reader_type(context, async_value)?;
+        let reader_to_js =
+            crate::async_values::reader_to_js_expr(context, async_value, quote! { __result })?;
+        (
+            reader_type,
+            quote! {
+                Ok(crate::internal::PromiseOutcome::Resolve(
+                    rquickjs::IntoJs::into_js(#reader_to_js, __ctx)?
+                ))
+            },
+        )
+    } else {
+        let return_types = get_return_type(context, function, name, rust_fn)?;
+        let original_result = return_types.wit_level_ret.original_type_ref.clone();
+        let wrap = &return_types.func_ret.wrap;
+
+        if let Some(exception) = &return_types.expected_exception {
+            let wrap_result = wrap.run(quote! { __ok });
+            let wrap_exception = exception.wrap.run(quote! { __err });
+            (
+                original_result,
+                quote! {
+                    match __result {
+                        Ok(__ok) => Ok(crate::internal::PromiseOutcome::Resolve(
+                            rquickjs::IntoJs::into_js(#wrap_result, __ctx)?
+                        )),
+                        Err(__err) => Ok(crate::internal::PromiseOutcome::Reject(
+                            rquickjs::IntoJs::into_js(#wrap_exception, __ctx)?
+                        )),
+                    }
+                },
+            )
+        } else {
+            let wrap_result = wrap.run(quote! { __result });
+            (
+                original_result,
+                quote! {
+                    Ok(crate::internal::PromiseOutcome::Resolve(
+                        rquickjs::IntoJs::into_js(#wrap_result, __ctx)?
+                    ))
+                },
+            )
+        }
+    };
+
+    Ok(quote! {
+        #[rquickjs::function]
+        fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<rquickjs::Promise<'js>> {
+            let (__promise, __resolve, __reject) = rquickjs::Promise::new(&ctx)?;
+            let __resolve = rquickjs::Persistent::save(&ctx, __resolve);
+            let __reject = rquickjs::Persistent::save(&ctx, __reject);
+            // Lower each `future<T>` / `stream<T>` parameter into a component reader here, while a
+            // `Ctx` is available. The writers are fed from JS (promise callbacks / a JS pump) and
+            // pure component-model tasks, so they keep running correctly after the import returns.
+            #(#arg_bindings)*
+            wit_bindgen_p3::rt::async_support::spawn_local(async move {
+                let __result: #result_ty = #bindgen_path(#(#arg_exprs),*).await;
+                crate::internal::settle_import_promise(
+                    __resolve,
+                    __reject,
+                    move |__ctx| { #produce_body },
+                )
+                .await;
+            });
+            Ok(__promise)
+        }
     })
 }
 

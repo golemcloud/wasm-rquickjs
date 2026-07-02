@@ -244,12 +244,15 @@ sync or async.
 | Flags                   | `flags { a, b, c }` | `{ a: boolean, b: boolean, c: boolean }`          | The object keys are camelCase                                                 |
 | Record                  | `record { .. }`     | Object                                            | Field names are camelCase                                                     |
 | Variant                 | `variant { .. }`    | `{ tag: "x", val: X }`                            | Tag names match the WIT variant case names; `val` is undefined for unit cases |
+| Future                  | `future<T>`         | `Promise<T>`                                      | Only as a direct function parameter/return type; WASI Preview 3 (`--target wasi-p3`) only     |
+| Stream                  | `stream<T>`         | `AsyncIterable<T>`                                | Only as a direct function parameter/return type; WASI Preview 3 (`--target wasi-p3`) only     |
 
 ### Limitations
 
 - Maximum number of function parameters is 26
 - Anonymous interface exports/imports are not supported
 - Imported individual functions into the world are not supported (only whole interfaces)
+- `future<T>` and `stream<T>` are only supported as a **direct** function parameter or return type (WASI Preview 3 target); nested occurrences (inside a record, list, option, result, tuple, etc.) are rejected
 
 ## Available JavaScript APIs
 

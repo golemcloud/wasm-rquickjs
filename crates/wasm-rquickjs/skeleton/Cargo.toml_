@@ -143,10 +143,10 @@ wstd = { version = "=0.6.5", optional = true }
 # WASI Preview 3 host bindings + async wit-bindgen (enabled by the `p3` feature).
 # `wit-bindgen-p3` is the same `wit-bindgen` crate renamed so the 0.58 (async) and the
 # Preview 2 0.42 versions can coexist in this single skeleton; the generated Preview 3
-# bindings use `runtime_path: "wit_bindgen_p3::rt"`. Pinned to the snapshot matching
-# Wasmtime 45 (see `examples/phase0-p3-spike`).
-wasip3 = { version = "=0.6.0", optional = true }
-wit-bindgen-p3 = { package = "wit-bindgen", version = "0.58.0", default-features = false, features = ["async", "macros", "inter-task-wakeup"], optional = true }
+# bindings use `runtime_path: "wit_bindgen_p3::rt"`. Pinned to the `wasi-0.3.0` snapshot
+# matching Wasmtime 46.
+wasip3 = { version = "=0.7.0", optional = true }
+wit-bindgen-p3 = { package = "wit-bindgen", version = "0.58.0", default-features = false, features = ["async", "async-spawn", "macros", "inter-task-wakeup"], optional = true }
 # Pure-Rust HTTP primitives used by the Preview 3 `fetch`/HTTP bridge (`builtin/http_p3.rs`) to
 # validate header names/values, HTTP versions, and to resolve canonical status reason phrases.
 # This matches the validation the Preview 2 path gets from `golem-wasi-http` (which re-exports the

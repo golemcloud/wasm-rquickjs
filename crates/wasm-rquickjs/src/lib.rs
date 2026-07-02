@@ -63,6 +63,7 @@ impl GenerationTarget {
     }
 }
 
+mod async_values;
 mod conversions;
 mod exports;
 mod imports;

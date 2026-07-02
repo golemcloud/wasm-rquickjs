@@ -539,6 +539,12 @@ fn generate_conversion_instances_for_type(
         TypeDefKind::Type(Type::Id(type_id)) => {
             generate_conversion_instances_for_type(context, *type_id, visited_types)
         }
+        // A `future<T>`/`stream<T>` payload of a named (record/variant/enum/...) type needs its
+        // own IntoJs/FromJs conversions generated so the async-value bridge can wrap/unwrap it.
+        TypeDefKind::Future(Some(Type::Id(payload_id)))
+        | TypeDefKind::Stream(Some(Type::Id(payload_id))) => {
+            generate_conversion_instances_for_type(context, *payload_id, visited_types)
+        }
         _ => Ok(None),
     }
 }

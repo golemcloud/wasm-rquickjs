@@ -6,19 +6,24 @@
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
 
-use futures::future::AbortHandle;
-use rquickjs::function::{Args, IntoArgs};
+use futures::future::{AbortHandle, Abortable};
+use rquickjs::function::{Args, IntoArgs, This};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
+use rquickjs::promise::Promised;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, FromJs, Function, Module,
-    Object, Persistent, Promise, String as JsString, Value, async_with,
+    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, FromJs, Function, IntoJs,
+    Module, Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 use std::task::{Context as TaskContext, Poll};
+use wit_bindgen_p3::rt::async_support::{
+    FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
+};
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
@@ -115,6 +120,63 @@ impl JsState {
             .finish::<()>()
             .catch(&ctx)
             .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
+
+            // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
+            // turns a Rust-provided `pull()` (returning a promise of `{ value, done }`) into a JS
+            // async-iterable; `get_async_iterator` normalizes any (async or sync) iterable passed
+            // from JS into an async iterator whose `next()` always returns a promise.
+            Module::evaluate(
+                ctx.clone(),
+                "__wasm_rquickjs_async_values",
+                r#"
+                globalThis.__wasm_rquickjs_make_async_iterable = function (pull) {
+                    return {
+                        [Symbol.asyncIterator]() {
+                            return { next() { return pull(); } };
+                        },
+                    };
+                };
+                globalThis.__wasm_rquickjs_get_async_iterator = function (iterable) {
+                    if (iterable != null && typeof iterable[Symbol.asyncIterator] === 'function') {
+                        return iterable[Symbol.asyncIterator]();
+                    }
+                    if (iterable != null && typeof iterable[Symbol.iterator] === 'function') {
+                        const it = iterable[Symbol.iterator]();
+                        return { next() { return Promise.resolve(it.next()); } };
+                    }
+                    throw new TypeError('value provided for a component stream<T> is not (async) iterable');
+                };
+                // Drives a JS (async/sync) iterable `source` into a component stream, calling the
+                // native `writeOne(item)` for each item and awaiting the promise it returns before
+                // pulling the next one (backpressure). `writeOne` resolves to `false` when the
+                // component reader hung up, which stops iteration. Runs as ordinary QuickJS jobs so
+                // it never becomes a competing async runtime driver.
+                globalThis.__wasm_rquickjs_drive_stream_param = async function (source, writeOne) {
+                    const value = await source;
+                    const iterator = globalThis.__wasm_rquickjs_get_async_iterator(value);
+                    while (true) {
+                        const result = await iterator.next();
+                        if (result == null || typeof result !== 'object') {
+                            throw new TypeError('stream iterator next() did not resolve to an object');
+                        }
+                        if (result.done) {
+                            return;
+                        }
+                        // A sync iterable normalized into an async iterator can still yield
+                        // promise-valued items; `for await` awaits each value, so do the same.
+                        const keepGoing = await writeOne(await result.value);
+                        if (!keepGoing) {
+                            return;
+                        }
+                    }
+                };
+                "#,
+            )
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to evaluate async-value helpers:\n{}", format_caught_error(e)))
+            .finish::<()>()
+            .catch(&ctx)
+            .unwrap_or_else(|e| panic!("Failed to finish async-value helpers:\n{}", format_caught_error(e)));
 
             let wiring = crate::builtin::wire_builtins();
             Module::evaluate(
@@ -262,6 +324,44 @@ pub fn get_js_state() -> &'static JsState {
     }
 }
 
+/// RAII guard that keeps a persistent rquickjs scheduler driver (`AsyncRuntime::drive`) running on
+/// the component-model async executor for the lifetime of an exported call.
+///
+/// The rquickjs scheduler (which holds `Promised` / `Ctx::spawn` tasks such as the `future<T>` /
+/// `stream<T>` bridges and stream backpressure acknowledgements) is only advanced while some
+/// `async_with!` (`WithFuture`) or the `DriveFuture` returned by `drive()` is actively polled. An
+/// exported call parks inside `async_with!` awaiting the JS result promise; while parked it stops
+/// driving the scheduler, so any scheduler task a JS job spawns after that point (typically a
+/// `future<T>` / `stream<T>` produced or consumed by an imported async function) would never be
+/// polled again — a cross-executor lost wakeup.
+///
+/// `DriveFuture` avoids this: it registers its waker with the runtime's spawner on every poll and
+/// is re-woken whenever anything is spawned, so keeping one alive for the whole exported call means
+/// the scheduler always makes progress. It is spawned as an independent wit-bindgen task (confined
+/// to the current call's `FutureState`) and aborted when the guard is dropped so the call's task
+/// set can drain once the export body — and any writer tasks it started — have finished.
+struct DriveGuard(AbortHandle);
+
+impl Drop for DriveGuard {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// Spawns the persistent scheduler driver described on [`DriveGuard`] and returns the guard that
+/// aborts it on drop. Must be called from within an exported call's async context (so the spawned
+/// driver is polled within that call's `FutureState`).
+fn spawn_drive_guard(rt: &AsyncRuntime) -> DriveGuard {
+    let (handle, registration) = AbortHandle::new_pair();
+    let drive = rt.drive();
+    spawn_local(async move {
+        // `Abortable` resolves to `Err(Aborted)` once the guard is dropped; the driver itself never
+        // completes on its own while the runtime is alive.
+        let _ = Abortable::new(drive, registration).await;
+    });
+    DriveGuard(handle)
+}
+
 pub async fn call_js_export<A, R>(
     wit_package: &'static str,
     function_path: &'static [&'static str],
@@ -312,6 +412,10 @@ where
     TME: for<'js> Fn(&Ctx<'js>, &Value<'js>) -> Option<FR>,
 {
     let js_state = ensure_initialized().await;
+    // Keep the rquickjs scheduler driven for the whole call so `future<T>` / `stream<T>` bridges
+    // (which live as scheduler tasks) make progress even while this call is parked awaiting the JS
+    // result promise. Dropped (aborted) when this call returns.
+    let _drive_guard = spawn_drive_guard(&js_state.rt);
 
     async_with!(js_state.ctx => |ctx| {
         let (user_function, parent) =
@@ -600,5 +704,592 @@ pub fn format_caught_error(caught: CaughtError) -> String {
         CaughtError::Error(e) => format!("Host error: {e:?}"),
         CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
         CaughtError::Value(val) => format_js_exception(&val),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WASI Preview 3 `future<T>` / `stream<T>` bridge helpers.
+//
+// These support the generated code that maps component-model async values to and from
+// JavaScript. A component `future<T>` is exposed to JS as a `Promise<T>` and a `stream<T>`
+// as an async-iterable; conversely a JS `Promise`/async-iterable coming from JS is turned
+// into a component future/stream. Values that must outlive the current exported/imported
+// call (writers driven from JS) use `spawn_local` + `rquickjs::Persistent` so the background
+// task keeps running on the component-model async executor after the initiating call returns.
+// ---------------------------------------------------------------------------
+
+/// Awaits a JavaScript value, transparently resolving it if it is a promise, and converts the
+/// result to `R`. Panics (traps) if the promise rejects or the value cannot be converted, since
+/// `future<T>` has no error channel.
+async fn resolve_js_value<'js, R>(ctx: &Ctx<'js>, value: Value<'js>) -> R
+where
+    R: FromJs<'js>,
+{
+    if value.is_promise() {
+        let promise: Promise = value
+            .into_promise()
+            .expect("value.is_promise() returned true but conversion to Promise failed");
+        match promise.into_future::<R>().await {
+            Ok(v) => v,
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+                panic!(
+                    "A JavaScript promise backing a component future/stream payload rejected:\n{}",
+                    format_js_exception(&exception)
+                );
+            }
+            Err(e) => panic!(
+                "Error awaiting a JavaScript promise for a component future/stream payload: {e:?}"
+            ),
+        }
+    } else {
+        R::from_js(ctx, value).unwrap_or_else(|e| {
+            panic!(
+                "Failed to convert a JavaScript value to a component future/stream payload: {e:?}"
+            )
+        })
+    }
+}
+
+/// Calls an exported JS function and returns its raw return value (a promise or a plain value)
+/// as a `Persistent` handle, without awaiting it. Used by exported functions whose WIT return
+/// type is `future<T>`/`stream<T>`: the returned value is resolved later by a background writer
+/// task so the component can hand the async value back to the host immediately.
+pub async fn call_js_export_raw<A>(
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
+    args: A,
+) -> Persistent<Value<'static>>
+where
+    A: for<'js> IntoArgs<'js>,
+{
+    let js_state = ensure_initialized().await;
+    // See `call_js_export_internal`: keep the rquickjs scheduler driven for the whole call. The
+    // returned raw value's writer task (spawned by the caller) self-drives via its own `async_with!`
+    // after this returns, so the guard only needs to cover the JS call itself.
+    let _drive_guard = spawn_drive_guard(&js_state.rt);
+
+    async_with!(js_state.ctx => |ctx| {
+        let (user_function, parent) =
+            get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
+
+        let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
+
+        match result {
+            Ok(value) => Persistent::save(&ctx, value),
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+                panic!("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&exception));
+            }
+            Err(e) => {
+                panic!("Error during call of {fun}:\n{e:?}", fun = function_path.join("."));
+            }
+        }
+    })
+    .await
+}
+
+/// The future produced by [`spawn_future_writer`], factored out so it can also be composed with
+/// an import call in a single wit-bindgen task (see [`drive_import_with_writers`]) instead of
+/// always being spawned as an independent task.
+///
+/// Resolves a persisted JavaScript value (awaiting it if it is a promise), converts it to the
+/// component payload type, and writes it into the component future.
+pub async fn future_writer_task<T, R, F>(
+    js_value: Persistent<Value<'static>>,
+    writer: FutureWriter<T>,
+    convert: F,
+) where
+    T: 'static,
+    R: for<'js> FromJs<'js> + 'static,
+    F: FnOnce(R) -> T + 'static,
+{
+    let payload: T = async_with!(get_js_state().ctx => |ctx| {
+        let value = js_value
+            .restore(&ctx)
+            .expect("Failed to restore a persisted future payload value");
+        let r: R = resolve_js_value::<R>(&ctx, value).await;
+        convert(r)
+    })
+    .await;
+    let _ = writer.write(payload).await;
+}
+
+/// Spawns a background task that resolves a persisted JavaScript value (awaiting it if it is a
+/// promise), converts it to the component payload type, and writes it into the component future.
+pub fn spawn_future_writer<T, R, F>(
+    js_value: Persistent<Value<'static>>,
+    writer: FutureWriter<T>,
+    convert: F,
+) where
+    T: 'static,
+    R: for<'js> FromJs<'js> + 'static,
+    F: FnOnce(R) -> T + 'static,
+{
+    spawn_local(future_writer_task(js_value, writer, convert));
+}
+
+/// The future produced by [`spawn_stream_writer`], factored out so it can also be composed with
+/// an import call in a single wit-bindgen task (see [`drive_import_with_writers`]) instead of
+/// always being spawned as an independent task.
+///
+/// Drains a persisted JavaScript (async-)iterable one item at a time and writes each item into
+/// the component stream. Stops early if the reader hangs up.
+pub async fn stream_writer_task<T, R, F>(
+    js_value: Persistent<Value<'static>>,
+    mut writer: StreamWriter<T>,
+    convert: F,
+) where
+    T: 'static,
+    R: for<'js> FromJs<'js> + 'static,
+    F: Fn(R) -> T + 'static,
+{
+    // Obtain a normalized async iterator from the JS value once. The persisted value may be a
+    // promise (an `async function` returning the iterable resolves to it), so resolve it first
+    // before normalizing it into an async iterator.
+    let iterator: Persistent<Object<'static>> = async_with!(get_js_state().ctx => |ctx| {
+            let value = js_value
+                .restore(&ctx)
+                .expect("Failed to restore a persisted stream value");
+            let value: Value = resolve_js_value::<Value>(&ctx, value).await;
+            let get_iter: Function = ctx
+                .globals()
+                .get("__wasm_rquickjs_get_async_iterator")
+                .expect("async-value helper __wasm_rquickjs_get_async_iterator is missing");
+            let iterator: Object = get_iter
+                .call((value,))
+                .unwrap_or_else(|e| panic!("Failed to obtain an async iterator for a component stream<T>: {e:?}"));
+            Persistent::save(&ctx, iterator)
+        })
+        .await;
+
+    // Borrow the converter so the per-iteration `async_with!` closure copies a `&F` (which is
+    // `Copy`) instead of moving the non-`Copy` `convert` out of the enclosing task.
+    let convert = &convert;
+    loop {
+        // Clone the persisted iterator handle per iteration so the `async_with!` closure moves
+        // a fresh clone each time rather than the shared handle (which the loop reuses).
+        let iterator = iterator.clone();
+        let item: Option<T> = async_with!(get_js_state().ctx => |ctx| {
+                let iterator = iterator
+                    .restore(&ctx)
+                    .expect("Failed to restore a persisted stream iterator");
+                let next_fn: Function = iterator
+                    .get("next")
+                    .expect("stream async iterator has no next() method");
+                let next_value: Value = next_fn
+                    .call((This(iterator.clone()),))
+                    .unwrap_or_else(|e| panic!("Failed to call next() on a component stream<T> iterator: {e:?}"));
+                let resolved: Value = resolve_js_value::<Value>(&ctx, next_value).await;
+                let result_obj: Object = resolved
+                    .into_object()
+                    .unwrap_or_else(|| panic!("stream iterator next() did not resolve to an object"));
+                let done: bool = result_obj.get("done").unwrap_or(false);
+                if done {
+                    None
+                } else {
+                    let value: Value = result_obj
+                        .get("value")
+                        .unwrap_or_else(|e| panic!("Failed to read `value` from a stream iterator result: {e:?}"));
+                    // A sync iterable normalized into an async iterator can still yield
+                    // promise-valued items; JS `for await` awaits each value (AsyncFromSyncIterator
+                    // semantics), so resolve promises before converting to the payload type.
+                    let r: R = resolve_js_value::<R>(&ctx, value).await;
+                    Some(convert(r))
+                }
+            })
+            .await;
+
+        match item {
+            Some(item) => {
+                if writer.write_one(item).await.is_some() {
+                    // The reader hung up; stop producing further items.
+                    break;
+                }
+            }
+            None => {
+                break;
+            }
+        }
+    }
+}
+
+/// Spawns a background task that drains a persisted JavaScript (async-)iterable one item at a
+/// time and writes each item into the component stream. Stops early if the reader hangs up.
+pub fn spawn_stream_writer<T, R, F>(
+    js_value: Persistent<Value<'static>>,
+    writer: StreamWriter<T>,
+    convert: F,
+) where
+    T: 'static,
+    R: for<'js> FromJs<'js> + 'static,
+    F: Fn(R) -> T + 'static,
+{
+    spawn_local(stream_writer_task(js_value, writer, convert));
+}
+
+/// Whether a settled deferred promise should be fulfilled or rejected, and with what JS value.
+///
+/// Used by [`settle_import_promise`] to bridge a WIT import result (which may be a `result<_, _>`
+/// or an ordinary value) into a JS promise settlement.
+pub enum PromiseOutcome<'js> {
+    Resolve(Value<'js>),
+    Reject(Value<'js>),
+}
+
+// ---------------------------------------------------------------------------
+// Import-side `future<T>` / `stream<T>` parameter lowering (JS -> component).
+//
+// A `future<T>` / `stream<T>` parameter is an owned component value that the host may consume
+// *during* the import call or store and consume *after* the import returns. The generated bridge
+// for an async import that takes such parameters is a synchronous function that returns a deferred
+// JS promise and spawns one wit-bindgen task that awaits the import and then settles the promise.
+//
+// The subtle constraint is the rquickjs runtime's single scheduler waker: while the root exported
+// call is parked awaiting its result promise inside `async_with!`, it is the sole registered
+// runtime driver. If a background writer task also drives the runtime via `async_with!` (to
+// resolve/convert the JS payload) it clobbers that driver waker, and a subsequent async import
+// that depends on the writer's output never gets re-polled -> deadlock.
+//
+// So these lowering helpers strictly separate the two kinds of work:
+//   * JS-value resolution + payload conversion runs in JS promise `.then` callbacks / a JS async
+//     pump. Those run as ordinary QuickJS jobs, driven by the existing runtime driver (the export
+//     call), and never register a competing driver.
+//   * The actual component-model write runs in a *pure* wit-bindgen task that only awaits
+//     component futures/channels and never touches the QuickJS `Ctx`.
+// The converted payloads are handed from the JS side to the pure write task over plain Rust
+// channels. This works whether the host consumes the reader during or after the import call.
+// ---------------------------------------------------------------------------
+
+/// Lowers a JS value (`value`, a `Promise<T>` or a plain `T`) into a component `future<T>` fed by
+/// `writer`. The JS→Rust conversion happens in a promise `.then` callback (or immediately, for a
+/// non-promise value); the resolved payload is sent to a pure component-model task that performs
+/// `writer.write`. Neither the callback nor the write task ever drives the rquickjs runtime, so
+/// this is safe to call while an exported call is parked (e.g. for a stored `future<T>` consumed
+/// by a later import).
+pub fn future_writer_from_js<'js, T, R, F>(
+    ctx: &Ctx<'js>,
+    value: Value<'js>,
+    writer: FutureWriter<T>,
+    convert: F,
+) -> rquickjs::Result<()>
+where
+    T: 'static,
+    R: for<'a> FromJs<'a> + 'static,
+    F: FnOnce(R) -> T + 'static,
+{
+    let (tx, rx) = futures::channel::oneshot::channel::<T>();
+
+    // Pure write task: no `async_with!`, only component-model awaits.
+    spawn_local(async move {
+        match rx.await {
+            Ok(payload) => {
+                // If the host dropped the reader the write fails harmlessly.
+                let _ = writer.write(payload).await;
+            }
+            Err(_) => {
+                // The JS promise rejected (or was dropped) without producing a payload. A bare
+                // `future<T>` has no error channel, so dropping the writer traps via
+                // `async_value_default`, matching the "payload never resolved" contract.
+                drop(writer);
+            }
+        }
+    });
+
+    if value.is_promise() {
+        let promise = value
+            .into_promise()
+            .expect("value.is_promise() returned true but conversion to Promise failed");
+        // `convert`/`tx` are single-use; a QuickJS callback must be `Fn`, so guard them behind a
+        // shared cell that the fulfilled/rejected reactions take from (only one ever fires).
+        let slot: Rc<RefCell<Option<(futures::channel::oneshot::Sender<T>, F)>>> =
+            Rc::new(RefCell::new(Some((tx, convert))));
+        let slot_ok = slot.clone();
+        let on_fulfilled = Function::new(ctx.clone(), move |resolved: Value<'_>| {
+            if let Some((tx, convert)) = slot_ok.borrow_mut().take() {
+                // Derive the `Ctx` from the value so both share the same `'js` lifetime.
+                let cb_ctx = resolved.ctx().clone();
+                let wrapped = R::from_js(&cb_ctx, resolved).unwrap_or_else(|e| {
+                    panic!("Failed to convert a JavaScript value to a component future payload: {e:?}")
+                });
+                let _ = tx.send(convert(wrapped));
+            }
+        })?;
+        let on_rejected = Function::new(ctx.clone(), move |_reason: Value<'_>| {
+            // Drop the sender so the pure write task observes a cancelled payload and traps.
+            drop(slot.borrow_mut().take());
+        })?;
+        let then: Function = promise.get("then")?;
+        then.call::<_, ()>((This(promise.clone()), on_fulfilled, on_rejected))?;
+    } else {
+        let wrapped = R::from_js(ctx, value)?;
+        let _ = tx.send(convert(wrapped));
+    }
+    Ok(())
+}
+
+/// Lowers a JS value (`value`, an async/sync iterable or a `Promise` of one) into a component
+/// `stream<T>` fed by `writer`. A JS async pump (`__wasm_rquickjs_drive_stream_param`) iterates the
+/// source and, for each item, invokes a native `writeOne` callback that converts the item and hands
+/// it to a pure component-model task; the callback returns a promise the pump awaits before pulling
+/// the next item, preserving backpressure. As with [`future_writer_from_js`], no callback or task
+/// drives the rquickjs runtime, so a stored stream consumed after the import returns works too.
+pub fn stream_writer_from_js<'js, T, R, F>(
+    ctx: &Ctx<'js>,
+    value: Value<'js>,
+    writer: StreamWriter<T>,
+    convert: F,
+) -> rquickjs::Result<()>
+where
+    T: 'static,
+    R: for<'a> FromJs<'a> + 'static,
+    F: Fn(R) -> T + 'static,
+{
+    // Commands from the JS `writeOne` callback to the pure write task. Each item carries a
+    // oneshot the task uses to acknowledge whether the stream should keep producing.
+    let (cmd_tx, mut cmd_rx) =
+        futures::channel::mpsc::unbounded::<(T, futures::channel::oneshot::Sender<bool>)>();
+
+    // Pure write task: no `async_with!`, only component-model awaits.
+    spawn_local(async move {
+        use futures::StreamExt as _;
+        let mut writer = writer;
+        while let Some((payload, ack)) = cmd_rx.next().await {
+            match writer.write_one(payload).await {
+                // Item accepted; ask the pump to continue.
+                None => {
+                    let _ = ack.send(true);
+                }
+                // The reader hung up; tell the pump to stop and end the stream.
+                Some(_returned) => {
+                    let _ = ack.send(false);
+                    break;
+                }
+            }
+        }
+        // Dropping `writer` closes the component stream once the pump has finished (or the reader
+        // hung up).
+        drop(writer);
+    });
+
+    let cmd_tx = Rc::new(cmd_tx);
+    // Returns a `Promised` (converted to a JS promise by rquickjs) that resolves to whether the
+    // pump should keep producing. Returning `Promised` directly (rather than `into_js`-ing it here)
+    // avoids tying an explicit `Value<'js>` return to the argument's invariant lifetime.
+    let write_one = Function::new(ctx.clone(), move |item: Value<'_>| {
+        // Derive the `Ctx` from the item so `from_js` uses the matching `'js` lifetime.
+        let cb_ctx = item.ctx().clone();
+        let wrapped = R::from_js(&cb_ctx, item).unwrap_or_else(|e| {
+            panic!("Failed to convert a JavaScript value to a component stream payload: {e:?}")
+        });
+        let payload = convert(wrapped);
+        let (ack_tx, ack_rx) = futures::channel::oneshot::channel::<bool>();
+        // If the pure task already exited (reader hung up) the send fails; report "stop".
+        let accepted = cmd_tx.unbounded_send((payload, ack_tx)).is_ok();
+        Promised(async move {
+            if accepted {
+                ack_rx.await.unwrap_or(false)
+            } else {
+                false
+            }
+        })
+    })?;
+
+    let drive: Function = ctx
+        .globals()
+        .get("__wasm_rquickjs_drive_stream_param")
+        .expect("async-value helper __wasm_rquickjs_drive_stream_param is missing");
+    // The pump returns a promise; attach a rejection handler so a throwing iterable traps with a
+    // clear diagnostic instead of surfacing as an unhandled rejection.
+    let pump: Value = drive.call((value, write_one))?;
+    if let Some(pump) = pump.as_promise() {
+        let on_rejected = Function::new(ctx.clone(), move |reason: Value<'_>| -> () {
+            panic!(
+                "A JavaScript iterable backing a component stream failed:\n{}",
+                format_js_exception(&reason)
+            );
+        })?;
+        let then: Function = pump.get("then")?;
+        then.call::<_, ()>((This(pump.clone()), rquickjs::Undefined, on_rejected))?;
+    }
+    Ok(())
+}
+
+/// Settles a deferred JS promise (created for an async import that lowers JS `future<T>` /
+/// `stream<T>` parameters) with the outcome produced by `produce`, then drives the QuickJS job
+/// queue so the awaiting JS continuation — and the root export's promise-resolution callback —
+/// actually run. Merely calling `resolve`/`reject` and returning is not sufficient: promise
+/// reaction jobs are only executed while the QuickJS job queue is pumped.
+pub async fn settle_import_promise<P>(
+    resolve: Persistent<Function<'static>>,
+    reject: Persistent<Function<'static>>,
+    produce: P,
+) where
+    P: for<'js> FnOnce(&Ctx<'js>) -> rquickjs::Result<PromiseOutcome<'js>> + 'static,
+{
+    async_with!(get_js_state().ctx => |ctx| {
+        let resolve = resolve
+            .restore(&ctx)
+            .expect("Failed to restore a persisted async-import resolve function");
+        let reject = reject
+            .restore(&ctx)
+            .expect("Failed to restore a persisted async-import reject function");
+        match produce(&ctx) {
+            Ok(PromiseOutcome::Resolve(value)) => {
+                resolve
+                    .call::<_, ()>((value,))
+                    .unwrap_or_else(|e| panic!("Failed to resolve an async import promise: {e:?}"));
+            }
+            Ok(PromiseOutcome::Reject(error)) => {
+                reject
+                    .call::<_, ()>((error,))
+                    .unwrap_or_else(|e| panic!("Failed to reject an async import promise: {e:?}"));
+            }
+            Err(e) => panic!("Failed to convert an async import result to JavaScript: {e:?}"),
+        }
+        // Run the promise reaction jobs enqueued by resolve/reject (and any transitive
+        // continuations) so the JS `await` resumes and the root export's promise settles.
+        while ctx.execute_pending_job() {}
+    })
+    .await;
+}
+
+/// A single async-iterator result (`{ value, done }`) produced from an `Option`.
+struct IterResult<V>(Option<V>);
+
+impl<'js, V> IntoJs<'js> for IterResult<V>
+where
+    V: IntoJs<'js>,
+{
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        let obj = Object::new(ctx.clone())?;
+        match self.0 {
+            Some(v) => {
+                obj.set("done", false)?;
+                obj.set("value", v)?;
+            }
+            None => {
+                obj.set("done", true)?;
+                obj.set("value", rquickjs::Undefined)?;
+            }
+        }
+        Ok(obj.into_value())
+    }
+}
+
+/// Default value constructor handed to `wit_future::new`/`wit_stream::new` in generated code.
+/// The generated writer tasks always write an explicit value before the writer is dropped, so
+/// this default is only reached on an abnormal path (the writer was dropped before a value was
+/// resolved and written, e.g. the resolving task was cancelled). There is no error channel on a
+/// bare `future<T>`/`stream<T>`, so trap with an explicit diagnostic instead of fabricating a
+/// value. `fn() -> T` is required by the wit-bindgen helpers; this generic fn satisfies it for
+/// any payload type without requiring `T: Default`.
+pub fn async_value_default<T>() -> T {
+    panic!(
+        "a component future/stream writer was dropped before its JavaScript value was resolved \
+         and written; this indicates the producing task was cancelled"
+    )
+}
+
+/// Builds a JavaScript async-iterable that yields items pulled one at a time from a component
+/// stream reader, applying `wrap` to convert each payload to its JS representation.
+///
+/// Concurrent `next()` calls are serialized through an async mutex so a second pull started
+/// before the first resolves waits its turn instead of observing a premature end-of-stream.
+pub fn stream_reader_to_js<'js, T, R, F>(
+    ctx: &Ctx<'js>,
+    reader: StreamReader<T>,
+    wrap: F,
+) -> rquickjs::Result<Value<'js>>
+where
+    T: 'static,
+    R: for<'a> IntoJs<'a> + 'static,
+    F: Fn(T) -> R + Clone + 'static,
+{
+    let state: Rc<futures::lock::Mutex<StreamReader<T>>> =
+        Rc::new(futures::lock::Mutex::new(reader));
+    let pull = Function::new(ctx.clone(), move || {
+        let state = state.clone();
+        let wrap = wrap.clone();
+        Promised(async move {
+            let item: Option<T> = {
+                let mut reader = state.lock().await;
+                reader.next().await
+            };
+            IterResult(item.map(&wrap))
+        })
+    })?;
+
+    let make: Function = ctx.globals().get("__wasm_rquickjs_make_async_iterable")?;
+    let iterable: Value = make.call((pull,))?;
+    Ok(iterable)
+}
+
+/// Awaits a component future reader and converts its payload to a JS value via `wrap`. Exposed to
+/// JavaScript as a `Promise` (through rquickjs' `Promised`).
+pub fn future_reader_to_js<'js, T, R, F>(
+    ctx: &Ctx<'js>,
+    reader: FutureReader<T>,
+    wrap: F,
+) -> rquickjs::Result<Value<'js>>
+where
+    T: 'static,
+    R: for<'a> IntoJs<'a> + 'static,
+    F: FnOnce(T) -> R + 'static,
+{
+    Promised(async move {
+        let payload: T = reader.await;
+        wrap(payload)
+    })
+    .into_js(ctx)
+}
+
+/// An `IntoJs` wrapper around a component future reader, so the backing `Promise` is created
+/// lazily inside the QuickJS context (where a `Ctx` is available), e.g. when passed as an
+/// exported function argument or returned from an imported-function bridge.
+pub struct FutureReaderIntoJs<T: 'static, F> {
+    reader: FutureReader<T>,
+    wrap: F,
+}
+
+impl<T: 'static, F> FutureReaderIntoJs<T, F> {
+    pub fn new(reader: FutureReader<T>, wrap: F) -> Self {
+        Self { reader, wrap }
+    }
+}
+
+impl<'js, T, R, F> IntoJs<'js> for FutureReaderIntoJs<T, F>
+where
+    T: 'static,
+    R: for<'a> IntoJs<'a> + 'static,
+    F: FnOnce(T) -> R + 'static,
+{
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        future_reader_to_js(ctx, self.reader, self.wrap)
+    }
+}
+
+/// An `IntoJs` wrapper around a component stream reader, so that the async-iterable is built
+/// lazily inside the QuickJS context (where a `Ctx` is available), e.g. when it is passed as an
+/// exported function argument.
+pub struct StreamReaderIntoJs<T: 'static, F> {
+    reader: StreamReader<T>,
+    wrap: F,
+}
+
+impl<T: 'static, F> StreamReaderIntoJs<T, F> {
+    pub fn new(reader: StreamReader<T>, wrap: F) -> Self {
+        Self { reader, wrap }
+    }
+}
+
+impl<'js, T, R, F> IntoJs<'js> for StreamReaderIntoJs<T, F>
+where
+    T: 'static,
+    R: for<'a> IntoJs<'a> + 'static,
+    F: Fn(T) -> R + Clone + 'static,
+{
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        stream_reader_to_js(ctx, self.reader, self.wrap)
     }
 }

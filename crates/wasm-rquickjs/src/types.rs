@@ -87,8 +87,22 @@ pub fn type_id_to_type_ref(
                 .collect::<anyhow::Result<Vec<_>>>()?;
             Ok(quote! { (#(#item_refs),*) })
         }
-        TypeDefKind::Future(_) => Err(anyhow!("Future types are not supported yet"))?,
-        TypeDefKind::Stream(_) => Err(anyhow!("Stream types are not supported yet"))?,
+        TypeDefKind::Future(inner) => {
+            let rt = context.wit_bindgen_rt_path();
+            let payload = match inner {
+                Some(inner) => to_type_ref(context, inner)?,
+                None => quote! { () },
+            };
+            Ok(quote! { #rt::async_support::FutureReader<#payload> })
+        }
+        TypeDefKind::Stream(inner) => {
+            let rt = context.wit_bindgen_rt_path();
+            let payload = match inner {
+                Some(inner) => to_type_ref(context, inner)?,
+                None => quote! { () },
+            };
+            Ok(quote! { #rt::async_support::StreamReader<#payload> })
+        }
         TypeDefKind::Handle(handle) => match handle {
             Handle::Own(resource_type_id) => owned_resource_ref(context, resource_type_id),
             Handle::Borrow(resource_type_id) => borrowed_resource_ref(context, resource_type_id),
@@ -432,6 +446,10 @@ pub fn get_wrapped_type_internal(
                 TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
                     get_wrapped_type_borrow_handle(ctx, resource_type_id)
                 }
+                TypeDefKind::Future(_) | TypeDefKind::Stream(_) => Err(anyhow!(
+                    "future<T> and stream<T> are only supported as a direct function parameter \
+                     or return type, not nested inside another type"
+                ))?,
                 TypeDefKind::Type(inner) => {
                     // Recursively dealiasing
                     let inner = get_wrapped_type_internal(

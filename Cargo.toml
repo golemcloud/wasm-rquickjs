@@ -54,9 +54,9 @@ oxc_allocator = { workspace = true }
 oxc_ast = { workspace = true }
 oxc_span = { workspace = true }
 wac-graph = { workspace = true }
-wasmtime = { workspace = true, features = ["async", "component-model", "cache"] }
-wasmtime-wasi = { workspace = true }
-wasmtime-wasi-http = { workspace = true }
+wasmtime = { workspace = true, features = ["async", "component-model", "component-model-async", "cache"] }
+wasmtime-wasi = { workspace = true, features = ["p3"] }
+wasmtime-wasi-http = { workspace = true, features = ["p3"] }
 
 [[test]]
 name = "compilation"
@@ -156,10 +156,10 @@ tokio = "1.47.1"
 tokio-util = "0.7.16"
 toml_edit = "0.22.27"
 wac-graph = "0.10.0"
-wasmtime = "=45.0.0"
-wasmtime-wasi = "=45.0.0"
-wasmtime-wasi-http = "=45.0.0"
-wasmtime-wizer = "=45.0.0"
+wasmtime = "=46.0.1"
+wasmtime-wasi = "=46.0.1"
+wasmtime-wasi-http = "=46.0.1"
+wasmtime-wizer = "=46.0.1"
 wit-bindgen-core = "0.57.1"
 wasm-encoder = "0.247.0"
 wasmparser_encoder = { package = "wasmparser", version = "0.247.0" }

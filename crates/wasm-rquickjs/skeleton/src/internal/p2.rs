@@ -1385,7 +1385,9 @@ fn source_has_top_level_await(source: &str) -> bool {
             b'}' => {
                 if let Some(context) = braces.pop() {
                     match context {
-                        JsBraceContext::Function => function_depth = function_depth.saturating_sub(1),
+                        JsBraceContext::Function => {
+                            function_depth = function_depth.saturating_sub(1)
+                        }
                         JsBraceContext::Class => class_depth = class_depth.saturating_sub(1),
                         JsBraceContext::Normal => {}
                     }
@@ -1585,8 +1587,7 @@ pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 pub struct JsState {
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
-    pub exported_function_cache:
-        RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
+    pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
     pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
@@ -2170,11 +2171,16 @@ fn get_cached_js_export<'js>(
         .globals()
         .get("userModule")
         .expect("Failed to get userModule");
-    let (user_function_obj, parent): (Object, Object) =
-        get_path(&module, function_path).unwrap_or_else(|| {
+    let (user_function_obj, parent): (Object, Object) = get_path(&module, function_path)
+        .unwrap_or_else(|| {
             panic!(
                 "{}",
-                dump_cannot_find_export("exported JS function", function_path, &module, wit_package)
+                dump_cannot_find_export(
+                    "exported JS function",
+                    function_path,
+                    &module,
+                    wit_package
+                )
             )
         });
     let user_function = user_function_obj

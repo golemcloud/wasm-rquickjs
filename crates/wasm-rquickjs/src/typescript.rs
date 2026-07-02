@@ -195,12 +195,19 @@ fn declare_functions_and_resources(
 
     for (name, function) in functions {
         match &function.kind {
-            FunctionKind::Freestanding => {
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                // A WIT `async func` (`AsyncFreestanding`) always presents to JS as a
+                // Promise-returning function, regardless of the module-level `async_` flag: an
+                // async export returns a `Promise`, and an imported `async func` is bridged to a
+                // JS function that returns a `Promise`. A plain `func` follows the module-level
+                // convention (`async_` is `true` for the Preview 3 export module, `false` for
+                // imported interfaces).
+                let is_async = async_ || matches!(function.kind, FunctionKind::AsyncFreestanding);
                 let docs =
                     add_throws_to_doc(context, interface_stack, &function.result, &function.docs)?;
                 result.write_docs(&docs);
                 let js_name = escape_js_ident(name.to_lower_camel_case());
-                let mut exported_function = if async_ {
+                let mut exported_function = if is_async {
                     result.begin_export_async_function(&js_name)
                 } else {
                     result.begin_export_function(&js_name)
@@ -209,15 +216,13 @@ fn declare_functions_and_resources(
                     let js_param_name = escape_js_ident(param.name.to_lower_camel_case());
                     exported_function.param(
                         &js_param_name,
-                        &ts_type_reference(context, &param.ty, false, interface_stack)?,
+                        &ts_boundary_type_reference(context, &param.ty, interface_stack)?,
                     );
                 }
                 define_return_type(context, interface_stack, function, &mut exported_function)?;
             }
-            FunctionKind::AsyncFreestanding
-            | FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_) => {
-                Err(anyhow!("Async exported functions are not supported yet"))?
+            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
+                Err(anyhow!("Async resource methods are not supported yet"))?
             }
             FunctionKind::Method(resource_id)
             | FunctionKind::Static(resource_id)
@@ -272,7 +277,7 @@ fn declare_functions_and_resources(
                 let js_param_name = escape_js_ident(param.name.to_lower_camel_case());
                 fun.param(
                     &js_param_name,
-                    &ts_type_reference(context, &param.ty, false, interface_stack)?,
+                    &ts_boundary_type_reference(context, &param.ty, interface_stack)?,
                 );
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_)) {
@@ -381,12 +386,39 @@ fn define_return_type(
         };
 
         if !special_case_for_result {
-            exported_function.result(&ts_type_reference(
-                context,
-                result_type,
-                false,
-                interface_stack,
-            )?);
+            // At an export return boundary, a `future<T>` returned by an async (Promise-returning)
+            // function collapses with the function's own promise: the JS function returns the
+            // payload `T` (or a `Promise<T>`), so the declared return type must be `Promise<T>`.
+            // Emit just the payload here and let the writer add the outer `Promise<…>`, otherwise
+            // we would produce `Promise<Promise<T>>`. `stream<T>` does not collapse this way (an
+            // async function returning an async-iterable is genuinely `Promise<AsyncIterable<T>>`).
+            let future_payload = if exported_function.returns_promise() {
+                match crate::async_values::detect(context, result_type)? {
+                    Some(async_value)
+                        if async_value.kind == crate::async_values::AsyncValueKind::Future =>
+                    {
+                        Some(match async_value.payload {
+                            Some(inner) => {
+                                ts_type_reference(context, &inner, false, interface_stack)?
+                            }
+                            None => "void".to_string(),
+                        })
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+
+            if let Some(payload) = future_payload {
+                exported_function.result(&payload);
+            } else {
+                exported_function.result(&ts_boundary_type_reference(
+                    context,
+                    result_type,
+                    interface_stack,
+                )?);
+            }
         }
     }
     Ok(())
@@ -415,6 +447,21 @@ fn export_types(
         if let Some(result_type) = &function.result {
             visit_subtree(context, result_type, interface_stack, &mut visit_result)?;
         }
+    }
+
+    // Emit `import * as …` lines for every interface whose types are referenced only through a
+    // qualified `module.Name` reference (e.g. a `future<other.rec>` / `stream<other.rec>` payload
+    // whose payload type is defined in another interface). Regular `use`d types register their
+    // import through the alias definition in `export_type_definition`, but async-value payloads are
+    // rendered inline and would otherwise reference an unbound namespace.
+    for interface_id in &visit_result.imported_interfaces {
+        let imported_interface = context.get_imported_interface(interface_id)?;
+        let imported_module_name =
+            escape_js_ident(imported_interface.module_name()?.to_lower_camel_case());
+        result.import_module(
+            &imported_module_name,
+            &imported_interface.fully_qualified_interface_name(),
+        );
     }
 
     let mut visited_types = BTreeSet::new();
@@ -447,6 +494,15 @@ fn export_type_definition(
 ) -> anyhow::Result<()> {
     if !visited_types.insert(type_id) {
         // Already processed this type, skip it
+        return Ok(());
+    }
+
+    // `future<T>` / `stream<T>` (including WIT aliases that resolve to them) are inlined at their
+    // function boundaries as `Promise<T>` / `AsyncIterable<T>` by `ts_boundary_type_reference`;
+    // they never get a standalone TypeScript type definition. Skip them here so that a *direct*
+    // boundary alias is not misreported as a forbidden nested use. Genuine nested uses are still
+    // rejected by `ts_type_reference`.
+    if crate::async_values::detect(context, &Type::Id(type_id))?.is_some() {
         return Ok(());
     }
 
@@ -488,6 +544,32 @@ fn export_type_definition(
     }
 }
 
+/// Maps a **direct** function-boundary type (parameter or return) to its TypeScript type.
+///
+/// A `future<T>` at a direct parameter/return position maps to `Promise<T>` and a `stream<T>` to
+/// `AsyncIterable<T>` (following type aliases via [`crate::async_values::detect`]). Any other type
+/// is delegated to [`ts_type_reference`], which rejects future/stream nested inside another type,
+/// mirroring the runtime restriction enforced by [`crate::types::get_wrapped_type`].
+fn ts_boundary_type_reference(
+    context: &GeneratorContext,
+    typ: &Type,
+    interface_stack: &VecDeque<InterfaceId>,
+) -> anyhow::Result<String> {
+    if let Some(async_value) = crate::async_values::detect(context, typ)? {
+        let inner_ts_type = match async_value.payload {
+            Some(inner) => ts_type_reference(context, &inner, false, interface_stack)?,
+            None => "void".to_string(),
+        };
+        return Ok(match async_value.kind {
+            crate::async_values::AsyncValueKind::Future => format!("Promise<{inner_ts_type}>"),
+            crate::async_values::AsyncValueKind::Stream => {
+                format!("AsyncIterable<{inner_ts_type}>")
+            }
+        });
+    }
+    ts_type_reference(context, typ, false, interface_stack)
+}
+
 fn ts_type_reference(
     context: &GeneratorContext,
     typ: &Type,
@@ -509,6 +591,18 @@ fn ts_type_reference(
         Type::String => Ok("string".to_string()),
         Type::ErrorContext => Ok("ErrorContext".to_string()),
         Type::Id(type_id) => {
+            // Reaching here with a `future<T>` / `stream<T>` (directly or via a WIT alias) means it
+            // is used *nested* inside another type: the four direct function boundaries never call
+            // `ts_type_reference` for async values (they go through `ts_boundary_type_reference`).
+            // Nested async values have no TypeScript representation, so reject them here, mirroring
+            // the runtime restriction in `crate::types::get_wrapped_type`.
+            if crate::async_values::detect(context, typ)?.is_some() {
+                return Err(anyhow!(
+                    "future<T> and stream<T> are only supported as a direct function parameter \
+                     or return type, not nested inside another type"
+                ));
+            }
+
             let typ = context.typ(*type_id)?;
 
             match &typ.name {
@@ -544,6 +638,7 @@ fn ts_type_reference(
 #[derive(Default)]
 struct VisitResult {
     visited_types: BTreeSet<TypeId>,
+    imported_interfaces: BTreeSet<InterfaceId>,
     has_result: bool,
 }
 
@@ -553,70 +648,85 @@ fn visit_subtree<'a>(
     interface_stack: &VecDeque<InterfaceId>,
     result: &mut VisitResult,
 ) -> anyhow::Result<()> {
-    if let Type::Id(type_id) = typ {
-        let typ = context.typ(*type_id)?;
+    let Type::Id(type_id) = typ else {
+        return Ok(());
+    };
 
-        if !result.visited_types.contains(type_id) {
-            if !matches!(typ.kind, TypeDefKind::Resource) {
-                // Resource types are handled specially, we don't want them in the set of type IDs
-                result.visited_types.insert(*type_id);
-            }
+    // A direct `future<T>` / `stream<T>` boundary (including WIT aliases that resolve to one) is
+    // rendered inline as `Promise<T>` / `AsyncIterable<T>` and has no standalone declaration of its
+    // own. Its payload `T` is still part of the public surface, so collect the payload's
+    // dependencies (named types, the `Result<T, E>` helper, cross-interface imports) and stop.
+    if let Some(async_value) = crate::async_values::detect(context, typ)? {
+        if let Some(payload) = async_value.payload {
+            visit_subtree(context, &payload, interface_stack, result)?;
+        }
+        return Ok(());
+    }
 
-            match &typ.kind {
-                TypeDefKind::Record(record) => {
-                    for field in &record.fields {
-                        visit_subtree(context, &field.ty, interface_stack, result)?;
-                    }
-                }
-                TypeDefKind::Tuple(tuple) => {
-                    for field_type in &tuple.types {
-                        visit_subtree(context, field_type, interface_stack, result)?;
-                    }
-                }
-                TypeDefKind::Variant(variant) => {
-                    for case in &variant.cases {
-                        if let Some(ty) = &case.ty {
-                            visit_subtree(context, ty, interface_stack, result)?;
-                        }
-                    }
-                }
-                TypeDefKind::Option(inner) => {
-                    visit_subtree(context, inner, interface_stack, result)?;
-                }
-                TypeDefKind::Result(result_) => {
-                    result.has_result = true;
-                    if let Some(ok_type) = &result_.ok {
-                        visit_subtree(context, ok_type, interface_stack, result)?;
-                    }
-                    if let Some(err_type) = &result_.err {
-                        visit_subtree(context, err_type, interface_stack, result)?;
-                    }
-                }
-                TypeDefKind::List(elem_type) => {
-                    visit_subtree(context, elem_type, interface_stack, result)?;
-                }
-                TypeDefKind::FixedLengthList(elem_type, _) => {
-                    visit_subtree(context, elem_type, interface_stack, result)?;
-                }
-                TypeDefKind::Type(Type::Id(type_id)) => {
-                    let aliased_type = context
-                        .resolve
-                        .types
-                        .get(*type_id)
-                        .ok_or_else(|| anyhow!("Unknown aliased type id: {type_id:?}"))?;
-                    if let TypeOwner::Interface(interface_id) = &aliased_type.owner
-                        && !interface_stack.contains(interface_id)
-                    {
-                        // The type is defined in a different module. In this case we are not
-                        // following the type reference, we will only generate an import
-                    }
-                }
-                TypeDefKind::Type(typ) => {
-                    visit_subtree(context, typ, interface_stack, result)?;
-                }
-                _ => {}
+    let typedef = context.typ(*type_id)?;
+
+    // A named type owned by another interface is referenced as `module.Name`; do not emit a local
+    // definition for it, only record the interface so its `import * as module` line is emitted.
+    if let TypeOwner::Interface(interface_id) = typedef.owner
+        && !interface_stack.contains(&interface_id)
+    {
+        result.imported_interfaces.insert(interface_id);
+        return Ok(());
+    }
+
+    // Resource types are handled specially; we don't want them in the set of type IDs.
+    if matches!(typedef.kind, TypeDefKind::Resource) {
+        return Ok(());
+    }
+
+    if !result.visited_types.insert(*type_id) {
+        // Already processed this type.
+        return Ok(());
+    }
+
+    match &typedef.kind {
+        TypeDefKind::Record(record) => {
+            for field in &record.fields {
+                visit_subtree(context, &field.ty, interface_stack, result)?;
             }
         }
+        TypeDefKind::Tuple(tuple) => {
+            for field_type in &tuple.types {
+                visit_subtree(context, field_type, interface_stack, result)?;
+            }
+        }
+        TypeDefKind::Variant(variant) => {
+            for case in &variant.cases {
+                if let Some(ty) = &case.ty {
+                    visit_subtree(context, ty, interface_stack, result)?;
+                }
+            }
+        }
+        TypeDefKind::Option(inner) => {
+            visit_subtree(context, inner, interface_stack, result)?;
+        }
+        TypeDefKind::Result(result_) => {
+            result.has_result = true;
+            if let Some(ok_type) = &result_.ok {
+                visit_subtree(context, ok_type, interface_stack, result)?;
+            }
+            if let Some(err_type) = &result_.err {
+                visit_subtree(context, err_type, interface_stack, result)?;
+            }
+        }
+        TypeDefKind::List(elem_type) => {
+            visit_subtree(context, elem_type, interface_stack, result)?;
+        }
+        TypeDefKind::FixedLengthList(elem_type, _) => {
+            visit_subtree(context, elem_type, interface_stack, result)?;
+        }
+        TypeDefKind::Type(inner) => {
+            // A same-module alias: follow it so its target's dependencies are collected. A target
+            // owned by another interface is handled by the external-interface check above when the
+            // recursion reaches it.
+            visit_subtree(context, inner, interface_stack, result)?;
+        }
+        _ => {}
     }
 
     Ok(())
@@ -735,8 +845,10 @@ fn ts_type_definition(
             ts_type_reference(context, elem_type, false, interface_stack)?
         )),
         TypeDefKind::Type(aliased) => ts_type_reference(context, aliased, false, interface_stack),
-        TypeDefKind::Future(_) => Err(anyhow!("Future types are not supported yet")),
-        TypeDefKind::Stream(_) => Err(anyhow!("Stream types are not supported yet")),
+        TypeDefKind::Future(_) | TypeDefKind::Stream(_) => Err(anyhow!(
+            "future<T> and stream<T> are only supported as a direct function parameter \
+             or return type, not nested inside another type"
+        )),
         TypeDefKind::Resource => ts_resource_reference(context, typ, interface_stack),
         TypeDefKind::Map(..) => Err(anyhow!("Map types are not supported yet")),
         TypeDefKind::Unknown => Err(anyhow!("Unknown type definition kind")),
@@ -972,6 +1084,13 @@ impl<'a> DtsFunctionWriter<'a> {
 
     pub fn result(&mut self, typ: &str) {
         self.return_type = Some(typ.to_string());
+    }
+
+    /// Whether this function's declared return type is implicitly wrapped in `Promise<…>` (i.e. it
+    /// is an async function or method). Callers use this to avoid double-wrapping a `future<T>`
+    /// export return, whose payload is already delivered through the function's own promise.
+    pub fn returns_promise(&self) -> bool {
+        self.returns_promise
     }
 }
 

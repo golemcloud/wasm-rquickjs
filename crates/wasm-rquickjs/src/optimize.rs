@@ -214,7 +214,7 @@ fn collect_wasi_resource_types(component: &Component, engine: &Engine) -> Vec<Re
             .iter()
             .any(|prefix| import_name.starts_with(prefix))
         {
-            collect_resource_types_from_item(&item, engine, &mut known);
+            collect_resource_types_from_item(&item.ty, engine, &mut known);
         }
     }
 
@@ -229,7 +229,7 @@ fn collect_resource_types_from_item(
     match item {
         ComponentItem::ComponentInstance(inst) => {
             for (_name, export_item) in inst.exports(engine) {
-                collect_resource_types_from_item(&export_item, engine, known);
+                collect_resource_types_from_item(&export_item.ty, engine, known);
             }
         }
         ComponentItem::Resource(res_ty) if !known.contains(res_ty) => {
@@ -270,7 +270,7 @@ fn stub_unknown_imports(
         stub_component_item(
             &mut linker.root(),
             import_name,
-            &item,
+            &item.ty,
             &engine,
             &wasi_resources,
         )?;
@@ -293,7 +293,7 @@ fn stub_component_item(
                 stub_component_item(
                     &mut nested,
                     export_name,
-                    &export_item,
+                    &export_item.ty,
                     engine,
                     wasi_resources,
                 )?;
