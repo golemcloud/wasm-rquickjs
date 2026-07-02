@@ -1004,6 +1004,25 @@ function findBestPackagePattern(map, key) {
     return bestKey === null ? null : { key: bestKey, substitution: bestSubstitution };
 }
 
+function findPackageMapTarget(map, specifier, invalidPatternMessage) {
+    if (Object.prototype.hasOwnProperty.call(map, specifier)) {
+        return { target: map[specifier], patternSubstitution: undefined, patternKey: undefined };
+    }
+    const pattern = findBestPackagePattern(map, specifier);
+    if (pattern === null) return null;
+    if (isInvalidPackagePatternSubstitution(pattern.substitution)) {
+        throw makeInvalidModuleSpecifierError(
+            specifier,
+            invalidPackagePatternSubstitutionMessage(pattern.substitution, invalidPatternMessage)
+        );
+    }
+    return {
+        target: map[pattern.key],
+        patternSubstitution: pattern.substitution,
+        patternKey: pattern.key
+    };
+}
+
 function packagePatternCompare(a, b) {
     const aStar = a.indexOf('*');
     const bStar = b.indexOf('*');
@@ -1143,16 +1162,16 @@ function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions
             resolved = resolvePackageTargetWithContext(packageDir, exportsField, conditions, false, undefined, { kind: 'exports', specifier: key });
         }
     } else if (exportsField && typeof exportsField === 'object') {
-        if (Object.prototype.hasOwnProperty.call(exportsField, key)) {
-            resolved = resolvePackageTargetWithContext(packageDir, exportsField[key], conditions, false, undefined, { kind: 'exports', specifier: key });
-        } else {
-            const pattern = findBestPackagePattern(exportsField, key);
-            if (pattern !== null) {
-                if (isInvalidPackagePatternSubstitution(pattern.substitution)) {
-                    throw makeInvalidModuleSpecifierError(key, invalidPackagePatternSubstitutionMessage(pattern.substitution, 'is not a valid match in pattern'));
-                }
-                resolved = resolvePackageTargetWithContext(packageDir, exportsField[pattern.key], conditions, false, pattern.substitution, { kind: 'exports', specifier: key, patternKey: pattern.key });
-            }
+        const match = findPackageMapTarget(exportsField, key, 'is not a valid match in pattern');
+        if (match !== null) {
+            resolved = resolvePackageTargetWithContext(
+                packageDir,
+                match.target,
+                conditions,
+                false,
+                match.patternSubstitution,
+                { kind: 'exports', specifier: key, patternKey: match.patternKey }
+            );
         }
     } else if (exportsField !== null) {
         throw addPackageErrorContext(makeInvalidPackageTargetError(exportsField, 'exports'), key);
@@ -1206,22 +1225,18 @@ function resolvePackageImports(id, parentDir, conditions) {
         throw makePackageImportNotDefinedError(id);
     }
     validatePackageImportSpecifier(id);
-    let target;
-    let patternSubstitution = null;
-    let patternKey = null;
-    if (Object.prototype.hasOwnProperty.call(scope.pkg.imports, id)) {
-        target = scope.pkg.imports[id];
-    } else {
-        const pattern = findBestPackagePattern(scope.pkg.imports, id);
-        if (pattern === null) throw makePackageImportNotDefinedError(id);
-        if (isInvalidPackagePatternSubstitution(pattern.substitution)) {
-            throw makeInvalidModuleSpecifierError(id, invalidPackagePatternSubstitutionMessage(pattern.substitution, 'request is not a valid match in pattern'));
-        }
-        target = scope.pkg.imports[pattern.key];
-        patternSubstitution = pattern.substitution;
-        patternKey = pattern.key;
+    const match = findPackageMapTarget(scope.pkg.imports, id, 'request is not a valid match in pattern');
+    if (match === null) {
+        throw makePackageImportNotDefinedError(id);
     }
-    const resolved = resolvePackageTargetWithContext(scope.dir, target, conditions, true, patternSubstitution, { kind: 'imports', specifier: id, patternKey });
+    const resolved = resolvePackageTargetWithContext(
+        scope.dir,
+        match.target,
+        conditions,
+        true,
+        match.patternSubstitution,
+        { kind: 'imports', specifier: id, patternKey: match.patternKey }
+    );
     if (resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
     throw makePackageImportNotDefinedError(id);
 }
