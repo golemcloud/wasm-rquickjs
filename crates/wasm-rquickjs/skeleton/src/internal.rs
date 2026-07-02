@@ -1884,11 +1884,8 @@ fn parse_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usiz
 
 fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
     for keyword in ["const", "let", "var"] {
-        if source[pos..].starts_with(keyword)
-            && is_ident_start_boundary(source.as_bytes(), pos)
-            && is_ident_boundary(source.as_bytes(), pos + keyword.len())
-        {
-            let start = skip_ws_comments(source, pos + keyword.len());
+        if let Some(keyword_end) = parse_free_ident_name(source, pos, keyword) {
+            let start = skip_ws_comments(source, keyword_end);
             let end = find_variable_declaration_end(source, start);
             return Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end));
         }
