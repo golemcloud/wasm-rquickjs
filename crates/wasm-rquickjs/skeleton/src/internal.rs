@@ -5548,7 +5548,7 @@ fn callback_has_transpiler_reexport(callback: &str, binding: &str, key: &str) ->
         }
         if let Some(next) = parse_export_star_return_guard(callback, i, key) {
             let mut write_pos = skip_statement_separator(callback, next);
-            while let Some(next_guard) = parse_any_if_return_guard(callback, write_pos) {
+            while let Some(next_guard) = parse_duplicate_export_return_guard(callback, write_pos, binding, key) {
                 write_pos = skip_statement_separator(callback, next_guard);
             }
             if statement_starts.get(write_pos).copied().unwrap_or(false)
@@ -5621,7 +5621,7 @@ fn parse_export_star_return_guard(source: &str, pos: usize, key: &str) -> Option
     Some(i + 6)
 }
 
-fn parse_any_if_return_guard(source: &str, pos: usize) -> Option<usize> {
+fn parse_duplicate_export_return_guard(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
     if !is_free_ident_start(bytes, pos)
         || !source[pos..].starts_with("if")
@@ -5634,6 +5634,10 @@ fn parse_any_if_return_guard(source: &str, pos: usize) -> Option<usize> {
         return None;
     }
     let condition_end = find_matching_paren(source, i)?;
+    let condition = &source[i + 1..condition_end];
+    if !is_duplicate_export_guard_condition(condition, binding, key) {
+        return None;
+    }
     i = skip_ws_comments(source, condition_end + 1);
     if !is_free_ident_start(bytes, i)
         || !source[i..].starts_with("return")
@@ -5642,6 +5646,36 @@ fn parse_any_if_return_guard(source: &str, pos: usize) -> Option<usize> {
         return None;
     }
     Some(i + 6)
+}
+
+fn is_duplicate_export_guard_condition(condition: &str, binding: &str, key: &str) -> bool {
+    let i = skip_ws_comments(condition, 0);
+    if let Some(next) = parse_exports_has_own_key(condition, i, key)
+        && skip_ws_comments(condition, next) >= condition.len()
+    {
+        return true;
+    }
+
+    let Some(next) = parse_key_in_export_target_condition(condition, i, key) else {
+        return false;
+    };
+    let mut i = skip_ws_comments(condition, next);
+    if i + 2 > condition.len() || &condition[i..i + 2] != "&&" {
+        return false;
+    }
+    i = skip_ws_comments(condition, i + 2);
+    let Some(next) = parse_export_target_bracket_key(condition, i, key) else {
+        return false;
+    };
+    i = skip_ws_comments(condition, next);
+    if i + 3 > condition.len() || &condition[i..i + 3] != "===" {
+        return false;
+    }
+    i = skip_ws_comments(condition, i + 3);
+    let Some(next) = parse_binding_bracket_key(condition, i, binding, key) else {
+        return false;
+    };
+    skip_ws_comments(condition, next) >= condition.len()
 }
 
 fn is_export_star_guard_condition(condition: &str, key: &str) -> bool {
@@ -5722,6 +5756,41 @@ fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(S
     Some((value, next))
 }
 
+fn parse_exports_has_own_key(source: &str, pos: usize, key: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let (receiver, next) = read_ident(source, pos)?;
+    if receiver != "Object" {
+        return None;
+    }
+    let mut i = parse_dot_member_name(source, next, "prototype")?;
+    i = parse_dot_member_name(source, i, "hasOwnProperty")?;
+    i = parse_dot_member_name(source, i, "call")?;
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    let (target, next) = parse_exports_target(source, i)?;
+    if target != CjsExportTarget::Exports {
+        return None;
+    }
+    i = skip_ws_comments(source, next);
+    if i >= bytes.len() || bytes[i] != b',' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !is_free_ident_start(bytes, i)
+        || !source[i..].starts_with(key)
+        || !is_ident_boundary(bytes, i + key.len())
+    {
+        return None;
+    }
+    i = skip_ws_comments(source, i + key.len());
+    if i >= bytes.len() || bytes[i] != b')' {
+        return None;
+    }
+    Some(i + 1)
+}
+
 fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
     if pos >= bytes.len() || bytes[pos] != b'!' {
@@ -5782,6 +5851,59 @@ fn parse_negated_exports_has_own_key(source: &str, pos: usize, key: &str) -> Opt
     }
 }
 
+fn parse_key_in_export_target_condition(source: &str, pos: usize, key: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with(key)
+        || !is_ident_boundary(bytes, pos + key.len())
+    {
+        return None;
+    }
+    let mut i = skip_ws_comments(source, pos + key.len());
+    if !source[i..].starts_with("in") || !is_ident_boundary(bytes, i + 2) {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 2);
+    let (_, next) = parse_exports_target(source, i)?;
+    Some(next)
+}
+
+fn parse_export_target_bracket_key(source: &str, pos: usize, key: &str) -> Option<usize> {
+    let (_, next) = parse_exports_target(source, pos)?;
+    parse_bracket_key(source, next, key)
+}
+
+fn parse_binding_bracket_key(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos)
+        || !source[pos..].starts_with(binding)
+        || !is_ident_boundary(bytes, pos + binding.len())
+    {
+        return None;
+    }
+    parse_bracket_key(source, pos + binding.len(), key)
+}
+
+fn parse_bracket_key(source: &str, pos: usize, key: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = skip_ws_comments(source, pos);
+    if i >= bytes.len() || bytes[i] != b'[' {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    if !is_free_ident_start(bytes, i)
+        || !source[i..].starts_with(key)
+        || !is_ident_boundary(bytes, i + key.len())
+    {
+        return None;
+    }
+    i = skip_ws_comments(source, i + key.len());
+    if i >= bytes.len() || bytes[i] != b']' {
+        return None;
+    }
+    Some(i + 1)
+}
+
 fn parse_dot_member_name(source: &str, pos: usize, name: &str) -> Option<usize> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, pos);
@@ -5810,10 +5932,7 @@ fn parse_member_name(source: &str, pos: usize, name: &str) -> Option<usize> {
 
 fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    let (target, mut i) = parse_exports_target(source, pos)?;
-    if target != CjsExportTarget::Exports {
-        return None;
-    }
+    let (_, mut i) = parse_exports_target(source, pos)?;
 
     i = skip_ws_comments(source, i);
     if i >= bytes.len() || bytes[i] != b'[' {
@@ -9215,6 +9334,99 @@ mod cjs_export_analyzer_tests {
             true,
             &["own"],
             &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (key in exports && exports[key] === _dep[key]) return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (key in module.exports && module.exports[key] === _dep[key]) return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (key in module.exports && module.exports[key] === _dep[key]) return;
+                    module.exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                var skip = {};
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (skip.hasOwnProperty(key)) return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                var skip = {};
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (key in skip && skip[key] === _dep[key]) return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = _interopRequireWildcard(require("./dep.cjs"));
+                var other = {};
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    if (key in exports && exports[key] === other[key]) return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
         );
 
         assert_analysis(
