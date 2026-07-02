@@ -589,7 +589,7 @@ fn has_import_type_rewrite_token(path: &str) -> bool {
     })
 }
 
-fn read_static_import_specifier_literal(
+fn read_import_specifier_literal(
     source: &str,
     pos: usize,
 ) -> Option<(usize, usize, usize, usize)> {
@@ -613,6 +613,18 @@ fn read_static_import_specifier_literal(
         i += 1;
     }
     Some((literal_start, i, specifier_start, specifier_end))
+}
+
+fn read_closed_import_specifier_literal(
+    source: &str,
+    pos: usize,
+) -> Option<(usize, usize, usize, usize)> {
+    let literal = read_import_specifier_literal(source, pos)?;
+    let bytes = source.as_bytes();
+    if literal.1 <= pos + 1 || literal.1 > bytes.len() || bytes.get(literal.1 - 1) != bytes.get(pos) {
+        return None;
+    }
+    Some(literal)
 }
 
 /// Process static import attributes in JavaScript module source code.
@@ -668,7 +680,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                 continue;
             }
 
-            if let Some(literal) = read_static_import_specifier_literal(source, i) {
+            if let Some(literal) = read_import_specifier_literal(source, i) {
                 specifier_literal = Some(literal);
                 i = literal.1;
             } else {
@@ -683,7 +695,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                         while j < len && bytes[j].is_ascii_whitespace() {
                             j += 1;
                         }
-                        if let Some(literal) = read_static_import_specifier_literal(source, j) {
+                        if let Some(literal) = read_import_specifier_literal(source, j) {
                             specifier_literal = Some(literal);
                             i = literal.1;
                             break;
@@ -835,20 +847,9 @@ fn rewrite_dynamic_import_call(
         return rewrite_dynamic_import_expression_call(source, open_paren);
     }
 
-    let quote = bytes[i];
-    let spec_literal_start = i;
-    i += 1;
-    while i < len && bytes[i] != quote {
-        if bytes[i] == b'\\' {
-            i += 1;
-        }
-        i += 1;
-    }
-    if i >= len {
-        return None;
-    }
-    i += 1;
-    let spec_literal_end = i;
+    let (spec_literal_start, spec_literal_end, _, _) =
+        read_closed_import_specifier_literal(source, i)?;
+    i = spec_literal_end;
 
     while i < len && bytes[i].is_ascii_whitespace() {
         i += 1;
