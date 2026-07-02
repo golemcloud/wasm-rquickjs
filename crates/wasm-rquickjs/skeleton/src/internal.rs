@@ -5851,19 +5851,6 @@ fn parse_dot_member_name(source: &str, pos: usize, name: &str) -> Option<usize> 
     Some(skip_ws_comments(source, i + name.len()))
 }
 
-fn parse_member_name(source: &str, pos: usize, name: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
-    let mut i = skip_ws_comments(source, pos);
-    if i >= bytes.len() || !source[i..].starts_with(name) || !is_ident_boundary(bytes, i + name.len()) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + name.len());
-    if i >= bytes.len() || bytes[i] != b'.' {
-        return Some(i);
-    }
-    Some(skip_ws_comments(source, i + 1))
-}
-
 fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_export_target_bracket_key(source, pos, key)?);
