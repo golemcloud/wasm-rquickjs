@@ -762,7 +762,7 @@ const esmDefaultPackageConditions = ['golem', 'node', 'module-sync', 'import', '
 const loaderDefaultConditions = ['node', 'import', 'module-sync', 'node-addons'];
 
 function addPackageCondition(conditions, condition) {
-    if (condition) conditions.add(condition);
+    if (typeof condition === 'string' && condition.length > 0) conditions.add(condition);
 }
 
 function packageConditions(defaults) {
@@ -773,7 +773,7 @@ function packageConditions(defaults) {
     }
 
     for (let i = 0; i < userConditions.length; i++) {
-        addPackageCondition(conditions, String(userConditions[i]));
+        addPackageCondition(conditions, userConditions[i]);
     }
 
     return conditions;

@@ -4237,6 +4237,55 @@ export const testPackageCustomConditions = async () => {
         const facadeImported = (await import('/package-custom-conditions-app/facade-entry.mjs')).default;
         assert.strictEqual(facadeImported, 'custom-require');
 
+        fs.mkdirSync('/package-custom-conditions-app/node_modules/sparse-pkg', { recursive: true });
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/sparse-pkg/package.json', JSON.stringify({
+            exports: {
+                './condition': {
+                    undefined: './bad.mjs',
+                    null: './bad.mjs',
+                    import: './import.mjs',
+                    require: './require.cjs',
+                    default: './default.mjs',
+                },
+            },
+        }));
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/sparse-pkg/bad.mjs', 'export default "bad";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/sparse-pkg/import.mjs', 'export default "sparse-import";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/sparse-pkg/require.cjs', 'module.exports = "sparse-require";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/sparse-pkg/default.mjs', 'export default "sparse-default";');
+        fs.writeFileSync('/package-custom-conditions-app/sparse-entry.mjs', [
+            'import selected from "sparse-pkg/condition";',
+            'export default selected;',
+        ].join('\n'));
+
+        globalThis.__wasm_rquickjs_package_conditions = Array(1);
+        assert.strictEqual((await import('/package-custom-conditions-app/sparse-entry.mjs')).default, 'sparse-import');
+        assert.strictEqual(require('sparse-pkg/condition'), 'sparse-require');
+
+        fs.mkdirSync('/package-custom-conditions-app/node_modules/undefined-pkg', { recursive: true });
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/undefined-pkg/package.json', JSON.stringify({
+            exports: {
+                './condition': {
+                    undefined: './bad.mjs',
+                    null: './bad.mjs',
+                    import: './import.mjs',
+                    require: './require.cjs',
+                    default: './default.mjs',
+                },
+            },
+        }));
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/undefined-pkg/bad.mjs', 'export default "bad";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/undefined-pkg/import.mjs', 'export default "undefined-import";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/undefined-pkg/require.cjs', 'module.exports = "undefined-require";');
+        fs.writeFileSync('/package-custom-conditions-app/node_modules/undefined-pkg/default.mjs', 'export default "undefined-default";');
+        fs.writeFileSync('/package-custom-conditions-app/undefined-entry.mjs', [
+            'import selected from "undefined-pkg/condition";',
+            'export default selected;',
+        ].join('\n'));
+        globalThis.__wasm_rquickjs_package_conditions = [undefined, null];
+        assert.strictEqual((await import('/package-custom-conditions-app/undefined-entry.mjs')).default, 'undefined-import');
+        assert.strictEqual(require('undefined-pkg/condition'), 'undefined-require');
+
         return true;
     } catch (error) {
         console.error(error);
