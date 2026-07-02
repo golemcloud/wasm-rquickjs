@@ -1254,8 +1254,10 @@ function resolveFilename(id, parentDir) {
         if (resolved !== null) return resolved;
     }
 
-    resolved = loadAsDirectory(candidate, id, parentDir);
-    if (resolved !== null) return resolved;
+    if (forceDirectory || isPathDirectory(candidate)) {
+        resolved = loadAsDirectory(candidate, id, parentDir);
+        if (resolved !== null) return resolved;
+    }
 
     const err = new Error("Cannot find module '" + id + "' from '" + parentDir + "'");
     err.code = 'MODULE_NOT_FOUND';
