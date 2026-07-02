@@ -1417,7 +1417,8 @@ struct StaticNamedImport {
 }
 
 fn cjs_named_import_error_module_source(ctx: &Ctx<'_>, filename: &str, source: &str) -> Option<String> {
-    let conditions = NodeModulesResolver::conditions_from_global(ctx, &NodeModulesResolver::CJS_CONDITIONS);
+    let conditions =
+        NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.default_conditions());
     find_cjs_named_import_error(filename, source, &conditions).map(|message| {
         let escaped = DataUrlLoader::js_string_escape(&message);
         format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
@@ -3063,6 +3064,17 @@ enum NodePackageResolveMode {
 }
 
 impl NodePackageResolveMode {
+    const ESM_CONDITIONS: [&'static str; 5] = ["golem", "node", "module-sync", "import", "default"];
+    const CJS_ANALYSIS_CONDITIONS: [&'static str; 5] =
+        ["golem", "node", "require", "module-sync", "default"];
+
+    fn default_conditions(&self) -> &'static [&'static str] {
+        match self {
+            NodePackageResolveMode::EsmImport => &Self::ESM_CONDITIONS,
+            NodePackageResolveMode::CjsAnalysis => &Self::CJS_ANALYSIS_CONDITIONS,
+        }
+    }
+
     fn package_exports_importer<'a>(&self, base: &'a str) -> Option<&'a str> {
         match self {
             NodePackageResolveMode::EsmImport => Some(base),
@@ -3083,9 +3095,6 @@ enum CjsAnalysisPackageFallbackStep {
 }
 
 impl NodeModulesResolver {
-    const ESM_CONDITIONS: [&'static str; 5] = ["golem", "node", "module-sync", "import", "default"];
-    const CJS_CONDITIONS: [&'static str; 5] = ["golem", "node", "require", "module-sync", "default"];
-
     fn try_resolve(
         &self,
         base: &str,
@@ -4427,7 +4436,8 @@ impl Resolver for NodeModulesResolver {
         base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
-        let conditions = Self::conditions_from_global(ctx, &Self::ESM_CONDITIONS);
+        let conditions =
+            Self::conditions_from_global(ctx, NodePackageResolveMode::EsmImport.default_conditions());
         let mut warnings = Vec::new();
         let (resolution_name, suffix) = if has_import_type_rewrite_token(name) {
             split_module_path_suffix(name)
@@ -6402,7 +6412,8 @@ impl Loader for CjsCompatLoader {
             include_resolve: true,
         };
 
-        let cjs_conditions = NodeModulesResolver::conditions_from_global(ctx, &NodeModulesResolver::CJS_CONDITIONS);
+        let cjs_conditions =
+            NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.default_conditions());
         let detected_analysis =
             analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
         let has_esm_syntax = source_looks_like_esm(&source);
