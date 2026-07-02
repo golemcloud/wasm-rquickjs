@@ -9157,7 +9157,7 @@
         "block_07_block_07": { "category": "known-gap", "reason": "vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented" }
       }
     },
-    "parallel/test-vm-context-property-forwarding.js": { "category": "known-gap", "reason": "vm context property forwarding and indexed descriptor behavior are incomplete" },
+    "parallel/test-vm-context-property-forwarding.js": { "category": "runnable" },
     "parallel/test-vm-context.js": { "category": "known-gap", "reason": "vm contextification write-back and runInContext semantics are incomplete" },
     "parallel/test-vm-create-and-run-in-context.js": { "category": "runnable" },
     "parallel/test-vm-create-context-accessors.js": { "category": "runnable" },
