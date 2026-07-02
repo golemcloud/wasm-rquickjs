@@ -686,6 +686,25 @@ export const testEsmDataUrlImportAttributes = async () => {
         );
         assert.deepStrictEqual((await import('/json-pkg-attrs-app/main.mjs')).default, { pkg: true });
         fs.writeFileSync(
+            '/json-pkg-attrs-app/commented-static.mjs',
+            [
+                'import /* after import */ value from /* before specifier */ "json-pkg" /* before with */ with /* before attrs */ { type: "json" };',
+                'export default value;',
+            ].join('\n'),
+        );
+        assert.deepStrictEqual((await import('/json-pkg-attrs-app/commented-static.mjs')).default, { pkg: true });
+        fs.writeFileSync(
+            '/json-pkg-attrs-app/commented-after-with.mjs',
+            [
+                'import value from "json-pkg" with { type: "json" } // keep newline',
+                '(globalThis.__moduleSyntaxImportAttributeTrailingComment = value);',
+                'export default globalThis.__moduleSyntaxImportAttributeTrailingComment;',
+            ].join('\n'),
+        );
+        globalThis.__moduleSyntaxImportAttributeTrailingComment = undefined;
+        assert.deepStrictEqual((await import('/json-pkg-attrs-app/commented-after-with.mjs')).default, { pkg: true });
+        assert.deepStrictEqual(globalThis.__moduleSyntaxImportAttributeTrailingComment, { pkg: true });
+        fs.writeFileSync(
             '/json-pkg-attrs-app/dynamic.mjs',
             'export default (await import("json-pkg", { with: { type: "json" } })).default;',
         );

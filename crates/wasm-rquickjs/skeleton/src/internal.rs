@@ -662,9 +662,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
 
             let mut specifier_literal = None;
 
-            while i < len && bytes[i].is_ascii_whitespace() {
-                i += 1;
-            }
+            i = skip_ws_comments(source, i);
 
             if i < len && bytes[i] == b'(' {
                 if is_object_method_shorthand_import(source, import_start, i) {
@@ -692,9 +690,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                         && (i + 4 >= len || !is_id_char(bytes[i + 4]))
                     {
                         let mut j = i + 4;
-                        while j < len && bytes[j].is_ascii_whitespace() {
-                            j += 1;
-                        }
+                        j = skip_ws_comments(source, j);
                         if let Some(literal) = read_import_specifier_literal(source, j) {
                             specifier_literal = Some(literal);
                             i = literal.1;
@@ -713,9 +709,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
 
                 // Skip whitespace
                 let after_spec = i;
-                while i < len && bytes[i].is_ascii_whitespace() {
-                    i += 1;
-                }
+                i = skip_ws_comments(source, i);
 
                 if i + 6 <= len
                     && &source[i..i + 6] == "assert"
@@ -732,9 +726,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                 {
                     let with_start = i;
                     i += 4;
-                    while i < len && bytes[i].is_ascii_whitespace() {
-                        i += 1;
-                    }
+                    i = skip_ws_comments(source, i);
                     if i < len && bytes[i] == b'{' {
                         i += 1;
                         let attrs_start = i;
@@ -783,9 +775,6 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                             attr_info.type_value.as_deref(),
                         ));
                         result.push_str(&source[spec_lit_end..after_spec]);
-                        while i < len && bytes[i].is_ascii_whitespace() {
-                            i += 1;
-                        }
                         continue;
                     } else {
                         // 'with' not followed by '{', not import attrs
