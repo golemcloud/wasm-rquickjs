@@ -2823,10 +2823,9 @@ function nextLoaderDescriptorEntry(source, cursor, descriptorEnd) {
 function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
     if (!source.startsWith('function', pos) || !hasIdentifierBoundary(source, pos, pos + 8)) return null;
     let next = skipWhitespaceAndComments(source, pos + 8);
-    if (isIdentifierStartCode(source.charCodeAt(next))) {
-        next++;
-        while (next < descriptorEnd && isIdentifierContinueCode(source.charCodeAt(next))) next++;
-        next = skipWhitespaceAndComments(source, next);
+    const functionName = readLoaderIdentifier(source, next);
+    if (functionName !== null) {
+        next = skipWhitespaceAndComments(source, functionName.end);
     }
     if (source.charCodeAt(next) !== 0x28) return null;
     const body = loaderGetterBodyEnd(source, next, descriptorEnd);
