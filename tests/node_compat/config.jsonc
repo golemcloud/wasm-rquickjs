@@ -9159,7 +9159,7 @@
     },
     "parallel/test-vm-context-property-forwarding.js": { "category": "known-gap", "reason": "vm context property forwarding and indexed descriptor behavior are incomplete" },
     "parallel/test-vm-context.js": { "category": "known-gap", "reason": "vm contextification write-back and runInContext semantics are incomplete" },
-    "parallel/test-vm-create-and-run-in-context.js": { "category": "known-gap", "reason": "vm contextification does not propagate var/global writes correctly" },
+    "parallel/test-vm-create-and-run-in-context.js": { "category": "runnable" },
     "parallel/test-vm-create-context-accessors.js": { "category": "runnable" },
     "parallel/test-vm-create-context-arg.js": { "category": "runnable" },
     "parallel/test-vm-createcacheddata.js": { "category": "engine-difference", "reason": "vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS" },
