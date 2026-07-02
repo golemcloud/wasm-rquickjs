@@ -19,8 +19,10 @@ const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_d
 const defaultLoaderImportHelper = '__wasm_rquickjs_vm_default_loader_import__';
 const missingDynamicImportHelper = '__wasm_rquickjs_vm_missing_dynamic_import__';
 const missingDynamicImportFlagHelper = '__wasm_rquickjs_vm_missing_dynamic_import_flag__';
+const sandboxDescriptorsHelper = '__wasm_rquickjs_vm_sandbox_descriptors__';
 const sourceTextModuleExportCellsPlaceholder = '__wasm_rquickjs_vm_export_cells_placeholder__';
 let defaultLoaderImportHelperCounter = 1;
+let sandboxDescriptorsHelperCounter = 1;
 function defaultLoaderImportFunction(filename, specifier) {
     return import(resolveDefaultLoaderSpecifier(String(specifier), filename));
 }
@@ -1083,7 +1085,7 @@ function createIndirectEvalSource(code) {
     return '(0, eval)(' + JSON.stringify(code) + ')';
 }
 
-function createSandboxEvalSource(code, helperName, sandboxKeys) {
+function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelperName) {
     const sandboxKeyLiterals = [];
     for (let i = 0; i < sandboxKeys.length; i++) {
         sandboxKeyLiterals.push(JSON.stringify(sandboxKeys[i]));
@@ -1093,12 +1095,24 @@ function createSandboxEvalSource(code, helperName, sandboxKeys) {
         'const __wasm_rquickjs_vm_create = __wasm_rquickjs_vm_Object.create;' +
         'const __wasm_rquickjs_vm_names_of = __wasm_rquickjs_vm_Object.getOwnPropertyNames;' +
         'const __wasm_rquickjs_vm_get_desc = __wasm_rquickjs_vm_Object.getOwnPropertyDescriptor;' +
+        'const __wasm_rquickjs_vm_define = __wasm_rquickjs_vm_Object.defineProperty;' +
+        'const __wasm_rquickjs_vm_descriptors = ' + (descriptorHelperName ? 'globalThis[' + JSON.stringify(descriptorHelperName) + ']' : 'undefined') + ';' +
+        (descriptorHelperName ? 'delete globalThis[' + JSON.stringify(descriptorHelperName) + '];' : '') +
+        'const __wasm_rquickjs_vm_sandbox_key_list = [' + sandboxKeyLiterals.join(',') + '];' +
+        'if (__wasm_rquickjs_vm_descriptors !== undefined) {' +
+        'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_key_list.length; __wasm_rquickjs_vm_i++) {' +
+        'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_sandbox_key_list[__wasm_rquickjs_vm_i];' +
+        'const __wasm_rquickjs_vm_desc = __wasm_rquickjs_vm_descriptors[__wasm_rquickjs_vm_key];' +
+        'if (__wasm_rquickjs_vm_desc !== undefined) {' +
+        '__wasm_rquickjs_vm_define(globalThis, __wasm_rquickjs_vm_key, __wasm_rquickjs_vm_desc);' +
+        '}' +
+        '}' +
+        '}' +
         'const __wasm_rquickjs_vm_baseline = __wasm_rquickjs_vm_create(null);' +
         'const __wasm_rquickjs_vm_baseline_keys = __wasm_rquickjs_vm_names_of(globalThis);' +
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_baseline_keys.length; __wasm_rquickjs_vm_i++) {' +
         '__wasm_rquickjs_vm_baseline[__wasm_rquickjs_vm_baseline_keys[__wasm_rquickjs_vm_i]] = true;' +
         '}' +
-        'const __wasm_rquickjs_vm_sandbox_key_list = [' + sandboxKeyLiterals.join(',') + '];' +
         'const __wasm_rquickjs_vm_sandbox_keys = __wasm_rquickjs_vm_create(null);' +
         'const __wasm_rquickjs_vm_represented_sandbox_keys = __wasm_rquickjs_vm_create(null);' +
         'for (let __wasm_rquickjs_vm_i = 0; __wasm_rquickjs_vm_i < __wasm_rquickjs_vm_sandbox_key_list.length; __wasm_rquickjs_vm_i++) {' +
@@ -1188,12 +1202,20 @@ export function runInNewContext(code, sandbox, options) {
 function evalCodeInNewContext(code, sandbox, helperName) {
     const keys = [];
     const values = [];
+    let sandboxKeys = [];
+    let descriptorHelperName;
 
     if (sandbox && typeof sandbox === 'object') {
-        const sandboxKeys = Object.keys(sandbox);
-        for (let i = 0; i < sandboxKeys.length; i++) {
-            keys.push(sandboxKeys[i]);
-            values.push(sandbox[sandboxKeys[i]]);
+        const bindings = collectSandboxBindings(sandbox);
+        sandboxKeys = bindings.keys;
+        for (let i = 0; i < bindings.keys.length; i++) {
+            keys.push(bindings.keys[i]);
+            values.push(bindings.values[i]);
+        }
+        if (bindings.keys.length > 0) {
+            descriptorHelperName = chooseSandboxDescriptorsHelperName(code, bindings.keys);
+            keys.push(descriptorHelperName);
+            values.push(bindings.descriptors);
         }
     }
     if (helperName) {
@@ -1201,7 +1223,7 @@ function evalCodeInNewContext(code, sandbox, helperName) {
         values.push(globalThis[helperName]);
     }
 
-    return applySandboxUpdates(sandbox, evalInNewContext(createSandboxEvalSource(code, helperName, keys), keys, values));
+    return applySandboxUpdates(sandbox, evalInNewContext(createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelperName), keys, values));
 }
 
 function createContextForRunInNewContext(sandbox) {
@@ -1300,16 +1322,23 @@ export function runInContext(code, context, options) {
 function evalCodeInContext(code, context, helperName) {
     const keys = [];
     const values = [];
-    for (const k of Object.keys(context)) {
-        keys.push(k);
-        values.push(context[k]);
+    const bindings = collectSandboxBindings(context);
+    for (let i = 0; i < bindings.keys.length; i++) {
+        keys.push(bindings.keys[i]);
+        values.push(bindings.values[i]);
+    }
+    let descriptorHelperName;
+    if (bindings.keys.length > 0) {
+        descriptorHelperName = chooseSandboxDescriptorsHelperName(code, bindings.keys);
+        keys.push(descriptorHelperName);
+        values.push(bindings.descriptors);
     }
     if (helperName) {
         keys.push(helperName);
         values.push(globalThis[helperName]);
     }
 
-    return applySandboxUpdates(context, evalInNewContext(createSandboxEvalSource(code, helperName, keys), keys, values));
+    return applySandboxUpdates(context, evalInNewContext(createSandboxEvalSource(code, helperName, bindings.keys, descriptorHelperName), keys, values));
 }
 
 export function runInThisContext(code, options) {
@@ -1485,6 +1514,18 @@ function collectContextBindings(context, keys, values) {
         keys.push(key);
         values.push(context[key]);
     }
+}
+
+function collectSandboxBindings(sandbox) {
+    const descriptors = Object.create(null);
+    const keys = Object.getOwnPropertyNames(sandbox);
+    const values = [];
+    for (let i = 0; i < keys.length; i++) {
+        const descriptor = Object.getOwnPropertyDescriptor(sandbox, keys[i]);
+        descriptors[keys[i]] = descriptor;
+        values.push(descriptor && 'value' in descriptor ? descriptor.value : undefined);
+    }
+    return { keys, values, descriptors };
 }
 
 function finalizeCompileFunction(fn, code, params, options) {
@@ -2122,6 +2163,14 @@ function chooseMissingDynamicImportFlagHelperName(code) {
     do {
         helperName = missingDynamicImportFlagHelper + '_' + defaultLoaderImportHelperCounter++;
     } while (code.indexOf(helperName) !== -1);
+    return helperName;
+}
+
+function chooseSandboxDescriptorsHelperName(code, sandboxKeys) {
+    let helperName;
+    do {
+        helperName = sandboxDescriptorsHelper + '_' + sandboxDescriptorsHelperCounter++;
+    } while (code.indexOf(helperName) !== -1 || sandboxKeys.indexOf(helperName) !== -1);
     return helperName;
 }
 

@@ -4119,6 +4119,16 @@ export const testVmMainContextDefaultLoader = async () => {
             message: 'The "options.columnOffset" property must be of type number. Received null',
         });
         assert.strictEqual(vm.compileFunction('return a;', undefined, { contextExtensions: [{ a: 5 }] })(), 5);
+        let compileFunctionSetterValue;
+        const compileFunctionExtension = {};
+        Object.defineProperty(compileFunctionExtension, 'x', {
+            enumerable: true,
+            configurable: true,
+            get() { return 42; },
+            set(value) { compileFunctionSetterValue = value; },
+        });
+        assert.strictEqual(vm.compileFunction('return x', [], { contextExtensions: [compileFunctionExtension] })(), 42);
+        assert.strictEqual(compileFunctionSetterValue, undefined);
         assert.strictEqual(vm.compileFunction('return varInContext', [], {
             parsingContext: vm.createContext({ varInContext: 'abc' }),
         })(), 'abc');
@@ -4176,6 +4186,17 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.deepStrictEqual(Reflect.ownKeys(keyedContextSandbox), ['visible', 'hidden', contextSymbolA, contextSymbolB]);
         assert.deepStrictEqual(Object.getOwnPropertyNames(keyedContextSandbox), ['visible', 'hidden']);
         assert.deepStrictEqual(Object.getOwnPropertySymbols(keyedContextSandbox), [contextSymbolA, contextSymbolB]);
+        const nativeContextNames = vm.runInNewContext('Object.getOwnPropertyNames(this)');
+        const keyedContextNames = vm.runInContext('Object.getOwnPropertyNames(this)', keyedContextSandbox);
+        const keyedContextOwnNames = keyedContextNames.filter((name) => !nativeContextNames.includes(name));
+        assert.strictEqual(keyedContextOwnNames.length, 2);
+        assert.strictEqual(keyedContextOwnNames[0], 'visible');
+        assert.strictEqual(keyedContextOwnNames[1], 'hidden');
+        const hiddenDescriptor = vm.runInContext('Object.getOwnPropertyDescriptor(this, "hidden")', keyedContextSandbox);
+        assert.strictEqual(hiddenDescriptor.value, true);
+        assert.strictEqual(hiddenDescriptor.writable, false);
+        assert.strictEqual(hiddenDescriptor.enumerable, false);
+        assert.strictEqual(hiddenDescriptor.configurable, false);
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);

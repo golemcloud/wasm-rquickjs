@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3210/4395 (73.0%)
+**Primary compatibility (CI-enforced):** 3213/4395 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3210 | 73.0% | 56.2% | 47.0% |
-| 🧩 known gap | 1185 | 27.0% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3213 | 73.1% | 56.2% | 47.0% |
+| 🧩 known gap | 1182 | 26.9% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3210/5713 (56.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3213/5713 (56.2%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 56 | 53 | 3 | 9 | 0 | 0 | 51.4% | 46.3% |
+| vm | 121 | 59 | 50 | 3 | 9 | 0 | 0 | 54.1% | 48.8% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1185)
+### known gap (1182)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -800,6 +800,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
 | vm timeout interrupt is surfaced as a wasm trap instead of ERR_SCRIPT_EXECUTION_TIMEOUT | 2 | `parallel/test-vm-timeout.js`, `sequential/test-vm-timeout-rethrow.js` |
+| vm.runInContext does not project symbol sandbox properties into the evaluated global object | 2 | `parallel/test-vm-ownkeys.js`, `parallel/test-vm-ownpropertysymbols.js` |
 | wasi:http client path does not surface HPE_UNEXPECTED_CONTENT_LENGTH parse errors | 2 | `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`, `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead` |
 | wasi:http request body is not finalized/sent until end(), so write()-only request flow diverges from Node | 2 | `parallel/test-http-outgoing-destroyed.js#block_00_block_00`, `parallel/test-http-outgoing-destroyed.js#block_01_block_01` |
 | --disable-proto=delete semantics differ in QuickJS (__proto__ yields null) | 1 | `parallel/test-disable-proto-delete.js` |
@@ -1033,7 +1034,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | contextCodeGeneration/codeGeneration options do not block string eval with the expected EvalError | 1 | `parallel/test-vm-codegen.js#block_01_block_01` |
 | contextified assignment semantics for strict/non-strict writes to non-writable globals are incorrect | 1 | `parallel/test-vm-strict-assign.js` |
 | contextified global proxy identity/property fallback semantics are incomplete | 1 | `parallel/test-vm-property-not-on-sandbox.js` |
-| createContext does not preserve non-enumerable/non-writable sandbox property descriptors | 1 | `parallel/test-vm-preserves-property.js` |
 | createContext incorrectly triggers Proxy getOwnPropertyDescriptor traps | 1 | `parallel/test-vm-proxy-failure-CP.js` |
 | decoding empty-passphrase encrypted PEM traps in the WASM crypto backend | 1 | `parallel/test-crypto-keygen-empty-passphrase-no-prompt.js` |
 | deep async recursion intended to exercise V8 stack recovery can trap the QuickJS/WASM runtime before JavaScript can catch and log the RangeError | 1 | `parallel/test-ttywrap-stack.js` |
@@ -1318,10 +1318,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm contexts do not provide the expected per-context Proxy behavior | 1 | `parallel/test-vm-proxies.js` |
 | vm global getter/setter descriptors are not exposed correctly on contextified objects | 1 | `parallel/test-vm-global-setter.js` |
 | vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
-| vm.createContext does not preserve sandbox accessor properties during evaluation | 1 | `parallel/test-vm-create-context-accessors.js` |
-| vm.runInContext does not project non-enumerable or symbol sandbox properties into the evaluated global object | 1 | `parallel/test-vm-ownkeys.js` |
-| vm.runInContext does not project non-enumerable sandbox properties into the evaluated global object | 1 | `parallel/test-vm-ownpropertynames.js` |
-| vm.runInContext does not project symbol sandbox properties into the evaluated global object | 1 | `parallel/test-vm-ownpropertysymbols.js` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
 | wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-cr-no-lf.js` |
