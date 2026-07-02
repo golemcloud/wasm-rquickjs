@@ -1730,13 +1730,7 @@ fn find_statement_end(source: &str, pos: usize) -> usize {
 
 fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
     let bytes = source.as_bytes();
-    if !source[pos..].starts_with("import")
-        || !is_ident_start_boundary(bytes, pos)
-        || !is_ident_boundary(bytes, pos + 6)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 6);
+    let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "import")?);
     if i < bytes.len() && (bytes[i] == b'(' || bytes[i] == b'\'' || bytes[i] == b'"') {
         return Some((Vec::new(), find_statement_end(source, i)));
     }
@@ -1744,8 +1738,8 @@ fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<St
     let mut bindings = Vec::new();
     if i < bytes.len() && bytes[i] == b'*' {
         i = skip_ws_comments(source, i + 1);
-        if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
-            i = skip_ws_comments(source, i + 2);
+        if let Some(as_end) = parse_ident_name(source, i, "as") {
+            i = skip_ws_comments(source, as_end);
             let (name, _) = read_ident(source, i)?;
             bindings.push(name);
         }
@@ -1764,8 +1758,8 @@ fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<St
             i = skip_ws_comments(source, i + 1);
             if i < bytes.len() && bytes[i] == b'*' {
                 i = skip_ws_comments(source, i + 1);
-                if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
-                    i = skip_ws_comments(source, i + 2);
+                if let Some(as_end) = parse_ident_name(source, i, "as") {
+                    i = skip_ws_comments(source, as_end);
                     let (name, _) = read_ident(source, i)?;
                     bindings.push(name);
                 }
@@ -1781,13 +1775,7 @@ fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<St
 
 fn parse_static_named_import(source: &str, pos: usize) -> Option<(String, Vec<StaticNamedImport>, usize)> {
     let bytes = source.as_bytes();
-    if !source[pos..].starts_with("import")
-        || !is_ident_start_boundary(bytes, pos)
-        || !is_ident_boundary(bytes, pos + 6)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 6);
+    let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "import")?);
     if i < bytes.len() && matches!(bytes[i], b'(' | b'\'' | b'"') {
         return None;
     }
@@ -1813,10 +1801,7 @@ fn parse_static_named_import(source: &str, pos: usize) -> Option<(String, Vec<St
         i = skip_ws_comments(source, find_matching_brace(source, i)? + 1);
     }
 
-    if !source[i..].starts_with("from") || !is_ident_boundary(bytes, i + 4) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 4);
+    i = skip_ws_comments(source, parse_ident_name(source, i, "from")?);
     let (specifier, next) = read_js_string(source, i)?;
     Some((specifier, named_imports, find_statement_end(source, next)))
 }
@@ -1843,8 +1828,8 @@ fn collect_named_import_specifiers(
         };
         let mut local = imported.clone();
         i = skip_ws_comments(source, next);
-        if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
-            i = skip_ws_comments(source, i + 2);
+        if let Some(as_end) = parse_ident_name(source, i, "as") {
+            i = skip_ws_comments(source, as_end);
             let (alias, next) = read_ident(source, i)?;
             local = alias;
             i = next;
@@ -1873,8 +1858,8 @@ fn collect_named_import_bindings(source: &str, start: usize, bindings: &mut Vec<
         }
         let (mut name, next) = read_ident(source, i)?;
         i = skip_ws_comments(source, next);
-        if source[i..].starts_with("as") && is_ident_boundary(bytes, i + 2) {
-            i = skip_ws_comments(source, i + 2);
+        if let Some(as_end) = parse_ident_name(source, i, "as") {
+            i = skip_ws_comments(source, as_end);
             let (alias, next) = read_ident(source, i)?;
             name = alias;
             i = next;
@@ -4665,15 +4650,23 @@ fn read_ident(source: &str, mut pos: usize) -> Option<(String, usize)> {
     Some((source[start..pos].to_string(), pos))
 }
 
-fn parse_free_ident_name(source: &str, pos: usize, name: &str) -> Option<usize> {
+fn parse_ident_name(source: &str, pos: usize, name: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
+    if !is_ident_start_boundary(bytes, pos)
         || !source[pos..].starts_with(name)
         || !is_ident_boundary(bytes, pos + name.len())
     {
         return None;
     }
     Some(pos + name.len())
+}
+
+fn parse_free_ident_name(source: &str, pos: usize, name: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if !is_free_ident_start(bytes, pos) {
+        return None;
+    }
+    parse_ident_name(source, pos, name)
 }
 
 fn read_js_string(source: &str, pos: usize) -> Option<(String, usize)> {
