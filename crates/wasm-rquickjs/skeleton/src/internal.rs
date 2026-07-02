@@ -8285,6 +8285,7 @@ mod cjs_export_analyzer_tests {
                 "valueThenComputed",
                 "valueThenShorthand",
                 "valueThenMethod",
+                "valueThenFalseEnumerable",
                 "objectMemberDescriptor",
                 "objectPlusDescriptor",
             ],
@@ -8317,7 +8318,7 @@ mod cjs_export_analyzer_tests {
                 Object.defineProperty(exports, "configurableThenValue", { configurable: true, value: dep.value });
                 Object.defineProperty(exports, "quotedEnumerableThenValue", { "enumerable": true, value: dep.value });
             "#,
-            true,
+            false,
             &[],
             &[],
         );
