@@ -4897,10 +4897,7 @@ fn descriptor_function_getter_body(
     descriptor_end: usize,
 ) -> Option<(usize, usize, usize)> {
     let bytes = source.as_bytes();
-    if !source[pos..].starts_with("function") || !is_ident_boundary(bytes, pos + 8) {
-        return None;
-    }
-    let mut next = skip_ws_comments(source, pos + 8);
+    let mut next = skip_ws_comments(source, parse_ident_name(source, pos, "function")?);
     if let Some((_, ident_end)) = read_ident(source, next) {
         next = skip_ws_comments(source, ident_end);
     }
@@ -5047,12 +5044,10 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
                 return false;
             }
             let value_start = skip_ws_comments(descriptor, next + 1);
-            if !descriptor[value_start..].starts_with("true")
-                || !is_ident_boundary(bytes, value_start + 4)
-            {
+            let Some(true_end) = parse_ident_name(descriptor, value_start, "true") else {
                 return false;
-            }
-            cursor = skip_ws_comments(descriptor, value_start + 4);
+            };
+            cursor = skip_ws_comments(descriptor, true_end);
         } else {
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
                 cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
@@ -5153,13 +5148,10 @@ fn find_matching_brace(source: &str, start: usize) -> Option<usize> {
 
 fn is_simple_getter_body(body: &str) -> bool {
     let return_pos = skip_ws_comments(body, 0);
-    if !body[return_pos..].starts_with("return")
-        || !is_free_ident_start(body.as_bytes(), return_pos)
-        || !is_ident_boundary(body.as_bytes(), return_pos + 6)
-    {
+    let Some(return_end) = parse_free_ident_name(body, return_pos, "return") else {
         return false;
-    }
-    let mut i = skip_ws_comments(body, return_pos + 6);
+    };
+    let mut i = skip_ws_comments(body, return_end);
     let Some((_, next)) = read_ident(body, i) else {
         return false;
     };
@@ -5992,13 +5984,11 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
                 return false;
             }
             let value_start = skip_ws_comments(descriptor, next + 1);
-            if !descriptor[value_start..].starts_with("true")
-                || !is_ident_boundary(bytes, value_start + 4)
-            {
+            let Some(true_end) = parse_ident_name(descriptor, value_start, "true") else {
                 return false;
-            }
+            };
             seen_enumerable = true;
-            cursor = skip_ws_comments(descriptor, value_start + 4);
+            cursor = skip_ws_comments(descriptor, true_end);
         } else if name == "get" {
             if found {
                 return false;
@@ -6047,13 +6037,10 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
 fn getter_body_returns_binding_key(body: &str, binding: &str, key: &str) -> bool {
     let bytes = body.as_bytes();
     let mut i = skip_ws_comments(body, 0);
-    if !body[i..].starts_with("return")
-        || !is_free_ident_start(bytes, i)
-        || !is_ident_boundary(bytes, i + 6)
-    {
+    let Some(return_end) = parse_free_ident_name(body, i, "return") else {
         return false;
-    }
-    i = skip_ws_comments(body, i + 6);
+    };
+    i = skip_ws_comments(body, return_end);
     if !body[i..].starts_with(binding)
         || !is_free_ident_start(bytes, i)
         || !is_ident_boundary(bytes, i + binding.len())
