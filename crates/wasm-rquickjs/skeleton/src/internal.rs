@@ -3651,44 +3651,18 @@ impl NodeModulesResolver {
         }
 
         if let PackageTarget::Object(map) = exports {
-            if let Some(target) = map.get(&key) {
-                return Self::resolve_package_target_with_context(
-                    package_dir,
-                    target,
-                    false,
-                    "exports",
-                    conditions,
-                    None,
-                    &key,
-                    None,
-                    importer,
-                    warnings,
-                )
-                .and_then(|resolution| {
-                    Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
-                });
-            }
-            if let Some((pattern_key, pattern_substitution)) = Self::find_best_package_pattern(map, &key)
-                && let Some(target) = map.get(pattern_key)
+            if let Some((target, pattern_substitution, pattern_key)) =
+                Self::find_package_map_target(map, &key, "is not a valid match in pattern")?
             {
-                if Self::is_invalid_package_pattern_substitution(&pattern_substitution) {
-                    return Err(NodePackageResolveError::InvalidPackagePatternMatch {
-                        specifier: key,
-                        message: Self::invalid_package_pattern_substitution_message(
-                            &pattern_substitution,
-                            "is not a valid match in pattern",
-                        ),
-                    });
-                }
                 return Self::resolve_package_target_with_context(
                     package_dir,
                     target,
                     false,
                     "exports",
                     conditions,
-                    Some(&pattern_substitution),
+                    pattern_substitution.as_deref(),
                     &key,
-                    Some(pattern_key),
+                    pattern_key,
                     importer,
                     warnings,
                 )
@@ -3715,46 +3689,29 @@ impl NodeModulesResolver {
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
         {
-            let (target, pattern_substitution, pattern_key) = if let Some(target) = map.get(specifier) {
-                (target, None, None)
-            } else if let Some((pattern_key, pattern_substitution)) =
-                Self::find_best_package_pattern(map, specifier)
+            if let Some((target, pattern_substitution, pattern_key)) =
+                Self::find_package_map_target(
+                    map,
+                    specifier,
+                    "request is not a valid match in pattern",
+                )?
             {
-                if Self::is_invalid_package_pattern_substitution(&pattern_substitution) {
-                    return Err(NodePackageResolveError::InvalidPackagePatternMatch {
-                        specifier: specifier.to_string(),
-                        message: Self::invalid_package_pattern_substitution_message(
-                            &pattern_substitution,
-                            "request is not a valid match in pattern",
-                        ),
-                    });
-                }
-                let Some(target) = map.get(pattern_key) else {
-                    return Err(NodePackageResolveError::PackageImportNotDefined {
-                        specifier: specifier.to_string(),
-                    });
-                };
-                (target, Some(pattern_substitution), Some(pattern_key))
-            } else {
-                return Err(NodePackageResolveError::PackageImportNotDefined {
-                    specifier: specifier.to_string(),
-                });
-            };
-            return Self::resolve_package_target_with_context(
-                package_dir,
-                target,
-                true,
-                "imports",
-                conditions,
-                pattern_substitution.as_deref(),
-                specifier,
-                pattern_key,
-                importer,
-                warnings,
-            )
-            .and_then(
-                |resolution| Self::target_resolution_to_import_result(resolution, specifier),
-            );
+                return Self::resolve_package_target_with_context(
+                    package_dir,
+                    target,
+                    true,
+                    "imports",
+                    conditions,
+                    pattern_substitution.as_deref(),
+                    specifier,
+                    pattern_key,
+                    importer,
+                    warnings,
+                )
+                .and_then(
+                    |resolution| Self::target_resolution_to_import_result(resolution, specifier),
+                );
+            }
         }
         Err(NodePackageResolveError::PackageImportNotDefined {
             specifier: specifier.to_string(),
@@ -4064,6 +4021,32 @@ impl NodeModulesResolver {
             }
         }
         best
+    }
+
+    fn find_package_map_target<'a>(
+        map: &'a IndexMap<String, PackageTarget>,
+        specifier: &str,
+        invalid_pattern_message: &str,
+    ) -> Result<Option<(&'a PackageTarget, Option<String>, Option<&'a str>)>, NodePackageResolveError> {
+        if let Some(target) = map.get(specifier) {
+            return Ok(Some((target, None, None)));
+        }
+
+        let Some((pattern_key, pattern_substitution)) = Self::find_best_package_pattern(map, specifier) else {
+            return Ok(None);
+        };
+        if Self::is_invalid_package_pattern_substitution(&pattern_substitution) {
+            return Err(NodePackageResolveError::InvalidPackagePatternMatch {
+                specifier: specifier.to_string(),
+                message: Self::invalid_package_pattern_substitution_message(
+                    &pattern_substitution,
+                    invalid_pattern_message,
+                ),
+            });
+        }
+        Ok(map
+            .get(pattern_key)
+            .map(|target| (target, Some(pattern_substitution), Some(pattern_key))))
     }
 
     fn package_pattern_compare(a: &str, b: &str) -> std::cmp::Ordering {
