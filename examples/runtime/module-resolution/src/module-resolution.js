@@ -3720,13 +3720,33 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'import { main as depMain } from "./entry-main-dep.mjs";',
             'export default { main: import.meta.main, depMain };',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/entry-main-spaced.mjs', [
+            'export default {',
+            '  spaced: import . meta . main,',
+            '  commented: import/*x*/.meta.main,',
+            '  prefix: typeof import.meta.mainx,',
+            '};',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/import-meta-main-false-positive.mjs', [
-            'const obj = { "import": { meta: { main: 1 } } };',
+            'const obj = { "import": { meta: { main: 1 } }, "//": { import: { meta: { main: 2 } } } };',
+            'class C { #import = { meta: { main: 1 } }; m() { return this.#import.meta.main; } }',
             'export default [',
             '  "import.meta.main",',
             '  /import\\.meta\\.main/.source,',
             '  obj["import"].meta.main,',
+            '  obj.import.meta.main,',
+            '  obj.import . meta . main,',
+            '  obj["//"].import.meta.main,',
+            '  obj./*x*/import.meta.main,',
+            '  obj./* x /* y */import.meta.main,',
+            '  obj.//x',
+            '    import.meta.main,',
+            '  (() => { const s = ".//"; return import.meta.main; })(),',
+            '  new C().m(),',
             '  import.meta.main,',
+            '  import . meta . main,',
+            '  import/*x*/.meta.main,',
+            '  typeof import.meta.mainx,',
             '];',
         ].join('\n'));
         fs.writeFileSync('/module-syntax-app/package-without-type/package.json', JSON.stringify({ main: 'index.js' }));
@@ -3887,11 +3907,28 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             process.argv[1] = '/module-syntax-app/entry-main.mjs';
             const esmMain = (await import('/module-syntax-app/entry-main.mjs')).default;
             assert.deepStrictEqual(esmMain, { main: true, depMain: false });
+            process.argv[1] = '/module-syntax-app/entry-main-spaced.mjs';
+            assert.deepStrictEqual((await import('/module-syntax-app/entry-main-spaced.mjs')).default, {
+                spaced: true,
+                commented: true,
+                prefix: 'undefined',
+            });
             assert.deepStrictEqual(await import('/module-syntax-app/import-meta-main-false-positive.mjs').then((m) => m.default), [
                 'import.meta.main',
                 'import\\.meta\\.main',
                 1,
+                1,
+                1,
+                2,
+                1,
+                1,
+                1,
                 false,
+                1,
+                false,
+                false,
+                false,
+                'undefined',
             ]);
         } finally {
             Object.assign(require.main, originalRequireMain);

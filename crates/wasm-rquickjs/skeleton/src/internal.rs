@@ -6028,6 +6028,17 @@ fn previous_significant_byte(source: &str, pos: usize) -> Option<u8> {
     None
 }
 
+fn previous_significant_byte_before_import_meta(source: &str, pos: usize) -> Option<u8> {
+    let mut previous = None;
+    let _ = scan_code_positions(&source[..pos], true, |_, byte| {
+        if !byte.is_ascii_whitespace() {
+            previous = Some(byte);
+        }
+        ControlFlow::Continue(None)
+    });
+    previous
+}
+
 fn is_regex_literal_start(source: &str, pos: usize) -> bool {
     if matches!(
         previous_significant_byte(source, pos),
@@ -6999,12 +7010,9 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
     let mut spans = Vec::new();
     scan_code_positions(source, true, |i, _| {
-        if source[i..].starts_with("import.meta.main")
-            && is_ident_start_boundary(source.as_bytes(), i)
-            && is_ident_boundary(source.as_bytes(), i + "import.meta.main".len())
-        {
-            spans.push((i, i + "import.meta.main".len()));
-            ControlFlow::Continue(Some(i + "import.meta.main".len()))
+        if let Some(end) = parse_import_meta_main_span(source, i) {
+            spans.push((i, end));
+            ControlFlow::Continue(Some(end))
         } else {
             ControlFlow::Continue(None)
         }
@@ -7019,6 +7027,28 @@ fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
         rewritten.replace_range(start..end, replacement);
     }
     rewritten
+}
+
+fn parse_import_meta_main_span(source: &str, pos: usize) -> Option<usize> {
+    let mut i = parse_ident_name(source, pos, "import")?;
+    if matches!(
+        previous_significant_byte_before_import_meta(source, pos),
+        Some(b'.' | b'#')
+    ) {
+        return None;
+    }
+    i = skip_ws_comments(source, i);
+    if source.as_bytes().get(i) != Some(&b'.') {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    i = parse_ident_name(source, i, "meta")?;
+    i = skip_ws_comments(source, i);
+    if source.as_bytes().get(i) != Some(&b'.') {
+        return None;
+    }
+    i = skip_ws_comments(source, i + 1);
+    parse_ident_name(source, i, "main")
 }
 
 struct ImportMetaLoader;
