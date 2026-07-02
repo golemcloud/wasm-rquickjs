@@ -6043,6 +6043,19 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         assert.deepStrictEqual(parent.fromModuleRequire, { from: 'child' });
         assert.strictEqual(parent.fromModuleRequire, parent.fromChildRequire);
 
+        fs.mkdirSync(`${root}/node_modules/no-exports-cjs/subdir`, { recursive: true });
+        fs.mkdirSync(`${root}/node_modules/no-exports-cjs/empty-dir`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/no-exports-cjs/package.json`, JSON.stringify({ type: 'commonjs' }));
+        fs.writeFileSync(`${root}/node_modules/no-exports-cjs/exact.js`, 'module.exports = { value: "exact" };');
+        fs.writeFileSync(`${root}/node_modules/no-exports-cjs/no-ext.js`, 'module.exports = { value: "extension" };');
+        fs.writeFileSync(`${root}/node_modules/no-exports-cjs/subdir/index.js`, 'module.exports = { value: "directory" };');
+        fs.writeFileSync(`${root}/node_modules/no-exports-cjs/sp%20ce.js`, 'module.exports = { value: "encoded" };');
+        assert.deepStrictEqual(require('no-exports-cjs/exact.js'), { value: 'exact' });
+        assert.deepStrictEqual(require('no-exports-cjs/no-ext'), { value: 'extension' });
+        assert.deepStrictEqual(require('no-exports-cjs/subdir'), { value: 'directory' });
+        assert.deepStrictEqual(require('no-exports-cjs/sp%20ce.js'), { value: 'encoded' });
+        assert.throws(() => require('no-exports-cjs/empty-dir'), { code: 'MODULE_NOT_FOUND' });
+
         fs.writeFileSync(`${root}/bom.js`, '\uFEFFmodule.exports = 42;');
         fs.writeFileSync(`${root}/bom.json`, '\uFEFF42');
         fs.writeFileSync(`${root}/bom-shebang-shebang.js`, '\uFEFF#!shebang\n#!shebang\nmodule.exports = 1;');
