@@ -9231,7 +9231,7 @@
     },
     "parallel/test-vm-no-dynamic-import-callback.js": { "category": "runnable" },
     "parallel/test-vm-not-strict.js": { "category": "known-gap", "reason": "runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect" },
-    "parallel/test-vm-options-validation.js": { "category": "known-gap", "reason": "vm.Script constructor/run option validation and error codes are incomplete" },
+    "parallel/test-vm-options-validation.js": { "category": "runnable" },
     "parallel/test-vm-ownkeys.js": { "category": "runnable" },
     "parallel/test-vm-ownpropertynames.js": { "category": "runnable" },
     "parallel/test-vm-ownpropertysymbols.js": { "category": "runnable" },

@@ -4164,6 +4164,31 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.throws(() => vm.runInContext('throw new Error("boom")', runFilenameContext, 'runtime-boom.js'), hasVmFilenameStack);
         assert.throws(() => vm.createContext('bad'), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
         assert.throws(() => vm.createContext(function badSandbox() {}), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script('void 0', 42), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script('void 0', { lineOffset: null }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script('void 0', { lineOffset: 0.5 }), { name: 'RangeError', code: 'ERR_OUT_OF_RANGE' });
+        assert.throws(() => new vm.Script('void 0', { columnOffset: 2 ** 32 }), { name: 'RangeError', code: 'ERR_OUT_OF_RANGE' });
+        assert.throws(() => new vm.Script('void 0', { filename: 123 }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script('void 0', { produceCachedData: 1 }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script('void 0', { cachedData: {} }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script('void 0', { importModuleDynamically: 123 }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => new vm.Script({ toString() { throw new Error('code toString'); } }, 42), {
+            name: 'Error',
+            message: 'code toString',
+        });
+        assert.doesNotThrow(() => new vm.Script('void 0', 'runtime-script.js'));
+        const runOptionScript = new vm.Script('void 0');
+        const runOptionContext = vm.createContext({});
+        assert.throws(() => runOptionScript.runInThisContext(null), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => runOptionScript.runInContext(runOptionContext, { timeout: 0 }), { name: 'RangeError', code: 'ERR_OUT_OF_RANGE' });
+        assert.doesNotThrow(() => runOptionScript.runInThisContext({ timeout: 4294967295 }));
+        assert.throws(() => runOptionScript.runInThisContext({ timeout: 4294967296 }), { name: 'RangeError', code: 'ERR_OUT_OF_RANGE' });
+        assert.throws(() => runOptionScript.runInContext({}, { get timeout() { throw new Error('bad order'); } }), {
+            name: 'TypeError',
+            message: 'argument must be a vm.Context',
+        });
+        assert.throws(() => runOptionScript.runInNewContext({}, { displayErrors: null }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
+        assert.throws(() => runOptionScript.runInNewContext({}, { breakOnSigint: 1 }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
         assert.strictEqual(vm.isContext({}), false);
         assert.strictEqual(vm.isContext([]), false);
         for (const invalidContext of ['string', null, undefined, 8.9, Symbol('sym'), true, function invalidContext() {}]) {

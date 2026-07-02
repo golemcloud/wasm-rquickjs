@@ -1495,6 +1495,48 @@ function validateCompileFunctionOptions(options) {
     }
 }
 
+function validateScriptConstructorOptions(options) {
+    if (typeof options === 'string') {
+        return { filename: options };
+    }
+    options = validateOptionsObject(options);
+    validateImportModuleDynamicallyOption(options.importModuleDynamically);
+    validateInt32PropertyOption(options.lineOffset, 'options.lineOffset');
+    validateInt32PropertyOption(options.columnOffset, 'options.columnOffset');
+    if (options.filename !== undefined && typeof options.filename !== 'string') {
+        throwInvalidPropertyType('options.filename', 'string', options.filename);
+    }
+    if (options.produceCachedData !== undefined && typeof options.produceCachedData !== 'boolean') {
+        throwInvalidPropertyType('options.produceCachedData', 'boolean', options.produceCachedData);
+    }
+    if (options.cachedData !== undefined && !ArrayBuffer.isView(options.cachedData)) {
+        throwInvalidPropertyInstance('options.cachedData', 'Buffer, TypedArray, or DataView', options.cachedData);
+    }
+    return options;
+}
+
+function validateScriptRunOptions(options) {
+    options = validateOptionsObject(options);
+    if (options.timeout !== undefined) {
+        if (typeof options.timeout !== 'number') {
+            throwInvalidArgType('options.timeout', 'number', options.timeout);
+        }
+        if (!Number.isInteger(options.timeout)) {
+            throwOutOfRange('options.timeout', 'an integer', options.timeout);
+        }
+        if (options.timeout < 1 || options.timeout > 4294967295) {
+            throwOutOfRange('options.timeout', '>= 1 && <= 4294967295', options.timeout);
+        }
+    }
+    if (options.displayErrors !== undefined && typeof options.displayErrors !== 'boolean') {
+        throwInvalidPropertyType('options.displayErrors', 'boolean', options.displayErrors);
+    }
+    if (options.breakOnSigint !== undefined && typeof options.breakOnSigint !== 'boolean') {
+        throwInvalidPropertyType('options.breakOnSigint', 'boolean', options.breakOnSigint);
+    }
+    return options;
+}
+
 function compileFunctionInContext(code, params, options) {
     const source = '[function(' + params.map(String).join(',') + '){' + code + '\n}][0]';
     const keys = [];
@@ -2549,6 +2591,7 @@ export class Script {
     constructor(code, options) {
         scriptBrandSet.add(this);
         this._code = String(code);
+        options = validateScriptConstructorOptions(options);
         this.sourceMapURL = extractSourceMapURL(this._code);
         this._options = snapshotVmOptions(options);
         this._usesDefaultLoader = this._options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER;
@@ -2598,39 +2641,30 @@ export class Script {
         if (!this || !scriptBrandSet.has(this)) {
             throw new TypeError('Illegal invocation');
         }
-        validateOptionsObject(options);
+        if (!isContext(context)) {
+            throw new TypeError('argument must be a vm.Context');
+        }
+        options = validateScriptRunOptions(options);
         if (this._usesDefaultLoader) {
-            if (!isContext(context)) {
-                throw new TypeError('argument must be a vm.Context');
-            }
             return evalCodeInContext(this._defaultLoaderCode, context, this._defaultLoaderHelperName);
         }
         if (this._usesMissingDynamicImportCallback) {
-            if (!isContext(context)) {
-                throw new TypeError('argument must be a vm.Context');
-            }
             return evalCodeInContext(this._missingCallbackCode, context, this._missingCallbackHelperName);
         }
         if (this._usesMissingDynamicImportFlag) {
-            if (!isContext(context)) {
-                throw new TypeError('argument must be a vm.Context');
-            }
             return evalCodeInContext(this._missingFlagCode, context, this._missingFlagHelperName);
         }
         if (this._usesDynamicImportCallback) {
-            if (!isContext(context)) {
-                throw new TypeError('argument must be a vm.Context');
-            }
             return evalCodeInContext(this._dynamicImportCallbackCode, context, this._dynamicImportCallbackHelperName);
         }
-        return runInContext(this._code, context, {});
+        return runInContext(this._code, context, options);
     }
 
     runInThisContext(options) {
         if (!this || !scriptBrandSet.has(this)) {
             throw new TypeError('Illegal invocation');
         }
-        validateOptionsObject(options);
+        options = validateScriptRunOptions(options);
         if (this._usesDefaultLoader) {
             return evalWithFilename(this._defaultLoaderCode, this._defaultLoaderFilename);
         }
@@ -2643,7 +2677,7 @@ export class Script {
         if (this._usesDynamicImportCallback) {
             return (0, eval)(this._dynamicImportCallbackCode);
         }
-        return runInThisContext(this._code, {});
+        return runInThisContext(this._code, options);
     }
 
     createCachedData() {

@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3216/4395 (73.2%)
+**Primary compatibility (CI-enforced):** 3217/4395 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3216 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1179 | 26.8% | 20.6% | 17.2% |
+| ✅ passing (runnable) | 3217 | 73.2% | 56.3% | 47.1% |
+| 🧩 known gap | 1178 | 26.8% | 20.6% | 17.2% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3216/5713 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3217/5713 (56.3%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 62 | 47 | 3 | 9 | 0 | 0 | 56.9% | 51.2% |
+| vm | 121 | 63 | 46 | 3 | 9 | 0 | 0 | 57.8% | 52.1% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1179)
+### known gap (1178)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1315,7 +1315,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm global getter/setter descriptors are not exposed correctly on contextified objects | 1 | `parallel/test-vm-global-setter.js` |
 | vm inherited sandbox property lookup/assignment semantics require contextified global proxy behavior | 1 | `parallel/test-vm-inherited_properties.js` |
 | vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype | 1 | `parallel/test-vm-symbols.js` |
-| vm.Script constructor/run option validation and error codes are incomplete | 1 | `parallel/test-vm-options-validation.js` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
 | wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-cr-no-lf.js` |
