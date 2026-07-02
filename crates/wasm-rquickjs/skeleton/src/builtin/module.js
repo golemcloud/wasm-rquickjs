@@ -2825,16 +2825,22 @@ function nextLoaderDescriptorEntry(source, cursor, descriptorEnd) {
     return skipWhitespaceAndComments(source, cursor + 1);
 }
 
-function loaderDescriptorFunctionGetterEnd(source, pos, descriptorEnd) {
+function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
     if (!source.startsWith('function', pos) || !hasIdentifierBoundary(source, pos, pos + 8)) return null;
     let next = skipWhitespaceAndComments(source, pos + 8);
-    if (isIdentifierContinueCode(source.charCodeAt(next))) {
+    if (isIdentifierStartCode(source.charCodeAt(next))) {
         next++;
         while (next < descriptorEnd && isIdentifierContinueCode(source.charCodeAt(next))) next++;
         next = skipWhitespaceAndComments(source, next);
     }
     if (source.charCodeAt(next) !== 0x28) return null;
     const body = loaderGetterBodyEnd(source, next, descriptorEnd);
+    if (body === null) return null;
+    return body;
+}
+
+function loaderDescriptorFunctionGetterEnd(source, pos, descriptorEnd) {
+    const body = loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd);
     if (body === null || !loaderSimpleGetterBody(source, body.start, body.end)) return null;
     return body.end + 1;
 }
@@ -3354,18 +3360,10 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
                 found = true;
                 cursor = skipWhitespaceAndComments(source, getterEnd);
             } else if (source.charCodeAt(next) === 0x3a) {
-                next = skipWhitespaceAndComments(source, next + 1);
-                if (!source.startsWith('function', next) || !hasIdentifierBoundary(source, next, next + 8)) return false;
-                next = skipWhitespaceAndComments(source, next + 8);
-                if (isIdentifierStartCode(source.charCodeAt(next))) {
-                    next++;
-                    while (next < descriptorEnd && isIdentifierContinueCode(source.charCodeAt(next))) next++;
-                    next = skipWhitespaceAndComments(source, next);
-                }
-                const getterEnd = loaderDynamicReexportGetterBody(source, next, descriptorEnd, binding, key);
-                if (getterEnd === null) return false;
+                const body = loaderDescriptorFunctionGetterBody(source, skipWhitespaceAndComments(source, next + 1), descriptorEnd);
+                if (body === null || !loaderGetterReturnsBindingKey(source, body.start, body.end, binding, key)) return false;
                 found = true;
-                cursor = skipWhitespaceAndComments(source, getterEnd);
+                cursor = skipWhitespaceAndComments(source, body.end + 1);
             } else {
                 return false;
             }
