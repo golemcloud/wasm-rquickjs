@@ -2316,6 +2316,18 @@ function startsWithKeywordAt(source, keyword, pos) {
     return source.startsWith(keyword, pos) && hasIdentifierBoundary(source, pos, pos + keyword.length);
 }
 
+function readKeywordAt(source, keyword, pos) {
+    return startsWithKeywordAt(source, keyword, pos) ? pos + keyword.length : null;
+}
+
+function readVariableDeclarationKeyword(source, pos) {
+    let end = readKeywordAt(source, 'const', pos);
+    if (end !== null) return end;
+    end = readKeywordAt(source, 'let', pos);
+    if (end !== null) return end;
+    return readKeywordAt(source, 'var', pos);
+}
+
 function skipNonCode(source, pos, skipRegex) {
     const code = source.charCodeAt(pos);
     if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
@@ -2480,13 +2492,20 @@ function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
     let next = skipWhitespace(source, requirePos + 7);
     if (source.charCodeAt(next) !== 0x3d) return false;
     next = skipWhitespace(source, next + 1);
-    if (!source.startsWith('createRequire', next) || !hasIdentifierBoundary(source, next, next + 13)) {
+    const createRequireEnd = readLoaderNamedIdentifier(source, next, 'createRequire');
+    if (createRequireEnd === null) {
         return false;
     }
-    next = skipWhitespace(source, next + 13);
+    next = skipWhitespace(source, createRequireEnd);
     if (source.charCodeAt(next) !== 0x28) return false;
     next = skipWhitespace(source, next + 1);
-    return source.startsWith('import.meta.url', next) && hasIdentifierBoundary(source, next, next + 15);
+    return readImportMetaUrl(source, next) !== null;
+}
+
+function readImportMetaUrl(source, pos) {
+    return source.startsWith('import.meta.url', pos) && hasIdentifierBoundary(source, pos, pos + 15)
+        ? pos + 15
+        : null;
 }
 
 function hasCjsWrapperRequireRedeclaration(source) {
@@ -2502,8 +2521,10 @@ function hasCjsWrapperRequireRedeclaration(source) {
             return undefined;
         }
 
-        if (braceDepth === 0 && (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i))) {
-            let next = skipWhitespace(source, i + (source.startsWith('const', i) ? 5 : 3));
+        if (braceDepth === 0) {
+            const declarationEnd = readKeywordAt(source, 'const', i) || readKeywordAt(source, 'let', i);
+            if (declarationEnd === null) return undefined;
+            let next = skipWhitespace(source, declarationEnd);
             const requireEnd = readLoaderNamedIdentifier(source, next, 'require');
             if (requireEnd !== null) {
                 if (!isCreateRequireImportMetaUrlDeclaration(source, next)) {
@@ -3165,9 +3186,7 @@ function readLoaderIdentifier(source, pos) {
 }
 
 function readLoaderNamedIdentifier(source, pos, name) {
-    return source.startsWith(name, pos) && hasIdentifierBoundary(source, pos, pos + name.length)
-        ? pos + name.length
-        : null;
+    return readKeywordAt(source, name, pos);
 }
 
 function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) {
@@ -3275,8 +3294,9 @@ function readLoaderDuplicateExportReturnGuard(source, pos, binding, key) {
     c = skipWhitespaceAndComments(source, c);
     if (source.substring(c, c + 3) !== '===') return null;
     c = skipWhitespaceAndComments(source, c + 3);
-    if (!source.startsWith(binding, c) || !hasIdentifierBoundary(source, c, c + binding.length)) return null;
-    c = skipWhitespaceAndComments(source, c + binding.length);
+    const bindingEnd = readLoaderNamedIdentifier(source, c, binding);
+    if (bindingEnd === null) return null;
+    c = skipWhitespaceAndComments(source, bindingEnd);
     c = readLoaderBracketIdentifier(source, c, key);
     if (c === null || skipWhitespaceAndComments(source, c) !== condition.end) return null;
     return readLoaderNamedIdentifier(source, condition.after, 'return');
@@ -3733,9 +3753,9 @@ function collectCreateRequireAliases(source, factoryNames) {
     const aliases = [];
     if (factoryNames.length === 0) return aliases;
     scanSourceCodePositions(source, { skipRegex: false }, (i) => {
-        if (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i) || startsWithKeywordAt(source, 'var', i)) {
-            const keywordLen = source.startsWith('const', i) ? 5 : 3;
-            let p = skipWhitespace(source, i + keywordLen);
+        const declarationEnd = readVariableDeclarationKeyword(source, i);
+        if (declarationEnd !== null) {
+            let p = skipWhitespace(source, declarationEnd);
             const identMatch = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(source.slice(p));
             if (identMatch) {
                 const name = identMatch[0];
