@@ -2504,7 +2504,8 @@ function hasCjsWrapperRequireRedeclaration(source) {
 
         if (braceDepth === 0 && (startsWithKeywordAt(source, 'const', i) || startsWithKeywordAt(source, 'let', i))) {
             let next = skipWhitespace(source, i + (source.startsWith('const', i) ? 5 : 3));
-            if (source.startsWith('require', next) && hasIdentifierBoundary(source, next, next + 7)) {
+            const requireEnd = readLoaderNamedIdentifier(source, next, 'require');
+            if (requireEnd !== null) {
                 if (!isCreateRequireImportMetaUrlDeclaration(source, next)) {
                     found = true;
                     return false;
@@ -2751,8 +2752,9 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
         }
         if (source.startsWith('...', cursor)) {
             const spreadStart = skipWhitespaceAndComments(source, cursor + 3);
-            if (source.startsWith('require', spreadStart) && hasIdentifierBoundary(source, spreadStart, spreadStart + 7)) {
-                const afterRequire = skipWhitespaceAndComments(source, spreadStart + 7);
+            const requireEnd = readLoaderNamedIdentifier(source, spreadStart, 'require');
+            if (requireEnd !== null) {
+                const afterRequire = skipWhitespaceAndComments(source, requireEnd);
                 if (source.charCodeAt(afterRequire) !== 0x28) break;
                 const requireCall = readLoaderRequireString(source, spreadStart, true);
                 if (requireCall !== null) {
@@ -2823,8 +2825,9 @@ function nextLoaderDescriptorEntry(source, cursor, descriptorEnd) {
 }
 
 function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
-    if (!source.startsWith('function', pos) || !hasIdentifierBoundary(source, pos, pos + 8)) return null;
-    let next = skipWhitespaceAndComments(source, pos + 8);
+    const functionEnd = readLoaderNamedIdentifier(source, pos, 'function');
+    if (functionEnd === null) return null;
+    let next = skipWhitespaceAndComments(source, functionEnd);
     const functionName = readLoaderIdentifier(source, next);
     if (functionName !== null) {
         next = skipWhitespaceAndComments(source, functionName.end);
@@ -2904,10 +2907,11 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
                 return false;
             } else {
                 const valueStart = skipWhitespaceAndComments(source, next + 1);
-                if (!source.startsWith('true', valueStart) || !hasIdentifierBoundary(source, valueStart, valueStart + 4)) {
+                const trueEnd = readLoaderNamedIdentifier(source, valueStart, 'true');
+                if (trueEnd === null) {
                     return false;
                 }
-                cursor = skipWhitespaceAndComments(source, valueStart + 4);
+                cursor = skipWhitespaceAndComments(source, trueEnd);
             }
         } else {
             if (foundKind === 'value') {
@@ -2924,8 +2928,9 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
 
 function loaderSimpleGetterBody(source, start, end) {
     let i = skipWhitespaceAndComments(source, start);
-    if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return false;
-    i = skipWhitespaceAndComments(source, i + 6);
+    const returnEnd = readLoaderNamedIdentifier(source, i, 'return');
+    if (returnEnd === null) return false;
+    i = skipWhitespaceAndComments(source, returnEnd);
     const receiver = readLoaderIdentifier(source, i);
     if (receiver === null) return false;
     i = skipWhitespaceAndComments(source, receiver.end);
