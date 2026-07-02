@@ -589,6 +589,32 @@ fn has_import_type_rewrite_token(path: &str) -> bool {
     })
 }
 
+fn read_static_import_specifier_literal(
+    source: &str,
+    pos: usize,
+) -> Option<(usize, usize, usize, usize)> {
+    let bytes = source.as_bytes();
+    if !matches!(bytes.get(pos), Some(b'"' | b'\'')) {
+        return None;
+    }
+
+    let literal_start = pos;
+    let quote = bytes[pos];
+    let mut i = pos + 1;
+    let specifier_start = i;
+    while i < bytes.len() && bytes[i] != quote {
+        if bytes[i] == b'\\' {
+            i += 1;
+        }
+        i += 1;
+    }
+    let specifier_end = i;
+    if i < bytes.len() {
+        i += 1;
+    }
+    Some((literal_start, i, specifier_start, specifier_end))
+}
+
 /// Process static import attributes in JavaScript module source code.
 ///
 /// Handles patterns like `import "specifier" with { type: "json" }`.
@@ -622,10 +648,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
             let import_start = i;
             i += 6;
 
-            let mut spec_literal_start = None;
-            let mut spec_literal_end = None;
-            let mut specifier_start = None;
-            let mut specifier_end = None;
+            let mut specifier_literal = None;
 
             while i < len && bytes[i].is_ascii_whitespace() {
                 i += 1;
@@ -645,22 +668,9 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                 continue;
             }
 
-            if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
-                spec_literal_start = Some(i);
-                let quote = bytes[i];
-                i += 1;
-                specifier_start = Some(i);
-                while i < len && bytes[i] != quote {
-                    if bytes[i] == b'\\' {
-                        i += 1;
-                    }
-                    i += 1;
-                }
-                specifier_end = Some(i);
-                if i < len {
-                    i += 1; // skip closing quote
-                }
-                spec_literal_end = Some(i);
+            if let Some(literal) = read_static_import_specifier_literal(source, i) {
+                specifier_literal = Some(literal);
+                i = literal.1;
             } else {
                 while i < len {
                     if bytes[i] == b'f'
@@ -673,23 +683,9 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                         while j < len && bytes[j].is_ascii_whitespace() {
                             j += 1;
                         }
-                        if j < len && (bytes[j] == b'"' || bytes[j] == b'\'') {
-                            spec_literal_start = Some(j);
-                            let quote = bytes[j];
-                            j += 1;
-                            specifier_start = Some(j);
-                            while j < len && bytes[j] != quote {
-                                if bytes[j] == b'\\' {
-                                    j += 1;
-                                }
-                                j += 1;
-                            }
-                            specifier_end = Some(j);
-                            if j < len {
-                                j += 1;
-                            }
-                            spec_literal_end = Some(j);
-                            i = j;
+                        if let Some(literal) = read_static_import_specifier_literal(source, j) {
+                            specifier_literal = Some(literal);
+                            i = literal.1;
                             break;
                         }
                     }
@@ -700,9 +696,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                 }
             }
 
-            if let (Some(spec_lit_start), Some(spec_lit_end), Some(spec_start), Some(spec_end)) =
-                (spec_literal_start, spec_literal_end, specifier_start, specifier_end)
-            {
+            if let Some((spec_lit_start, spec_lit_end, spec_start, spec_end)) = specifier_literal {
                 let specifier = &source[spec_start..spec_end];
 
                 // Skip whitespace
