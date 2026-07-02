@@ -3062,6 +3062,13 @@ enum NodePackageResolveMode {
     CjsAnalysis,
 }
 
+enum CjsAnalysisPackageFallbackStep {
+    RootFile,
+    PackageMain,
+    Subpath,
+    RootDirectory,
+}
+
 impl NodeModulesResolver {
     const ESM_CONDITIONS: [&'static str; 5] = ["golem", "node", "module-sync", "import", "default"];
     const CJS_CONDITIONS: [&'static str; 5] = ["golem", "node", "require", "module-sync", "default"];
@@ -3316,34 +3323,60 @@ impl NodeModulesResolver {
         package_path: &std::path::Path,
         package: Option<&PackageJson>,
     ) -> Option<String> {
-        if subpath.is_empty()
-            && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(package_path)
-        {
-            return Some(resolved);
-        }
-
-        if let Some(package) = package {
-            if subpath.is_empty()
-                && let Some(main) = package.main.as_ref()
-                && let Some(resolved) = Self::resolve_cjs_analysis_file_or_directory(package_path, main)
-            {
+        let steps = [
+            CjsAnalysisPackageFallbackStep::RootFile,
+            CjsAnalysisPackageFallbackStep::PackageMain,
+            CjsAnalysisPackageFallbackStep::Subpath,
+            CjsAnalysisPackageFallbackStep::RootDirectory,
+        ];
+        for step in steps {
+            if let Some(resolved) = Self::resolve_cjs_analysis_package_fallback_step(
+                step,
+                subpath,
+                package_path,
+                package,
+            ) {
                 return Some(resolved);
             }
         }
 
-        if !subpath.is_empty()
-            && let Some(resolved) = Self::resolve_cjs_analysis_file_or_directory(package_path, subpath)
-        {
-            return Some(resolved);
-        }
-
-        if subpath.is_empty()
-            && let Some(resolved) = Self::resolve_cjs_analysis_package_root_directory(package_path)
-        {
-            return Some(resolved);
-        }
-
         None
+    }
+
+    fn resolve_cjs_analysis_package_fallback_step(
+        step: CjsAnalysisPackageFallbackStep,
+        subpath: &str,
+        package_path: &std::path::Path,
+        package: Option<&PackageJson>,
+    ) -> Option<String> {
+        match step {
+            CjsAnalysisPackageFallbackStep::RootFile => {
+                subpath
+                    .is_empty()
+                    .then(|| Self::resolve_cjs_analysis_package_root_file(package_path))
+                    .flatten()
+            }
+            CjsAnalysisPackageFallbackStep::PackageMain => {
+                if !subpath.is_empty() {
+                    return None;
+                }
+                let main = package.and_then(|package| package.main.as_ref())?;
+                Self::resolve_cjs_analysis_file_or_directory(package_path, main)
+            }
+            CjsAnalysisPackageFallbackStep::Subpath => {
+                if subpath.is_empty() {
+                    None
+                } else {
+                    Self::resolve_cjs_analysis_file_or_directory(package_path, subpath)
+                }
+            }
+            CjsAnalysisPackageFallbackStep::RootDirectory => {
+                subpath
+                    .is_empty()
+                    .then(|| Self::resolve_cjs_analysis_package_root_directory(package_path))
+                    .flatten()
+            }
+        }
     }
 
     fn try_resolve_package_import_with_conditions(
