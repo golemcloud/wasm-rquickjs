@@ -1488,6 +1488,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  if (specifier === "virtual:loader-cjs-keys-duplicate-guard") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-duplicate-guard.cjs", format: "commonjs" };',
             '  }',
+            '  if (specifier === "virtual:loader-cjs-keys-duplicate-enumerable") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-duplicate-enumerable.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-keys-getter-only") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-getter-only.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-keys-getter-before-enumerable") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-getter-before-enumerable.cjs", format: "commonjs" };',
+            '  }',
             '  if (specifier === "virtual:loader-cjs-keys-direct-hasown-guard") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-direct-hasown-guard.cjs", format: "commonjs" };',
             '  }',
@@ -1837,6 +1846,48 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '      ].join("\\n")',
             '    };',
             '  }',
+            '  if (url === "file:///loader-cjs-source-app/keys-duplicate-enumerable.cjs") {',
+            '    return {',
+            '      shortCircuit: true,',
+            '      format: "commonjs",',
+            '      source: [',
+            '        "var dep = require(\\"./reexport-dep.cjs\\");",',
+            '        "Object.keys(dep).forEach(function (key) {",',
+            '        "  if (key === \\"default\\" || key === \\"__esModule\\") return;",',
+            '        "  Object.defineProperty(exports, key, { enumerable: true, enumerable: true, get: function () { return dep[key]; } });",',
+            '        "});",',
+            '        "exports.own = \\"own-value\\";"',
+            '      ].join("\\n")',
+            '    };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/keys-getter-only.cjs") {',
+            '    return {',
+            '      shortCircuit: true,',
+            '      format: "commonjs",',
+            '      source: [',
+            '        "var dep = require(\\"./reexport-dep.cjs\\");",',
+            '        "Object.keys(dep).forEach(function (key) {",',
+            '        "  if (key === \\"default\\" || key === \\"__esModule\\") return;",',
+            '        "  Object.defineProperty(exports, key, { get: function () { return dep[key]; } });",',
+            '        "});",',
+            '        "exports.own = \\"own-value\\";"',
+            '      ].join("\\n")',
+            '    };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/keys-getter-before-enumerable.cjs") {',
+            '    return {',
+            '      shortCircuit: true,',
+            '      format: "commonjs",',
+            '      source: [',
+            '        "var dep = require(\\"./reexport-dep.cjs\\");",',
+            '        "Object.keys(dep).forEach(function (key) {",',
+            '        "  if (key === \\"default\\" || key === \\"__esModule\\") return;",',
+            '        "  Object.defineProperty(exports, key, { get: function () { return dep[key]; }, enumerable: true });",',
+            '        "});",',
+            '        "exports.own = \\"own-value\\";"',
+            '      ].join("\\n")',
+            '    };',
+            '  }',
             '  if (url === "file:///loader-cjs-source-app/keys-direct-hasown-guard.cjs") {',
             '    return {',
             '      shortCircuit: true,',
@@ -2122,6 +2173,18 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'const keysDuplicateGuard = await import("virtual:loader-cjs-keys-duplicate-guard");',
             'assert.strictEqual(keysDuplicateGuard.reexported, 91);',
             'assert.strictEqual(keysDuplicateGuard.own, "own-value");',
+            'const keysDuplicateEnumerable = await import("virtual:loader-cjs-keys-duplicate-enumerable");',
+            'assert.strictEqual(keysDuplicateEnumerable.default.reexported, 91);',
+            'assert.strictEqual(keysDuplicateEnumerable.own, "own-value");',
+            'assert.strictEqual(Object.prototype.hasOwnProperty.call(keysDuplicateEnumerable, "reexported"), false);',
+            'const keysGetterOnly = await import("virtual:loader-cjs-keys-getter-only");',
+            'assert.strictEqual(keysGetterOnly.default.reexported, 91);',
+            'assert.strictEqual(keysGetterOnly.own, "own-value");',
+            'assert.strictEqual(Object.prototype.hasOwnProperty.call(keysGetterOnly, "reexported"), false);',
+            'const keysGetterBeforeEnumerable = await import("virtual:loader-cjs-keys-getter-before-enumerable");',
+            'assert.strictEqual(keysGetterBeforeEnumerable.default.reexported, 91);',
+            'assert.strictEqual(keysGetterBeforeEnumerable.own, "own-value");',
+            'assert.strictEqual(Object.prototype.hasOwnProperty.call(keysGetterBeforeEnumerable, "reexported"), false);',
             'const keysDirectHasOwnGuard = await import("virtual:loader-cjs-keys-direct-hasown-guard");',
             'assert.strictEqual(keysDirectHasOwnGuard.directGuarded, 93);',
             'assert.strictEqual(keysDirectHasOwnGuard.own, "own-value");',
@@ -2719,6 +2782,46 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  Object.defineProperty(exports, key, { enumerable: true, get: function () { return _dep[key]; } });',
             '});',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/hidden-descriptor-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: false, get: function () { return _dep[key]; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/extra-descriptor-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: true, get: function () { return _dep[key]; }, configurable: true });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/duplicate-enumerable-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: true, enumerable: true, get: function () { return _dep[key]; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/getter-only-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { get: function () { return _dep[key]; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/getter-before-enumerable-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { get: function () { return _dep[key]; }, enumerable: true });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/reversed-guard-reexport.cjs', [
             'var _dep = require("./dep.cjs");',
             'Object.keys(_dep).forEach(function (key) {',
@@ -2976,6 +3079,11 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as nestedReexport from "./nested-reexport.cjs";',
             'import * as nestedRequireBinding from "./nested-require-binding.cjs";',
             'import * as unguardedReexport from "./unguarded-reexport.cjs";',
+            'import * as hiddenDescriptorReexport from "./hidden-descriptor-reexport.cjs";',
+            'import * as extraDescriptorReexport from "./extra-descriptor-reexport.cjs";',
+            'import * as duplicateEnumerableReexport from "./duplicate-enumerable-reexport.cjs";',
+            'import * as getterOnlyReexport from "./getter-only-reexport.cjs";',
+            'import * as getterBeforeEnumerableReexport from "./getter-before-enumerable-reexport.cjs";',
             'import * as reversedGuardReexport from "./reversed-guard-reexport.cjs";',
             'import * as delayedGuardReexport from "./delayed-guard-reexport.cjs";',
             'import * as nestedGuardReexport from "./nested-guard-reexport.cjs";',
@@ -3017,6 +3125,16 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  nestedRequireBindingKeys: Object.keys(nestedRequireBinding).filter((key) => key !== "default" && key !== "own"),',
             '  nestedRequireBindingOwn: nestedRequireBinding.own,',
             '  unguardedReexportKeys: Object.keys(unguardedReexport).filter((key) => key !== "default"),',
+            '  hiddenDescriptorReexportKeys: Object.keys(hiddenDescriptorReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  hiddenDescriptorOwn: hiddenDescriptorReexport.own,',
+            '  extraDescriptorReexportKeys: Object.keys(extraDescriptorReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  extraDescriptorOwn: extraDescriptorReexport.own,',
+            '  duplicateEnumerableReexportKeys: Object.keys(duplicateEnumerableReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  duplicateEnumerableOwn: duplicateEnumerableReexport.own,',
+            '  getterOnlyReexportKeys: Object.keys(getterOnlyReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  getterOnlyOwn: getterOnlyReexport.own,',
+            '  getterBeforeEnumerableReexportKeys: Object.keys(getterBeforeEnumerableReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  getterBeforeEnumerableOwn: getterBeforeEnumerableReexport.own,',
             '  reversedGuardReexportKeys: Object.keys(reversedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
             '  reversedGuardOwn: reversedGuardReexport.own,',
             '  delayedGuardReexportKeys: Object.keys(delayedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
@@ -3073,6 +3191,16 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.deepStrictEqual(result.nestedRequireBindingKeys, []);
         assert.strictEqual(result.nestedRequireBindingOwn, 'own');
         assert.deepStrictEqual(result.unguardedReexportKeys, []);
+        assert.deepStrictEqual(result.hiddenDescriptorReexportKeys, []);
+        assert.strictEqual(result.hiddenDescriptorOwn, 'own');
+        assert.deepStrictEqual(result.extraDescriptorReexportKeys, []);
+        assert.strictEqual(result.extraDescriptorOwn, 'own');
+        assert.deepStrictEqual(result.duplicateEnumerableReexportKeys, []);
+        assert.strictEqual(result.duplicateEnumerableOwn, 'own');
+        assert.deepStrictEqual(result.getterOnlyReexportKeys, []);
+        assert.strictEqual(result.getterOnlyOwn, 'own');
+        assert.deepStrictEqual(result.getterBeforeEnumerableReexportKeys, []);
+        assert.strictEqual(result.getterBeforeEnumerableOwn, 'own');
         assert.deepStrictEqual(result.reversedGuardReexportKeys, []);
         assert.strictEqual(result.reversedGuardOwn, 'own');
         assert.deepStrictEqual(result.delayedGuardReexportKeys, []);

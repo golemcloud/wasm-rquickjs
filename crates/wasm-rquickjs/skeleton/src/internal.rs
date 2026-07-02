@@ -4770,7 +4770,11 @@ enum DescriptorNamedProperty {
     Getter,
 }
 
-fn descriptor_function_getter_end(source: &str, pos: usize, descriptor_end: usize) -> Option<usize> {
+fn descriptor_function_getter_body(
+    source: &str,
+    pos: usize,
+    descriptor_end: usize,
+) -> Option<(usize, usize, usize)> {
     let bytes = source.as_bytes();
     if !source[pos..].starts_with("function") || !is_ident_boundary(bytes, pos + 8) {
         return None;
@@ -4783,10 +4787,15 @@ fn descriptor_function_getter_end(source: &str, pos: usize, descriptor_end: usiz
         return None;
     }
     let body = getter_body_after_empty_params(source, next, descriptor_end)?;
+    Some((body.0, body.1, body.1 + 1))
+}
+
+fn descriptor_function_getter_end(source: &str, pos: usize, descriptor_end: usize) -> Option<usize> {
+    let body = descriptor_function_getter_body(source, pos, descriptor_end)?;
     if !is_simple_getter_body(&source[body.0..body.1]) {
         return None;
     }
-    Some(body.1 + 1)
+    Some(body.2)
 }
 
 fn getter_body_after_empty_params(source: &str, params_open: usize, limit: usize) -> Option<(usize, usize)> {
@@ -5853,92 +5862,92 @@ fn parse_define_property_reexport(source: &str, pos: usize, binding: &str, key: 
     }
 }
 
-fn find_getter_body(source: &str) -> Option<(usize, usize)> {
-    let bytes = source.as_bytes();
-    let mut i = 0usize;
-    let mut depth = 0usize;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                i += 2;
-                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
-                    i += 1;
-                }
-                continue;
-            }
-            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
-                i += 2;
-                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i = (i + 2).min(bytes.len());
-                continue;
-            }
-            b'/' if is_regex_literal_start(source, i) => {
-                i = skip_regex_literal(source, i);
-                continue;
-            }
-            b'{' => {
-                depth += 1;
-                i += 1;
-                continue;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                i += 1;
-                continue;
-            }
-            b'g' if depth == 1
-                && is_free_ident_start(bytes, i)
-                && source[i..].starts_with("get")
-                && is_ident_boundary(bytes, i + 3) =>
-            {
-                let mut j = skip_ws_comments(source, i + 3);
-                if j < bytes.len() && bytes[j] == b'(' {
-                    let params_end = find_matching_paren(source, j)?;
-                    j = skip_ws_comments(source, params_end + 1);
-                    if j < bytes.len() && bytes[j] == b'{' {
-                        let body_end = find_matching_brace(source, j)?;
-                        return Some((j + 1, body_end));
-                    }
-                } else if j < bytes.len() && bytes[j] == b':' {
-                    j = skip_ws_comments(source, j + 1);
-                    if !source[j..].starts_with("function") || !is_ident_boundary(bytes, j + 8) {
-                        i += 1;
-                        continue;
-                    }
-                    j = skip_ws_comments(source, j + 8);
-                    if let Some((_, next)) = read_ident(source, j) {
-                        j = skip_ws_comments(source, next);
-                    }
-                    if j >= bytes.len() || bytes[j] != b'(' {
-                        i += 1;
-                        continue;
-                    }
-                    let params_end = find_matching_paren(source, j)?;
-                    j = skip_ws_comments(source, params_end + 1);
-                    if j < bytes.len() && bytes[j] == b'{' {
-                        let body_end = find_matching_brace(source, j)?;
-                        return Some((j + 1, body_end));
-                    }
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    None
-}
-
 fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &str) -> bool {
-    let Some((body_start, body_end)) = find_getter_body(descriptor) else {
+    let bytes = descriptor.as_bytes();
+    let descriptor_start = skip_ws_comments(descriptor, 0);
+    if descriptor_start >= bytes.len() || bytes[descriptor_start] != b'{' {
+        return false;
+    }
+    let Some(descriptor_end) = find_matching_brace(descriptor, descriptor_start) else {
         return false;
     };
-    getter_body_returns_binding_key(&descriptor[body_start..body_end], binding, key)
+
+    let mut seen_enumerable = false;
+    let mut found = false;
+    let mut cursor = skip_ws_comments(descriptor, descriptor_start + 1);
+    while cursor < descriptor_end {
+        if bytes[cursor] == b',' {
+            cursor = skip_ws_comments(descriptor, cursor + 1);
+            continue;
+        }
+        if descriptor[cursor..].starts_with("...") || bytes[cursor] == b'[' {
+            return false;
+        }
+        let Some((name, key_is_ident, key_end)) = parse_exports_literal_key(descriptor, cursor)
+        else {
+            return false;
+        };
+        if !key_is_ident {
+            return false;
+        }
+        let mut next = skip_ws_comments(descriptor, key_end);
+        if name == "enumerable" {
+            if seen_enumerable || found || next >= descriptor_end || bytes[next] != b':' {
+                return false;
+            }
+            let value_start = skip_ws_comments(descriptor, next + 1);
+            if !descriptor[value_start..].starts_with("true")
+                || !is_ident_boundary(bytes, value_start + 4)
+            {
+                return false;
+            }
+            seen_enumerable = true;
+            cursor = skip_ws_comments(descriptor, value_start + 4);
+        } else if name == "get" {
+            if found {
+                return false;
+            }
+            if next < descriptor_end && bytes[next] == b'(' {
+                let Some((body_start, body_end)) =
+                    getter_body_after_empty_params(descriptor, next, descriptor_end)
+                else {
+                    return false;
+                };
+                if !getter_body_returns_binding_key(&descriptor[body_start..body_end], binding, key)
+                {
+                    return false;
+                }
+                found = true;
+                cursor = skip_ws_comments(descriptor, body_end + 1);
+            } else if next < descriptor_end && bytes[next] == b':' {
+                next = skip_ws_comments(descriptor, next + 1);
+                let Some((body_start, body_end, function_end)) =
+                    descriptor_function_getter_body(descriptor, next, descriptor_end)
+                else {
+                    return false;
+                };
+                if !getter_body_returns_binding_key(&descriptor[body_start..body_end], binding, key)
+                {
+                    return false;
+                }
+                found = true;
+                cursor = skip_ws_comments(descriptor, function_end);
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        if cursor < descriptor_end {
+            if bytes[cursor] != b',' {
+                return false;
+            }
+            cursor = skip_ws_comments(descriptor, cursor + 1);
+        }
+    }
+
+    found && seen_enumerable
 }
 
 fn getter_body_returns_binding_key(body: &str, binding: &str, key: &str) -> bool {
@@ -8862,6 +8871,92 @@ mod cjs_export_analyzer_tests {
                     Object.defineProperty(other, key, { value: 1 });
                     exports;
                     function unrelated() { return _dep[key]; }
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    Object.defineProperty(exports, key, {
+                        enumerable: false,
+                        get: function () { return _dep[key]; }
+                    });
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    Object.defineProperty(exports, key, {
+                        enumerable: true,
+                        get: function () { return _dep[key]; },
+                        configurable: true
+                    });
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    Object.defineProperty(exports, key, {
+                        enumerable: true,
+                        enumerable: true,
+                        get: function () { return _dep[key]; }
+                    });
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    Object.defineProperty(exports, key, {
+                        get: function () { return _dep[key]; }
+                    });
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    Object.defineProperty(exports, key, {
+                        get: function () { return _dep[key]; },
+                        enumerable: true
+                    });
                 });
                 exports.own = "own";
             "#,

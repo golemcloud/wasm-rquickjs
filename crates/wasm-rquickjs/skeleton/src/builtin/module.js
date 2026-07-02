@@ -3316,6 +3316,7 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
     if (source.charCodeAt(descriptorStart) !== 0x7b) return false;
     const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
     if (descriptorEnd < 0 || descriptorEnd > end) return false;
+    let seenEnumerable = false;
     let found = false;
     let cursor = skipWhitespaceAndComments(source, descriptorStart + 1);
     while (cursor < descriptorEnd) {
@@ -3328,9 +3329,10 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
         if (property === null || property.quoted) return false;
         let next = skipWhitespaceAndComments(source, property.end);
         if (property.name === 'enumerable') {
-            if (found || source.charCodeAt(next) !== 0x3a) return false;
+            if (seenEnumerable || found || source.charCodeAt(next) !== 0x3a) return false;
             const valueStart = skipWhitespaceAndComments(source, next + 1);
             if (!source.startsWith('true', valueStart) || !hasIdentifierBoundary(source, valueStart, valueStart + 4)) return false;
+            seenEnumerable = true;
             cursor = skipWhitespaceAndComments(source, valueStart + 4);
         } else if (property.name === 'get') {
             if (found) return false;
@@ -3363,7 +3365,7 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
             cursor = skipWhitespaceAndComments(source, cursor + 1);
         }
     }
-    return found;
+    return found && seenEnumerable;
 }
 
 function readLoaderDefinePropertyReexport(source, pos, binding, key) {
