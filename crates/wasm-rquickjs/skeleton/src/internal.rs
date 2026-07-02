@@ -2988,6 +2988,17 @@ enum PackageTargetResolution {
     Blocked,
 }
 
+struct PackageTargetResolveContext<'a> {
+    package_dir: &'a std::path::Path,
+    allow_bare_target: bool,
+    kind: &'static str,
+    conditions: &'a [String],
+    pattern_substitution: Option<&'a str>,
+    warning_specifier: &'a str,
+    warning_pattern_key: Option<&'a str>,
+    warning_importer: Option<&'a str>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum PackageTarget {
@@ -3774,33 +3785,25 @@ impl NodeModulesResolver {
         warning_importer: Option<&str>,
         warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
+        let ctx = PackageTargetResolveContext {
+            package_dir,
+            allow_bare_target,
+            kind,
+            conditions,
+            pattern_substitution,
+            warning_specifier,
+            warning_pattern_key,
+            warning_importer,
+        };
         Self::add_invalid_package_target_context(
-            Self::resolve_package_target_value(
-                package_dir,
-                target,
-                allow_bare_target,
-                kind,
-                conditions,
-                pattern_substitution,
-                warning_specifier,
-                warning_pattern_key,
-                warning_importer,
-                warnings,
-            ),
+            Self::resolve_package_target_value(target, &ctx, warnings),
             warning_specifier,
         )
     }
 
     fn resolve_package_target_value(
-        package_dir: &std::path::Path,
         target: &PackageTarget,
-        allow_bare_target: bool,
-        kind: &'static str,
-        conditions: &[String],
-        pattern_substitution: Option<&str>,
-        warning_specifier: &str,
-        warning_pattern_key: Option<&str>,
-        warning_importer: Option<&str>,
+        ctx: &PackageTargetResolveContext<'_>,
         warnings: &mut Vec<NodePackageWarning>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
@@ -3809,139 +3812,123 @@ impl NodeModulesResolver {
             }
             PackageTarget::Bool(false) => {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
-                    kind,
+                    kind: ctx.kind,
                     target: "false".to_string(),
                 });
             }
             PackageTarget::Bool(true) => {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
-                    kind,
+                    kind: ctx.kind,
                     target: "true".to_string(),
                 });
             }
             PackageTarget::Invalid(value) => {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
-                    kind,
+                    kind: ctx.kind,
                     target: value.to_string(),
                 });
             }
             PackageTarget::String(target_str) => {
-            let target_str = if let Some(pattern_substitution) = pattern_substitution {
-                target_str.replace('*', pattern_substitution)
-            } else {
-                target_str.clone()
-            };
-            Self::push_package_deprecation_warning(
-                warnings,
-                package_dir,
-                kind,
-                warning_specifier,
-                &target_str,
-                pattern_substitution,
-                warning_pattern_key,
-                warning_importer,
-            );
-            if allow_bare_target && Self::is_bare_package_specifier(&target_str) {
-                let base = package_dir.join("package.json");
-                let base_str = base.to_string_lossy();
-                let resolver = NodeModulesResolver;
-                if let Some(resolved) =
-                    resolver.try_resolve(&base_str, &target_str, conditions, warnings)?
-                {
-                    return Ok(PackageTargetResolution::Resolved(resolved));
+                let target_str = if let Some(pattern_substitution) = ctx.pattern_substitution {
+                    target_str.replace('*', pattern_substitution)
+                } else {
+                    target_str.clone()
+                };
+                Self::push_package_deprecation_warning(
+                    warnings,
+                    ctx.package_dir,
+                    ctx.kind,
+                    ctx.warning_specifier,
+                    &target_str,
+                    ctx.pattern_substitution,
+                    ctx.warning_pattern_key,
+                    ctx.warning_importer,
+                );
+                if ctx.allow_bare_target && Self::is_bare_package_specifier(&target_str) {
+                    let base = ctx.package_dir.join("package.json");
+                    let base_str = base.to_string_lossy();
+                    let resolver = NodeModulesResolver;
+                    if let Some(resolved) =
+                        resolver.try_resolve(&base_str, &target_str, ctx.conditions, warnings)?
+                    {
+                        return Ok(PackageTargetResolution::Resolved(resolved));
+                    }
+                    return Err(NodePackageResolveError::ModuleNotFound {
+                        request: target_str,
+                    });
+                }
+                if ctx.allow_bare_target && target_str.starts_with("node:") {
+                    return Ok(PackageTargetResolution::Resolved(target_str));
+                }
+                if Self::has_encoded_slash_or_backslash(&target_str) {
+                    return Err(NodePackageResolveError::InvalidPackagePatternMatch {
+                        specifier: target_str,
+                        message: "must not include encoded \"/\" or \"\\\" characters".to_string(),
+                    });
+                }
+                if !target_str.starts_with("./") {
+                    return Err(NodePackageResolveError::InvalidPackageTarget {
+                        kind: ctx.kind,
+                        target: target_str,
+                    });
+                }
+                let decoded_target = Self::decode_package_target_path(&target_str);
+                let Some(candidate) =
+                    Self::resolve_valid_package_target_path(ctx.package_dir, &decoded_target)
+                else {
+                    return Err(NodePackageResolveError::InvalidPackageTarget {
+                        kind: ctx.kind,
+                        target: target_str,
+                    });
+                };
+                if candidate.is_file() {
+                    return Ok(PackageTargetResolution::Resolved(
+                        candidate.to_string_lossy().into_owned(),
+                    ));
+                }
+                if candidate.is_dir() {
+                    return Err(NodePackageResolveError::UnsupportedDirectoryImport {
+                        request: candidate.to_string_lossy().into_owned(),
+                    });
                 }
                 return Err(NodePackageResolveError::ModuleNotFound {
-                    request: target_str,
-                });
-            }
-            if allow_bare_target && target_str.starts_with("node:") {
-                return Ok(PackageTargetResolution::Resolved(target_str));
-            }
-            if Self::has_encoded_slash_or_backslash(&target_str) {
-                return Err(NodePackageResolveError::InvalidPackagePatternMatch {
-                    specifier: target_str,
-                    message: "must not include encoded \"/\" or \"\\\" characters".to_string(),
-                });
-            }
-            if !target_str.starts_with("./") {
-                return Err(NodePackageResolveError::InvalidPackageTarget {
-                    kind,
-                    target: target_str,
-                });
-            }
-            let decoded_target = Self::decode_package_target_path(&target_str);
-            let Some(candidate) = Self::resolve_valid_package_target_path(package_dir, &decoded_target) else {
-                return Err(NodePackageResolveError::InvalidPackageTarget {
-                    kind,
-                    target: target_str,
-                });
-            };
-            if candidate.is_file() {
-                return Ok(PackageTargetResolution::Resolved(
-                    candidate.to_string_lossy().into_owned(),
-                ));
-            }
-            if candidate.is_dir() {
-                return Err(NodePackageResolveError::UnsupportedDirectoryImport {
                     request: candidate.to_string_lossy().into_owned(),
                 });
             }
-            return Err(NodePackageResolveError::ModuleNotFound {
-                request: candidate.to_string_lossy().into_owned(),
-            });
-            }
             PackageTarget::Array(array) => {
-            let mut last_fallback_error = None;
-            for item in array {
-                match Self::resolve_package_target_value(
-                    package_dir,
-                    item,
-                    allow_bare_target,
-                    kind,
-                    conditions,
-                    pattern_substitution,
-                    warning_specifier,
-                    warning_pattern_key,
-                    warning_importer,
-                    warnings,
-                ) {
-                    Ok(PackageTargetResolution::Resolved(path)) => {
-                        return Ok(PackageTargetResolution::Resolved(path));
+                let mut last_fallback_error = None;
+                for item in array {
+                    match Self::resolve_package_target_value(item, ctx, warnings) {
+                        Ok(PackageTargetResolution::Resolved(path)) => {
+                            return Ok(PackageTargetResolution::Resolved(path));
+                        }
+                        Ok(PackageTargetResolution::Blocked) => continue,
+                        Ok(PackageTargetResolution::NoMatch) => continue,
+                        Err(err @ NodePackageResolveError::InvalidPackageTarget { .. }) => {
+                            last_fallback_error = Some(err);
+                            continue;
+                        }
+                        Err(err) => return Err(err),
                     }
-                    Ok(PackageTargetResolution::Blocked) => continue,
-                    Ok(PackageTargetResolution::NoMatch) => continue,
-                    Err(err @ NodePackageResolveError::InvalidPackageTarget { .. }) => {
-                        last_fallback_error = Some(err);
-                        continue;
-                    }
-                    Err(err) => return Err(err),
                 }
-            }
                 if let Some(err) = last_fallback_error {
                     return Err(err);
                 }
                 return Ok(PackageTargetResolution::NoMatch);
             }
             PackageTarget::Object(map) => {
-            for (condition, value) in map {
-                if conditions.iter().any(|candidate| candidate == condition) {
-                    match Self::resolve_package_target_value(
-                        package_dir,
-                        value,
-                        allow_bare_target,
-                        kind,
-                        conditions,
-                        pattern_substitution,
-                        warning_specifier,
-                        warning_pattern_key,
-                        warning_importer,
-                        warnings,
-                    )? {
-                        PackageTargetResolution::NoMatch => continue,
-                        resolution => return Ok(resolution),
+                for (condition, value) in map {
+                    if ctx
+                        .conditions
+                        .iter()
+                        .any(|candidate| candidate == condition)
+                    {
+                        match Self::resolve_package_target_value(value, ctx, warnings)? {
+                            PackageTargetResolution::NoMatch => continue,
+                            resolution => return Ok(resolution),
+                        }
                     }
                 }
-            }
                 Ok(PackageTargetResolution::NoMatch)
             }
         }
