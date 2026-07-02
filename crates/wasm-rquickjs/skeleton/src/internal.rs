@@ -4723,7 +4723,7 @@ fn parse_require_call_string(source: &str, pos: usize, require_free_start: bool)
     }
 }
 
-fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usize)> {
+fn parse_object_define_property_call(source: &str, pos: usize) -> Option<usize> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "Object")?);
     if i >= bytes.len() || bytes[i] != b'.' {
@@ -4737,7 +4737,12 @@ fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usi
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
-    i = skip_ws_comments(source, i + 1);
+    Some(skip_ws_comments(source, i + 1))
+}
+
+fn parse_define_property_export(source: &str, pos: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let mut i = parse_object_define_property_call(source, pos)?;
     let (_, next) = parse_exports_target(source, i)?;
     i = next;
     i = skip_ws_comments(source, i);
@@ -5817,25 +5822,7 @@ fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &
 
 fn parse_define_property_reexport(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("Object")
-        || !is_ident_boundary(bytes, pos + 6)
-    {
-        return None;
-    }
-    let mut i = skip_ws_comments(source, pos + 6);
-    if i >= bytes.len() || bytes[i] != b'.' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    if !source[i..].starts_with("defineProperty") || !is_ident_boundary(bytes, i + 14) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 14);
-    if i >= bytes.len() || bytes[i] != b'(' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
+    let mut i = parse_object_define_property_call(source, pos)?;
     let (target, next) = parse_exports_target(source, i)?;
     if target != CjsExportTarget::Exports {
         return None;
