@@ -2925,19 +2925,14 @@ function loaderSimpleGetterBody(source, start, end) {
     let i = skipWhitespaceAndComments(source, start);
     if (!source.startsWith('return', i) || !hasIdentifierBoundary(source, i, i + 6)) return false;
     i = skipWhitespaceAndComments(source, i + 6);
-    const first = source.charCodeAt(i);
-    if (!isIdentifierStartCode(first)) {
-        return false;
-    }
-    i++;
-    while (i < end && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    i = skipWhitespaceAndComments(source, i);
+    const receiver = readLoaderIdentifier(source, i);
+    if (receiver === null) return false;
+    i = skipWhitespaceAndComments(source, receiver.end);
     if (source.charCodeAt(i) === 0x2e) {
         i = skipWhitespaceAndComments(source, i + 1);
-        const ch = source.charCodeAt(i);
-        if (!isIdentifierStartCode(ch)) return false;
-        i++;
-        while (i < end && isIdentifierContinueCode(source.charCodeAt(i))) i++;
+        const member = readLoaderIdentifier(source, i);
+        if (member === null) return false;
+        i = member.end;
     } else if (source.charCodeAt(i) === 0x5b) {
         i = skipWhitespaceAndComments(source, i + 1);
         const quote = source.charCodeAt(i);
