@@ -732,14 +732,13 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                                 b'{' => depth += 1,
                                 b'}' => depth -= 1,
                                 b'"' | b'\'' => {
-                                    let q = bytes[i];
-                                    i += 1;
-                                    while i < len && bytes[i] != q {
-                                        if bytes[i] == b'\\' {
-                                            i += 1;
-                                        }
-                                        i += 1;
-                                    }
+                                    let next = skip_string_or_template(source, i);
+                                    i = if next == len && bytes.get(len - 1) != Some(&bytes[i]) {
+                                        len + 1
+                                    } else {
+                                        next
+                                    };
+                                    continue;
                                 }
                                 _ => {}
                             }
