@@ -4857,18 +4857,32 @@ fn getter_body_after_empty_params(source: &str, params_open: usize, limit: usize
     Some((body_open + 1, body_end))
 }
 
-fn descriptor_has_named_property(descriptor: &str) -> bool {
+fn descriptor_object_span(descriptor: &str) -> Option<(usize, usize)> {
     let bytes = descriptor.as_bytes();
     let descriptor_start = skip_ws_comments(descriptor, 0);
     if descriptor_start >= bytes.len() || bytes[descriptor_start] != b'{' {
-        return false;
+        return None;
     }
-    let Some(descriptor_end) = find_matching_brace(descriptor, descriptor_start) else {
+    let descriptor_end = find_matching_brace(descriptor, descriptor_start)?;
+    Some((skip_ws_comments(descriptor, descriptor_start + 1), descriptor_end))
+}
+
+fn next_descriptor_entry(descriptor: &str, cursor: usize, descriptor_end: usize) -> Option<usize> {
+    if cursor >= descriptor_end {
+        return Some(descriptor_end);
+    }
+    if descriptor.as_bytes()[cursor] != b',' {
+        return None;
+    }
+    Some(skip_ws_comments(descriptor, cursor + 1))
+}
+
+fn descriptor_has_named_property(descriptor: &str) -> bool {
+    let bytes = descriptor.as_bytes();
+    let Some((mut cursor, descriptor_end)) = descriptor_object_span(descriptor) else {
         return false;
     };
-
     let mut found: Option<DescriptorNamedProperty> = None;
-    let mut cursor = skip_ws_comments(descriptor, descriptor_start + 1);
     while cursor < descriptor_end {
         if bytes[cursor] == b',' {
             cursor = skip_ws_comments(descriptor, cursor + 1);
@@ -4880,12 +4894,10 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
         if bytes[cursor] == b'[' {
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
                 cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, cursor, descriptor_end));
-                if cursor < descriptor_end {
-                    if bytes[cursor] != b',' {
-                        return false;
-                    }
-                    cursor = skip_ws_comments(descriptor, cursor + 1);
-                }
+                let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+                    return false;
+                };
+                cursor = next_cursor;
                 continue;
             }
             return false;
@@ -4947,12 +4959,10 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             }
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
                 cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
-                if cursor < descriptor_end {
-                    if bytes[cursor] != b',' {
-                        return false;
-                    }
-                    cursor = skip_ws_comments(descriptor, cursor + 1);
-                }
+                let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+                    return false;
+                };
+                cursor = next_cursor;
                 continue;
             }
             if matches!(found, Some(DescriptorNamedProperty::Getter)) {
@@ -4973,12 +4983,10 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             }
         }
 
-        if cursor < descriptor_end {
-            if bytes[cursor] != b',' {
-                return false;
-            }
-            cursor = skip_ws_comments(descriptor, cursor + 1);
-        }
+        let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+            return false;
+        };
+        cursor = next_cursor;
     }
 
     found.is_some()
@@ -5907,17 +5915,11 @@ fn parse_define_property_reexport(source: &str, pos: usize, binding: &str, key: 
 
 fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &str) -> bool {
     let bytes = descriptor.as_bytes();
-    let descriptor_start = skip_ws_comments(descriptor, 0);
-    if descriptor_start >= bytes.len() || bytes[descriptor_start] != b'{' {
-        return false;
-    }
-    let Some(descriptor_end) = find_matching_brace(descriptor, descriptor_start) else {
+    let Some((mut cursor, descriptor_end)) = descriptor_object_span(descriptor) else {
         return false;
     };
-
     let mut seen_enumerable = false;
     let mut found = false;
-    let mut cursor = skip_ws_comments(descriptor, descriptor_start + 1);
     while cursor < descriptor_end {
         if bytes[cursor] == b',' {
             cursor = skip_ws_comments(descriptor, cursor + 1);
@@ -5982,12 +5984,10 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
             return false;
         }
 
-        if cursor < descriptor_end {
-            if bytes[cursor] != b',' {
-                return false;
-            }
-            cursor = skip_ws_comments(descriptor, cursor + 1);
-        }
+        let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+            return false;
+        };
+        cursor = next_cursor;
     }
 
     found && seen_enumerable
