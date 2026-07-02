@@ -62,6 +62,37 @@ impl Resolver for DataUrlResolver {
     }
 }
 
+struct PrivateBuiltinResolverGuard;
+
+impl PrivateBuiltinResolverGuard {
+    fn is_private_builtin(name: &str) -> bool {
+        name.starts_with("__wasm_rquickjs_builtin/")
+    }
+
+    fn is_user_referrer(base: &str) -> bool {
+        base == crate::JS_EXPORT_MODULE_NAME
+            || base == "<input>"
+            || crate::JS_ADDITIONAL_MODULES
+                .iter()
+                .any(|(name, _)| base == *name)
+            || base.starts_with("data:")
+            || base.starts_with("file:")
+            || base.starts_with('/')
+            || base.starts_with("virtual:")
+    }
+}
+
+impl Resolver for PrivateBuiltinResolverGuard {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        if !Self::is_private_builtin(name) || !Self::is_user_referrer(base) {
+            return Err(Error::new_resolving(base, name));
+        }
+
+        let message = format!("Cannot find module '{}'", name);
+        throw_native_coded_error(ctx, &message, "ERR_MODULE_NOT_FOUND", false)
+    }
+}
+
 /// Loader for `data:` URL modules (e.g. `data:text/javascript,export default 42`).
 struct DataUrlLoader;
 
@@ -7350,7 +7381,10 @@ impl JsState {
                 MockModuleResolver,
                 DataUrlResolver,
                 FileUrlResolver,
+                PrivateBuiltinResolverGuard,
                 RegisteredLoaderResolver,
+            ),
+            (
                 builtin_resolver,
                 NodeModulesResolver,
                 NodeFileResolver,

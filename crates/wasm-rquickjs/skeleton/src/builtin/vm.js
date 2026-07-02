@@ -26,8 +26,22 @@ const sourceTextModuleExportCellsPlaceholder = '__wasm_rquickjs_vm_export_cells_
 let defaultLoaderImportHelperCounter = 1;
 let sandboxDescriptorsHelperCounter = 1;
 let sandboxSymbolsHelperCounter = 1;
+function isPrivateBuiltinSpecifier(specifier) {
+    return specifier.startsWith('__wasm_rquickjs_builtin/');
+}
+
+function rejectPrivateBuiltinImport(specifier) {
+    const err = new Error("Cannot find module '" + specifier + "'");
+    err.code = 'ERR_MODULE_NOT_FOUND';
+    return Promise.reject(err);
+}
+
 function defaultLoaderImportFunction(filename, specifier) {
-    return import(resolveDefaultLoaderSpecifier(String(specifier), filename));
+    specifier = String(specifier);
+    if (isPrivateBuiltinSpecifier(specifier)) {
+        return rejectPrivateBuiltinImport(specifier);
+    }
+    return import(resolveDefaultLoaderSpecifier(specifier, filename));
 }
 
 function missingDynamicImportFunction() {

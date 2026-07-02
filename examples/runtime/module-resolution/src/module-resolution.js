@@ -2527,6 +2527,7 @@ export const testSyncBuiltinEsmExports = async () => {
         const module = await import('node:module');
         const fsModule = await import('node:fs');
         const eventsModule = await import('node:events');
+        const vmModule = await import('node:vm');
 
         const fs = fsModule.default;
         const originalReadFile = fs.readFile;
@@ -2594,6 +2595,51 @@ export const testSyncBuiltinEsmExports = async () => {
         moduleDefault.syncBuiltinESMExports = originalSyncBuiltinESMExports;
         moduleDefault.createRequire = originalCreateRequire;
         originalSyncBuiltinESMExports();
+
+        try {
+            await import('__wasm_rquickjs_builtin/vm_native');
+            throw new Error('private builtin import should not resolve from user modules');
+        } catch (error) {
+            assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND');
+        }
+
+        async function expectPrivateBuiltinRejected(label, promise) {
+            try {
+                await promise;
+            } catch (error) {
+                assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND', label);
+                return;
+            }
+            throw new Error('private builtin import should not resolve from ' + label);
+        }
+
+        await expectPrivateBuiltinRejected(
+            'data module',
+            import('data:text/javascript,' + encodeURIComponent('import "__wasm_rquickjs_builtin/vm_native"; export default true;')),
+        );
+
+        await expectPrivateBuiltinRejected(
+            'vm default loader',
+            vmModule.default.runInNewContext('import("__wasm_rquickjs_builtin/vm_native")', {}, {
+                importModuleDynamically: vmModule.default.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }),
+        );
+
+        const vmSpecifierSandbox = {};
+        const vmSpecifierResult = await vmModule.default.runInNewContext([
+            'globalThis.toStringCalls = 0;',
+            'const specifier = {',
+            '  toString() {',
+            '    globalThis.toStringCalls += 1;',
+            '    return globalThis.toStringCalls === 1 ? "node:fs" : "__wasm_rquickjs_builtin/vm_native";',
+            '  }',
+            '};',
+            'import(specifier);',
+        ].join('\n'), vmSpecifierSandbox, {
+            importModuleDynamically: vmModule.default.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(typeof vmSpecifierResult.existsSync, 'function');
+        assert.strictEqual(vmSpecifierSandbox.toStringCalls, 1);
         return true;
     } catch (error) {
         console.error(error);
