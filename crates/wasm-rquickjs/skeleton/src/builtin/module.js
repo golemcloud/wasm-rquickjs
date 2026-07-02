@@ -2503,9 +2503,11 @@ function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
 }
 
 function readImportMetaUrl(source, pos) {
-    return source.startsWith('import.meta.url', pos) && hasIdentifierBoundary(source, pos, pos + 15)
-        ? pos + 15
-        : null;
+    let i = readLoaderNamedIdentifier(source, pos, 'import');
+    if (i === null) return null;
+    i = readLoaderDotMember(source, i, 'meta');
+    if (i === null) return null;
+    return readLoaderDotMember(source, i, 'url');
 }
 
 function hasCjsWrapperRequireRedeclaration(source) {

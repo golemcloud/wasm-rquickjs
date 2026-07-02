@@ -3674,6 +3674,28 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'const require = createRequire(import.meta.url);',
             'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-spaced.js', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import . meta . url);',
+            'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-commented.js', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import/*x*/.meta.url);',
+            'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-ambiguous-spaced.js', [
+            'const require = createRequire(import . meta . url);',
+            'globalThis.__moduleSyntaxAmbiguousSpaced = require.resolve("./false-positive.cjs");',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-ambiguous-commented.js', [
+            'const require = createRequire(import/*x*/.meta.url);',
+            'globalThis.__moduleSyntaxAmbiguousCommented = require.resolve("./false-positive.cjs");',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js', [
+            'const require = createRequire(import.meta.urlx);',
+            'globalThis.__moduleSyntaxAmbiguousUrlPrefix = require.resolve("./false-positive.cjs");',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/entry-main-dep.cjs', [
             'module.exports = {',
             '  isMain: require.main === module,',
@@ -3821,6 +3843,19 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             kind: 'function',
             resolved: '/module-syntax-app/false-positive.cjs',
         });
+        assert.deepStrictEqual(require('/module-syntax-app/create-require-spaced.js').default, createRequireIdiom);
+        assert.deepStrictEqual(require('/module-syntax-app/create-require-commented.js').default, createRequireIdiom);
+        globalThis.createRequire = createRequire;
+        globalThis.__moduleSyntaxAmbiguousSpaced = undefined;
+        globalThis.__moduleSyntaxAmbiguousCommented = undefined;
+        globalThis.__moduleSyntaxAmbiguousUrlPrefix = undefined;
+        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-spaced.js'), /import\.meta|unexpected|SyntaxError/i);
+        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-commented.js'), /import\.meta|unexpected|SyntaxError/i);
+        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js'), /urlx|undefined/i);
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousSpaced, undefined);
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommented, undefined);
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousUrlPrefix, undefined);
+        delete globalThis.createRequire;
 
         const originalArgv = process.argv.slice();
         const originalMainModule = process.mainModule;
