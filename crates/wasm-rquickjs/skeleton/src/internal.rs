@@ -1653,14 +1653,12 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
         }
 
         for name in names {
-            if source[i..].starts_with(name)
-                && is_ident_start_boundary(bytes, i)
-                && is_ident_boundary(bytes, i + name.len())
+            if let Some(name_end) = parse_free_ident_name(source, i, name)
                 && previous_significant_byte(source, i) != Some(b'.')
                 && !is_typeof_operand(source, i)
                 && !declared.iter().any(|declared| declared == name)
             {
-                let next = skip_ws_comments(source, i + name.len());
+                let next = skip_ws_comments(source, name_end);
                 if next < bytes.len() && bytes[next] == b':' {
                     break;
                 }
@@ -8700,6 +8698,9 @@ mod cjs_export_analyzer_tests {
         assert_cjs_global("class C { #require = 1; get() { return this.#require; } } export default C;", None);
         assert_cjs_global("class C { #exports = 1; get() { return this.#exports; } } export default C;", None);
         assert_cjs_global("class C { #module = 1; get() { return this.#module; } } export default C;", None);
+        assert_cjs_global("export default import.meta . require;", None);
+        assert_cjs_global("export default globalThis . require;", None);
+        assert_cjs_global("export default obj\n.\nmodule;", None);
         assert_cjs_global(
             "export default { require() { return 1; }, f(module) { return module; } }.f(2);",
             None,
