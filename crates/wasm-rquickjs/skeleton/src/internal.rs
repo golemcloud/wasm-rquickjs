@@ -5801,43 +5801,13 @@ fn parse_member_name(source: &str, pos: usize, name: &str) -> Option<usize> {
 
 fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
     let bytes = source.as_bytes();
-    let (_, mut i) = parse_exports_target(source, pos)?;
-
-    i = skip_ws_comments(source, i);
-    if i >= bytes.len() || bytes[i] != b'[' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    i = skip_ws_comments(source, parse_free_ident_name(source, i, key)?);
-    if i >= bytes.len() || bytes[i] != b']' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
+    let mut i = skip_ws_comments(source, parse_export_target_bracket_key(source, pos, key)?);
     if i >= bytes.len() || bytes[i] != b'=' || (i + 1 < bytes.len() && matches!(bytes[i + 1], b'=' | b'>')) {
         return None;
     }
 
     i = skip_ws_comments(source, i + 1);
-    if !source[i..].starts_with(binding)
-        || !is_free_ident_start(bytes, i)
-        || !is_ident_boundary(bytes, i + binding.len())
-    {
-        return None;
-    }
-    i = skip_ws_comments(source, i + binding.len());
-    if i >= bytes.len() || bytes[i] != b'[' {
-        return None;
-    }
-    i = skip_ws_comments(source, i + 1);
-    if !source[i..].starts_with(key) || !is_free_ident_start(bytes, i) || !is_ident_boundary(bytes, i + key.len()) {
-        return None;
-    }
-    i = skip_ws_comments(source, i + key.len());
-    if i >= bytes.len() || bytes[i] != b']' {
-        return None;
-    }
-
-    let after_rhs = skip_ws_comments(source, i + 1);
+    let after_rhs = skip_ws_comments(source, parse_binding_bracket_key(source, i, binding, key)?);
     if is_statement_boundary(source, after_rhs) {
         Some(after_rhs.min(source.len()))
     } else {
