@@ -3062,6 +3062,19 @@ enum NodePackageResolveMode {
     CjsAnalysis,
 }
 
+impl NodePackageResolveMode {
+    fn package_exports_importer<'a>(&self, base: &'a str) -> Option<&'a str> {
+        match self {
+            NodePackageResolveMode::EsmImport => Some(base),
+            NodePackageResolveMode::CjsAnalysis => None,
+        }
+    }
+
+    fn probes_missing_package_root_file(&self) -> bool {
+        matches!(self, NodePackageResolveMode::CjsAnalysis)
+    }
+}
+
 enum CjsAnalysisPackageFallbackStep {
     RootFile,
     PackageMain,
@@ -3155,7 +3168,7 @@ impl NodeModulesResolver {
                 }
             }
 
-            if matches!(mode, NodePackageResolveMode::CjsAnalysis)
+            if mode.probes_missing_package_root_file()
                 && subpath.is_empty()
                 && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(&package_path)
             {
@@ -3193,10 +3206,7 @@ impl NodeModulesResolver {
                     subpath,
                     conditions,
                     warnings,
-                    match mode {
-                        NodePackageResolveMode::EsmImport => Some(base),
-                        NodePackageResolveMode::CjsAnalysis => None,
-                    },
+                    mode.package_exports_importer(base),
                 )
                 .map(Some);
             }
