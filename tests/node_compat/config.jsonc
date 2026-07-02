@@ -9158,7 +9158,7 @@
       }
     },
     "parallel/test-vm-context-property-forwarding.js": { "category": "runnable" },
-    "parallel/test-vm-context.js": { "category": "known-gap", "reason": "vm contextification write-back and runInContext semantics are incomplete" },
+    "parallel/test-vm-context.js": { "category": "known-gap", "reason": "vm runInContext filename stack formatting with lineOffset/columnOffset is incomplete" },
     "parallel/test-vm-create-and-run-in-context.js": { "category": "runnable" },
     "parallel/test-vm-create-context-accessors.js": { "category": "runnable" },
     "parallel/test-vm-create-context-arg.js": { "category": "runnable" },
@@ -9239,7 +9239,7 @@
     "parallel/test-vm-property-not-on-sandbox.js": { "category": "known-gap", "reason": "contextified global proxy identity/property fallback semantics are incomplete" },
     "parallel/test-vm-proxies.js": { "category": "known-gap", "reason": "vm contexts do not provide the expected per-context Proxy behavior" },
     "parallel/test-vm-proxy-failure-CP.js": { "category": "known-gap", "reason": "createContext incorrectly triggers Proxy getOwnPropertyDescriptor traps" },
-    "parallel/test-vm-run-in-new-context.js": { "category": "known-gap", "reason": "runInNewContext sandbox binding and write-back semantics are incomplete" },
+    "parallel/test-vm-run-in-new-context.js": { "category": "known-gap", "reason": "vm runInNewContext filename stack formatting is incomplete" },
     "parallel/test-vm-set-property-proxy.js": { "category": "known-gap", "reason": "runInNewContext assignment with Proxy sandbox does not match Node trap behavior" },
     "parallel/test-vm-sigint-existing-handler.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },
     "parallel/test-vm-sigint.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },

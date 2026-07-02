@@ -1241,7 +1241,11 @@ function applySandboxUpdates(sandbox, evaluation) {
 export function runInNewContext(code, sandbox, options) {
     if (code === undefined || code === null) code = '';
     code = String(code);
+    if (sandbox !== undefined && (sandbox === null || typeof sandbox !== 'object')) {
+        throwInvalidArgType('object', 'object', sandbox);
+    }
     options = normalizeRunOptions(options);
+    validateVmRunOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
     let helperName;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
@@ -1366,11 +1370,12 @@ function isContextObject(obj) {
 
 export function runInContext(code, context, options) {
     if (!isContext(context)) {
-        throw new TypeError('argument must be a vm.Context');
+        throwInvalidContextifiedObject();
     }
     if (code === undefined || code === null) code = '';
     code = String(code);
     options = normalizeRunOptions(options);
+    validateVmRunOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
     let helperName;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
@@ -1423,6 +1428,7 @@ export function runInThisContext(code, options) {
     if (code === undefined || code === null) return undefined;
     code = String(code);
     options = normalizeRunOptions(options);
+    validateVmRunOptions(options);
     validateImportModuleDynamicallyOption(options.importModuleDynamically);
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
@@ -1450,6 +1456,14 @@ function normalizeRunOptions(options) {
         return { filename: options };
     }
     return validateOptionsObject(options);
+}
+
+function validateVmRunOptions(options) {
+    if (options.filename !== undefined && typeof options.filename !== 'string') {
+        throwInvalidPropertyType('options.filename', 'string', options.filename);
+    }
+    validateInt32PropertyOption(options.lineOffset, 'options.lineOffset');
+    validateInt32PropertyOption(options.columnOffset, 'options.columnOffset');
 }
 
 function evalVmRunWithFilename(fn, filename) {
@@ -2152,6 +2166,12 @@ function throwInvalidArgType(name, expected, value) {
     throw err;
 }
 
+function throwInvalidContextifiedObject() {
+    const err = new TypeError('The "contextifiedObject" argument must be an vm.Context.');
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+}
+
 function throwInvalidPropertyType(name, expected, value) {
     const err = new TypeError('The "' + name + '" property must be of type ' + expected + '.' + formatReceivedType(value));
     err.code = 'ERR_INVALID_ARG_TYPE';
@@ -2678,7 +2698,7 @@ export class Script {
             throw new TypeError('Illegal invocation');
         }
         if (!isContext(context)) {
-            throw new TypeError('argument must be a vm.Context');
+            throwInvalidContextifiedObject();
         }
         options = validateScriptRunOptions(options);
         if (this._usesDefaultLoader) {

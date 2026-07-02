@@ -4161,7 +4161,63 @@ export const testVmMainContextDefaultLoader = async () => {
         }
         assert.throws(() => vm.runInThisContext('throw new Error("boom")', 'runtime-boom.js'), hasVmFilenameStack);
         assert.throws(() => vm.runInNewContext('throw new Error("boom")', {}, 'runtime-boom.js'), hasVmFilenameStack);
+        assert.strictEqual(vm.runInNewContext('1 + 1', undefined), 2);
+        assert.throws(() => vm.runInNewContext('', null, 'runtime-null-sandbox.js'), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            name: 'TypeError',
+        });
+        for (const invalidSandbox of [0, '', true, Symbol('sandbox'), function invalidSandbox() {}]) {
+            assert.throws(() => vm.runInNewContext('1 + 1', invalidSandbox), {
+                code: 'ERR_INVALID_ARG_TYPE',
+                name: 'TypeError',
+            });
+        }
+        assert.throws(() => vm.runInNewContext('', {}, { filename: 1 }), { code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError' });
+        assert.throws(() => vm.runInNewContext('', {}, { filename: 1, get lineOffset() { throw new Error('wrong order'); } }), { code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError' });
+        assert.throws(() => vm.runInContext('', runFilenameContext, { lineOffset: 1.5 }), { code: 'ERR_OUT_OF_RANGE', name: 'RangeError' });
+        assert.throws(() => vm.runInThisContext('', { columnOffset: 'bad' }), { code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError' });
         assert.throws(() => vm.runInContext('throw new Error("boom")', runFilenameContext, 'runtime-boom.js'), hasVmFilenameStack);
+        assert.throws(() => vm.runInContext('', {}), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            name: 'TypeError',
+            message: /contextifiedObject.*vm\.Context/,
+        });
+        assert.throws(() => new vm.Script('').runInContext([]), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            name: 'TypeError',
+            message: /contextifiedObject.*vm\.Context/,
+        });
+        const vmRegex = vm.runInNewContext('/hello/');
+        assert.throws(() => { throw 'hello world'; }, vmRegex);
+        assert.throws(() => assert.match('hello', { [Symbol.toStringTag]: 'RegExp', test() { return true; } }), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            name: 'TypeError',
+        });
+        assert.throws(() => assert.match('hello', Object.create(/hello/)), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            name: 'TypeError',
+        });
+        assert.throws(() => assert.match('hello', new Proxy(/hello/, {})), {
+            code: 'ERR_INVALID_ARG_TYPE',
+            name: 'TypeError',
+        });
+        const poisonedRegex = /hello/;
+        poisonedRegex.test = () => false;
+        assert.match('hello', poisonedRegex);
+        assert.throws(() => { throw 'hello world'; }, poisonedRegex);
+        const originalRegExpSource = Object.getOwnPropertyDescriptor(RegExp.prototype, 'source');
+        try {
+            Object.defineProperty(RegExp.prototype, 'source', {
+                configurable: true,
+                get() { return ''; },
+            });
+            assert.throws(() => assert.match('hello', { test() { return true; } }), {
+                code: 'ERR_INVALID_ARG_TYPE',
+                name: 'TypeError',
+            });
+        } finally {
+            Object.defineProperty(RegExp.prototype, 'source', originalRegExpSource);
+        }
         const sloppyMainResult = vm.runInThisContext([
             'var __wasm_rquickjs_sloppy_main_value = "main";',
             '[delete __wasm_rquickjs_sloppy_main_value, __wasm_rquickjs_sloppy_main_value];',
@@ -4219,7 +4275,8 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.throws(() => runOptionScript.runInThisContext({ timeout: 4294967296 }), { name: 'RangeError', code: 'ERR_OUT_OF_RANGE' });
         assert.throws(() => runOptionScript.runInContext({}, { get timeout() { throw new Error('bad order'); } }), {
             name: 'TypeError',
-            message: 'argument must be a vm.Context',
+            code: 'ERR_INVALID_ARG_TYPE',
+            message: /contextifiedObject.*vm\.Context/,
         });
         assert.throws(() => runOptionScript.runInNewContext({}, { displayErrors: null }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
         assert.throws(() => runOptionScript.runInNewContext({}, { breakOnSigint: 1 }), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
