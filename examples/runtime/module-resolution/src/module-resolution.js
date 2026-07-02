@@ -4269,6 +4269,15 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.strictEqual(hiddenDescriptor.writable, false);
         assert.strictEqual(hiddenDescriptor.enumerable, false);
         assert.strictEqual(hiddenDescriptor.configurable, false);
+        assert.strictEqual(vm.runInNewContext('typeof performance'), 'undefined');
+        assert.strictEqual(vm.runInContext('Object.keys(this).join(",")', vm.createContext({ key: 'value', 1: 'one' })), '1,key');
+        const hiddenVmGlobalNames = ['DOMException', 'Float16Array', 'InternalError', 'performance', 'queueMicrotask'];
+        assert.strictEqual(vm.runInNewContext('["DOMException", "Float16Array", "InternalError", "performance", "queueMicrotask"].filter((name) => Object.hasOwn(this, name)).join(",")'), '');
+        for (const hiddenName of hiddenVmGlobalNames) {
+            assert.strictEqual(vm.runInContext(hiddenName + '.marker', vm.createContext({
+                [hiddenName]: { marker: hiddenName },
+            })), hiddenName);
+        }
         assert.strictEqual(new vm.Script('2 + 1', { importModuleDynamically() { throw new Error('unreachable'); } }).runInThisContext(), 3);
         assert.strictEqual(vm.compileFunction('return 2', [], { importModuleDynamically() { throw new Error('unreachable'); } })(), 2);
         assert.strictEqual(missingImportHelperCount(), missingImportHelperCountBefore);

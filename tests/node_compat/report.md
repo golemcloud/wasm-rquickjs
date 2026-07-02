@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3224/4395 (73.4%)
+**Primary compatibility (CI-enforced):** 3225/4395 (73.4%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3224 | 73.4% | 56.4% | 47.2% |
-| 🧩 known gap | 1171 | 26.6% | 20.5% | 17.1% |
+| ✅ passing (runnable) | 3225 | 73.4% | 56.5% | 47.2% |
+| 🧩 known gap | 1170 | 26.6% | 20.5% | 17.1% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.2% | 16.9% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.4% |
 | **Total** | **6835** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3224/5713 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3225/5713 (56.5%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 70 | 39 | 3 | 9 | 0 | 0 | 64.2% | 57.9% |
+| vm | 121 | 71 | 38 | 3 | 9 | 0 | 0 | 65.1% | 58.7% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -681,7 +681,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1171)
+### known gap (1170)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1301,7 +1301,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | valid EC key vectors fail to import | 1 | `parallel/test-webcrypto-export-import-ec.js#block_00_block_00` |
 | verify() returns non-Node error code/message for unsupported key types | 1 | `parallel/test-crypto-sign-verify.js#block_18_block_18` |
 | vm context global object identity/proxy semantics differ from Node | 1 | `parallel/test-vm-global-identity.js` |
-| vm context global property enumeration includes unexpected runtime globals | 1 | `parallel/test-vm-global-property-enumerator.js` |
 | vm context property forwarding and indexed descriptor behavior are incomplete | 1 | `parallel/test-vm-context-property-forwarding.js` |
 | vm context prototype chain and own-property lookup semantics are incomplete | 1 | `parallel/test-vm-global-property-prototype.js` |
 | vm contextification write-back and runInContext semantics are incomplete | 1 | `parallel/test-vm-context.js` |

@@ -71,6 +71,17 @@ fn eval_in_new_context_impl<'js>(
 
     // Restore sandbox values into the new context's global object
     let new_global = new_ctx.globals();
+    // Match the Node 22 vm global surface by hiding QuickJS globals that are
+    // not present on a fresh contextified global unless the sandbox provides them.
+    for key in [
+        "DOMException",
+        "Float16Array",
+        "InternalError",
+        "performance",
+        "queueMicrotask",
+    ] {
+        let _ = new_global.remove(key);
+    }
     for (key, pval) in sandbox_keys.iter().zip(persistent_values) {
         let restored: Value<'js> = pval
             .restore(&new_ctx)

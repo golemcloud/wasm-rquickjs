@@ -9170,7 +9170,7 @@
     "parallel/test-vm-global-define-property.js": { "category": "runnable" },
     "parallel/test-vm-global-identity.js": { "category": "known-gap", "reason": "vm context global object identity/proxy semantics differ from Node" },
     "parallel/test-vm-global-non-writable-properties.js": { "category": "known-gap", "reason": "strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message" },
-    "parallel/test-vm-global-property-enumerator.js": { "category": "known-gap", "reason": "vm context global property enumeration includes unexpected runtime globals" },
+    "parallel/test-vm-global-property-enumerator.js": { "category": "runnable" },
     "parallel/test-vm-global-property-interceptors.js": { "category": "known-gap", "reason": "global property descriptor/interceptor behavior in vm contexts is incomplete" },
     "parallel/test-vm-global-property-prototype.js": { "category": "known-gap", "reason": "vm context prototype chain and own-property lookup semantics are incomplete" },
     "parallel/test-vm-global-setter.js": { "category": "known-gap", "reason": "non-writable vm global assignment throws QuickJS read-only wording instead of Node's Cannot redefine property message" },
