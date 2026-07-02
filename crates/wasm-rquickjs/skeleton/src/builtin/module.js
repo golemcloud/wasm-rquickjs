@@ -2615,12 +2615,10 @@ function readLoaderCjsExportName(source, pos) {
     let name;
     if (source.charCodeAt(i) === 0x2e) {
         i = skipWhitespaceAndComments(source, i + 1);
-        const start = i;
-        const first = source.charCodeAt(i);
-        if (!isIdentifierStartCode(first)) return null;
-        i++;
-        while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-        name = source.substring(start, i);
+        const ident = readLoaderIdentifier(source, i);
+        if (ident === null) return null;
+        name = ident.name;
+        i = ident.end;
     } else if (source.charCodeAt(i) === 0x5b) {
         i = skipWhitespaceAndComments(source, i + 1);
         const quote = source.charCodeAt(i);
