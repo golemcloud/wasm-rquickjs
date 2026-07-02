@@ -3108,18 +3108,8 @@ function readLoaderModuleExportsRequire(source, pos) {
     let i = skipWhitespaceAndComments(source, targetEnd);
     if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    const requireEnd = readLoaderNamedIdentifier(source, i, 'require');
-    if (requireEnd === null) return null;
-    i = skipWhitespaceAndComments(source, requireEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const quote = source.charCodeAt(i);
-    if (quote !== 0x27 && quote !== 0x22) return null;
-    const decoded = decodeStringLiteral(source, i + 1, quote);
-    if (decoded === null) return null;
-    i = skipWhitespaceAndComments(source, decoded.end + 1);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    return decoded.value;
+    const required = readLoaderRequireString(source, i);
+    return required === null ? null : required.specifier;
 }
 
 function readLoaderRequireString(source, pos, allowSpreadPrefix) {
