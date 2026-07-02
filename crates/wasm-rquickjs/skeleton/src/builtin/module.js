@@ -727,8 +727,10 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
     );
 }
 
+let packageDeprecationWarningsSuppressed = 0;
+
 function emitPackageDeprecationWarning(message, code, key) {
-    if (globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings) return;
+    if (packageDeprecationWarningsSuppressed > 0) return;
     const emitWarning = globalThis.__wasm_rquickjs_emit_package_deprecation_warning;
     if (typeof emitWarning !== 'function') {
         throw new Error('Internal package deprecation warning emitter is not initialized');
@@ -737,15 +739,11 @@ function emitPackageDeprecationWarning(message, code, key) {
 }
 
 function withSuppressedPackageDeprecationWarnings(callback) {
-    globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings =
-        (globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings || 0) + 1;
+    packageDeprecationWarningsSuppressed += 1;
     try {
         return callback();
     } finally {
-        globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings -= 1;
-        if (globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings <= 0) {
-            delete globalThis.__wasm_rquickjs_suppress_package_deprecation_warnings;
-        }
+        packageDeprecationWarningsSuppressed -= 1;
     }
 }
 
