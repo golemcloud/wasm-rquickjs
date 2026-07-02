@@ -5187,14 +5187,7 @@ fn parse_exports_assign_require_value(source: &str, pos: usize) -> Option<(Strin
         return Some((specifier, next));
     }
 
-    if !is_free_ident_start(bytes, pos)
-        || !source[pos..].starts_with("_interopRequireWildcard")
-        || !is_ident_boundary(bytes, pos + 23)
-    {
-        return None;
-    }
-
-    let mut i = skip_ws_comments(source, pos + 23);
+    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "_interopRequireWildcard")?);
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
@@ -5210,11 +5203,8 @@ fn parse_exports_assign_require_value(source: &str, pos: usize) -> Option<(Strin
 
 fn parse_require_binding(source: &str, pos: usize) -> Option<(String, String, usize)> {
     for keyword in ["var", "let", "const"] {
-        if is_free_ident_start(source.as_bytes(), pos)
-            && source[pos..].starts_with(keyword)
-            && is_ident_boundary(source.as_bytes(), pos + keyword.len())
-        {
-            let mut i = skip_ws_comments(source, pos + keyword.len());
+        if let Some(keyword_end) = parse_free_ident_name(source, pos, keyword) {
+            let mut i = skip_ws_comments(source, keyword_end);
             let (name, next) = read_ident(source, i)?;
             i = skip_ws_comments(source, next);
             if i >= source.len() || source.as_bytes()[i] != b'=' {
@@ -5284,34 +5274,25 @@ fn parse_export_star_reexport(source: &str, pos: usize) -> Option<(String, usize
     fn parse_export_star_callee(source: &str, pos: usize) -> Option<usize> {
         let bytes = source.as_bytes();
         let member_access = previous_significant_byte(source, pos) == Some(b'.');
-        if is_free_ident_start(bytes, pos)
-            && !member_access
-            && source[pos..].starts_with("__exportStar")
-            && is_ident_boundary(bytes, pos + 12)
-        {
-            return Some(pos + 12);
+        if !member_access {
+            if let Some(export_star_end) = parse_free_ident_name(source, pos, "__exportStar") {
+                return Some(export_star_end);
+            }
+            if let Some(export_end) = parse_free_ident_name(source, pos, "__export") {
+                return Some(export_end);
+            }
         }
-        if is_free_ident_start(bytes, pos)
-            && !member_access
-            && source[pos..].starts_with("__export")
-            && is_ident_boundary(bytes, pos + 8)
-        {
-            return Some(pos + 8);
-        }
-        if is_free_ident_start(bytes, pos)
-            && source[pos..].starts_with("tslib")
-            && is_ident_boundary(bytes, pos + 5)
-        {
-            let mut i = skip_ws_comments(source, pos + 5);
+        if let Some(tslib_end) = parse_free_ident_name(source, pos, "tslib") {
+            let mut i = skip_ws_comments(source, tslib_end);
             if i >= bytes.len() || bytes[i] != b'.' {
                 return None;
             }
             i = skip_ws_comments(source, i + 1);
-            if source[i..].starts_with("__exportStar") && is_ident_boundary(bytes, i + 12) {
-                return Some(i + 12);
+            if let Some(export_star_end) = parse_ident_name(source, i, "__exportStar") {
+                return Some(export_star_end);
             }
-            if source[i..].starts_with("__export") && is_ident_boundary(bytes, i + 8) {
-                return Some(i + 8);
+            if let Some(export_end) = parse_ident_name(source, i, "__export") {
+                return Some(export_end);
             }
         }
         None
