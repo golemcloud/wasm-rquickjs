@@ -1394,21 +1394,19 @@ export function runInThisContext(code, options) {
     }
     if (options.importModuleDynamically === undefined) {
         const rewritten = rewriteMissingDynamicImportsForEvaluation(code).code;
-        return options.filename
-            ? evalVmRunWithFilename(() => evalWithFilename(rewritten, options.filename), options.filename)
-            : (0, eval)(rewritten);
+        return evalVmRunWithFilename(() => evalWithFilename(rewritten, filenameForMainContextEval(options)), options.filename);
     }
     if (typeof options.importModuleDynamically === 'function') {
         const rewritten = vmModulesEnabled()
             ? rewriteVmDynamicImportCallbackForEvaluation(code, options.importModuleDynamically, undefined)
             : rewriteMissingDynamicImportFlagForEvaluation(code);
-        return options.filename
-            ? evalVmRunWithFilename(() => evalWithFilename(rewritten.code, options.filename), options.filename)
-            : (0, eval)(rewritten.code);
+        return evalVmRunWithFilename(() => evalWithFilename(rewritten.code, filenameForMainContextEval(options)), options.filename);
     }
-    return options.filename
-        ? evalVmRunWithFilename(() => evalWithFilename(code, options.filename), options.filename)
-        : (0, eval)(code);
+    return evalVmRunWithFilename(() => evalWithFilename(code, filenameForMainContextEval(options)), options.filename);
+}
+
+function filenameForMainContextEval(options) {
+    return options.filename === undefined ? 'evalmachine.<anonymous>' : options.filename;
 }
 
 function normalizeRunOptions(options) {
@@ -1428,7 +1426,7 @@ function evalVmRunWithFilename(fn, filename) {
 }
 
 function normalizeVmRunFilenameStack(err, filename) {
-    if (!filename || !err || typeof err !== 'object') return;
+    if (filename === undefined || !err || typeof err !== 'object') return;
     err.stack = String(filename) + ':1\n' + (err.name || 'Error') + ': ' + (err.message || '');
 }
 
@@ -2665,19 +2663,20 @@ export class Script {
             throw new TypeError('Illegal invocation');
         }
         options = validateScriptRunOptions(options);
+        const runOptions = scriptRunInThisContextOptions(this, options);
         if (this._usesDefaultLoader) {
             return evalWithFilename(this._defaultLoaderCode, this._defaultLoaderFilename);
         }
         if (this._usesMissingDynamicImportCallback) {
-            return (0, eval)(this._missingCallbackCode);
+            return runInThisContext(this._missingCallbackCode, runOptions);
         }
         if (this._usesMissingDynamicImportFlag) {
-            return (0, eval)(this._missingFlagCode);
+            return runInThisContext(this._missingFlagCode, runOptions);
         }
         if (this._usesDynamicImportCallback) {
-            return (0, eval)(this._dynamicImportCallbackCode);
+            return runInThisContext(this._dynamicImportCallbackCode, runOptions);
         }
-        return runInThisContext(this._code, options);
+        return runInThisContext(this._code, runOptions);
     }
 
     createCachedData() {
@@ -2686,6 +2685,15 @@ export class Script {
         }
         return new Uint8Array(0);
     }
+}
+
+function scriptRunInThisContextOptions(script, options) {
+    const result = Object.assign({}, options);
+    delete result.filename;
+    if (script._options.filename !== undefined) {
+        result.filename = script._options.filename;
+    }
+    return result;
 }
 
 export function Module() {

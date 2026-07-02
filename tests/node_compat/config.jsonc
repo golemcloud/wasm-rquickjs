@@ -9230,7 +9230,7 @@
       }
     },
     "parallel/test-vm-no-dynamic-import-callback.js": { "category": "runnable" },
-    "parallel/test-vm-not-strict.js": { "category": "known-gap", "reason": "runInThisContext/runInContext sloppy-mode var/delete semantics are incorrect" },
+    "parallel/test-vm-not-strict.js": { "category": "known-gap", "reason": "runInContext sloppy-mode var/delete semantics still require contextified global script bindings" },
     "parallel/test-vm-options-validation.js": { "category": "runnable" },
     "parallel/test-vm-ownkeys.js": { "category": "runnable" },
     "parallel/test-vm-ownpropertynames.js": { "category": "runnable" },
@@ -9245,7 +9245,7 @@
     "parallel/test-vm-sigint.js": { "category": "wasi-impossible", "reason": "breakOnSigint requires SIGINT delivery/handler semantics unavailable in WASI" },
     "parallel/test-vm-source-map-url.js": { "category": "runnable" },
     "parallel/test-vm-strict-assign.js": { "category": "known-gap", "reason": "contextified assignment semantics for strict/non-strict writes to non-writable globals are incorrect" },
-    "parallel/test-vm-strict-mode.js": { "category": "known-gap", "reason": "strict-mode assignment semantics in vm contexts differ from Node" },
+    "parallel/test-vm-strict-mode.js": { "category": "runnable" },
     "parallel/test-vm-symbols.js": { "category": "known-gap", "reason": "vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype" },
     "parallel/test-vm-syntax-error-message.js": { "category": "runnable" },
     "parallel/test-vm-syntax-error-stderr.js": { "category": "runnable" },

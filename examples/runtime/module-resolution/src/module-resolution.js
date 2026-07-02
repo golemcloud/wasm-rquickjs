@@ -4162,6 +4162,40 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.throws(() => vm.runInThisContext('throw new Error("boom")', 'runtime-boom.js'), hasVmFilenameStack);
         assert.throws(() => vm.runInNewContext('throw new Error("boom")', {}, 'runtime-boom.js'), hasVmFilenameStack);
         assert.throws(() => vm.runInContext('throw new Error("boom")', runFilenameContext, 'runtime-boom.js'), hasVmFilenameStack);
+        const sloppyMainResult = vm.runInThisContext([
+            'var __wasm_rquickjs_sloppy_main_value = "main";',
+            '[delete __wasm_rquickjs_sloppy_main_value, __wasm_rquickjs_sloppy_main_value];',
+        ].join('\n'));
+        assert.deepStrictEqual(sloppyMainResult, [false, 'main']);
+        assert.deepStrictEqual(Object.getOwnPropertyDescriptor(globalThis, '__wasm_rquickjs_sloppy_main_value'), {
+            value: 'main',
+            writable: true,
+            enumerable: true,
+            configurable: false,
+        });
+        const sloppyScriptResult = new vm.Script([
+            'var __wasm_rquickjs_sloppy_script_value = "script";',
+            '[delete __wasm_rquickjs_sloppy_script_value, __wasm_rquickjs_sloppy_script_value];',
+        ].join('\n')).runInThisContext();
+        assert.deepStrictEqual(sloppyScriptResult, [false, 'script']);
+        const sloppyConstructorFilenameResult = new vm.Script([
+            'var __wasm_rquickjs_sloppy_constructor_filename_value = "constructor";',
+            '[delete __wasm_rquickjs_sloppy_constructor_filename_value, __wasm_rquickjs_sloppy_constructor_filename_value];',
+        ].join('\n'), 'runtime-script-sloppy.js').runInThisContext();
+        assert.deepStrictEqual(sloppyConstructorFilenameResult, [false, 'constructor']);
+        assert.throws(() => new vm.Script('throw new Error("script filename")', {
+            filename: 'runtime-script-sloppy-stack.js',
+        }).runInThisContext(), (err) => {
+            return typeof err.stack === 'string' && err.stack.startsWith('runtime-script-sloppy-stack.js:1');
+        });
+        assert.throws(() => new vm.Script('throw new Error("empty script filename")', {
+            filename: '',
+        }).runInThisContext(), (err) => {
+            return typeof err.stack === 'string' && err.stack.startsWith(':1');
+        });
+        globalThis.__wasm_rquickjs_sloppy_main_value = undefined;
+        globalThis.__wasm_rquickjs_sloppy_script_value = undefined;
+        globalThis.__wasm_rquickjs_sloppy_constructor_filename_value = undefined;
         assert.throws(() => vm.createContext('bad'), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
         assert.throws(() => vm.createContext(function badSandbox() {}), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
         assert.throws(() => new vm.Script('void 0', 42), { name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' });
@@ -4268,7 +4302,7 @@ export const testVmMainContextDefaultLoader = async () => {
             8,
         );
         assert.strictEqual(
-            await new vm.Script('class Example { static async import() { return 9; } } Example.import();').runInThisContext(),
+            await new vm.Script('class AsyncExample { static async import() { return 9; } } AsyncExample.import();').runInThisContext(),
             9,
         );
 
