@@ -4834,14 +4834,14 @@ fn descriptor_object_span(descriptor: &str) -> Option<(usize, usize)> {
     Some((skip_ws_comments(descriptor, descriptor_start + 1), descriptor_end))
 }
 
-fn next_descriptor_entry(descriptor: &str, cursor: usize, descriptor_end: usize) -> Option<usize> {
-    if cursor >= descriptor_end {
-        return Some(descriptor_end);
+fn next_object_literal_entry(source: &str, cursor: usize, object_end: usize) -> Option<usize> {
+    if cursor >= object_end {
+        return Some(object_end);
     }
-    if descriptor.as_bytes()[cursor] != b',' {
+    if source.as_bytes()[cursor] != b',' {
         return None;
     }
-    Some(skip_ws_comments(descriptor, cursor + 1))
+    Some(skip_ws_comments(source, cursor + 1))
 }
 
 fn descriptor_has_named_property(descriptor: &str) -> bool {
@@ -4861,7 +4861,7 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
         if bytes[cursor] == b'[' {
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
                 cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, cursor, descriptor_end));
-                let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+                let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
                     return false;
                 };
                 cursor = next_cursor;
@@ -4926,7 +4926,7 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             }
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
                 cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
-                let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+                let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
                     return false;
                 };
                 cursor = next_cursor;
@@ -4948,7 +4948,7 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             }
         }
 
-        let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+        let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
             return false;
         };
         cursor = next_cursor;
@@ -5344,12 +5344,7 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
             } else {
                 break;
             };
-            if cursor < object_end {
-                if bytes[cursor] != b',' {
-                    return None;
-                }
-                cursor = skip_ws_comments(source, cursor + 1);
-            }
+            cursor = next_object_literal_entry(source, cursor, object_end)?;
             continue;
         }
 
@@ -5384,12 +5379,7 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
             break;
         }
 
-        if cursor < object_end {
-            if bytes[cursor] != b',' {
-                return None;
-            }
-            cursor = skip_ws_comments(source, cursor + 1);
-        }
+        cursor = next_object_literal_entry(source, cursor, object_end)?;
     }
 
     let after_object = skip_ws_comments(source, object_end + 1);
@@ -5865,7 +5855,7 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
             return false;
         }
 
-        let Some(next_cursor) = next_descriptor_entry(descriptor, cursor, descriptor_end) else {
+        let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
             return false;
         };
         cursor = next_cursor;
