@@ -4432,6 +4432,27 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'import("./static-source.mjs");',
             'const = ;',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/line-start-comment-export.js', [
+            '/*',
+            'export default "not module";',
+            '*/',
+            'module.exports = { value: "comment-export" };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/line-start-template-export.js', [
+            'const text = `',
+            'export default "not module";',
+            '`;',
+            'module.exports = { value: text.includes("not module") };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/import-prefix-identifiers.js', [
+            'const important = 1;',
+            'let imported = 2;',
+            'module.exports = { value: important + imported };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/export-prefix-identifier.js', [
+            'const exported = 3;',
+            'module.exports = { value: exported };',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/module-syntax-app/main.cjs');
@@ -4453,6 +4474,10 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         assert.strictEqual(require('/module-syntax-app/static-export-star.js').named, 'named');
         assert.strictEqual(require('/module-syntax-app/package-without-type/noext-esm').default, 'extensionless-module');
         assert.deepStrictEqual(require('/module-syntax-app/false-positive.cjs'), { value: 'cjs' });
+        assert.deepStrictEqual(require('/module-syntax-app/line-start-comment-export.js'), { value: 'comment-export' });
+        assert.deepStrictEqual(require('/module-syntax-app/line-start-template-export.js'), { value: true });
+        assert.deepStrictEqual(require('/module-syntax-app/import-prefix-identifiers.js'), { value: 3 });
+        assert.deepStrictEqual(require('/module-syntax-app/export-prefix-identifier.js'), { value: 3 });
         globalThis.__moduleSyntaxTlaOnly = undefined;
         await import('/module-syntax-app/tla-only.js');
         assert.strictEqual(globalThis.__moduleSyntaxTlaOnly, 'after');
