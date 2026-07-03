@@ -5551,19 +5551,18 @@ fn is_duplicate_export_guard_condition(condition: &str, binding: &str, key: &str
     let Some(next) = parse_key_in_export_target_condition(condition, i, key) else {
         return false;
     };
-    let mut i = skip_ws_comments(condition, next);
-    if i + 2 > condition.len() || &condition[i..i + 2] != "&&" {
+    let Some(next) = parse_operator(condition, skip_ws_comments(condition, next), "&&") else {
         return false;
-    }
-    i = skip_ws_comments(condition, i + 2);
+    };
+    let mut i = skip_ws_comments(condition, next);
     let Some(next) = parse_export_target_bracket_key(condition, i, key) else {
         return false;
     };
     i = skip_ws_comments(condition, next);
-    if i + 3 > condition.len() || &condition[i..i + 3] != "===" {
+    let Some(next) = parse_operator(condition, i, "===") else {
         return false;
-    }
-    i = skip_ws_comments(condition, i + 3);
+    };
+    i = skip_ws_comments(condition, next);
     let Some(next) = parse_binding_bracket_key(condition, i, binding, key) else {
         return false;
     };
@@ -5579,11 +5578,10 @@ fn is_export_star_guard_condition(condition: &str, key: &str) -> bool {
     if first != "default" {
         return false;
     }
-    i = skip_ws_comments(condition, next);
-    if i + 2 > condition.len() || &condition[i..i + 2] != "||" {
+    let Some(next) = parse_operator(condition, skip_ws_comments(condition, next), "||") else {
         return false;
-    }
-    i = skip_ws_comments(condition, i + 2);
+    };
+    i = skip_ws_comments(condition, next);
     let (second, next) = match parse_key_equals_string(condition, i, key) {
         Some(result) => result,
         None => return false,
@@ -5603,11 +5601,10 @@ fn is_export_star_has_own_guard_condition(condition: &str, key: &str) -> bool {
     if first != "default" {
         return false;
     }
-    i = skip_ws_comments(condition, next);
-    if i + 2 > condition.len() || &condition[i..i + 2] != "&&" {
+    let Some(next) = parse_operator(condition, skip_ws_comments(condition, next), "&&") else {
         return false;
-    }
-    i = skip_ws_comments(condition, i + 2);
+    };
+    i = skip_ws_comments(condition, next);
     let Some(next) = parse_negated_exports_has_own_key(condition, i, key) else {
         return false;
     };
@@ -5623,14 +5620,21 @@ fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(S
 }
 
 fn parse_key_string_comparison(source: &str, pos: usize, key: &str, operator: &str) -> Option<(String, usize)> {
-    let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, key)?);
-    if i + operator.len() > bytes.len() || &source[i..i + operator.len()] != operator {
-        return None;
-    }
-    i = skip_ws_comments(source, i + operator.len());
+    i = skip_ws_comments(source, parse_operator(source, i, operator)?);
     let (value, next) = read_js_string(source, i)?;
     Some((value, next))
+}
+
+fn parse_operator(source: &str, pos: usize, operator: &str) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let operator_bytes = operator.as_bytes();
+    for (offset, expected) in operator_bytes.iter().enumerate() {
+        if bytes.get(pos + offset).copied() != Some(*expected) {
+            return None;
+        }
+    }
+    Some(pos + operator_bytes.len())
 }
 
 fn parse_exports_has_own_key(source: &str, pos: usize, key: &str) -> Option<usize> {
