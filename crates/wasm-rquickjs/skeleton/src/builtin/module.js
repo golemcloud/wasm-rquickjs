@@ -2844,7 +2844,7 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
             continue;
         }
-        if (source.startsWith('...', cursor)) {
+        if (isLoaderSpreadTokenAt(source, cursor)) {
             const spreadStart = skipWhitespaceAndComments(source, cursor + 3);
             const requireEnd = readLoaderNamedIdentifier(source, spreadStart, 'require');
             if (requireEnd !== null) {
@@ -2917,6 +2917,10 @@ function nextLoaderObjectLiteralEntry(source, cursor, objectEnd) {
     return skipWhitespaceAndComments(source, cursor + 1);
 }
 
+function isLoaderSpreadTokenAt(source, pos) {
+    return source.charCodeAt(pos) === 0x2e && source.charCodeAt(pos + 1) === 0x2e && source.charCodeAt(pos + 2) === 0x2e;
+}
+
 function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
     const functionEnd = readLoaderNamedIdentifier(source, pos, 'function');
     if (functionEnd === null) return null;
@@ -2948,7 +2952,7 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
             cursor = skipWhitespaceAndComments(source, cursor + 1);
             continue;
         }
-        if (source.startsWith('...', cursor)) return false;
+        if (isLoaderSpreadTokenAt(source, cursor)) return false;
         if (source.charCodeAt(cursor) === 0x5b) {
             if (foundKind === 'value') {
                 cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, cursor, descriptorEnd));
@@ -3424,7 +3428,7 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
             cursor = skipWhitespaceAndComments(source, cursor + 1);
             continue;
         }
-        if (source.startsWith('...', cursor) || source.charCodeAt(cursor) === 0x5b) return false;
+        if (isLoaderSpreadTokenAt(source, cursor) || source.charCodeAt(cursor) === 0x5b) return false;
         const property = loaderDescriptorPropertyName(source, cursor);
         if (property === null || property.quoted) return false;
         let next = skipWhitespaceAndComments(source, property.end);

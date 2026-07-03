@@ -4844,6 +4844,13 @@ fn next_object_literal_entry(source: &str, cursor: usize, object_end: usize) -> 
     Some(skip_ws_comments(source, cursor + 1))
 }
 
+fn is_spread_token_at(source: &str, pos: usize) -> bool {
+    let bytes = source.as_bytes();
+    bytes.get(pos).copied() == Some(b'.')
+        && bytes.get(pos + 1).copied() == Some(b'.')
+        && bytes.get(pos + 2).copied() == Some(b'.')
+}
+
 fn descriptor_has_named_property(descriptor: &str) -> bool {
     let bytes = descriptor.as_bytes();
     let Some((mut cursor, descriptor_end)) = descriptor_object_span(descriptor) else {
@@ -4855,7 +4862,7 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             cursor = skip_ws_comments(descriptor, cursor + 1);
             continue;
         }
-        if descriptor[cursor..].starts_with("...") {
+        if is_spread_token_at(descriptor, cursor) {
             return false;
         }
         if bytes[cursor] == b'[' {
@@ -5331,7 +5338,7 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
             continue;
         }
 
-        if source[cursor..].starts_with("...") {
+        if is_spread_token_at(source, cursor) {
             let spread_start = skip_ws_comments(source, cursor + 3);
             if let Some((specifier, next)) = parse_require_string_loose(source, spread_start) {
                 add_unique(&mut reexports, specifier);
@@ -5806,7 +5813,7 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
             cursor = skip_ws_comments(descriptor, cursor + 1);
             continue;
         }
-        if descriptor[cursor..].starts_with("...") || bytes[cursor] == b'[' {
+        if is_spread_token_at(descriptor, cursor) || bytes[cursor] == b'[' {
             return false;
         }
         let Some((name, key_is_ident, key_end)) = parse_exports_literal_key(descriptor, cursor)
