@@ -81,6 +81,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             exports: {
                 './public': './public.mjs',
                 './encoded-target': './sp%20ce.mjs',
+                './root-directory': './',
                 './deprecated-double': './/public.mjs',
                 './pattern-slash*': './subpath*.mjs',
                 './trailing-pattern-slash*': './trailing-pattern-slash*index.mjs',
@@ -119,6 +120,10 @@ export const testEsmPackageMapEdgeCases = async () => {
                 ],
                 './array-missing-first': [
                     './missing.mjs',
+                    './public.mjs',
+                ],
+                './array-root-first': [
+                    './',
                     './public.mjs',
                 ],
                 './array-invalid-fallback': [
@@ -161,6 +166,11 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/root-export-pkg', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/root-export-pkg/package.json', JSON.stringify({
+            type: 'module',
+            exports: './',
+        }));
 
         fs.writeFileSync('/esm-package-map-edge-app/entry.mjs', [
             'export const publicValue = (await import("exported-pkg/public")).default;',
@@ -413,8 +423,11 @@ export const testEsmPackageMapEdgeCases = async () => {
         writeImportEntry('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'exported-pkg/blocked-null');
         writeImportEntry('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'exported-pkg/blocked-false');
         writeImportEntry('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'exported-pkg/array-missing-first');
+        writeImportEntry('/esm-package-map-edge-app/root-directory-subpath.mjs', 'exported-pkg/root-directory');
+        writeImportEntry('/esm-package-map-edge-app/array-root-first-subpath.mjs', 'exported-pkg/array-root-first');
         writeImportEntry('/esm-package-map-edge-app/directory-subpath.mjs', 'exported-pkg/directory');
         writeImportEntry('/esm-package-map-edge-app/no-ext-subpath.mjs', 'exported-pkg/no-ext');
+        writeImportEntry('/esm-package-map-edge-app/root-export-pkg-entry.mjs', 'root-export-pkg');
 
         await expectImportError('/esm-package-map-edge-app/no-exports-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
         await expectImportError('/esm-package-map-edge-app/main-extension-mjs-only-entry.mjs', 'ERR_MODULE_NOT_FOUND');
@@ -437,8 +450,15 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
         await expectImportError('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/root-directory-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
+        await expectImportError('/esm-package-map-edge-app/array-root-first-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
         await expectImportError('/esm-package-map-edge-app/directory-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
         await expectImportError('/esm-package-map-edge-app/no-ext-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/root-export-pkg-entry.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
+        const requireRootDirectory = createRequire('/esm-package-map-edge-app/root-directory-require.cjs');
+        assert.throws(() => requireRootDirectory('exported-pkg/root-directory'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => requireRootDirectory('exported-pkg/array-root-first'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => requireRootDirectory('root-export-pkg'), { code: 'MODULE_NOT_FOUND' });
 
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/external-pkg', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/external-pkg/package.json', JSON.stringify({
@@ -455,6 +475,7 @@ export const testEsmPackageMapEdgeCases = async () => {
                 '#external-encoded-backslash': 'missing-external/a%5Cb',
                 '#relative-encoded-slash': './a%2Fb.js',
                 '#relative-encoded-backslash': './a%5Cb.js',
+                '#root-directory': './',
                 '#builtin': 'node:fs',
                 '#false-target': false,
                 '#array-false-fallback': [
@@ -495,6 +516,9 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/imports-relative-encoded-backslash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         fs.writeFileSync('/esm-package-map-edge-app/imports-false-entry.mjs', 'export default await import("#false-target");');
         await expectImportError('/esm-package-map-edge-app/imports-false-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-root-directory-entry.mjs', 'export default await import("#root-directory");');
+        await expectImportError('/esm-package-map-edge-app/imports-root-directory-entry.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
+        assert.throws(() => requireRootDirectory('#root-directory'), { code: 'MODULE_NOT_FOUND' });
         await expectImportError('/esm-package-map-edge-app/imports-boundary-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
 
         return true;

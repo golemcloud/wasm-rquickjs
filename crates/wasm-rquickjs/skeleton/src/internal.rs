@@ -4102,9 +4102,6 @@ impl NodeModulesResolver {
                 part => relative_parts.push(part),
             }
         }
-        if relative_parts.is_empty() {
-            return None;
-        }
         let mut candidate = package_dir.to_path_buf();
         for part in relative_parts {
             candidate.push(part);

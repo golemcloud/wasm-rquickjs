@@ -1082,7 +1082,7 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
         }
         const candidate = pathModule.resolve(packageDir, decodePackageTargetPath(target));
         const relative = pathModule.relative(packageDir, candidate);
-        if (relative === '' || relative.startsWith('..') || pathModule.isAbsolute(relative)) {
+        if (relative.startsWith('..') || pathModule.isAbsolute(relative)) {
             throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
         }
         return resolveExactPackageFile(candidate);
