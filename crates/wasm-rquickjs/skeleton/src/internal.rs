@@ -4533,7 +4533,7 @@ impl Resolver for NodeModulesResolver {
     }
 }
 
-/// Loader that wraps CJS `.js` and `.cjs` files in ESM-compatible wrappers when loaded via `import()`.
+/// Loader that wraps CommonJS sources in ESM-compatible wrappers when loaded via `import()`.
 /// This enables ESM modules to import CJS packages from `node_modules`.
 struct CjsCompatLoader;
 
@@ -6387,8 +6387,9 @@ impl Loader for CjsCompatLoader {
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let fs_path = module_filesystem_path(path);
+        let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
         let is_cjs_ext = fs_path.ends_with(".cjs");
-        if !fs_path.ends_with(".js") && !is_cjs_ext {
+        if !fs_path.ends_with(".js") && !is_cjs_ext && !is_extensionless {
             return Err(Error::new_loading(path));
         }
         if import_attr_type_from_path(path).as_deref() == Some("json") {
@@ -6424,7 +6425,7 @@ impl Loader for CjsCompatLoader {
             include_resolve: true,
         };
 
-        let package_scope = if fs_abs_path.ends_with(".js") {
+        let package_scope = if fs_abs_path.ends_with(".js") || is_extensionless {
             package_scope_info(&fs_abs_path)
         } else {
             None
@@ -6443,12 +6444,11 @@ impl Loader for CjsCompatLoader {
             || source_has_import_meta(&source)
             || source_has_top_level_await(&source)
             || has_cjs_wrapper_lexical_redeclaration(&source);
-        // .cjs files are always CommonJS; .js files outside a module package
+        // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
         let is_cjs = is_cjs_ext
             || is_commonjs_package_js
             || (!is_module_package_js && !has_esm_syntax);
-
         if !is_cjs {
             let package_type_module_js = fs_path.ends_with(".js") && is_module_package_js;
             let preflight_error_source = if package_type_module_js {
@@ -6932,6 +6932,134 @@ fn source_has_static_import_or_export(source: &str) -> bool {
         ControlFlow::Continue(None)
     })
     .is_break()
+        || source_has_line_start_static_import_or_export(source)
+}
+
+fn source_has_line_start_static_import_or_export(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    let mut at_line_start = true;
+    let mut in_block_comment = false;
+    let mut in_string: Option<u8> = None;
+
+    while i < bytes.len() {
+        if in_block_comment {
+            if i + 1 < bytes.len() && bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                in_block_comment = false;
+                i += 2;
+            } else {
+                at_line_start = matches!(bytes[i], b'\n' | b'\r');
+                i += 1;
+            }
+            continue;
+        }
+
+        if let Some(quote) = in_string {
+            match bytes[i] {
+                b'\\' => i = (i + 2).min(bytes.len()),
+                b if b == quote => {
+                    in_string = None;
+                    at_line_start = false;
+                    i += 1;
+                }
+                b'\n' | b'\r' => {
+                    at_line_start = true;
+                    i += 1;
+                }
+                _ => i += 1,
+            }
+            continue;
+        }
+
+        if at_line_start {
+            while i < bytes.len() && matches!(bytes[i], b' ' | b'\t' | 0x0b | 0x0c) {
+                i += 1;
+            }
+            if i >= bytes.len() {
+                break;
+            }
+            if matches!(bytes[i], b'\n' | b'\r') {
+                i += 1;
+                at_line_start = true;
+                continue;
+            }
+            if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                at_line_start = true;
+                continue;
+            }
+            if i + 1 < bytes.len() && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                in_block_comment = true;
+                i += 2;
+                continue;
+            }
+            let line = &source[i..];
+            if line_starts_with_static_export(line) || line_starts_with_static_import(line) {
+                return true;
+            }
+            at_line_start = false;
+        }
+
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => {
+                in_string = Some(bytes[i]);
+                i += 1;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                at_line_start = true;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                in_block_comment = true;
+                i += 2;
+            }
+            b'\n' | b'\r' => {
+                at_line_start = true;
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    false
+}
+
+fn line_starts_with_static_export(line: &str) -> bool {
+    let Some(rest) = line.strip_prefix("export") else {
+        return false;
+    };
+    if rest.chars().next().is_some_and(|ch| is_ident_continue(ch as u8)) {
+        return false;
+    }
+    let rest = rest.trim_start();
+    rest.starts_with('{')
+        || rest.starts_with('*')
+        || ["default", "const", "let", "var", "function", "class"]
+            .iter()
+            .any(|keyword| {
+                rest.starts_with(keyword)
+                    && rest[keyword.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(|ch| !is_ident_continue(ch as u8))
+            })
+}
+
+fn line_starts_with_static_import(line: &str) -> bool {
+    let Some(rest) = line.strip_prefix("import") else {
+        return false;
+    };
+    if rest.chars().next().is_some_and(|ch| is_ident_continue(ch as u8)) {
+        return false;
+    }
+    let rest = rest.trim_start();
+    if rest.starts_with('(') || rest.starts_with(':') {
+        return false;
+    }
+    rest.starts_with('"') || rest.starts_with('\'') || rest.starts_with('{') || rest.starts_with('*') || rest.chars().next().is_some_and(|ch| is_js_identifier_start(ch as u8))
 }
 
 fn source_has_import_meta(source: &str) -> bool {

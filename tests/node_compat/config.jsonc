@@ -6089,8 +6089,41 @@
     "es-module/test-esm-type-field.mjs": { "category": "runnable" },
     "es-module/test-esm-type-flag-cli-entry.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-type-flag-errors.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-type-flag-loose-files.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-type-flag-package-scopes.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
+    "es-module/test-esm-type-flag-loose-files.mjs": {
+      "split": true,
+      "nestedNodeTest": true,
+      "subtests": {
+        "test_00_should_run_as_esm_a_js_file_that_is_outside_of_any_package_s": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_01_should_run_as_esm_an_extensionless_javascript_file_that_is_o": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_02_should_run_as_wasm_an_extensionless_wasm_file_that_is_outsid": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution plus WebAssembly module loading support" },
+        "test_03_should_import_as_esm_a_js_file_that_is_outside_of_any_packag": { "category": "runnable" },
+        "test_04_should_import_as_esm_an_extensionless_javascript_file_that_i": { "category": "runnable" },
+        "test_05_should_import_as_wasm_an_extensionless_wasm_file_that_is_out": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" },
+        "test_06_should_check_as_esm_input_passed_via_check": { "category": "known-gap", "reason": "requires spawned process.execPath --check execution with --experimental-default-type=module" }
+      }
+    },
+    "es-module/test-esm-type-flag-package-scopes.mjs": {
+      "split": true,
+      "nestedNodeTest": true,
+      "subtests": {
+        "test_00_should_run_as_esm_an_extensionless_javascript_file_within_a_": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_01_should_import_an_extensionless_javascript_file_within_a_type": { "category": "runnable" },
+        "test_02_should_import_an_extensionless_javascript_file_within_a_type": { "category": "runnable" },
+        "test_03_should_run_as_wasm_an_extensionless_wasm_file_within_a_type_": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution plus WebAssembly module loading support" },
+        "test_04_should_import_as_wasm_an_extensionless_wasm_file_within_a_ty": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" },
+        "test_05_should_import_an_extensionless_wasm_file_within_a_type_modul": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" },
+        "test_06_should_run_as_esm_a_js_file_within_package_scope_that_has_no": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_07_should_run_as_esm_an_extensionless_javascript_file_within_a_": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_08_should_run_as_wasm_an_extensionless_wasm_file_within_a_packa": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution plus WebAssembly module loading support" },
+        "test_09_should_import_as_esm_a_js_file_within_package_scope_that_has": { "category": "runnable" },
+        "test_10_should_import_as_esm_an_extensionless_javascript_file_within": { "category": "runnable" },
+        "test_11_should_import_as_wasm_an_extensionless_wasm_file_within_a_pa": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" },
+        "test_12_should_run_as_commonjs_a_js_file_within_package_scope_that_h": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_13_should_import_as_commonjs_a_js_file_within_a_package_scope_t": { "category": "runnable" },
+        "test_14_should_run_as_commonjs_an_extensionless_javascript_file_with": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution with --experimental-default-type=module" },
+        "test_15_should_import_as_commonjs_an_extensionless_javascript_file_w": { "category": "runnable" }
+      }
+    },
     "es-module/test-esm-type-flag-string-input.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-type-main.mjs": { "category": "runnable" },
     "es-module/test-esm-util-types.mjs": { "category": "runnable" },
