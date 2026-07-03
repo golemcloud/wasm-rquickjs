@@ -4579,10 +4579,25 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-package-reexport-app/package.json', JSON.stringify({
             imports: {
                 '#dep': './imports-target.cjs',
+                '#condition': {
+                    import: './imports-import.mjs',
+                    'module-sync': './imports-sync.cjs',
+                    require: './imports-require.cjs',
+                    default: './imports-default.cjs',
+                },
+                '#pattern/*': './imports-pattern/*.cjs',
             },
         }));
         fs.writeFileSync('/cjs-package-reexport-app/imports-target.cjs', 'exports.imported = "imported";');
+        fs.writeFileSync('/cjs-package-reexport-app/imports-sync.cjs', 'exports.importsCondition = "module-sync";');
+        fs.writeFileSync('/cjs-package-reexport-app/imports-require.cjs', 'exports.requireOnly = "require";');
+        fs.writeFileSync('/cjs-package-reexport-app/imports-default.cjs', 'exports.defaultOnly = "default";');
+        fs.writeFileSync('/cjs-package-reexport-app/imports-import.mjs', 'export const importOnly = "import";');
+        fs.mkdirSync('/cjs-package-reexport-app/imports-pattern', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/imports-pattern/target.cjs', 'exports.importsPattern = "pattern";');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-imports.cjs', 'module.exports = require("#dep");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-imports-condition.cjs', 'module.exports = require("#condition");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-imports-pattern.cjs', 'module.exports = require("#pattern/target");');
 
         fs.mkdirSync('/cjs-package-reexport-app/relative-main-pkg', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/relative-main-pkg/package.json', JSON.stringify({
@@ -4685,6 +4700,8 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import { feature } from "./reexport-exported-feature.cjs";',
             'import { condition } from "./reexport-exported-condition.cjs";',
             'import { imported } from "./reexport-imports.cjs";',
+            'import { importsCondition } from "./reexport-imports-condition.cjs";',
+            'import { importsPattern } from "./reexport-imports-pattern.cjs";',
             'import { relativeMain } from "./reexport-relative-main.cjs";',
             'import { relativeIndex } from "./reexport-relative-index.cjs";',
             'import { nonStringMainIndex } from "./reexport-non-string-main.cjs";',
@@ -4692,7 +4709,7 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import * as continuation from "./reexport-continuation.cjs";',
             'import * as cycle from "./cycle-a.cjs";',
             'export default {',
-            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, bareNonStringMain, bareNullMain, main, feature, condition, imported, relativeMain, relativeIndex, nonStringMainIndex, gamma, delta,',
+            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, bareNonStringMain, bareNullMain, main, feature, condition, imported, importsCondition, importsPattern, relativeMain, relativeIndex, nonStringMainIndex, gamma, delta,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default" && key !== "own"),',
             '  continuationOwn: continuation.own,',
             '  cycleKeys: Object.keys(cycle).filter((key) => key !== "default").sort(),',
@@ -4712,6 +4729,8 @@ export const testCjsPackageReexportNamedExports = async () => {
             feature: 'feature',
             condition: 'module-sync',
             imported: 'imported',
+            importsCondition: 'module-sync',
+            importsPattern: 'pattern',
             relativeMain: 'relative-main',
             relativeIndex: 'relative-index',
             nonStringMainIndex: 'non-string-main-index',
