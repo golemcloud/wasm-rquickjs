@@ -8267,7 +8267,7 @@
         "block_00_it_should_throw_with_invalid_args": { "category": "runnable" },
         "block_01_findsourcemap_should_return_undefined_when_no_source_map_is_": { "category": "runnable" },
         "block_02_non_exceptional_case": { "category": "runnable" },
-        "block_03_source_map_attached_to_error": { "category": "known-gap", "reason": "native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset" },
+        "block_03_source_map_attached_to_error": { "category": "engine-difference", "reason": "native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset" },
         "block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p": { "category": "runnable" },
         "block_05_error_when_receiving_a_malformed_mappings": { "category": "runnable" },
         "block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec": { "category": "runnable" },

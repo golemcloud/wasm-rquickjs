@@ -8,14 +8,14 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3240/4424 (73.2%)
+**Primary compatibility (CI-enforced):** 3240/4423 (73.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3240 | 73.2% | 56.4% | 47.2% |
-| 🧩 known gap | 1184 | 26.8% | 20.6% | 17.2% |
+| ✅ passing (runnable) | 3240 | 73.3% | 56.4% | 47.2% |
+| 🧩 known gap | 1183 | 26.7% | 20.6% | 17.2% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
-| ⚙️ engine difference (excluded) | 163 | — | 2.8% | 2.4% |
+| ⚙️ engine difference (excluded) | 164 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.3% |
 | **Total** | **6865** |  |  | **100.0%** |
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 613 | 188 | 145 | 86 | 11 | 0 | 183 | 56.5% | 43.7% |
+| other | 613 | 188 | 144 | 86 | 12 | 0 | 183 | 56.6% | 43.7% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -472,7 +472,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-snapshot-typescript.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-umd.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-warning.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
-| `test-source-map-api.js` | 9 | 8 | 1 | 0 | 0 | 0 | 0 |
+| `test-source-map-api.js` | 9 | 8 | 0 | 0 | 1 | 0 | 0 |
 | `test-source-map-enable.js` | 23 | 23 | 0 | 0 | 0 | 0 | 0 |
 | `test-sqlite-database-sync.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-sqlite-session.js` | 14 | 13 | 1 | 0 | 0 | 0 | 0 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1184)
+### known gap (1183)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1140,7 +1140,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | maxRequestsPerSocket keep-alive header behavior (Keep-Alive/Connection framing) is not Node-compatible | 1 | `parallel/test-http-keep-alive-max-requests.js` |
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
 | moveMessagePortToContext cross-context object/prototype semantics are incomplete | 1 | `parallel/test-worker-message-port-move.js` |
-| native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
 | native rquickjs URL accessors report Rust conversion errors for invalid receivers before JS can normalize them to V8/Web IDL private-member messages | 1 | `parallel/test-whatwg-url-invalidthis.js` |
 | native rquickjs URL class property enumeration order does not match Web IDL order and descriptors are not fully configurable from JS | 1 | `parallel/test-whatwg-url-custom-properties.js` |
 | net reusePort listen option/support probing is incomplete | 1 | `parallel/test-net-reuseport.js` |
@@ -1509,7 +1508,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
 | wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied | 1 | `parallel/test-http-write-head.js` |
 
-### engine difference (163)
+### engine difference (164)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1542,6 +1541,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | depends on V8 native syntax and runtime flags not available in QuickJS | 1 | `parallel/test-v8-flags.js` |
 | depends on engine-specific ArrayBuffer OOM RangeError message text in skip path | 1 | `sequential/test-buffer-creation-regression.js` |
 | expects V8 heap space statistics that QuickJS does not expose | 1 | `parallel/test-v8-stats.js` |
+| native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
 | uses V8 natives syntax intrinsics (`%DebugPrint`, `%HaveSameMap`, `%CollectGarbage`) unavailable in QuickJS | 1 | `parallel/test-http-same-map.js` |
 | uses v8.getHeapSnapshot, which is V8-specific and unavailable in QuickJS | 1 | `parallel/test-http2-ping-settings-heapdump.js` |
 | v8.cachedDataVersionTag depends on V8 internals unavailable in QuickJS | 1 | `parallel/test-v8-version-tag.js` |
