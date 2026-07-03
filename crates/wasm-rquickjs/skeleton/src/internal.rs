@@ -5428,10 +5428,13 @@ fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<Strin
     if after_keys >= bytes.len() || bytes[after_keys] != b'.' {
         return None;
     }
-    let for_each_pos = skip_ws_comments(source, after_keys + 1);
-    let for_each_end = parse_ident_name(source, for_each_pos, "forEach")?;
-    let end = find_matching_paren(source, for_each_end).unwrap_or(for_each_end);
-    let (callback_key, callback_body) = extract_for_each_callback_body(source, for_each_pos, end)?;
+    i = skip_ws_comments(source, after_keys + 1);
+    i = skip_ws_comments(source, parse_ident_name(source, i, "forEach")?);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    let end = find_matching_paren(source, i)?;
+    let (callback_key, callback_body) = extract_for_each_callback_body(source, i, end)?;
     if callback_has_transpiler_reexport(callback_body, &binding, &callback_key) {
         Some((specifier, end + 1))
     } else {
@@ -5439,9 +5442,8 @@ fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<Strin
     }
 }
 
-fn extract_for_each_callback_body(source: &str, start: usize, end: usize) -> Option<(String, &str)> {
+fn extract_for_each_callback_body(source: &str, call_open: usize, end: usize) -> Option<(String, &str)> {
     let bytes = source.as_bytes();
-    let call_open = source[start..end].find('(')? + start;
     let mut i = skip_ws_comments(source, call_open + 1);
     i = skip_ws_comments(source, parse_free_ident_name(source, i, "function")?);
     if i < end && is_ident_start(bytes[i]) {
@@ -8823,6 +8825,35 @@ mod cjs_export_analyzer_tests {
             true,
             &["own"],
             &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach /* comment */ (function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                var _dep = require("./dep.cjs");
+                Object.keys(_dep).forEach;
+                (function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    exports[key] = _dep[key];
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
         );
 
         assert_analysis(

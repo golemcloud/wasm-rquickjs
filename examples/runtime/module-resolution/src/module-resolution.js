@@ -3230,6 +3230,15 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '});',
             'exports.own = "own";',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/foreach-property-non-call.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach;',
+            '(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  exports[key] = _dep[key];',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/nested-reexport.cjs', [
             'var _dep = require("./dep.cjs");',
             'function copy() {',
@@ -3552,6 +3561,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as fp from "./false-positives.cjs";',
             'import * as unsafe from "./unsafe-define.cjs";',
             'import * as nonReexport from "./not-reexport.cjs";',
+            'import * as foreachPropertyNonCall from "./foreach-property-non-call.cjs";',
             'import * as nestedReexport from "./nested-reexport.cjs";',
             'import * as nestedRequireBinding from "./nested-require-binding.cjs";',
             'import * as unguardedReexport from "./unguarded-reexport.cjs";',
@@ -3596,6 +3606,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  safe: unsafe.safe,',
             '  nonReexportKeys: Object.keys(nonReexport).filter((key) => key !== "default" && key !== "own"),',
             '  own: nonReexport.own,',
+            '  foreachPropertyNonCallKeys: Object.keys(foreachPropertyNonCall).filter((key) => key !== "default" && key !== "own"),',
+            '  foreachPropertyNonCallOwn: foreachPropertyNonCall.own,',
             '  nestedReexportKeys: Object.keys(nestedReexport).filter((key) => key !== "default" && key !== "own"),',
             '  nestedOwn: nestedReexport.own,',
             '  nestedRequireBindingKeys: Object.keys(nestedRequireBinding).filter((key) => key !== "default" && key !== "own"),',
@@ -3662,6 +3674,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.strictEqual(result.safe, 'yes');
         assert.deepStrictEqual(result.nonReexportKeys, []);
         assert.strictEqual(result.own, 'own');
+        assert.deepStrictEqual(result.foreachPropertyNonCallKeys, []);
+        assert.strictEqual(result.foreachPropertyNonCallOwn, 'own');
         assert.deepStrictEqual(result.nestedReexportKeys, []);
         assert.strictEqual(result.nestedOwn, 'own');
         assert.deepStrictEqual(result.nestedRequireBindingKeys, []);
