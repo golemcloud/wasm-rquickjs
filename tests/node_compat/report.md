@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
-| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 34 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-experimental-warnings.mjs`, ... (+31) |
+| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 32 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-experimental-warnings.mjs`, ... (+29) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
@@ -1130,6 +1130,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | keep-alive socket reuse plus drain/backpressure behavior for corked responses is not Node-compatible | 1 | `parallel/test-http-outgoing-end-cork.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
+| loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
 | maxRequestsPerSocket keep-alive header behavior (Keep-Alive/Connection framing) is not Node-compatible | 1 | `parallel/test-http-keep-alive-max-requests.js` |
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
 | moveMessagePortToContext cross-context object/prototype semantics are incomplete | 1 | `parallel/test-worker-message-port-move.js` |
@@ -1190,6 +1191,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.setuid()/process.setgid() are stubbed and do not mutate credentials | 1 | `parallel/test-process-uid-gid.js` |
 | process.stdin.destroy() is not implemented | 1 | `parallel/test-net-listen-after-destroying-stdin.js` |
 | process.stdout is not yet a full stream.Writable implementation | 1 | `parallel/test-stdout-pipeline-destroy.js` |
+| programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode | 1 | `es-module/test-esm-loader-programmatically.mjs` |
 | rawHeaders/rawTrailers casing and duplicate-header preservation differ from Node semantics | 1 | `parallel/test-http-raw-headers.js` |
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
