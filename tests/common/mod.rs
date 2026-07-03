@@ -606,9 +606,8 @@ impl PreparedComponent {
         }
     }
 
-    /// Preview 3 host: a Component Model async engine, a stock-wasmtime P2+P3 WASI/HTTP linker,
-    /// and the same component. Only available on stock wasmtime — see [`p3_engine`].
-    #[cfg(not(feature = "use-golem-wasmtime"))]
+    /// Preview 3 host: a Component Model async engine, a P2+P3 WASI/HTTP linker, and the same
+    /// component. Works on both stock wasmtime and the Golem fork — see [`p3_engine`].
     fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
         let linker = p3_linker(&engine)?;
@@ -618,14 +617,6 @@ impl PreparedComponent {
             linker,
             component,
         })
-    }
-
-    #[cfg(feature = "use-golem-wasmtime")]
-    fn new_p3(_wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        anyhow::bail!(
-            "WASM_RQUICKJS_TEST_TARGET=p3 is only supported on stock wasmtime, not the Golem \
-             wasmtime fork (`use-golem-wasmtime`); run the P3 test lane without the fork"
-        )
     }
 
     fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
@@ -795,10 +786,10 @@ impl GolemPreparedComponent {
         }
     }
 
-    /// Preview 3 host for node_compat. The Golem context/websocket/logging capabilities are
-    /// Preview 2-only, so the P3 node-compat runner is built with `full-p3` (no Golem) and the
-    /// linker carries only the P2+P3 WASI/HTTP surface. `spans` is therefore always empty in P3.
-    #[cfg(not(feature = "use-golem-wasmtime"))]
+    /// Preview 3 host for node_compat. The Golem context/websocket/logging capabilities are only
+    /// wired up for the `full` (Preview 2) profile, so the P3 node-compat runner is built with
+    /// `full-p3` (no Golem) and the linker carries only the P2+P3 WASI/HTTP surface. `spans` is
+    /// therefore always empty in P3. Works on both stock wasmtime and the Golem fork.
     fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
         let linker = p3_linker(&engine)?;
@@ -809,14 +800,6 @@ impl GolemPreparedComponent {
             component,
             spans: Arc::new(Mutex::new(Vec::new())),
         })
-    }
-
-    #[cfg(feature = "use-golem-wasmtime")]
-    fn new_p3(_wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        anyhow::bail!(
-            "WASM_RQUICKJS_TEST_TARGET=p3 is only supported on stock wasmtime, not the Golem \
-             wasmtime fork (`use-golem-wasmtime`); run the P3 test lane without the fork"
-        )
     }
 
     fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
@@ -1082,6 +1065,9 @@ impl TestInstance {
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
             .inherit_network()
             .allow_ip_name_lookup(true);
+        #[cfg(feature = "use-golem-wasmtime")]
+        let (ctx, io_ctx) = ctx_builder.build();
+        #[cfg(not(feature = "use-golem-wasmtime"))]
         let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
@@ -1091,6 +1077,8 @@ impl TestInstance {
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
 
         let mut store = Store::new(engine, host);
@@ -1510,6 +1498,8 @@ pub struct Host {
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
+    #[cfg(feature = "use-golem-wasmtime")]
+    pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }
 
 impl WasiView for Host {
@@ -1523,6 +1513,11 @@ impl WasiView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx: Arc::get_mut(&mut self.io_ctx)
+                .expect("IoCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("IoCtx mutex must never fail"),
         }
     }
 }
@@ -1546,15 +1541,15 @@ impl WasiHttpView for Host {
 // ---------------------------------------------------------------------------------------------
 // WASI Preview 3 (Component Model async) host support.
 //
-// Only compiled on stock wasmtime. The Golem wasmtime fork (`use-golem-wasmtime`) is a Preview 2
-// runtime; the P3 test lane always runs on stock wasmtime, so gating this out keeps the fork
-// build free of any dependency on P3 host APIs.
+// Works on both stock wasmtime and the Golem wasmtime fork (`use-golem-wasmtime`): the fork
+// supports Preview 3 just like upstream, and the only fork-specific difference (the extra `IoCtx`
+// returned by `WasiCtxBuilder::build()` / required by `WasiCtxView`) is handled on the shared
+// `Host` type above.
 // ---------------------------------------------------------------------------------------------
 
 /// Preview 3 engine: same stack/epoch configuration as the P2 host, plus Component Model async
 /// support so that async-lifted exports can be driven by the concurrent executor that
 /// `Func::call_async` uses internally.
-#[cfg(not(feature = "use-golem-wasmtime"))]
 fn p3_engine() -> anyhow::Result<Engine> {
     let mut config = wasmtime::Config::default();
     config.wasm_component_model(true);
@@ -1576,7 +1571,6 @@ fn p3_engine() -> anyhow::Result<Engine> {
 
 /// Preview 3 linker: the P2 WASI surface (P3 components still import residual `wasi:io`/0.2 std
 /// interfaces), the P3 WASI surface, and the P3 async HTTP surface used by `fetch`.
-#[cfg(not(feature = "use-golem-wasmtime"))]
 fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
     let mut linker: Linker<Host> = Linker::new(engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
@@ -1585,7 +1579,6 @@ fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
     Ok(linker)
 }
 
-#[cfg(not(feature = "use-golem-wasmtime"))]
 impl wasmtime_wasi_http::p3::WasiHttpView for Host {
     fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
         wasmtime_wasi_http::p3::WasiHttpCtxView {

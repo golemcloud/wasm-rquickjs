@@ -43,6 +43,8 @@ struct WizerHost {
     table: wasmtime::component::ResourceTable,
     wasi: wasmtime_wasi::WasiCtx,
     wasi_http: wasmtime_wasi_http::WasiHttpCtx,
+    #[cfg(feature = "use-golem-wasmtime")]
+    io_ctx: wasmtime_wasi::IoCtx,
 }
 
 impl wasmtime_wasi::WasiView for WizerHost {
@@ -50,6 +52,8 @@ impl wasmtime_wasi::WasiView for WizerHost {
         wasmtime_wasi::WasiCtxView {
             ctx: &mut self.wasi,
             table: &mut self.table,
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx: &mut self.io_ctx,
         }
     }
 }
@@ -91,6 +95,9 @@ pub async fn optimize_component(
     // diagnostics instead of collapsing into a bare trap.
     wasi_builder.inherit_stdout().inherit_stderr();
 
+    #[cfg(feature = "use-golem-wasmtime")]
+    let (wasi, io_ctx) = wasi_builder.build();
+    #[cfg(not(feature = "use-golem-wasmtime"))]
     let wasi = wasi_builder.build();
 
     let mut store = Store::new(
@@ -99,6 +106,8 @@ pub async fn optimize_component(
             table: wasmtime::component::ResourceTable::new(),
             wasi,
             wasi_http: wasmtime_wasi_http::WasiHttpCtx::new(),
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx,
         },
     );
 

@@ -49,6 +49,10 @@ struct Host {
     wasi: wasmtime_wasi::WasiCtx,
     http: WasiHttpCtx,
     table: ResourceTable,
+    // The Golem wasmtime fork's `WasiCtxBuilder::build()` also yields an `IoCtx` that the
+    // `WasiCtxView` requires; on stock wasmtime this field does not exist.
+    #[cfg(feature = "use-golem-wasmtime")]
+    io_ctx: wasmtime_wasi::IoCtx,
 }
 
 impl wasmtime_wasi::WasiView for Host {
@@ -56,6 +60,8 @@ impl wasmtime_wasi::WasiView for Host {
         WasiCtxView {
             ctx: &mut self.wasi,
             table: &mut self.table,
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx: &mut self.io_ctx,
         }
     }
 }
@@ -79,6 +85,9 @@ fn engine() -> Result<Engine> {
 }
 
 fn new_store(engine: &Engine) -> Store<Host> {
+    #[cfg(feature = "use-golem-wasmtime")]
+    let (wasi, io_ctx) = WasiCtxBuilder::new().inherit_stdio().build();
+    #[cfg(not(feature = "use-golem-wasmtime"))]
     let wasi = WasiCtxBuilder::new().inherit_stdio().build();
     Store::new(
         engine,
@@ -86,6 +95,8 @@ fn new_store(engine: &Engine) -> Store<Host> {
             wasi,
             http: WasiHttpCtx::new(),
             table: ResourceTable::new(),
+            #[cfg(feature = "use-golem-wasmtime")]
+            io_ctx,
         },
     )
 }
