@@ -3135,7 +3135,21 @@ function loaderIsStatementBoundary(source, pos) {
     if (i >= source.length) return true;
     if (source.charCodeAt(i) === 0x3b || source.charCodeAt(i) === 0x7d) return true;
     if (!skipped.hasLineTerminator) return false;
-    return '`([.,:?+-*/%&|^<>=!~'.indexOf(source[i]) < 0;
+    return !isLoaderAsiContinuationNext(source, i);
+}
+
+function isLoaderAsiContinuationNext(source, pos) {
+    if (pos + 1 < source.length) {
+        const pair = source.substring(pos, pos + 2);
+        if (pair === '++' || pair === '--') return false;
+    }
+    return isLoaderAsiContinuationOperator(source.charCodeAt(pos));
+}
+
+function isLoaderAsiContinuationOperator(code) {
+    return code === 0x60 || code === 0x28 || code === 0x5b || code === 0x2e || code === 0x2c || code === 0x3a ||
+        code === 0x3f || code === 0x2b || code === 0x2d || code === 0x2a || code === 0x2f || code === 0x25 ||
+        code === 0x26 || code === 0x7c || code === 0x5e || code === 0x3c || code === 0x3e || code === 0x3d;
 }
 
 function readLoaderRequireBinding(source, pos) {
