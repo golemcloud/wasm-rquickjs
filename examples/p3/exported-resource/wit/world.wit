@@ -1,0 +1,22 @@
+package test:exported-res;
+
+interface api {
+  // An *exported* WIT resource exercised on the WASI Preview 3 path. It mixes the two method
+  // shapes wit-bindgen-p3 emits differently for exports:
+  //   * `constructor`, `increment`, `get`, `%static-zero` are *synchronous* component-model
+  //     exports (plain `fn`s in the generated Guest trait), driven into the async QuickJS runtime
+  //     with `block_on`; their JavaScript must return values directly (never a Promise).
+  //   * `increment-async` is an `async func` (an `async fn` in the generated Guest trait) that
+  //     awaits the JS method's Promise.
+  resource counter {
+    constructor(initial: u32);
+    increment: func(by: u32) -> u32;
+    get: func() -> u32;
+    %static-zero: static func() -> u32;
+    increment-async: async func(by: u32) -> u32;
+  }
+}
+
+world exported-res {
+  export api;
+}

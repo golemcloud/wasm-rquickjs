@@ -7,12 +7,12 @@
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
 
 use futures::future::{AbortHandle, Abortable};
-use rquickjs::function::{Args, IntoArgs, This};
+use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 use rquickjs::promise::Promised;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, FromJs, Function, IntoJs,
-    Module, Object, Persistent, Promise, String as JsString, Value, async_with,
+    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Filter, FromJs, Function,
+    IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -30,6 +30,15 @@ use wit_bindgen_p3::rt::async_support::{
 /// so it must match the constant the Preview 2 path uses (`internal/p2.rs`).
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
+/// Global object holding live *exported* resource instances, keyed by the stringified
+/// monotonic resource id. Generated exported-resource code stores each constructed JS instance
+/// here so the host-facing resource handle (which only carries the numeric id) can be mapped back
+/// to the JS object. Mirrors the Preview 2 path (`internal/p2.rs`).
+pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
+/// Property name written onto an exported resource's JS instance to remember its resource id.
+/// Mirrors the Preview 2 path (`internal/p2.rs`).
+pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
+
 /// All Rust-side runtime state for the component. A single instance lives in
 /// `STATE` and is shared across all (possibly concurrent) exported calls.
 pub struct JsState {
@@ -40,6 +49,13 @@ pub struct JsState {
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
     pub unrefed_timers: RefCell<HashSet<usize>>,
+    /// Monotonic id allocator for exported resource instances (starts at 1; 0 is never used).
+    pub last_resource_id: AtomicUsize,
+    /// Ids of exported resource instances whose host handle has been dropped. Populated
+    /// synchronously from the resource's `Drop` (which cannot `.await`) and drained at the start
+    /// of the next JS entry point, where the corresponding entry is removed from the JS resource
+    /// table. See [`enqueue_drop_js_resource`] / [`drain_pending_resource_drops`].
+    pub pending_resource_drops: RefCell<Vec<usize>>,
 }
 
 pub struct CachedExportedFunction {
@@ -91,6 +107,8 @@ impl JsState {
             abort_handles: RefCell::new(HashMap::new()),
             last_abort_id: AtomicUsize::new(0),
             unrefed_timers: RefCell::new(HashSet::new()),
+            last_resource_id: AtomicUsize::new(1),
+            pending_resource_drops: RefCell::new(Vec::new()),
         }
     }
 
@@ -120,6 +138,12 @@ impl JsState {
             .finish::<()>()
             .catch(&ctx)
             .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
+
+            // Table holding live exported resource instances (see `RESOURCE_TABLE_NAME`). Must exist
+            // before any exported resource is constructed or any resource handle is lowered to JS.
+            ctx.globals()
+                .set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()).expect("Failed to create the resource table object"))
+                .expect("Failed to initialize the exported resource table");
 
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns a Rust-provided `pull()` (returning a promise of `{ value, done }`) into a JS
@@ -371,7 +395,7 @@ where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
 {
-    call_js_export_internal(wit_package, function_path, args, |a| a, |_, _| None).await
+    call_js_export_internal(wit_package, function_path, args, |a| a, |_, _| None, true).await
 }
 
 pub async fn call_js_export_returning_result<A, R, E>(
@@ -394,6 +418,51 @@ where
                 .ok()
                 .map(|e| crate::wrappers::JsResult(Err(e)))
         },
+        true,
+    )
+    .await
+}
+
+/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported resource static
+/// method. It is driven to completion by [`run_sync`] (`block_on`) from a synchronous Guest trait
+/// method, so it must never suspend: if the JavaScript static returns a `Promise`, it traps with
+/// an actionable message instead of awaiting it (which could deadlock the whole instance). Declare
+/// the static as `async func` in WIT to get the awaiting behavior.
+pub async fn call_js_export_sync<A, R>(
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
+    args: A,
+) -> R
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+{
+    call_js_export_internal(wit_package, function_path, args, |a| a, |_, _| None, false).await
+}
+
+/// Synchronous, `result`-returning variant of [`call_js_export_returning_result`] for a
+/// synchronous exported resource static method. See [`call_js_export_sync`] for the promise rule.
+pub async fn call_js_export_sync_returning_result<A, R, E>(
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
+    args: A,
+) -> crate::wrappers::JsResult<R, E>
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    E: for<'js> FromJs<'js> + 'static,
+{
+    call_js_export_internal(
+        wit_package,
+        function_path,
+        args,
+        |a| crate::wrappers::JsResult(Ok(a)),
+        |ctx, value| {
+            FromJs::from_js(ctx, value.clone())
+                .ok()
+                .map(|e| crate::wrappers::JsResult(Err(e)))
+        },
+        false,
     )
     .await
 }
@@ -404,6 +473,7 @@ async fn call_js_export_internal<A, R, FR, TME>(
     args: A,
     map_result: impl Fn(R) -> FR,
     try_map_exception: TME,
+    allow_async: bool,
 ) -> FR
 where
     A: for<'js> IntoArgs<'js>,
@@ -415,9 +485,16 @@ where
     // Keep the rquickjs scheduler driven for the whole call so `future<T>` / `stream<T>` bridges
     // (which live as scheduler tasks) make progress even while this call is parked awaiting the JS
     // result promise. Dropped (aborted) when this call returns.
-    let _drive_guard = spawn_drive_guard(&js_state.rt);
+    //
+    // The synchronous path (`allow_async == false`, used for synchronous exported resource statics
+    // driven by `block_on`) never awaits a JS promise and never spawns scheduler tasks, so it must
+    // NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned inside a `block_on`
+    // would prevent it from returning.
+    let _drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
 
     async_with!(js_state.ctx => |ctx| {
+        drain_pending_resource_drops(&ctx);
+
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
@@ -437,6 +514,14 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
+                    if !allow_async {
+                        panic!(
+                            "The synchronous exported function {fun} returned a Promise. Synchronous \
+                             exported functions must return a value directly on the WASI Preview 3 \
+                             path; declare it as `async func` in WIT to return a Promise.",
+                            fun = function_path.join(".")
+                        );
+                    }
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<R>();
 
@@ -463,6 +548,373 @@ where
         }
     })
     .await
+}
+
+// ---------------------------------------------------------------------------
+// Exported WIT resources.
+//
+// In the component model a resource constructor and its *synchronous* methods/statics are lowered
+// as synchronous core-wasm exports (they are NOT wrapped in `start_task`), so the generated Guest
+// trait methods for them are ordinary `fn`s. They still need to enter the shared async QuickJS
+// runtime, which is only reachable through `async_with!` (an `async` operation). The generated sync
+// methods therefore drive the corresponding `async fn` helper below to completion with
+// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). To keep `block_on` from ever blocking
+// the whole component instance, the synchronous helpers never spawn a scheduler driver and never
+// await a JS promise — a sync-declared op whose JavaScript returns a `Promise` traps with an
+// actionable message telling the author to declare it `async func`.
+//
+// `async` WIT resource methods/statics are generated as `async fn`s that `.await` the async
+// helpers directly (with a `DriveGuard`), exactly like freestanding async exports.
+// ---------------------------------------------------------------------------
+
+/// Drives `future` to completion synchronously using `wit-bindgen`'s self-contained `block_on`
+/// (its own `FutureState`, no component-model context-local storage). Used by generated
+/// synchronous exported-resource Guest methods (constructor, sync method, sync static), which
+/// cannot be `async fn` but must call into the async QuickJS runtime.
+pub fn run_sync<T: 'static>(future: impl Future<Output = T>) -> T {
+    wit_bindgen_p3::rt::async_support::block_on(future)
+}
+
+/// Allocates the next monotonic exported-resource id. Ids start at 1 and are never reused, so a
+/// queued drop can never delete a newer instance that happens to share a recycled id.
+pub fn get_free_resource_id() -> usize {
+    get_js_state()
+        .last_resource_id
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Records that an exported resource instance's host handle has been dropped. Called from the
+/// generated resource's synchronous `Drop`, which cannot `.await`; the JS-side removal happens
+/// later in [`drain_pending_resource_drops`] at the next JS entry point.
+pub fn enqueue_drop_js_resource(resource_id: usize) {
+    get_js_state()
+        .pending_resource_drops
+        .borrow_mut()
+        .push(resource_id);
+}
+
+/// Removes any exported resource instances whose host handle has been dropped from the JS resource
+/// table, allowing them to be garbage-collected. Called at the start of every JS entry point while
+/// the QuickJS context is held. The pending list is swapped out under a short borrow so no
+/// `RefCell` borrow is held across the (synchronous) JS table mutations, and removing an id that is
+/// no longer present is treated as a harmless no-op.
+fn drain_pending_resource_drops(ctx: &Ctx<'_>) {
+    let ids = {
+        let mut pending = get_js_state().pending_resource_drops.borrow_mut();
+        if pending.is_empty() {
+            return;
+        }
+        std::mem::take(&mut *pending)
+    };
+
+    let resource_table: Object = ctx
+        .globals()
+        .get(RESOURCE_TABLE_NAME)
+        .expect("Failed to get the resource table");
+    for id in ids {
+        // Idempotent: a stale / already-removed id simply has no entry to delete.
+        let _ = resource_table.remove(id.to_string());
+    }
+}
+
+/// Constructs an exported resource instance by invoking its JavaScript class constructor, stores
+/// the instance in the resource table keyed by a fresh id, and returns that id. Constructors are
+/// always synchronous in the component model, so this never awaits a promise and never spawns a
+/// scheduler driver; it is driven by [`run_sync`] from the generated synchronous constructor.
+pub async fn call_js_resource_constructor<A>(
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
+    args: A,
+) -> usize
+where
+    A: for<'js> IntoArgs<'js>,
+{
+    let js_state = ensure_initialized().await;
+
+    async_with!(js_state.ctx => |ctx| {
+        drain_pending_resource_drops(&ctx);
+
+        let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
+        let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path)
+            .unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
+        let constructor = constructor_obj
+            .as_constructor()
+            .unwrap_or_else(|| panic!("Expected export {path} to be a class with a constructor", path = resource_path.join(".")))
+            .clone();
+
+        let parameter_count = constructor_obj
+            .get::<&str, usize>("length")
+            .unwrap_or_else(|_| panic!("Failed to get parameter count of exported constructor {}", resource_path.join(".")));
+        if parameter_count != args.num_args() {
+            panic!(
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript constructor got {} parameters (exported constructor {} in WIT package {})",
+                args.num_args(),
+                parameter_count,
+                resource_path.join("."),
+                wit_package
+            );
+        }
+
+        let result: Result<Object, Error> = constructor.construct(args);
+        match result {
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+                panic!("Exception during call of constructor {path}:\n{exception}", path = resource_path.join("."), exception = format_js_exception(&exception));
+            }
+            Err(e) => {
+                panic!("Error during call of constructor {path}: {e:?}", path = resource_path.join("."));
+            }
+            Ok(resource) => {
+                let resource_id = get_free_resource_id();
+                resource.set(RESOURCE_ID_KEY, resource_id).expect("Failed to set resource ID");
+                let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME).expect("Failed to get the resource table");
+                resource_table.set(resource_id.to_string(), resource).expect("Failed to store resource instance");
+                resource_id
+            }
+        }
+    })
+    .await
+}
+
+/// Invokes an `async` method on an exported resource instance and awaits its result. Used by
+/// generated `async fn` resource methods.
+pub async fn call_js_resource_method<A, R>(
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
+    resource_id: usize,
+    name: &'static str,
+    args: A,
+) -> R
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+{
+    call_js_resource_method_internal(
+        wit_package,
+        resource_path,
+        resource_id,
+        name,
+        args,
+        |a| a,
+        |_, _| None,
+        true,
+    )
+    .await
+}
+
+/// `result`-returning variant of [`call_js_resource_method`] for `async` resource methods.
+pub async fn call_js_resource_method_returning_result<A, R, E>(
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
+    resource_id: usize,
+    name: &'static str,
+    args: A,
+) -> crate::wrappers::JsResult<R, E>
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    E: for<'js> FromJs<'js> + 'static,
+{
+    call_js_resource_method_internal(
+        wit_package,
+        resource_path,
+        resource_id,
+        name,
+        args,
+        |a| crate::wrappers::JsResult(Ok(a)),
+        |ctx, value| {
+            FromJs::from_js(ctx, value.clone())
+                .ok()
+                .map(|e| crate::wrappers::JsResult(Err(e)))
+        },
+        true,
+    )
+    .await
+}
+
+/// Synchronous variant of [`call_js_resource_method`], used for a *synchronous* exported resource
+/// method and driven by [`run_sync`]. It never awaits a JS promise: if the method returns one it
+/// traps with an actionable message (declare the method `async func` in WIT).
+pub async fn call_js_resource_method_sync<A, R>(
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
+    resource_id: usize,
+    name: &'static str,
+    args: A,
+) -> R
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+{
+    call_js_resource_method_internal(
+        wit_package,
+        resource_path,
+        resource_id,
+        name,
+        args,
+        |a| a,
+        |_, _| None,
+        false,
+    )
+    .await
+}
+
+/// Synchronous, `result`-returning variant of [`call_js_resource_method_returning_result`] for a
+/// synchronous exported resource method. See [`call_js_resource_method_sync`] for the promise rule.
+pub async fn call_js_resource_method_sync_returning_result<A, R, E>(
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
+    resource_id: usize,
+    name: &'static str,
+    args: A,
+) -> crate::wrappers::JsResult<R, E>
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    E: for<'js> FromJs<'js> + 'static,
+{
+    call_js_resource_method_internal(
+        wit_package,
+        resource_path,
+        resource_id,
+        name,
+        args,
+        |a| crate::wrappers::JsResult(Ok(a)),
+        |ctx, value| {
+            FromJs::from_js(ctx, value.clone())
+                .ok()
+                .map(|e| crate::wrappers::JsResult(Err(e)))
+        },
+        false,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn call_js_resource_method_internal<A, R, FR, TME>(
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
+    resource_id: usize,
+    name: &'static str,
+    args: A,
+    map_result: impl Fn(R) -> FR,
+    try_map_exception: TME,
+    allow_async: bool,
+) -> FR
+where
+    A: for<'js> IntoArgs<'js>,
+    R: for<'js> FromJs<'js> + 'static,
+    FR: 'static,
+    TME: for<'js> Fn(&Ctx<'js>, &Value<'js>) -> Option<FR>,
+{
+    let js_state = ensure_initialized().await;
+    // See `call_js_export_internal`: the async path drives the scheduler for the whole call; the
+    // synchronous path (driven by `block_on`) must not, so it never returns a `DriveGuard`.
+    let _drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
+
+    async_with!(js_state.ctx => |ctx| {
+        drain_pending_resource_drops(&ctx);
+
+        let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
+            .expect("Failed to get the resource table");
+        let resource_instance: Object = resource_table.get(resource_id.to_string())
+            .unwrap_or_else(|_| panic!("Failed to get resource instance with id #{resource_id} of class {}", resource_path.join(".")));
+
+        let method_obj: Object = resource_instance.get(name)
+            .unwrap_or_else(|_| panic!("{}", dump_cannot_find_method(name, resource_path, &resource_instance, wit_package)));
+
+        let method = method_obj.as_function()
+            .unwrap_or_else(|| panic!("Expected method {name} to be a function in class {}", resource_path.join(".")))
+            .clone();
+
+        let parameter_count = method.get::<&str, usize>("length")
+            .unwrap_or_else(|_| panic!("Failed to get parameter count of exported method {name} in class {}", resource_path.join(".")));
+        if parameter_count != args.num_args() {
+            panic!(
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript method got {} parameters (exported method {} of class {} representing a resource defined in WIT package {})",
+                args.num_args(),
+                parameter_count,
+                name,
+                resource_path.join("."),
+                wit_package
+            );
+        }
+
+        let result: Result<Value, Error> = call_with_this(ctx.clone(), method, resource_instance, args);
+        match result {
+            Err(Error::Exception) => {
+                let exception = ctx.catch();
+                if let Some(result) = try_map_exception(&ctx, &exception) {
+                    result
+                } else {
+                    panic!("Exception during call of method {name} in {path}:\n{exception}", path = resource_path.join("."), exception = format_js_exception(&exception));
+                }
+            }
+            Err(e) => {
+                panic!("Error during call of method {name} in {path}:\n{e:?}", path = resource_path.join("."));
+            }
+            Ok(value) => {
+                if value.is_promise() {
+                    if !allow_async {
+                        panic!(
+                            "The synchronous exported method {name} of {path} returned a Promise. \
+                             Synchronous exported resource methods must return a value directly on the \
+                             WASI Preview 3 path; declare it as `async func` in WIT to return a Promise.",
+                            path = resource_path.join(".")
+                        );
+                    }
+                    let promise: Promise = value.into_promise().unwrap();
+                    match promise.into_future::<R>().await {
+                        Ok(result) => map_result(result),
+                        Err(Error::Exception) => {
+                            let exception = ctx.catch();
+                            if let Some(result) = try_map_exception(&ctx, &exception) {
+                                result
+                            } else {
+                                panic!("Exception during awaiting call result of method {name} in {path}:\n{exception}", path = resource_path.join("."), exception = format_js_exception(&exception));
+                            }
+                        }
+                        Err(e) => {
+                            panic!("Error during awaiting call result of method {name} in {path}:\n{e:?}", path = resource_path.join("."));
+                        }
+                    }
+                } else {
+                    map_result(R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for method {name} in exported class {path}: {err}", path = resource_path.join("."))))
+                }
+            }
+        }
+    })
+    .await
+}
+
+fn dump_cannot_find_method(
+    name: &str,
+    resource_path: &[&str],
+    class_instance: &Object,
+    wit_package: &str,
+) -> String {
+    let mut panic_message = String::new();
+    panic_message.push_str(&format!(
+        "Cannot find method {name} in an instance of class {path} of WIT package {wit_package}",
+        path = resource_path.join(".")
+    ));
+    if let Some(prototype) = class_instance.get_prototype() {
+        panic_message.push_str("\nKeys in the instance's prototype:\n");
+        let mut keys: Vec<String> = vec![];
+        for key in prototype
+            .own_keys(Filter::new().symbol().string().private())
+            .flatten()
+        {
+            keys.push(key);
+        }
+        keys.sort();
+        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+    }
+    panic_message.push_str(&format!(
+        "\nTry adding a method `{name}() {{ ... }}` to class {path}\n",
+        path = resource_path.join(".")
+    ));
+    panic_message
 }
 
 fn get_cached_js_export<'js>(
@@ -770,6 +1222,8 @@ where
     let _drive_guard = spawn_drive_guard(&js_state.rt);
 
     async_with!(js_state.ctx => |ctx| {
+        drain_pending_resource_drops(&ctx);
+
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 

@@ -999,6 +999,72 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
 }
 
 #[test]
+fn p3_generated_crate_builds_with_exported_resource() -> anyhow::Result<()> {
+    // An *exported* WIT resource on the Preview 3 path (Phase 4). It exercises every method shape:
+    // a synchronous constructor, synchronous instance/static methods (plain `fn`s driven by
+    // `block_on`), and `async func` instance/static methods (`async fn`s awaiting the JS Promise).
+    // This locks in that the P3 exported-resource glue generates a crate that compiles. The
+    // end-to-end runtime behavior (constructor / method / static / async / drop) is validated by
+    // the `tests/p3_exported_resource.rs` harness.
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:exported-resource;
+
+            interface api {
+              resource counter {
+                constructor(initial: u32);
+                increment: func(by: u32) -> u32;
+                get: func() -> u32;
+                %static-zero: static func() -> u32;
+                increment-async: async func(by: u32) -> u32;
+                make-async: static async func(initial: u32) -> u32;
+              }
+            }
+
+            world exported-resource {
+              export api;
+            }
+        "#},
+        indoc! {r#"
+            class Counter {
+              constructor(initial) {
+                this.value = initial;
+              }
+              increment(by) {
+                this.value += by;
+                return this.value;
+              }
+              get() {
+                return this.value;
+              }
+              static staticZero() {
+                return 0;
+              }
+              async incrementAsync(by) {
+                await Promise.resolve();
+                this.value += by;
+                return this.value;
+              }
+              static async makeAsync(initial) {
+                await Promise.resolve();
+                return initial;
+              }
+            }
+
+            export const api = {
+              Counter,
+            };
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let _wasm_path = build_p3(temp.path(), "exported_resource")?;
+    Ok(())
+}
+
+#[test]
 fn p3_rejects_methodless_exported_resource() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(

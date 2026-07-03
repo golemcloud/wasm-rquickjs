@@ -213,13 +213,30 @@ fn generate_guest_impl(
 
     let is_p3 = context.target.is_p3();
 
-    // The Preview 3 path does not support exported resources. A resource without any
-    // constructor/method/static functions produces no entries in `exports`, so it would slip
-    // past the per-function rejection below; reject at the type level here so methodless
-    // exported resources are caught too.
+    // The Preview 3 path supports exported resources that have at least one
+    // constructor/method/static function. A resource with no functions produces no entries in
+    // `exports` (so no `GuestX` impl would be generated — the same limitation exists on the P2
+    // path), which would surface as an obscure compile error. Reject such methodless exported
+    // resources at the type level here with an actionable message.
     if is_p3 && let Some((_, iface, _)) = interface {
+        let mut resource_ids_with_functions = std::collections::HashSet::new();
+        for (_, function) in exports {
+            match &function.kind {
+                FunctionKind::Method(type_id)
+                | FunctionKind::Static(type_id)
+                | FunctionKind::Constructor(type_id)
+                | FunctionKind::AsyncMethod(type_id)
+                | FunctionKind::AsyncStatic(type_id) => {
+                    resource_ids_with_functions.insert(*type_id);
+                }
+                _ => {}
+            }
+        }
+
         for (_, type_id) in &iface.types {
-            if type_resolves_to_resource(context, *type_id)? {
+            if type_resolves_to_resource(context, *type_id)?
+                && !resource_ids_with_functions.contains(type_id)
+            {
                 let typ = context
                     .resolve
                     .types
@@ -227,7 +244,7 @@ fn generate_guest_impl(
                     .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
                 let resource_name = typ.name.as_deref().unwrap_or("<anonymous>");
                 return Err(anyhow!(
-                    "Exported resources are not supported by the WASI Preview 3 generation path yet (resource '{resource_name}')"
+                    "Exported resources without any constructor, method, or static function are not supported by the WASI Preview 3 generation path (resource '{resource_name}')"
                 ));
             }
         }
@@ -268,17 +285,19 @@ fn generate_guest_impl(
                     return Err(anyhow!("Async exported functions are not supported yet"));
                 }
             }
-            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
-                return Err(anyhow!("Async exported functions are not supported yet"));
+            FunctionKind::AsyncMethod(type_id) | FunctionKind::AsyncStatic(type_id) => {
+                if is_p3 {
+                    resource_functions
+                        .entry(type_id)
+                        .or_insert_with(Vec::new)
+                        .push((name, function));
+                } else {
+                    return Err(anyhow!("Async exported functions are not supported yet"));
+                }
             }
             FunctionKind::Method(type_id)
             | FunctionKind::Static(type_id)
             | FunctionKind::Constructor(type_id) => {
-                if is_p3 {
-                    return Err(anyhow!(
-                        "Exported resources are not supported by the WASI Preview 3 generation path yet (function '{name}')"
-                    ));
-                }
                 resource_functions
                     .entry(type_id)
                     .or_insert_with(Vec::new)
@@ -678,79 +697,144 @@ fn generate_exported_resource_function_impl(
         None => quote! { &[#js_func_name_str] },
     };
 
+    // On the Preview 3 path the generated Guest trait methods mirror the shape wit-bindgen-p3
+    // emits: constructors and *synchronous* methods/statics are plain `fn`s (their component-model
+    // exports are not `start_task`-wrapped), so they drive the async JS helpers to completion with
+    // `crate::internal::run_sync` (a self-contained `block_on`); `async` methods/statics are
+    // `async fn`s that `.await` the helpers directly. On the Preview 2 path everything is a
+    // synchronous `fn` driven by `async_exported_function`, and `async` resource functions are
+    // rejected.
+    let is_p3 = context.target.is_p3();
+
     let func_impl = match &function.kind {
         FunctionKind::Constructor(_) => {
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
-
+            let body = quote! {
+                let resource_id = crate::internal::call_js_resource_constructor(
+                     #wit_package_lit,
+                     #js_resource_path,
+                     #param_refs_tuple,
+                ).await;
+                Self {
+                    resource_id
+                }
+            };
+            let driver = if is_p3 {
+                quote! { crate::internal::run_sync }
+            } else {
+                quote! { crate::internal::async_exported_function }
+            };
             quote! {
               fn #func_name_ident(#(#func_arg_list),*) -> Self {
-                  crate::internal::async_exported_function(async move {
-                    let resource_id = crate::internal::call_js_resource_constructor(
-                         #wit_package_lit,
-                         #js_resource_path,
-                         #param_refs_tuple,
-                    ).await;
-                    Self {
-                        resource_id
-                    }
-                  })
+                  #driver(async move { #body })
               }
             }
         }
-        FunctionKind::Method(_) => {
+        FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
+            let is_async = matches!(function.kind, FunctionKind::AsyncMethod(_));
+            if is_async && !is_p3 {
+                return Err(anyhow::anyhow!(
+                    "Async exported functions are not supported yet"
+                ));
+            }
             let param_refs = param_refs[1..].to_vec();
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
             let original_result = &return_types.func_ret.original_type_ref;
             let wrapped_result = &return_types.func_ret.wrapped_type_ref;
             let unwrap = &return_types.func_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
-            let call = if return_types.expected_exception.is_some() {
-                quote! { call_js_resource_method_returning_result }
-            } else {
-                quote! { call_js_resource_method }
+            let has_exception = return_types.expected_exception.is_some();
+            let call = match (is_p3, is_async, has_exception) {
+                // Preview 3, async method: await the async helper directly.
+                (true, true, true) => quote! { call_js_resource_method_returning_result },
+                (true, true, false) => quote! { call_js_resource_method },
+                // Preview 3, sync method: driven by `block_on`, traps on a returned Promise.
+                (true, false, true) => quote! { call_js_resource_method_sync_returning_result },
+                (true, false, false) => quote! { call_js_resource_method_sync },
+                // Preview 2: only synchronous methods, driven by `async_exported_function`.
+                (false, _, true) => quote! { call_js_resource_method_returning_result },
+                (false, _, false) => quote! { call_js_resource_method },
             };
-            quote! {
-               fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                   crate::internal::async_exported_function(async move {
-                       let result: #wrapped_result = crate::internal::#call(
-                            #wit_package_lit,
-                            #js_resource_path,
-                            self.resource_id,
-                            #js_func_name_str,
-                            #param_refs_tuple,
-                       ).await;
-                       #unwrap_result
-                   })
-               }
+            let body = quote! {
+                let result: #wrapped_result = crate::internal::#call(
+                     #wit_package_lit,
+                     #js_resource_path,
+                     self.resource_id,
+                     #js_func_name_str,
+                     #param_refs_tuple,
+                ).await;
+                #unwrap_result
+            };
+            if is_p3 && is_async {
+                quote! {
+                   async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #body
+                   }
+                }
+            } else {
+                let driver = if is_p3 {
+                    quote! { crate::internal::run_sync }
+                } else {
+                    quote! { crate::internal::async_exported_function }
+                };
+                quote! {
+                   fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #driver(async move { #body })
+                   }
+                }
             }
         }
-        FunctionKind::Static(_) => {
+        FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
+            let is_async = matches!(function.kind, FunctionKind::AsyncStatic(_));
+            if is_async && !is_p3 {
+                return Err(anyhow::anyhow!(
+                    "Async exported functions are not supported yet"
+                ));
+            }
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
             let original_result = &return_types.wit_level_ret.original_type_ref;
             let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
             let unwrap = &return_types.wit_level_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
-            let call = if return_types.expected_exception.is_some() {
-                quote! { call_js_export_returning_result }
-            } else {
-                quote! { call_js_export }
+            let has_exception = return_types.expected_exception.is_some();
+            let call = match (is_p3, is_async, has_exception) {
+                // Preview 3, async static: await the async helper directly.
+                (true, true, true) => quote! { call_js_export_returning_result },
+                (true, true, false) => quote! { call_js_export },
+                // Preview 3, sync static: driven by `block_on`, traps on a returned Promise.
+                (true, false, true) => quote! { call_js_export_sync_returning_result },
+                (true, false, false) => quote! { call_js_export_sync },
+                // Preview 2: only synchronous statics, driven by `async_exported_function`.
+                (false, _, true) => quote! { call_js_export_returning_result },
+                (false, _, false) => quote! { call_js_export },
             };
-            quote! {
-               fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                   crate::internal::async_exported_function(async move {
-                       let result: #wrapped_result = crate::internal::#call(
-                           #wit_package_lit,
-                           #js_static_func_path,
-                           #param_refs_tuple,
-                       ).await;
-                       #unwrap_result
-                   })
-               }
+            let body = quote! {
+                let result: #wrapped_result = crate::internal::#call(
+                    #wit_package_lit,
+                    #js_static_func_path,
+                    #param_refs_tuple,
+                ).await;
+                #unwrap_result
+            };
+            if is_p3 && is_async {
+                quote! {
+                   async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #body
+                   }
+                }
+            } else {
+                let driver = if is_p3 {
+                    quote! { crate::internal::run_sync }
+                } else {
+                    quote! { crate::internal::async_exported_function }
+                };
+                quote! {
+                   fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #driver(async move { #body })
+                   }
+                }
             }
         }
-        FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => Err(anyhow::anyhow!(
-            "Async exported functions are not supported yet",
-        ))?,
         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => Err(anyhow::anyhow!(
             "Freestanding functions are not expected in resource methods",
         ))?,
