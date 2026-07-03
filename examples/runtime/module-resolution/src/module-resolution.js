@@ -3217,6 +3217,10 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/dep.cjs', 'exports.alpha = "alpha";');
         fs.writeFileSync('/cjs-analyzer-guards-app/dep-nested.cjs', 'exports.nested = { beta: "beta" };');
+        fs.writeFileSync('/cjs-analyzer-guards-app/dep-spread.cjs', [
+            'exports.alpha = "alpha";',
+            'exports.nested = { beta: "beta" };',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/not-reexport.cjs', [
             'var _dep = require("./dep.cjs");',
             'var other = {};',
@@ -3529,6 +3533,15 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  afterRequire: "not-detected",',
             '};',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-require-spread-continuation.cjs', [
+            'const before = "before";',
+            'const after = "after";',
+            'module.exports = {',
+            '  before,',
+            '  ...require("./dep-spread.cjs").nested,',
+            '  after,',
+            '};',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/object-literal-unsupported.cjs', [
             'const identifierValue = "identifier";',
             'module.exports = {',
@@ -3596,6 +3609,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as bindingContinuation from "./binding-continuation.cjs";',
             'import * as objectLiteralValues from "./object-literal-values.cjs";',
             'import * as objectLiteralRequireValue from "./object-literal-require-value.cjs";',
+            'import * as objectLiteralRequireSpreadContinuation from "./object-literal-require-spread-continuation.cjs";',
             'import * as objectLiteralUnsupported from "./object-literal-unsupported.cjs";',
             'import * as objectLiteralCallTerminal from "./object-literal-call-terminal.cjs";',
             'import * as objectLiteralMethodTerminal from "./object-literal-method-terminal.cjs";',
@@ -3659,6 +3673,10 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  callExpression: objectLiteralValues.callExpression,',
             '  objectLiteralRequireValueKeys: Object.keys(objectLiteralRequireValue).filter((key) => key !== "default").sort(),',
             '  requireValue: objectLiteralRequireValue.requireValue,',
+            '  objectLiteralRequireSpreadContinuationKeys: Object.keys(objectLiteralRequireSpreadContinuation).filter((key) => key !== "default" && key !== "before").sort(),',
+            '  objectLiteralRequireSpreadContinuationBefore: objectLiteralRequireSpreadContinuation.before,',
+            '  objectLiteralRequireSpreadContinuationAlpha: objectLiteralRequireSpreadContinuation.alpha,',
+            '  objectLiteralRequireSpreadContinuationNested: objectLiteralRequireSpreadContinuation.nested,',
             '  objectLiteralUnsupportedKeys: Object.keys(objectLiteralUnsupported).filter((key) => key !== "default").sort(),',
             '  objectLiteralCallTerminalKeys: Object.keys(objectLiteralCallTerminal).filter((key) => key !== "default").sort(),',
             '  callValue: objectLiteralCallTerminal.callValue,',
@@ -3730,6 +3748,10 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.strictEqual(result.callExpression, 'call');
         assert.deepStrictEqual(result.objectLiteralRequireValueKeys, ['requireValue']);
         assert.deepStrictEqual(result.requireValue, { alpha: 'alpha' });
+        assert.deepStrictEqual(result.objectLiteralRequireSpreadContinuationKeys, ['alpha', 'nested']);
+        assert.strictEqual(result.objectLiteralRequireSpreadContinuationBefore, 'before');
+        assert.strictEqual(result.objectLiteralRequireSpreadContinuationAlpha, undefined);
+        assert.strictEqual(result.objectLiteralRequireSpreadContinuationNested, undefined);
         assert.deepStrictEqual(result.objectLiteralUnsupportedKeys, []);
         assert.deepStrictEqual(result.objectLiteralCallTerminalKeys, ['callValue']);
         assert.strictEqual(result.callValue, 'call');

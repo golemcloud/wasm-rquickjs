@@ -5337,19 +5337,21 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
 
         if source[cursor..].starts_with("...") {
             let spread_start = skip_ws_comments(source, cursor + 3);
-            let next = if let Some((specifier, next)) = parse_require_string_loose(source, spread_start) {
+            if let Some((specifier, next)) = parse_require_string_loose(source, spread_start) {
                 add_unique(&mut reexports, specifier);
-                next
+                cursor = skip_ws_comments(source, next);
+                if cursor < object_end && bytes[cursor] != b',' {
+                    break;
+                }
             } else if let Some((_, next)) = read_ident(source, spread_start) {
                 let after_ident = skip_ws_comments(source, next);
                 if after_ident < object_end && bytes[after_ident] != b',' {
                     break;
                 }
-                after_ident
+                cursor = after_ident;
             } else {
                 break;
             };
-            cursor = skip_ws_comments(source, next);
             if cursor < object_end {
                 if bytes[cursor] != b',' {
                     return None;
@@ -8466,6 +8468,17 @@ mod cjs_export_analyzer_tests {
             "#,
             true,
             &["a", "c"],
+            &["./dep.cjs"],
+        );
+
+        assert_analysis(
+            r#"
+                const a = 1;
+                const c = 3;
+                module.exports = { a, ...require("./dep.cjs").nested, c };
+            "#,
+            true,
+            &["a"],
             &["./dep.cjs"],
         );
 
