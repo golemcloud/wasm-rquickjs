@@ -161,6 +161,87 @@ async fn runner_static_registered_loader_async_resolve(
 }
 
 #[test_r::test]
+async fn runner_programmatic_registered_loader_chain(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("register-chain-loader-a.mjs"),
+        [
+            "export function resolve(specifier, context, nextResolve) {",
+            "  if (!specifier.startsWith('virtual:registered-chain')) return nextResolve(specifier, context);",
+            "  return nextResolve(`${specifier}:a`, context);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("register-chain-loader-b.mjs"),
+        [
+            "let tag;",
+            "export function initialize(data) { tag = data.tag; }",
+            "export function resolve(specifier, context, nextResolve) {",
+            "  if (!specifier.startsWith('virtual:registered-chain')) return nextResolve(specifier, context);",
+            "  return nextResolve(`${specifier}:${tag}`, context);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("register-chain-terminal.mjs"),
+        [
+            "let tag;",
+            "export function initialize(data) { tag = data.tag; }",
+            "export function resolve(specifier, context, nextResolve) {",
+            "  if (!specifier.startsWith('virtual:registered-chain')) return nextResolve(specifier, context);",
+            "  return { shortCircuit: true, url: `virtual:done:${specifier}:${tag}`, format: 'module' };",
+            "}",
+            "export function load(url, context, nextLoad) {",
+            "  if (!url.startsWith('virtual:done:')) return nextLoad(url, context);",
+            "  return { shortCircuit: true, format: 'module', source: `export default ${JSON.stringify(url)};` };",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("register-chain-entry.mjs"),
+        [
+            "import { register } from 'node:module';",
+            "register('./register-chain-terminal.mjs', { parentURL: import.meta.url, data: { tag: 'terminal' } });",
+            "register('./register-chain-loader-a.mjs', { parentURL: import.meta.url });",
+            "register('./register-chain-loader-b.mjs', { parentURL: import.meta.url, data: { tag: 'b' } });",
+            "register('./register-chain-loader-a.mjs', { parentURL: import.meta.url });",
+            "const ns = await import('virtual:registered-chain');",
+            "if (ns.default !== 'virtual:done:virtual:registered-chain:a:b:a:terminal') {",
+            "  throw new Error('programmatic loader chain order mismatch: ' + ns.default);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/register-chain-entry.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
 async fn runner_module_load_uses_parent_resolution(
     prepared: &Arc<FullPreparedComponent>,
 ) -> anyhow::Result<()> {
