@@ -355,7 +355,7 @@
       }
     },
     "parallel/test-util-inspect-long-running.js": {},
-    "parallel/test-util-inspect-namespace.js": {},
+    "parallel/test-util-inspect-namespace.js": { "category": "runnable" },
     "parallel/test-util-inspect-proxy.js": { "category": "node-internals", "reason": "requires internalBinding('util').getProxyDetails" },
     "parallel/test-util-inspect.js": {
       "category": "node-internals",
