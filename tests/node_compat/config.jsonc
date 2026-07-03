@@ -6001,7 +6001,22 @@
     "es-module/test-esm-exports-deprecations.mjs": { "category": "runnable" },
     "es-module/test-esm-exports.mjs": { "category": "runnable" },
     "es-module/test-esm-extension-lookup-deprecation.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-extensionless-esm-and-wasm.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
+    "es-module/test-esm-extensionless-esm-and-wasm.mjs": {
+      "split": true,
+      "nestedNodeTest": true,
+      "subtests": {
+        "test_00_should_run_as_the_entry_point": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution for extensionless ESM files" },
+        "test_01_should_be_importable": { "category": "runnable" },
+        "test_02_should_be_importable_from_a_module_scope_under_node_modules": { "category": "runnable" },
+        "test_03_should_run_as_the_entry_point": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution plus WebAssembly module loading support" },
+        "test_04_should_be_importable": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" },
+        "test_05_should_be_importable_from_a_module_scope_under_node_modules": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" },
+        "test_06_should_run_as_the_entry_point": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution for extensionless ESM files" },
+        "test_07_should_run_on_import": { "category": "runnable" },
+        "test_08_should_error_as_the_entry_point": { "category": "known-gap", "reason": "requires spawned process.execPath entry-point execution to verify extensionless .wasm classification outside module scope" },
+        "test_09_should_run_on_import": { "category": "known-gap", "reason": "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source" }
+      }
+    },
     "es-module/test-esm-forbidden-globals.mjs": { "category": "runnable" },
     "es-module/test-esm-fs-promises.mjs": { "category": "runnable" },
     "es-module/test-esm-import-assertion-warning.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
