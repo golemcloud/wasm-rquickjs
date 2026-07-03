@@ -3394,7 +3394,9 @@ function readLoaderDirectReexportAssignment(source, pos, binding, key) {
     if (bindingEnd === null) return null;
     i = skipWhitespaceAndComments(source, bindingEnd);
     i = readLoaderBracketIdentifier(source, i, key);
-    return i;
+    if (i === null) return null;
+    i = skipWhitespaceAndComments(source, i);
+    return loaderIsStatementBoundary(source, i) ? i : null;
 }
 
 function loaderGetterReturnsBindingKey(source, start, end, binding, key) {

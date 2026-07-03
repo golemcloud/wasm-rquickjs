@@ -9275,6 +9275,20 @@ mod cjs_export_analyzer_tests {
 
         assert_analysis(
             r#"
+                var dep = require("./dep.cjs");
+                Object.keys(dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    exports[key] = dep[key].nested;
+                });
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
                 var _dep = _interopRequireWildcard(require("./dep.cjs"));
                 Object.keys(_dep).forEach(function (key) {
                     if (key === "default" || key === "__esModule") return;
