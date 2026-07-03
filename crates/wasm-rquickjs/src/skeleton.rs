@@ -53,10 +53,10 @@ fn change_package_name(context: &GeneratorContext, doc: &mut DocumentMut) {
 /// The skeleton defaults to the Preview 2 feature set (`["p2", "normal"]`); a Preview 3
 /// wrapper crate must instead select the `p3` runtime spine (which pulls in the `wasip3` /
 /// renamed `wit-bindgen` dependencies) together with the `normal-p3` capability tier. That
-/// tier mirrors the Preview 2 `normal` tier for capabilities that do not depend on the `p2`
-/// path — `crypto`, `zlib`, and `encoding` — while leaving Preview 2 HTTP (`fetch` /
-/// `node-http`), `logging`, and the heavier `sqlite` capability out of the default set. The
-/// heavier capabilities remain available through the `full-p3` tier.
+/// tier mirrors the Preview 2 `normal` tier exactly — `crypto`, `zlib`, `logging`, and
+/// `encoding` — except for Preview 2 HTTP (`fetch` / `node-http`), which the `p3` path
+/// replaces with its own built-in `wasi:http@0.3` based implementations. The heavier
+/// capabilities remain available through the `full-p3` tier.
 fn set_p3_default_features(doc: &mut DocumentMut) {
     let mut default = Array::new();
     default.push("p3");

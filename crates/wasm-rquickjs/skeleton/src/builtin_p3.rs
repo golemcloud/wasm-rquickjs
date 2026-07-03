@@ -323,6 +323,11 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/sqlite_native")
         .with_module("node:sqlite");
 
+    #[cfg(feature = "golem")]
+    let resolver = resolver
+        .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
+        .with_module("__wasm_rquickjs_builtin/diagnostics_channel_golem");
+
     #[cfg(feature = "websocket")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/websocket_native")
@@ -402,6 +407,12 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/sqlite_native",
             sqlite::js_native_module,
         );
+
+    #[cfg(feature = "golem")]
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/diagnostics_channel_native",
+        diagnostics_channel::js_native_module,
+    );
 
     #[cfg(feature = "websocket")]
     let native_loader = native_loader.with_module(
@@ -555,6 +566,12 @@ pub fn module_loader() -> (
         .with_module("zlib", zlib::REEXPORT_JS)
         .with_module("node:sqlite", sqlite::SQLITE_JS);
 
+    #[cfg(feature = "golem")]
+    let builtin_loader = builtin_loader.with_module(
+        "__wasm_rquickjs_builtin/diagnostics_channel_golem",
+        diagnostics_channel::DIAGNOSTICS_CHANNEL_GOLEM_JS,
+    );
+
     #[cfg(feature = "websocket")]
     let builtin_loader =
         builtin_loader.with_module("__wasm_rquickjs_builtin/websocket", websocket::WEBSOCKET_JS);
@@ -595,6 +612,9 @@ pub fn wire_builtins() -> String {
         crate::internal::module_loading::IMPORT_ATTRS_VALIDATE_JS
     )
     .unwrap();
+
+    #[cfg(feature = "golem")]
+    writeln!(result, "{}", diagnostics_channel::GOLEM_WIRE_JS).unwrap();
 
     #[cfg(feature = "websocket")]
     writeln!(result, "{}", websocket::WIRE_JS).unwrap();

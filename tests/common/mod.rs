@@ -606,24 +606,26 @@ impl FeatureCombination {
 
     /// Cargo `--features` args for a given [`TestTarget`].
     ///
-    /// For Preview 2 this is the historical [`cargo_args`](Self::cargo_args). For Preview 3 the
-    /// P2-only capabilities (`logging`, `node-http`, `fetch`, `golem`, `websocket`) are not
-    /// available, so every combination collapses onto one of the two P3 feature bundles the
-    /// skeleton exposes: `normal-p3` (crypto/zlib/encoding) or `full-p3` (adds crypto-full,
-    /// brotli, sqlite, timezone). The features are always spelled out explicitly so the P3 build
-    /// never silently falls back to the P2 default feature set.
+    /// For Preview 2 this is the historical [`cargo_args`](Self::cargo_args). For Preview 3 each
+    /// combination enables exactly the same capabilities as its Preview 2 counterpart: the P3
+    /// tiers (`normal-p3`, `full-p3`, `full-no-logging-p3`) mirror the P2 tiers, and `golem` /
+    /// `websocket` / `logging` are target-agnostic. The only difference is `fetch`/`node-http`,
+    /// which are the Preview 2 HTTP implementations — the `p3` path ships its own `wasi:http@0.3`
+    /// based fetch and node:http unconditionally, so `None`/`Lite` collapse onto bare `p3`. The
+    /// features are always spelled out explicitly so the P3 build never silently falls back to
+    /// the P2 default feature set.
     pub fn cargo_args_for_target(&self, target: TestTarget) -> Vec<&'static str> {
         match target {
             TestTarget::P2 => self.cargo_args(),
             TestTarget::P3 => {
                 let features = match self {
-                    FeatureCombination::None | FeatureCombination::Lite => "normal-p3",
+                    FeatureCombination::None | FeatureCombination::Lite => "p3",
                     FeatureCombination::Normal => "normal-p3",
-                    FeatureCombination::Full
-                    | FeatureCombination::FullNoLogging
-                    | FeatureCombination::Golem
-                    | FeatureCombination::FullWithGolem
-                    | FeatureCombination::FullNoLoggingWithGolem => "full-p3",
+                    FeatureCombination::Full => "full-p3",
+                    FeatureCombination::FullNoLogging => "full-no-logging-p3",
+                    FeatureCombination::Golem => "normal-p3,golem",
+                    FeatureCombination::FullWithGolem => "full-p3,golem",
+                    FeatureCombination::FullNoLoggingWithGolem => "full-no-logging-p3,golem",
                 };
                 vec!["--no-default-features", "--features", features]
             }
@@ -684,85 +686,10 @@ impl PreparedComponent {
         wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
         // Mock wasi:logging/logging (required by the full feature)
-        {
-            let mut logging = linker.instance("wasi:logging/logging")?;
-            logging.func_wrap(
-                "log",
-                |mut ctx: StoreContextMut<'_, Host>,
-                 (level, context, message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> {
-                    ctx.data_mut()
-                        .log_messages
-                        .lock()
-                        .unwrap()
-                        .push((level, context, message));
-                    Ok(())
-                },
-            )?;
-        }
+        add_wasi_logging_mock(&mut linker)?;
 
         // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-
-            ws.func_new(
-                "[static]websocket-connection.connect",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket connect not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.send",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket send not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.close",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket close not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.subscribe",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket subscribe not available in tests",
-                    ))
-                },
-            )?;
-        }
+        add_websocket_client_mock(&mut linker)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -825,19 +752,20 @@ impl GolemPreparedComponent {
         }
     }
 
-    /// Preview 3 host for node_compat. The Golem context/websocket/logging capabilities are only
-    /// wired up for the `full` (Preview 2) profile, so the P3 node-compat runner is built with
-    /// `full-p3` (no Golem) and the linker carries only the P2+P3 WASI/HTTP surface. `spans` is
-    /// therefore always empty in P3. Works on both stock wasmtime and the Golem fork.
+    /// Preview 3 host: the P2+P3 WASI/HTTP surface plus the `wasi:logging` and `golem:websocket`
+    /// mocks (see [`p3_linker`]) and the same `golem:api/context` span-recording mock as the
+    /// Preview 2 host, so Golem-flavored feature combinations behave identically on both targets.
+    /// Works on both stock wasmtime and the Golem fork.
     fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
-        let linker = p3_linker(&engine)?;
+        let mut linker = p3_linker(&engine)?;
+        let spans = add_golem_context_mock(&mut linker)?;
         let component = Component::from_file(&engine, wasm_path)?;
         Ok(Self {
             engine,
             linker,
             component,
-            spans: Arc::new(Mutex::new(Vec::new())),
+            spans,
         })
     }
 
@@ -867,182 +795,13 @@ impl GolemPreparedComponent {
         wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
         // Mock wasi:logging/logging (required by the golem feature)
-        {
-            let mut logging = linker.instance("wasi:logging/logging")?;
-            logging.func_wrap(
-                "log",
-                |mut ctx: StoreContextMut<'_, Host>,
-                 (level, context, message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> {
-                    ctx.data_mut()
-                        .log_messages
-                        .lock()
-                        .unwrap()
-                        .push((level, context, message));
-                    Ok(())
-                },
-            )?;
-        }
+        add_wasi_logging_mock(&mut linker)?;
 
         // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-
-            ws.func_new(
-                "[static]websocket-connection.connect",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket connect not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.send",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket send not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.close",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket close not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.subscribe",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket subscribe not available in tests",
-                    ))
-                },
-            )?;
-        }
+        add_websocket_client_mock(&mut linker)?;
 
         // Mock golem:api/context@1.5.0
-        let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
-        let spans_clone = spans.clone();
-
-        let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
-
-        // Register the span resource type
-        let span_resource_type = ResourceType::host::<GolemSpan>();
-        golem_ctx.resource("span", span_resource_type, {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
-                // Destructor: mark span as finished if not already
-                let table = ctx.data_mut().table.lock().unwrap();
-                // Resource already dropped by wasmtime
-                let _ = (spans.as_ref(), rep, table);
-                Ok(())
-            }
-        })?;
-
-        // start-span: func(name: string) -> span
-        golem_ctx.func_wrap("start-span", {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>,
-                  (name,): (String,)|
-                  -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
-                let span = GolemSpan {
-                    name,
-                    attributes: Vec::new(),
-                    finished: false,
-                };
-                let mut table = ctx.data_mut().table.lock().unwrap();
-                let resource = table.push(span)?;
-                spans.lock().unwrap().push(GolemSpan {
-                    name: String::new(), // placeholder, real data is in table
-                    attributes: Vec::new(),
-                    finished: false,
-                });
-                Ok((resource,))
-            }
-        })?;
-
-        // [method]span.set-attribute: func(name: string, value: attribute-value)
-        // attribute-value is a variant with one case: string(string)
-        // In the component model, a single-case variant is lifted as a tuple (u32, string) or similar.
-        // But since it has only one case, wasmtime may simplify it.
-        // Let's check what the actual signature is - it's (resource<span>, string, attribute-value)
-        // where attribute-value = variant { string(string) }
-        // A variant with one case lifts as (discriminant: u32, payload: string) but wasmtime component
-        // may represent it as an enum. Let's use a tuple.
-        golem_ctx.func_wrap("[method]span.set-attribute", {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>,
-                  (span_res, attr_name, attr_value): (
-                wasmtime::component::Resource<GolemSpan>,
-                String,
-                AttributeValue,
-            )|
-                  -> Result<(), wasmtime::Error> {
-                let value_str = match &attr_value {
-                    AttributeValue::String(s) => s.clone(),
-                };
-                let mut table = ctx.data_mut().table.lock().unwrap();
-                if let Ok(span) = table.get_mut(&span_res) {
-                    span.attributes.push((attr_name.clone(), value_str.clone()));
-                }
-                // Also record in the shared spans list
-                let mut shared = spans.lock().unwrap();
-                if let Some(last) = shared.last_mut() {
-                    last.attributes.push((attr_name, value_str));
-                }
-                Ok(())
-            }
-        })?;
-
-        // [method]span.finish: func()
-        golem_ctx.func_wrap("[method]span.finish", {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>,
-                  (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
-                  -> Result<(), wasmtime::Error> {
-                let mut table = ctx.data_mut().table.lock().unwrap();
-                if let Ok(span) = table.get_mut(&span_res) {
-                    span.finished = true;
-                    // Copy final state to shared spans
-                    let name = span.name.clone();
-                    let attributes = span.attributes.clone();
-                    let mut shared = spans.lock().unwrap();
-                    if let Some(last) = shared.last_mut() {
-                        last.name = name;
-                        last.finished = true;
-                        last.attributes = attributes;
-                    }
-                }
-                Ok(())
-            }
-        })?;
+        let spans = add_golem_context_mock(&mut linker)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -1609,13 +1368,202 @@ fn p3_engine() -> anyhow::Result<Engine> {
 }
 
 /// Preview 3 linker: the P2 WASI surface (P3 components still import residual `wasi:io`/0.2 std
-/// interfaces), the P3 WASI surface, and the P3 async HTTP surface used by `fetch`.
+/// interfaces), the P3 WASI surface, and the P3 async HTTP surface used by `fetch`. Also mocks
+/// `wasi:logging/logging` and `golem:websocket/client@1.5.0` so P3 builds with the (target-
+/// agnostic) `logging` / `websocket` features can instantiate; the definitions are ignored by
+/// components that don't import them.
 fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
     let mut linker: Linker<Host> = Linker::new(engine);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    add_wasi_logging_mock(&mut linker)?;
+    add_websocket_client_mock(&mut linker)?;
     Ok(linker)
+}
+
+/// Mock `wasi:logging/logging`: records every `log` call in the Host's `log_messages` list.
+fn add_wasi_logging_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
+    let mut logging = linker.instance("wasi:logging/logging")?;
+    logging.func_wrap(
+        "log",
+        |mut ctx: StoreContextMut<'_, Host>,
+         (level, context, message): (LogLevel, String, String)|
+         -> Result<(), wasmtime::Error> {
+            ctx.data_mut()
+                .log_messages
+                .lock()
+                .unwrap()
+                .push((level, context, message));
+            Ok(())
+        },
+    )?;
+    Ok(())
+}
+
+/// Mock `golem:api/context@1.5.0`: implements `start-span`, `span.set-attribute`, and
+/// `span.finish`, recording every span in the returned shared list so tests can assert on the
+/// emitted tracing spans.
+fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex<Vec<GolemSpan>>>> {
+    let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
+    let spans_clone = spans.clone();
+
+    let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
+
+    // Register the span resource type
+    let span_resource_type = ResourceType::host::<GolemSpan>();
+    golem_ctx.resource("span", span_resource_type, {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
+            // Destructor: mark span as finished if not already
+            let table = ctx.data_mut().table.lock().unwrap();
+            // Resource already dropped by wasmtime
+            let _ = (spans.as_ref(), rep, table);
+            Ok(())
+        }
+    })?;
+
+    // start-span: func(name: string) -> span
+    golem_ctx.func_wrap("start-span", {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>,
+              (name,): (String,)|
+              -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
+            let span = GolemSpan {
+                name,
+                attributes: Vec::new(),
+                finished: false,
+            };
+            let mut table = ctx.data_mut().table.lock().unwrap();
+            let resource = table.push(span)?;
+            spans.lock().unwrap().push(GolemSpan {
+                name: String::new(), // placeholder, real data is in table
+                attributes: Vec::new(),
+                finished: false,
+            });
+            Ok((resource,))
+        }
+    })?;
+
+    // [method]span.set-attribute: func(name: string, value: attribute-value)
+    // attribute-value is a variant with one case: string(string)
+    golem_ctx.func_wrap("[method]span.set-attribute", {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>,
+              (span_res, attr_name, attr_value): (
+            wasmtime::component::Resource<GolemSpan>,
+            String,
+            AttributeValue,
+        )|
+              -> Result<(), wasmtime::Error> {
+            let value_str = match &attr_value {
+                AttributeValue::String(s) => s.clone(),
+            };
+            let mut table = ctx.data_mut().table.lock().unwrap();
+            if let Ok(span) = table.get_mut(&span_res) {
+                span.attributes.push((attr_name.clone(), value_str.clone()));
+            }
+            // Also record in the shared spans list
+            let mut shared = spans.lock().unwrap();
+            if let Some(last) = shared.last_mut() {
+                last.attributes.push((attr_name, value_str));
+            }
+            Ok(())
+        }
+    })?;
+
+    // [method]span.finish: func()
+    golem_ctx.func_wrap("[method]span.finish", {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>,
+              (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
+              -> Result<(), wasmtime::Error> {
+            let mut table = ctx.data_mut().table.lock().unwrap();
+            if let Ok(span) = table.get_mut(&span_res) {
+                span.finished = true;
+                // Copy final state to shared spans
+                let name = span.name.clone();
+                let attributes = span.attributes.clone();
+                let mut shared = spans.lock().unwrap();
+                if let Some(last) = shared.last_mut() {
+                    last.name = name;
+                    last.finished = true;
+                    last.attributes = attributes;
+                }
+            }
+            Ok(())
+        }
+    })?;
+
+    Ok(spans)
+}
+
+/// Mock `golem:websocket/client@1.5.0`: registers the `websocket-connection` resource and stubs
+/// every method to fail. This satisfies the host import required when the `websocket` module is
+/// compiled in; tests only exercise the JS-side API surface (globals, brand checks), not live
+/// connections.
+fn add_websocket_client_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
+    struct WsConn;
+    let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+    ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+        move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+    })?;
+
+    ws.func_new(
+        "[static]websocket-connection.connect",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket connect not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.send",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket send not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.receive",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket receive not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.receive-with-timeout",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket receive-with-timeout not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.close",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket close not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.subscribe",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket subscribe not available in tests",
+            ))
+        },
+    )?;
+
+    Ok(())
 }
 
 impl wasmtime_wasi_http::p3::WasiHttpView for Host {

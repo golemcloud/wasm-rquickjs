@@ -517,11 +517,16 @@ fn p3_generated_crate_builds_with_wasi_system_clock_import() -> anyhow::Result<(
 /// none of the Preview 2 runtime dependencies are active, while the Preview 3 bindings are.
 ///
 /// Note on scope: the check deliberately targets the P2 *runtime* crates our own skeleton would
-/// pull in via the `p2`/`fetch`/`golem` features (`wstd`, the 0.42 `wit-bindgen-rt`,
-/// `golem-wasi-http`, `golem-context`). It does **not** assert the absence of the `wasip2` crate:
-/// that appears purely as `getrandom`'s WASI backend for the `wasm32-wasip2` target and is
-/// unavoidable until a dedicated `wasm32-wasip3` rustc target exists — it is not evidence of a
-/// Preview 2 runtime leak in our code.
+/// pull in via the `p2`/`fetch` features (`wstd`, `golem-wasi-http`). It does **not** assert the
+/// absence of:
+/// - the `wasip2` crate: that appears purely as `getrandom`'s WASI backend for the
+///   `wasm32-wasip2` target and is unavoidable until a dedicated `wasm32-wasip3` rustc target
+///   exists — it is not evidence of a Preview 2 runtime leak in our code;
+/// - the 0.42 `wit-bindgen-rt` and the target-agnostic binding crates that use it
+///   (`wasi-logging`, `golem-context`, `golem-websocket`): they bind fully synchronous
+///   interfaces that work on both targets (P3 components legitimately import residual 0.2-style
+///   sync interfaces), and `wasi-logging` is part of the default `normal-p3` tier, mirroring the
+///   Preview 2 `normal` tier.
 #[test]
 fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
@@ -568,7 +573,7 @@ fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> 
         .collect();
 
     // Preview 2 runtime crates that must never be active in the Preview 3 path.
-    for forbidden in ["wstd", "wit-bindgen-rt", "golem-wasi-http", "golem-context"] {
+    for forbidden in ["wstd", "golem-wasi-http"] {
         assert!(
             !crate_names.contains(forbidden),
             "Preview 2 runtime crate `{forbidden}` must not appear in the P3 dependency graph; \

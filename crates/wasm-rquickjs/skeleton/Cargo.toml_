@@ -31,17 +31,16 @@ normal = ["lite", "node-http", "crypto", "zlib", "logging", "encoding"]
 full = ["normal", "crypto-full", "brotli", "sqlite", "timezone"]
 full-no-logging = ["lite", "node-http", "crypto", "zlib", "encoding", "crypto-full", "brotli", "sqlite", "timezone"]
 
-# Preview 3 tier meta-features (cumulative). These mirror the Preview 2 tiers but only pull
-# in capabilities that do not depend on the `p2` path: `fetch`/`node-http` (Preview 2 HTTP)
-# are excluded, and `logging` / `websocket` are left opt-in because they each add a required
-# host import (`wasi:logging` / `golem:websocket`) that not every Preview 3 host provides.
+# Preview 3 tier meta-features (cumulative). These mirror the Preview 2 tiers exactly, except
+# for `fetch`/`node-http`: those features are the Preview 2 HTTP implementations, and the `p3`
+# path ships its own `wasi:http@0.3` based fetch and node:http unconditionally. Every other
+# capability (`crypto`, `zlib`, `logging`, `encoding`, `crypto-full`, `brotli`, `sqlite`,
+# `timezone`, `websocket`, `golem`) is target-agnostic and means the same thing on both targets.
 # The code generator sets the generated crate's default to `["p3", "normal-p3"]` for the
-# Preview 3 target. `full-p3` adds the heavier WASI-only capabilities (crypto-full, brotli,
-# sqlite, timezone). Like `logging`, `websocket` is intentionally NOT part of `full-p3` and must
-# be enabled explicitly (via `golem:websocket@1.5.0`, fully synchronous and Preview 3-portable),
-# because it adds a required `golem:websocket` host import that plain WASI hosts cannot satisfy.
-normal-p3 = ["p3", "crypto", "zlib", "encoding"]
+# Preview 3 target, mirroring the Preview 2 default of `["p2", "normal"]`.
+normal-p3 = ["p3", "crypto", "zlib", "logging", "encoding"]
 full-p3 = ["normal-p3", "crypto-full", "brotli", "sqlite", "timezone"]
+full-no-logging-p3 = ["p3", "crypto", "zlib", "encoding", "crypto-full", "brotli", "sqlite", "timezone"]
 
 # Individual capabilities (Preview 2 only)
 fetch = ["p2", "dep:golem-wasi-http"]
@@ -77,12 +76,13 @@ timezone = ["dep:chrono-tz"]
 
 # WebSocket support via `golem:websocket@1.5.0`. Target-agnostic: the interface is fully
 # synchronous (no `wasi:io/poll`), so it works on both the Preview 2 and Preview 3 paths.
-# Kept separate from `golem` so Preview 3 can enable WebSocket without dragging in the
-# Preview 2-only `golem-context` crate.
 websocket = ["dep:golem-websocket"]
 
-# Preview 2 Golem bundle: WebSocket + Golem context/diagnostics integration.
-golem = ["p2", "dep:golem-context", "websocket"]
+# Golem bundle: WebSocket + Golem context/diagnostics integration. Target-agnostic: the
+# `golem-context` crate only imports the fully synchronous `golem:api/context@1.5.0` interface
+# (plus the `wasi:clocks/wall-clock@0.2.3` datetime type, which Preview 3 hosts also provide),
+# so it works on both the Preview 2 and Preview 3 paths.
+golem = ["dep:golem-context", "websocket"]
 
 [dependencies]
 # Core dependencies
