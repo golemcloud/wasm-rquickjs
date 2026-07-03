@@ -625,23 +625,46 @@ function findLongestRegisteredExtension(filename) {
 }
 
 function getPackageScopeType(filename) {
+    const packageType = getPackageScopeExplicitType(filename);
+    return packageType || 'commonjs';
+}
+
+function getPackageScopeExplicitType(filename) {
+    const scope = getPackageScopeInfo(filename);
+    return scope ? scope.packageType : null;
+}
+
+function getPackageScopeInfo(filename) {
     let dir = pathModule.dirname(filename);
     while (true) {
-        if (pathModule.basename(dir) === 'node_modules') return 'commonjs';
+        if (pathModule.basename(dir) === 'node_modules') return null;
         const pkgPath = pathModule.join(dir, 'package.json');
         try {
             const entry = readPackageJson(pkgPath);
             if (entry !== null) {
-                return entry.pkg.type || 'commonjs';
+                return {
+                    packageType: entry.pkg.type || null,
+                    isNodeModulesPackage: isNodeModulesPackageScope(dir),
+                };
             }
         } catch (e) {
-            return 'commonjs';
+            return null;
         }
         const parent = pathModule.dirname(dir);
         if (parent === dir) break;
         dir = parent;
     }
-    return 'commonjs';
+    return null;
+}
+
+function isNodeModulesPackageScope(dir) {
+    const parent = pathModule.dirname(dir);
+    if (parent === dir) return false;
+    if (pathModule.basename(parent) === 'node_modules') return true;
+    const grandparent = pathModule.dirname(parent);
+    return pathModule.basename(parent).startsWith('@') &&
+        grandparent !== parent &&
+        pathModule.basename(grandparent) === 'node_modules';
 }
 
 function isPathDirectory(filename) {
@@ -2394,6 +2417,12 @@ function readVariableDeclarationKeyword(source, pos) {
     return readKeywordAt(source, 'var', pos);
 }
 
+function readLexicalVariableDeclarationKeyword(source, pos) {
+    let end = readKeywordAt(source, 'const', pos);
+    if (end !== null) return end;
+    return readKeywordAt(source, 'let', pos);
+}
+
 function skipNonCode(source, pos, skipRegex) {
     const code = source.charCodeAt(pos);
     if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
@@ -2471,6 +2500,10 @@ function looksLikeEsmSource(source) {
         }
         if (startsWithKeywordAt(source, 'import', i)) {
             if (isStaticImportSyntax(source, i)) {
+                found = true;
+                return false;
+            }
+            if (readImportMeta(source, i) !== null) {
                 found = true;
                 return false;
             }
@@ -2572,14 +2605,191 @@ function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
 }
 
 function readImportMetaUrl(source, pos) {
-    let i = readLoaderNamedIdentifier(source, pos, 'import');
-    if (i === null) return null;
-    i = readLoaderDotMember(source, i, 'meta');
+    let i = readImportMeta(source, pos);
     if (i === null) return null;
     return readLoaderDotMember(source, i, 'url');
 }
 
-function hasCjsWrapperRequireRedeclaration(source) {
+function readImportMeta(source, pos) {
+    if (previousSignificantChar(source, pos) === 0x2e) return null;
+    let i = readLoaderNamedIdentifier(source, pos, 'import');
+    if (i === null) return null;
+    return readLoaderDotMember(source, i, 'meta');
+}
+
+const cjsWrapperGlobalNames = ['require', 'exports', 'module', '__filename', '__dirname'];
+
+function findVariableDeclarationEnd(source, pos) {
+    let i = pos;
+    let paren = 0;
+    let brace = 0;
+    let bracket = 0;
+    while (i < source.length) {
+        const skipped = skipNonCode(source, i, true);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+        const code = source.charCodeAt(i);
+        if (code === 0x28) paren++;
+        else if (code === 0x29) paren = Math.max(0, paren - 1);
+        else if (code === 0x7b) brace++;
+        else if (code === 0x7d) {
+            if (paren === 0 && brace === 0 && bracket === 0) return i;
+            brace = Math.max(0, brace - 1);
+        } else if (code === 0x5b) bracket++;
+        else if (code === 0x5d) bracket = Math.max(0, bracket - 1);
+        else if (code === 0x3b && paren === 0 && brace === 0 && bracket === 0) return i + 1;
+        i++;
+    }
+    return i;
+}
+
+function objectPatternPropertyKeyWithoutBinding(source, pos) {
+    const i = skipWhitespaceAndComments(source, pos);
+    return source.charCodeAt(i) === 0x3a;
+}
+
+function findMatchingBracket(source, start) {
+    let i = start;
+    let depth = 0;
+    while (i < source.length) {
+        const skipped = skipNonCode(source, i, true);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+        const code = source.charCodeAt(i);
+        if (code === 0x5b) depth++;
+        else if (code === 0x5d) {
+            depth = Math.max(0, depth - 1);
+            if (depth === 0) return i;
+        }
+        i++;
+    }
+    return null;
+}
+
+function cjsGlobalIdentifierIsBindingName(source, pos, nameEnd) {
+    if (objectPatternPropertyKeyWithoutBinding(source, nameEnd)) return false;
+    const next = skipWhitespaceAndComments(source, nameEnd);
+    if (source.charCodeAt(next) === 0x28) return false;
+    const previous = previousSignificantChar(source, pos);
+    if (previous === 0x3d) return false;
+    if (previous === 0x5b &&
+        source.charCodeAt(next) === 0x5d &&
+        source.charCodeAt(skipWhitespaceAndComments(source, next + 1)) === 0x3a) {
+        return false;
+    }
+    return true;
+}
+
+function collectCjsGlobalBindingNamesInVariableDeclaration(source, start, end) {
+    const names = [];
+    let i = start;
+    let inBinding = true;
+    let paren = 0;
+    let brace = 0;
+    let bracket = 0;
+    while (i < end && i < source.length) {
+        const skipped = skipNonCode(source, i, true);
+        if (skipped !== null) {
+            i = Math.min(skipped, end);
+            continue;
+        }
+        const code = source.charCodeAt(i);
+        if (inBinding && code === 0x5b) {
+            const close = findMatchingBracket(source, i);
+            if (close !== null &&
+                close < end &&
+                source.charCodeAt(skipWhitespaceAndComments(source, close + 1)) === 0x3a) {
+                i = close + 1;
+                continue;
+            }
+        }
+        if (code === 0x28) paren++;
+        else if (code === 0x29) paren = Math.max(0, paren - 1);
+        else if (code === 0x7b) brace++;
+        else if (code === 0x7d) brace = Math.max(0, brace - 1);
+        else if (code === 0x5b) bracket++;
+        else if (code === 0x5d) bracket = Math.max(0, bracket - 1);
+        else if (code === 0x3d && paren === 0 && brace === 0 && bracket === 0) inBinding = false;
+        else if (code === 0x2c && paren === 0 && brace === 0 && bracket === 0) inBinding = true;
+
+        if (inBinding) {
+            for (let n = 0; n < cjsWrapperGlobalNames.length; n++) {
+                const name = cjsWrapperGlobalNames[n];
+                const nameEnd = readLoaderNamedIdentifier(source, i, name);
+                if (nameEnd !== null &&
+                    cjsGlobalIdentifierIsBindingName(source, i, nameEnd) &&
+                    !names.includes(name)) {
+                    names.push(name);
+                    break;
+                }
+            }
+        }
+        i++;
+    }
+    return names;
+}
+
+function parseVariableDeclarationSpan(source, pos) {
+    const keywordEnd = readLexicalVariableDeclarationKeyword(source, pos);
+    if (keywordEnd === null) return null;
+    const start = skipWhitespaceAndComments(source, keywordEnd);
+    const end = findVariableDeclarationEnd(source, start);
+    return {
+        bindings: collectCjsGlobalBindingNamesInVariableDeclaration(source, start, end),
+        end,
+    };
+}
+
+function findClassDeclarationEnd(source, pos) {
+    let i = pos;
+    while (i < source.length) {
+        const skipped = skipNonCode(source, i, true);
+        if (skipped !== null) {
+            i = skipped;
+            continue;
+        }
+        if (source.charCodeAt(i) === 0x7b) {
+            let depth = 1;
+            i++;
+            while (i < source.length) {
+                const innerSkipped = skipNonCode(source, i, true);
+                if (innerSkipped !== null) {
+                    i = innerSkipped;
+                    continue;
+                }
+                const code = source.charCodeAt(i);
+                if (code === 0x7b) depth++;
+                else if (code === 0x7d) {
+                    depth--;
+                    if (depth === 0) return i + 1;
+                }
+                i++;
+            }
+            return i;
+        }
+        i++;
+    }
+    return i;
+}
+
+function parseClassDeclarationSpan(source, pos) {
+    const classEnd = readKeywordAt(source, 'class', pos);
+    if (classEnd === null) return null;
+    const nameStart = skipWhitespaceAndComments(source, classEnd);
+    const nameEnd = readLoaderIdentifierEnd(source, nameStart);
+    const bindings = [];
+    if (nameEnd !== null) {
+        const name = source.slice(nameStart, nameEnd);
+        if (cjsWrapperGlobalNames.includes(name)) bindings.push(name);
+    }
+    return { bindings, end: findClassDeclarationEnd(source, nameStart) };
+}
+
+function hasCjsWrapperLexicalRedeclaration(source) {
     let found = false;
     let braceDepth = 0;
     scanSourceCodePositions(source, { skipRegex: true }, (i, code) => {
@@ -2593,16 +2803,23 @@ function hasCjsWrapperRequireRedeclaration(source) {
         }
 
         if (braceDepth === 0) {
-            const declarationEnd = readKeywordAt(source, 'const', i) || readKeywordAt(source, 'let', i);
-            if (declarationEnd === null) return undefined;
-            let next = skipWhitespaceAndComments(source, declarationEnd);
-            const requireEnd = readLoaderNamedIdentifier(source, next, 'require');
-            if (requireEnd !== null) {
-                if (!isCreateRequireImportMetaUrlDeclaration(source, next)) {
+            const declaration = parseVariableDeclarationSpan(source, i) || parseClassDeclarationSpan(source, i);
+            if (declaration === null) return undefined;
+            for (let n = 0; n < declaration.bindings.length; n++) {
+                const name = declaration.bindings[n];
+                if (name === 'require') {
+                    const keywordEnd = readLexicalVariableDeclarationKeyword(source, i);
+                    const next = keywordEnd === null ? null : skipWhitespaceAndComments(source, keywordEnd);
+                    if (next !== null && isCreateRequireImportMetaUrlDeclaration(source, next)) {
+                        continue;
+                    }
+                }
+                if (cjsWrapperGlobalNames.includes(name)) {
                     found = true;
                     return false;
                 }
             }
+            return declaration.end;
         }
         return undefined;
     });
@@ -3949,9 +4166,14 @@ function collectCreateRequireCallSpecifiers(source, factoryNames) {
 }
 
 function isEsmGraphFile(filename, source) {
+    const packageScope = filename.endsWith('.js') ? getPackageScopeInfo(filename) : null;
+    const explicitPackageType = packageScope ? packageScope.packageType : null;
+    const isCommonJsPackage = explicitPackageType === 'commonjs' ||
+        (explicitPackageType === null && packageScope !== null && packageScope.isNodeModulesPackage);
     return filename.endsWith('.mjs') ||
-        (filename.endsWith('.js') && getPackageScopeType(filename) === 'module') ||
-        (!filename.endsWith('.cjs') && looksLikeEsmSource(source));
+        (filename.endsWith('.js') && explicitPackageType === 'module') ||
+        (!filename.endsWith('.cjs') && !isCommonJsPackage &&
+            (looksLikeEsmSource(source) || hasCjsWrapperLexicalRedeclaration(source)));
 }
 
 function readEsmGraphFileInfo(filename, cache) {
@@ -4622,8 +4844,12 @@ function loadModule(resolvedFilename, source, parentModule) {
             throw err;
         }
     } else {
+        const packageScope = filename.endsWith('.js') ? getPackageScopeInfo(filename) : null;
+        const explicitPackageType = packageScope ? packageScope.packageType : null;
+        const isCommonJsPackage = explicitPackageType === 'commonjs' ||
+            (explicitPackageType === null && packageScope !== null && packageScope.isNodeModulesPackage);
         const isEsm = filename.endsWith('.mjs') ||
-            (filename.endsWith('.js') && getPackageScopeType(filename) === 'module');
+            (filename.endsWith('.js') && explicitPackageType === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
             delete moduleCache[filename];
             unlinkModuleFromParent(parentModule, mod);
@@ -4648,7 +4874,8 @@ function loadModule(resolvedFilename, source, parentModule) {
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
             let cjsSyntaxError = null;
-            const cjsWrapperRequireRedeclaration = !filename.endsWith('.cjs') && hasCjsWrapperRequireRedeclaration(source);
+            const canFallbackToEsm = !filename.endsWith('.cjs') && !isCommonJsPackage;
+            const cjsWrapperLexicalRedeclaration = canFallbackToEsm && hasCjsWrapperLexicalRedeclaration(source);
             let cjsSourceLooksEsm = false;
             try {
                 compiledFn = compileCjs(filename, source);
@@ -4660,10 +4887,10 @@ function loadModule(resolvedFilename, source, parentModule) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError') {
+                if (canFallbackToEsm && err && err.name === 'SyntaxError') {
                     cjsSourceLooksEsm = looksLikeEsmSource(source);
                 }
-                if (!filename.endsWith('.cjs') && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperRequireRedeclaration)) {
+                if (canFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
                     delete moduleCache[filename];
@@ -4672,7 +4899,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                     throw err;
                 }
             }
-            if (cjsSyntaxError || cjsWrapperRequireRedeclaration) {
+            if (cjsSyntaxError || cjsWrapperLexicalRedeclaration) {
                 if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
                     delete moduleCache[filename];
                     unlinkModuleFromParent(parentModule, mod);
@@ -4685,7 +4912,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 } catch (esmErr) {
                     delete moduleCache[filename];
                     unlinkModuleFromParent(parentModule, mod);
-                    if (cjsSourceLooksEsm || cjsWrapperRequireRedeclaration) {
+                    if (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
                     }

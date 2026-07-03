@@ -3155,6 +3155,171 @@ export const testCjsDirectNamedExports = async () => {
     }
 };
 
+export const testEsmImportsSideEffectCommonJs = async () => {
+    try {
+        fs.mkdirSync('/esm-side-effect-cjs-app', { recursive: true });
+        fs.writeFileSync('/esm-side-effect-cjs-app/side-effect.js', [
+            "'use strict';",
+            'const path = require("node:path");',
+            'const self = require.resolve("./side-effect.js");',
+            'globalThis.esmSideEffectCjs = {',
+            '  basename: path.basename(self),',
+            '  cached: require.cache[self] !== undefined,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/dynamic-import-method.js', [
+            "'use strict';",
+            'module.exports = {',
+            '  async importFromInside(specifier) {',
+            '    return import(specifier);',
+            '  },',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/var-require.js', [
+            "'use strict';",
+            'var require = "var-require-binding";',
+            'module.exports = { require };',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/destructure-default-require.js', [
+            "'use strict';",
+            'const { x = require("node:path") } = {};',
+            'module.exports = { sep: x.sep };',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/computed-key-module.js', [
+            "'use strict';",
+            'const source = { [module.id]: "computed-key-module" };',
+            'const { [module.id]: value } = source;',
+            'module.exports = { value };',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/property-import-meta.js', [
+            "'use strict';",
+            'const obj = { import: { meta: "plain-property" } };',
+            'module.exports = { value: obj.import.meta };',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/entry.mjs', [
+            'import value from "./side-effect.js";',
+            'import dynamicImportMethod from "./dynamic-import-method.js";',
+            'import varRequire from "./var-require.js";',
+            'import destructureDefaultRequire from "./destructure-default-require.js";',
+            'import computedKeyModule from "./computed-key-module.js";',
+            'import propertyImportMeta from "./property-import-meta.js";',
+            'export default {',
+            '  value,',
+            '  sideEffect: globalThis.esmSideEffectCjs,',
+            '  dynamicImportMethod,',
+            '  varRequire,',
+            '  destructureDefaultRequire,',
+            '  computedKeyModule,',
+            '  propertyImportMeta,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/import-meta.js', [
+            'globalThis.esmAmbiguousImportMeta = import.meta.url;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/redeclare-exports.js', [
+            'const exports = "exports-binding";',
+            'globalThis.esmAmbiguousExports = exports;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/redeclare-module.js', [
+            'let module = "module-binding";',
+            'globalThis.esmAmbiguousModule = module;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/redeclare-filename.js', [
+            'const __filename = "filename-binding";',
+            'globalThis.esmAmbiguousFilename = __filename;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/redeclare-dirname.js', [
+            'class __dirname {}',
+            'globalThis.esmAmbiguousDirname = __dirname.name;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/require-import-meta.js', [
+            'globalThis.requireAmbiguousImportMeta = import.meta.url;',
+            'export default "require-import-meta";',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/require-redeclare-exports.js', [
+            'const exports = "require-exports-binding";',
+            'export default exports;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/require-redeclare-dirname.js', [
+            'class __dirname {}',
+            'export default __dirname.name;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/require-redeclare-destructure.js', [
+            'const { exports } = { exports: "require-destructure-binding" };',
+            'export default exports;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/require-redeclare-later.js', [
+            'const first = "ignored", module = "require-later-binding";',
+            'export default module;',
+        ].join('\n'));
+        fs.writeFileSync('/esm-side-effect-cjs-app/require-entry.cjs', [
+            'const importMeta = require("./require-import-meta.js");',
+            'const redeclareExports = require("./require-redeclare-exports.js");',
+            'const redeclareDirname = require("./require-redeclare-dirname.js");',
+            'const redeclareDestructure = require("./require-redeclare-destructure.js");',
+            'const redeclareLater = require("./require-redeclare-later.js");',
+            'module.exports = {',
+            '  importMeta,',
+            '  redeclareExports,',
+            '  redeclareDirname,',
+            '  redeclareDestructure,',
+            '  redeclareLater,',
+            '};',
+        ].join('\n'));
+        fs.mkdirSync('/esm-side-effect-cjs-app/commonjs-package', { recursive: true });
+        fs.writeFileSync('/esm-side-effect-cjs-app/commonjs-package/package.json', JSON.stringify({ type: 'commonjs' }));
+        fs.writeFileSync('/esm-side-effect-cjs-app/commonjs-package/esm-syntax.js', 'export default "must-not-load-as-esm";');
+        fs.mkdirSync('/esm-side-effect-cjs-app/node_modules/no-type-package', { recursive: true });
+        fs.writeFileSync('/esm-side-effect-cjs-app/node_modules/no-type-package/package.json', JSON.stringify({ name: 'no-type-package' }));
+        fs.writeFileSync('/esm-side-effect-cjs-app/node_modules/no-type-package/esm-syntax.js', 'export default "must-not-load-as-esm";');
+
+        const result = (await import('/esm-side-effect-cjs-app/entry.mjs')).default;
+        assert.deepStrictEqual(result.value, {});
+        assert.deepStrictEqual(result.sideEffect, {
+            basename: 'side-effect.js',
+            cached: true,
+        });
+        assert.strictEqual(typeof result.dynamicImportMethod.importFromInside, 'function');
+        assert.deepStrictEqual(result.varRequire, { require: 'var-require-binding' });
+        assert.deepStrictEqual(result.destructureDefaultRequire, { sep: '/' });
+        assert.deepStrictEqual(result.computedKeyModule, { value: 'computed-key-module' });
+        assert.deepStrictEqual(result.propertyImportMeta, { value: 'plain-property' });
+        await import('/esm-side-effect-cjs-app/import-meta.js');
+        await import('/esm-side-effect-cjs-app/redeclare-exports.js');
+        await import('/esm-side-effect-cjs-app/redeclare-module.js');
+        await import('/esm-side-effect-cjs-app/redeclare-filename.js');
+        await import('/esm-side-effect-cjs-app/redeclare-dirname.js');
+        assert.strictEqual(globalThis.esmAmbiguousImportMeta, 'file:///esm-side-effect-cjs-app/import-meta.js');
+        assert.strictEqual(globalThis.esmAmbiguousExports, 'exports-binding');
+        assert.strictEqual(globalThis.esmAmbiguousModule, 'module-binding');
+        assert.strictEqual(globalThis.esmAmbiguousFilename, 'filename-binding');
+        assert.strictEqual(globalThis.esmAmbiguousDirname, '__dirname');
+        const localRequire = createRequire('/esm-side-effect-cjs-app/entry.mjs');
+        const requireResult = localRequire('/esm-side-effect-cjs-app/require-entry.cjs');
+        assert.strictEqual(requireResult.importMeta.default, 'require-import-meta');
+        assert.strictEqual(
+            globalThis.requireAmbiguousImportMeta,
+            'file:///esm-side-effect-cjs-app/require-import-meta.js',
+        );
+        assert.strictEqual(requireResult.redeclareExports.default, 'require-exports-binding');
+        assert.strictEqual(requireResult.redeclareDirname.default, '__dirname');
+        assert.strictEqual(requireResult.redeclareDestructure.default, 'require-destructure-binding');
+        assert.strictEqual(requireResult.redeclareLater.default, 'require-later-binding');
+        await assert.rejects(
+            import('/esm-side-effect-cjs-app/commonjs-package/esm-syntax.js'),
+            (error) => error && error.name === 'SyntaxError',
+        );
+        await assert.rejects(
+            import('/esm-side-effect-cjs-app/node_modules/no-type-package/esm-syntax.js'),
+            (error) => error && error.name === 'SyntaxError',
+        );
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsDefinePropertyNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-define-export-app', { recursive: true });
@@ -4295,13 +4460,13 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         globalThis.__moduleSyntaxAmbiguousCommented = undefined;
         globalThis.__moduleSyntaxAmbiguousCommentedBinding = undefined;
         globalThis.__moduleSyntaxAmbiguousUrlPrefix = undefined;
-        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-spaced.js'), /import\.meta|unexpected|SyntaxError/i);
-        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-commented.js'), /import\.meta|unexpected|SyntaxError/i);
-        assert.throws(() => require('/module-syntax-app/create-require-ambiguous-commented-binding.js'), /import\.meta|unexpected|SyntaxError/i);
+        require('/module-syntax-app/create-require-ambiguous-spaced.js');
+        require('/module-syntax-app/create-require-ambiguous-commented.js');
+        require('/module-syntax-app/create-require-ambiguous-commented-binding.js');
         assert.throws(() => require('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js'), /urlx|undefined/i);
-        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousSpaced, undefined);
-        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommented, undefined);
-        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommentedBinding, undefined);
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousSpaced, '/module-syntax-app/false-positive.cjs');
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommented, '/module-syntax-app/false-positive.cjs');
+        assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommentedBinding, '/module-syntax-app/false-positive.cjs');
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousUrlPrefix, undefined);
         delete globalThis.createRequire;
 

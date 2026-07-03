@@ -1852,6 +1852,16 @@ fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<Stri
     Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
 }
 
+fn parse_lexical_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    let start = skip_ws_comments(source, parse_lexical_variable_declaration_keyword(source, pos)?);
+    let end = find_variable_declaration_end(source, start);
+    Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+}
+
+fn parse_lexical_variable_declaration_keyword(source: &str, pos: usize) -> Option<usize> {
+    parse_free_ident_name(source, pos, "const").or_else(|| parse_free_ident_name(source, pos, "let"))
+}
+
 fn parse_variable_declaration_keyword(source: &str, pos: usize) -> Option<usize> {
     parse_free_ident_name(source, pos, "const")
         .or_else(|| parse_free_ident_name(source, pos, "let"))
@@ -2041,6 +2051,15 @@ fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start:
     let mut brace = 0usize;
     let mut bracket = 0usize;
     while i < end && i < bytes.len() {
+        if in_binding
+            && bytes[i] == b'['
+            && let Some(close) = find_matching_bracket(source, i)
+            && close < end
+            && bytes.get(skip_ws_comments(source, close + 1)) == Some(&b':')
+        {
+            i = close + 1;
+            continue;
+        }
         match bytes[i] {
             b'\'' | b'"' | b'`' => {
                 i = skip_string_or_template(source, i);
@@ -2079,7 +2098,7 @@ fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start:
         if in_binding {
             for name in CJS_GLOBAL_NAMES {
                 if let Some(name_end) = parse_ident_name(source, i, name)
-                    && !object_pattern_property_key_without_binding(source, name_end)
+                    && cjs_global_identifier_is_binding_name(source, i, name_end)
                     && !names.iter().any(|existing| existing == name)
                 {
                     names.push(name.to_string());
@@ -2090,6 +2109,67 @@ fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start:
         i = next_char_boundary(source, i);
     }
     names
+}
+
+fn cjs_global_identifier_is_binding_name(source: &str, pos: usize, name_end: usize) -> bool {
+    if object_pattern_property_key_without_binding(source, name_end) {
+        return false;
+    }
+    let bytes = source.as_bytes();
+    let next = skip_ws_comments(source, name_end);
+    if bytes.get(next) == Some(&b'(') {
+        return false;
+    }
+    if previous_significant_byte(source, pos) == Some(b'=') {
+        return false;
+    }
+    if previous_significant_byte(source, pos) == Some(b'[')
+        && bytes.get(next) == Some(&b']')
+        && bytes.get(skip_ws_comments(source, next + 1)) == Some(&b':')
+    {
+        return false;
+    }
+    true
+}
+
+fn find_matching_bracket(source: &str, start: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut i = start;
+    let mut depth = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => i = skip_string_or_template(source, i),
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+            }
+            b'[' => {
+                depth += 1;
+                i += 1;
+            }
+            b']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(i);
+                }
+                i += 1;
+            }
+            _ => i = next_char_boundary(source, i),
+        }
+    }
+    None
 }
 
 fn object_pattern_property_key_without_binding(source: &str, pos: usize) -> bool {
@@ -2111,7 +2191,7 @@ fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String
     ))
 }
 
-fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
+fn has_cjs_wrapper_lexical_redeclaration(source: &str) -> bool {
     let mut found = false;
     let mut brace_depth = 0usize;
     let _ = scan_code_positions(source, true, |i, byte| {
@@ -2128,15 +2208,27 @@ fn has_cjs_wrapper_require_redeclaration(source: &str) -> bool {
         }
 
         if brace_depth == 0 {
-            for keyword in ["const", "let"] {
-                if let Some(keyword_end) = parse_ident_name(source, i, keyword) {
-                    let next = skip_ws_comments(source, keyword_end);
-                    if parse_ident_name(source, next, "require").is_some() {
-                        if !is_create_require_import_meta_url_declaration(source, next) {
-                            found = true;
-                            return ControlFlow::Break(());
+            if let Some((bindings, _)) = parse_lexical_variable_declaration_span(source, i) {
+                for binding in bindings {
+                    if binding == "require" {
+                        let keyword_end = parse_lexical_variable_declaration_keyword(source, i).unwrap_or(i);
+                        let next = skip_ws_comments(source, keyword_end);
+                        if is_create_require_import_meta_url_declaration(source, next) {
+                            continue;
                         }
                     }
+                    if CJS_GLOBAL_NAMES.contains(&binding.as_str()) {
+                        found = true;
+                        return ControlFlow::Break(());
+                    }
+                }
+            } else if let Some((bindings, _)) = parse_class_declaration_span(source, i) {
+                if bindings
+                    .iter()
+                    .any(|binding| CJS_GLOBAL_NAMES.contains(&binding.as_str()))
+                {
+                    found = true;
+                    return ControlFlow::Break(());
                 }
             }
         }
@@ -2163,9 +2255,16 @@ fn is_create_require_import_meta_url_declaration(source: &str, require_pos: usiz
 }
 
 fn parse_import_meta_url(source: &str, pos: usize) -> Option<usize> {
-    let i = parse_ident_name(source, pos, "import")?;
-    let i = parse_dot_member_name(source, i, "meta")?;
+    let i = parse_import_meta(source, pos)?;
     parse_dot_member_name(source, i, "url")
+}
+
+fn parse_import_meta(source: &str, pos: usize) -> Option<usize> {
+    let i = parse_ident_name(source, pos, "import")?;
+    if source.as_bytes().get(skip_ws_comments(source, i)) == Some(&b'(') {
+        return None;
+    }
+    parse_dot_member_name(source, i, "meta")
 }
 
 fn is_ascii_js_identifier(value: &str) -> bool {
@@ -6215,7 +6314,16 @@ fn analyze_cjs_exports_for_file(
     analysis
 }
 
+struct PackageScopeInfo {
+    package_type: Option<String>,
+    is_node_modules_package: bool,
+}
+
 fn package_scope_type(filename: &str) -> Option<String> {
+    package_scope_info(filename).and_then(|scope| scope.package_type)
+}
+
+fn package_scope_info(filename: &str) -> Option<PackageScopeInfo> {
     let mut dir = std::path::Path::new(filename).parent()?.to_path_buf();
     loop {
         if dir.file_name().is_some_and(|name| name == "node_modules") {
@@ -6224,13 +6332,33 @@ fn package_scope_type(filename: &str) -> Option<String> {
         let pkg_path = dir.join("package.json");
         if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional(&pkg_path)
         {
-            return package.package_type.clone();
+            return Some(PackageScopeInfo {
+                package_type: package.package_type.clone(),
+                is_node_modules_package: is_node_modules_package_scope(&dir),
+            });
         }
         if !dir.pop() {
             break;
         }
     }
     None
+}
+
+fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
+    let Some(parent) = dir.parent() else {
+        return false;
+    };
+    if parent.file_name().is_some_and(|name| name == "node_modules") {
+        return true;
+    }
+    parent
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('@'))
+        && parent
+            .parent()
+            .and_then(|grandparent| grandparent.file_name())
+            .is_some_and(|name| name == "node_modules")
 }
 
 fn is_js_in_module_package_scope(filename: &str) -> bool {
@@ -6267,7 +6395,7 @@ impl Loader for CjsCompatLoader {
             return throw_import_attr_type_incompatible(ctx);
         }
 
-        let mut source = match std::fs::read_to_string(fs_path) {
+        let source = match std::fs::read_to_string(fs_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -6281,7 +6409,7 @@ impl Loader for CjsCompatLoader {
         };
 
         let fs_abs_path = ensure_absolute_path(fs_path);
-        source = process_static_import_attrs(&source, path);
+        let module_source = process_static_import_attrs(&source, path);
         let filename = Some(fs_abs_path.clone());
         let url = path_to_file_url(path);
         let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &url);
@@ -6295,23 +6423,36 @@ impl Loader for CjsCompatLoader {
             include_resolve: true,
         };
 
-        let cjs_conditions =
-            NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.default_conditions());
-        let detected_analysis =
-            analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
-        let has_esm_syntax = source_looks_like_esm(&source);
-        // .cjs files are always CommonJS; for .js files, use the analyzer so
-        // comments, strings, templates, and regex literals do not force CJS.
+        let package_scope = if fs_abs_path.ends_with(".js") {
+            package_scope_info(&fs_abs_path)
+        } else {
+            None
+        };
+        let package_type = package_scope
+            .as_ref()
+            .and_then(|scope| scope.package_type.clone());
+        let is_module_package_js = package_type.as_deref() == Some("module");
+        let is_commonjs_package_js = package_type.as_deref() == Some("commonjs")
+            || (package_type.is_none()
+                && package_scope
+                    .as_ref()
+                    .is_some_and(|scope| scope.is_node_modules_package));
+        let has_static_esm_syntax = source_has_static_import_or_export(&source);
+        let has_import_meta = source_has_import_meta(&source);
+        let has_top_level_await = source_has_top_level_await(&source);
+        let has_cjs_wrapper_lexical_redeclaration = has_cjs_wrapper_lexical_redeclaration(&source);
+        let has_esm_syntax = has_static_esm_syntax
+            || has_import_meta
+            || has_top_level_await
+            || has_cjs_wrapper_lexical_redeclaration;
+        // .cjs files are always CommonJS; .js files outside a module package
+        // remain CommonJS unless syntax detection finds ESM.
         let is_cjs = is_cjs_ext
-            || (!is_js_in_module_package_scope(&fs_abs_path)
-                && !has_esm_syntax
-                && !has_cjs_wrapper_require_redeclaration(&source)
-                && (detected_analysis.is_cjs
-                    || !detected_analysis.exports.is_empty()
-                    || !detected_analysis.reexports.is_empty()));
+            || is_commonjs_package_js
+            || (!is_module_package_js && !has_esm_syntax);
 
         if !is_cjs {
-            let package_type_module_js = fs_path.ends_with(".js") && is_js_in_module_package_scope(&fs_abs_path);
+            let package_type_module_js = fs_path.ends_with(".js") && is_module_package_js;
             let preflight_error_source = if package_type_module_js {
                 esm_preflight_error_module_source(&source, true, raw_cjs_global_messages)
             } else {
@@ -6324,10 +6465,14 @@ impl Loader for CjsCompatLoader {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
             // Treat as ESM — inject import.meta prologue (handles shebangs)
-            let injected = inject_import_meta_prologue(&init, &source);
+            let injected = inject_import_meta_prologue(&init, &module_source);
             return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
         }
 
+        let cjs_conditions =
+            NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.default_conditions());
+        let detected_analysis =
+            analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
         let named_exports = cjs_named_export_source(&detected_analysis.exports);
 
         // Let the existing CommonJS loader execute and cache the module. The
@@ -6767,15 +6912,28 @@ fn source_has_top_level_await(source: &str) -> bool {
 }
 
 fn source_looks_like_esm(source: &str) -> bool {
-    if source_has_top_level_await(source) {
-        return true;
-    }
+    source_has_top_level_await(source) || source_has_static_import_or_export(source) || source_has_import_meta(source)
+}
 
+fn source_has_static_import_or_export(source: &str) -> bool {
     scan_code_positions(source, true, |i, _| {
         if parse_ident_name(source, i, "export").is_some() && is_static_export_syntax(source, i) {
             return ControlFlow::Break(());
         }
         if parse_ident_name(source, i, "import").is_some() && is_static_import_syntax(source, i) {
+            return ControlFlow::Break(());
+        }
+        ControlFlow::Continue(None)
+    })
+    .is_break()
+}
+
+fn source_has_import_meta(source: &str) -> bool {
+    scan_code_positions(source, true, |i, _| {
+        if parse_import_meta(source, i).is_some()
+            && !is_static_import_syntax(source, i)
+            && previous_significant_byte(source, i) != Some(b'.')
+        {
             return ControlFlow::Break(());
         }
         ControlFlow::Continue(None)
@@ -8752,36 +8910,69 @@ mod cjs_export_analyzer_tests {
     }
 
     #[test]
-    fn require_redeclaration_scanner_skips_non_code() {
-        assert!(has_cjs_wrapper_require_redeclaration("const require = 1;"));
-        assert!(has_cjs_wrapper_require_redeclaration("let /*x*/ require = 1;"));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+    fn cjs_wrapper_lexical_redeclaration_scanner_skips_non_code() {
+        assert!(has_cjs_wrapper_lexical_redeclaration("const require = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration("let /*x*/ require = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration("const exports = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration("let module = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration("const __filename = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration("class __dirname {}"));
+        assert!(has_cjs_wrapper_lexical_redeclaration("const { exports } = ns;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration(
+            "const x = 1, module = 2;"
+        ));
+        assert!(!has_cjs_wrapper_lexical_redeclaration("var require = 1;"));
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
+            "const { x = require('node:path') } = {};"
+        ));
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
+            "const { [require('x')]: value } = obj;"
+        ));
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
+            "const { [module.id]: value } = obj;"
+        ));
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
+            "const { [exports.name]: value } = obj;"
+        ));
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
+            "const { [__dirname + '/x']: value } = obj;"
+        ));
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "const require = createRequire(import.meta.url);"
         ));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "const require = createRequire(import . meta . url);"
         ));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "const require = createRequire(import/*x*/.meta.url);"
         ));
-        assert!(has_cjs_wrapper_require_redeclaration(
+        assert!(has_cjs_wrapper_lexical_redeclaration(
             "const require = createRequire(import.meta.urls);"
         ));
-        assert!(has_cjs_wrapper_require_redeclaration(
+        assert!(has_cjs_wrapper_lexical_redeclaration(
             "const require = createRequire(import.meta.urlx);"
         ));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "const text = `const require = 1`; export default text;"
         ));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "// const require = 1\nexport default 1;"
         ));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "const re = /const require = 1/; export default re;"
         ));
-        assert!(!has_cjs_wrapper_require_redeclaration(
+        assert!(!has_cjs_wrapper_lexical_redeclaration(
             "function f() { const require = 1; return require; }"
         ));
+    }
+
+    #[test]
+    fn esm_syntax_detection_includes_import_meta() {
+        assert!(source_looks_like_esm("globalThis.url = import.meta.url;"));
+        assert!(source_looks_like_esm("globalThis.meta = import . meta;"));
+        assert!(!source_looks_like_esm("const obj = { import: { meta: 1 } };"));
+        assert!(!source_looks_like_esm("globalThis.meta = obj.import.meta;"));
+        assert!(!source_looks_like_esm("const text = 'import.meta.url';"));
     }
 
     #[test]
