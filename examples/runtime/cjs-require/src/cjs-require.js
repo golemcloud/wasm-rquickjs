@@ -1,5 +1,9 @@
 // Tests for CJS require() loader
 // This is an ESM file (as all user modules are), but it tests globalThis.require
+const require = globalThis.require;
+if (typeof require !== 'function') {
+    throw new Error('globalThis.require is not installed');
+}
 
 export const testRequireBuiltin = () => {
     try {
