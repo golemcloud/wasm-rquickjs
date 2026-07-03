@@ -4703,7 +4703,29 @@ function makeModuleRequire(mod) {
     };
 }
 
-function requireEsmWithCacheGuard(mod, resolvedFilename) {
+function markRequireEsmForcedModule(resolvedFilename) {
+    let registry = globalThis.__wasm_rquickjs_require_esm_forced_module;
+    if (!registry || typeof registry !== 'object') {
+        registry = Object.create(null);
+        Object.defineProperty(globalThis, '__wasm_rquickjs_require_esm_forced_module', {
+            value: registry,
+            writable: true,
+            configurable: true,
+            enumerable: false,
+        });
+    }
+    registry[resolvedFilename] = true;
+    registry[nodeUrl.pathToFileURL(resolvedFilename).href] = true;
+}
+
+function unmarkRequireEsmForcedModule(resolvedFilename) {
+    const registry = globalThis.__wasm_rquickjs_require_esm_forced_module;
+    if (!registry || typeof registry !== 'object') return;
+    delete registry[resolvedFilename];
+    delete registry[nodeUrl.pathToFileURL(resolvedFilename).href];
+}
+
+function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule) {
     throwIfRequireEsmGraphCycle(resolvedFilename);
     const markedGraph = markRequireEsmGraph(resolvedFilename);
     Object.defineProperty(mod, '__wasmRequireEsmInProgress', {
@@ -4713,12 +4735,14 @@ function requireEsmWithCacheGuard(mod, resolvedFilename) {
         enumerable: false,
     });
     try {
+        if (forceModule) markRequireEsmForcedModule(resolvedFilename);
         const namespace = _requireEsm(resolvedFilename);
         if (namespace && typeof namespace === 'object' && Object.hasOwn(namespace, 'module.exports')) {
             return namespace['module.exports'];
         }
         return wrapEsmNamespace(namespace);
     } finally {
+        if (forceModule) unmarkRequireEsmForcedModule(resolvedFilename);
         unmarkRequireEsmGraph(markedGraph);
         delete mod.__wasmRequireEsmInProgress;
     }
@@ -4909,7 +4933,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 }
                 // SyntaxError in a .js file — try loading as ESM (entry point detection)
                 try {
-                    mod.exports = requireEsmWithCacheGuard(mod, filename);
+                    mod.exports = requireEsmWithCacheGuard(mod, filename, true);
                 } catch (esmErr) {
                     delete moduleCache[filename];
                     unlinkModuleFromParent(parentModule, mod);

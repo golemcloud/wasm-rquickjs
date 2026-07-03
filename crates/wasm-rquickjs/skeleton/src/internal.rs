@@ -6413,6 +6413,7 @@ impl Loader for CjsCompatLoader {
         let filename = Some(fs_abs_path.clone());
         let url = path_to_file_url(path);
         let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &url);
+        let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
 
         let init = ImportMetaInit {
             url,
@@ -6437,14 +6438,11 @@ impl Loader for CjsCompatLoader {
                 && package_scope
                     .as_ref()
                     .is_some_and(|scope| scope.is_node_modules_package));
-        let has_static_esm_syntax = source_has_static_import_or_export(&source);
-        let has_import_meta = source_has_import_meta(&source);
-        let has_top_level_await = source_has_top_level_await(&source);
-        let has_cjs_wrapper_lexical_redeclaration = has_cjs_wrapper_lexical_redeclaration(&source);
-        let has_esm_syntax = has_static_esm_syntax
-            || has_import_meta
-            || has_top_level_await
-            || has_cjs_wrapper_lexical_redeclaration;
+        let has_esm_syntax = force_module
+            || source_has_static_import_or_export(&source)
+            || source_has_import_meta(&source)
+            || source_has_top_level_await(&source)
+            || has_cjs_wrapper_lexical_redeclaration(&source);
         // .cjs files are always CommonJS; .js files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
         let is_cjs = is_cjs_ext
@@ -6671,6 +6669,14 @@ fn module_filesystem_path(path: &str) -> &str {
 fn require_esm_in_progress(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
     let globals = ctx.globals();
     let Ok(registry) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_in_progress") else {
+        return false;
+    };
+    registry.get::<_, bool>(filename).unwrap_or(false) || registry.get::<_, bool>(file_url).unwrap_or(false)
+}
+
+fn require_esm_forced_module(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
+    let globals = ctx.globals();
+    let Ok(registry) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_forced_module") else {
         return false;
     };
     registry.get::<_, bool>(filename).unwrap_or(false) || registry.get::<_, bool>(file_url).unwrap_or(false)
@@ -8968,6 +8974,9 @@ mod cjs_export_analyzer_tests {
 
     #[test]
     fn esm_syntax_detection_includes_import_meta() {
+        assert!(source_looks_like_esm(
+            "// comment\n// another comment\nexport default 'module';\nconsole.log('executed');"
+        ));
         assert!(source_looks_like_esm("globalThis.url = import.meta.url;"));
         assert!(source_looks_like_esm("globalThis.meta = import . meta;"));
         assert!(!source_looks_like_esm("const obj = { import: { meta: 1 } };"));

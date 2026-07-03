@@ -4197,6 +4197,15 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/loose.js', [
             'export default "loose-module";',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/bridge-cjs-dep.cjs', [
+            'module.exports = { value: "cjs-dependency" };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/loose-with-comments.js', [
+            '// Mention require() before ESM syntax.',
+            '// Ambiguous .js still has to load through the ESM bridge.',
+            'import dep from "./bridge-cjs-dep.cjs";',
+            'export default { kind: "module", dep: dep.value };',
+        ].join('\n'));
         fs.writeFileSync('/module-syntax-app/static-source.mjs', [
             'export const named = "named";',
             'export default "source-default";',
@@ -4357,6 +4366,9 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/type-module/dep.mjs', 'export default 2;');
         fs.writeFileSync('/module-syntax-app/type-module/import-module.js', 'import module from "./dep.mjs"; export default module;');
         fs.writeFileSync('/module-syntax-app/type-module/object-exports.js', 'export default { exports: 3 };');
+        fs.mkdirSync('/module-syntax-app/type-commonjs', { recursive: true });
+        fs.writeFileSync('/module-syntax-app/type-commonjs/package.json', JSON.stringify({ type: 'commonjs' }));
+        fs.writeFileSync('/module-syntax-app/type-commonjs/export-syntax.js', 'export default "not-forced";');
         fs.writeFileSync('/module-syntax-app/query.mjs', [
             'globalThis.__queryModuleCount = (globalThis.__queryModuleCount || 0) + 1;',
             'export const count = globalThis.__queryModuleCount;',
@@ -4425,6 +4437,10 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         const require = createRequire('/module-syntax-app/main.cjs');
 
         assert.strictEqual(require('/module-syntax-app/loose.js').default, 'loose-module');
+        assert.deepStrictEqual(require('/module-syntax-app/loose-with-comments.js').default, {
+            kind: 'module',
+            dep: 'cjs-dependency',
+        });
         assert.strictEqual(require('/module-syntax-app/static-import-side-effect.js').default, 'side-effect-import');
         globalThis.__moduleSyntaxCommentedImport = undefined;
         require('/module-syntax-app/static-import-commented.js');
@@ -4464,6 +4480,7 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         require('/module-syntax-app/create-require-ambiguous-commented.js');
         require('/module-syntax-app/create-require-ambiguous-commented-binding.js');
         assert.throws(() => require('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js'), /urlx|undefined/i);
+        assert.throws(() => require('/module-syntax-app/type-commonjs/export-syntax.js'), /export|Unexpected/i);
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousSpaced, '/module-syntax-app/false-positive.cjs');
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommented, '/module-syntax-app/false-positive.cjs');
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommentedBinding, '/module-syntax-app/false-positive.cjs');
