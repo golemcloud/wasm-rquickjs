@@ -415,10 +415,16 @@ function _resolveRequireMock(id) {
     return _moduleMockRegistry[key] || null;
 }
 
+function _hasImportMock(specifier, base) {
+    const key = _mockCanonicalKey(specifier, base);
+    return !!(key && _moduleMockRegistry[key]);
+}
+
 globalThis.__wasm_rquickjs_mock_canonical_key = _mockCanonicalKey;
 globalThis.__wasm_rquickjs_register_module_mock = _registerModuleMock;
 globalThis.__wasm_rquickjs_resolve_require_mock = _resolveRequireMock;
 globalThis.__wasm_rquickjs_materialize_cjs_mock = _materializeCjsMock;
+globalThis.__wasm_rquickjs_has_import_mock = _hasImportMock;
 
 function traceModuleRequire(id, parentFilename, fn) {
     if (globalThis.__wasm_rquickjs_suppress_module_require_diagnostics) {

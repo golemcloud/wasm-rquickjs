@@ -769,6 +769,17 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, 
       globalThis.__wasm_rquickjs_discard_import_attr_rewrite(key);
     }
   }
+  var importFn = typeof importer === 'function' ? importer : function(value) { return import(value); };
+  if (
+    typeof globalThis.__wasm_rquickjs_has_import_mock === 'function' &&
+    globalThis.__wasm_rquickjs_has_import_mock(prepared, baseUrl)
+  ) {
+    try {
+      return await importFn(prepared);
+    } finally {
+      discardGeneratedRewriteToken();
+    }
+  }
   var cache = globalThis.__wasm_rquickjs_import_attr_inflight;
   if (!cache) {
     cache = Object.create(null);
@@ -781,7 +792,6 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, 
     }
     return cached.promise;
   }
-  var importFn = typeof importer === 'function' ? importer : function(value) { return import(value); };
   var promise = importFn(prepared);
   var entry = { promise: promise, preparedKey: key };
   cache[completedKey] = entry;
