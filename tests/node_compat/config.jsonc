@@ -2606,7 +2606,7 @@
     "parallel/test-console-stdio-setters.js": {},
     "parallel/test-console-tty-colors.js": {},
     "parallel/test-console-with-frozen-intrinsics.js": {},
-    "parallel/test-delayed-require.js": {},
+    "parallel/test-delayed-require.js": { "category": "runnable" },
     "parallel/test-diagnostics-channel-bind-store.js": { "category": "known-gap", "reason": "diagnostics_channel runStores transformer-error propagation is incomplete" },
     "parallel/test-diagnostics-channel-has-subscribers.js": {},
     "parallel/test-diagnostics-channel-object-channel-pub-sub.js": {},
@@ -4042,7 +4042,7 @@
 
     // === sequential tests ===
     "sequential/test-net-server-listen-ipv6-link-local.js": {},
-    "sequential/test-require-cache-without-stat.js": {},
+    "sequential/test-require-cache-without-stat.js": { "category": "runnable" },
     "sequential/test-stream2-fs.js": {},
     "sequential/test-https-server-keep-alive-timeout.js": { "category": "wasi-impossible", "reason": "https is not supported in WebAssembly environment" },
     "sequential/test-buffer-creation-regression.js": { "category": "engine-difference", "reason": "depends on engine-specific ArrayBuffer OOM RangeError message text in skip path" },
