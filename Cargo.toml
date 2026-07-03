@@ -185,8 +185,8 @@ oxc_span = "0.115"
 
 # Golem's forked wasmtime — uncomment these patches together with enabling the
 # `use-golem-wasmtime` feature.
-#[patch.crates-io]
-#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-#wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+[patch.crates-io]
+wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }

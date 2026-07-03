@@ -1082,9 +1082,6 @@ impl TestInstance {
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
             .inherit_network()
             .allow_ip_name_lookup(true);
-        #[cfg(feature = "use-golem-wasmtime")]
-        let (ctx, io_ctx) = ctx_builder.build();
-        #[cfg(not(feature = "use-golem-wasmtime"))]
         let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
@@ -1094,8 +1091,6 @@ impl TestInstance {
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            #[cfg(feature = "use-golem-wasmtime")]
-            io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
 
         let mut store = Store::new(engine, host);
@@ -1515,8 +1510,6 @@ pub struct Host {
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
-    #[cfg(feature = "use-golem-wasmtime")]
-    pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }
 
 impl WasiView for Host {
@@ -1530,11 +1523,6 @@ impl WasiView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
-            #[cfg(feature = "use-golem-wasmtime")]
-            io_ctx: Arc::get_mut(&mut self.io_ctx)
-                .expect("IoCtx is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("IoCtx mutex must never fail"),
         }
     }
 }
