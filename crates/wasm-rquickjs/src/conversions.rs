@@ -281,9 +281,12 @@ fn generate_conversion_instances_for_type(
                    obj.set(#field_name_lit, #self_ref & #type_path::#rust_field_ident == #type_path::#rust_field_ident)?;
                 });
 
+                // `result = result | ...` instead of `|=`: the Preview 3 path uses
+                // `wit-bindgen` 0.58 with default features off, whose built-in `bitflags`
+                // shim only implements `BitOr`/`BitAnd`/`BitXor` (no `BitOrAssign`).
                 get_fields.push(quote! {
                     if obj.get(#field_name_lit)? {
-                        result |= #type_path::#rust_field_ident;
+                        result = result | #type_path::#rust_field_ident;
                     }
                 });
             }

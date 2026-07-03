@@ -32,8 +32,14 @@ pub fn generate_export_impls(
     // `wit-bindgen` dependency (`wit-bindgen-p3`, compiled with the
     // `async`/`macros`/`inter-task-wakeup` features) so that it can coexist with the Preview 2
     // `wit-bindgen` in the single shared skeleton; `runtime_path` points the generated bindings
-    // at that renamed crate's runtime module. The Preview 2 `ownership: Owning, generate_all`
-    // options are intentionally not used here.
+    // at that renamed crate's runtime module.
+    //
+    // `ownership: Owning` and `generate_all` match the Preview 2 invocation below.
+    // `ownership: Owning` keeps generated ADTs owned (no lifetime-parameterized borrowed
+    // variants), which is what the import/export codegen in this crate models. `generate_all`
+    // is required so that interfaces without a `with:` remap entry — user-defined imports and
+    // WASI interfaces whose version does not match the `wasip3` crate (e.g.
+    // `wasi:io/poll@0.2.3`) — get bindings generated instead of making the macro fail.
     let bindings_module = if context.target.is_p3() {
         quote! {
             #[allow(unsafe_op_in_unsafe_fn)]
@@ -42,6 +48,8 @@ pub fn generate_export_impls(
                     path: "wit",
                     world: #world_name_lit,
                     runtime_path: "wit_bindgen_p3::rt",
+                    ownership: Owning,
+                    generate_all,
                     #with_block
                 });
             }
@@ -1100,6 +1108,13 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
             if let Some(ref name) = interface.name
                 && let Some(package_id) = interface.package
             {
+                // Only packages accepted by `is_wasi_remapped_package` may get a `with:`
+                // entry; the check is version-aware, so e.g. `wasi:clocks/...@0.2.3` in a
+                // Preview 3 world is not remapped to the (API-incompatible) `wasip3` crate
+                // and keeps its generated bindings instead.
+                if !context.is_wasi_remapped_package(package_id) {
+                    continue;
+                }
                 let package = &context.resolve.packages[package_id];
                 let unversioned =
                     format!("{}:{}/{}", package.name.namespace, package.name.name, name);

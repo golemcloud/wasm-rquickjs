@@ -598,10 +598,18 @@ fn generate_import_module(
                 exports.push(bridge.export);
                 bridge_functions.push(bridge.bridge_fn);
             }
-            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
-                return Err(anyhow!(
-                    "Async imported resource methods are not supported yet"
-                ));
+            FunctionKind::AsyncMethod(type_id) | FunctionKind::AsyncStatic(type_id) => {
+                // Async imported resource methods/statics are only supported on the Preview 3
+                // target: the bridge is an `async fn` awaiting the component-model async import.
+                if !context.target.is_p3() {
+                    return Err(anyhow!(
+                        "Async imported resource methods are not supported by the WASI Preview 2 generation path"
+                    ));
+                }
+                resource_functions
+                    .entry(*type_id)
+                    .or_insert_with(Vec::new)
+                    .push((name, function));
             }
             FunctionKind::Method(type_id)
             | FunctionKind::Static(type_id)
@@ -719,8 +727,19 @@ fn generate_import_module(
             let wrap = &return_types.func_ret.wrap;
             let wrap_result = wrap.run(quote! { result });
 
+            // Async imported resource methods/statics (Preview 3 only; the dispatch loop above
+            // rejects them for Preview 2) generate `async fn` bridges awaiting the
+            // component-model async import; rquickjs turns them into promise-returning JS
+            // methods.
+            let (maybe_async, maybe_await) = match &function.kind {
+                FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
+                    (quote! { async }, quote! { .await })
+                }
+                _ => (quote! {}, quote! {}),
+            };
+
             match &function.kind {
-                FunctionKind::Method(_) => {
+                FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
                     let param_list = param_list[1..].to_vec();
                     let param_refs = param_refs[1..].to_vec();
                     if let Some(exception) = &return_types.expected_exception {
@@ -728,13 +747,14 @@ fn generate_import_module(
                         let wrap_exception = exception.wrap.run(quote! { error });
 
                         methods.push(quote! {
-                            pub fn #rust_method_name_ident(&self, ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                            pub #maybe_async fn #rust_method_name_ident(&self, ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
                                 let result: #original_result = self
                                       .inner
                                       .as_ref()
                                       .expect("Resource has already been disposed")
                                       .deref()
-                                      .#rust_method_name_ident(#(#param_refs),*);
+                                      .#rust_method_name_ident(#(#param_refs),*)
+                                      #maybe_await;
                                 match result {
                                     Ok(result) => Ok(#wrap_result),
                                     Err(error) => {
@@ -746,27 +766,28 @@ fn generate_import_module(
                         });
                     } else {
                         methods.push(quote! {
-                           pub fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
+                           pub #maybe_async fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
                                 let result: #original_result = self
                                   .inner
                                   .as_ref()
                                   .expect("Resource has already been disposed")
                                   .deref()
-                                  .#rust_method_name_ident(#(#param_refs),*);
+                                  .#rust_method_name_ident(#(#param_refs),*)
+                                  #maybe_await;
                                 #wrap_result
                             }
                         });
                     }
                 }
-                FunctionKind::Static(_) => {
+                FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
                     if let Some(exception) = &return_types.expected_exception {
                         let wrapped_exception = &exception.wrapped_type_ref;
                         let wrap_exception = exception.wrap.run(quote! { error });
 
                         methods.push(quote! {
                             #[qjs(static)]
-                            pub fn #rust_method_name_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
-                                let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
+                            pub #maybe_async fn #rust_method_name_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                                let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*) #maybe_await;
                                 match result {
                                     Ok(result) => Ok(#wrap_result),
                                     Err(error) => {
@@ -779,8 +800,8 @@ fn generate_import_module(
                     } else {
                         methods.push(quote! {
                            #[qjs(static)]
-                           pub fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
-                                let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*);
+                           pub #maybe_async fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
+                                let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*) #maybe_await;
                                 #wrap_result
                            }
                         });
@@ -793,13 +814,15 @@ fn generate_import_module(
         }
 
         let mut special_methods = Vec::new();
-        // The `wasi:io/poll.pollable` async helpers (`promise` / `abortable_promise`) are driven
-        // by P2 pollables (`wasip2::io::poll` + `wstd::runtime::AsyncPollable`), so they only
-        // exist on the Preview 2 path. The Preview 3 path must not use P2 pollables (it drives
-        // async via the component-model async ABI instead), and those deps are not even compiled
-        // under the `p3` feature, so these helpers are never emitted there.
-        if !context.target.is_p3()
-            && resource_name == "pollable"
+        // The `wasi:io/poll.pollable` async helpers (`promise` / `abortable_promise`).
+        //
+        // On the Preview 2 path they are driven by P2 pollables (`wasip2::io::poll` +
+        // `wstd::runtime::AsyncPollable`). On the Preview 3 path those deps are not compiled
+        // (P2 pollables are not waitables in the component-model async ABI), so the helpers
+        // instead poll `ready()` in a loop interleaved with short `wasip3` monotonic-clock
+        // async sleeps — this keeps the P3 executor running (JS timers, abort callbacks)
+        // while waiting.
+        if resource_name == "pollable"
             && &import.name == "poll"
             && import
                 .package_name
@@ -807,11 +830,38 @@ fn generate_import_module(
                 .map(|p| format!("{}:{}", p.namespace, p.name))
                 == Some("wasi:io".to_string())
         {
+            // The future the helpers await on: how a single pollable is asynchronously waited
+            // for differs between the two targets, everything else is shared.
+            let (wait_future, take_pollable) = if context.target.is_p3() {
+                (
+                    quote! {
+                        async move {
+                            while !pollable.ready() {
+                                wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
+                            }
+                        }
+                    },
+                    quote! {
+                        let pollable = self.inner.take().expect("Resource has already been disposed");
+                    },
+                )
+            } else {
+                (
+                    quote! {
+                        wstd::runtime::AsyncPollable::new(pollable).wait_for()
+                    },
+                    quote! {
+                        let pollable = self.inner.take().expect("Resource has already been disposed");
+                        let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
+                    },
+                )
+            };
+
             special_methods.push(quote! {
                 pub async fn promise(&mut self) -> () {
-                    let pollable = self.inner.take().expect("Resource has already been disposed");
-                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
-                    wstd::runtime::AsyncPollable::new(pollable).wait_for().await;
+                    #take_pollable
+                    let wait_for = #wait_future;
+                    wait_for.await;
                 }
             });
             special_methods.push(quote! {
@@ -861,9 +911,8 @@ fn generate_import_module(
                     }
 
                     // Only consume the pollable after signal setup succeeds
-                    let pollable = self.inner.take().expect("Resource has already been disposed");
-                    let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
-                    let wait_for = wstd::runtime::AsyncPollable::new(pollable).wait_for();
+                    #take_pollable
+                    let wait_for = #wait_future;
 
                     let result = Abortable::new(wait_for, abort_reg).await;
 

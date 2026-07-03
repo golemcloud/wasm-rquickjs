@@ -470,12 +470,51 @@ pub fn rewrite_wit_exports_async(
         let dst_path = dst_wit_dir.join(file_name);
 
         if file_type.is_dir() {
-            // A `deps/` subtree holds *imported* interfaces — copy it verbatim so the import
-            // signatures keep matching the host, never rewriting them to async.
-            copy_dir_recursive(src_path.as_std_path(), dst_path.as_std_path())?;
+            // A `deps/` subtree holds *imported* interfaces. Imports satisfied by the *host*
+            // (`wasi:*`, `golem:*` packages — the host registers synchronous implementations)
+            // must keep their sync signatures, so those files are copied verbatim. Imports
+            // satisfied by *another example component* via composition (`plug_into`) must be
+            // rewritten to async, because the providing component is itself built in P3 mode
+            // with its exports rewritten to `async func` — otherwise the plug's async exports
+            // would not type-match the socket's sync imports.
+            copy_deps_rewriting_non_host_packages(src_path.as_std_path(), dst_path.as_std_path())?;
         } else if src_path.extension() == Some("wit") {
             let rewritten = rewrite_wit_source_exports_async(&fs::read_to_string(&src_path)?);
             fs::write(&dst_path, rewritten)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Recursively copies a `deps/` subtree, rewriting `: func(` to `: async func(` in every WIT
+/// file whose package is *not* host-provided. Host-provided packages (`wasi:*`, `golem:*`)
+/// are copied verbatim because the test host registers synchronous implementations for them;
+/// everything else (e.g. `quickjs:*` interfaces exported by sibling example components) is
+/// rewritten so composed components type-match. See [`rewrite_wit_exports_async`].
+fn copy_deps_rewriting_non_host_packages(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+) -> anyhow::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_deps_rewriting_non_host_packages(&src_path, &dst_path)?;
+        } else if src_path.extension().and_then(|e| e.to_str()) == Some("wit") {
+            let source = fs::read_to_string(&src_path)?;
+            let is_host_package = source.lines().any(|line| {
+                let line = line.trim_start();
+                line.starts_with("package wasi:") || line.starts_with("package golem:")
+            });
+            if is_host_package {
+                fs::write(&dst_path, source)?;
+            } else {
+                fs::write(&dst_path, rewrite_wit_source_exports_async(&source))?;
+            }
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
