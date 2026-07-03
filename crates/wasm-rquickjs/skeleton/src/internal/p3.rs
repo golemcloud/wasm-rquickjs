@@ -8,7 +8,7 @@
 
 use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::{Args, Constructor, IntoArgs, This};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
+use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver};
 use rquickjs::promise::Promised;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Filter, FromJs, Function,
@@ -23,6 +23,13 @@ use std::sync::atomic::AtomicUsize;
 use std::task::{Context as TaskContext, Poll};
 use wit_bindgen_p3::rt::async_support::{
     FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
+};
+
+use super::module_loading::{
+    CjsCompatLoader, CjsEvalResolver, DataUrlLoader, DataUrlResolver, FileUrlResolver,
+    ImportMetaInit, ImportMetaLoader, JsonFileLoader, MockModuleLoader, MockModuleResolver,
+    NodeFileResolver, NodeModuleErrorResolver, NodeModulesResolver, RealmGuardResolver,
+    inject_import_meta_prologue,
 };
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
@@ -84,20 +91,93 @@ impl JsState {
         let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
         let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
-        let mut builtin_loader = BuiltinLoader::default()
-            .with_module(crate::JS_EXPORT_MODULE_NAME, crate::js_export_module());
+        // The resolver/loader stack must stay identical to the Preview 2 path
+        // (`internal/p2.rs::new_base`) so module resolution semantics (file/`node_modules`
+        // lookup, `data:`/`file://` URLs, module mocking, CJS-in-ESM compatibility, JSON
+        // modules and `import.meta`) do not diverge between the two targets.
+        let file_resolver = FileResolver::default()
+            .with_path("/")
+            .with_pattern("{}.js")
+            .with_pattern("{}.mjs")
+            .with_pattern("{}.json");
+
+        let resolver = (
+            (
+                RealmGuardResolver,
+                MockModuleResolver,
+                DataUrlResolver,
+                FileUrlResolver,
+                builtin_resolver,
+                NodeModulesResolver,
+                NodeFileResolver,
+            ),
+            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
+        );
+
+        let mut builtin_loader = BuiltinLoader::default().with_module(
+            crate::JS_EXPORT_MODULE_NAME,
+            inject_import_meta_prologue(
+                &ImportMetaInit {
+                    url: format!(
+                        "file:///__wasm_rquickjs_virtual__/{}.mjs",
+                        crate::JS_EXPORT_MODULE_NAME
+                    ),
+                    filename: None,
+                    dirname: None,
+                    include_resolve: true,
+                },
+                crate::js_export_module(),
+            ),
+        );
         for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
             let source = (get_module)();
-            builtin_loader = builtin_loader.with_module(name.to_string(), source);
+            let injected = inject_import_meta_prologue(
+                &ImportMetaInit {
+                    url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
+                    filename: None,
+                    dirname: None,
+                    include_resolve: true,
+                },
+                &source,
+            );
+            builtin_loader = builtin_loader.with_module(name.to_string(), injected);
         }
 
         let loader = (
+            MockModuleLoader,
             builtin_loader,
             crate::modules::module_loader(),
             crate::builtin::module_loader(),
+            DataUrlLoader,
+            JsonFileLoader,
+            CjsCompatLoader,
+            ImportMetaLoader,
         );
 
-        rt.set_loader(builtin_resolver, loader).await;
+        rt.set_loader(resolver, loader).await;
+
+        // Module mocking (`test.mock.module`) allocates synthetic module ids from this
+        // counter; it must exist before any test file is loaded. Mirrors the Preview 2 path.
+        async_with!(ctx => |ctx| {
+            ctx.globals()
+                .set("__wasm_rquickjs_mock_seq", 0i64)
+                .expect("Failed to initialize mock sequence counter");
+        })
+        .await;
+
+        // `process.js` publishes `__wasm_rquickjs_rejection_tracker` to surface unhandled
+        // promise rejections as `process` events. Mirrors the Preview 2 path.
+        rt.set_host_promise_rejection_tracker(Some(Box::new(
+            |ctx, promise, reason, is_handled| {
+                if let Ok(handler) = ctx
+                    .globals()
+                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
+                {
+                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
+                }
+            },
+        )))
+        .await;
 
         Self {
             rt,

@@ -583,25 +583,21 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     writeln!(result, "globalThis.global = globalThis;").unwrap();
     writeln!(result, "globalThis.self = globalThis;").unwrap();
-    writeln!(result, "{}", IMPORT_META_RESOLVE_JS).unwrap();
-    writeln!(result, "{}", IMPORT_ATTRS_VALIDATE_JS).unwrap();
+    writeln!(
+        result,
+        "{}",
+        crate::internal::module_loading::IMPORT_META_RESOLVE_JS
+    )
+    .unwrap();
+    writeln!(
+        result,
+        "{}",
+        crate::internal::module_loading::IMPORT_ATTRS_VALIDATE_JS
+    )
+    .unwrap();
 
     #[cfg(feature = "websocket")]
     writeln!(result, "{}", websocket::WIRE_JS).unwrap();
 
     result
 }
-
-const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_resolve = function(baseUrl, specifier) {
-  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
-  if (specifier.startsWith('node:')) return specifier;
-  var NODE_BUILTINS = new Set(['fs','path','os','crypto','http','https','url','util','stream','events','buffer','querystring','string_decoder','zlib','assert','module','net','tls','child_process','timers','dns','dgram','cluster','constants','readline','tty','v8','vm','worker_threads','perf_hooks','async_hooks','diagnostics_channel','trace_events','inspector','punycode','console','process','test','sqlite','domain','http2','repl']);
-  if (NODE_BUILTINS.has(specifier)) return 'node:' + specifier;
-  throw new Error('Cannot resolve bare specifier "' + specifier + '" from "' + baseUrl + '"');
-};"#;
-
-const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
-globalThis.__wasm_rquickjs_validate_import_attrs = function(_specifier, _options) {
-  return undefined;
-};
-"#;

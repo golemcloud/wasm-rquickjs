@@ -300,7 +300,9 @@ impl NodeHttpClientRequest {
 
         let taken = std::mem::replace(&mut self.state, RequestState::Writing);
         if let RequestState::Sending { send_future } = taken {
-            let response = send_future.await.map_err(|err| throw_http_error(&ctx, &err))?;
+            let response = send_future
+                .await
+                .map_err(|err| throw_http_error(&ctx, &err))?;
 
             let status = response.get_status_code();
             let headers = fields_to_pairs(&response.get_headers());
@@ -380,7 +382,9 @@ enum ResponseBodyState {
     },
     /// The body stream reported end-of-stream after a final data chunk; the body result future
     /// still needs to be awaited to surface a mid-transfer error.
-    Finishing { result: BodyResultReader },
+    Finishing {
+        result: BodyResultReader,
+    },
     Consumed,
 }
 

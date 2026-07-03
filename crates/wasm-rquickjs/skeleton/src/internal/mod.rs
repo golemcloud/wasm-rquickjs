@@ -24,6 +24,8 @@ compile_error!(
     "enable exactly one of the `p2` or `p3` features to select the WASI generation target"
 );
 
+pub(crate) mod module_loading;
+
 #[cfg(feature = "p2")]
 mod p2;
 #[cfg(feature = "p2")]
