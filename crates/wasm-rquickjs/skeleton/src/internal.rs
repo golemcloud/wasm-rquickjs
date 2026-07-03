@@ -5120,11 +5120,7 @@ fn is_statement_boundary(source: &str, pos: usize) -> bool {
 }
 
 fn is_asi_continuation_previous(byte: u8) -> bool {
-    matches!(
-        byte,
-        b'(' | b'[' | b'.' | b',' | b'=' | b':' | b'?' | b'!' | b'~' | b'+' | b'-' | b'*' | b'/' | b'%' | b'&'
-            | b'|' | b'^' | b'<' | b'>'
-    )
+    is_asi_continuation_operator(byte) || matches!(byte, b'!' | b'~')
 }
 
 fn is_asi_continuation_next(source: &str, pos: usize) -> bool {
@@ -5132,8 +5128,12 @@ fn is_asi_continuation_next(source: &str, pos: usize) -> bool {
     if pos + 1 < bytes.len() && matches!(&source[pos..pos + 2], "++" | "--") {
         return false;
     }
+    is_asi_continuation_operator(bytes[pos])
+}
+
+fn is_asi_continuation_operator(byte: u8) -> bool {
     matches!(
-        bytes[pos],
+        byte,
         b'(' | b'[' | b'.' | b',' | b':' | b'?' | b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^' | b'<' | b'>'
             | b'='
     )
@@ -8356,6 +8356,26 @@ mod cjs_export_analyzer_tests {
             &["own"],
             &[],
         );
+    }
+
+    #[test]
+    fn cjs_statement_start_asi_continuation_edges() {
+        assert!(is_asi_continuation_previous(b'!'));
+        assert!(is_asi_continuation_previous(b'~'));
+        assert!(!is_asi_continuation_next("!", 0));
+        assert!(!is_asi_continuation_next("~", 0));
+        assert!(!is_asi_continuation_next("++x", 0));
+        assert!(is_asi_continuation_next("+x", 0));
+
+        let continued = "const dep = require('./dep')\n(exports.x = dep.x);";
+        let continued_starts = statement_starts(continued);
+        let continued_export = continued.find("exports").unwrap();
+        assert!(!continued_starts[continued_export]);
+
+        let separated = "const dep = require('./dep')\nexports.x = dep.x;";
+        let separated_starts = statement_starts(separated);
+        let separated_export = separated.find("exports").unwrap();
+        assert!(separated_starts[separated_export]);
     }
 
     #[test]
