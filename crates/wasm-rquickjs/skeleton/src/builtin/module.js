@@ -2731,10 +2731,7 @@ function readLoaderCjsExportName(source, pos) {
     }
 
     i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) {
-        return null;
-    }
-    return name;
+    return readLoaderAssignmentOperator(source, i) === null ? null : name;
 }
 
 function loaderFindMatchingParen(source, open) {
@@ -2830,8 +2827,9 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
     const targetEnd = readLoaderCjsExportTarget(source, pos, false);
     if (targetEnd === null) return null;
     let i = skipWhitespaceAndComments(source, targetEnd);
-    if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
+    i = readLoaderAssignmentOperator(source, i);
+    if (i === null) return null;
+    i = skipWhitespaceAndComments(source, i);
     if (source.charCodeAt(i) !== 0x7b) return null;
     const objectEnd = loaderFindMatchingBrace(source, i);
     if (objectEnd < 0) return null;
@@ -3106,8 +3104,9 @@ function readLoaderModuleExportsRequire(source, pos) {
     const targetEnd = readLoaderCjsExportTarget(source, pos, false);
     if (targetEnd === null) return null;
     let i = skipWhitespaceAndComments(source, targetEnd);
-    if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
+    i = readLoaderAssignmentOperator(source, i);
+    if (i === null) return null;
+    i = skipWhitespaceAndComments(source, i);
     const required = readLoaderRequireString(source, i);
     return required === null ? null : required.specifier;
 }
@@ -3164,8 +3163,9 @@ function readLoaderRequireBinding(source, pos) {
     if (parsedBinding === null) return null;
     const binding = parsedBinding.name;
     i = skipWhitespaceAndComments(source, parsedBinding.end);
-    if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
+    i = readLoaderAssignmentOperator(source, i);
+    if (i === null) return null;
+    i = skipWhitespaceAndComments(source, i);
     let required = readLoaderRequireString(source, i);
     if (required !== null) {
         if (!loaderIsStatementBoundary(source, required.end)) return null;
@@ -3239,6 +3239,12 @@ function readLoaderOperator(source, pos, operator) {
         if (source.charCodeAt(pos + i) !== operator.charCodeAt(i)) return null;
     }
     return pos + operator.length;
+}
+
+function readLoaderAssignmentOperator(source, pos) {
+    if (source.charCodeAt(pos) !== 0x3d) return null;
+    const next = source.charCodeAt(pos + 1);
+    return next === 0x3d || next === 0x3e ? null : pos + 1;
 }
 
 function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) {
@@ -3381,8 +3387,9 @@ function readLoaderDirectReexportAssignment(source, pos, binding, key) {
     i = readLoaderBracketIdentifier(source, i, key);
     if (i === null) return null;
     i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) !== 0x3d || source.charCodeAt(i + 1) === 0x3d || source.charCodeAt(i + 1) === 0x3e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
+    i = readLoaderAssignmentOperator(source, i);
+    if (i === null) return null;
+    i = skipWhitespaceAndComments(source, i);
     const bindingEnd = readLoaderNamedIdentifier(source, i, binding);
     if (bindingEnd === null) return null;
     i = skipWhitespaceAndComments(source, bindingEnd);

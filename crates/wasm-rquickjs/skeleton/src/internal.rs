@@ -4700,14 +4700,7 @@ fn parse_export_member(source: &str, pos: usize) -> Option<(String, usize)> {
         return None;
     }
     i = skip_ws_comments(source, i);
-    if i < bytes.len()
-        && bytes[i] == b'='
-        && (i + 1 >= bytes.len() || !matches!(bytes[i + 1], b'=' | b'>'))
-    {
-        Some((name, i + 1))
-    } else {
-        None
-    }
+    parse_assignment_operator(source, i).map(|next| (name, next))
 }
 
 fn parse_require_string(source: &str, pos: usize) -> Option<(String, usize)> {
@@ -5222,20 +5215,12 @@ fn parse_export_star_reexport(source: &str, pos: usize) -> Option<(String, usize
 }
 
 fn parse_module_exports_assignment(source: &str, pos: usize) -> Option<usize> {
-    let bytes = source.as_bytes();
     let (target, mut i) = parse_exports_target(source, pos)?;
     if target != CjsExportTarget::ModuleExports {
         return None;
     }
     i = skip_ws_comments(source, i);
-    if i < bytes.len()
-        && bytes[i] == b'='
-        && (i + 1 >= bytes.len() || !matches!(bytes[i + 1], b'=' | b'>'))
-    {
-        Some(i + 1)
-    } else {
-        None
-    }
+    parse_assignment_operator(source, i)
 }
 
 fn parse_exports_literal_key(source: &str, pos: usize) -> Option<(String, bool, usize)> {
@@ -5318,11 +5303,7 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
     }
 
     i = skip_ws_comments(source, i);
-    if i >= bytes.len() || bytes[i] != b'=' || (i + 1 < bytes.len() && matches!(bytes[i + 1], b'=' | b'>')) {
-        return None;
-    }
-
-    i = skip_ws_comments(source, i + 1);
+    i = skip_ws_comments(source, parse_assignment_operator(source, i)?);
     if i >= bytes.len() || bytes[i] != b'{' {
         return None;
     }
@@ -5644,6 +5625,16 @@ fn parse_operator(source: &str, pos: usize, operator: &str) -> Option<usize> {
     Some(pos + operator_bytes.len())
 }
 
+fn parse_assignment_operator(source: &str, pos: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    if bytes.get(pos).copied() != Some(b'=')
+        || matches!(bytes.get(pos + 1).copied(), Some(b'=' | b'>'))
+    {
+        return None;
+    }
+    Some(pos + 1)
+}
+
 fn parse_exports_has_own_key(source: &str, pos: usize, key: &str) -> Option<usize> {
     let (target, next) = parse_object_has_own_property_call(source, pos, key, true)?;
     if target != "exports" {
@@ -5757,13 +5748,8 @@ fn parse_dot_member_name(source: &str, pos: usize, name: &str) -> Option<usize> 
 }
 
 fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
-    let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_export_target_bracket_key(source, pos, key)?);
-    if i >= bytes.len() || bytes[i] != b'=' || (i + 1 < bytes.len() && matches!(bytes[i + 1], b'=' | b'>')) {
-        return None;
-    }
-
-    i = skip_ws_comments(source, i + 1);
+    i = skip_ws_comments(source, parse_assignment_operator(source, i)?);
     let after_rhs = skip_ws_comments(source, parse_binding_bracket_key(source, i, binding, key)?);
     if is_statement_boundary(source, after_rhs) {
         Some(after_rhs.min(source.len()))
@@ -8798,6 +8784,9 @@ mod cjs_export_analyzer_tests {
             r#"
                 if (module.exports === undefined) {}
                 if (exports.fake == "no") {}
+                exports.arrow => value;
+                module.exports => {};
+                module.exports => require("./dep.cjs");
                 const template = `exports.templateOnly = "no";`;
                 Object.defineProperty(exports, "setterOnly", { set(v) { return dep.value; } });
                 Object.defineProperty(exports, "unrelated", { other: function () { return dep.value; } });
@@ -9250,6 +9239,20 @@ mod cjs_export_analyzer_tests {
                     if (key === "default" || key === "__esModule") return;
                     exports[key] = dep[key];
                 }, null);
+                exports.own = "own";
+            "#,
+            true,
+            &["own"],
+            &[],
+        );
+
+        assert_analysis(
+            r#"
+                var dep = require("./dep.cjs");
+                Object.keys(dep).forEach(function (key) {
+                    if (key === "default" || key === "__esModule") return;
+                    exports[key] => dep[key];
+                });
                 exports.own = "own";
             "#,
             true,
