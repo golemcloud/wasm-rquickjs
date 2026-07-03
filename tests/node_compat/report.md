@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3239/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3240/4424 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3239 | 73.2% | 56.4% | 47.2% |
-| 🧩 known gap | 1186 | 26.8% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3240 | 73.2% | 56.4% | 47.2% |
+| 🧩 known gap | 1184 | 26.8% | 20.6% | 17.2% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
-| ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
+| ⚙️ engine difference (excluded) | 163 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.3% |
 | **Total** | **6865** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5743 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3240/5743 (56.4%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 73 | 36 | 3 | 9 | 0 | 0 | 67.0% | 60.3% |
+| vm | 121 | 74 | 34 | 3 | 10 | 0 | 0 | 68.5% | 61.2% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1186)
+### known gap (1184)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -777,7 +777,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs | 2 | `parallel/test-cli-syntax-piped-bad.js`, `parallel/test-cli-syntax-piped-good.js` |
 | child_process execPath emulation does not implement --trace-require-module warning output | 2 | `es-module/test-require-module-warning.js`, `es-module/test-require-node-modules-warning.js` |
 | child_process.spawn emulation does not support --interactive REPL sessions | 2 | `parallel/test-repl-array-prototype-tempering.js`, `sequential/test-repl-timeout-throw.js` |
-| common-shim gc helper does not provide V8-style collectability checks used by this leak test | 2 | `es-module/test-vm-source-text-module-leak.js`, `es-module/test-vm-synthetic-module-leak.js` |
 | crypto.X509Certificate.checkHost is not available | 2 | `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`, `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist` |
 | dgram send() callback does not report bytes correctly for multi-buffer payloads | 2 | `parallel/test-dgram-send-callback-multi-buffer.js`, `parallel/test-dgram-send-multi-buffer-copy.js` |
 | dgram socket buffer size APIs do not match Node error semantics | 2 | `parallel/test-dgram-socket-buffer-size.js#block_00_block_00`, `parallel/test-dgram-socket-buffer-size.js#block_01_block_01` |
@@ -1510,7 +1509,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
 | wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied | 1 | `parallel/test-http-write-head.js` |
 
-### engine difference (162)
+### engine difference (163)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1529,6 +1528,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | targets V8 external string internals/limits that QuickJS does not replicate | 3 | `parallel/test-stringbytes-external.js#block_00_block_00`, `parallel/test-stringbytes-external.js#block_01_block_01`, `parallel/test-stringbytes-external.js#block_02_https_github_com_nodejs_node_issues_1024` |
 | --heapsnapshot-signal depends on V8 heap snapshot support, unavailable in QuickJS | 2 | `sequential/test-heapdump-flag-custom-dir.js`, `sequential/test-heapdump-flag.js` |
 | --use-largepages is a V8 startup flag not applicable to QuickJS/WASM | 2 | `parallel/test-startup-large-pages.js#block_00_block_00`, `parallel/test-startup-large-pages.js#block_01_block_01` |
+| uses common/gc checkIfCollectableByCounting, which depends on V8-only v8.queryObjects | 2 | `es-module/test-vm-source-text-module-leak.js`, `parallel/test-diagnostics-channel-memory-leak.js` |
 | v8.getHeapSnapshot is V8-specific and unavailable in QuickJS | 2 | `parallel/test-heapdump-async-hooks-init-promise.js`, `parallel/test-v8-getheapsnapshot-twice.js` |
 | v8.serialize/deserialize are V8-specific and unavailable in QuickJS | 2 | `parallel/test-v8-deserialize-buffer.js`, `parallel/test-v8-serialize-leak.js` |
 | v8.writeHeapSnapshot is a V8-specific API and is unavailable in QuickJS | 2 | `parallel/test-permission-fs-write-v8.js#block_00_block_00`, `parallel/test-permission-fs-write-v8.js#block_01_block_01` |
@@ -1543,7 +1543,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | depends on engine-specific ArrayBuffer OOM RangeError message text in skip path | 1 | `sequential/test-buffer-creation-regression.js` |
 | expects V8 heap space statistics that QuickJS does not expose | 1 | `parallel/test-v8-stats.js` |
 | uses V8 natives syntax intrinsics (`%DebugPrint`, `%HaveSameMap`, `%CollectGarbage`) unavailable in QuickJS | 1 | `parallel/test-http-same-map.js` |
-| uses common/gc checkIfCollectableByCounting, which depends on V8-only v8.queryObjects | 1 | `parallel/test-diagnostics-channel-memory-leak.js` |
 | uses v8.getHeapSnapshot, which is V8-specific and unavailable in QuickJS | 1 | `parallel/test-http2-ping-settings-heapdump.js` |
 | v8.cachedDataVersionTag depends on V8 internals unavailable in QuickJS | 1 | `parallel/test-v8-version-tag.js` |
 | v8.getHeapSnapshot heap-introspection behavior is V8-specific and unavailable in QuickJS | 1 | `sequential/test-get-heapsnapshot-options.js` |
