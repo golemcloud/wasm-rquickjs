@@ -6019,9 +6019,9 @@
       "split": true,
       "nestedNodeTest": true,
       "subtests": {
-        "test_00_should_load_json": {},
+        "test_00_should_load_json": { "category": "runnable" },
         "test_01_should_not_print_an_experimental_warning": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support for child-process JSON module warning assertions" },
-        "test_02_should_load_different_modules_when_the_url_is_different": {}
+        "test_02_should_load_different_modules_when_the_url_is_different": { "category": "runnable" }
       }
     },
     "es-module/test-esm-live-binding.mjs": { "category": "runnable" },
@@ -9197,15 +9197,15 @@
       "split": true,
       "isolateBlockSubtests": true,
       "subtests": {
-        "block_00_check_inspection_of_the_instance": {},
-        "block_01_block_01": {},
-        "block_02_check_dependencies_getter_returns_same_object_every_time": {},
-        "block_03_check_the_impossibility_of_creating_an_abstract_instance_of_": {},
-        "block_04_check_to_throws_invalid_exportnames": {},
-        "block_05_https_github_com_nodejs_node_issues_32806": {},
-        "block_06_check_to_throws_invalid_evaluatecallback": {},
-        "block_07_check_to_throws_invalid_options": {},
-        "block_08_test_compilefunction_importmoduledynamically": {}
+        "block_00_check_inspection_of_the_instance": { "category": "runnable" },
+        "block_01_block_01": { "category": "runnable" },
+        "block_02_check_dependencies_getter_returns_same_object_every_time": { "category": "runnable" },
+        "block_03_check_the_impossibility_of_creating_an_abstract_instance_of_": { "category": "runnable" },
+        "block_04_check_to_throws_invalid_exportnames": { "category": "runnable" },
+        "block_05_https_github_com_nodejs_node_issues_32806": { "category": "runnable" },
+        "block_06_check_to_throws_invalid_evaluatecallback": { "category": "runnable" },
+        "block_07_check_to_throws_invalid_options": { "category": "runnable" },
+        "block_08_test_compilefunction_importmoduledynamically": { "category": "runnable" }
       }
     },
     "parallel/test-vm-module-cached-data.js": { "category": "engine-difference", "reason": "SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS" },
