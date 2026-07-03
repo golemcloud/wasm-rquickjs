@@ -5,16 +5,18 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 // The bulk of this module performs filesystem I/O through `std::fs`, which is backed by the
 // WASI filesystem on the `wasm32-wasip2` target for both generation paths. Only the
 // `utimes`/`lutimes` family needs the host `wasi:filesystem` bindings directly (to set times on
-// a path with symlink control), so those bindings are aliased here and switched between the
-// Preview 2 and Preview 3 crates by feature.
-#[cfg(feature = "p2")]
+// a path with symlink control). The *Preview 2* bindings are used on both generation paths:
+// Preview 3 replaced `set-times-at` with an async component-model call, and driving it to
+// completion from inside a synchronous native function (which runs inside JS execution, i.e.
+// inside a poll of the exported call's wit-bindgen task) requires a nested `block_on`. That
+// nested `block_on` deadlocks: wit-bindgen's executor keeps spawned tasks in a crate-global
+// queue, so the nested `block_on` steals any task the enclosing export spawned earlier in the
+// same poll — notably the never-completing `rt.drive()` scheduler driver — and then waits for
+// it forever (wasmtime traps with "deadlock detected"). The P2 `set-times-at` is synchronous,
+// and P3 components import the residual P2 WASI surface for `std` anyway, so every P3 host
+// already provides `wasi:filesystem@0.2`.
 use wasip2::filesystem::preopens as wasi_fs_preopens;
-#[cfg(feature = "p2")]
 use wasip2::filesystem::types as wasi_fs_types;
-#[cfg(feature = "p3")]
-use wasip3::filesystem::preopens as wasi_fs_preopens;
-#[cfg(feature = "p3")]
-use wasip3::filesystem::types as wasi_fs_types;
 
 fn unix_timestamp_to_system_time(secs: f64) -> std::io::Result<SystemTime> {
     if !secs.is_finite() {
@@ -59,20 +61,12 @@ fn secs_to_wasi_timestamp(secs: f64) -> std::io::Result<wasi_fs_types::NewTimest
     }
     let seconds = secs.floor() as u64;
     let nanoseconds = ((secs - secs.floor()) * 1_000_000_000.0) as u32;
-    // Preview 2 uses `wall-clock/datetime` (u64 seconds); Preview 3 replaced it with
-    // `system-clock/instant` (i64 seconds). The seconds value is a non-negative timestamp, so
-    // the `as i64` conversion below is lossless for any representable time.
-    #[cfg(feature = "p2")]
-    let timestamp = wasi_fs_types::NewTimestamp::Timestamp(wasip2::clocks::wall_clock::Datetime {
-        seconds,
-        nanoseconds,
-    });
-    #[cfg(feature = "p3")]
-    let timestamp = wasi_fs_types::NewTimestamp::Timestamp(wasip3::clocks::system_clock::Instant {
-        seconds: seconds as i64,
-        nanoseconds,
-    });
-    Ok(timestamp)
+    Ok(wasi_fs_types::NewTimestamp::Timestamp(
+        wasip2::clocks::wall_clock::Datetime {
+            seconds,
+            nanoseconds,
+        },
+    ))
 }
 
 fn wasi_fs_error_to_io(e: &wasi_fs_types::ErrorCode) -> std::io::Error {
@@ -142,20 +136,10 @@ fn set_path_times(
     }
 
     if let Some((idx, relative)) = best_match {
-        // Preview 2 `set-times-at` is synchronous; Preview 3 made it an async component-model
-        // call, so drive it to completion on the current async executor with `block_on`.
-        #[cfg(feature = "p2")]
-        let result = dirs[idx]
+        dirs[idx]
             .0
-            .set_times_at(path_flags, &relative, atime, mtime);
-        #[cfg(feature = "p3")]
-        let result = wit_bindgen_p3::rt::async_support::block_on(async {
-            dirs[idx]
-                .0
-                .set_times_at(path_flags, relative, atime, mtime)
-                .await
-        });
-        result.map_err(|e| wasi_fs_error_to_io(&e))
+            .set_times_at(path_flags, &relative, atime, mtime)
+            .map_err(|e| wasi_fs_error_to_io(&e))
     } else {
         Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,

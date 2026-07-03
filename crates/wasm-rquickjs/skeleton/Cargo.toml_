@@ -22,7 +22,13 @@ default = ["p2", "normal"]
 # These are selected by the code generator, which rewrites `default` to `["p3"]` for the
 # Preview 3 target.
 p2 = ["dep:wit-bindgen", "dep:wit-bindgen-rt", "dep:wasip2", "dep:wstd"]
-p3 = ["dep:wit-bindgen-p3", "dep:wasip3", "dep:http"]
+# `wasip2` is also needed on the P3 path: the `utimes` family in `builtin/fs.rs` uses the
+# synchronous Preview 2 `set-times-at` on both paths, because P3's async `set-times-at` would
+# require a nested `block_on` inside JS execution, which deadlocks the wit-bindgen executor
+# (the nested `block_on` steals the enclosing export's spawned tasks, e.g. the never-completing
+# `rt.drive()` scheduler driver). P3 components import the residual P2 WASI surface for `std`
+# anyway, so this adds no new host requirements.
+p3 = ["dep:wit-bindgen-p3", "dep:wasip3", "dep:wasip2", "dep:http"]
 
 # Tier meta-features (cumulative). All Preview 2 tiers, since the Node.js builtin set they
 # enable is only compiled in the `p2` path.
@@ -182,4 +188,3 @@ libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.
 # generated crates can resolve the optional dependency. FINALIZE: publish 0.0.3 and
 # drop this patch entry.
 golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", rev = "dda5a2ad5f6140544dc013a94a13a1c384c14c0c" }
-
