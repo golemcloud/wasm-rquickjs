@@ -1624,8 +1624,16 @@ export const testCjsDynamicImportAttributeScanner = async () => {
 export const testLoaderCommonjsSourceNamedExports = async () => {
     try {
         fs.mkdirSync('/loader-cjs-source-app', { recursive: true });
+        fs.writeFileSync('/loader-cjs-source-app/package.json', JSON.stringify({
+            imports: {
+                '#loader-import': './imports-target.cjs',
+            },
+        }));
         fs.writeFileSync('/loader-cjs-source-app/dep.cjs', 'module.exports = { depValue: 17 };');
+        fs.writeFileSync('/loader-cjs-source-app/imports-target.cjs', 'exports.importsReexported = 102;');
         fs.writeFileSync('/loader-cjs-source-app/reexport-dep.cjs', 'exports.reexported = 91;');
+        fs.mkdirSync('/loader-cjs-source-app/dot-reexport-dir', { recursive: true });
+        fs.writeFileSync('/loader-cjs-source-app/dot-reexport-dir/index.js', 'exports.dotReexported = 103;');
         fs.writeFileSync('/loader-cjs-source-app/guard-dep.cjs', 'exports.foo = "foo"; exports.bar = "bar";');
         fs.writeFileSync('/loader-cjs-source-app/direct-guard-dep.cjs', 'exports.directGuarded = 93;');
         fs.writeFileSync('/loader-cjs-source-app/object-guard-dep.cjs', 'exports.objectGuarded = 94;');
@@ -1633,6 +1641,9 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
         fs.writeFileSync('/loader-cjs-source-app/nested-dep.cjs', 'exports.nested = { nestedValue: 92 };');
         fs.writeFileSync('/loader-cjs-source-app/tag-dep.cjs', 'module.exports = function tag() { return { reexported: 1 }; }; module.exports.reexported = 91;');
         fs.writeFileSync('/loader-cjs-source-app/aliased-dep.cjs', 'exports.aliasValue = 77;');
+        fs.mkdirSync('/loader-cjs-source-app/node_modules/loader-bare-dep', { recursive: true });
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/loader-bare-dep/package.json', JSON.stringify({ main: 'index.cjs' }));
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/loader-bare-dep/index.cjs', 'exports.bareReexported = 101;');
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
             'import { register } from "node:module";',
@@ -1648,6 +1659,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  }',
             '  if (specifier === "virtual:loader-cjs-reexport") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-bare-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/bare-reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-imports-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/imports-reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-dot-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/dot-reexport-dir/reexport.cjs", format: "commonjs" };',
             '  }',
             '  if (specifier === "virtual:loader-cjs-reexport-continuation") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/reexport-continuation.cjs", format: "commonjs" };',
@@ -1666,6 +1686,12 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  }',
             '  if (specifier === "virtual:loader-cjs-keys-reexport") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-keys-bare-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-bare-reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-keys-imports-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-imports-reexport.cjs", format: "commonjs" };',
             '  }',
             '  if (specifier === "virtual:loader-cjs-keys-member-require") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/keys-member-require.cjs", format: "commonjs" };',
@@ -1973,6 +1999,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  if (url === "file:///loader-cjs-source-app/reexport.cjs") {',
             '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\"./reexport-dep.cjs\\");" };',
             '  }',
+            '  if (url === "file:///loader-cjs-source-app/bare-reexport.cjs") {',
+            '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\"loader-bare-dep\\");" };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/imports-reexport.cjs") {',
+            '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\"#loader-import\\");" };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/dot-reexport-dir/reexport.cjs") {',
+            '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\".\\");" };',
+            '  }',
             '  if (url === "file:///loader-cjs-source-app/reexport-continuation.cjs") {',
             '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\"./nested-dep.cjs\\").nested;" };',
             '  }',
@@ -1994,6 +2029,34 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '      format: "commonjs",',
             '      source: [',
             '        "var dep = require(\\"./reexport-dep.cjs\\");",',
+            '        "Object.keys(dep).forEach(function (key) {",',
+            '        "  if (key === \\"default\\" || key === \\"__esModule\\") return;",',
+            '        "  exports[key] = dep[key];",',
+            '        "});",',
+            '        "exports.own = \\"own-value\\";"',
+            '      ].join("\\n")',
+            '    };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/keys-bare-reexport.cjs") {',
+            '    return {',
+            '      shortCircuit: true,',
+            '      format: "commonjs",',
+            '      source: [',
+            '        "var dep = require(\\"loader-bare-dep\\");",',
+            '        "Object.keys(dep).forEach(function (key) {",',
+            '        "  if (key === \\"default\\" || key === \\"__esModule\\") return;",',
+            '        "  exports[key] = dep[key];",',
+            '        "});",',
+            '        "exports.own = \\"own-value\\";"',
+            '      ].join("\\n")',
+            '    };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/keys-imports-reexport.cjs") {',
+            '    return {',
+            '      shortCircuit: true,',
+            '      format: "commonjs",',
+            '      source: [',
+            '        "var dep = require(\\"#loader-import\\");",',
             '        "Object.keys(dep).forEach(function (key) {",',
             '        "  if (key === \\"default\\" || key === \\"__esModule\\") return;",',
             '        "  exports[key] = dep[key];",',
@@ -2476,6 +2539,9 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'assert.strictEqual(fileQueryA.moduleFilename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual(fileQueryB.moduleFilename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual((await import("virtual:loader-cjs-reexport")).reexported, 91);',
+            'assert.strictEqual((await import("virtual:loader-cjs-bare-reexport")).bareReexported, 101);',
+            'assert.strictEqual((await import("virtual:loader-cjs-imports-reexport")).importsReexported, 102);',
+            'assert.strictEqual((await import("virtual:loader-cjs-dot-reexport")).dotReexported, 103);',
             'const continuationReexport = await import("virtual:loader-cjs-reexport-continuation");',
             'assert.strictEqual(continuationReexport.default.nestedValue, 92);',
             'assert.strictEqual(Object.prototype.hasOwnProperty.call(continuationReexport, "nested"), true);',
@@ -2496,6 +2562,12 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'const keysReexport = await import("virtual:loader-cjs-keys-reexport");',
             'assert.strictEqual(keysReexport.reexported, 91);',
             'assert.strictEqual(keysReexport.own, "own-value");',
+            'const keysBareReexport = await import("virtual:loader-cjs-keys-bare-reexport");',
+            'assert.strictEqual(keysBareReexport.bareReexported, 101);',
+            'assert.strictEqual(keysBareReexport.own, "own-value");',
+            'const keysImportsReexport = await import("virtual:loader-cjs-keys-imports-reexport");',
+            'assert.strictEqual(keysImportsReexport.importsReexported, 102);',
+            'assert.strictEqual(keysImportsReexport.own, "own-value");',
             'const keysMemberRequire = await import("virtual:loader-cjs-keys-member-require");',
             'assert.strictEqual(keysMemberRequire.own, "own-value");',
             'assert.strictEqual(Object.prototype.hasOwnProperty.call(keysMemberRequire, "reexported"), false);',

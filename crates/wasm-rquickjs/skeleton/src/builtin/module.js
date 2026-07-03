@@ -3523,6 +3523,21 @@ function readLoaderObjectKeysReexport(source, pos, requireBindings) {
     return { specifier, end: callEnd + 1 };
 }
 
+function resolveLoaderCjsReexport(specifier, filename) {
+    if (!filename || isBuiltin(specifier) || specifier.startsWith('node:') || specifier.includes(':')) return null;
+    const parentDir = pathModule.dirname(filename);
+    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')) {
+        return resolveFilename(specifier, parentDir);
+    }
+    if (specifier.startsWith('#')) {
+        return resolvePackageImports(specifier, parentDir, cjsPackageConditions());
+    }
+    if (isBarePackageSpecifier(specifier)) {
+        return resolveFromNodeModules(specifier, parentDir, filename, cjsPackageConditions());
+    }
+    return null;
+}
+
 function scanLoaderCjsTopLevelPositions(source, visitor) {
     let i = 0;
     let braceDepth = 0;
@@ -3605,22 +3620,20 @@ function addLoaderCjsNames(names, nameSet, source, filename, seen) {
             if (filename) {
                 for (let j = 0; j < objectLiteral.reexports.length; j++) {
                     const reexport = objectLiteral.reexports[j];
-                    if (reexport.startsWith('./') || reexport.startsWith('../') || reexport.startsWith('/')) {
-                        try {
-                            const resolved = resolveFilename(reexport, pathModule.dirname(filename));
-                            addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
-                        } catch (_) {}
-                    }
+                    try {
+                        const resolved = resolveLoaderCjsReexport(reexport, filename);
+                        if (resolved !== null) addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
+                    } catch (_) {}
                 }
             }
             return objectLiteral.end;
         }
         const keysReexport = braceDepth === 0 && statementStart ? readLoaderObjectKeysReexport(source, i, requireBindings) : null;
         const reexport = keysReexport !== null ? keysReexport.specifier : readLoaderModuleExportsRequire(source, i);
-        if (reexport !== null && filename && (reexport.startsWith('./') || reexport.startsWith('../') || reexport.startsWith('/'))) {
+        if (reexport !== null && filename) {
             try {
-                const resolved = resolveFilename(reexport, pathModule.dirname(filename));
-                addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
+                const resolved = resolveLoaderCjsReexport(reexport, filename);
+                if (resolved !== null) addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
             } catch (_) {}
         }
         if (keysReexport !== null) return keysReexport.end;
