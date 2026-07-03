@@ -107,6 +107,19 @@ harness = false
 name = "js_subtest_parser"
 harness = false
 
+# WASI Preview 3 (`--target wasi-p3`) integration tests. These are ordinary
+# libtest tests (default harness), unlike the test-r harnesses above. They are
+# registered explicitly so the P3 surface is a first-class, reviewable test
+# target and is picked up by the dedicated `test-p3` CI job.
+[[test]]
+name = "p3_generation"
+
+[[test]]
+name = "p3_exported_resource"
+
+[[test]]
+name = "p3_async_values"
+
 [features]
 default = []
 # Use Golem's forked wasmtime (see [patch.crates-io] at bottom of file)

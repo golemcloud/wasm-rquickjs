@@ -83,7 +83,7 @@ mod intl;
 mod module;
 #[path = "builtin/net.rs"]
 mod net;
-#[path = "builtin/node_http_disabled.rs"]
+#[path = "builtin/node_http_p3.rs"]
 mod node_http;
 #[path = "builtin/node_test.rs"]
 mod node_test;
@@ -279,6 +279,7 @@ pub fn add_module_resolvers(
         .with_module("https")
         .with_module("node:inspector")
         .with_module("inspector")
+        .with_module("__wasm_rquickjs_builtin/node_http_native")
         .with_module("__wasm_rquickjs_builtin/node_http_server")
         .with_module("node:_http_common")
         .with_module("_http_common")
@@ -389,6 +390,10 @@ pub fn module_loader() -> (
         )
         .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
         .with_module("__wasm_rquickjs_builtin/net_native", net::js_native_module)
+        .with_module(
+            "__wasm_rquickjs_builtin/node_http_native",
+            node_http::js_native_module,
+        )
         .with_module(
             "__wasm_rquickjs_builtin/zlib_native",
             zlib::js_native_module,

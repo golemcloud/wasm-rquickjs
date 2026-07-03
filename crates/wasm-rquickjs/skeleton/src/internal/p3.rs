@@ -215,7 +215,10 @@ impl JsState {
             .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
         })
         .await;
-        self.rt.idle().await;
+        // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
+        // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
+        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        drain_and_idle(self).await;
     }
 
     /// Phase 2b: import and evaluate the user module. Must run after
@@ -249,7 +252,10 @@ impl JsState {
             }
         })
         .await;
-        self.rt.idle().await;
+        // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
+        // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
+        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        drain_and_idle(self).await;
     }
 
     /// Evaluate all JavaScript — dispose symbols, builtin wiring, user module
@@ -386,6 +392,66 @@ fn spawn_drive_guard(rt: &AsyncRuntime) -> DriveGuard {
     DriveGuard(handle)
 }
 
+/// Aborts every currently-unref'd timer so a pending [`AsyncRuntime::idle`] can return. Mirrors the
+/// Preview 2 helper of the same name in `internal/p2.rs`: the immutable count borrows taken by the
+/// caller are dropped before this runs, so taking the mutable borrows here is safe.
+fn abort_unrefed_timers(js_state: &JsState) {
+    let unrefed = js_state.unrefed_timers.borrow().clone();
+    let mut abort_handles = js_state.abort_handles.borrow_mut();
+    let mut unrefed_mut = js_state.unrefed_timers.borrow_mut();
+    for id in unrefed.iter() {
+        if let Some(handle) = abort_handles.remove(id) {
+            handle.abort();
+        }
+        unrefed_mut.remove(id);
+    }
+}
+
+/// Drains the JavaScript event loop before an exported call returns.
+///
+/// After the export produces its result (a direct value or an awaited Promise) the P3 wrapper would
+/// otherwise return immediately and drop its [`DriveGuard`], so any work the export merely
+/// *scheduled* — `setTimeout`/`setInterval`/`setImmediate` callbacks, `queueMicrotask`/Promise jobs,
+/// `future<T>`/`stream<T>` writer tasks — would never run. This mirrors the Preview 2 `drain_and_idle`:
+/// it waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
+/// event loop exits once only unref'd timers are left) so [`AsyncRuntime::idle`] can complete.
+///
+/// `idle()` drives the runtime on its own (exactly as the plain `idle()` calls during
+/// `finish_init` do), so this is also used during initialization where no `DriveGuard` exists. In
+/// an exported call the caller's `DriveGuard` is additionally kept alive across this call, so any
+/// scheduler task started by the parked JS promise (`future<T>`/`stream<T>` writers) keeps being
+/// polled too.
+async fn drain_and_idle(js_state: &JsState) {
+    if js_state.unrefed_timers.borrow().is_empty() {
+        js_state.rt.idle().await;
+        return;
+    }
+    // Spawn a sentinel that polls until only unref'd timers remain, then aborts them so `idle()`
+    // can return. The sentinel is itself a spawned job (not tracked in `abort_handles`), so it does
+    // not perturb the `abort_count == unref_count` comparison below.
+    async_with!(js_state.ctx => |ctx| {
+        ctx.spawn(async {
+            loop {
+                // 1ms poll interval (`wait_for` takes nanoseconds).
+                wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
+                let state = get_js_state();
+                let abort_count = state.abort_handles.borrow().len();
+                let unref_count = state.unrefed_timers.borrow().len();
+                // Once the only remaining timers are unref'd, abort them so the loop can drain.
+                if abort_count > 0 && abort_count == unref_count {
+                    abort_unrefed_timers(state);
+                    break;
+                }
+                if unref_count == 0 {
+                    break;
+                }
+            }
+        });
+    })
+    .await;
+    js_state.rt.idle().await;
+}
+
 pub async fn call_js_export<A, R>(
     wit_package: &'static str,
     function_path: &'static [&'static str],
@@ -492,7 +558,7 @@ where
     // would prevent it from returning.
     let _drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
 
-    async_with!(js_state.ctx => |ctx| {
+    let result = async_with!(js_state.ctx => |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -547,7 +613,15 @@ where
             }
         }
     })
-    .await
+    .await;
+
+    // Run any timers / spawned jobs the export merely scheduled before returning (see
+    // `drain_and_idle`). The `DriveGuard` above is still alive here, so the scheduler keeps being
+    // polled while the drain waits.
+    if allow_async {
+        drain_and_idle(js_state).await;
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -812,7 +886,7 @@ where
     // synchronous path (driven by `block_on`) must not, so it never returns a `DriveGuard`.
     let _drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
 
-    async_with!(js_state.ctx => |ctx| {
+    let result = async_with!(js_state.ctx => |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
@@ -884,7 +958,14 @@ where
             }
         }
     })
-    .await
+    .await;
+
+    // Run any timers / spawned jobs the method merely scheduled before returning (see
+    // `drain_and_idle`).
+    if allow_async {
+        drain_and_idle(js_state).await;
+    }
+    result
 }
 
 fn dump_cannot_find_method(
@@ -1464,7 +1545,9 @@ where
                 // Derive the `Ctx` from the value so both share the same `'js` lifetime.
                 let cb_ctx = resolved.ctx().clone();
                 let wrapped = R::from_js(&cb_ctx, resolved).unwrap_or_else(|e| {
-                    panic!("Failed to convert a JavaScript value to a component future payload: {e:?}")
+                    panic!(
+                        "Failed to convert a JavaScript value to a component future payload: {e:?}"
+                    )
                 });
                 let _ = tx.send(convert(wrapped));
             }

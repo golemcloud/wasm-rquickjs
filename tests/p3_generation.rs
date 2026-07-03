@@ -509,6 +509,82 @@ fn p3_generated_crate_builds_with_wasi_system_clock_import() -> anyhow::Result<(
     Ok(())
 }
 
+/// Hardening regression test for the WASI Preview 3 dependency boundary.
+///
+/// The Preview 3 generation path must not drag in the Preview 2 *runtime* crates. This test
+/// resolves the generated P3 crate's dependency graph (for its default `["p3", "normal-p3"]`
+/// features, on the `wasm32-wasip2` build target that P3 actually compiles to) and asserts that
+/// none of the Preview 2 runtime dependencies are active, while the Preview 3 bindings are.
+///
+/// Note on scope: the check deliberately targets the P2 *runtime* crates our own skeleton would
+/// pull in via the `p2`/`fetch`/`golem` features (`wstd`, the 0.42 `wit-bindgen-rt`,
+/// `golem-wasi-http`, `golem-context`). It does **not** assert the absence of the `wasip2` crate:
+/// that appears purely as `getrandom`'s WASI backend for the `wasm32-wasip2` target and is
+/// unavoidable until a dedicated `wasm32-wasip3` rustc target exists — it is not evidence of a
+/// Preview 2 runtime leak in our code.
+#[test]
+fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package test:p3deps;
+
+            world p3deps {
+              export run: async func() -> string;
+            }
+        "#},
+        "export async function run() { return \"ok\"; }\n",
+    )?;
+
+    generate_p3(temp.path())?;
+
+    // `--prefix none` makes each line start with `<crate> vX.Y.Z ...`; `-e normal` keeps only
+    // dependencies that compile into the artifact (no dev/build-only edges).
+    let output = Command::new("cargo")
+        .arg("tree")
+        .arg("--manifest-path")
+        .arg(temp.path().join("out").join("Cargo.toml"))
+        .arg("--target")
+        .arg("wasm32-wasip2")
+        .arg("-e")
+        .arg("normal")
+        .arg("--prefix")
+        .arg("none")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "cargo tree on the generated P3 crate should succeed; stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let crate_names: std::collections::BTreeSet<&str> = stdout
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|token| !token.is_empty())
+        .collect();
+
+    // Preview 2 runtime crates that must never be active in the Preview 3 path.
+    for forbidden in ["wstd", "wit-bindgen-rt", "golem-wasi-http", "golem-context"] {
+        assert!(
+            !crate_names.contains(forbidden),
+            "Preview 2 runtime crate `{forbidden}` must not appear in the P3 dependency graph; \
+             full graph:\n{stdout}"
+        );
+    }
+
+    // The Preview 3 bindings must be present.
+    assert!(
+        crate_names.contains("wasip3"),
+        "Preview 3 crate `wasip3` must appear in the P3 dependency graph; full graph:\n{stdout}"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn p3_generated_crate_builds_with_async_result_export() -> anyhow::Result<()> {
     // An async export returning `result<T, E>`. Per the documented contract a result-returning

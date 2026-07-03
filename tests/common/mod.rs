@@ -11,12 +11,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
-use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
+use wasm_rquickjs::{
+    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
+};
 use wasmtime::component::{
     Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
 };
@@ -386,6 +388,124 @@ pub fn collect_example_paths(dirs: &[&str]) -> anyhow::Result<Vec<Utf8PathBuf>> 
     Ok(result)
 }
 
+/// The WASI generation target a runtime/node_compat test is exercised against.
+///
+/// Selected once per process via the `WASM_RQUICKJS_TEST_TARGET` environment variable
+/// (`p2` — the default — or `p3`). Preview 2 reproduces the historical behavior; Preview 3
+/// generates async component exports and runs them on a Component Model async host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestTarget {
+    P2,
+    P3,
+}
+
+impl TestTarget {
+    /// Suffix appended to generated crate / shared-target directories so that P2 and P3 builds of
+    /// the same example never share an output tree (the P3 generator writes a different Cargo.toml
+    /// and skeleton set).
+    pub fn dir_suffix(self) -> &'static str {
+        match self {
+            TestTarget::P2 => "",
+            TestTarget::P3 => "-p3",
+        }
+    }
+
+    pub fn generation_target(self) -> GenerationTarget {
+        match self {
+            TestTarget::P2 => GenerationTarget::WasiP2,
+            TestTarget::P3 => GenerationTarget::WasiP3,
+        }
+    }
+}
+
+/// Reads the active test target once from `WASM_RQUICKJS_TEST_TARGET` (default: `p2`).
+pub fn test_target() -> TestTarget {
+    static TARGET: OnceLock<TestTarget> = OnceLock::new();
+    *TARGET.get_or_init(
+        || match std::env::var("WASM_RQUICKJS_TEST_TARGET").ok().as_deref() {
+            Some("p3") | Some("P3") => TestTarget::P3,
+            Some("p2") | Some("P2") | None => TestTarget::P2,
+            Some(other) => {
+                panic!("Unknown WASM_RQUICKJS_TEST_TARGET '{other}'; expected 'p2' or 'p3'")
+            }
+        },
+    )
+}
+
+/// Copies a WIT directory to `dst`, turning every synchronous freestanding exported function into
+/// an `async func`.
+///
+/// The Preview 3 generation path rejects *synchronous freestanding exports* — both world-level
+/// `export …: func(…)` and plain `name: func(…)` declarations inside an exported `interface`. A
+/// synchronous *resource instance method* additionally traps at runtime if its JS implementation
+/// returns a Promise. Because the JS in these examples freely uses `async` methods, the rewrite
+/// async-ifies every `name: func(` declaration — freestanding functions and resource instance
+/// methods alike (see [`rewrite_wit_source_exports_async`]). Resource `constructor`s and `static
+/// func`s are left synchronous: WIT has no async spelling for them, and their JS returns values
+/// directly.
+///
+/// Only the package's own `.wit` files (those directly in `src_wit_dir`) are rewritten; the
+/// `deps/` subtree is copied verbatim. Dependency interfaces are *imported* (e.g. `wasi:random`),
+/// and their function signatures must keep matching the host imports, so they must never be
+/// async-ified. Examples that *export* an interface defined in a dependency package may therefore
+/// still fail to build or run under the P3 lane; every test is run in P3 mode on CI so such gaps
+/// surface directly.
+pub fn rewrite_wit_exports_async(
+    src_wit_dir: &Utf8Path,
+    dst_wit_dir: &Utf8Path,
+) -> anyhow::Result<()> {
+    if dst_wit_dir.exists() {
+        fs::remove_dir_all(dst_wit_dir)?;
+    }
+    fs::create_dir_all(dst_wit_dir)?;
+
+    for entry in fs::read_dir(src_wit_dir)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path =
+            Utf8PathBuf::from_path_buf(entry.path()).map_err(|_| anyhow!("Non UTF-8 WIT path"))?;
+        let file_name = src_path
+            .file_name()
+            .ok_or_else(|| anyhow!("WIT entry without file name"))?;
+        let dst_path = dst_wit_dir.join(file_name);
+
+        if file_type.is_dir() {
+            // A `deps/` subtree holds *imported* interfaces — copy it verbatim so the import
+            // signatures keep matching the host, never rewriting them to async.
+            copy_dir_recursive(src_path.as_std_path(), dst_path.as_std_path())?;
+        } else if src_path.extension() == Some("wit") {
+            let rewritten = rewrite_wit_source_exports_async(&fs::read_to_string(&src_path)?);
+            fs::write(&dst_path, rewritten)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Line-oriented rewrite backing [`rewrite_wit_exports_async`]. Kept separate so it is trivially
+/// unit-testable and free of any filesystem access.
+///
+/// Every line declaring a function type as `name: func(` is turned into `name: async func(`. This
+/// covers world-level `export foo: func(…)`, freestanding `foo: func(…)` inside an exported
+/// interface, and resource *instance* methods `bar: func(…)`. It deliberately does **not** match
+/// `constructor(…)` (no `: func(`) or `baz: static func(…)` (spelled `: static func(`, not
+/// `: func(`): WIT has no async spelling for those, and their JS returns values directly.
+fn rewrite_wit_source_exports_async(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| {
+            if line.contains(": func(") && !line.contains(": async func(") {
+                line.replacen(": func(", ": async func(", 1)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if source.ends_with('\n') { "\n" } else { "" }
+}
+
 #[derive(Copy, Clone)]
 pub enum FeatureCombination {
     None,
@@ -444,6 +564,32 @@ impl FeatureCombination {
             }
         }
     }
+
+    /// Cargo `--features` args for a given [`TestTarget`].
+    ///
+    /// For Preview 2 this is the historical [`cargo_args`](Self::cargo_args). For Preview 3 the
+    /// P2-only capabilities (`logging`, `node-http`, `fetch`, `golem`, `websocket`) are not
+    /// available, so every combination collapses onto one of the two P3 feature bundles the
+    /// skeleton exposes: `normal-p3` (crypto/zlib/encoding) or `full-p3` (adds crypto-full,
+    /// brotli, sqlite, timezone). The features are always spelled out explicitly so the P3 build
+    /// never silently falls back to the P2 default feature set.
+    pub fn cargo_args_for_target(&self, target: TestTarget) -> Vec<&'static str> {
+        match target {
+            TestTarget::P2 => self.cargo_args(),
+            TestTarget::P3 => {
+                let features = match self {
+                    FeatureCombination::None | FeatureCombination::Lite => "normal-p3",
+                    FeatureCombination::Normal => "normal-p3",
+                    FeatureCombination::Full
+                    | FeatureCombination::FullNoLogging
+                    | FeatureCombination::Golem
+                    | FeatureCombination::FullWithGolem
+                    | FeatureCombination::FullNoLoggingWithGolem => "full-p3",
+                };
+                vec!["--no-default-features", "--features", features]
+            }
+        }
+    }
 }
 
 pub struct PreparedComponent {
@@ -454,6 +600,35 @@ pub struct PreparedComponent {
 
 impl PreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        match test_target() {
+            TestTarget::P2 => Self::new_p2(wasm_path),
+            TestTarget::P3 => Self::new_p3(wasm_path),
+        }
+    }
+
+    /// Preview 3 host: a Component Model async engine, a stock-wasmtime P2+P3 WASI/HTTP linker,
+    /// and the same component. Only available on stock wasmtime — see [`p3_engine`].
+    #[cfg(not(feature = "use-golem-wasmtime"))]
+    fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let engine = p3_engine()?;
+        let linker = p3_linker(&engine)?;
+        let component = Component::from_file(&engine, wasm_path)?;
+        Ok(Self {
+            engine,
+            linker,
+            component,
+        })
+    }
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    fn new_p3(_wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        anyhow::bail!(
+            "WASM_RQUICKJS_TEST_TARGET=p3 is only supported on stock wasmtime, not the Golem \
+             wasmtime fork (`use-golem-wasmtime`); run the P3 test lane without the fork"
+        )
+    }
+
+    fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
@@ -614,6 +789,37 @@ pub struct GolemPreparedComponent {
 
 impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        match test_target() {
+            TestTarget::P2 => Self::new_p2(wasm_path),
+            TestTarget::P3 => Self::new_p3(wasm_path),
+        }
+    }
+
+    /// Preview 3 host for node_compat. The Golem context/websocket/logging capabilities are
+    /// Preview 2-only, so the P3 node-compat runner is built with `full-p3` (no Golem) and the
+    /// linker carries only the P2+P3 WASI/HTTP surface. `spans` is therefore always empty in P3.
+    #[cfg(not(feature = "use-golem-wasmtime"))]
+    fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let engine = p3_engine()?;
+        let linker = p3_linker(&engine)?;
+        let component = Component::from_file(&engine, wasm_path)?;
+        Ok(Self {
+            engine,
+            linker,
+            component,
+            spans: Arc::new(Mutex::new(Vec::new())),
+        })
+    }
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    fn new_p3(_wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        anyhow::bail!(
+            "WASM_RQUICKJS_TEST_TARGET=p3 is only supported on stock wasmtime, not the Golem \
+             wasmtime fork (`use-golem-wasmtime`); run the P3 test lane without the fork"
+        )
+    }
+
+    fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
@@ -1103,7 +1309,13 @@ impl CompiledTest {
     ) -> anyhow::Result<CompiledTest> {
         let compiled =
             Self::compile_with_features(path, use_shared_target, feature_combination).await?;
-        compiled.optimize().await
+        // Wizer pre-initialization is only wired up for the Preview 2 generation path; the P3
+        // generator deliberately does not inject a `wizer-initialize` export, so optimizing a P3
+        // component would fail. Return the unoptimized artifact for P3.
+        match test_target() {
+            TestTarget::P2 => compiled.optimize().await,
+            TestTarget::P3 => Ok(compiled),
+        }
     }
 
     async fn compile_with_features(
@@ -1111,25 +1323,45 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
+        let target = test_target();
         let name = path.file_name().unwrap();
-        let wrapper_crate_root = Utf8Path::new("tmp")
-            .join(name)
-            .join(feature_combination.label());
+        // P2 and P3 builds of the same example never share an output tree.
+        let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
+        let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
 
         // shared_target is relative to wrapper_crate_root.
         // this is a _different_ shared target than the one used in the compilation tests to make
-        // sure different feature combinations do not interfere with these tests.
-        let shared_target = Utf8Path::new("..").join("..").join("rt-target");
+        // sure different feature combinations do not interfere with these tests. P3 uses its own
+        // shared target so P2 and P3 artifacts never collide.
+        let shared_target_name = format!("rt-target{}", target.dir_suffix());
+        let shared_target = Utf8Path::new("..").join("..").join(&shared_target_name);
 
-        println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
-        generate_wrapper_crate(
-            &path.join("wit"),
+        // The Preview 3 generation path rejects synchronous freestanding exports, so for P3 we
+        // rewrite the example's WIT so its world-level exported functions become `async func`
+        // before generation. The rewritten WIT lives inside the wrapper crate dir so it never
+        // touches the committed example sources.
+        let wit_dir = match target {
+            TestTarget::P2 => path.join("wit"),
+            TestTarget::P3 => {
+                let rewritten = wrapper_crate_root.join("wit-async");
+                rewrite_wit_exports_async(&path.join("wit"), &rewritten)?;
+                rewritten
+            }
+        };
+
+        println!(
+            "Generating wrapper create for example '{name}' ({:?}) to {wrapper_crate_root}",
+            target
+        );
+        generate_wrapper_crate_with_target(
+            &wit_dir,
             &[JsModuleSpec {
                 name: name.to_string(),
                 mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
             }],
             &wrapper_crate_root,
             None,
+            target.generation_target(),
         )?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
@@ -1140,7 +1372,7 @@ impl CompiledTest {
             command.arg(shared_target);
         }
         command
-            .args(feature_combination.cargo_args())
+            .args(feature_combination.cargo_args_for_target(target))
             .current_dir(&wrapper_crate_root)
             .status()
             .and_then(|status| {
@@ -1157,7 +1389,7 @@ impl CompiledTest {
             CompiledTest {
                 wasm: Precompiled(
                     Utf8Path::new("tmp")
-                        .join("rt-target")
+                        .join(&shared_target_name)
                         .join("wasm32-wasip2")
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
@@ -1319,6 +1551,65 @@ impl WasiHttpView for Host {
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
             hooks: default_hooks(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// WASI Preview 3 (Component Model async) host support.
+//
+// Only compiled on stock wasmtime. The Golem wasmtime fork (`use-golem-wasmtime`) is a Preview 2
+// runtime; the P3 test lane always runs on stock wasmtime, so gating this out keeps the fork
+// build free of any dependency on P3 host APIs.
+// ---------------------------------------------------------------------------------------------
+
+/// Preview 3 engine: same stack/epoch configuration as the P2 host, plus Component Model async
+/// support so that async-lifted exports can be driven by the concurrent executor that
+/// `Func::call_async` uses internally.
+#[cfg(not(feature = "use-golem-wasmtime"))]
+fn p3_engine() -> anyhow::Result<Engine> {
+    let mut config = wasmtime::Config::default();
+    config.wasm_component_model(true);
+    config.wasm_component_model_async(true);
+    config.epoch_interruption(true);
+    config.async_stack_size(32 * 1024 * 1024);
+    config.max_wasm_stack(16 * 1024 * 1024);
+    let engine = Engine::new(&config)?;
+
+    let epoch_engine = engine.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            epoch_engine.increment_epoch();
+        }
+    });
+    Ok(engine)
+}
+
+/// Preview 3 linker: the P2 WASI surface (P3 components still import residual `wasi:io`/0.2 std
+/// interfaces), the P3 WASI surface, and the P3 async HTTP surface used by `fetch`.
+#[cfg(not(feature = "use-golem-wasmtime"))]
+fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
+    let mut linker: Linker<Host> = Linker::new(engine);
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    Ok(linker)
+}
+
+#[cfg(not(feature = "use-golem-wasmtime"))]
+impl wasmtime_wasi_http::p3::WasiHttpView for Host {
+    fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
+        wasmtime_wasi_http::p3::WasiHttpCtxView {
+            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            table: Arc::get_mut(&mut self.table)
+                .expect("ResourceTable is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("ResourceTable mutex must never fail"),
+            ctx: Arc::get_mut(&mut self.wasi_http)
+                .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("WasiHttpCtx mutex must never fail"),
         }
     }
 }

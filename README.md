@@ -70,6 +70,22 @@ the user's WIT world:
 
 By default `logging` and `http` are enabled. The `sqlite` feature must be explicitly enabled.
 
+#### Choosing the WASI target
+
+The `--target` option selects which WASI generation mode is used:
+
+- `--target wasi-p2` (**default**): the historical WASI Preview 2 mode. Component exports are
+  synchronous WIT functions and the full Node.js-compatible builtin set is available. This is the
+  stable, production path.
+- `--target wasi-p3`: the opt-in WASI Preview 3 (async) mode. Component exports and imports become
+  asynchronous, and WIT `future<T>` / `stream<T>` values are supported as direct function
+  parameters and return types. See [WASI Preview 3 target](#wasi-preview-3-target) below for the
+  current status and limitations.
+
+Both targets generate a crate that is still compiled with `cargo build --target wasm32-wasip2`
+(a dedicated `wasm32-wasip3` rustc target does not exist yet; the Preview 3 crate uses the
+[`wasip3`](https://crates.io/crates/wasip3) bindings on top of the Preview 2 target).
+
 ### Generating TypeScript module definitions
 
 The `generate-dts` command generates TypeScript module definitions for all the exported and imported interfaces:
@@ -87,6 +103,50 @@ Usage: wasm-rquickjs generate-dts --wit <WIT> --output <OUTPUT>
 
 `wasm-rquickjs` is integrated into [Golem](https://golem.cloud)'s command line interface, so it can be directly used
 using Golem app templates.
+
+> **Note:** The Golem integration currently targets the default WASI Preview 2 mode. Preview 3
+> (`--target wasi-p3`) is exercised through the project's own test suite and examples, not yet
+> through Golem app templates.
+
+### WASI Preview 3 target
+
+Passing `--target wasi-p3` to `generate-wrapper-crate` selects the **opt-in, asynchronous** WASI
+Preview 3 generation mode. It is intended for hosts that support the Component Model async ABI.
+
+**How it differs from Preview 2:**
+
+- Component exports and imports are generated as **async** WIT functions (`task.return`) instead of
+  synchronous ones.
+- The JavaScript event loop is driven by the Component Model async executor instead of Preview 2
+  `wasi:io/poll` pollables — there are no `wstd`/`wasip2`/pollable dependencies in the Preview 3
+  code path.
+- WIT `future<T>` and `stream<T>` are supported as **direct** function parameters and return types
+  (mapped to JavaScript `Promise<T>` and `AsyncIterable<T>` respectively).
+- `fetch` / HTTP uses the `wasi:http` Preview 3 (`wasi:http/handler`) async client.
+
+**Building and running:**
+
+The generated crate is still built with `cargo build --target wasm32-wasip2`. Running the resulting
+component requires a host with Preview 3 and Component Model async support. For example, with the
+`wasmtime` CLI (version 46.x):
+
+```
+wasmtime run -S p3=y -S http=y --wasm component-model=y --wasm component-model-async=y \
+  --invoke 'my-export()' path/to/component.wasm
+```
+
+The Node.js-compatible builtin set is available on Preview 3 as well. Working end-to-end examples
+live under [`examples/p3`](examples/p3), covering async exports/imports, `future<T>`/`stream<T>`
+values, exported resources, and HTTP `fetch`.
+
+**Current limitations (Preview 3):**
+
+- **Composition** (`--js-modules name=@composition`) is not supported yet.
+- **Wizer** pre-initialization (`optimize`) is not applied to Preview 3 components.
+- **Golem** app-template integration targets Preview 2 (see the note above).
+
+Preview 3 is opt-in and evolving; Preview 2 (`--target wasi-p2`) remains the default and stable
+path.
 
 ## Mappings
 
