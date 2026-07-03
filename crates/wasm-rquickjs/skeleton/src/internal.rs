@@ -5125,8 +5125,12 @@ fn is_asi_continuation_previous(byte: u8) -> bool {
 
 fn is_asi_continuation_next(source: &str, pos: usize) -> bool {
     let bytes = source.as_bytes();
-    if pos + 1 < bytes.len() && matches!(&source[pos..pos + 2], "++" | "--") {
-        return false;
+    if pos + 1 < bytes.len() {
+        let current = bytes[pos];
+        let next = bytes[pos + 1];
+        if (current == b'+' && next == b'+') || (current == b'-' && next == b'-') {
+            return false;
+        }
     }
     is_asi_continuation_operator(bytes[pos])
 }
