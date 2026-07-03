@@ -8275,7 +8275,7 @@
         "block_08_observed_see_https_github_com_mozilla_source_map_pull_92": { "category": "runnable" }
       }
     },
-    "parallel/test-source-map-cjs-require-cache.js": { "category": "known-gap", "reason": "source-map cache eviction via findSourceMap()/GC is incomplete" },
+    "parallel/test-source-map-cjs-require-cache.js": { "category": "runnable" },
     "parallel/test-spawn-cmd-named-pipe.js": { "category": "wasi-impossible", "reason": "Windows-only named pipe/cmd shell behavior is not available in WASI" },
     "parallel/test-sqlite-custom-functions.js": {},
     "parallel/test-sqlite-data-types.js": {},

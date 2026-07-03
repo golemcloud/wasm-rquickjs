@@ -1677,6 +1677,15 @@ function getSimpleSourceMapRegistry() {
     return registry;
 }
 
+function getCjsSourceMapOwnerRegistry() {
+    let registry = globalThis.__wasm_rquickjs_cjs_source_map_owners;
+    if (!registry || typeof registry !== 'object') {
+        registry = Object.create(null);
+        globalThis.__wasm_rquickjs_cjs_source_map_owners = registry;
+    }
+    return registry;
+}
+
 function getCjsLineOffsetRegistry() {
     let registry = globalThis.__wasm_rquickjs_cjs_line_offsets;
     if (!registry || typeof registry !== 'object') {
@@ -1687,6 +1696,32 @@ function getCjsLineOffsetRegistry() {
 }
 
 const cjsLineOffset = 6;
+
+function derefWeakRef(ref) {
+    if (ref === undefined || ref === null) return undefined;
+    try {
+        if (typeof ref.deref === 'function') return ref.deref();
+    } catch (_) {
+        return ref;
+    }
+    try {
+        if (typeof WeakRef === 'function' && WeakRef.prototype && typeof WeakRef.prototype.deref === 'function') {
+            return WeakRef.prototype.deref.call(ref);
+        }
+    } catch (_) {
+        return ref;
+    }
+    return ref;
+}
+
+function makeWeakRef(value) {
+    if (typeof WeakRef !== 'function') return undefined;
+    try {
+        return new WeakRef(value);
+    } catch (err) {
+        return undefined;
+    }
+}
 
 const sourceMapVlqChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const sourceMapVlqMap = Object.create(null);
@@ -1926,8 +1961,16 @@ class SourceMap {
 }
 
 function findSourceMap(path) {
+    path = String(path);
+    const owners = getCjsSourceMapOwnerRegistry();
+    const ownerRef = owners[path];
+    if (ownerRef !== undefined && derefWeakRef(ownerRef) === undefined) {
+        delete owners[path];
+        delete getSimpleSourceMapRegistry()[path];
+        return undefined;
+    }
     const registry = getSimpleSourceMapRegistry();
-    return registry[String(path)];
+    return registry[path];
 }
 
 function sourceMapLineLengths(source) {
@@ -1947,10 +1990,12 @@ function decodeInlineSourceMap(url) {
     }
 }
 
-function registerSourceMapForCjs(filename, source) {
+function registerSourceMapForCjs(filename, source, moduleObject) {
     const registry = getSimpleSourceMapRegistry();
+    const owners = getCjsSourceMapOwnerRegistry();
     if (!isSourceMapsEnabled()) {
         delete registry[filename];
+        delete owners[filename];
         return;
     }
 
@@ -1963,6 +2008,7 @@ function registerSourceMapForCjs(filename, source) {
     }
     if (url === null) {
         delete registry[filename];
+        delete owners[filename];
         return;
     }
 
@@ -1984,12 +2030,23 @@ function registerSourceMapForCjs(filename, source) {
     }
     if (payload === null) {
         delete registry[filename];
+        delete owners[filename];
         return;
     }
     registry[filename] = new SourceMap(payload, {
         lineLengths: sourceMapLineLengths(source),
         sourceBasePath,
     });
+    if (moduleObject) {
+        const ownerRef = makeWeakRef(moduleObject);
+        if (ownerRef !== undefined) {
+            owners[filename] = ownerRef;
+        } else {
+            delete owners[filename];
+        }
+    } else {
+        delete owners[filename];
+    }
 }
 
 function countMatches(text, charCode) {
@@ -4837,7 +4894,7 @@ function loadModule(resolvedFilename, source, parentModule) {
 
     // Cache before executing (handles circular dependencies)
     moduleCache[filename] = mod;
-    registerSourceMapForCjs(filename, source);
+    registerSourceMapForCjs(filename, source, mod);
 
     if (parentModule && parentModule.children) {
         parentModule.children.push(mod);
@@ -5044,7 +5101,7 @@ function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
     mod._compile = makeModuleCompile(mod);
     mod.require = makeModuleRequire(mod);
     moduleCache[cacheKey] = mod;
-    registerSourceMapForCjs(filename, source);
+    registerSourceMapForCjs(filename, source, mod);
     try {
         const loaderRequire = makeLoaderCommonJsRequire(sourceUrl || (pathModule.isAbsolute(filename) ? fileUrlForPath(filename) : filename), pathModule.isAbsolute(filename) ? dirname : '/', mod, filename);
         mod.require = loaderRequire;

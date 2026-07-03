@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3238/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3239/4425 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3238 | 73.2% | 56.4% | 47.2% |
-| 🧩 known gap | 1187 | 26.8% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3239 | 73.2% | 56.4% | 47.2% |
+| 🧩 known gap | 1186 | 26.8% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 162 | — | 2.8% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.3% |
 | **Total** | **6865** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3238/5743 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5743 (56.4%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 613 | 187 | 146 | 86 | 11 | 0 | 183 | 56.2% | 43.5% |
+| other | 613 | 188 | 145 | 86 | 11 | 0 | 183 | 56.5% | 43.7% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1187)
+### known gap (1186)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1271,7 +1271,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | setImmediate queue turn semantics are unstable and can trap in the timeout scheduler | 1 | `parallel/test-timers-immediate-queue.js` |
 | setInterval scheduling incorrectly includes callback execution time | 1 | `sequential/test-timers-set-interval-excludes-callback-duration.js` |
 | snapshot update/read flow via node:test is incomplete in WASM child emulation | 1 | `parallel/test-runner-snapshot-file-tests.js#test_01_t_assert_filesnapshot_update_read_flow` |
-| source-map cache eviction via findSourceMap()/GC is incomplete | 1 | `parallel/test-source-map-cjs-require-cache.js` |
 | spawn() stdio handling is incomplete: non-requested stderr stream is still created | 1 | `sequential/test-child-process-exit.js` |
 | spawn() timeout validation path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02` |
 | spawn() timeout+AbortSignal cleanup path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_03_block_03` |
