@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-02 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-07-03 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
-| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 35 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-dynamic-import-mutating-fs.mjs`, ... (+32) |
+| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 34 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-experimental-warnings.mjs`, ... (+31) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
@@ -1223,6 +1223,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | runInContext sloppy-mode var/delete semantics still require contextified global script bindings | 1 | `parallel/test-vm-not-strict.js` |
 | runInNewContext assignment with Proxy sandbox does not match Node trap behavior | 1 | `parallel/test-vm-set-property-proxy.js` |
 | same-component node:http client->server calls via wasi:http can deadlock in this scenario | 1 | `parallel/test-http-write-head-after-set-header.js` |
+| same-process dynamic import cache behavior is covered by runner_dynamic_import_cache_survives_removed_file; full Node test also requires spawned process.execPath --input-type=module support | 1 | `es-module/test-esm-dynamic-import-mutating-fs.mjs` |
 | same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 1 | `es-module/test-esm-import-meta-resolve.mjs` |
 | sendBlockList connect path can crash in WASI UDP implementation | 1 | `parallel/test-dgram-blocklist.js#block_00_block_00` |
 | sendBlockList send() callback path is not Node-compatible and can hang | 1 | `parallel/test-dgram-blocklist.js#block_01_block_01` |

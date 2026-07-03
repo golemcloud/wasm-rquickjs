@@ -96,6 +96,48 @@ async fn runner_import_preload_flag(prepared: &Arc<FullPreparedComponent>) -> an
 }
 
 #[test_r::test]
+async fn runner_dynamic_import_cache_survives_removed_file(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("dynamic-import-cache-entry.mjs"),
+        [
+            "import assert from 'node:assert';",
+            "import fs from 'node:fs/promises';",
+            "const target = new URL('./dynamic-import-cache-target.mjs', import.meta.url);",
+            "await assert.rejects(import(target), { code: 'ERR_MODULE_NOT_FOUND' });",
+            "await fs.writeFile(target, 'export default \"actual target\"\\n');",
+            "const moduleRecord = await import(target);",
+            "await fs.rm(target);",
+            "assert.strictEqual(await import(target), moduleRecord);",
+        ]
+        .join("\n"),
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/dynamic-import-cache-entry.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
 async fn runner_static_registered_loader_async_resolve(
     prepared: &Arc<FullPreparedComponent>,
 ) -> anyhow::Result<()> {

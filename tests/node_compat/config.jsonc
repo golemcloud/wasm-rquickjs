@@ -5993,7 +5993,7 @@
     "es-module/test-esm-double-encoding.mjs": { "category": "runnable" },
     "es-module/test-esm-dynamic-import-attribute.mjs": { "category": "runnable" },
     "es-module/test-esm-dynamic-import-commonjs.mjs": { "category": "runnable" },
-    "es-module/test-esm-dynamic-import-mutating-fs.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
+    "es-module/test-esm-dynamic-import-mutating-fs.mjs": { "category": "known-gap", "reason": "same-process dynamic import cache behavior is covered by runner_dynamic_import_cache_survives_removed_file; full Node test also requires spawned process.execPath --input-type=module support" },
     "es-module/test-esm-encoded-path.mjs": { "category": "runnable" },
     "es-module/test-esm-example-loader.mjs": { "category": "runnable" },
     "es-module/test-esm-experimental-warnings.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
