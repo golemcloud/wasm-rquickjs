@@ -451,6 +451,10 @@ export const testEsmPackageMapEdgeCases = async () => {
             imports: {
                 '#app-alias': './app-alias.mjs',
                 '#external': 'external-pkg',
+                '#external-encoded-slash': 'missing-external/a%2Fb',
+                '#external-encoded-backslash': 'missing-external/a%5Cb',
+                '#relative-encoded-slash': './a%2Fb.js',
+                '#relative-encoded-backslash': './a%5Cb.js',
                 '#builtin': 'node:fs',
                 '#false-target': false,
                 '#array-false-fallback': [
@@ -481,6 +485,14 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(importsEntry.arrayFalseFallbackValue, { appAlias: true });
         fs.writeFileSync('/esm-package-map-edge-app/imports-builtin-entry.mjs', 'export default await import("#builtin");');
         await expectImportError('/esm-package-map-edge-app/imports-builtin-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-external-encoded-slash-entry.mjs', 'export default await import("#external-encoded-slash");');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-external-encoded-backslash-entry.mjs', 'export default await import("#external-encoded-backslash");');
+        await expectImportError('/esm-package-map-edge-app/imports-external-encoded-slash-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        await expectImportError('/esm-package-map-edge-app/imports-external-encoded-backslash-entry.mjs', 'ERR_MODULE_NOT_FOUND');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-relative-encoded-slash-entry.mjs', 'export default await import("#relative-encoded-slash");');
+        fs.writeFileSync('/esm-package-map-edge-app/imports-relative-encoded-backslash-entry.mjs', 'export default await import("#relative-encoded-backslash");');
+        await expectImportError('/esm-package-map-edge-app/imports-relative-encoded-slash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        await expectImportError('/esm-package-map-edge-app/imports-relative-encoded-backslash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         fs.writeFileSync('/esm-package-map-edge-app/imports-false-entry.mjs', 'export default await import("#false-target");');
         await expectImportError('/esm-package-map-edge-app/imports-false-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/imports-boundary-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');

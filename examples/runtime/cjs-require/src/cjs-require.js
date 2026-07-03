@@ -460,6 +460,10 @@ export const testRequirePackageMapEdgeCases = () => {
             imports: {
                 '#app-alias': './app-alias.js',
                 '#external': 'external-pkg',
+                '#external-encoded-slash': 'missing-external/a%2Fb',
+                '#external-encoded-backslash': 'missing-external/a%5Cb',
+                '#relative-encoded-slash': './a%2Fb.js',
+                '#relative-encoded-backslash': './a%5Cb.js',
                 '#builtin': 'node:fs',
             },
         }));
@@ -470,6 +474,10 @@ export const testRequirePackageMapEdgeCases = () => {
 
         assert.deepStrictEqual(appRequire('#external'), { external: true });
         assert.throws(() => appRequire('#builtin'), { code: 'ERR_INVALID_PACKAGE_TARGET' });
+        assert.throws(() => appRequire('#external-encoded-slash'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => appRequire('#external-encoded-backslash'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => appRequire('#relative-encoded-slash'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
+        assert.throws(() => appRequire('#relative-encoded-backslash'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         const dep = appRequire('dep');
         assert.throws(() => dep.loadAppAlias(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
 

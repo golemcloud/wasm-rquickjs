@@ -1066,13 +1066,13 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
                 warningContext.importer
             );
         }
-        if (hasEncodedSlashOrBackslash(target)) {
-            throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');
-        }
         if (allowBareTarget && isBarePackageSpecifier(target)) {
             const resolved = resolveFromNodeModules(target, packageDir, pathModule.join(packageDir, 'package.json'), conditions);
             if (resolved !== null) return resolved;
             throw makeModuleNotFoundError(target);
+        }
+        if (hasEncodedSlashOrBackslash(target)) {
+            throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');
         }
         if (!target.startsWith('./')) {
             throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
