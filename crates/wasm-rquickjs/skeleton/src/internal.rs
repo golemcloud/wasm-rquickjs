@@ -4514,7 +4514,7 @@ fn skip_ws_comments_impl<const TRACK_LINE_TERMINATOR: bool>(
     }
 }
 
-fn read_ident(source: &str, mut pos: usize) -> Option<(String, usize)> {
+fn read_ident_span(source: &str, mut pos: usize) -> Option<(usize, usize)> {
     let bytes = source.as_bytes();
     if pos >= bytes.len() || !is_ident_start(bytes[pos]) {
         return None;
@@ -4524,7 +4524,12 @@ fn read_ident(source: &str, mut pos: usize) -> Option<(String, usize)> {
     while pos < bytes.len() && is_ident_continue(bytes[pos]) {
         pos += 1;
     }
-    Some((source[start..pos].to_string(), pos))
+    Some((start, pos))
+}
+
+fn read_ident(source: &str, pos: usize) -> Option<(String, usize)> {
+    let (start, end) = read_ident_span(source, pos)?;
+    Some((source[start..end].to_string(), end))
 }
 
 fn parse_ident_name(source: &str, pos: usize, name: &str) -> Option<usize> {
@@ -5035,38 +5040,63 @@ fn find_matching_brace(source: &str, start: usize) -> Option<usize> {
 }
 
 
-fn is_simple_getter_body(body: &str) -> bool {
-    let return_pos = skip_ws_comments(body, 0);
-    let Some(return_end) = parse_free_ident_name(body, return_pos, "return") else {
-        return false;
-    };
-    let mut i = skip_ws_comments(body, return_end);
-    let Some((_, next)) = read_ident(body, i) else {
-        return false;
-    };
+enum GetterReturnMember<'a> {
+    Bare,
+    Dot,
+    BracketString,
+    BracketIdentifier { receiver: &'a str, member: &'a str },
+}
+
+fn parse_getter_return_member_body(body: &str) -> Option<GetterReturnMember<'_>> {
+    let bytes = body.as_bytes();
+    let mut i = skip_ws_comments(body, 0);
+    let return_end = parse_free_ident_name(body, i, "return")?;
+    i = skip_ws_comments(body, return_end);
+    let (receiver_start, next) = read_ident_span(body, i)?;
+    let receiver = &body[receiver_start..next];
     i = skip_ws_comments(body, next);
-    if i < body.len() && body.as_bytes()[i] == b'.' {
+    let member = if i < body.len() && bytes[i] == b'.' {
         i = skip_ws_comments(body, i + 1);
-        let Some((_, next)) = read_ident(body, i) else {
-            return false;
-        };
+        let (_, next) = read_ident_span(body, i)?;
         i = next;
-    } else if i < body.len() && body.as_bytes()[i] == b'[' {
+        GetterReturnMember::Dot
+    } else if i < body.len() && bytes[i] == b'[' {
         i = skip_ws_comments(body, i + 1);
-        let Some((_, next)) = read_js_string(body, i) else {
-            return false;
+        let quote = bytes.get(i).copied();
+        let member = if matches!(quote, Some(b'\'') | Some(b'"')) {
+            let (_, next) = read_js_string(body, i)?;
+            i = skip_ws_comments(body, next);
+            GetterReturnMember::BracketString
+        } else {
+            let (member_start, next) = read_ident_span(body, i)?;
+            let member = &body[member_start..next];
+            i = skip_ws_comments(body, next);
+            GetterReturnMember::BracketIdentifier { receiver, member }
         };
-        i = skip_ws_comments(body, next);
-        if i >= body.len() || body.as_bytes()[i] != b']' {
-            return false;
+        if i >= body.len() || bytes[i] != b']' {
+            return None;
         }
         i += 1;
-    }
+        member
+    } else {
+        GetterReturnMember::Bare
+    };
     i = skip_ws_comments(body, i);
-    if i < body.len() && body.as_bytes()[i] == b';' {
+    if i < body.len() && bytes[i] == b';' {
         i = skip_ws_comments(body, i + 1);
     }
-    i >= body.len()
+    if i >= body.len() {
+        Some(member)
+    } else {
+        None
+    }
+}
+
+fn is_simple_getter_body(body: &str) -> bool {
+    matches!(
+        parse_getter_return_member_body(body),
+        Some(GetterReturnMember::Bare | GetterReturnMember::Dot | GetterReturnMember::BracketString)
+    )
 }
 
 
@@ -5863,32 +5893,11 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
 }
 
 fn getter_body_returns_binding_key(body: &str, binding: &str, key: &str) -> bool {
-    let bytes = body.as_bytes();
-    let mut i = skip_ws_comments(body, 0);
-    let Some(return_end) = parse_free_ident_name(body, i, "return") else {
-        return false;
-    };
-    i = skip_ws_comments(body, return_end);
-    let Some(binding_end) = parse_free_ident_name(body, i, binding) else {
-        return false;
-    };
-    i = skip_ws_comments(body, binding_end);
-    if i >= bytes.len() || bytes[i] != b'[' {
-        return false;
-    }
-    i = skip_ws_comments(body, i + 1);
-    let Some(key_end) = parse_free_ident_name(body, i, key) else {
-        return false;
-    };
-    i = skip_ws_comments(body, key_end);
-    if i >= bytes.len() || bytes[i] != b']' {
-        return false;
-    }
-    i = skip_ws_comments(body, i + 1);
-    if i < bytes.len() && bytes[i] == b';' {
-        i = skip_ws_comments(body, i + 1);
-    }
-    i >= bytes.len()
+    matches!(
+        parse_getter_return_member_body(body),
+        Some(GetterReturnMember::BracketIdentifier { receiver, member })
+            if receiver == binding && member == key
+    )
 }
 
 fn next_char_boundary(source: &str, pos: usize) -> usize {

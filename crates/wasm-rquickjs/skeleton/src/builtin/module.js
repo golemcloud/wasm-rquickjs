@@ -3021,32 +3021,46 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
     return foundKind !== null;
 }
 
-function loaderSimpleGetterBody(source, start, end) {
+function readLoaderGetterReturnMember(source, start, end) {
     let i = skipWhitespaceAndComments(source, start);
     const returnEnd = readLoaderNamedIdentifier(source, i, 'return');
-    if (returnEnd === null) return false;
+    if (returnEnd === null) return null;
     i = skipWhitespaceAndComments(source, returnEnd);
     const receiver = readLoaderIdentifier(source, i);
-    if (receiver === null) return false;
+    if (receiver === null) return null;
     i = skipWhitespaceAndComments(source, receiver.end);
+    let member = { kind: 'bare', receiver: receiver.name };
     if (source.charCodeAt(i) === 0x2e) {
         i = skipWhitespaceAndComments(source, i + 1);
-        const member = readLoaderIdentifier(source, i);
-        if (member === null) return false;
-        i = member.end;
+        const property = readLoaderIdentifier(source, i);
+        if (property === null) return null;
+        i = property.end;
+        member = { kind: 'dot', receiver: receiver.name, property: property.name };
     } else if (source.charCodeAt(i) === 0x5b) {
         i = skipWhitespaceAndComments(source, i + 1);
         const quote = source.charCodeAt(i);
-        if (quote !== 0x27 && quote !== 0x22) return false;
-        const decoded = decodeStringLiteral(source, i + 1, quote);
-        if (decoded === null) return false;
-        i = skipWhitespaceAndComments(source, decoded.end + 1);
-        if (source.charCodeAt(i) !== 0x5d) return false;
+        if (quote === 0x27 || quote === 0x22) {
+            const decoded = decodeStringLiteral(source, i + 1, quote);
+            if (decoded === null) return null;
+            i = skipWhitespaceAndComments(source, decoded.end + 1);
+            member = { kind: 'bracket-string', receiver: receiver.name, property: decoded.value };
+        } else {
+            const property = readLoaderIdentifier(source, i);
+            if (property === null) return null;
+            i = skipWhitespaceAndComments(source, property.end);
+            member = { kind: 'bracket-identifier', receiver: receiver.name, property: property.name };
+        }
+        if (source.charCodeAt(i) !== 0x5d) return null;
         i++;
     }
     i = skipWhitespaceAndComments(source, i);
     if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
-    return i >= end;
+    return i >= end ? member : null;
+}
+
+function loaderSimpleGetterBody(source, start, end) {
+    const member = readLoaderGetterReturnMember(source, start, end);
+    return member !== null && member.kind !== 'bracket-identifier';
 }
 
 function loaderGetterBodyEnd(source, paramsOpen, limit) {

@@ -3398,6 +3398,40 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '});',
             'exports.own = "own";',
         ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/named-function-getter-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: true, get: function namedGetter() { return _dep[key]; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/nested-getter-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: true, get: function () { return _dep[key].nested; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/other-binding-getter-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'var other = _dep;',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: true, get: function () { return other[key]; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
+        fs.writeFileSync('/cjs-analyzer-guards-app/other-key-getter-reexport.cjs', [
+            'var _dep = require("./dep.cjs");',
+            'Object.keys(_dep).forEach(function (key) {',
+            '  var otherKey = key;',
+            '  if (key === "default" || key === "__esModule") return;',
+            '  Object.defineProperty(exports, key, { enumerable: true, get: function () { return _dep[otherKey]; } });',
+            '});',
+            'exports.own = "own";',
+        ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/reversed-guard-reexport.cjs', [
             'var _dep = require("./dep.cjs");',
             'Object.keys(_dep).forEach(function (key) {',
@@ -3670,6 +3704,10 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'import * as duplicateEnumerableReexport from "./duplicate-enumerable-reexport.cjs";',
             'import * as getterOnlyReexport from "./getter-only-reexport.cjs";',
             'import * as getterBeforeEnumerableReexport from "./getter-before-enumerable-reexport.cjs";',
+            'import * as namedFunctionGetterReexport from "./named-function-getter-reexport.cjs";',
+            'import * as nestedGetterReexport from "./nested-getter-reexport.cjs";',
+            'import * as otherBindingGetterReexport from "./other-binding-getter-reexport.cjs";',
+            'import * as otherKeyGetterReexport from "./other-key-getter-reexport.cjs";',
             'import * as reversedGuardReexport from "./reversed-guard-reexport.cjs";',
             'import * as delayedGuardReexport from "./delayed-guard-reexport.cjs";',
             'import * as nestedGuardReexport from "./nested-guard-reexport.cjs";',
@@ -3724,6 +3762,13 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  getterOnlyOwn: getterOnlyReexport.own,',
             '  getterBeforeEnumerableReexportKeys: Object.keys(getterBeforeEnumerableReexport).filter((key) => key !== "default" && key !== "own"),',
             '  getterBeforeEnumerableOwn: getterBeforeEnumerableReexport.own,',
+            '  namedFunctionGetterAlpha: namedFunctionGetterReexport.alpha,',
+            '  nestedGetterReexportKeys: Object.keys(nestedGetterReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  nestedGetterOwn: nestedGetterReexport.own,',
+            '  otherBindingGetterReexportKeys: Object.keys(otherBindingGetterReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  otherBindingGetterOwn: otherBindingGetterReexport.own,',
+            '  otherKeyGetterReexportKeys: Object.keys(otherKeyGetterReexport).filter((key) => key !== "default" && key !== "own"),',
+            '  otherKeyGetterOwn: otherKeyGetterReexport.own,',
             '  reversedGuardReexportKeys: Object.keys(reversedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
             '  reversedGuardOwn: reversedGuardReexport.own,',
             '  delayedGuardReexportKeys: Object.keys(delayedGuardReexport).filter((key) => key !== "default" && key !== "own"),',
@@ -3797,6 +3842,13 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.strictEqual(result.getterOnlyOwn, 'own');
         assert.deepStrictEqual(result.getterBeforeEnumerableReexportKeys, []);
         assert.strictEqual(result.getterBeforeEnumerableOwn, 'own');
+        assert.strictEqual(result.namedFunctionGetterAlpha, 'alpha');
+        assert.deepStrictEqual(result.nestedGetterReexportKeys, []);
+        assert.strictEqual(result.nestedGetterOwn, 'own');
+        assert.deepStrictEqual(result.otherBindingGetterReexportKeys, []);
+        assert.strictEqual(result.otherBindingGetterOwn, 'own');
+        assert.deepStrictEqual(result.otherKeyGetterReexportKeys, []);
+        assert.strictEqual(result.otherKeyGetterOwn, 'own');
         assert.deepStrictEqual(result.reversedGuardReexportKeys, []);
         assert.strictEqual(result.reversedGuardOwn, 'own');
         assert.deepStrictEqual(result.delayedGuardReexportKeys, []);
