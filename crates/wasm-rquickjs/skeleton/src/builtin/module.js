@@ -3021,46 +3021,59 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
     return foundKind !== null;
 }
 
-function readLoaderGetterReturnMember(source, start, end) {
+const loaderGetterReturnInvalid = 0;
+const loaderGetterReturnBare = 1;
+const loaderGetterReturnDot = 2;
+const loaderGetterReturnBracketString = 3;
+const loaderGetterReturnBracketIdentifier = 4;
+
+function readLoaderIdentifierEnd(source, pos) {
+    if (!isIdentifierStartCode(source.charCodeAt(pos))) return null;
+    let i = pos + 1;
+    while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
+    return i;
+}
+
+function readLoaderGetterReturnMemberKind(source, start, end) {
     let i = skipWhitespaceAndComments(source, start);
     const returnEnd = readLoaderNamedIdentifier(source, i, 'return');
-    if (returnEnd === null) return null;
+    if (returnEnd === null) return loaderGetterReturnInvalid;
     i = skipWhitespaceAndComments(source, returnEnd);
-    const receiver = readLoaderIdentifier(source, i);
-    if (receiver === null) return null;
-    i = skipWhitespaceAndComments(source, receiver.end);
-    let member = { kind: 'bare', receiver: receiver.name };
+    const receiverEnd = readLoaderIdentifierEnd(source, i);
+    if (receiverEnd === null) return loaderGetterReturnInvalid;
+    i = skipWhitespaceAndComments(source, receiverEnd);
+    let kind = loaderGetterReturnBare;
     if (source.charCodeAt(i) === 0x2e) {
         i = skipWhitespaceAndComments(source, i + 1);
-        const property = readLoaderIdentifier(source, i);
-        if (property === null) return null;
-        i = property.end;
-        member = { kind: 'dot', receiver: receiver.name, property: property.name };
+        const propertyEnd = readLoaderIdentifierEnd(source, i);
+        if (propertyEnd === null) return loaderGetterReturnInvalid;
+        i = propertyEnd;
+        kind = loaderGetterReturnDot;
     } else if (source.charCodeAt(i) === 0x5b) {
         i = skipWhitespaceAndComments(source, i + 1);
         const quote = source.charCodeAt(i);
         if (quote === 0x27 || quote === 0x22) {
             const decoded = decodeStringLiteral(source, i + 1, quote);
-            if (decoded === null) return null;
+            if (decoded === null) return loaderGetterReturnInvalid;
             i = skipWhitespaceAndComments(source, decoded.end + 1);
-            member = { kind: 'bracket-string', receiver: receiver.name, property: decoded.value };
+            kind = loaderGetterReturnBracketString;
         } else {
-            const property = readLoaderIdentifier(source, i);
-            if (property === null) return null;
-            i = skipWhitespaceAndComments(source, property.end);
-            member = { kind: 'bracket-identifier', receiver: receiver.name, property: property.name };
+            const propertyEnd = readLoaderIdentifierEnd(source, i);
+            if (propertyEnd === null) return loaderGetterReturnInvalid;
+            i = skipWhitespaceAndComments(source, propertyEnd);
+            kind = loaderGetterReturnBracketIdentifier;
         }
-        if (source.charCodeAt(i) !== 0x5d) return null;
+        if (source.charCodeAt(i) !== 0x5d) return loaderGetterReturnInvalid;
         i++;
     }
     i = skipWhitespaceAndComments(source, i);
     if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
-    return i >= end ? member : null;
+    return i >= end ? kind : loaderGetterReturnInvalid;
 }
 
 function loaderSimpleGetterBody(source, start, end) {
-    const member = readLoaderGetterReturnMember(source, start, end);
-    return member !== null && member.kind !== 'bracket-identifier';
+    const kind = readLoaderGetterReturnMemberKind(source, start, end);
+    return kind !== loaderGetterReturnInvalid && kind !== loaderGetterReturnBracketIdentifier;
 }
 
 function loaderGetterBodyEnd(source, paramsOpen, limit) {
@@ -3238,10 +3251,8 @@ function readLoaderDotMember(source, pos, name) {
 }
 
 function readLoaderIdentifier(source, pos) {
-    if (!isIdentifierStartCode(source.charCodeAt(pos))) return null;
-    let i = pos + 1;
-    while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    return { name: source.substring(pos, i), end: i };
+    const end = readLoaderIdentifierEnd(source, pos);
+    return end === null ? null : { name: source.substring(pos, end), end };
 }
 
 function readLoaderNamedIdentifier(source, pos, name) {
