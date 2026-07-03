@@ -3140,8 +3140,9 @@ function loaderIsStatementBoundary(source, pos) {
 
 function isLoaderAsiContinuationNext(source, pos) {
     if (pos + 1 < source.length) {
-        const pair = source.substring(pos, pos + 2);
-        if (pair === '++' || pair === '--') return false;
+        const code = source.charCodeAt(pos);
+        const next = source.charCodeAt(pos + 1);
+        if ((code === 0x2b && next === 0x2b) || (code === 0x2d && next === 0x2d)) return false;
     }
     return isLoaderAsiContinuationOperator(source.charCodeAt(pos));
 }
