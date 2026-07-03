@@ -2884,10 +2884,9 @@ function readLoaderModuleExportsObjectLiteralNames(source, pos) {
                 break;
             }
         }
-        if (cursor < objectEnd) {
-            if (source.charCodeAt(cursor) !== 0x2c) break;
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-        }
+        const nextEntry = nextLoaderObjectLiteralEntry(source, cursor, objectEnd);
+        if (nextEntry === null) break;
+        cursor = nextEntry;
     }
     return { names, reexports, end: objectEnd + 1 };
 }
@@ -2912,8 +2911,8 @@ function readLoaderDescriptorObject(source, start, end) {
     return { cursor: skipWhitespaceAndComments(source, descriptorStart + 1), end: descriptorEnd };
 }
 
-function nextLoaderDescriptorEntry(source, cursor, descriptorEnd) {
-    if (cursor >= descriptorEnd) return descriptorEnd;
+function nextLoaderObjectLiteralEntry(source, cursor, objectEnd) {
+    if (cursor >= objectEnd) return objectEnd;
     if (source.charCodeAt(cursor) !== 0x2c) return null;
     return skipWhitespaceAndComments(source, cursor + 1);
 }
@@ -2953,7 +2952,7 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
         if (source.charCodeAt(cursor) === 0x5b) {
             if (foundKind === 'value') {
                 cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, cursor, descriptorEnd));
-                cursor = nextLoaderDescriptorEntry(source, cursor, descriptorEnd);
+                cursor = nextLoaderObjectLiteralEntry(source, cursor, descriptorEnd);
                 if (cursor === null) return false;
                 continue;
             }
@@ -3014,7 +3013,7 @@ function loaderDescriptorHasNamedProperty(source, start, end) {
                 return false;
             }
         }
-        cursor = nextLoaderDescriptorEntry(source, cursor, descriptorEnd);
+        cursor = nextLoaderObjectLiteralEntry(source, cursor, descriptorEnd);
         if (cursor === null) return false;
     }
     return foundKind !== null;
@@ -3442,7 +3441,7 @@ function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, k
         } else {
             return false;
         }
-        cursor = nextLoaderDescriptorEntry(source, cursor, descriptorEnd);
+        cursor = nextLoaderObjectLiteralEntry(source, cursor, descriptorEnd);
         if (cursor === null) return false;
     }
     return found && seenEnumerable;
