@@ -5154,11 +5154,7 @@ fn parse_module_exports_reexport(source: &str, pos: usize) -> Option<(String, us
     }
     let (specifier, next) = parse_require_string(source, skip_ws_comments(source, i + 1))?;
     let after_require = skip_ws_comments(source, next);
-    if is_statement_boundary(source, after_require) {
-        Some((specifier, after_require.min(source.len())))
-    } else {
-        None
-    }
+    Some((specifier, after_require.min(source.len())))
 }
 
 fn parse_export_star_reexport(source: &str, pos: usize) -> Option<(String, usize)> {
@@ -8344,13 +8340,13 @@ mod cjs_export_analyzer_tests {
             r#"module.exports = require("./dep.cjs").nested;"#,
             true,
             &[],
-            &[],
+            &["./dep.cjs"],
         );
         assert_analysis(
             r#"module.exports = require("./dep.cjs")();"#,
             true,
             &[],
-            &[],
+            &["./dep.cjs"],
         );
         assert_analysis(
             r#"

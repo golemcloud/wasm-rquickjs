@@ -3121,8 +3121,10 @@ export const testCjsReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-reexport-app/dep.cjs', [
             'exports.alpha = "alpha";',
             'exports.beta = "beta";',
+            'exports.nested = { nestedValue: "nested" };',
         ].join('\n'));
         fs.writeFileSync('/cjs-reexport-app/reexport.cjs', 'module.exports = require("./dep.cjs");');
+        fs.writeFileSync('/cjs-reexport-app/reexport-continuation.cjs', 'module.exports = require("./dep.cjs").nested;');
         fs.writeFileSync('/cjs-reexport-app/transpiler.cjs', [
             'var _dep = require("./dep.cjs");',
             'Object.keys(_dep).forEach(function (key) {',
@@ -3140,10 +3142,16 @@ export const testCjsReexportNamedExports = async () => {
         ].join('\n'));
         fs.writeFileSync('/cjs-reexport-app/reexport-entry.mjs', [
             'import { alpha, beta } from "./reexport.cjs";',
+            'import * as continuation from "./reexport-continuation.cjs";',
             'import { alpha as transAlpha, beta as transBeta } from "./transpiler.cjs";',
             'import * as nonReexport from "./not-reexport.cjs";',
             'export default {',
             '  alpha, beta, transAlpha, transBeta,',
+            '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default").sort(),',
+            '  continuationAlpha: continuation.alpha,',
+            '  continuationBeta: continuation.beta,',
+            '  continuationNested: continuation.nested,',
+            '  continuationDefault: continuation.default,',
             '  nonReexportKeys: Object.keys(nonReexport).filter((key) => key !== "default" && key !== "own"),',
             '  nonReexportOwn: nonReexport.own,',
             '};',
@@ -3155,6 +3163,11 @@ export const testCjsReexportNamedExports = async () => {
             beta: 'beta',
             transAlpha: 'alpha',
             transBeta: 'beta',
+            continuationKeys: ['alpha', 'beta', 'nested'],
+            continuationAlpha: undefined,
+            continuationBeta: undefined,
+            continuationNested: undefined,
+            continuationDefault: { nestedValue: 'nested' },
             nonReexportKeys: [],
             nonReexportOwn: 'own',
         });
@@ -3505,7 +3518,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             'exports.own = "own";',
         ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/continuation.cjs', [
-            'module.exports = require("./dep.cjs").nested;',
+            'module.exports = require("./dep-spread.cjs").nested;',
         ].join('\n'));
         fs.writeFileSync('/cjs-analyzer-guards-app/binding-continuation.cjs', [
             'var dep = require("./dep-nested.cjs").nested;',
@@ -3666,6 +3679,7 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
             '  interveningStatementReexportKeys: Object.keys(interveningStatementReexport).filter((key) => key !== "default" && key !== "own"),',
             '  prefixAsiAlpha: prefixAsiReexport.alpha,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default"),',
+            '  continuationDefault: continuation.default,',
             '  bindingContinuationKeys: Object.keys(bindingContinuation).filter((key) => key !== "default" && key !== "own"),',
             '  bindingContinuationOwn: bindingContinuation.own,',
             '  objectLiteralValueKeys: Object.keys(objectLiteralValues).filter((key) => key !== "default").sort(),',
@@ -3737,7 +3751,8 @@ export const testCjsAnalyzerFalsePositiveGuards = async () => {
         assert.deepStrictEqual(result.conditionalBodyReexportKeys, []);
         assert.deepStrictEqual(result.interveningStatementReexportKeys, []);
         assert.strictEqual(result.prefixAsiAlpha, 'alpha');
-        assert.deepStrictEqual(result.continuationKeys, []);
+        assert.deepStrictEqual(result.continuationKeys, ['alpha', 'nested']);
+        assert.deepStrictEqual(result.continuationDefault, { beta: 'beta' });
         assert.deepStrictEqual(result.bindingContinuationKeys, []);
         assert.strictEqual(result.bindingContinuationOwn, 'own');
         assert.deepStrictEqual(result.objectLiteralValueKeys, [
