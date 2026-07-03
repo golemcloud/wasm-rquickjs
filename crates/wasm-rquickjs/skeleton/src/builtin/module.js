@@ -4875,7 +4875,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             let compiledFn;
             let cjsSyntaxError = null;
             const canFallbackToEsm = !filename.endsWith('.cjs') && !isCommonJsPackage;
-            const cjsWrapperLexicalRedeclaration = canFallbackToEsm && hasCjsWrapperLexicalRedeclaration(source);
+            let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
             try {
                 compiledFn = compileCjs(filename, source);
@@ -4889,6 +4889,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
                 if (canFallbackToEsm && err && err.name === 'SyntaxError') {
                     cjsSourceLooksEsm = looksLikeEsmSource(source);
+                    cjsWrapperLexicalRedeclaration = hasCjsWrapperLexicalRedeclaration(source);
                 }
                 if (canFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
                     cjsSyntaxError = err;
