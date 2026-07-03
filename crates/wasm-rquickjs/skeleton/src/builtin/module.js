@@ -3193,8 +3193,9 @@ function readLoaderKeyStringComparison(source, pos, key, operator) {
     const keyEnd = readLoaderNamedIdentifier(source, pos, key);
     if (keyEnd === null) return null;
     let i = skipWhitespaceAndComments(source, keyEnd);
-    if (source.substring(i, i + operator.length) !== operator) return null;
-    i = skipWhitespaceAndComments(source, i + operator.length);
+    i = readLoaderOperator(source, i, operator);
+    if (i === null) return null;
+    i = skipWhitespaceAndComments(source, i);
     const quote = source.charCodeAt(i);
     if (quote !== 0x27 && quote !== 0x22) return null;
     const decoded = decodeStringLiteral(source, i + 1, quote);
@@ -3227,6 +3228,13 @@ function readLoaderIdentifier(source, pos) {
 
 function readLoaderNamedIdentifier(source, pos, name) {
     return readKeywordAt(source, name, pos);
+}
+
+function readLoaderOperator(source, pos, operator) {
+    for (let i = 0; i < operator.length; i++) {
+        if (source.charCodeAt(pos + i) !== operator.charCodeAt(i)) return null;
+    }
+    return pos + operator.length;
 }
 
 function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) {
@@ -3276,8 +3284,9 @@ function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
     const first = readLoaderKeyEqualsString(source, c, key);
     if (first === null || first.value !== 'default') return null;
     c = skipWhitespaceAndComments(source, first.end);
-    if (source.substring(c, c + 2) !== '||') return null;
-    c = skipWhitespaceAndComments(source, c + 2);
+    c = readLoaderOperator(source, c, '||');
+    if (c === null) return null;
+    c = skipWhitespaceAndComments(source, c);
     const second = readLoaderKeyEqualsString(source, c, key);
     if (second === null || second.value !== '__esModule') return null;
     if (skipWhitespaceAndComments(source, second.end) !== condition.end) return null;
@@ -3324,16 +3333,18 @@ function readLoaderDuplicateExportReturnGuard(source, pos, binding, key) {
     let targetEnd = readLoaderCjsExportTarget(source, c);
     if (targetEnd === null) return null;
     c = skipWhitespaceAndComments(source, targetEnd);
-    if (source.substring(c, c + 2) !== '&&') return null;
-    c = skipWhitespaceAndComments(source, c + 2);
+    c = readLoaderOperator(source, c, '&&');
+    if (c === null) return null;
+    c = skipWhitespaceAndComments(source, c);
     targetEnd = readLoaderCjsExportTarget(source, c);
     if (targetEnd === null) return null;
     c = skipWhitespaceAndComments(source, targetEnd);
     c = readLoaderBracketIdentifier(source, c, key);
     if (c === null) return null;
     c = skipWhitespaceAndComments(source, c);
-    if (source.substring(c, c + 3) !== '===') return null;
-    c = skipWhitespaceAndComments(source, c + 3);
+    c = readLoaderOperator(source, c, '===');
+    if (c === null) return null;
+    c = skipWhitespaceAndComments(source, c);
     const bindingEnd = readLoaderNamedIdentifier(source, c, binding);
     if (bindingEnd === null) return null;
     c = skipWhitespaceAndComments(source, bindingEnd);
@@ -3349,8 +3360,9 @@ function readLoaderHasOwnConditionalReexport(source, pos, binding, key) {
     const keyCheck = readLoaderKeyNotEqualsString(source, c, key);
     if (keyCheck === null || keyCheck.value !== 'default') return null;
     c = skipWhitespaceAndComments(source, keyCheck.end);
-    if (source.substring(c, c + 2) !== '&&') return null;
-    c = skipWhitespaceAndComments(source, c + 2);
+    c = readLoaderOperator(source, c, '&&');
+    if (c === null) return null;
+    c = skipWhitespaceAndComments(source, c);
     if (source.charCodeAt(c) !== 0x21) return null;
     c = skipWhitespaceAndComments(source, c + 1);
     const hasOwnEnd = readLoaderHasOwnPropertyKey(source, c, key);
