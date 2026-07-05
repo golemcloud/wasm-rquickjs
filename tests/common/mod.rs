@@ -7,12 +7,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use futures::FutureExt;
 use heck::ToSnakeCase;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::Write;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
@@ -29,6 +29,12 @@ use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
+
+const TEST_FAST_ENV: &str = "WASM_RQUICKJS_TEST_FAST";
+const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
+const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
+const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
+const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 
 /// Strip JSONC comments (// and /* */) while respecting string literals.
 pub fn strip_jsonc_comments(input: &str) -> String {
@@ -75,6 +81,114 @@ pub fn strip_jsonc_comments(input: &str) -> String {
     }
 
     result
+}
+
+fn truthy_env(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn test_cache_enabled(name: &str) -> bool {
+    truthy_env(TEST_FAST_ENV) || truthy_env(name)
+}
+
+fn test_artifact_cache_enabled() -> bool {
+    test_cache_enabled(TEST_ARTIFACT_CACHE_ENV)
+}
+
+fn test_drop_cache_enabled() -> bool {
+    truthy_env(TEST_DROP_CACHE_ENV)
+}
+
+fn test_prepared_component_cache_enabled() -> bool {
+    test_cache_enabled(TEST_PREPARED_COMPONENT_CACHE_ENV)
+}
+
+fn test_wasmtime_cache_enabled() -> bool {
+    test_cache_enabled(TEST_WASMTIME_CACHE_ENV)
+}
+
+fn test_cache_stamp_dir() -> Utf8PathBuf {
+    Utf8Path::new("tmp").join("test-artifact-cache")
+}
+
+fn test_cache_stamp(
+    name: &str,
+    feature_combination: FeatureCombination,
+    kind: &str,
+) -> Utf8PathBuf {
+    test_cache_stamp_dir().join(format!(
+        "{}-{}-{kind}.stamp",
+        name.to_snake_case(),
+        feature_combination.label()
+    ))
+}
+
+fn modified_time(path: &Utf8Path) -> anyhow::Result<SystemTime> {
+    Ok(fs::metadata(path)?.modified()?)
+}
+
+fn newest_modified_time(path: &Utf8Path) -> anyhow::Result<SystemTime> {
+    let metadata = fs::metadata(path)?;
+    let mut newest = metadata.modified()?;
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let entry_path = Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|_| anyhow!("Non UTF-8 path under {path}"))?;
+            newest = newest.max(newest_modified_time(&entry_path)?);
+        }
+    }
+    Ok(newest)
+}
+
+fn newest_modified_time_of_existing(paths: &[Utf8PathBuf]) -> anyhow::Result<SystemTime> {
+    let mut newest = SystemTime::UNIX_EPOCH;
+    for path in paths {
+        if path.exists() {
+            newest = newest.max(newest_modified_time(path)?);
+        }
+    }
+    Ok(newest)
+}
+
+fn output_fresh_for_inputs(output: &Utf8Path, stamp: &Utf8Path, inputs: &[Utf8PathBuf]) -> bool {
+    if !output.exists() || !stamp.exists() || test_drop_cache_enabled() {
+        return false;
+    }
+
+    let Ok(output_mtime) = modified_time(output) else {
+        return false;
+    };
+    let Ok(stamp_mtime) = modified_time(stamp) else {
+        return false;
+    };
+    let Ok(input_mtime) = newest_modified_time_of_existing(inputs) else {
+        return false;
+    };
+
+    output_mtime >= input_mtime && stamp_mtime >= input_mtime
+}
+
+fn refresh_cache_stamp(stamp: &Utf8Path) -> anyhow::Result<()> {
+    if let Some(parent) = stamp.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(stamp, b"ok")?;
+    Ok(())
+}
+
+fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Result<()> {
+    if test_wasmtime_cache_enabled() {
+        config.cache(Some(wasmtime::Cache::new(wasmtime::CacheConfig::new())?));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -668,6 +782,7 @@ impl PreparedComponent {
         config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
         config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
+        configure_test_wasmtime_cache(&mut config)?;
         let engine = Engine::new(&config)?;
 
         // Start a background thread that increments the epoch every 10ms,
@@ -828,6 +943,7 @@ impl GolemPreparedComponent {
         config.epoch_interruption(true);
         config.async_stack_size(32 * 1024 * 1024);
         config.max_wasm_stack(16 * 1024 * 1024);
+        configure_test_wasmtime_cache(&mut config)?;
         let engine = Engine::new(&config)?;
 
         // Start a background thread that increments the epoch every 10ms,
@@ -1050,6 +1166,11 @@ pub struct TestInstance {
 
 impl TestInstance {
     pub async fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        if test_prepared_component_cache_enabled() {
+            let prepared = prepared_component_for_path(wasm_path)?;
+            return Self::from_prepared(&prepared).await;
+        }
+
         let prepared = PreparedComponent::new(wasm_path)?;
         Self::from_prepared(&prepared).await
     }
@@ -1240,6 +1361,24 @@ impl TestInstance {
     }
 }
 
+fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<PreparedComponent>> {
+    static PREPARED_COMPONENTS: OnceLock<Mutex<HashMap<Utf8PathBuf, Arc<PreparedComponent>>>> =
+        OnceLock::new();
+
+    let mut prepared = PREPARED_COMPONENTS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap();
+
+    if let Some(component) = prepared.get(wasm_path) {
+        return Ok(component.clone());
+    }
+
+    let component = Arc::new(PreparedComponent::new(wasm_path)?);
+    prepared.insert(wasm_path.to_path_buf(), component.clone());
+    Ok(component)
+}
+
 pub async fn invoke_and_capture_output(
     wasm_path: &Utf8Path,
     interface_name: Option<&str>,
@@ -1318,6 +1457,46 @@ impl CompiledTest {
         // this is a _different_ shared target than the one used in the compilation tests to make
         // sure different feature combinations do not interfere with these tests.
         let shared_target = Utf8Path::new("..").join("..").join("rt-target");
+        let wasm_file_name = format!("{}.wasm", name.to_snake_case());
+        let compiled_wasm_path = if use_shared_target {
+            Utf8Path::new("tmp")
+                .join("rt-target")
+                .join("wasm32-wasip2")
+                .join("debug")
+                .join(&wasm_file_name)
+        } else {
+            wrapper_crate_root
+                .join("target")
+                .join("wasm32-wasip2")
+                .join("debug")
+                .join(&wasm_file_name)
+        };
+        let compile_stamp = test_cache_stamp(name, feature_combination, "compile");
+        let compile_inputs = vec![
+            path.to_path_buf(),
+            Utf8Path::new("crates").join("wasm-rquickjs").join("src"),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("skeleton"),
+            Utf8Path::new("crates").join("wasi-logging").join("src"),
+            Utf8Path::new("Cargo.toml").to_path_buf(),
+            Utf8Path::new("Cargo.lock").to_path_buf(),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("Cargo.toml"),
+            Utf8Path::new("crates")
+                .join("wasi-logging")
+                .join("Cargo.toml"),
+        ];
+
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(&compiled_wasm_path, &compile_stamp, &compile_inputs)
+        {
+            println!("Reusing cached wrapper component {compiled_wasm_path}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(compiled_wasm_path),
+            });
+        }
 
         println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
         generate_wrapper_crate(
@@ -1351,29 +1530,13 @@ impl CompiledTest {
                 }
             })?;
 
-        let compiled = if use_shared_target {
-            CompiledTest {
-                wasm: Precompiled(
-                    Utf8Path::new("tmp")
-                        .join("rt-target")
-                        .join("wasm32-wasip2")
-                        .join("debug")
-                        .join(format!("{}.wasm", name.to_snake_case())),
-                ),
-            }
-        } else {
-            CompiledTest {
-                wasm: Precompiled(
-                    wrapper_crate_root
-                        .join("target")
-                        .join("wasm32-wasip2")
-                        .join("debug")
-                        .join(format!("{}.wasm", name.to_snake_case())),
-                ),
-            }
-        };
+        if test_artifact_cache_enabled() {
+            refresh_cache_stamp(&compile_stamp)?;
+        }
 
-        Ok(compiled)
+        Ok(CompiledTest {
+            wasm: Precompiled(compiled_wasm_path),
+        })
     }
 
     /// Run Wizer pre-initialization on the compiled component.
@@ -1381,8 +1544,22 @@ impl CompiledTest {
     pub async fn optimize(&self) -> anyhow::Result<CompiledTest> {
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
+        let optimize_stamp = input.with_extension("optimized.stamp");
+        let optimize_inputs = vec![input.to_path_buf()];
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(&optimized, &optimize_stamp, &optimize_inputs)
+        {
+            println!("Reusing cached optimized component {optimized}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(optimized),
+            });
+        }
+
         println!("Optimizing component {input} -> {optimized}");
         wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
+        if test_artifact_cache_enabled() {
+            refresh_cache_stamp(&optimize_stamp)?;
+        }
         Ok(CompiledTest {
             wasm: Precompiled(optimized),
         })

@@ -39,6 +39,22 @@ cargo build --release
 cargo test
 ```
 
+### Optional fast test caches
+
+The runtime and node compatibility test harness keeps all cache behavior off by default. For local iteration, enable the clean-state-preserving caches explicitly:
+
+```bash
+WASM_RQUICKJS_TEST_FAST=1 cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time --test-threads 1
+```
+
+`WASM_RQUICKJS_TEST_FAST=1` enables:
+
+- `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` — uses Wasmtime's filesystem compilation cache.
+- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` — reuses process-local `Engine`/`Linker`/`Component` values while still creating a fresh `Store`, component instance, WASI context, temp dir, and QuickJS runtime state per test.
+- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` — reuses wrapper build and optimized component artifacts when their source inputs are unchanged.
+
+Use `WASM_RQUICKJS_TEST_DROP_CACHE=1` with the artifact cache to force wrapper build and Wizer outputs to be refreshed. Do not use grouped tests to speed up module compatibility checks; these tests rely on clean runtime state per case.
+
 ### ⚠️ CRITICAL TEST RULES
 
 **DO NOT run `cargo test` without arguments** — it runs everything and takes too long. **ALWAYS filter** to a specific test harness and module. Load the `skeleton-development` skill for full test rules and examples.
