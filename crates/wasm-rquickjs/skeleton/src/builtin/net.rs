@@ -29,6 +29,10 @@ use wstd::runtime::AsyncPollable;
 //     not cancelled.
 //   * `listen()` returns a `stream<tcp-socket>` of accepted connections.
 #[cfg(feature = "p3")]
+use futures::channel::oneshot;
+#[cfg(feature = "p3")]
+use futures::future::Either;
+#[cfg(feature = "p3")]
 use std::rc::Rc;
 #[cfg(feature = "p3")]
 use wasip3::sockets::types::{ErrorCode, IpAddressFamily, TcpSocket as WasiTcpSocket};
@@ -160,6 +164,8 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             writer: None,
             send_future: None,
             recv_future: None,
+            read_cancel: None,
+            write_cancel: None,
             family: ip_family,
             connected: false,
             closed: false,
@@ -184,6 +190,12 @@ struct TcpInner {
     /// the operations are not cancelled while their streams are in use.
     send_future: Option<FutureReader<Result<(), ErrorCode>>>,
     recv_future: Option<FutureReader<Result<(), ErrorCode>>>,
+    /// Wakes the in-flight `read()` / `write()` (if any) when the socket is
+    /// closed or the corresponding side is shut down. Without this, a pending
+    /// `StreamReader::read` would pin the socket resource (via its cloned `Rc`)
+    /// and the JS event loop alive until the *peer* closes the connection.
+    read_cancel: Option<oneshot::Sender<()>>,
+    write_cancel: Option<oneshot::Sender<()>>,
     family: IpAddressFamily,
     connected: bool,
     closed: bool,
@@ -947,7 +959,7 @@ impl TcpSocket {
     }
 
     pub async fn read(&self, ctx: Ctx<'_>, len: u64) -> rquickjs::Result<Option<Vec<u8>>> {
-        let (_keepalive, mut reader) = {
+        let (_keepalive, mut reader, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
             if inner.closed {
                 return Err(throw_socket_error(
@@ -966,7 +978,15 @@ impl TcpSocket {
                 ));
             }
             match (inner.socket.clone(), inner.reader.take()) {
-                (Some(sock), Some(reader)) => (sock, reader),
+                (Some(sock), Some(reader)) => {
+                    // Register a cancel signal so `close()` / `shutdown(SHUT_RD)`
+                    // can wake this read; otherwise the pending stream read would
+                    // keep the socket resource and the JS event loop alive until
+                    // the peer closes the connection.
+                    let (cancel_tx, cancel_rx) = oneshot::channel();
+                    inner.read_cancel = Some(cancel_tx);
+                    (sock, reader, cancel_rx)
+                }
                 // No reader means the receive side already reached EOF or was shut
                 // down: report end-of-stream.
                 _ => return Ok(None),
@@ -975,10 +995,24 @@ impl TcpSocket {
 
         let cap = if len == 0 { 16384 } else { len as usize };
         loop {
-            let (status, buf) = reader.read(Vec::with_capacity(cap)).await;
+            let (status, buf) = {
+                let read_fut = reader.read(Vec::with_capacity(cap));
+                futures::pin_mut!(read_fut);
+                match futures::future::select(read_fut, &mut cancel_rx).await {
+                    Either::Left((result, _)) => result,
+                    Either::Right(_) => {
+                        // Cancelled by `close()` or `shutdown(SHUT_RD)`. Dropping
+                        // the in-flight read future issues `stream.cancel-read`;
+                        // dropping the reader and the keepalive `Rc` releases the
+                        // socket.
+                        return Ok(None);
+                    }
+                }
+            };
             match status {
                 StreamResult::Complete(_) if !buf.is_empty() => {
                     let mut inner = self.inner.borrow_mut();
+                    inner.read_cancel = None;
                     if !inner.closed {
                         inner.reader = Some(reader);
                     }
@@ -990,6 +1024,7 @@ impl TcpSocket {
                     // Peer sent FIN / stream closed. Drop the reader so subsequent
                     // reads observe EOF.
                     let mut inner = self.inner.borrow_mut();
+                    inner.read_cancel = None;
                     inner.reader = None;
                     inner.recv_future = None;
                     if buf.is_empty() {
@@ -997,14 +1032,17 @@ impl TcpSocket {
                     }
                     return Ok(Some(buf));
                 }
-                StreamResult::Cancelled => return Ok(None),
+                StreamResult::Cancelled => {
+                    self.inner.borrow_mut().read_cancel = None;
+                    return Ok(None);
+                }
             }
         }
     }
 
     pub async fn write(&self, ctx: Ctx<'_>, data: Vec<u8>) -> rquickjs::Result<u32> {
         let total = data.len();
-        let (_keepalive, mut writer) = {
+        let (_keepalive, mut writer, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
             if inner.closed {
                 return Err(throw_socket_error(
@@ -1023,7 +1061,13 @@ impl TcpSocket {
                 ));
             }
             match (inner.socket.clone(), inner.writer.take()) {
-                (Some(sock), Some(writer)) => (sock, writer),
+                (Some(sock), Some(writer)) => {
+                    // Register a cancel signal so `close()` can wake a write that
+                    // is blocked on stream capacity (see `read_cancel`).
+                    let (cancel_tx, cancel_rx) = oneshot::channel();
+                    inner.write_cancel = Some(cancel_tx);
+                    (sock, writer, cancel_rx)
+                }
                 // No writer means the write side was shut down (SHUT_WR).
                 _ => {
                     return Err(throw_socket_error(
@@ -1036,8 +1080,26 @@ impl TcpSocket {
             }
         };
 
-        let leftover = writer.write_all(data).await;
+        let leftover = {
+            let write_fut = writer.write_all(data);
+            futures::pin_mut!(write_fut);
+            match futures::future::select(write_fut, &mut cancel_rx).await {
+                Either::Left((leftover, _)) => leftover,
+                Either::Right(_) => {
+                    // Cancelled by `close()`. Dropping the in-flight write future
+                    // cancels the pending stream write; dropping the writer and
+                    // the keepalive `Rc` releases the socket.
+                    return Err(throw_socket_error(
+                        &ctx,
+                        "EPIPE",
+                        "write",
+                        "Socket is closed",
+                    ));
+                }
+            }
+        };
         let mut inner = self.inner.borrow_mut();
+        inner.write_cancel = None;
         if !leftover.is_empty() {
             // The peer hung up before all bytes were accepted.
             inner.writer = None;
@@ -1069,9 +1131,13 @@ impl TcpSocket {
             ));
         }
         match how {
-            // SHUT_RD: drop the receive stream (discards queued data).
+            // SHUT_RD: drop the receive stream (discards queued data) and cancel
+            // an in-flight read (which owns the taken-out reader).
             0 => {
                 inner.reader = None;
+                if let Some(tx) = inner.read_cancel.take() {
+                    let _ = tx.send(());
+                }
             }
             // SHUT_WR: drop the send-stream writer, which closes the stream and
             // makes the host emit a FIN. Keep `send_future` so the host can drain
@@ -1082,6 +1148,12 @@ impl TcpSocket {
             2 => {
                 inner.reader = None;
                 inner.writer = None;
+                if let Some(tx) = inner.read_cancel.take() {
+                    let _ = tx.send(());
+                }
+                if let Some(tx) = inner.write_cancel.take() {
+                    let _ = tx.send(());
+                }
             }
             _ => {
                 return Err(throw_socket_error(
@@ -1270,7 +1342,15 @@ impl TcpSocket {
         inner.connected = false;
         // Drop the writer first so the send stream closes (FIN) before the socket
         // resource is released. In-flight read/write tasks hold their own reader/
-        // writer and a cloned `Rc`, so they finish gracefully and observe `closed`.
+        // writer and a cloned `Rc`; cancel them so they release those handles —
+        // otherwise a pending read would pin the socket resource (and the JS
+        // event loop) alive until the peer closes the connection.
+        if let Some(tx) = inner.read_cancel.take() {
+            let _ = tx.send(());
+        }
+        if let Some(tx) = inner.write_cancel.take() {
+            let _ = tx.send(());
+        }
         inner.writer = None;
         inner.send_future = None;
         inner.reader = None;
@@ -1280,7 +1360,7 @@ impl TcpSocket {
 
     pub fn force_close(&self) {
         // On P3 `close()` already tears everything down immediately; in-flight
-        // tasks own their taken-out stream handles and exit on the `closed` flag.
+        // tasks own their taken-out stream handles and are cancelled by `close()`.
         self.close();
     }
 }
@@ -1368,6 +1448,7 @@ fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpL
         inner: RefCell::new(ListenerInner {
             socket: Some(Rc::new(socket)),
             accept_stream: None,
+            accept_cancel: None,
             listening: false,
             closed: false,
         }),
@@ -1381,6 +1462,10 @@ fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpL
 struct ListenerInner {
     socket: Option<Rc<WasiTcpSocket>>,
     accept_stream: Option<StreamReader<WasiTcpSocket>>,
+    /// Wakes the in-flight `accept()` (if any) when the listener is closed, so
+    /// the pending accept-stream read does not pin the listener socket (via its
+    /// cloned `Rc`) and the JS event loop alive.
+    accept_cancel: Option<oneshot::Sender<()>>,
     listening: bool,
     closed: bool,
 }
@@ -2019,7 +2104,7 @@ impl TcpListener {
         &self,
         ctx: Ctx<'_>,
     ) -> rquickjs::Result<List<(TcpSocket, String, u32, String)>> {
-        let (_keepalive, mut stream) = {
+        let (_keepalive, mut stream, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
             if inner.closed {
                 return Err(throw_socket_error(
@@ -2038,7 +2123,14 @@ impl TcpListener {
                 ));
             }
             match (inner.socket.clone(), inner.accept_stream.take()) {
-                (Some(sock), Some(stream)) => (sock, stream),
+                (Some(sock), Some(stream)) => {
+                    // Register a cancel signal so `close()` can wake this accept;
+                    // otherwise the pending accept-stream read would keep the
+                    // listener socket resource and the JS event loop alive.
+                    let (cancel_tx, cancel_rx) = oneshot::channel();
+                    inner.accept_cancel = Some(cancel_tx);
+                    (sock, stream, cancel_rx)
+                }
                 _ => {
                     return Err(throw_socket_error(
                         &ctx,
@@ -2050,10 +2142,28 @@ impl TcpListener {
             }
         };
 
-        let accepted = stream.next().await;
+        let accepted = {
+            let accept_fut = stream.next();
+            futures::pin_mut!(accept_fut);
+            match futures::future::select(accept_fut, &mut cancel_rx).await {
+                Either::Left((accepted, _)) => accepted,
+                Either::Right((_, accept_fut)) => {
+                    // Cancelled by `close()`. Dropping the in-flight stream read
+                    // and the keepalive `Rc` releases the listener socket.
+                    drop(accept_fut);
+                    return Err(throw_socket_error(
+                        &ctx,
+                        "EBADF",
+                        "accept",
+                        "Socket was closed or reset",
+                    ));
+                }
+            }
+        };
 
         let client = {
             let mut inner = self.inner.borrow_mut();
+            inner.accept_cancel = None;
             if inner.closed {
                 return Err(throw_socket_error(
                     &ctx,
@@ -2103,6 +2213,8 @@ impl TcpListener {
                 writer: Some(writer),
                 send_future: Some(send_future),
                 recv_future: Some(recv_future),
+                read_cancel: None,
+                write_cancel: None,
                 family: client_family,
                 connected: true,
                 closed: false,
@@ -2146,6 +2258,11 @@ impl TcpListener {
         }
         inner.closed = true;
         inner.listening = false;
+        // Wake an in-flight `accept()` so it releases its taken-out stream and
+        // its cloned socket `Rc` (see `accept_cancel`).
+        if let Some(tx) = inner.accept_cancel.take() {
+            let _ = tx.send(());
+        }
         inner.accept_stream = None;
         inner.socket = None;
     }

@@ -649,10 +649,30 @@ fn build_fields(headers: &[(String, String)]) -> Fields {
     fields
 }
 
+/// Hop-by-hop / forbidden headers that the wasmtime Preview 2 host strips from
+/// incoming response fields (`remove_forbidden_headers`). The Preview 3 host
+/// passes response headers through unfiltered, so we apply the same filter here
+/// to keep the two generation targets behaviorally identical.
+fn is_forbidden_response_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "connection"
+            | "keep-alive"
+            | "proxy-connection"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "transfer-encoding"
+            | "upgrade"
+            | "host"
+            | "http2-settings"
+    )
+}
+
 fn fields_to_pairs(fields: &Fields) -> Vec<Vec<String>> {
     fields
         .copy_all()
         .into_iter()
+        .filter(|(name, _)| !is_forbidden_response_header(name))
         .map(|(name, value)| {
             vec![
                 name,

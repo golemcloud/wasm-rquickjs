@@ -322,6 +322,9 @@ ServerResponse.prototype.setHeader = function setHeader(name, value) {
         throw err;
     }
     const lower = name.toLowerCase();
+    if (lower === 'connection') {
+        this._removedConnection = false;
+    }
     this._headers[lower] = value;
     this._headerNames[lower] = name;
     return this;
@@ -343,6 +346,11 @@ ServerResponse.prototype.removeHeader = function removeHeader(name) {
     if (lower === 'date') {
         // Match Node.js behavior: removing Date disables automatic Date generation.
         this.sendDate = false;
+    } else if (lower === 'connection') {
+        // Match Node.js behavior: an explicitly removed Connection header is not
+        // re-added implicitly. The connection lifecycle is unchanged (HTTP/1.1
+        // persists, HTTP/1.0 closes after the response).
+        this._removedConnection = true;
     }
     delete this._headers[lower];
     delete this._headerNames[lower];
@@ -560,11 +568,11 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         ? canKeepAlive
         : (canKeepAlive && userSaysKeepAlive && !userSaysClose);
 
-    if (userConnection === undefined) {
+    if (userConnection === undefined && !this._removedConnection) {
         head += 'Connection: ' + (effectiveKeepAlive ? 'keep-alive' : 'close') + '\r\n';
     }
 
-    if (effectiveKeepAlive && this.getHeader('keep-alive') === undefined) {
+    if (effectiveKeepAlive && !this._removedConnection && this.getHeader('keep-alive') === undefined) {
         const timeoutMs = typeof this._keepAliveTimeout === 'number' && this._keepAliveTimeout >= 0
             ? this._keepAliveTimeout
             : 5000;
