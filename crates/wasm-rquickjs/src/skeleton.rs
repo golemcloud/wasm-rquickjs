@@ -474,6 +474,66 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_format_normalization_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains("function loaderFormatOrUndefined(format) {")
+                && module_js.contains(
+                    "return format === undefined || format === null ? undefined : String(format);"
+                ),
+            "registered-loader result format normalization must stay centralized"
+        );
+
+        let package_start = module_js
+            .find("function packageResolutionForLoaderResult(resolved)")
+            .expect("packageResolutionForLoaderResult function must exist");
+        let package_end = module_js[package_start..]
+            .find("function cjsLoaderFileFormat(")
+            .expect("package result helper must precede CJS file format helper")
+            + package_start;
+        let package_result = &module_js[package_start..package_end];
+        assert!(
+            package_result.contains("format: loaderFormatOrUndefined(resolved.format),"),
+            "registered-loader package result shaping must use the shared format normalizer"
+        );
+
+        let resolved_start = module_js
+            .find("function normalizeRegisteredLoaderResolvedResult(resolved)")
+            .expect("normalizeRegisteredLoaderResolvedResult function must exist");
+        let resolved_end = module_js[resolved_start..]
+            .find("function registeredLoaderLoadContext(")
+            .expect("resolved-result helper must precede load-context helper")
+            + resolved_start;
+        let resolved_result = &module_js[resolved_start..resolved_end];
+        assert!(
+            resolved_result.contains("format: loaderFormatOrUndefined(resolved.format),"),
+            "registered-loader resolve results must use the shared format normalizer"
+        );
+
+        let static_start = module_js
+            .find("function staticRegisteredLoaderReturn(loaded)")
+            .expect("staticRegisteredLoaderReturn function must exist");
+        let static_end = module_js[static_start..]
+            .find("function staticRegisteredLoaderReturnForEdge(")
+            .expect("static registered-loader return helper must precede edge helper")
+            + static_start;
+        let static_return = &module_js[static_start..static_end];
+        assert!(
+            static_return.contains("const format = loaderFormatOrUndefined(loaded.format);"),
+            "static registered-loader return shaping must use the shared format normalizer"
+        );
+
+        assert_eq!(
+            module_js
+                .matches("=== undefined || format === null ? undefined : String(format)")
+                .count(),
+            1,
+            "format nullish/String coercion should exist only inside loaderFormatOrUndefined"
+        );
+    }
+
+    #[test]
     fn rust_module_kind_detection_uses_shared_esm_helper() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
