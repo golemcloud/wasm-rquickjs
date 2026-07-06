@@ -357,6 +357,56 @@ mod tests {
     }
 
     #[test]
+    fn rust_package_bridge_results_share_url_and_keep_loader_format_separate() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "fn package_resolved_url_object<'js>( ctx: &Ctx<'js>, resolved: &str, ) -> rquickjs::Result<Object<'js>>"
+            ) && internal_rs.contains("result.set(\"url\", path_to_file_url(resolved))?;"),
+            "Rust package bridge URL result object construction must stay centralized"
+        );
+        assert!(
+            internal_rs.contains(
+                "fn loader_package_result_format(resolved: &str, mode: NodePackageResolveMode) -> Option<&'static str>"
+            ) && internal_rs.contains(
+                "Some(\"mjs\") if mode == NodePackageResolveMode::EsmImport => Some(\"module\"),"
+            ) && internal_rs.contains("Some(\"cjs\") | Some(\"mjs\") => Some(\"commonjs\"),")
+                && internal_rs.contains("_ if mode == NodePackageResolveMode::CjsAnalysis => Some(\"commonjs\"),"),
+            "registered-loader package bridge format mapping must stay mode-specific"
+        );
+
+        let loader_start = internal_rs
+            .find("fn loader_default_resolve_package<'js>(")
+            .expect("loader_default_resolve_package must exist");
+        let loader_end = internal_rs[loader_start..]
+            .find("fn cjs_resolve_package_exports<'js>(")
+            .expect("loader package bridge must precede CJS package exports bridge")
+            + loader_start;
+        let loader_bridge = &internal_rs[loader_start..loader_end];
+        assert!(
+            loader_bridge.contains("let result = package_resolved_url_object(&ctx, &resolved)?;")
+                && loader_bridge.contains(
+                    "if let Some(format) = loader_package_result_format(&resolved, mode) { result.set(\"format\", format)?; }"
+                ),
+            "registered-loader package bridge must share URL object construction and own format attachment"
+        );
+
+        let cjs_start = loader_end;
+        let cjs_end = internal_rs[cjs_start..]
+            .find("fn throw_cjs_invalid_package_config_while_importing")
+            .expect("CJS package exports bridge must precede invalid-package-config helper")
+            + cjs_start;
+        let cjs_bridge = &internal_rs[cjs_start..cjs_end];
+        assert!(
+            cjs_bridge.contains("package_resolved_url_object(&ctx, &resolved).map(Some)")
+                && !cjs_bridge.contains("loader_package_result_format(")
+                && !cjs_bridge.contains("\"format\""),
+            "CJS package exports bridge must share URL object construction without attaching loader format"
+        );
+    }
+
+    #[test]
     fn cjs_package_directory_results_preserve_owning_package_metadata() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
