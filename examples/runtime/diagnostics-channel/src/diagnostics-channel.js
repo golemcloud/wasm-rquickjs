@@ -1,7 +1,10 @@
 import dc from 'node:diagnostics_channel';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 export async function test() {
     const results = {};
@@ -349,10 +352,11 @@ export async function test() {
             },
         });
         const result = require(parentFixture);
+        const expectedOuterParentFilename = fileURLToPath(import.meta.url);
         results.moduleRequireNestedResult = result && typeof result.request === 'function';
         results.moduleRequireNestedTrace = events.map((event) => event.name + ':' + event.id).join(',') ===
             'start:' + parentFixture + ',start:' + childFixture + ',start:http,end:http,end:' + childFixture + ',end:' + parentFixture &&
-            events[0].parentFilename === '/' &&
+            events[0].parentFilename === expectedOuterParentFilename &&
             events[1].parentFilename === parentFixture &&
             events[2].parentFilename === childFixture &&
             events.filter((event) => event.name === 'end').every((event) => event.sameObject && event.hasResult);

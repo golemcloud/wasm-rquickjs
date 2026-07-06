@@ -1202,11 +1202,11 @@ function stripImportAttributes(source, filename) {
                     if (commaPos > -1) {
                         const firstArg = processSubrange(argStart, commaPos);
                         const secondArg = processSubrange(commaPos + 1, i - 1);
-                        out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
+                        out.push('((async(__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{const __wasm_rquickjs_url=String(__wasm_rquickjs_specifier);const __wasm_rquickjs_parsed_options=globalThis.__wasm_rquickjs_import_attr_read_options(__wasm_rquickjs_options);return globalThis.__wasm_rquickjs_trace_module_import(__wasm_rquickjs_url,');
                         out.push(filenameLiteral);
-                        out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import(');
+                        out.push(',async()=>globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(');
                         out.push(baseUrlLiteral);
-                        out.push(',__wasm_rquickjs_url,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
+                        out.push(',__wasm_rquickjs_url,__wasm_rquickjs_parsed_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)));})(');
                         out.push(firstArg);
                         out.push(',');
                         out.push(secondArg);

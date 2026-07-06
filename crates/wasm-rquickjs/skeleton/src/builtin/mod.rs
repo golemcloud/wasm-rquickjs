@@ -626,6 +626,7 @@ const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
 globalThis.__wasm_rquickjs_import_attr_read_options = function(options) {
   var typeValue;
   var unsupportedKey;
+  var unsupportedValue;
 
   if (options !== undefined) {
     if (options === null || typeof options !== 'object') {
@@ -646,11 +647,12 @@ globalThis.__wasm_rquickjs_import_attr_read_options = function(options) {
           }
         } else if (unsupportedKey === undefined) {
           unsupportedKey = keys[k];
+          unsupportedValue = attrs[keys[k]];
         }
       }
     }
   }
-  return { typeValue: typeValue, unsupportedKey: unsupportedKey };
+  return { typeValue: typeValue, unsupportedKey: unsupportedKey, unsupportedValue: unsupportedValue };
 };
 
 globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, parsedOptions, asyncSemanticErrors) {
@@ -658,6 +660,7 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
   parsedOptions = parsedOptions || {};
   var typeValue = parsedOptions.typeValue;
   var unsupportedKey = parsedOptions.unsupportedKey;
+  var unsupportedValue = parsedOptions.unsupportedValue;
 
   function semanticError(error) {
     if (!asyncSemanticErrors) throw error;
@@ -683,6 +686,16 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
     format = 'json';
   } else if (value.endsWith('.js') || value.endsWith('.mjs') || value.endsWith('.cjs')) {
     format = 'module';
+  }
+
+  if (unsupportedKey !== undefined) {
+    var unsupportedValueText = typeof unsupportedValue === 'string'
+      ? '"' + unsupportedValue + '"'
+      : String(unsupportedValue);
+    return semanticError(Object.assign(
+      new TypeError('Import attribute "' + unsupportedKey + '" with value ' + unsupportedValueText + ' is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
   }
 
   if (typeValue !== undefined) {
@@ -712,13 +725,6 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
     }
   }
 
-  if (unsupportedKey !== undefined) {
-    return semanticError(Object.assign(
-      new TypeError('Import attribute "' + unsupportedKey + '" is not supported'),
-      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-    ));
-  }
-
   if (typeValue !== 'json') return value;
   return globalThis.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
 };
@@ -732,6 +738,12 @@ globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, as
 globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function(baseUrl, specifier, options, asyncSemanticErrors) {
   var originalValue = String(specifier);
   var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
+  return globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors);
+};
+
+globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed = async function(baseUrl, originalValue, parsedOptions, asyncSemanticErrors) {
+  originalValue = String(originalValue);
+  parsedOptions = parsedOptions || {};
   if (
     globalThis.__wasm_rquickjs_registered_loaders &&
     globalThis.__wasm_rquickjs_registered_loaders.length > 0
@@ -753,7 +765,14 @@ globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function(baseUrl
 
 globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, specifier, options, asyncSemanticErrors, importer) {
   var originalSpecifier = String(specifier);
-  var prepared = await globalThis.__wasm_rquickjs_import_attr_prepare_for_base(baseUrl, specifier, options, asyncSemanticErrors);
+  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
+  return globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer);
+};
+
+globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer) {
+  originalSpecifier = String(originalSpecifier);
+  parsedOptions = parsedOptions || {};
+  var prepared = await globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors);
   var key = String(prepared);
   var completedKey = key;
   var originalHasRewriteToken = originalSpecifier.indexOf('__wasm_rquickjs_import_type=') >= 0;
