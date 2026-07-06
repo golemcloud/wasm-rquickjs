@@ -534,6 +534,68 @@ mod tests {
     }
 
     #[test]
+    fn static_registered_loader_cache_fill_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, edgeReturn) {"
+            ) && module_js.contains("return { cached: cache[key], created: false };")
+                && module_js.contains("return { cached: cache[key], created: true };"),
+            "static registered-loader cache fill must stay centralized and report cache-hit vs new-entry state"
+        );
+
+        let helper_start = module_js
+            .find("function staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, edgeReturn)")
+            .expect("staticRegisteredLoaderCacheEntry function must exist");
+        let helper_end = module_js[helper_start..]
+            .find("async function prepareStaticRegisteredLoaderGraph(")
+            .expect("static cache helper must precede graph preparation")
+            + helper_start;
+        let helper = &module_js[helper_start..helper_end];
+        assert!(
+            helper.contains(
+                "const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');"
+            ) && helper.contains(
+                "const value = edgeReturn ? staticRegisteredLoaderReturnForEdge(loaded, attrs) : staticRegisteredLoaderReturn(loaded);"
+            ) && helper.contains("cache[key] = { error };"),
+            "static registered-loader cache helper must own load invocation, edge-vs-entry return shaping, and error caching"
+        );
+
+        let graph_start = module_js
+            .find("async function prepareStaticRegisteredLoaderGraph(parentUrl, seen)")
+            .expect("prepareStaticRegisteredLoaderGraph function must exist");
+        let graph_end = module_js[graph_start..]
+            .find("globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph")
+            .expect("graph preparation must precede entry preparation")
+            + graph_start;
+        let graph = &module_js[graph_start..graph_end];
+        assert!(
+            graph.contains("staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, true)")
+                && graph
+                    .contains("if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;")
+                && graph.contains("if (cached && cached.error) continue;"),
+            "static graph preparation must use the shared cache helper and continue on cached or fresh edge errors"
+        );
+
+        let entry_start = module_js
+            .find("globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph")
+            .expect("entry graph preparation function must exist");
+        let entry_end = module_js[entry_start..]
+            .find("globalThis.__wasm_rquickjs_resolve_static_registered_loader")
+            .expect("entry graph preparation must precede static resolve")
+            + entry_start;
+        let entry = &module_js[entry_start..entry_end];
+        assert!(
+            entry.contains(
+                "staticRegisteredLoaderCacheEntry(parentUrl, specifier, undefined, false)"
+            ) && entry.contains("if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;")
+                && entry.contains("if (created && cached && cached.error) return;"),
+            "entry graph preparation must use the shared cache helper and only abort on newly-created entry errors"
+        );
+    }
+
+    #[test]
     fn rust_module_kind_detection_uses_shared_esm_helper() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
