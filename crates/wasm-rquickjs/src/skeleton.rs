@@ -511,6 +511,36 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_chain_completion_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function assertRegisteredLoaderChainComplete(hookName, result, nextCalled) { if (!nextCalled && (!result || result.shortCircuit !== true)) { throw makeLoaderChainError(hookName); } }"
+            ),
+            "registered-loader chain completion check must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("assertRegisteredLoaderChainComplete(")
+                .count(),
+            5,
+            "async/sync registered-loader resolve/load paths must all use the shared chain-completion helper"
+        );
+        assert_eq!(
+            module_js
+                .matches("if (!nextCalled && (!result || result.shortCircuit !== true))")
+                .count(),
+            1,
+            "registered-loader chain-completion predicate must only appear inside the shared helper"
+        );
+        assert!(
+            module_js.contains("if (!nextCalled) throw makeLoaderChainError('resolve');"),
+            "sync registered-loader undefined resolve result must keep its next-called special case"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

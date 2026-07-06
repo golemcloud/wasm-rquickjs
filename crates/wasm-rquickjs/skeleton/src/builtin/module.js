@@ -5619,6 +5619,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
     }
 
+    function assertRegisteredLoaderChainComplete(hookName, result, nextCalled) {
+        if (!nextCalled && (!result || result.shortCircuit !== true)) {
+            throw makeLoaderChainError(hookName);
+        }
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5705,9 +5711,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 };
                 const result = validateRegisteredLoaderResult(await module.resolve(nextSpecifier, context, nextResolve), 'resolve', context);
                 validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
-                if (!nextCalled && (!result || result.shortCircuit !== true)) {
-                    throw makeLoaderChainError('resolve');
-                }
+                assertRegisteredLoaderChainComplete('resolve', result, nextCalled);
                 return result;
             }
             return runResolve(index - 1, nextSpecifier, context);
@@ -5737,9 +5741,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 if (result.format !== undefined && result.format !== null && result.format !== '') {
                     validateRegisteredLoaderLoadFormat(result.format);
                 }
-                if (!nextCalled && (!result || result.shortCircuit !== true)) {
-                    throw makeLoaderChainError('load');
-                }
+                assertRegisteredLoaderChainComplete('load', result, nextCalled);
                 return result;
             }
             return runLoad(index - 1, nextUrl, context);
@@ -5872,9 +5874,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 }
                 const result = validateRegisteredLoaderResult(hookResult, 'resolve', context);
                 validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
-                if (!nextCalled && (!result || result.shortCircuit !== true)) {
-                    throw makeLoaderChainError('resolve');
-                }
+                assertRegisteredLoaderChainComplete('resolve', result, nextCalled);
                 return result;
             }
             return runResolve(index - 1, nextSpecifier, context);
@@ -5907,9 +5907,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 if (result.format !== undefined && result.format !== null && result.format !== '') {
                     validateRegisteredLoaderLoadFormat(result.format);
                 }
-                if (!nextCalled && (!result || result.shortCircuit !== true)) {
-                    throw makeLoaderChainError('load');
-                }
+                assertRegisteredLoaderChainComplete('load', result, nextCalled);
                 return result;
             }
             return runLoad(index - 1, nextUrl, context);
