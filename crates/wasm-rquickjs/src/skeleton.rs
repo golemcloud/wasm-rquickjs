@@ -578,6 +578,44 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_hook_entries_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderHookEntry(loader) { return loader.module ? { module: loader.module, url: loader.url } : undefined; }"
+            ),
+            "registered-loader hook module and URL pairing must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderHookEntry(").count(),
+            3,
+            "async and sync registered-loader paths must build hook entries through the shared helper"
+        );
+        assert_eq!(
+            module_js.matches("const entries = [];").count(),
+            2,
+            "async and sync registered-loader paths must each maintain one ordered hook-entry list"
+        );
+        assert!(
+            !module_js.contains("const modules = [];")
+                && !module_js.contains("const moduleUrls = [];")
+                && !module_js.contains("moduleUrls[index]"),
+            "registered-loader hook state must not split modules and loader URLs into drift-prone parallel arrays"
+        );
+        assert_eq!(
+            module_js.matches("entries.length - 1").count(),
+            4,
+            "registered-loader resolve and load chains must use the shared entry list for async and sync modes"
+        );
+        assert_eq!(
+            module_js.matches("entry.url").count(),
+            2,
+            "registered-loader resolve URL validation must read the loader URL from the paired hook entry"
+        );
+    }
+
+    #[test]
     fn registered_loader_chain_completion_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
@@ -631,9 +669,9 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "registeredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, moduleUrls[index], () => nextCalled, false)"
+                "registeredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, entry.url, () => nextCalled, false)"
             ) && module_js.contains(
-                "registeredLoaderResolveResult(hookResult, context, moduleUrls[index], () => nextCalled, true)"
+                "registeredLoaderResolveResult(hookResult, context, entry.url, () => nextCalled, true)"
             ),
             "registered-loader undefined resolve-result carve-out must stay sync-only"
         );

@@ -5683,6 +5683,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function registeredLoaderHookEntry(loader) {
+        return loader.module ? { module: loader.module, url: loader.url } : undefined;
+    }
+
     function assertRegisteredLoaderChainComplete(hookName, result, nextCalled) {
         if (!nextCalled && (!result || result.shortCircuit !== true)) {
             throw makeLoaderChainError(hookName);
@@ -5743,8 +5747,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
 
-        const modules = [];
-        const moduleUrls = [];
+        const entries = [];
         for (let i = 0; i < loaders.length; i++) {
             const loader = loaders[i];
             try {
@@ -5753,10 +5756,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 loader.initializing = undefined;
                 throw e;
             }
-            if (loader.module) {
-                modules.push(loader.module);
-                moduleUrls.push(loader.url);
-            }
+            const entry = registeredLoaderHookEntry(loader);
+            if (entry) entries.push(entry);
         }
 
         const importAttributes = attrs && attrs.typeValue !== undefined
@@ -5776,7 +5777,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const runResolve = async (index, nextSpecifier, context) => {
             if (index < 0) return defaultResolve(nextSpecifier, context);
-            const module = modules[index];
+            const entry = entries[index];
+            const module = entry.module;
             if (typeof module.resolve === 'function') {
                 let nextCalled = false;
                 const nextResolve = async (specifierForNext, contextForNext) => {
@@ -5787,19 +5789,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                return registeredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, moduleUrls[index], () => nextCalled, false);
+                return registeredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, entry.url, () => nextCalled, false);
             }
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const resolved = await runResolve(modules.length - 1, specifier, baseContext);
+        const resolved = await runResolve(entries.length - 1, specifier, baseContext);
         const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
         if (!normalizedResolved) return undefined;
         const resolvedFormat = normalizedResolved.format;
 
         const runLoad = async (index, nextUrl, context) => {
             if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
-            const module = modules[index];
+            const module = entries[index].module;
             if (typeof module.load === 'function') {
                 let nextCalled = false;
                 const nextLoad = async (urlForNext, contextForNext) => {
@@ -5816,7 +5818,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const loadContext = registeredLoaderLoadContext(baseContext, resolved, resolvedFormat);
-        const loaded = await runLoad(modules.length - 1, resolved.url, loadContext);
+        const loaded = await runLoad(entries.length - 1, resolved.url, loadContext);
         const loadedHasSource = registeredLoaderHasSource(loaded);
         const loadedFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (mode === 'static-raw') {
@@ -5874,8 +5876,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
-        const modules = [];
-        const moduleUrls = [];
+        const entries = [];
         for (let i = 0; i < loaders.length; i++) {
             const loader = loaders[i];
             if (!loader.initialized) {
@@ -5889,12 +5890,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 }
                 continue;
             }
-            if (loader.module) {
-                modules.push(loader.module);
-                moduleUrls.push(loader.url);
-            }
+            const entry = registeredLoaderHookEntry(loader);
+            if (entry) entries.push(entry);
         }
-        if (modules.length === 0) return undefined;
+        if (entries.length === 0) return undefined;
 
         const baseContext = {
             conditions: isImportMode ? loaderHookConditions() : Array.from(cjsPackageConditions()),
@@ -5918,7 +5917,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const runResolve = (index, nextSpecifier, context) => {
             if (index < 0) return defaultResolve(nextSpecifier, context);
-            const module = modules[index];
+            const entry = entries[index];
+            const module = entry.module;
             if (typeof module.resolve === 'function') {
                 let nextCalled = false;
                 const nextResolve = (specifierForNext, contextForNext) => {
@@ -5930,7 +5930,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 };
                 const hookResult = assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve', isImportMode ? 'static ES module resolution' : undefined);
-                return registeredLoaderResolveResult(hookResult, context, moduleUrls[index], () => nextCalled, true);
+                return registeredLoaderResolveResult(hookResult, context, entry.url, () => nextCalled, true);
             }
             return runResolve(index - 1, nextSpecifier, context);
         };
@@ -5938,7 +5938,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const initialSpecifier = isImportMode && typeof specifier === 'string'
             ? normalizeLoaderResolvedUrl(specifier)
             : specifier;
-        const resolved = runResolve(modules.length - 1, initialSpecifier, baseContext);
+        const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
         const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
         if (!normalizedResolved) return undefined;
         const resolvedFormat = normalizedResolved.format;
@@ -5946,7 +5946,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const runLoad = (index, nextUrl, context) => {
             if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
-            const module = modules[index];
+            const module = entries[index].module;
             if (typeof module.load === 'function') {
                 let nextCalled = false;
                 const nextLoad = (urlForNext, contextForNext) => {
@@ -5966,7 +5966,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runLoad(index - 1, nextUrl, context);
         };
 
-        const loaded = runLoad(modules.length - 1, resolved.url, registeredLoaderLoadContext(baseContext, resolved, resolvedFormat));
+        const loaded = runLoad(entries.length - 1, resolved.url, registeredLoaderLoadContext(baseContext, resolved, resolvedFormat));
         const finalFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (finalFormat === 'builtin') return { url: resolved.url, format: finalFormat };
         if (!loaded && resolved.source === undefined) return undefined;
