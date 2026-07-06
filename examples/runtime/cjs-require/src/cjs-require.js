@@ -464,6 +464,8 @@ export const testRequirePackageMapEdgeCases = () => {
             imports: {
                 '#app-alias': './app-alias.js',
                 '#external': 'external-pkg',
+                '#external-exact': 'dep/sub.js',
+                '#external-extensionless': 'dep/sub',
                 '#external-encoded-slash': 'missing-external/a%2Fb',
                 '#external-encoded-backslash': 'missing-external/a%5Cb',
                 '#relative-encoded-slash': './a%2Fb.js',
@@ -472,18 +474,21 @@ export const testRequirePackageMapEdgeCases = () => {
             },
         }));
         fs.writeFileSync('/package-map-edge-app/app-alias.js', 'module.exports = { appAlias: true };');
+        fs.writeFileSync('/package-map-edge-app/node_modules/dep/sub.js', 'module.exports = { exact: true };');
         fs.writeFileSync('/package-map-edge-app/node_modules/dep/index.js', [
             'exports.loadAppAlias = function() { return require("#app-alias"); };',
         ].join('\n'));
 
         assert.deepStrictEqual(appRequire('#external'), { external: true });
+        assert.deepStrictEqual(appRequire('#external-exact'), { exact: true });
+        assert.throws(() => appRequire('#external-extensionless'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => appRequire('#builtin'), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         assert.throws(() => appRequire('#external-encoded-slash'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => appRequire('#external-encoded-backslash'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => appRequire('#relative-encoded-slash'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         assert.throws(() => appRequire('#relative-encoded-backslash'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         const dep = appRequire('dep');
-        assert.throws(() => dep.loadAppAlias(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
+        assert.throws(() => dep.loadAppAlias(), { code: 'MODULE_NOT_FOUND' });
 
         return true;
     } catch (e) {

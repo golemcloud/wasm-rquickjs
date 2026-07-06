@@ -303,17 +303,24 @@ mod tests {
             resolve_package_imports.contains("__wasm_rquickjs_loader_default_resolve_package(")
                 && resolve_package_imports.contains("'cjs-analysis'")
                 && resolve_package_imports.contains("makeCjsModuleNotFoundFromErrModuleNotFound")
+                && resolve_package_imports.contains("return resolveExactPackageFile(")
                 && !resolve_package_imports.contains("findPackageScope(")
                 && !resolve_package_imports.contains("findPackageMapTarget(")
+                && !resolve_package_imports.contains("resolveCjsPackageFallbacks(")
+                && !resolve_package_imports.contains("loadAsFile(")
+                && !resolve_package_imports.contains("loadAsDirectory(")
                 && !module_js.contains("function validatePackageImportSpecifier("),
-            "CJS package imports must delegate package-map resolution to Rust cjs-analysis mode"
+            "CJS package imports must delegate package-map resolution to Rust cjs-analysis mode and read the exact resolved file"
         );
         assert!(
             internal_rs.contains("fn try_resolve_package_import_with_context(")
                 && internal_rs.contains("no_imports_field: bool")
                 && internal_rs.contains("\"__wasmNoImportsField\"")
-                && internal_rs.contains("Self::validate_package_import_specifier(name)?"),
-            "Rust package imports must preserve CJS fallback metadata and validation ownership"
+                && internal_rs.contains("Self::validate_package_import_specifier(name)?")
+                && internal_rs.contains(
+                    "nested_bare_target_resolution_mode: NodePackageResolveMode::EsmImport"
+                ),
+            "Rust package imports must preserve CJS fallback metadata, validation ownership, and ESM nested bare-target semantics"
         );
     }
 
