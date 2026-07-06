@@ -956,6 +956,22 @@ function resolvePackageImports(id, parentDir, conditions) {
     return resolvedFile;
 }
 
+function resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths) {
+    try {
+        return resolvePackageImports(id, parentDir, cjsPackageConditions());
+    } catch (err) {
+        if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
+            throw err;
+        }
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
+        if (nmResolved) return nmResolved;
+        if (err.__wasmNoImportsField === true) {
+            throw makeModuleNotFoundError(id);
+        }
+        throw err;
+    }
+}
+
 function resolveFilename(id, parentDir) {
     const hasTrailingSlash = /\/$/.test(id);
     const forceDirectory = hasTrailingSlash || /(?:^|\/)\.\.?$/.test(id);
@@ -5167,21 +5183,9 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
         }
     }
     if (id.startsWith('#')) {
-        try {
-            const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions());
-            if (importsResolved.builtin) return importsResolved.builtin;
-            return toCjsCanonicalFilename(importsResolved.filename, false);
-        } catch (err) {
-            if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
-                throw err;
-            }
-            const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
-            if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
-            if (err.__wasmNoImportsField === true) {
-                throw makeModuleNotFoundError(id);
-            }
-            throw err;
-        }
+        const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths);
+        if (importsResolved.builtin) return importsResolved.builtin;
+        return toCjsCanonicalFilename(importsResolved.filename, false);
     }
     // node_modules resolution for bare specifiers
     const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
@@ -5275,25 +5279,10 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         }
 
         if (id.startsWith('#')) {
-            try {
-                const importsResolved = resolvePackageImports(id, parentDir, cjsPackageConditions());
-                if (importsResolved.builtin) return builtinModuleMap[importsResolved.builtin];
-                const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
-                return mod.exports;
-            } catch (err) {
-                if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
-                    throw err;
-                }
-                const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
-                if (nmResolved) {
-                    const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
-                    return mod.exports;
-                }
-                if (err.__wasmNoImportsField === true) {
-                    throw makeModuleNotFoundError(id);
-                }
-                throw err;
-            }
+            const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths);
+            if (importsResolved.builtin) return builtinModuleMap[importsResolved.builtin];
+            const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
+            return mod.exports;
         }
 
         // node_modules resolution for bare specifiers

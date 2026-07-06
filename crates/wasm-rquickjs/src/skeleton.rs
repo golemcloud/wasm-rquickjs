@@ -294,8 +294,8 @@ mod tests {
             .find("function resolvePackageImports(id, parentDir, conditions)")
             .expect("resolvePackageImports function must exist");
         let function_end = module_js[function_start..]
-            .find("function resolveFilename(id, parentDir)")
-            .expect("resolvePackageImports must precede resolveFilename")
+            .find("function resolveCjsPackageImportOrNodeModules")
+            .expect("resolvePackageImports must precede CJS package-import fallback helper")
             + function_start;
         let resolve_package_imports = &module_js[function_start..function_end];
 
@@ -313,6 +313,24 @@ mod tests {
                 && !resolve_package_imports.contains("loadAsDirectory(")
                 && !module_js.contains("function validatePackageImportSpecifier("),
             "CJS package imports must delegate package-map resolution to Rust cjs-analysis mode and read the exact resolved file"
+        );
+        let fallback_start = function_end;
+        let fallback_end = module_js[fallback_start..]
+            .find("function resolveFilename(id, parentDir)")
+            .expect("CJS package-import fallback helper must precede resolveFilename")
+            + fallback_start;
+        let cjs_package_import_fallback = &module_js[fallback_start..fallback_end];
+        assert!(
+            cjs_package_import_fallback
+                .contains("function resolveCjsPackageImportOrNodeModules(")
+                && cjs_package_import_fallback.contains("resolvePackageImports(id, parentDir, cjsPackageConditions())")
+                && cjs_package_import_fallback.contains("resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths)")
+                && cjs_package_import_fallback.contains("throw makeModuleNotFoundError(id);"),
+            "CJS require() and require.resolve() must share package-import fallback behavior"
+        );
+        assert!(
+            module_js.matches("resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths)").count() == 3,
+            "CJS package-import fallback helper should have exactly the definition plus require and require.resolve call sites"
         );
         assert!(
             internal_rs.contains("fn try_resolve_package_import_with_context(")
