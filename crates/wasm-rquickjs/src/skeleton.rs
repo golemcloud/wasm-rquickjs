@@ -772,6 +772,36 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_resolve_result_validation_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function validateRegisteredLoaderResolveResult(hookResult, context, loaderUrl) { const result = validateRegisteredLoaderResult(hookResult, 'resolve', context); validateRegisteredLoaderResolveUrl(result.url, loaderUrl); return result; }"
+            ),
+            "registered-loader resolve-result validation must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("validateRegisteredLoaderResolveResult(")
+                .count(),
+            3,
+            "async and sync registered-loader resolve paths must use the shared resolve-result validator"
+        );
+        assert_eq!(
+            module_js
+                .matches("validateRegisteredLoaderResolveUrl(result.url,")
+                .count(),
+            1,
+            "registered-loader resolve URL boundary checks must only appear inside the shared helper"
+        );
+        assert!(
+            module_js.contains("if (!nextCalled) throw makeLoaderChainError('resolve');"),
+            "sync registered-loader undefined resolve result must keep its next-called special case"
+        );
+    }
+
+    #[test]
     fn registered_loader_default_load_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

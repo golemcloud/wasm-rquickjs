@@ -5610,6 +5610,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function validateRegisteredLoaderResolveResult(hookResult, context, loaderUrl) {
+        const result = validateRegisteredLoaderResult(hookResult, 'resolve', context);
+        validateRegisteredLoaderResolveUrl(result.url, loaderUrl);
+        return result;
+    }
+
     function registeredLoaderLoadContext(baseContext, resolved, resolvedFormat) {
         return {
             conditions: baseContext.conditions,
@@ -5745,8 +5751,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderResult(await module.resolve(nextSpecifier, context, nextResolve), 'resolve', context);
-                validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
+                const result = validateRegisteredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, moduleUrls[index]);
                 assertRegisteredLoaderChainComplete('resolve', result, nextCalled);
                 return result;
             }
@@ -5899,8 +5904,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     if (!nextCalled) throw makeLoaderChainError('resolve');
                     return undefined;
                 }
-                const result = validateRegisteredLoaderResult(hookResult, 'resolve', context);
-                validateRegisteredLoaderResolveUrl(result.url, moduleUrls[index]);
+                const result = validateRegisteredLoaderResolveResult(hookResult, context, moduleUrls[index]);
                 assertRegisteredLoaderChainComplete('resolve', result, nextCalled);
                 return result;
             }
