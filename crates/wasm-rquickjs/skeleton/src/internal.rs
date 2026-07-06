@@ -5138,6 +5138,15 @@ fn loader_package_result_format(resolved: &str, mode: NodePackageResolveMode) ->
     }
 }
 
+fn package_resolved_url_object<'js>(
+    ctx: &Ctx<'js>,
+    resolved: &str,
+) -> rquickjs::Result<Object<'js>> {
+    let result = Object::new(ctx.clone())?;
+    result.set("url", path_to_file_url(resolved))?;
+    Ok(result)
+}
+
 fn loader_default_resolve_package<'js>(
     ctx: Ctx<'js>,
     base_url: String,
@@ -5164,8 +5173,7 @@ fn loader_default_resolve_package<'js>(
             } else {
                 resolved
             };
-            let result = Object::new(ctx.clone())?;
-            result.set("url", path_to_file_url(&resolved))?;
+            let result = package_resolved_url_object(&ctx, &resolved)?;
             if let Some(format) = loader_package_result_format(&resolved, mode) {
                 result.set("format", format)?;
             }
@@ -5232,9 +5240,7 @@ fn cjs_resolve_package_exports<'js>(
     emit_node_package_deprecation_warnings(&ctx, &warnings)?;
     match result {
         Ok(resolved) => {
-            let result = Object::new(ctx.clone())?;
-            result.set("url", path_to_file_url(&resolved))?;
-            Ok(Some(result))
+            package_resolved_url_object(&ctx, &resolved).map(Some)
         }
         Err(err) => {
             let _: String = throw_node_package_resolve_error(&ctx, err)?;
