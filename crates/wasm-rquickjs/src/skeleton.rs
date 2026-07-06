@@ -924,6 +924,34 @@ mod tests {
                 && !callback_parser.contains("source.charCodeAt(i) === 0x3b"),
             "loader reexport callback parser must share optional semicolon consumption after return guards"
         );
+
+        let getter_kind_start = module_js
+            .find("function readLoaderGetterReturnMemberKind(")
+            .expect("readLoaderGetterReturnMemberKind function must exist");
+        let getter_kind_end = module_js[getter_kind_start..]
+            .find("function loaderSimpleGetterBody(")
+            .expect("getter return parser must precede loaderSimpleGetterBody")
+            + getter_kind_start;
+        let getter_kind_parser = &module_js[getter_kind_start..getter_kind_end];
+        assert!(
+            getter_kind_parser.contains("i = skipLoaderOptionalSemicolon(source, i);")
+                && !getter_kind_parser.contains("source.charCodeAt(i) === 0x3b"),
+            "loader descriptor getter parser must share optional semicolon consumption"
+        );
+
+        let dynamic_getter_start = module_js
+            .find("function loaderGetterReturnsBindingKey(")
+            .expect("loaderGetterReturnsBindingKey function must exist");
+        let dynamic_getter_end = module_js[dynamic_getter_start..]
+            .find("function loaderDynamicReexportGetterBody(")
+            .expect("dynamic getter parser must precede loaderDynamicReexportGetterBody")
+            + dynamic_getter_start;
+        let dynamic_getter_parser = &module_js[dynamic_getter_start..dynamic_getter_end];
+        assert!(
+            dynamic_getter_parser.contains("i = skipLoaderOptionalSemicolon(source, i);")
+                && !dynamic_getter_parser.contains("source.charCodeAt(i) === 0x3b"),
+            "loader dynamic reexport getter parser must share optional semicolon consumption"
+        );
     }
 
     #[test]

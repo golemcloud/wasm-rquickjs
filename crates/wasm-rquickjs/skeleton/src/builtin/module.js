@@ -3099,7 +3099,7 @@ function readLoaderGetterReturnMemberKind(source, start, end) {
         i++;
     }
     i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
+    i = skipLoaderOptionalSemicolon(source, i);
     return i >= end ? kind : loaderGetterReturnInvalid;
 }
 
@@ -3467,7 +3467,7 @@ function loaderGetterReturnsBindingKey(source, start, end, binding, key) {
     i = readLoaderBracketIdentifier(source, i, key);
     if (i === null) return false;
     i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
+    i = skipLoaderOptionalSemicolon(source, i);
     return i >= end;
 }
 
