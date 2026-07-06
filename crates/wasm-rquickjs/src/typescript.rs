@@ -72,7 +72,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
         let interface_stack: VecDeque<_> = vec![interface_id].into_iter().collect();
 
         result.write_docs(&interface.docs);
-        let js_name = escape_js_ident(name.to_lower_camel_case());
+        let js_name = context.exported_interface_js_name(interface_id, &name)?;
         result.begin_export_namespace(&js_name);
         declare_functions_and_resources(
             &mut result,

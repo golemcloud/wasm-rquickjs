@@ -1,0 +1,5 @@
+package test:a@1.0.0;
+
+interface guest {
+  invoke: func(a: string, b: string, c: string) -> string;
+}

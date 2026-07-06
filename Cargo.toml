@@ -92,6 +92,10 @@ name = "wizer_benchmark"
 harness = false
 
 [[test]]
+name = "glue_benchmark"
+harness = false
+
+[[test]]
 name = "migrate_config_split"
 harness = false
 

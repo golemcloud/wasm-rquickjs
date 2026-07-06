@@ -7,7 +7,7 @@ use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Res
 use rquickjs::object::Property;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
-    Object, Promise, Value, async_with, Exception,
+    Object, Persistent, Promise, String as JsString, Value, async_with, Exception,
 };
 use rquickjs::{CaughtError, prelude::*};
 use serde::de::Error as SerdeError;
@@ -8506,6 +8506,9 @@ pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 pub struct JsState {
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
+    pub exported_function_cache:
+        RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
+    pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
     pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
@@ -8514,6 +8517,12 @@ pub struct JsState {
     pub unrefed_timers: RefCell<HashSet<usize>>,
     pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub gc_pending: std::sync::atomic::AtomicBool,
+}
+
+pub struct CachedExportedFunction {
+    function: Persistent<Function<'static>>,
+    parent: Persistent<Object<'static>>,
+    parameter_count: usize,
 }
 
 /// Tracks which initialization phase the runtime is in.
@@ -8731,6 +8740,8 @@ impl JsState {
         Self {
             rt,
             ctx,
+            exported_function_cache: RefCell::new(HashMap::new()),
+            variant_case_tag_cache: RefCell::new(HashMap::new()),
             last_resource_id,
             resource_drop_queue_tx,
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
@@ -9015,7 +9026,11 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     })
 }
 
-pub async fn call_js_export<A, R>(wit_package: &str, function_path: &[&str], args: A) -> R
+pub async fn call_js_export<A, R>(
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
+    args: A,
+) -> R
 where
     A: for<'js> IntoArgs<'js>,
     R: for<'js> FromJs<'js> + 'static,
@@ -9024,8 +9039,8 @@ where
 }
 
 pub async fn call_js_export_returning_result<A, R, E>(
-    wit_package: &str,
-    function_path: &[&str],
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
     args: A,
 ) -> crate::wrappers::JsResult<R, E>
 where
@@ -9048,8 +9063,8 @@ where
 }
 
 async fn call_js_export_internal<A, R, FR, TME>(
-    wit_package: &str,
-    function_path: &[&str],
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
     args: A,
     map_result: impl Fn(R) -> FR,
     try_map_exception: TME,
@@ -9063,20 +9078,8 @@ where
     let js_state = get_js_state();
 
     let result: FR = async_with!(js_state.ctx => |ctx| {
-        let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (user_function_obj, parent): (Object, Object) = get_path(&module, function_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS function", function_path, &module, wit_package)));
-        let user_function = user_function_obj.as_function().unwrap_or_else(|| panic!("Expected export {} to be a function", function_path.join("."))).clone();
-
-        let parameter_count = user_function_obj.get::<&str, usize>("length").unwrap_or_else(|_| panic!("Failed to get parameter count of exported function {}", function_path.join(".")));
-        if parameter_count != args.num_args() {
-            panic!(
-                "The WIT specification defines {} parameters,\nbut the exported JavaScript function got {} parameters (exported function {} in WIT package {})",
-                args.num_args(),
-                parameter_count,
-                function_path.join("."),
-                wit_package
-            );
-        }
+        let (user_function, parent) =
+            get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
 
@@ -9130,9 +9133,115 @@ where
     result
 }
 
+fn get_cached_js_export<'js>(
+    js_state: &JsState,
+    ctx: &Ctx<'js>,
+    wit_package: &'static str,
+    function_path: &'static [&'static str],
+    expected_parameter_count: usize,
+) -> (Function<'js>, Object<'js>) {
+    if let Some((function, parent, parameter_count)) = js_state
+        .exported_function_cache
+        .borrow()
+        .get(function_path)
+        .map(|cached| {
+            (
+                cached.function.clone(),
+                cached.parent.clone(),
+                cached.parameter_count,
+            )
+        })
+    {
+        if parameter_count != expected_parameter_count {
+            panic!(
+                "The WIT specification defines {} parameters,\nbut the exported JavaScript function got {} parameters (exported function {} in WIT package {})",
+                expected_parameter_count,
+                parameter_count,
+                function_path.join("."),
+                wit_package
+            );
+        }
+
+        let function = function
+            .restore(ctx)
+            .expect("Failed to restore cached exported JS function");
+        let parent = parent
+            .restore(ctx)
+            .expect("Failed to restore cached exported JS function parent");
+        return (function, parent);
+    }
+
+    let module: Object = ctx
+        .globals()
+        .get("userModule")
+        .expect("Failed to get userModule");
+    let (user_function_obj, parent): (Object, Object) =
+        get_path(&module, function_path).unwrap_or_else(|| {
+            panic!(
+                "{}",
+                dump_cannot_find_export("exported JS function", function_path, &module, wit_package)
+            )
+        });
+    let user_function = user_function_obj
+        .as_function()
+        .unwrap_or_else(|| {
+            panic!(
+                "Expected export {} to be a function",
+                function_path.join(".")
+            )
+        })
+        .clone();
+
+    let parameter_count = user_function_obj
+        .get::<&str, usize>("length")
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed to get parameter count of exported function {}",
+                function_path.join(".")
+            )
+        });
+    if parameter_count != expected_parameter_count {
+        panic!(
+            "The WIT specification defines {} parameters,\nbut the exported JavaScript function got {} parameters (exported function {} in WIT package {})",
+            expected_parameter_count,
+            parameter_count,
+            function_path.join("."),
+            wit_package
+        );
+    }
+
+    js_state.exported_function_cache.borrow_mut().insert(
+        function_path,
+        CachedExportedFunction {
+            function: Persistent::save(ctx, user_function.clone()),
+            parent: Persistent::save(ctx, parent.clone()),
+            parameter_count,
+        },
+    );
+
+    (user_function, parent)
+}
+
+pub fn variant_case_tag<'js>(
+    ctx: &Ctx<'js>,
+    name: &'static str,
+) -> rquickjs::Result<JsString<'js>> {
+    let js_state = get_js_state();
+    if let Some(tag) = js_state.variant_case_tag_cache.borrow().get(name).cloned() {
+        return tag.restore(ctx);
+    }
+
+    let tag = JsString::from_str(ctx.clone(), name)?;
+    js_state
+        .variant_case_tag_cache
+        .borrow_mut()
+        .insert(name, Persistent::save(ctx, tag.clone()));
+    Ok(tag)
+}
+
 pub async fn call_js_resource_constructor<A>(
-    wit_package: &str,
-    resource_path: &[&str],
+    wit_package: &'static str,
+    resource_path: &'static [&'static str],
     args: A,
 ) -> usize
 where

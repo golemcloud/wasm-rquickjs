@@ -1,0 +1,6 @@
+package test:demo;
+
+world export-interface-name-collision {
+  export test:a/guest@1.0.0;
+  export test:b/guest@1.0.0;
+}

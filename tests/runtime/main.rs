@@ -24,6 +24,7 @@ mod example1;
 mod example2;
 mod example3;
 mod export_from_inner_package;
+mod export_interface_name_collision;
 mod fetch;
 mod fs;
 mod imports;
@@ -45,6 +46,7 @@ mod timeout;
 mod toplevel_timer;
 mod url;
 mod v8_stack_trace;
+mod variant_list_roundtrip;
 mod xhr;
 
 // Tag suites into runtime groups for parallel CI matrix execution.
@@ -73,6 +75,7 @@ tag_suite!(domain, group6);
 tag_suite!(stateful1, group6);
 tag_suite!(os, group6);
 tag_suite!(export_from_inner_package, group6);
+tag_suite!(export_interface_name_collision, group6);
 tag_suite!(example3, group6);
 tag_suite!(sqlite, group6);
 
@@ -83,6 +86,7 @@ tag_suite!(timeout, group7);
 tag_suite!(buffer, group7);
 tag_suite!(bigint_roundtrip, group7);
 tag_suite!(imports, group7);
+tag_suite!(variant_list_roundtrip, group7);
 
 tag_suite!(response_static, group8);
 tag_suite!(v8_stack_trace, group8);
