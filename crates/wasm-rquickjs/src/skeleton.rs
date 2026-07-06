@@ -149,6 +149,12 @@ mod tests {
             "package default conditions must not be duplicated as JS arrays"
         );
         assert!(
+            !module_js.contains("emitPackageDeprecationWarning")
+                && !module_js.contains("package_deprecation_warning_seen")
+                && !module_js.contains("mark_package_deprecation_warning_seen"),
+            "package deprecation warning emission must stay on the Rust resolver side"
+        );
+        assert!(
             module_js.contains("__wasm_rquickjs_package_default_conditions(mode)"),
             "module.js must request package condition defaults from the Rust provider"
         );
@@ -346,25 +352,25 @@ mod tests {
     #[test]
     fn cjs_package_directory_results_preserve_owning_package_metadata() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
-        let function_start = module_js
-            .find(
-                "function resolveCjsPackageDirectory(candidate, fallbackPackageDir, id, fromPart)",
-            )
-            .expect("resolveCjsPackageDirectory function must exist");
-        let function_end = module_js[function_start..]
-            .find("function resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, fromPart)")
-            .expect("resolveCjsPackageDirectory must precede resolveCjsPackageFallbacks")
-            + function_start;
-        let resolve_cjs_package_directory = &module_js[function_start..function_end];
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 
         assert!(
-            resolve_cjs_package_directory
-                .contains("nestedPackageEntry = readPackageJson(nestedPkgJsonPath);")
-                && resolve_cjs_package_directory.contains(
-                    "const resolved = resolveCjsPackageMain(candidate, nestedPackageEntry.pkg, nestedPkgJsonPath, id, fromPart);"
-                )
-                && resolve_cjs_package_directory
-                    .contains("resolved.packageDir = fallbackPackageDir; return resolved;"),
+            module_js.contains("__wasm_rquickjs_cjs_resolve_package_fallback(")
+                && module_js.contains("cjsPackageExtensionKeys()")
+                && module_js.contains("readCjsPackageCandidate(String(resolved.filename), String(resolved.packageDir || pkgDir))")
+                && !module_js.contains("function resolveCjsPackageDirectory(")
+                && !module_js.contains("function resolveCjsPackageMain(")
+                && !module_js.contains("function readCjsPackageFileCandidates(")
+                && !module_js.contains("function readCjsPackageIndexCandidates("),
+            "runtime CJS package fallback must delegate probing to Rust with live require.extensions keys"
+        );
+        assert!(
+            internal_rs.contains("fn resolve_runtime_cjs_package_directory(")
+                && internal_rs.contains("fn resolve_runtime_cjs_package_fallback(")
+                && internal_rs.contains("fn join_package_subpath(")
+                && internal_rs.contains("Self::join_package_subpath(package_dir, subpath)")
+                && internal_rs.contains("CjsEvalResolver::normalize_path(fallback_package_dir)")
+                && internal_rs.contains("\"__wasm_rquickjs_cjs_resolve_package_fallback\""),
             "nested package.json main fallback must keep the owning bare package metadata for findPackageJSON"
         );
     }

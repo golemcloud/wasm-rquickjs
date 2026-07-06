@@ -7823,10 +7823,16 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         fs.mkdirSync(`${root}/node_modules/custom-ext-index`, { recursive: true });
         fs.writeFileSync(`${root}/node_modules/custom-ext-index/package.json`, JSON.stringify({}));
         fs.writeFileSync(`${root}/node_modules/custom-ext-index/index.test`, 'VALUE = "index";');
+        fs.mkdirSync(`${root}/node_modules/double-slash-sub/sub`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/double-slash-sub/package.json`, JSON.stringify({}));
+        fs.writeFileSync(`${root}/node_modules/double-slash-sub/sub/index.test`, 'VALUE = "package-sub";');
+        fs.mkdirSync('/sub', { recursive: true });
+        fs.writeFileSync('/sub/index.test', 'VALUE = "escaped-root";');
         assert.strictEqual(require('custom-ext-main').value, 'main');
         assert.strictEqual(require('custom-ext-sub/subdir').value, 'subdir');
         assert.strictEqual(require('custom-ext-sub-main/subdir').value, 'subdir-main');
         assert.strictEqual(require('custom-ext-index').value, 'index');
+        assert.strictEqual(require('double-slash-sub//sub').value, 'package-sub');
         require.extensions['.data'] = require.extensions['.json'];
         require.extensions['.jx'] = require.extensions['.js'];
         fs.mkdirSync(`${root}/node_modules/default-json-ext-main`, { recursive: true });

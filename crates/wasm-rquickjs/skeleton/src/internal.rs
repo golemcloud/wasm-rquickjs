@@ -3904,8 +3904,124 @@ impl NodeModulesResolver {
         None
     }
 
+    fn first_existing_runtime_cjs_probe(
+        target_path: &std::path::Path,
+        extensions: &[String],
+        include_exact: bool,
+        include_index: bool,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
+        if include_exact {
+            let normalized = CjsEvalResolver::normalize_path(target_path);
+            if resolution.normalized_is_file(&normalized) {
+                return Some(normalized);
+            }
+        }
+
+        for extension in extensions {
+            let candidate = Self::with_appended_extension(target_path, extension);
+            let normalized = CjsEvalResolver::normalize_path(&candidate);
+            if resolution.normalized_is_file(&normalized) {
+                return Some(normalized);
+            }
+        }
+
+        if include_index {
+            for extension in extensions {
+                let candidate = target_path.join(format!("index{}", extension));
+                let normalized = CjsEvalResolver::normalize_path(&candidate);
+                if resolution.normalized_is_file(&normalized) {
+                    return Some(normalized);
+                }
+            }
+        }
+
+        None
+    }
+
     fn with_appended_extension(path: &std::path::Path, extension: &str) -> std::path::PathBuf {
         std::path::PathBuf::from(format!("{}{}", path.to_string_lossy(), extension))
+    }
+
+    fn resolve_runtime_cjs_file_or_index(
+        package_dir: &std::path::Path,
+        target: &str,
+        extensions: &[String],
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
+        let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
+        Self::first_existing_runtime_cjs_probe(&target_path, extensions, true, true, resolution)
+    }
+
+    fn resolve_runtime_cjs_package_directory(
+        candidate: &std::path::Path,
+        fallback_package_dir: &std::path::Path,
+        extensions: &[String],
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Result<Option<(String, String)>, NodePackageResolveError> {
+        let nested_pkg_path = candidate.join("package.json");
+        if let Some(package) = Self::read_package_json_optional(&nested_pkg_path)?
+            && let Some(main) = package.main.as_ref()
+            && let Some(resolved) =
+                Self::resolve_runtime_cjs_file_or_index(candidate, main, extensions, resolution)
+        {
+            return Ok(Some((
+                resolved,
+                CjsEvalResolver::normalize_path(fallback_package_dir),
+            )));
+        }
+
+        Ok(Self::first_existing_runtime_cjs_probe(
+            candidate, extensions, false, true, resolution,
+        )
+        .map(|resolved| (resolved, CjsEvalResolver::normalize_path(fallback_package_dir))))
+    }
+
+    fn resolve_runtime_cjs_package_fallback(
+        package_dir: &std::path::Path,
+        subpath: &str,
+        extensions: &[String],
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Result<Option<(String, String)>, NodePackageResolveError> {
+        let package_dir_key = CjsEvalResolver::normalize_path(package_dir);
+        if !subpath.is_empty() {
+            let sub_candidate = Self::join_package_subpath(package_dir, subpath);
+            if let Some(resolved) =
+                Self::first_existing_runtime_cjs_probe(&sub_candidate, extensions, true, false, resolution)
+            {
+                return Ok(Some((resolved, package_dir_key)));
+            }
+            return Self::resolve_runtime_cjs_package_directory(
+                &sub_candidate,
+                package_dir,
+                extensions,
+                resolution,
+            );
+        }
+
+        if let Some(resolved) =
+            Self::first_existing_runtime_cjs_probe(package_dir, extensions, true, false, resolution)
+        {
+            return Ok(Some((resolved, package_dir_key)));
+        }
+
+        let pkg_path = package_dir.join("package.json");
+        if let Some(package) = Self::read_package_json_optional(&pkg_path)?
+            && let Some(main) = package.main.as_ref()
+            && let Some(resolved) =
+                Self::resolve_runtime_cjs_file_or_index(package_dir, main, extensions, resolution)
+        {
+            return Ok(Some((resolved, package_dir_key)));
+        }
+
+        Ok(Self::first_existing_runtime_cjs_probe(
+            package_dir, extensions, false, true, resolution,
+        )
+        .map(|resolved| (resolved, package_dir_key)))
+    }
+
+    fn join_package_subpath(package_dir: &std::path::Path, subpath: &str) -> std::path::PathBuf {
+        package_dir.join(subpath.trim_start_matches('/'))
     }
 
     fn resolve_cjs_analysis_file_or_directory(
@@ -4909,6 +5025,16 @@ fn package_conditions_from_js_array<'js>(conditions: &rquickjs::Array<'js>) -> V
     condition_vec
 }
 
+fn package_extensions_from_js_array<'js>(extensions: &rquickjs::Array<'js>) -> Vec<String> {
+    let mut extension_vec = Vec::new();
+    for i in 0..extensions.len() {
+        if let Ok(extension) = extensions.get::<String>(i) {
+            extension_vec.push(extension);
+        }
+    }
+    extension_vec
+}
+
 fn loader_default_resolve_package<'js>(
     ctx: Ctx<'js>,
     base_url: String,
@@ -5011,6 +5137,71 @@ fn cjs_resolve_package_exports<'js>(
             let result = Object::new(ctx.clone())?;
             result.set("url", path_to_file_url(&resolved))?;
             Ok(Some(result))
+        }
+        Err(err) => {
+            let _: String = throw_node_package_resolve_error(&ctx, err)?;
+            unreachable!()
+        }
+    }
+}
+
+fn throw_cjs_invalid_package_config_while_importing<'js, T>(
+    ctx: &Ctx<'js>,
+    path: String,
+    id: &str,
+    from_part: &str,
+    reason: Option<String>,
+) -> rquickjs::Result<T> {
+    let mut message = format!(
+        "Invalid package config {} while importing \"{}\" from {}.",
+        path, id, from_part
+    );
+    if let Some(reason) = reason
+        && !reason.is_empty()
+    {
+        message.push(' ');
+        message.push_str(&reason);
+    }
+    throw_native_coded_error(ctx, &message, "ERR_INVALID_PACKAGE_CONFIG", false)
+}
+
+fn cjs_resolve_package_fallback<'js>(
+    ctx: Ctx<'js>,
+    package_dir: String,
+    subpath: String,
+    extensions: rquickjs::Array<'js>,
+    id: String,
+    from_part: String,
+) -> rquickjs::Result<Option<Object<'js>>> {
+    let extension_vec = package_extensions_from_js_array(&extensions);
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(
+        NodePackageResolveMode::CjsAnalysis,
+        &[],
+        &mut warnings,
+    );
+    let result = NodeModulesResolver::resolve_runtime_cjs_package_fallback(
+        &std::path::PathBuf::from(package_dir),
+        &subpath,
+        &extension_vec,
+        &mut resolution,
+    );
+    match result {
+        Ok(Some((filename, package_dir))) => {
+            let result = Object::new(ctx.clone())?;
+            result.set("filename", filename)?;
+            result.set("packageDir", package_dir)?;
+            Ok(Some(result))
+        }
+        Ok(None) => Ok(None),
+        Err(NodePackageResolveError::InvalidPackageConfig { path, reason }) => {
+            throw_cjs_invalid_package_config_while_importing(
+                &ctx,
+                path,
+                &id,
+                &from_part,
+                reason,
+            )
         }
         Err(err) => {
             let _: String = throw_node_package_resolve_error(&ctx, err)?;
@@ -8498,6 +8689,13 @@ impl JsState {
                     .expect("Failed to create CJS package exports resolver"),
             )
             .expect("Failed to initialize CJS package exports resolver");
+
+            global.set(
+                "__wasm_rquickjs_cjs_resolve_package_fallback",
+                Function::new(ctx.clone(), cjs_resolve_package_fallback)
+                    .expect("Failed to create CJS package fallback resolver"),
+            )
+            .expect("Failed to initialize CJS package fallback resolver");
 
             global.set(
                 "__wasm_rquickjs_package_default_conditions",

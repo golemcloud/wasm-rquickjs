@@ -61,10 +61,6 @@ import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
-import {
-    package_deprecation_warning_seen as _packageDeprecationWarningSeen,
-    mark_package_deprecation_warning_seen as _markPackageDeprecationWarningSeen,
-} from '__wasm_rquickjs_builtin/internal/binding/util_native';
 
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
@@ -753,32 +749,6 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
     );
 }
 
-let packageDeprecationWarningsSuppressed = 0;
-
-function emitPackageDeprecationWarning(message, code, key) {
-    if (packageDeprecationWarningsSuppressed > 0) return;
-    const warningKey = code === 'DEP0155' ? String(code) + ':' + String(key || message) : null;
-    const processObject = globalThis.process;
-    if (processObject && processObject.noDeprecation) return;
-    if (warningKey && _packageDeprecationWarningSeen(warningKey)) return;
-    if (warningKey) {
-        _markPackageDeprecationWarningSeen(warningKey);
-    }
-    if (!processObject || typeof processObject.emitWarning !== 'function') {
-        throw new Error('Internal process warning emitter is not initialized');
-    }
-    processObject.emitWarning(message, 'DeprecationWarning', code);
-}
-
-function withSuppressedPackageDeprecationWarnings(callback) {
-    packageDeprecationWarningsSuppressed += 1;
-    try {
-        return callback();
-    } finally {
-        packageDeprecationWarningsSuppressed -= 1;
-    }
-}
-
 function defaultPackageConditions(mode) {
     if (typeof globalThis.__wasm_rquickjs_package_default_conditions !== 'function') {
         throw new Error('Internal package condition provider is not initialized');
@@ -909,27 +879,6 @@ function cjsPackageExtensionKeys() {
     return Object.keys(requireExtensions);
 }
 
-function readCjsPackageFileCandidates(candidate, packageDir) {
-    let resolved = readCjsPackageCandidate(candidate, packageDir);
-    if (resolved !== null) return resolved;
-
-    const exts = cjsPackageExtensionKeys();
-    for (let i = 0; i < exts.length; i++) {
-        resolved = readCjsPackageCandidate(candidate + exts[i], packageDir);
-        if (resolved !== null) return resolved;
-    }
-    return null;
-}
-
-function readCjsPackageIndexCandidates(candidate, packageDir) {
-    const exts = cjsPackageExtensionKeys();
-    for (let i = 0; i < exts.length; i++) {
-        const resolved = readCjsPackageCandidate(pathModule.join(candidate, 'index' + exts[i]), packageDir);
-        if (resolved !== null) return resolved;
-    }
-    return null;
-}
-
 function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause) {
     const pkgErr = new Error(
         'Invalid package config ' + pkgJsonPath +
@@ -940,55 +889,19 @@ function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause
     return pkgErr;
 }
 
-function resolveCjsPackageMain(pkgDir, pkg, pkgJsonPath, id, fromPart) {
-    if (pkg === null || !Object.prototype.hasOwnProperty.call(pkg, 'main') || typeof pkg.main !== 'string') {
-        return null;
+function resolveCjsPackageFallbacks(parts, pkgDir, id, fromPart) {
+    if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_fallback !== 'function') {
+        throw new Error('Internal CJS package fallback resolver is not initialized');
     }
-
-    try {
-        const mainPath = pathModule.resolve(pkgDir, pkg.main);
-        let resolved = readCjsPackageFileCandidates(mainPath, pkgDir);
-        if (resolved !== null) return resolved;
-        return readCjsPackageIndexCandidates(mainPath, pkgDir);
-    } catch (e) {
-        throw makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, e);
-    }
-}
-
-function resolveCjsPackageDirectory(candidate, fallbackPackageDir, id, fromPart) {
-    const nestedPkgJsonPath = pathModule.join(candidate, 'package.json');
-    let nestedPackageEntry;
-    try {
-        nestedPackageEntry = readPackageJson(nestedPkgJsonPath);
-    } catch (e) {
-        throw makeInvalidPackageConfigWhileImporting(nestedPkgJsonPath, id, fromPart, e);
-    }
-    if (nestedPackageEntry !== null) {
-        const resolved = resolveCjsPackageMain(candidate, nestedPackageEntry.pkg, nestedPkgJsonPath, id, fromPart);
-        if (resolved !== null) {
-            resolved.packageDir = fallbackPackageDir;
-            return resolved;
-        }
-    }
-
-    return readCjsPackageIndexCandidates(candidate, fallbackPackageDir);
-}
-
-function resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, fromPart) {
-    if (parts.subpath.length > 0) {
-        const subCandidate = pathModule.join(pkgDir, parts.subpath);
-        let resolved = readCjsPackageFileCandidates(subCandidate, pkgDir);
-        if (resolved !== null) return resolved;
-        return resolveCjsPackageDirectory(subCandidate, pkgDir, id, fromPart);
-    }
-
-    let resolved = readCjsPackageFileCandidates(pkgDir, pkgDir);
-    if (resolved !== null) return resolved;
-
-    resolved = resolveCjsPackageMain(pkgDir, pkg, pkgJsonPath, id, fromPart);
-    if (resolved !== null) return resolved;
-
-    return readCjsPackageIndexCandidates(pkgDir, pkgDir);
+    const resolved = globalThis.__wasm_rquickjs_cjs_resolve_package_fallback(
+        pkgDir,
+        parts.subpath,
+        cjsPackageExtensionKeys(),
+        id,
+        fromPart,
+    );
+    if (resolved === null || resolved === undefined) return null;
+    return readCjsPackageCandidate(String(resolved.filename), String(resolved.packageDir || pkgDir));
 }
 
 const packageScopeCache = Object.create(null);
@@ -4301,9 +4214,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
 
 function markRequireEsmGraph(filename) {
     const marked = [];
-    withSuppressedPackageDeprecationWarnings(() => {
-        scanRequireEsmGraph(filename, marked, Object.create(null), [], Object.create(null));
-    });
+    scanRequireEsmGraph(filename, marked, Object.create(null), [], Object.create(null));
     return marked;
 }
 
@@ -5129,12 +5040,10 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
     for (let i = 0; i < dirs.length; i++) {
         const pkgDir = pathModule.join(dirs[i], parts.name);
         const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
-        let pkg = null;
 
         try {
             const packageEntry = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
             if (packageEntry !== null) {
-                pkg = packageEntry.pkg;
                 if (packageEntry.exportsResolved !== undefined) {
                     return packageEntry.exportsResolved;
                 }
@@ -5146,7 +5055,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
             throw makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, parentFilename || parentDir, e);
         }
 
-        const fallbackResolved = resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, parentFilename || parentDir);
+        const fallbackResolved = resolveCjsPackageFallbacks(parts, pkgDir, id, parentFilename || parentDir);
         if (fallbackResolved !== null) return fallbackResolved;
 
     }
