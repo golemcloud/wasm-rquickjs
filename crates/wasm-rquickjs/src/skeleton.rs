@@ -585,8 +585,8 @@ mod tests {
             module_js
                 .matches("registeredLoaderModuleSourceReturn(")
                 .count(),
-            3,
-            "dynamic and static registered-loader module source paths must use the shared converter"
+            4,
+            "dynamic source, dynamic file-backed, and static registered-loader module source paths must use the shared converter"
         );
         assert_eq!(
             module_js

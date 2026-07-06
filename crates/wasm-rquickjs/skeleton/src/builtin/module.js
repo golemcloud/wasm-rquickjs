@@ -5790,7 +5790,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
             const fileSource = loaderFileUrlSource(resolved.url);
             if (fileSource !== null) {
-                return 'data:text/javascript,' + encodeURIComponent(fileSource);
+                return registeredLoaderModuleSourceReturn(fileSource);
             }
         }
         if (loadedHasSource && loadedFormat === 'commonjs') {
