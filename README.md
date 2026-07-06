@@ -1460,9 +1460,11 @@ There are a few important things to keep in mind when working on the project:
   directory, and QuickJS runtime state for each test. `WASM_RQUICKJS_TEST_FAST=1` enables the wrapper/optimized artifact
   cache, prepared component cache, and Wasmtime compilation cache together. Use `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1`,
   `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1`, or `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` to enable only one layer, and
-  `WASM_RQUICKJS_TEST_DROP_CACHE=1` when the generated wrapper or optimized component artifacts must be rebuilt; it also
-  clears the in-process prepared component cache and bypasses the Wasmtime compilation cache for that run. The prepared
-  component cache currently applies to the normal `TestInstance::new` path; node-compat tests that instantiate through
+  `WASM_RQUICKJS_TEST_DROP_CACHE=1` when generated wrapper or optimized component artifacts must be rebuilt; it removes
+  the artifact cache stamps, clears the in-process prepared component cache, and bypasses the Wasmtime compilation cache
+  for that run. `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for `CompiledTest::new*` fixtures when
+  a very short compile/test loop is more useful than optimized-component startup behavior. The prepared component cache
+  currently applies to the normal `TestInstance::new` path; node-compat tests that instantiate through
   `GolemPreparedComponent` still benefit from artifact and Wasmtime compilation caches, but do not use that prepared
   component cache layer.
 

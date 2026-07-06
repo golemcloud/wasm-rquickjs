@@ -36,6 +36,7 @@ const TEST_FAST_ENV: &str = "WASM_RQUICKJS_TEST_FAST";
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
 const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
 const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
+const TEST_UNOPTIMIZED_ENV: &str = "WASM_RQUICKJS_TEST_UNOPTIMIZED";
 const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 
 /// Strip JSONC comments (// and /* */) while respecting string literals.
@@ -112,12 +113,25 @@ fn test_prepared_component_cache_enabled() -> bool {
     test_cache_enabled(TEST_PREPARED_COMPONENT_CACHE_ENV)
 }
 
+fn test_unoptimized_enabled() -> bool {
+    truthy_env(TEST_UNOPTIMIZED_ENV)
+}
+
 fn test_wasmtime_cache_enabled() -> bool {
     test_cache_enabled(TEST_WASMTIME_CACHE_ENV) && !test_drop_cache_enabled()
 }
 
 fn test_cache_stamp_dir() -> Utf8PathBuf {
     Utf8Path::new("tmp").join("test-artifact-cache")
+}
+
+fn drop_test_artifact_cache_once() {
+    static DROPPED: OnceLock<()> = OnceLock::new();
+    DROPPED.get_or_init(|| {
+        if test_drop_cache_enabled() {
+            let _ = fs::remove_dir_all(test_cache_stamp_dir());
+        }
+    });
 }
 
 fn test_cache_stamp(
@@ -230,6 +244,8 @@ fn output_fresh_for_inputs(
     inputs: &[Utf8PathBuf],
     signature: &str,
 ) -> bool {
+    drop_test_artifact_cache_once();
+
     if !output.exists() || !stamp.exists() || test_drop_cache_enabled() {
         return false;
     }
@@ -1608,7 +1624,11 @@ impl CompiledTest {
     ) -> anyhow::Result<CompiledTest> {
         let compiled =
             Self::compile_with_features(path, use_shared_target, feature_combination).await?;
-        compiled.optimize().await
+        if test_unoptimized_enabled() {
+            Ok(compiled)
+        } else {
+            compiled.optimize().await
+        }
     }
 
     async fn compile_with_features(
@@ -1616,6 +1636,8 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
+        drop_test_artifact_cache_once();
+
         let name = path.file_name().unwrap();
         let wrapper_crate_root = Utf8Path::new("tmp")
             .join(name)
@@ -1749,6 +1771,8 @@ impl CompiledTest {
     /// Run Wizer pre-initialization on the compiled component.
     /// Returns a new `CompiledTest` pointing to the optimized wasm file.
     pub async fn optimize(&self) -> anyhow::Result<CompiledTest> {
+        drop_test_artifact_cache_once();
+
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
         let optimize_stamp = input.with_extension("optimized.stamp");
