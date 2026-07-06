@@ -4518,18 +4518,26 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
         };
     }
 
+    function cjsLoaderFileFormat(filename, format) {
+        return format || (filename.endsWith('.json') ? 'json' : 'commonjs');
+    }
+
+    function cjsLoaderFileResult(filename, source, format, url) {
+        if (source === null) return undefined;
+        return {
+            url: url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url),
+            format: cjsLoaderFileFormat(filename, format),
+            source,
+        };
+    }
+
     function cjsPackageResolutionForLoaderResult(resolved) {
         const packageResolved = packageResolutionForLoaderResult(resolved);
         if (!packageResolved) return undefined;
         if (!packageResolved.url.startsWith('file://')) return packageResolved;
         const filename = nodeUrl.fileURLToPath(packageResolved.url);
         const source = tryReadFile(filename);
-        if (source === null) return undefined;
-        return {
-            url: packageResolved.url,
-            format: packageResolved.format || (filename.endsWith('.json') ? 'json' : 'commonjs'),
-            source,
-        };
+        return cjsLoaderFileResult(filename, source, packageResolved.format, packageResolved.url);
     }
 
     function resolvePackageDefaultForLoader(specifier, parentURL, context, defaultConditions, mode, mapNotFoundToCjs) {
@@ -4582,12 +4590,11 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
         if (specifier.startsWith('file://')) {
             const filename = nodeUrl.fileURLToPath(specifier);
             const source = tryReadFile(filename);
-            if (source === null) return undefined;
-            return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : 'commonjs', source };
+            return cjsLoaderFileResult(filename, source);
         }
         if (isRelativeOrAbsoluteSpecifier(specifier)) {
             const resolved = resolveFilename(specifier, parentDir);
-            return { url: nodeUrl.pathToFileURL(resolved.filename).href, format: resolved.filename.endsWith('.json') ? 'json' : 'commonjs', source: resolved.content };
+            return cjsLoaderFileResult(resolved.filename, resolved.content);
         }
         if (specifier.startsWith('#') && parentFilename) {
             return resolveCjsPackageDefaultForLoader(specifier, parentURL, context);

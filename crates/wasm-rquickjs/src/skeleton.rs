@@ -420,6 +420,47 @@ mod tests {
     }
 
     #[test]
+    fn cjs_registered_loader_file_results_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains("function cjsLoaderFileFormat(filename, format) {")
+                && module_js
+                    .contains("function cjsLoaderFileResult(filename, source, format, url) {")
+                && module_js.contains("format: cjsLoaderFileFormat(filename, format),"),
+            "registered-loader CJS file results must use one format/source adapter"
+        );
+
+        let package_start = module_js
+            .find("function cjsPackageResolutionForLoaderResult(resolved)")
+            .expect("cjsPackageResolutionForLoaderResult function must exist");
+        let package_end = module_js[package_start..]
+            .find("function resolvePackageDefaultForLoader(")
+            .expect("package result helper must precede package default resolver")
+            + package_start;
+        let package_result = &module_js[package_start..package_end];
+        assert!(
+            package_result.contains("return cjsLoaderFileResult(filename, source, packageResolved.format, packageResolved.url);"),
+            "registered-loader package CJS result must use the shared file adapter"
+        );
+
+        let default_start = module_js
+            .find("function resolveCjsDefaultForLoader(specifier, parentURL, context)")
+            .expect("resolveCjsDefaultForLoader function must exist");
+        let default_end = module_js[default_start..]
+            .find("function resultForRelativeOrAbsoluteSpecifier(")
+            .expect("resolveCjsDefaultForLoader must precede ESM relative resolver")
+            + default_start;
+        let default_resolver = &module_js[default_start..default_end];
+        assert!(
+            default_resolver.contains("return cjsLoaderFileResult(filename, source);")
+                && default_resolver
+                    .contains("return cjsLoaderFileResult(resolved.filename, resolved.content);"),
+            "registered-loader CJS file URL and relative paths must use the shared file adapter"
+        );
+    }
+
+    #[test]
     fn rust_module_kind_detection_uses_shared_esm_helper() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 
