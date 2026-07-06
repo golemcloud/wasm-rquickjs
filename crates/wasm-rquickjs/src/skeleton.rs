@@ -958,6 +958,88 @@ mod tests {
     }
 
     #[test]
+    fn cjs_esm_default_snapshot_state_is_loader_owned() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        let install_start = module_js
+            .find("function installCjsEsmDefaultSnapshotSlot(mod)")
+            .expect("CJS-to-ESM snapshot slot installer must exist");
+        let install_end = module_js[install_start..]
+            .find("function cjsEsmDefaultSnapshotSlot(mod)")
+            .expect("snapshot slot installer must precede slot reader")
+            + install_start;
+        let install_helper = &module_js[install_start..install_end];
+        assert!(
+            module_js.contains("const cjsEsmDefaultSnapshotSymbol = Symbol('wasm-rquickjs.cjs-esm-default-snapshot');")
+                && module_js.contains("const cjsEsmDefaultSnapshotToken = {};"),
+            "CJS-to-ESM default snapshot state must keep private symbol and token constants"
+        );
+        assert!(
+            install_helper.contains("const state = { captured: false, value: undefined };")
+                && install_helper.contains("Object.defineProperty(mod, cjsEsmDefaultSnapshotSymbol, { value: function cjsEsmDefaultSnapshotSlot(token, op, value)")
+                && install_helper.contains("if (token !== cjsEsmDefaultSnapshotToken) return undefined;")
+                && install_helper.contains("writable: false, configurable: false, enumerable: false,"),
+            "CJS-to-ESM default snapshot slot must keep state behind a token-guarded non-configurable module property"
+        );
+
+        let capture_start = module_js
+            .find("function captureCjsEsmDefaultSnapshot(mod)")
+            .expect("CJS-to-ESM snapshot capture helper must exist");
+        let capture_end = module_js[capture_start..]
+            .find("function hasCjsEsmDefaultSnapshot(cache, filename)")
+            .expect("snapshot capture helper must precede snapshot lookup")
+            + capture_start;
+        let capture_helper = &module_js[capture_start..capture_end];
+        assert!(
+            capture_helper.contains("installCjsEsmDefaultSnapshotSlot(mod);")
+                && capture_helper
+                    .contains("if (!slot || slot(cjsEsmDefaultSnapshotToken, 'has')) return;")
+                && capture_helper.contains("slot(cjsEsmDefaultSnapshotToken, 'set', mod.exports);"),
+            "snapshot capture helper must install the private slot and capture module.exports once"
+        );
+
+        let load_start = module_js
+            .find("function loadModule(resolvedFilename, source, parentModule)")
+            .expect("CJS loadModule function must exist");
+        let load_end = module_js[load_start..]
+            .find("function makeLoaderCommonJsRequire(")
+            .expect("loadModule must precede loader require helper")
+            + load_start;
+        let load_module = &module_js[load_start..load_end];
+        let cache_pos = load_module
+            .find("moduleCache[filename] = mod;")
+            .expect("CJS loader must cache module objects before execution");
+        let compile_call_pos = load_module
+            .find(
+                "compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);",
+            )
+            .expect("CJS loader must execute the compiled wrapper");
+        let capture_pos = load_module
+            .find("if (cjsEsmDefaultSnapshotEligible) { captureCjsEsmDefaultSnapshot(mod); }")
+            .expect("CJS loader must capture default snapshot after eligible loads");
+        assert!(
+            load_module[..cache_pos].contains("installCjsEsmDefaultSnapshotSlot(mod);")
+                && cache_pos < compile_call_pos
+                && compile_call_pos < capture_pos,
+            "regular CJS load path must install the snapshot slot before caching and capture after wrapper execution"
+        );
+        assert!(
+            module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', { value: hasCjsEsmDefaultSnapshot, writable: false, configurable: false,")
+                && module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot', { value: getCjsEsmDefaultSnapshot, writable: false, configurable: false,"),
+            "generated CJS facades must call non-replaceable internal snapshot helpers"
+        );
+        assert!(
+            internal_rs.contains("var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require(")
+                && internal_rs.contains("var __wasm_rquickjs_resolved_filename = __wasm_rquickjs_require.resolve(__wasm_rquickjs_filename);")
+                && internal_rs.contains("globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot( __wasm_rquickjs_require.cache, __wasm_rquickjs_resolved_filename )")
+                && internal_rs.contains("globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot( __wasm_rquickjs_require.cache, __wasm_rquickjs_resolved_filename )")
+                && internal_rs.contains(": __wasm_rquickjs_require(__wasm_rquickjs_filename);"),
+            "CJS facades must use the internal require factory, canonical cache key, and loader-owned snapshot before falling back to require()"
+        );
+    }
+
+    #[test]
     fn esm_file_resolution_realpaths_symlinks_by_default() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 
