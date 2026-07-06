@@ -2945,7 +2945,7 @@ function isLoaderSpreadTokenAt(source, pos) {
     return source.charCodeAt(pos) === 0x2e && source.charCodeAt(pos + 1) === 0x2e && source.charCodeAt(pos + 2) === 0x2e;
 }
 
-function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
+function readLoaderFunctionParamsOpen(source, pos) {
     const functionEnd = readLoaderNamedIdentifier(source, pos, 'function');
     if (functionEnd === null) return null;
     let next = skipWhitespaceAndComments(source, functionEnd);
@@ -2954,7 +2954,13 @@ function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
         next = skipWhitespaceAndComments(source, functionName.end);
     }
     if (source.charCodeAt(next) !== 0x28) return null;
-    const body = loaderGetterBodyEnd(source, next, descriptorEnd);
+    return next;
+}
+
+function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
+    const paramsOpen = readLoaderFunctionParamsOpen(source, pos);
+    if (paramsOpen === null) return null;
+    const body = loaderGetterBodyEnd(source, paramsOpen, descriptorEnd);
     if (body === null) return null;
     return body;
 }
@@ -3590,14 +3596,8 @@ function readLoaderObjectKeysReexport(source, pos, requireBindings) {
     const callEnd = loaderFindMatchingParen(source, i);
     if (callEnd < 0) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    const functionEnd = readLoaderNamedIdentifier(source, i, 'function');
-    if (functionEnd === null) return null;
-    i = skipWhitespaceAndComments(source, functionEnd);
-    const functionName = readLoaderIdentifier(source, i);
-    if (functionName !== null) {
-        i = skipWhitespaceAndComments(source, functionName.end);
-    }
-    if (source.charCodeAt(i) !== 0x28) return null;
+    i = readLoaderFunctionParamsOpen(source, i);
+    if (i === null) return null;
     const paramsEnd = loaderFindMatchingParen(source, i);
     if (paramsEnd < 0 || paramsEnd > callEnd) return null;
     i = skipWhitespaceAndComments(source, i + 1);

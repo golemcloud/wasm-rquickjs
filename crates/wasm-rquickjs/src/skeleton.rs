@@ -854,6 +854,50 @@ mod tests {
     }
 
     #[test]
+    fn loader_cjs_function_header_parser_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains("function readLoaderFunctionParamsOpen(source, pos) {")
+                && module_js
+                    .matches("readLoaderFunctionParamsOpen(source,")
+                    .count()
+                    == 3,
+            "loader CJS function header parsing must stay centralized"
+        );
+
+        let descriptor_start = module_js
+            .find("function loaderDescriptorFunctionGetterBody(")
+            .expect("loaderDescriptorFunctionGetterBody function must exist");
+        let descriptor_end = module_js[descriptor_start..]
+            .find("function loaderDescriptorFunctionGetterEnd(")
+            .expect("descriptor body parser must precede descriptor end parser")
+            + descriptor_start;
+        let descriptor_parser = &module_js[descriptor_start..descriptor_end];
+        assert!(
+            descriptor_parser
+                .contains("const paramsOpen = readLoaderFunctionParamsOpen(source, pos);")
+                && !descriptor_parser
+                    .contains("readLoaderNamedIdentifier(source, pos, 'function')"),
+            "descriptor getter parser must use the shared function-header helper"
+        );
+
+        let object_keys_start = module_js
+            .find("function readLoaderObjectKeysReexport(")
+            .expect("readLoaderObjectKeysReexport function must exist");
+        let object_keys_end = module_js[object_keys_start..]
+            .find("function scanLoaderCjsTopLevelPositions(")
+            .expect("Object.keys reexport parser must precede top-level scanner")
+            + object_keys_start;
+        let object_keys_parser = &module_js[object_keys_start..object_keys_end];
+        assert!(
+            object_keys_parser.contains("i = readLoaderFunctionParamsOpen(source, i);")
+                && !object_keys_parser.contains("readLoaderNamedIdentifier(source, i, 'function')"),
+            "Object.keys(...).forEach parser must use the shared function-header helper"
+        );
+    }
+
+    #[test]
     fn registered_loader_format_normalization_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
