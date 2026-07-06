@@ -1042,8 +1042,20 @@ function createConnectionParser(server, socket) {
             return true;
         }
 
-        // Set idle timeout for keep-alive connections
-        socket.setTimeout(server.keepAliveTimeout || 5000);
+        // Set idle timeout for keep-alive connections.
+        // Matches Node's resOnFinish: only arm an idle timeout when
+        // keepAliveTimeout is a positive finite number. A value of 0 (or
+        // invalid) disables the idle keep-alive timeout — the socket keeps
+        // whatever timeout was set while the request was active (the
+        // server.timeout reset, which is 0/disabled by default).
+        const kaTimeout = Number.isFinite(server.keepAliveTimeout) && server.keepAliveTimeout >= 0
+            ? server.keepAliveTimeout
+            : 0;
+        if (kaTimeout > 0) {
+            socket.setTimeout(kaTimeout);
+        } else {
+            socket.setTimeout(0);
+        }
         return true;
     }
 
