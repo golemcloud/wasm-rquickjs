@@ -5615,6 +5615,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function registeredLoaderNextContext(context, contextForNext) {
+        return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5696,7 +5700,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     return runResolve(
                         index - 1,
                         specifierForNext === undefined ? nextSpecifier : specifierForNext,
-                        contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
+                        registeredLoaderNextContext(context, contextForNext),
                     );
                 };
                 const result = validateRegisteredLoaderResult(await module.resolve(nextSpecifier, context, nextResolve), 'resolve', context);
@@ -5726,7 +5730,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     return runLoad(
                         index - 1,
                         urlForNext === undefined ? nextUrl : String(urlForNext),
-                        contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
+                        registeredLoaderNextContext(context, contextForNext),
                     );
                 };
                 const result = validateRegisteredLoaderResult(await module.load(nextUrl, context, nextLoad), 'load', context);
@@ -5858,7 +5862,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     return runResolve(
                         index - 1,
                         specifierForNext === undefined ? nextSpecifier : specifierForNext,
-                        contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
+                        registeredLoaderNextContext(context, contextForNext),
                     );
                 };
                 const hookResult = assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve', isImportMode ? 'static ES module resolution' : undefined);
@@ -5896,7 +5900,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     return runLoad(
                         index - 1,
                         urlForNext === undefined ? nextUrl : String(urlForNext),
-                        contextForNext === undefined ? context : Object.assign({}, context, contextForNext),
+                        registeredLoaderNextContext(context, contextForNext),
                     );
                 };
                 const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined), 'load', context);

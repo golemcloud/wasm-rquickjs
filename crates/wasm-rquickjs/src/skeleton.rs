@@ -483,6 +483,34 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_next_context_merge_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderNextContext(context, contextForNext) { return contextForNext === undefined ? context : Object.assign({}, context, contextForNext); }"
+            ),
+            "registered-loader next context merging must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderNextContext(context, contextForNext)")
+                .count(),
+            5,
+            "async/sync registered-loader resolve/load paths must all use the shared context merge helper"
+        );
+        assert_eq!(
+            module_js
+                .matches(
+                    "contextForNext === undefined ? context : Object.assign({}, context, contextForNext)"
+                )
+                .count(),
+            1,
+            "registered-loader next context merging must only appear inside the shared helper"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
