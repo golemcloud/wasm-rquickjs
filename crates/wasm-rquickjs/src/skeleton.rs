@@ -463,6 +463,7 @@ mod tests {
     #[test]
     fn rust_module_kind_detection_uses_shared_esm_helper() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
         assert!(
             internal_rs.contains(
@@ -476,6 +477,12 @@ mod tests {
                 && internal_rs.contains("source_has_import_meta(source)")
                 && internal_rs.contains("source_has_top_level_await(source)"),
             "Rust ESM syntax helper must include import/export, import.meta, and top-level await"
+        );
+        assert!(
+            !internal_rs.contains("fn is_js_in_module_package_scope(")
+                && !module_js.contains("function getPackageScopeType(")
+                && !module_js.contains("function getPackageScopeExplicitType("),
+            "module-kind package-scope checks must not keep unused parallel wrappers"
         );
     }
 }

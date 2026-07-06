@@ -7105,10 +7105,6 @@ fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
             .is_some_and(|name| name == "node_modules")
 }
 
-fn is_js_in_module_package_scope(filename: &str) -> bool {
-    filename.ends_with(".js") && package_scope_type(filename).as_deref() == Some("module")
-}
-
 fn cjs_named_export_source(names: &[String]) -> String {
     let mut out = String::new();
     for (index, name) in names.iter().enumerate() {

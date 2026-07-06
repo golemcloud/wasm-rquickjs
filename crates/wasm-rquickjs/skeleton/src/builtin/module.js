@@ -633,16 +633,6 @@ function findLongestRegisteredExtension(filename) {
     return '.js';
 }
 
-function getPackageScopeType(filename) {
-    const packageType = getPackageScopeExplicitType(filename);
-    return packageType || 'commonjs';
-}
-
-function getPackageScopeExplicitType(filename) {
-    const scope = getPackageScopeInfo(filename);
-    return scope ? scope.packageType : null;
-}
-
 function getPackageScopeInfo(filename) {
     let dir = pathModule.dirname(filename);
     while (true) {
