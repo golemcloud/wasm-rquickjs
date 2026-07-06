@@ -5648,6 +5648,22 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return result;
     }
 
+    function registeredLoaderResolveResult(hookResult, context, loaderUrl, nextCalled, allowUndefinedFromNext) {
+        if (allowUndefinedFromNext && hookResult === undefined) {
+            if (!nextCalled()) throw makeLoaderChainError('resolve');
+            return undefined;
+        }
+        const result = validateRegisteredLoaderResolveResult(hookResult, context, loaderUrl);
+        assertRegisteredLoaderChainComplete('resolve', result, nextCalled());
+        return result;
+    }
+
+    function registeredLoaderLoadResult(hookResult, context, nextCalled) {
+        const result = validateRegisteredLoaderLoadResult(hookResult, context);
+        assertRegisteredLoaderChainComplete('load', result, nextCalled());
+        return result;
+    }
+
     function registeredLoaderNextContext(context, contextForNext) {
         return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
     }
@@ -5757,9 +5773,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, moduleUrls[index]);
-                assertRegisteredLoaderChainComplete('resolve', result, nextCalled);
-                return result;
+                return registeredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, moduleUrls[index], () => nextCalled, false);
             }
             return runResolve(index - 1, nextSpecifier, context);
         };
@@ -5782,9 +5796,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderLoadResult(await module.load(nextUrl, context, nextLoad), context);
-                assertRegisteredLoaderChainComplete('load', result, nextCalled);
-                return result;
+                return registeredLoaderLoadResult(await module.load(nextUrl, context, nextLoad), context, () => nextCalled);
             }
             return runLoad(index - 1, nextUrl, context);
         };
@@ -5905,13 +5917,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 };
                 const hookResult = assertSyncLoaderResult(module.resolve(nextSpecifier, context, nextResolve), 'resolve', isImportMode ? 'static ES module resolution' : undefined);
-                if (hookResult === undefined) {
-                    if (!nextCalled) throw makeLoaderChainError('resolve');
-                    return undefined;
-                }
-                const result = validateRegisteredLoaderResolveResult(hookResult, context, moduleUrls[index]);
-                assertRegisteredLoaderChainComplete('resolve', result, nextCalled);
-                return result;
+                return registeredLoaderResolveResult(hookResult, context, moduleUrls[index], () => nextCalled, true);
             }
             return runResolve(index - 1, nextSpecifier, context);
         };
@@ -5938,9 +5944,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderLoadResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined), context);
-                assertRegisteredLoaderChainComplete('load', result, nextCalled);
-                return result;
+                return registeredLoaderLoadResult(
+                    assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined),
+                    context,
+                    () => nextCalled,
+                );
             }
             return runLoad(index - 1, nextUrl, context);
         };

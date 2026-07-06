@@ -524,8 +524,32 @@ mod tests {
             module_js
                 .matches("assertRegisteredLoaderChainComplete(")
                 .count(),
-            5,
-            "async/sync registered-loader resolve/load paths must all use the shared chain-completion helper"
+            3,
+            "registered-loader resolve/load result helpers must own chain-completion checks"
+        );
+        assert!(
+            module_js.contains("function registeredLoaderResolveResult(hookResult, context, loaderUrl, nextCalled, allowUndefinedFromNext)")
+                && module_js.contains("function registeredLoaderLoadResult(hookResult, context, nextCalled)"),
+            "registered-loader hook result validation and chain completion must stay centralized"
+        );
+        assert!(
+            module_js.contains("if (!nextCalled()) throw makeLoaderChainError('resolve');")
+                && module_js.contains(
+                    "assertRegisteredLoaderChainComplete('resolve', result, nextCalled());"
+                )
+                && module_js
+                    .contains("assertRegisteredLoaderChainComplete('load', result, nextCalled());"),
+            "registered-loader result helpers must observe next-called state after validation reads hook results"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderResolveResult(").count(),
+            3,
+            "async and sync registered-loader resolve paths must use the shared resolve-result helper"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderLoadResult(").count(),
+            3,
+            "async and sync registered-loader load paths must use the shared load-result helper"
         );
         assert_eq!(
             module_js
@@ -535,8 +559,16 @@ mod tests {
             "registered-loader chain-completion predicate must only appear inside the shared helper"
         );
         assert!(
-            module_js.contains("if (!nextCalled) throw makeLoaderChainError('resolve');"),
+            module_js.contains("if (!nextCalled()) throw makeLoaderChainError('resolve');"),
             "sync registered-loader undefined resolve result must keep its next-called special case"
+        );
+        assert!(
+            module_js.contains(
+                "registeredLoaderResolveResult(await module.resolve(nextSpecifier, context, nextResolve), context, moduleUrls[index], () => nextCalled, false)"
+            ) && module_js.contains(
+                "registeredLoaderResolveResult(hookResult, context, moduleUrls[index], () => nextCalled, true)"
+            ),
+            "registered-loader undefined resolve-result carve-out must stay sync-only"
         );
     }
 
@@ -785,8 +817,8 @@ mod tests {
             module_js
                 .matches("validateRegisteredLoaderResolveResult(")
                 .count(),
-            3,
-            "async and sync registered-loader resolve paths must use the shared resolve-result validator"
+            2,
+            "registered-loader resolve-result helper must be the only caller of the low-level validator"
         );
         assert_eq!(
             module_js
@@ -796,7 +828,7 @@ mod tests {
             "registered-loader resolve URL boundary checks must only appear inside the shared helper"
         );
         assert!(
-            module_js.contains("if (!nextCalled) throw makeLoaderChainError('resolve');"),
+            module_js.contains("if (!nextCalled()) throw makeLoaderChainError('resolve');"),
             "sync registered-loader undefined resolve result must keep its next-called special case"
         );
     }
@@ -855,8 +887,8 @@ mod tests {
             module_js
                 .matches("validateRegisteredLoaderLoadResult(")
                 .count(),
-            3,
-            "async and sync registered-loader load paths must use the shared full load-result validator"
+            2,
+            "registered-loader load-result helper must be the only caller of the low-level validator"
         );
         assert_eq!(
             module_js
