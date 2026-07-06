@@ -5125,6 +5125,19 @@ fn package_extensions_from_js_array<'js>(extensions: &rquickjs::Array<'js>) -> V
     extension_vec
 }
 
+fn loader_package_result_format(resolved: &str, mode: NodePackageResolveMode) -> Option<&'static str> {
+    match std::path::Path::new(resolved)
+        .extension()
+        .and_then(|ext| ext.to_str())
+    {
+        Some("json") => Some("json"),
+        Some("mjs") if mode == NodePackageResolveMode::EsmImport => Some("module"),
+        Some("cjs") | Some("mjs") => Some("commonjs"),
+        _ if mode == NodePackageResolveMode::CjsAnalysis => Some("commonjs"),
+        _ => None,
+    }
+}
+
 fn loader_default_resolve_package<'js>(
     ctx: Ctx<'js>,
     base_url: String,
@@ -5153,19 +5166,8 @@ fn loader_default_resolve_package<'js>(
             };
             let result = Object::new(ctx.clone())?;
             result.set("url", path_to_file_url(&resolved))?;
-            match std::path::Path::new(&resolved)
-                .extension()
-                .and_then(|ext| ext.to_str())
-            {
-                Some("json") => result.set("format", "json")?,
-                Some("mjs") if mode == NodePackageResolveMode::EsmImport => {
-                    result.set("format", "module")?
-                }
-                Some("cjs") | Some("mjs") => result.set("format", "commonjs")?,
-                _ if mode == NodePackageResolveMode::CjsAnalysis => {
-                    result.set("format", "commonjs")?
-                }
-                _ => {}
+            if let Some(format) = loader_package_result_format(&resolved, mode) {
+                result.set("format", format)?;
             }
             Ok(Some(result))
         }
