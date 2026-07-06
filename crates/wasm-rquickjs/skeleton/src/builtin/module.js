@@ -5668,6 +5668,14 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
     }
 
+    function registeredLoaderNextSpecifier(currentSpecifier, specifierForNext) {
+        return specifierForNext === undefined ? currentSpecifier : specifierForNext;
+    }
+
+    function registeredLoaderNextUrl(currentUrl, urlForNext) {
+        return urlForNext === undefined ? currentUrl : String(urlForNext);
+    }
+
     function assertRegisteredLoaderChainComplete(hookName, result, nextCalled) {
         if (!nextCalled && (!result || result.shortCircuit !== true)) {
             throw makeLoaderChainError(hookName);
@@ -5769,7 +5777,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     nextCalled = true;
                     return runResolve(
                         index - 1,
-                        specifierForNext === undefined ? nextSpecifier : specifierForNext,
+                        registeredLoaderNextSpecifier(nextSpecifier, specifierForNext),
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
@@ -5792,7 +5800,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     nextCalled = true;
                     return runLoad(
                         index - 1,
-                        urlForNext === undefined ? nextUrl : String(urlForNext),
+                        registeredLoaderNextUrl(nextUrl, urlForNext),
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
@@ -5912,7 +5920,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     nextCalled = true;
                     return runResolve(
                         index - 1,
-                        specifierForNext === undefined ? nextSpecifier : specifierForNext,
+                        registeredLoaderNextSpecifier(nextSpecifier, specifierForNext),
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
@@ -5940,7 +5948,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     nextCalled = true;
                     return runLoad(
                         index - 1,
-                        urlForNext === undefined ? nextUrl : String(urlForNext),
+                        registeredLoaderNextUrl(nextUrl, urlForNext),
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };

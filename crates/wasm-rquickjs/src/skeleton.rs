@@ -508,6 +508,36 @@ mod tests {
             1,
             "registered-loader next context merging must only appear inside the shared helper"
         );
+        assert!(
+            module_js.contains(
+                "function registeredLoaderNextSpecifier(currentSpecifier, specifierForNext) { return specifierForNext === undefined ? currentSpecifier : specifierForNext; }"
+            ) && module_js.contains(
+                "function registeredLoaderNextUrl(currentUrl, urlForNext) { return urlForNext === undefined ? currentUrl : String(urlForNext); }"
+            ),
+            "registered-loader next specifier and URL normalization must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderNextSpecifier(").count(),
+            3,
+            "async and sync registered-loader resolve paths must use the shared next-specifier normalizer"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderNextUrl(").count(),
+            3,
+            "async and sync registered-loader load paths must use the shared next-URL normalizer"
+        );
+        assert_eq!(
+            module_js
+                .matches("specifierForNext === undefined ?")
+                .count(),
+            1,
+            "registered-loader next specifier fallback must only appear inside the shared helper"
+        );
+        assert_eq!(
+            module_js.matches("urlForNext === undefined ?").count(),
+            1,
+            "registered-loader next URL fallback must only appear inside the shared helper"
+        );
     }
 
     #[test]
