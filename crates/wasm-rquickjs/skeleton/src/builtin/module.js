@@ -5620,6 +5620,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function registeredLoaderDefaultLoad(_nextUrl, context) {
+        return { format: context && context.format };
+    }
+
     function registeredLoaderFinalLoadFormat(loaded, fallbackFormat) {
         return loaded && loaded.format !== undefined && loaded.format !== null
             ? validateRegisteredLoaderLoadFormat(loaded.format)
@@ -5748,10 +5752,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!normalizedResolved) return undefined;
         const resolvedFormat = normalizedResolved.format;
 
-        const defaultLoad = async (_nextUrl, context) => ({ format: context && context.format });
-
         const runLoad = async (index, nextUrl, context) => {
-            if (index < 0) return defaultLoad(nextUrl, context);
+            if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
             const module = modules[index];
             if (typeof module.load === 'function') {
                 let nextCalled = false;
@@ -5910,9 +5912,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const resolvedFormat = normalizedResolved.format;
         if (resolveOnly) return { url: resolved.url, format: resolvedFormat };
 
-        const defaultLoad = (_nextUrl, context) => ({ format: context && context.format });
         const runLoad = (index, nextUrl, context) => {
-            if (index < 0) return defaultLoad(nextUrl, context);
+            if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
             const module = modules[index];
             if (typeof module.load === 'function') {
                 let nextCalled = false;

@@ -772,6 +772,30 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_default_load_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderDefaultLoad(_nextUrl, context) { return { format: context && context.format }; }"
+            ),
+            "registered-loader default load fallback must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderDefaultLoad(").count(),
+            3,
+            "async and sync registered-loader load paths must use the shared default-load fallback"
+        );
+        assert_eq!(
+            module_js
+                .matches("return { format: context && context.format };")
+                .count(),
+            1,
+            "registered-loader default load result shape must only appear inside the shared helper"
+        );
+    }
+
+    #[test]
     fn static_registered_loader_cache_fill_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
