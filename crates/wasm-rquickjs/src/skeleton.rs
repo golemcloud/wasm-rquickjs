@@ -552,12 +552,16 @@ mod tests {
         );
         assert_eq!(
             module_js.matches("registeredLoaderHasSource(").count(),
-            3,
-            "async/sync registered-loader load paths must use the shared source-presence helper"
+            4,
+            "async/sync/static registered-loader load paths must use the shared source-presence helper"
         );
         assert!(
             module_js.contains("? loaded.source : resolved.source"),
             "sync registered-loader source fallback must preserve loaded-source-over-resolved-source precedence"
+        );
+        assert!(
+            module_js.contains("!Object.prototype.hasOwnProperty.call(loaded, 'source')"),
+            "static JSON edge handling must keep checking source property presence separately from usable source"
         );
     }
 

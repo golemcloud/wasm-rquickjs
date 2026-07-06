@@ -5979,7 +5979,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!loaded || !loaded.url) return undefined;
         const url = String(loaded.url);
         const format = loaderFormatOrUndefined(loaded.format);
-        const hasSource = Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== undefined && loaded.source !== null;
+        const hasSource = registeredLoaderHasSource(loaded);
         if (hasSource && (format === undefined || format === 'module')) {
             return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(loaded.source));
         }
