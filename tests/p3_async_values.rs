@@ -198,9 +198,9 @@ enum LogLevel {
     Critical,
 }
 
-/// No-op `wasi:logging/logging` stub: the generated P3 crates are built with the default
-/// `normal-p3` feature tier, which includes `logging`, so the components import this interface
-/// even though these tests never assert on log output.
+/// No-op `wasi:logging/logging` stub kept for feature-set parity with the shared P3 test host.
+/// The generated crates in this file are built without the `logging` feature so they do not
+/// normally import this interface.
 fn add_wasi_logging_stub(linker: &mut Linker<Host>) -> Result<()> {
     let mut logging = linker.instance("wasi:logging/logging")?;
     logging.func_wrap(
@@ -357,6 +357,9 @@ fn generate_and_build(
         .arg("build")
         .arg("--manifest-path")
         .arg(out.join("Cargo.toml"))
+        .arg("--no-default-features")
+        .arg("--features")
+        .arg("p3,crypto,zlib,encoding")
         .arg("--target")
         .arg("wasm32-wasip2")
         .output()?;

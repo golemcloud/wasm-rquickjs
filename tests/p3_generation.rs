@@ -307,12 +307,15 @@ fn generate_p3(root: &Utf8Path) -> anyhow::Result<()> {
 }
 
 fn build_p3(root: &Utf8Path, wasm_name: &str) -> anyhow::Result<Utf8PathBuf> {
-    build_p3_with_features(root, wasm_name, None)
+    build_p3_with_features(root, wasm_name, Some(P3_NORMAL_NO_LOGGING_FEATURES))
 }
 
 /// Builds a generated P3 crate, optionally overriding its default feature set. Passing
 /// `features = Some("full-p3")` compiles the heavier capability tier (sqlite, brotli,
 /// crypto-full, timezone) that is intentionally left out of the default `normal-p3` tier.
+const P3_NORMAL_NO_LOGGING_FEATURES: &str = "p3,crypto,zlib,encoding";
+const P3_NORMAL_NO_LOGGING_WITH_WEBSOCKET_FEATURES: &str = "p3,crypto,zlib,encoding,websocket";
+
 fn build_p3_with_features(
     root: &Utf8Path,
     wasm_name: &str,
@@ -1007,10 +1010,11 @@ fn p3_zlib_gzip_roundtrip_on_wasi_p3() -> anyhow::Result<()> {
 #[test]
 fn p3_sqlite_roundtrip_on_wasi_p3() -> anyhow::Result<()> {
     // `sqlite` is intentionally kept out of the default `normal-p3` tier (it pulls in the
-    // heavier rusqlite dependency), so this builds the generated crate with the `full-p3`
-    // tier instead. An in-memory create/insert/select roundtrip proves the real rusqlite
-    // bridge is wired and functional on the Preview 3 path rather than the throwing
-    // `sqlite_disabled` stub.
+    // heavier rusqlite dependency), so this builds the generated crate with the full tier instead.
+    // Use the no-logging variant because this test invokes the component through the `wasmtime`
+    // CLI, which does not provide a `wasi:logging/logging` host implementation. An in-memory
+    // create/insert/select roundtrip proves the real rusqlite bridge is wired and functional on
+    // the Preview 3 path rather than the throwing `sqlite_disabled` stub.
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -1038,7 +1042,11 @@ fn p3_sqlite_roundtrip_on_wasi_p3() -> anyhow::Result<()> {
     )?;
 
     generate_p3(temp.path())?;
-    let wasm_path = build_p3_with_features(temp.path(), "p3_sqlite_roundtrip", Some("full-p3"))?;
+    let wasm_path = build_p3_with_features(
+        temp.path(),
+        "p3_sqlite_roundtrip",
+        Some("full-no-logging-p3"),
+    )?;
     let result = run_p3_string_export(&wasm_path, "run")?;
 
     assert_eq!(result, "alice,bob");
@@ -1074,8 +1082,12 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
     generate_p3(temp.path())?;
     // Build only: enabling `websocket` adds an unsatisfiable `golem:websocket` import under the
     // wasmtime CLI, so we assert compilation/linking succeeds rather than invoking the component.
-    let _wasm_path =
-        build_p3_with_features(temp.path(), "p3_websocket", Some("normal-p3,websocket"))?;
+    // Use the no-logging feature set for consistency with the P3 CLI-invoked tests.
+    let _wasm_path = build_p3_with_features(
+        temp.path(),
+        "p3_websocket",
+        Some(P3_NORMAL_NO_LOGGING_WITH_WEBSOCKET_FEATURES),
+    )?;
     Ok(())
 }
 
