@@ -839,8 +839,24 @@ mod tests {
             module_js
                 .matches("validateRegisteredLoaderLoadResultFormat(")
                 .count(),
+            2,
+            "registered-loader load-result format validation must be shared by the full load-result validator"
+        );
+        assert!(
+            module_js.contains("function validateRegisteredLoaderLoadResult(hookResult, context)")
+                && module_js.contains(
+                    "const result = validateRegisteredLoaderResult(hookResult, 'load', context);"
+                )
+                && module_js.contains("validateRegisteredLoaderLoadResultFormat(result);")
+                && module_js.contains("return result;"),
+            "registered-loader full load-result validation must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("validateRegisteredLoaderLoadResult(")
+                .count(),
             3,
-            "async and sync registered-loader load paths must use the shared load-result format validator"
+            "async and sync registered-loader load paths must use the shared full load-result validator"
         );
         assert_eq!(
             module_js

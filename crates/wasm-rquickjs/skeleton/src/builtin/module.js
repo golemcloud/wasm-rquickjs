@@ -5642,6 +5642,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
     }
 
+    function validateRegisteredLoaderLoadResult(hookResult, context) {
+        const result = validateRegisteredLoaderResult(hookResult, 'load', context);
+        validateRegisteredLoaderLoadResultFormat(result);
+        return result;
+    }
+
     function registeredLoaderNextContext(context, contextForNext) {
         return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
     }
@@ -5776,8 +5782,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderResult(await module.load(nextUrl, context, nextLoad), 'load', context);
-                validateRegisteredLoaderLoadResultFormat(result);
+                const result = validateRegisteredLoaderLoadResult(await module.load(nextUrl, context, nextLoad), context);
                 assertRegisteredLoaderChainComplete('load', result, nextCalled);
                 return result;
             }
@@ -5933,8 +5938,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                         registeredLoaderNextContext(context, contextForNext),
                     );
                 };
-                const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined), 'load', context);
-                validateRegisteredLoaderLoadResultFormat(result);
+                const result = validateRegisteredLoaderLoadResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined), context);
                 assertRegisteredLoaderChainComplete('load', result, nextCalled);
                 return result;
             }
