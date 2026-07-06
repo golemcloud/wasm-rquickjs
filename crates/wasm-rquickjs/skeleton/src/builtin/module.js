@@ -6061,6 +6061,26 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return aliases;
     }
 
+    function staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, edgeReturn) {
+        const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
+        const cache = globalThis.__wasm_rquickjs_static_registered_loader_cache;
+        if (Object.prototype.hasOwnProperty.call(cache, key)) {
+            return { cached: cache[key], created: false };
+        }
+        return (async () => {
+            try {
+                const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');
+                const value = edgeReturn
+                    ? staticRegisteredLoaderReturnForEdge(loaded, attrs)
+                    : staticRegisteredLoaderReturn(loaded);
+                cache[key] = { value, loaded };
+            } catch (error) {
+                cache[key] = { error };
+            }
+            return { cached: cache[key], created: true };
+        })();
+    }
+
     async function prepareStaticRegisteredLoaderGraph(parentUrl, seen) {
         parentUrl = normalizeLoaderResolvedUrl(String(parentUrl));
         seen = seen || Object.create(null);
@@ -6073,18 +6093,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         for (let i = 0; i < edges.length; i++) {
             const specifier = edges[i].specifier;
             const attrs = edges[i].attrs;
-            const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
-            if (!Object.prototype.hasOwnProperty.call(globalThis.__wasm_rquickjs_static_registered_loader_cache, key)) {
-                try {
-                    const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');
-                    const value = staticRegisteredLoaderReturnForEdge(loaded, attrs);
-                    globalThis.__wasm_rquickjs_static_registered_loader_cache[key] = { value, loaded };
-                } catch (error) {
-                    globalThis.__wasm_rquickjs_static_registered_loader_cache[key] = { error };
-                    continue;
-                }
-            }
-            const cached = globalThis.__wasm_rquickjs_static_registered_loader_cache[key];
+            let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, true);
+            if (cacheEntry && typeof cacheEntry.then === 'function') cacheEntry = await cacheEntry;
+            const { cached } = cacheEntry;
+            if (cached && cached.error) continue;
             if (cached && !cached.error && cached.value !== undefined) {
                 await prepareStaticRegisteredLoaderGraph(
                     staticRegisteredLoaderChildUrl(cached.loaded, cached.value),
@@ -6101,18 +6113,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (entrySpecifier !== undefined && entryParentUrl !== undefined) {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
             const specifier = String(entrySpecifier);
-            const key = staticRegisteredLoaderCacheKey(parentUrl, specifier);
-            if (!Object.prototype.hasOwnProperty.call(globalThis.__wasm_rquickjs_static_registered_loader_cache, key)) {
-                try {
-                    const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, undefined, 'static-raw');
-                    const value = staticRegisteredLoaderReturn(loaded);
-                    globalThis.__wasm_rquickjs_static_registered_loader_cache[key] = { value, loaded };
-                } catch (error) {
-                    globalThis.__wasm_rquickjs_static_registered_loader_cache[key] = { error };
-                    return;
-                }
-            }
-            const cached = globalThis.__wasm_rquickjs_static_registered_loader_cache[key];
+            let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, undefined, false);
+            if (cacheEntry && typeof cacheEntry.then === 'function') cacheEntry = await cacheEntry;
+            const { cached, created } = cacheEntry;
+            if (created && cached && cached.error) return;
             const aliases = staticRegisteredLoaderParentAliases(parentUrl);
             for (let i = 1; i < aliases.length; i++) {
                 globalThis.__wasm_rquickjs_static_registered_loader_cache[
