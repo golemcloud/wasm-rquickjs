@@ -5629,6 +5629,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return result && Object.prototype.hasOwnProperty.call(result, 'source') && result.source !== null && result.source !== undefined;
     }
 
+    function registeredLoaderModuleSourceReturn(source) {
+        return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source));
+    }
+
+    function registeredLoaderJsonSourceReturn(source) {
+        return globalThis.__wasm_rquickjs_register_import_attr_rewrite(
+            'data:application/json,' + encodeURIComponent(loaderSourceToString(source)),
+            'json',
+        );
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5764,7 +5775,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
 
         if (loadedHasSource && loadedFormat === 'module') {
-            return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(loaded.source));
+            return registeredLoaderModuleSourceReturn(loaded.source);
         }
         if (!loadedHasSource && loadedFormat === 'module') {
             if (String(resolved.url).startsWith('file://')) {
@@ -5787,10 +5798,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
         }
         if (loadedHasSource && loadedFormat === 'json') {
-            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(
-                'data:application/json,' + encodeURIComponent(loaderSourceToString(loaded.source)),
-                'json',
-            );
+            return registeredLoaderJsonSourceReturn(loaded.source);
         }
         if (loadContext.importAttributes && loadContext.importAttributes.type === 'json') {
             return globalThis.__wasm_rquickjs_register_import_attr_rewrite(resolved.url, 'json');
@@ -5981,7 +5989,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const format = loaderFormatOrUndefined(loaded.format);
         const hasSource = registeredLoaderHasSource(loaded);
         if (hasSource && (format === undefined || format === 'module')) {
-            return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(loaded.source));
+            return registeredLoaderModuleSourceReturn(loaded.source);
         }
         if (!hasSource && format === 'module') {
             return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
@@ -5996,10 +6004,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
         }
         if (hasSource && format === 'json') {
-            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(
-                'data:application/json,' + encodeURIComponent(loaderSourceToString(loaded.source)),
-                'json',
-            );
+            return registeredLoaderJsonSourceReturn(loaded.source);
         }
         if (url.startsWith('file://')) {
             return nodeUrl.fileURLToPath(url);

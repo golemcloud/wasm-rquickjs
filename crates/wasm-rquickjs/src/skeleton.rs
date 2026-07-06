@@ -566,6 +566,52 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_source_returns_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderModuleSourceReturn(source) { return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source)); }"
+            ),
+            "registered-loader module source return conversion must stay centralized"
+        );
+        assert!(
+            module_js.contains(
+                "function registeredLoaderJsonSourceReturn(source) { return globalThis.__wasm_rquickjs_register_import_attr_rewrite( 'data:application/json,' + encodeURIComponent(loaderSourceToString(source)), 'json', ); }"
+            ),
+            "registered-loader JSON source return conversion must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderModuleSourceReturn(")
+                .count(),
+            3,
+            "dynamic and static registered-loader module source paths must use the shared converter"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderJsonSourceReturn(")
+                .count(),
+            3,
+            "dynamic and static registered-loader JSON source paths must use the shared converter"
+        );
+        assert_eq!(
+            module_js
+                .matches("'data:text/javascript,' + encodeURIComponent(loaderSourceToString(")
+                .count(),
+            1,
+            "registered-loader module source data URL construction must only appear inside the shared converter"
+        );
+        assert_eq!(
+            module_js
+                .matches("'data:application/json,' + encodeURIComponent(loaderSourceToString(")
+                .count(),
+            1,
+            "registered-loader JSON source data URL construction must only appear inside the shared converter"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
