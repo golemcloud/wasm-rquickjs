@@ -336,6 +336,107 @@ fn test_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
     Ok(config)
 }
 
+fn start_test_epoch_thread(engine: &Engine) {
+    let epoch_engine = engine.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            epoch_engine.increment_epoch();
+        }
+    });
+}
+
+fn test_linker_with_common_hosts(engine: &Engine) -> anyhow::Result<Linker<Host>> {
+    let mut linker: Linker<Host> = Linker::new(engine);
+
+    wasmtime_wasi::p2::add_to_linker_with_options_async(
+        &mut linker,
+        &bindings::LinkOptions::default(),
+    )?;
+    wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
+
+    {
+        let mut logging = linker.instance("wasi:logging/logging")?;
+        logging.func_wrap(
+            "log",
+            |mut ctx: StoreContextMut<'_, Host>,
+             (level, context, message): (LogLevel, String, String)|
+             -> Result<(), wasmtime::Error> {
+                ctx.data_mut()
+                    .log_messages
+                    .lock()
+                    .unwrap()
+                    .push((level, context, message));
+                Ok(())
+            },
+        )?;
+    }
+
+    {
+        struct WsConn;
+        let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+        ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+            move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+        })?;
+
+        ws.func_new(
+            "[static]websocket-connection.connect",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket connect not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.send",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket send not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.receive",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket receive not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.receive-with-timeout",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket receive-with-timeout not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.close",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket close not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.subscribe",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket subscribe not available in tests",
+                ))
+            },
+        )?;
+    }
+
+    Ok(linker)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NodeCompatCategory {
     /// The test exercises supported public API and should pass. Failures count against primary compatibility.
@@ -925,103 +1026,8 @@ impl PreparedComponent {
         let config = test_wasmtime_config()?;
         let engine = Engine::new(&config)?;
 
-        // Start a background thread that increments the epoch every 10ms,
-        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
-        let epoch_engine = engine.clone();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                epoch_engine.increment_epoch();
-            }
-        });
-        let mut linker: Linker<Host> = Linker::new(&engine);
-
-        wasmtime_wasi::p2::add_to_linker_with_options_async(
-            &mut linker,
-            &bindings::LinkOptions::default(),
-        )?;
-        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-
-        // Mock wasi:logging/logging (required by the full feature)
-        {
-            let mut logging = linker.instance("wasi:logging/logging")?;
-            logging.func_wrap(
-                "log",
-                |mut ctx: StoreContextMut<'_, Host>,
-                 (level, context, message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> {
-                    ctx.data_mut()
-                        .log_messages
-                        .lock()
-                        .unwrap()
-                        .push((level, context, message));
-                    Ok(())
-                },
-            )?;
-        }
-
-        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-
-            ws.func_new(
-                "[static]websocket-connection.connect",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket connect not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.send",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket send not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.close",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket close not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.subscribe",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket subscribe not available in tests",
-                    ))
-                },
-            )?;
-        }
+        start_test_epoch_thread(&engine);
+        let linker = test_linker_with_common_hosts(&engine)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -1081,103 +1087,8 @@ impl GolemPreparedComponent {
         let config = test_wasmtime_config()?;
         let engine = Engine::new(&config)?;
 
-        // Start a background thread that increments the epoch every 10ms,
-        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
-        let epoch_engine = engine.clone();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                epoch_engine.increment_epoch();
-            }
-        });
-        let mut linker: Linker<Host> = Linker::new(&engine);
-
-        wasmtime_wasi::p2::add_to_linker_with_options_async(
-            &mut linker,
-            &bindings::LinkOptions::default(),
-        )?;
-        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-
-        // Mock wasi:logging/logging (required by the golem feature)
-        {
-            let mut logging = linker.instance("wasi:logging/logging")?;
-            logging.func_wrap(
-                "log",
-                |mut ctx: StoreContextMut<'_, Host>,
-                 (level, context, message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> {
-                    ctx.data_mut()
-                        .log_messages
-                        .lock()
-                        .unwrap()
-                        .push((level, context, message));
-                    Ok(())
-                },
-            )?;
-        }
-
-        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-
-            ws.func_new(
-                "[static]websocket-connection.connect",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket connect not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.send",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket send not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.close",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket close not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.subscribe",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket subscribe not available in tests",
-                    ))
-                },
-            )?;
-        }
+        start_test_epoch_thread(&engine);
+        let mut linker = test_linker_with_common_hosts(&engine)?;
 
         // Mock golem:api/context@1.5.0
         let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
