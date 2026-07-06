@@ -7217,9 +7217,7 @@ impl Loader for CjsCompatLoader {
                     .as_ref()
                     .is_some_and(|scope| scope.is_node_modules_package));
         let has_esm_syntax = force_module
-            || source_has_static_import_or_export(&source)
-            || source_has_import_meta(&source)
-            || source_has_top_level_await(&source)
+            || source_looks_like_esm(&source)
             || has_cjs_wrapper_lexical_redeclaration(&source);
         // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
@@ -7760,7 +7758,7 @@ fn is_object_await_key(source: &str, start: usize, next: usize) -> bool {
 }
 
 fn source_looks_like_esm(source: &str) -> bool {
-    source_has_top_level_await(source) || source_has_static_import_or_export(source) || source_has_import_meta(source)
+    source_has_static_import_or_export(source) || source_has_import_meta(source) || source_has_top_level_await(source)
 }
 
 fn source_has_static_import_or_export(source: &str) -> bool {

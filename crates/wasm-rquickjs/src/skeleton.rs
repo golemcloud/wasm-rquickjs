@@ -418,4 +418,23 @@ mod tests {
             "require(esm) graph traversal must reuse per-file scanner results"
         );
     }
+
+    #[test]
+    fn rust_module_kind_detection_uses_shared_esm_helper() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "let has_esm_syntax = force_module || source_looks_like_esm(&source) || has_cjs_wrapper_lexical_redeclaration(&source);",
+            ),
+            "Rust module-kind detection must use the shared ESM syntax helper"
+        );
+        assert!(
+            internal_rs.contains("fn source_looks_like_esm(source: &str) -> bool {")
+                && internal_rs.contains("source_has_static_import_or_export(source)")
+                && internal_rs.contains("source_has_import_meta(source)")
+                && internal_rs.contains("source_has_top_level_await(source)"),
+            "Rust ESM syntax helper must include import/export, import.meta, and top-level await"
+        );
+    }
 }
