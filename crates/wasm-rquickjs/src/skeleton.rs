@@ -796,6 +796,34 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_load_result_format_validation_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function validateRegisteredLoaderLoadResultFormat(result) { if (result.format !== undefined && result.format !== null && result.format !== '') { validateRegisteredLoaderLoadFormat(result.format); } }"
+            ),
+            "registered-loader load-result format validation must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("validateRegisteredLoaderLoadResultFormat(")
+                .count(),
+            3,
+            "async and sync registered-loader load paths must use the shared load-result format validator"
+        );
+        assert_eq!(
+            module_js
+                .matches(
+                    "result.format !== undefined && result.format !== null && result.format !== ''"
+                )
+                .count(),
+            1,
+            "registered-loader load-result format predicate must only appear inside the shared helper"
+        );
+    }
+
+    #[test]
     fn static_registered_loader_cache_fill_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

@@ -5630,6 +5630,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             : validateRegisteredLoaderLoadFormat(fallbackFormat);
     }
 
+    function validateRegisteredLoaderLoadResultFormat(result) {
+        if (result.format !== undefined && result.format !== null && result.format !== '') {
+            validateRegisteredLoaderLoadFormat(result.format);
+        }
+    }
+
     function registeredLoaderNextContext(context, contextForNext) {
         return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
     }
@@ -5766,9 +5772,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 };
                 const result = validateRegisteredLoaderResult(await module.load(nextUrl, context, nextLoad), 'load', context);
-                if (result.format !== undefined && result.format !== null && result.format !== '') {
-                    validateRegisteredLoaderLoadFormat(result.format);
-                }
+                validateRegisteredLoaderLoadResultFormat(result);
                 assertRegisteredLoaderChainComplete('load', result, nextCalled);
                 return result;
             }
@@ -5926,9 +5930,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 };
                 const result = validateRegisteredLoaderResult(assertSyncLoaderResult(module.load(nextUrl, context, nextLoad), 'load', isImportMode ? 'static ES module resolution' : undefined), 'load', context);
-                if (result.format !== undefined && result.format !== null && result.format !== '') {
-                    validateRegisteredLoaderLoadFormat(result.format);
-                }
+                validateRegisteredLoaderLoadResultFormat(result);
                 assertRegisteredLoaderChainComplete('load', result, nextCalled);
                 return result;
             }
