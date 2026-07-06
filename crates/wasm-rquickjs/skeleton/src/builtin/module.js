@@ -4642,6 +4642,11 @@ function loaderFileUrlSource(url) {
     }
 }
 
+function registeredLoaderPathOrUrlReturn(url) {
+    url = String(url);
+    return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
+}
+
 function loaderCommonJsFilename(url) {
     url = String(url || '');
     if (url.startsWith('file://')) {
@@ -4982,7 +4987,7 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
             const loaded = globalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id, true);
             if (loaded && loaded.url) {
                 if (String(loaded.url).startsWith('node:')) return String(loaded.url).slice(5);
-                return String(loaded.url).startsWith('file://') ? nodeUrl.fileURLToPath(String(loaded.url)) : String(loaded.url);
+                return registeredLoaderPathOrUrlReturn(loaded.url);
             }
         }
         return fallbackRequire.resolve(id, options);
@@ -5640,11 +5645,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         );
     }
 
-    function staticRegisteredLoaderUrlReturn(url) {
-        url = String(url);
-        return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
-    }
-
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5997,7 +5997,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderModuleSourceReturn(loaded.source);
         }
         if (!hasSource && format === 'module') {
-            return staticRegisteredLoaderUrlReturn(url);
+            return registeredLoaderPathOrUrlReturn(url);
         }
         if (hasSource && format === 'commonjs') {
             return loaderCommonJsSourceModule(loaded.source, url);
@@ -6011,7 +6011,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (hasSource && format === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
         }
-        return staticRegisteredLoaderUrlReturn(url);
+        return registeredLoaderPathOrUrlReturn(url);
     }
 
     function staticRegisteredLoaderReturnForEdge(loaded, attrs) {
@@ -6025,7 +6025,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             typeof globalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
         ) {
             const url = String(loaded.url);
-            const target = staticRegisteredLoaderUrlReturn(url);
+            const target = registeredLoaderPathOrUrlReturn(url);
             return globalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
         }
         return staticRegisteredLoaderReturn(loaded);

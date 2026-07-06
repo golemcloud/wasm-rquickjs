@@ -612,21 +612,27 @@ mod tests {
     }
 
     #[test]
-    fn static_registered_loader_url_returns_are_shared() {
+    fn registered_loader_path_or_url_returns_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
         assert!(
             module_js.contains(
-                "function staticRegisteredLoaderUrlReturn(url) { url = String(url); return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url; }"
+                "function registeredLoaderPathOrUrlReturn(url) { url = String(url); return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url; }"
             ),
-            "static registered-loader URL/path return conversion must stay centralized"
+            "registered-loader URL/path return conversion must stay centralized"
         );
         assert_eq!(
             module_js
-                .matches("staticRegisteredLoaderUrlReturn(")
+                .matches("registeredLoaderPathOrUrlReturn(")
                 .count(),
-            4,
-            "static registered-loader module/default/JSON-edge return paths must use the shared URL/path converter"
+            5,
+            "registered-loader require.resolve and static return paths must use the shared URL/path converter"
+        );
+        assert!(
+            module_js.contains(
+                "if (String(loaded.url).startsWith('node:')) return String(loaded.url).slice(5);"
+            ),
+            "registered-loader require.resolve must preserve Node's bare builtin return shape"
         );
 
         let static_start = module_js
@@ -639,7 +645,7 @@ mod tests {
         let static_return_helpers = &module_js[static_start..edge_end];
         assert!(
             !static_return_helpers.contains("nodeUrl.fileURLToPath("),
-            "static registered-loader return helpers must route file URL conversion through staticRegisteredLoaderUrlReturn"
+            "static registered-loader return helpers must route file URL conversion through registeredLoaderPathOrUrlReturn"
         );
     }
 
