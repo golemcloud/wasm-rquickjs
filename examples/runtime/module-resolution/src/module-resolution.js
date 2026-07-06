@@ -5664,6 +5664,9 @@ export const testFindPackageJson = async () => {
         fs.mkdirSync('/find-package-json-app/node_modules/pkg/subfolder', { recursive: true });
         fs.mkdirSync('/find-package-json-app/node_modules/pkg/subfolder2', { recursive: true });
         fs.mkdirSync('/find-package-json-app/node_modules/pkg2', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/node_modules/pkg3/sub-main', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/node_modules/pkg4/sub-ext', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/node_modules/pkg5/sub-dir-main/entry-dir', { recursive: true });
         fs.mkdirSync('/find-package-json-app/packages/nested/sub-pkg-cjs', { recursive: true });
         fs.mkdirSync('/find-package-json-app/packages/nested/sub-pkg-esm', { recursive: true });
 
@@ -5698,6 +5701,27 @@ export const testFindPackageJson = async () => {
             main: '/find-package-json-app/node_modules/pkg/subfolder2/index.js',
             secretNumberPkg2: 44,
         }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg3/package.json', JSON.stringify({
+            name: 'pkg3',
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg3/sub-main/package.json', JSON.stringify({
+            main: 'main.js',
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg3/sub-main/main.js', 'module.exports = { subMain: true };');
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg4/package.json', JSON.stringify({
+            name: 'pkg4',
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg4/sub-ext/package.json', JSON.stringify({
+            main: 'main',
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg4/sub-ext/main.test', 'module.exports = { subExt: true };');
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg5/package.json', JSON.stringify({
+            name: 'pkg5',
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg5/sub-dir-main/package.json', JSON.stringify({
+            main: 'entry-dir',
+        }));
+        fs.writeFileSync('/find-package-json-app/node_modules/pkg5/sub-dir-main/entry-dir/index.js', 'module.exports = { subDirMain: true };');
 
         assert.throws(
             () => findPackageJSON(),
@@ -5717,6 +5741,9 @@ export const testFindPackageJson = async () => {
         const nestedPackageJson = '/find-package-json-app/packages/nested/package.json';
         const pkgRootPackageJson = '/find-package-json-app/node_modules/pkg/package.json';
         const pkg2RootPackageJson = '/find-package-json-app/node_modules/pkg2/package.json';
+        const pkg3RootPackageJson = '/find-package-json-app/node_modules/pkg3/package.json';
+        const pkg4RootPackageJson = '/find-package-json-app/node_modules/pkg4/package.json';
+        const pkg5RootPackageJson = '/find-package-json-app/node_modules/pkg5/package.json';
 
         assert.strictEqual(
             findPackageJSON('./node_modules/pkg/subfolder/index.js', baseUrl.href),
@@ -5739,6 +5766,19 @@ export const testFindPackageJson = async () => {
 
         assert.strictEqual(findPackageJSON('pkg', baseUrl), pkgRootPackageJson);
         assert.strictEqual(findPackageJSON('pkg2', baseUrl), pkg2RootPackageJson);
+        assert.strictEqual(findPackageJSON('pkg3/sub-main', baseUrl), pkg3RootPackageJson);
+        const originalTestExtension = require.extensions['.test'];
+        require.extensions['.test'] = require.extensions['.js'];
+        try {
+            assert.strictEqual(findPackageJSON('pkg4/sub-ext', baseUrl), pkg4RootPackageJson);
+            assert.strictEqual(findPackageJSON('pkg5/sub-dir-main', baseUrl), pkg5RootPackageJson);
+        } finally {
+            if (originalTestExtension === undefined) {
+                delete require.extensions['.test'];
+            } else {
+                require.extensions['.test'] = originalTestExtension;
+            }
+        }
 
         const pkgResolved = require.resolve('pkg', { paths: ['/find-package-json-app'] });
         assert.strictEqual(findPackageJSON(pkgResolved), subfolderPackageJson);

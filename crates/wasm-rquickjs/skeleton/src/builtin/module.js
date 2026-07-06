@@ -975,7 +975,10 @@ function resolveCjsPackageDirectory(candidate, fallbackPackageDir, id, fromPart)
     }
     if (nestedPackageEntry !== null) {
         const resolved = resolveCjsPackageMain(candidate, nestedPackageEntry.pkg, nestedPkgJsonPath, id, fromPart);
-        if (resolved !== null) return resolved;
+        if (resolved !== null) {
+            resolved.packageDir = fallbackPackageDir;
+            return resolved;
+        }
     }
 
     return readCjsPackageIndexCandidates(candidate, fallbackPackageDir);
