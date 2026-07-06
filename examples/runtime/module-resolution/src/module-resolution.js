@@ -51,6 +51,19 @@ export const testImportMetaResolve = async () => {
     const entryUrl = `${pathToFileURL(`${appDir}/entry.mjs`).href}`;
     fs.mkdirSync(`${appDir}/node_modules/pkg-dir`, { recursive: true });
     fs.mkdirSync(`${appDir}/node_modules/exports-pkg`, { recursive: true });
+    for (const [name, exportsValue] of [
+        ['primitive-exports-false', false],
+        ['primitive-exports-true', true],
+        ['primitive-exports-number', 1],
+        ['primitive-exports-null', null],
+    ]) {
+        fs.mkdirSync(`${appDir}/node_modules/${name}`, { recursive: true });
+        fs.writeFileSync(`${appDir}/node_modules/${name}/package.json`, JSON.stringify({
+            exports: exportsValue,
+            main: 'main.mjs',
+        }));
+        fs.writeFileSync(`${appDir}/node_modules/${name}/main.mjs`, 'export default true;');
+    }
 
     assert.strictEqual(import.meta.resolve('./local.mjs', entryUrl), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
     assert.strictEqual(import.meta.resolve('./sp ce.mjs', entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
@@ -60,6 +73,10 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
+    assert.strictEqual(import.meta.resolve('primitive-exports-false/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-false/`).href}`);
+    assert.strictEqual(import.meta.resolve('primitive-exports-true/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-true/`).href}`);
+    assert.strictEqual(import.meta.resolve('primitive-exports-number/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-number/`).href}`);
+    assert.strictEqual(import.meta.resolve('primitive-exports-null/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-null/`).href}`);
     assert.throws(() => import.meta.resolve('does-not-exist', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });
     assert.throws(() => import.meta.resolve('./relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
     assert.throws(() => import.meta.resolve('../relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
@@ -7779,6 +7796,26 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         }));
         fs.writeFileSync(`${root}/node_modules/exports-blocks-cjs/public.js`, 'module.exports = { value: "public" };');
         fs.writeFileSync(`${root}/node_modules/exports-blocks-cjs/private.js`, 'module.exports = { value: "private" };');
+        for (const [name, exportsValue] of [
+            ['primitive-exports-false', false],
+            ['primitive-exports-true', true],
+            ['primitive-exports-number', 1],
+            ['primitive-exports-null', null],
+        ]) {
+            fs.mkdirSync(`${root}/node_modules/${name}`, { recursive: true });
+            fs.writeFileSync(`${root}/node_modules/${name}/package.json`, JSON.stringify({
+                exports: exportsValue,
+                main: 'main.cjs',
+            }));
+            fs.writeFileSync(`${root}/node_modules/${name}/main.cjs`, `module.exports = { value: ${JSON.stringify(name)} };`);
+        }
+        fs.writeFileSync(`${root}/primitive-entry.mjs`, [
+            'import falseDefault from "primitive-exports-false";',
+            'import trueDefault from "primitive-exports-true";',
+            'import numberDefault from "primitive-exports-number";',
+            'import nullDefault from "primitive-exports-null";',
+            'export default [falseDefault, trueDefault, numberDefault, nullDefault];',
+        ].join('\n'));
         fs.mkdirSync(`${root}/node_modules/native-main`, { recursive: true });
         fs.writeFileSync(`${root}/node_modules/native-main/package.json`, JSON.stringify({ main: 'addon' }));
         fs.writeFileSync(`${root}/node_modules/native-main/addon.node`, 'not a native addon');
@@ -7792,6 +7829,16 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         assert.throws(() => require('no-exports-cjs/native'), { code: 'ERR_DLOPEN_FAILED', message: /native\.node/ });
         assert.deepStrictEqual(require('exports-blocks-cjs'), { value: 'public' });
         assert.throws(() => require('exports-blocks-cjs/private.js'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+        assert.deepStrictEqual(require('primitive-exports-false'), { value: 'primitive-exports-false' });
+        assert.deepStrictEqual(require('primitive-exports-true'), { value: 'primitive-exports-true' });
+        assert.deepStrictEqual(require('primitive-exports-number'), { value: 'primitive-exports-number' });
+        assert.deepStrictEqual(require('primitive-exports-null'), { value: 'primitive-exports-null' });
+        assert.deepStrictEqual((await import(`${root}/primitive-entry.mjs`)).default, [
+            { value: 'primitive-exports-false' },
+            { value: 'primitive-exports-true' },
+            { value: 'primitive-exports-number' },
+            { value: 'primitive-exports-null' },
+        ]);
         assert.throws(() => require('native-main'), { code: 'ERR_DLOPEN_FAILED', message: /addon\.node/ });
         assert.throws(() => require('native-index'), { code: 'ERR_DLOPEN_FAILED', message: /index\.node/ });
 

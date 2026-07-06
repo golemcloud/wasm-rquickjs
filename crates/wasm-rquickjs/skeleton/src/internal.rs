@@ -3374,6 +3374,7 @@ impl NodeModulesResolver {
             return Ok(None);
         };
         Self::validate_package_name(base, name, package_name)?;
+        let package_root_trailing_slash = name.ends_with('/') && subpath.is_empty();
 
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
@@ -3393,6 +3394,7 @@ impl NodeModulesResolver {
                     name,
                     package_name,
                     subpath,
+                    package_root_trailing_slash,
                     &package_path,
                     resolution,
                 )? {
@@ -3421,6 +3423,7 @@ impl NodeModulesResolver {
         specifier: &str,
         package_name: &str,
         subpath: &str,
+        package_root_trailing_slash: bool,
         package_path: &std::path::Path,
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
@@ -3428,7 +3431,11 @@ impl NodeModulesResolver {
         let package = Self::read_package_json_optional(&pkg_path)?;
 
         if let Some(package) = package.as_ref() {
-            if let Some(exports_field) = package.exports.as_ref() {
+            if let Some(exports_field) = package
+                .exports
+                .as_ref()
+                .filter(|exports| Self::is_active_package_exports(exports))
+            {
                 Self::validate_package_exports_map(&pkg_path, exports_field)?;
                 return Self::resolve_package_exports(
                     package_name,
@@ -3448,6 +3455,7 @@ impl NodeModulesResolver {
                     base,
                     specifier,
                     subpath,
+                    package_root_trailing_slash,
                     package_path,
                     package.as_deref(),
                     resolution,
@@ -3462,6 +3470,13 @@ impl NodeModulesResolver {
                 ))
             }
         }
+    }
+
+    fn is_active_package_exports(exports: &PackageTarget) -> bool {
+        matches!(
+            exports,
+            PackageTarget::String(_) | PackageTarget::Array(_) | PackageTarget::Object(_)
+        )
     }
 
     fn read_package_json_optional(pkg_path: &std::path::Path) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
@@ -3490,12 +3505,14 @@ impl NodeModulesResolver {
         base: &str,
         specifier: &str,
         subpath: &str,
+        package_root_trailing_slash: bool,
         package_path: &std::path::Path,
         package: Option<&PackageJson>,
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         let package_type = package.and_then(|package| package.package_type.as_ref());
         if subpath.is_empty()
+            && !package_root_trailing_slash
             && let Some(package) = package
             && let Some(main) = package.main.as_ref()
         {
@@ -3706,7 +3723,10 @@ impl NodeModulesResolver {
             let pkg_path = dir.join("package.json");
             if let Some(package) = Self::read_package_json_optional(&pkg_path)? {
                 if package.name.as_deref() == Some(package_name)
-                    && let Some(exports_field) = package.exports.as_ref()
+                    && let Some(exports_field) = package
+                        .exports
+                        .as_ref()
+                        .filter(|exports| Self::is_active_package_exports(exports))
                 {
                     Self::validate_package_exports_map(&pkg_path, exports_field)?;
                     return Self::resolve_package_exports(
@@ -4935,6 +4955,70 @@ fn loader_default_resolve_package<'js>(
     }
 }
 
+fn cjs_resolve_package_exports<'js>(
+    ctx: Ctx<'js>,
+    package_dir: String,
+    package_name: String,
+    subpath: String,
+    conditions: rquickjs::Array<'js>,
+    importer: String,
+) -> rquickjs::Result<Option<Object<'js>>> {
+    let package_dir = std::path::PathBuf::from(package_dir);
+    let pkg_path = package_dir.join("package.json");
+    let package = match NodeModulesResolver::read_package_json_optional(&pkg_path) {
+        Ok(Some(package)) => package,
+        Ok(None) => return Ok(None),
+        Err(err) => {
+            let _: String = throw_node_package_resolve_error(&ctx, err)?;
+            unreachable!()
+        }
+    };
+    let Some(exports) = package
+        .exports
+        .as_ref()
+        .filter(|exports| NodeModulesResolver::is_active_package_exports(exports))
+    else {
+        return Ok(None);
+    };
+    if let Err(err) = NodeModulesResolver::validate_package_exports_map(&pkg_path, exports) {
+        let _: String = throw_node_package_resolve_error(&ctx, err)?;
+        unreachable!()
+    }
+
+    let condition_vec = package_conditions_from_js_array(&conditions);
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(
+        NodePackageResolveMode::CjsAnalysis,
+        &condition_vec,
+        &mut warnings,
+    );
+    let importer = if importer.is_empty() {
+        None
+    } else {
+        Some(importer.as_str())
+    };
+    let result = NodeModulesResolver::resolve_package_exports(
+        &package_name,
+        &package_dir,
+        exports,
+        &subpath,
+        &mut resolution,
+        importer,
+    );
+    emit_node_package_deprecation_warnings(&ctx, &warnings)?;
+    match result {
+        Ok(resolved) => {
+            let result = Object::new(ctx.clone())?;
+            result.set("url", path_to_file_url(&resolved))?;
+            Ok(Some(result))
+        }
+        Err(err) => {
+            let _: String = throw_node_package_resolve_error(&ctx, err)?;
+            unreachable!()
+        }
+    }
+}
+
 fn require_esm_graph_resolve_package<'js>(
     _ctx: Ctx<'js>,
     parent_filename: String,
@@ -4971,7 +5055,10 @@ fn import_meta_trailing_slash_package_has_exports(
         let pkg_path = dir.join("package.json");
         if let Some(package) = NodeModulesResolver::read_package_json_optional(&pkg_path)? {
             if package.name.as_deref() == Some(package_name) {
-                return Ok(package.exports.is_some());
+                return Ok(package
+                    .exports
+                    .as_ref()
+                    .is_some_and(|exports| NodeModulesResolver::is_active_package_exports(exports)));
             }
             break;
         }
@@ -4986,8 +5073,14 @@ fn import_meta_trailing_slash_package_has_exports(
         let package_path = dir.join("node_modules").join(package_name);
         if package_path.is_dir() {
             let pkg_path = package_path.join("package.json");
-            return NodeModulesResolver::read_package_json_optional(&pkg_path)
-                .map(|package| package.is_some_and(|package| package.exports.is_some()));
+            return NodeModulesResolver::read_package_json_optional(&pkg_path).map(|package| {
+                package.is_some_and(|package| {
+                    package
+                        .exports
+                        .as_ref()
+                        .is_some_and(|exports| NodeModulesResolver::is_active_package_exports(exports))
+                })
+            });
         }
 
         if !dir.pop() {
@@ -8404,6 +8497,13 @@ impl JsState {
                     .expect("Failed to create loader default package resolver"),
             )
             .expect("Failed to initialize loader default package resolver");
+
+            global.set(
+                "__wasm_rquickjs_cjs_resolve_package_exports",
+                Function::new(ctx.clone(), cjs_resolve_package_exports)
+                    .expect("Failed to create CJS package exports resolver"),
+            )
+            .expect("Failed to initialize CJS package exports resolver");
 
             global.set(
                 "__wasm_rquickjs_package_default_conditions",

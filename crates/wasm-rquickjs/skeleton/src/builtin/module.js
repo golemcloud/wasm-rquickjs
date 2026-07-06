@@ -822,20 +822,6 @@ function esmPackageConditions() {
 function loaderHookConditions() {
     return Array.from(packageConditions(defaultPackageConditions('loader')));
 }
-const packageTargetNoMatch = { __packageTargetNoMatch: true };
-const packageTargetBlocked = { __packageTargetBlocked: true };
-
-function makePackagePathNotExportedError(packageName, subpath, noExportsMain) {
-    if (noExportsMain || !subpath) {
-        const err = new Error('No "exports" main defined in package ' + packageName);
-        err.code = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
-        return err;
-    }
-    const suffix = subpath ? './' + subpath : '.';
-    const err = new Error('Package subpath ' + JSON.stringify(suffix) + ' is not defined by "exports" in package ' + packageName);
-    err.code = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
-    return err;
-}
 
 function makePackageImportNotDefinedError(specifier, noImportsField) {
     const err = new Error('Package import specifier ' + JSON.stringify(specifier) + ' is not defined');
@@ -846,28 +832,6 @@ function makePackageImportNotDefinedError(specifier, noImportsField) {
             configurable: true,
         });
     }
-    return err;
-}
-
-function makeInvalidModuleSpecifierError(specifier, message) {
-    const err = new TypeError('Invalid module ' + JSON.stringify(specifier) + ' ' + message);
-    err.code = 'ERR_INVALID_MODULE_SPECIFIER';
-    return err;
-}
-
-function makeInvalidPackageTargetError(target, kind) {
-    let message = kind ? 'Invalid "' + kind + '" target ' + JSON.stringify(target) : 'Invalid package target ' + JSON.stringify(target);
-    if (kind === 'exports' && typeof target === 'string' && !target.startsWith('./')) {
-        message += '; targets must start with "./"';
-    }
-    const err = new Error(message);
-    err.code = 'ERR_INVALID_PACKAGE_TARGET';
-    return err;
-}
-
-function makeInvalidPackageConfigError(path, message) {
-    const err = new Error('Invalid package config ' + path + '. ' + message);
-    err.code = 'ERR_INVALID_PACKAGE_CONFIG';
     return err;
 }
 
@@ -887,143 +851,6 @@ function makeCjsModuleNotFoundFromErrModuleNotFound(err, fallbackId) {
     return cjsErr;
 }
 
-function addPackageErrorContext(err, specifier) {
-    if (err && typeof err.message === 'string' && err.message.indexOf(specifier) === -1) {
-        err.message += ' for ' + JSON.stringify(specifier);
-    }
-    return err;
-}
-
-function isBarePackageSpecifier(target) {
-    return typeof target === 'string' &&
-        target.length > 0 &&
-        !target.startsWith('.') &&
-        !target.startsWith('/') &&
-        !target.startsWith('#') &&
-        !target.includes(':');
-}
-
-function isInvalidPackageTargetSegment(segment) {
-    if (segment === '.' || segment === '..' || segment === 'node_modules') return true;
-    let decoded = segment;
-    try {
-        decoded = decodeURIComponent(segment);
-    } catch (_) {
-        // Keep the raw segment when percent decoding fails; invalid escapes are
-        // handled by the normal module-not-found path for now.
-    }
-    decoded = decoded.toLowerCase();
-    return decoded === '.' || decoded === '..' || decoded === 'node_modules';
-}
-
-function hasEncodedSlashOrBackslash(value) {
-    return /%(?:2f|5c)/i.test(value);
-}
-
-function isInvalidPackagePatternSubstitution(substitution) {
-    if (hasEncodedSlashOrBackslash(substitution)) return true;
-    const parts = substitution.split('/');
-    for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (part === '') continue;
-        if (isInvalidPackageTargetSegment(part)) return true;
-    }
-    return false;
-}
-
-function invalidPackagePatternSubstitutionMessage(substitution, fallback) {
-    if (hasEncodedSlashOrBackslash(substitution)) {
-        return 'must not include encoded "/" or "\\" characters';
-    }
-    return fallback;
-}
-
-function hasDeprecatedDoubleSlash(value) {
-    return typeof value === 'string' && value.indexOf('//') !== -1;
-}
-
-function hasDeprecatedLeadingOrTrailingSlash(substitution) {
-    return typeof substitution === 'string' && (substitution.startsWith('/') || substitution.endsWith('/'));
-}
-
-function packageWarningLocation(kind, packageDir, importer) {
-    return ' in the "' + kind + '" field module resolution of the package at ' +
-        pathModule.join(packageDir, 'package.json') +
-        (importer ? ' imported from ' + importer : '') + '.';
-}
-
-function matchedPackagePatternSuffix(patternKey) {
-    return patternKey ? ' matched to ' + JSON.stringify(patternKey) : '';
-}
-
-function emitDeprecatedPackageTargetWarning(kind, specifier, target, patternSubstitution, packageDir, patternKey, importer) {
-    if (kind === 'exports' && typeof patternSubstitution === 'string' && patternSubstitution.endsWith('/')) {
-        const location = packageWarningLocation(kind, packageDir, importer);
-        emitPackageDeprecationWarning(
-            'Use of deprecated trailing slash pattern mapping ' +
-            JSON.stringify(specifier) + location + ' Mapping specifiers ending in "/" is no longer supported.',
-            'DEP0155',
-            packageDir + ':' + specifier
-        );
-        return;
-    }
-    if (hasDeprecatedDoubleSlash(target)) {
-        const location = packageWarningLocation(kind, packageDir, importer);
-        const matchedPattern = matchedPackagePatternSuffix(patternKey);
-        emitPackageDeprecationWarning(
-            'Use of deprecated double slash resolving ' + JSON.stringify(target) +
-            ' for module request ' + JSON.stringify(specifier) + matchedPattern + location,
-            'DEP0166',
-            packageDir + ':' + specifier + ':' + target
-        );
-        return;
-    }
-    if (hasDeprecatedLeadingOrTrailingSlash(patternSubstitution)) {
-        const location = packageWarningLocation(kind, packageDir, importer);
-        const matchedPattern = matchedPackagePatternSuffix(patternKey);
-        emitPackageDeprecationWarning(
-            'Use of deprecated leading or trailing slash matching resolving ' + JSON.stringify(target) +
-            ' for module request ' + JSON.stringify(specifier) + matchedPattern + location,
-            'DEP0166',
-            packageDir + ':' + specifier + ':' + target
-        );
-        return;
-    }
-    if (hasDeprecatedDoubleSlash(specifier)) {
-        const location = packageWarningLocation(kind, packageDir, importer);
-        const matchedPattern = matchedPackagePatternSuffix(patternKey);
-        emitPackageDeprecationWarning(
-            'Use of deprecated double slash resolving ' + JSON.stringify(target) +
-            ' for module request ' + JSON.stringify(specifier) + matchedPattern + location,
-            'DEP0166',
-            packageDir + ':' + specifier
-        );
-    }
-}
-
-function validatePackageTargetPath(target) {
-    const rest = target.slice(2);
-    const parts = rest.split('/');
-    if (parts.length === 0) return false;
-    for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (part === '') continue;
-        if (isInvalidPackageTargetSegment(part)) return false;
-    }
-    return true;
-}
-
-function makePackageTargetResolutionContext(conditions, allowBareTarget, patternSubstitution, warningContext) {
-    return {
-        conditions,
-        allowBareTarget,
-        patternSubstitution,
-        warningContext,
-        seen: new Set(),
-        exactFileCache: Object.create(null),
-    };
-}
-
 function resolveExactPackageFile(filename, resolution) {
     if (resolution && Object.prototype.hasOwnProperty.call(resolution.exactFileCache, filename)) {
         const cached = resolution.exactFileCache[filename];
@@ -1038,236 +865,29 @@ function resolveExactPackageFile(filename, resolution) {
     throw makeModuleNotFoundError(filename);
 }
 
-function decodePackageTargetPath(target) {
+function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions) {
+    if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
+    if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
+        throw new Error('Internal CJS package exports resolver is not initialized');
+    }
+    let resolved;
     try {
-        return decodeURIComponent(target);
-    } catch (_) {
-        return target;
-    }
-}
-
-function packagePatternKeyMatch(patternKey, key) {
-    const star = patternKey.indexOf('*');
-    if (star === -1) return null;
-    const prefix = patternKey.slice(0, star);
-    const suffix = patternKey.slice(star + 1);
-    if (!key.startsWith(prefix) || !key.endsWith(suffix)) return null;
-    if (key.length <= prefix.length + suffix.length) return null;
-    return key.slice(prefix.length, key.length - suffix.length);
-}
-
-function findBestPackagePattern(map, key) {
-    let bestKey = null;
-    let bestSubstitution = null;
-    const keys = Object.keys(map);
-    for (let i = 0; i < keys.length; i++) {
-        const patternKey = keys[i];
-        if (patternKey.indexOf('*') === -1) continue;
-        const substitution = packagePatternKeyMatch(patternKey, key);
-        if (substitution === null) continue;
-        if (bestKey === null || packagePatternCompare(patternKey, bestKey) < 0) {
-            bestKey = patternKey;
-            bestSubstitution = substitution;
-        }
-    }
-    return bestKey === null ? null : { key: bestKey, substitution: bestSubstitution };
-}
-
-function findPackageMapTarget(map, specifier, invalidPatternMessage) {
-    if (Object.prototype.hasOwnProperty.call(map, specifier)) {
-        return { target: map[specifier], patternSubstitution: undefined, patternKey: undefined };
-    }
-    const pattern = findBestPackagePattern(map, specifier);
-    if (pattern === null) return null;
-    if (isInvalidPackagePatternSubstitution(pattern.substitution)) {
-        throw makeInvalidModuleSpecifierError(
-            specifier,
-            invalidPackagePatternSubstitutionMessage(pattern.substitution, invalidPatternMessage)
+        resolved = globalThis.__wasm_rquickjs_cjs_resolve_package_exports(
+            packageDir,
+            parts.name,
+            parts.subpath,
+            Array.from(conditions || cjsPackageConditions()),
+            '',
         );
-    }
-    return {
-        target: map[pattern.key],
-        patternSubstitution: pattern.substitution,
-        patternKey: pattern.key
-    };
-}
-
-function packagePatternCompare(a, b) {
-    const aStar = a.indexOf('*');
-    const bStar = b.indexOf('*');
-    const aBase = aStar === -1 ? a.length : aStar;
-    const bBase = bStar === -1 ? b.length : bStar;
-    if (aBase !== bBase) return bBase - aBase;
-    const aTrailer = aStar === -1 ? 0 : a.length - aStar - 1;
-    const bTrailer = bStar === -1 ? 0 : b.length - bStar - 1;
-    if (aTrailer !== bTrailer) return bTrailer - aTrailer;
-    if (a.length !== b.length) return b.length - a.length;
-    return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function resolvePackageImportsBareTarget(target, packageDir, conditions) {
-    if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
-        throw makeModuleNotFoundError(target);
-    }
-    const resolved = globalThis.__wasm_rquickjs_loader_default_resolve_package(
-        nodeUrl.pathToFileURL(pathModule.join(packageDir, 'package.json')).href,
-        target,
-        Array.from(conditions || cjsPackageConditions()),
-        'import',
-    );
-    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) {
-        throw makeModuleNotFoundError(target);
-    }
-    return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)));
-}
-
-function resolvePackageTargetValue(packageDir, target, resolution) {
-    if (target === null) return packageTargetBlocked;
-    if (target === false) {
-        throw makeInvalidPackageTargetError('false', resolution.allowBareTarget ? 'imports' : 'exports');
-    }
-
-    if (typeof target === 'string') {
-        if (resolution.patternSubstitution !== undefined && resolution.patternSubstitution !== null) {
-            target = target.replace(/\*/g, () => resolution.patternSubstitution);
-        }
-        if (resolution.warningContext) {
-            emitDeprecatedPackageTargetWarning(
-                resolution.warningContext.kind,
-                resolution.warningContext.specifier,
-                target,
-                resolution.patternSubstitution,
-                packageDir,
-                resolution.warningContext.patternKey,
-                resolution.warningContext.importer
-            );
-        }
-        if (resolution.allowBareTarget && isBarePackageSpecifier(target)) {
-            return resolvePackageImportsBareTarget(target, packageDir, resolution.conditions);
-        }
-        if (hasEncodedSlashOrBackslash(target)) {
-            throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');
-        }
-        if (!target.startsWith('./')) {
-            throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
-        }
-        if (!validatePackageTargetPath(target)) {
-            throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
-        }
-        const candidate = pathModule.resolve(packageDir, decodePackageTargetPath(target));
-        const relative = pathModule.relative(packageDir, candidate);
-        if (relative.startsWith('..') || pathModule.isAbsolute(relative)) {
-            throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
-        }
-        return resolveExactPackageFile(candidate, resolution);
-    }
-
-    if (Array.isArray(target)) {
-        let lastFallbackError = null;
-        for (let i = 0; i < target.length; i++) {
-            try {
-                const resolved = resolvePackageTargetValue(packageDir, target[i], resolution);
-                if (resolved === packageTargetBlocked) continue;
-                if (resolved !== packageTargetNoMatch) return resolved;
-            } catch (err) {
-                if (!err || err.code !== 'ERR_INVALID_PACKAGE_TARGET') throw err;
-                lastFallbackError = err;
-            }
-        }
-        if (lastFallbackError !== null) throw lastFallbackError;
-        return packageTargetNoMatch;
-    }
-
-    if (target && typeof target === 'object') {
-        if (resolution.seen.has(target)) return null;
-        resolution.seen.add(target);
-        const keys = Object.keys(target);
-        for (let i = 0; i < keys.length; i++) {
-            const condition = keys[i];
-            if (resolution.conditions.has(condition)) {
-                const resolved = resolvePackageTargetValue(packageDir, target[condition], resolution);
-                if (resolved === packageTargetNoMatch) continue;
-                return resolved;
-            }
-        }
-        return packageTargetNoMatch;
-    }
-
-    throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
-}
-
-function resolvePackageTargetWithContext(packageDir, target, conditions, allowBareTarget, patternSubstitution, warningContext) {
-    const resolution = makePackageTargetResolutionContext(conditions, allowBareTarget, patternSubstitution, warningContext);
-    try {
-        return resolvePackageTargetValue(packageDir, target, resolution);
     } catch (err) {
-        if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
-            throw addPackageErrorContext(err, warningContext.specifier);
+        if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
+            throw makeCjsModuleNotFoundFromErrModuleNotFound(err, parts.name);
         }
         throw err;
     }
-}
-
-function isPackageExportsConditionsObject(exportsField) {
-    if (!exportsField || typeof exportsField !== 'object' || Array.isArray(exportsField)) return false;
-    const keys = Object.keys(exportsField);
-    return keys.length > 0 && !keys.some((key) => key.startsWith('.'));
-}
-
-function validatePackageExportsMap(pkgJsonPath, exportsField) {
-    if (!exportsField || typeof exportsField !== 'object' || Array.isArray(exportsField)) return;
-    const keys = Object.keys(exportsField);
-    for (let i = 0; i < keys.length; i++) {
-        if (/^(?:0|[1-9][0-9]*)$/.test(keys[i])) {
-            throw makeInvalidPackageConfigError(pkgJsonPath, '"exports" cannot contain numeric property keys');
-        }
-    }
-    if (keys.length > 0) {
-        const hasSubpathKey = keys.some((key) => key.startsWith('.'));
-        const hasConditionKey = keys.some((key) => !key.startsWith('.'));
-        if (hasSubpathKey && hasConditionKey) {
-            throw makeInvalidPackageConfigError(pkgJsonPath, '"exports" cannot contain some keys starting with \'.\' and some not. The exports object must either be an object of package subpath keys or an object of main entry condition name keys only.');
-        }
-    }
-}
-
-function resolvePackageExports(packageName, packageDir, pkg, subpath, conditions) {
-    if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
-    const key = subpath ? './' + subpath : '.';
-    const exportsField = pkg.exports;
-    let resolved = null;
-
-    if (typeof exportsField === 'string' || Array.isArray(exportsField) || isPackageExportsConditionsObject(exportsField)) {
-        if (key === '.') {
-            resolved = resolvePackageTargetWithContext(packageDir, exportsField, conditions, false, undefined, { kind: 'exports', specifier: key });
-        }
-    } else if (exportsField && typeof exportsField === 'object') {
-        const match = findPackageMapTarget(exportsField, key, 'is not a valid match in pattern');
-        if (match !== null) {
-            resolved = resolvePackageTargetWithContext(
-                packageDir,
-                match.target,
-                conditions,
-                false,
-                match.patternSubstitution,
-                { kind: 'exports', specifier: key, patternKey: match.patternKey }
-            );
-        }
-    } else if (exportsField !== null) {
-        throw addPackageErrorContext(makeInvalidPackageTargetError(exportsField, 'exports'), key);
-    }
-
-    if (resolved !== null && resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
-    throw makePackagePathNotExportedError(packageName, subpath, key === '.' && isPackageExportsConditionsObject(exportsField));
-}
-
-function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions) {
-    if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
-    validatePackageExportsMap(pkgJsonPath, pkg.exports);
-    const resolved = resolvePackageExports(parts.name, packageDir, pkg, parts.subpath, conditions);
-    if (resolved !== undefined) {
-        resolved.packageDir = packageDir;
-    }
+    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) return undefined;
+    resolved = resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)));
+    resolved.packageDir = packageDir;
     return resolved;
 }
 
