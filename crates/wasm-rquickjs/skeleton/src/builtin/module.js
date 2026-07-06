@@ -5676,6 +5676,13 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return urlForNext === undefined ? currentUrl : String(urlForNext);
     }
 
+    function registeredLoaderResolveInputs(nextSpecifier, context, fallbackParentURL) {
+        return {
+            specifier: String(nextSpecifier),
+            parentURL: context && context.parentURL ? String(context.parentURL) : fallbackParentURL,
+        };
+    }
+
     function assertRegisteredLoaderChainComplete(hookName, result, nextCalled) {
         if (!nextCalled && (!result || result.shortCircuit !== true)) {
             throw makeLoaderChainError(hookName);
@@ -5763,9 +5770,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const defaultResolve = async (nextSpecifier, context) => {
-            const specifierString = String(nextSpecifier);
-            const parentURL = context && context.parentURL ? String(context.parentURL) : String(baseUrl);
-            return resolveEsmDefaultForLoader(specifierString, parentURL, context, baseUrl, false, true);
+            const inputs = registeredLoaderResolveInputs(nextSpecifier, context, String(baseUrl));
+            return resolveEsmDefaultForLoader(inputs.specifier, inputs.parentURL, context, baseUrl, false, true);
         };
 
         const runResolve = async (index, nextSpecifier, context) => {
@@ -5897,18 +5903,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const defaultResolve = (nextSpecifier, context) => {
-            const specifierString = String(nextSpecifier);
-            const parentURL = context && context.parentURL ? String(context.parentURL) : baseContext.parentURL;
-            if (specifierString.startsWith('node:')) {
-                return { url: specifierString, format: isImportMode ? undefined : 'builtin' };
+            const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);
+            if (inputs.specifier.startsWith('node:')) {
+                return { url: inputs.specifier, format: isImportMode ? undefined : 'builtin' };
             }
-            if (isBuiltin(specifierString)) {
-                return { url: 'node:' + specifierString, format: isImportMode ? undefined : 'builtin' };
+            if (isBuiltin(inputs.specifier)) {
+                return { url: 'node:' + inputs.specifier, format: isImportMode ? undefined : 'builtin' };
             }
             if (isImportMode) {
-                return resolveEsmDefaultForLoader(specifierString, parentURL, context, baseContext.parentURL, true, false);
+                return resolveEsmDefaultForLoader(inputs.specifier, inputs.parentURL, context, baseContext.parentURL, true, false);
             }
-            return resolveCjsDefaultForLoader(specifierString, parentURL, context);
+            return resolveCjsDefaultForLoader(inputs.specifier, inputs.parentURL, context);
         };
 
         const runResolve = (index, nextSpecifier, context) => {

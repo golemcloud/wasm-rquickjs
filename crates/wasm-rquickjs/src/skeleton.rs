@@ -541,6 +541,43 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_default_resolve_inputs_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderResolveInputs(nextSpecifier, context, fallbackParentURL) { return { specifier: String(nextSpecifier), parentURL: context && context.parentURL ? String(context.parentURL) : fallbackParentURL, }; }"
+            ),
+            "registered-loader default-resolve input coercion must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderResolveInputs(").count(),
+            3,
+            "async and sync registered-loader default resolve paths must use the shared input helper"
+        );
+        assert_eq!(
+            module_js.matches("String(nextSpecifier)").count(),
+            1,
+            "registered-loader default-resolve specifier coercion must only appear inside the shared helper"
+        );
+        assert_eq!(
+            module_js
+                .matches("context && context.parentURL ? String(context.parentURL)")
+                .count(),
+            1,
+            "registered-loader default-resolve parentURL fallback must only appear inside the shared helper"
+        );
+        assert!(
+            module_js.contains(
+                "const inputs = registeredLoaderResolveInputs(nextSpecifier, context, String(baseUrl)); return resolveEsmDefaultForLoader(inputs.specifier, inputs.parentURL, context, baseUrl, false, true);"
+            ) && module_js.contains(
+                "const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);"
+            ),
+            "registered-loader async and sync default resolve paths must pass their mode-specific parent fallbacks"
+        );
+    }
+
+    #[test]
     fn registered_loader_chain_completion_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
