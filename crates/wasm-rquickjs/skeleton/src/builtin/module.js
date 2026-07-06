@@ -5595,6 +5595,24 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return loader.initializing;
     };
 
+    function normalizeRegisteredLoaderResolvedResult(resolved) {
+        if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
+        resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
+        return {
+            format: resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format),
+        };
+    }
+
+    function registeredLoaderLoadContext(baseContext, resolved, resolvedFormat) {
+        return {
+            conditions: baseContext.conditions,
+            importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
+                ? resolved.importAttributes
+                : baseContext.importAttributes,
+            format: resolvedFormat,
+        };
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5690,9 +5708,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const resolved = await runResolve(modules.length - 1, specifier, baseContext);
-        if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
-        resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
-        const resolvedFormat = resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format);
+        const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
+        if (!normalizedResolved) return undefined;
+        const resolvedFormat = normalizedResolved.format;
 
         const defaultLoad = async (_nextUrl, context) => ({ format: context && context.format });
 
@@ -5721,13 +5739,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runLoad(index - 1, nextUrl, context);
         };
 
-        const loadContext = {
-            conditions: baseContext.conditions,
-            importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
-                ? resolved.importAttributes
-                : baseContext.importAttributes,
-            format: resolvedFormat,
-        };
+        const loadContext = registeredLoaderLoadContext(baseContext, resolved, resolvedFormat);
         const loaded = await runLoad(modules.length - 1, resolved.url, loadContext);
         const loadedHasSource = loaded && Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== null && loaded.source !== undefined;
         const loadedFormat = loaded && loaded.format !== undefined && loaded.format !== null
@@ -5866,9 +5878,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ? normalizeLoaderResolvedUrl(specifier)
             : specifier;
         const resolved = runResolve(modules.length - 1, initialSpecifier, baseContext);
-        if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
-        resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
-        const resolvedFormat = resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format);
+        const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
+        if (!normalizedResolved) return undefined;
+        const resolvedFormat = normalizedResolved.format;
         if (resolveOnly) return { url: resolved.url, format: resolvedFormat };
 
         const defaultLoad = (_nextUrl, context) => ({ format: context && context.format });
@@ -5897,13 +5909,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runLoad(index - 1, nextUrl, context);
         };
 
-        const loaded = runLoad(modules.length - 1, resolved.url, {
-            conditions: baseContext.conditions,
-            importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
-                ? resolved.importAttributes
-                : baseContext.importAttributes,
-            format: resolvedFormat,
-        });
+        const loaded = runLoad(modules.length - 1, resolved.url, registeredLoaderLoadContext(baseContext, resolved, resolvedFormat));
         const finalFormat = loaded && loaded.format !== undefined && loaded.format !== null
             ? validateRegisteredLoaderLoadFormat(loaded.format)
             : validateRegisteredLoaderLoadFormat(resolvedFormat);
