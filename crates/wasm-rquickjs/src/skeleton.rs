@@ -342,4 +342,80 @@ mod tests {
             "Rust package exports bridge must own CJS package-map resolution"
         );
     }
+
+    #[test]
+    fn cjs_package_directory_results_preserve_owning_package_metadata() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let function_start = module_js
+            .find(
+                "function resolveCjsPackageDirectory(candidate, fallbackPackageDir, id, fromPart)",
+            )
+            .expect("resolveCjsPackageDirectory function must exist");
+        let function_end = module_js[function_start..]
+            .find("function resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, fromPart)")
+            .expect("resolveCjsPackageDirectory must precede resolveCjsPackageFallbacks")
+            + function_start;
+        let resolve_cjs_package_directory = &module_js[function_start..function_end];
+
+        assert!(
+            resolve_cjs_package_directory
+                .contains("nestedPackageEntry = readPackageJson(nestedPkgJsonPath);")
+                && resolve_cjs_package_directory.contains(
+                    "const resolved = resolveCjsPackageMain(candidate, nestedPackageEntry.pkg, nestedPkgJsonPath, id, fromPart);"
+                )
+                && resolve_cjs_package_directory
+                    .contains("resolved.packageDir = fallbackPackageDir; return resolved;"),
+            "nested package.json main fallback must keep the owning bare package metadata for findPackageJSON"
+        );
+    }
+
+    #[test]
+    fn require_esm_graph_scans_are_cached_per_graph_file() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function esmGraphStaticSpecifiers(fileInfo) { if (!Object.prototype.hasOwnProperty.call(fileInfo, 'staticSpecifiers'))"
+            ) && module_js.contains(
+                "function esmGraphRequireSpecifiers(fileInfo) { if (!Object.prototype.hasOwnProperty.call(fileInfo, 'requireSpecifiers'))"
+            ) && module_js.contains(
+                "function esmGraphCreateRequireSpecifiers(fileInfo) { if (!Object.prototype.hasOwnProperty.call(fileInfo, 'createRequireSpecifiers'))"
+            ),
+            "require(esm) graph specifier scans must be cached on the per-graph file info"
+        );
+
+        let reaches_start = module_js
+            .find("function esmGraphReachesAny(filename, stack, seen, fileInfoCache)")
+            .expect("esmGraphReachesAny function must exist");
+        let reaches_end = module_js[reaches_start..]
+            .find("function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache)")
+            .expect("esmGraphReachesAny must precede scanRequireEsmGraph")
+            + reaches_start;
+        let reaches_any = &module_js[reaches_start..reaches_end];
+        assert!(
+            reaches_any.contains("esmGraphStaticSpecifiers(fileInfo)")
+                && reaches_any.contains("esmGraphRequireSpecifiers(fileInfo)")
+                && reaches_any.contains("esmGraphCreateRequireSpecifiers(fileInfo)")
+                && !reaches_any.contains("collectStaticEsmSpecifiers(source)")
+                && !reaches_any.contains("collectLiteralRequireSpecifiers(source)")
+                && !reaches_any.contains("collectCreateRequireFactoryNames(source)"),
+            "cycle reachability checks must reuse per-file graph scanner results"
+        );
+
+        let scan_start = reaches_end;
+        let scan_end = module_js[scan_start..]
+            .find("function markRequireEsmGraph(filename)")
+            .expect("scanRequireEsmGraph must precede markRequireEsmGraph")
+            + scan_start;
+        let scan_graph = &module_js[scan_start..scan_end];
+        assert!(
+            scan_graph.contains("esmGraphStaticSpecifiers(fileInfo)")
+                && scan_graph.contains("esmGraphRequireSpecifiers(fileInfo)")
+                && scan_graph.contains("esmGraphCreateRequireSpecifiers(fileInfo)")
+                && !scan_graph.contains("collectStaticEsmSpecifiers(source)")
+                && !scan_graph.contains("collectLiteralRequireSpecifiers(source)")
+                && !scan_graph.contains("collectCreateRequireFactoryNames(source)"),
+            "require(esm) graph traversal must reuse per-file scanner results"
+        );
+    }
 }

@@ -4107,6 +4107,32 @@ function readEsmGraphFileInfo(filename, cache) {
     return info;
 }
 
+function esmGraphStaticSpecifiers(fileInfo) {
+    if (!Object.prototype.hasOwnProperty.call(fileInfo, 'staticSpecifiers')) {
+        fileInfo.staticSpecifiers = collectStaticEsmSpecifiers(fileInfo.source);
+    }
+    return fileInfo.staticSpecifiers;
+}
+
+function esmGraphRequireSpecifiers(fileInfo) {
+    if (!Object.prototype.hasOwnProperty.call(fileInfo, 'requireSpecifiers')) {
+        fileInfo.requireSpecifiers = collectLiteralRequireSpecifiers(fileInfo.source);
+    }
+    return fileInfo.requireSpecifiers;
+}
+
+function esmGraphCreateRequireSpecifiers(fileInfo) {
+    if (!Object.prototype.hasOwnProperty.call(fileInfo, 'createRequireSpecifiers')) {
+        const source = fileInfo.source;
+        const factoryNames = collectCreateRequireFactoryNames(source);
+        const aliases = collectCreateRequireAliases(source, factoryNames);
+        fileInfo.createRequireSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
+            aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
+        );
+    }
+    return fileInfo.createRequireSpecifiers;
+}
+
 function fileUrlForPath(filename) {
     return 'file://' + filename;
 }
@@ -4214,11 +4240,10 @@ function esmGraphReachesAny(filename, stack, seen, fileInfoCache) {
     const fileInfo = readEsmGraphFileInfo(filename, fileInfoCache);
     if (fileInfo.source === null) return false;
 
-    const source = fileInfo.source;
     const isEsm = fileInfo.isEsm;
     const specifiers = isEsm
-        ? collectStaticEsmSpecifiers(source)
-        : collectLiteralRequireSpecifiers(source);
+        ? esmGraphStaticSpecifiers(fileInfo)
+        : esmGraphRequireSpecifiers(fileInfo);
     const conditions = isEsm ? esmPackageConditions() : cjsPackageConditions();
     for (let i = 0; i < specifiers.length; i++) {
         const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions, isEsm ? 'import' : 'cjs-analysis');
@@ -4226,11 +4251,7 @@ function esmGraphReachesAny(filename, stack, seen, fileInfoCache) {
     }
 
     if (isEsm) {
-        const factoryNames = collectCreateRequireFactoryNames(source);
-        const aliases = collectCreateRequireAliases(source, factoryNames);
-        const bridgeSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
-            aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
-        );
+        const bridgeSpecifiers = esmGraphCreateRequireSpecifiers(fileInfo);
         for (let i = 0; i < bridgeSpecifiers.length; i++) {
             const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
             if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen, fileInfoCache)) return true;
@@ -4247,10 +4268,9 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
     const fileInfo = readEsmGraphFileInfo(filename, fileInfoCache);
     if (fileInfo.source === null) return;
 
-    const source = fileInfo.source;
     const isEsm = fileInfo.isEsm;
     if (!isEsm) {
-        const requireSpecifiers = collectLiteralRequireSpecifiers(source);
+        const requireSpecifiers = esmGraphRequireSpecifiers(fileInfo);
         for (let i = 0; i < requireSpecifiers.length; i++) {
             const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
             if (resolved && resolved.filename) {
@@ -4267,18 +4287,14 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
 
     stack.push(filename);
 
-    const specifiers = collectStaticEsmSpecifiers(source);
+    const specifiers = esmGraphStaticSpecifiers(fileInfo);
     for (let i = 0; i < specifiers.length; i++) {
         const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions(), 'import');
         if (resolved && resolved.filename) {
             scanRequireEsmGraph(resolved.filename, marked, seen, stack, fileInfoCache);
         }
     }
-    const factoryNames = collectCreateRequireFactoryNames(source);
-    const aliases = collectCreateRequireAliases(source, factoryNames);
-    const createRequireSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
-        aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
-    );
+    const createRequireSpecifiers = esmGraphCreateRequireSpecifiers(fileInfo);
     for (let i = 0; i < createRequireSpecifiers.length; i++) {
         const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
         if (resolved && resolved.filename) {
