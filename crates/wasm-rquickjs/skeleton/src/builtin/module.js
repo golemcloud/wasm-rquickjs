@@ -855,12 +855,6 @@ function makeInvalidModuleSpecifierError(specifier, message) {
     return err;
 }
 
-function validatePackageImportSpecifier(specifier) {
-    if (specifier === '#' || specifier.startsWith('#/') || specifier.endsWith('/')) {
-        throw makeInvalidModuleSpecifierError(specifier, 'is not a valid internal imports specifier name');
-    }
-}
-
 function makeInvalidPackageTargetError(target, kind) {
     let message = kind ? 'Invalid "' + kind + '" target ' + JSON.stringify(target) : 'Invalid package target ' + JSON.stringify(target);
     if (kind === 'exports' && typeof target === 'string' && !target.startsWith('./')) {

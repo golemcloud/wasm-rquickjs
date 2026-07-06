@@ -290,4 +290,35 @@ mod tests {
             "JS and Rust invalid package target segment checks must stay aligned"
         );
     }
+
+    #[test]
+    fn cjs_package_imports_resolution_is_rust_owned() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+        let function_start = module_js
+            .find("function resolvePackageImports(id, parentDir, conditions)")
+            .expect("resolvePackageImports function must exist");
+        let function_end = module_js[function_start..]
+            .find("function resolveFilename(id, parentDir)")
+            .expect("resolvePackageImports must precede resolveFilename")
+            + function_start;
+        let resolve_package_imports = &module_js[function_start..function_end];
+
+        assert!(
+            resolve_package_imports.contains("__wasm_rquickjs_loader_default_resolve_package(")
+                && resolve_package_imports.contains("'cjs-analysis'")
+                && resolve_package_imports.contains("makeCjsModuleNotFoundFromErrModuleNotFound")
+                && !resolve_package_imports.contains("findPackageScope(")
+                && !resolve_package_imports.contains("findPackageMapTarget(")
+                && !module_js.contains("function validatePackageImportSpecifier("),
+            "CJS package imports must delegate package-map resolution to Rust cjs-analysis mode"
+        );
+        assert!(
+            internal_rs.contains("fn try_resolve_package_import_with_context(")
+                && internal_rs.contains("no_imports_field: bool")
+                && internal_rs.contains("\"__wasmNoImportsField\"")
+                && internal_rs.contains("Self::validate_package_import_specifier(name)?"),
+            "Rust package imports must preserve CJS fallback metadata and validation ownership"
+        );
+    }
 }
