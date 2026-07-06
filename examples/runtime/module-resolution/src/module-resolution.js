@@ -7676,6 +7676,34 @@ export const testCjsEsmDefaultSnapshotTiming = async () => {
         require.cache[dynamicReplace].exports = { value: 2 };
         assert.strictEqual((await import(`${root}/dynamic-replace.js`)).default.value, 1);
 
+        fs.writeFileSync(`${root}/prevent-extensions-module.js`, [
+            'module.exports = { value: 1 };',
+            'Object.preventExtensions(module);',
+        ].join('\n'));
+        const preventExtensionsModule = require.resolve(`${root}/prevent-extensions-module.js`);
+        require(preventExtensionsModule);
+        assert.strictEqual((await import(`${root}/prevent-extensions-module.js`)).default.value, 1);
+
+        fs.writeFileSync(`${root}/snapshot-tamper.js`, 'module.exports = { value: 1 };');
+        const snapshotTamper = require.resolve(`${root}/snapshot-tamper.js`);
+        require(snapshotTamper);
+        for (const symbol of Object.getOwnPropertySymbols(require.cache[snapshotTamper])) {
+            try {
+                require.cache[snapshotTamper][symbol] = () => ({ value: 99 });
+            } catch (_) {}
+            try {
+                delete require.cache[snapshotTamper][symbol];
+            } catch (_) {}
+            const value = require.cache[snapshotTamper][symbol];
+            if (typeof value === 'function') {
+                try {
+                    value({}, 'set', { value: 99 });
+                } catch (_) {}
+            }
+        }
+        require.cache[snapshotTamper].exports = { value: 2 };
+        assert.strictEqual((await import(`${root}/snapshot-tamper.js`)).default.value, 1);
+
         fs.writeFileSync(`${root}/delete-before-import.js`, 'module.exports = 1;');
         const deleteBeforeImport = require.resolve(`${root}/delete-before-import.js`);
         require(deleteBeforeImport);

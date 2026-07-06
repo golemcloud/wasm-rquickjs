@@ -4040,24 +4040,56 @@ function fileUrlForPath(filename) {
     return 'file://' + filename;
 }
 
-const cjsEsmDefaultSnapshots = new WeakMap();
+const cjsEsmDefaultSnapshotSymbol = Symbol('wasm-rquickjs.cjs-esm-default-snapshot');
+const cjsEsmDefaultSnapshotToken = {};
+
+function installCjsEsmDefaultSnapshotSlot(mod) {
+    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function') || Object.prototype.hasOwnProperty.call(mod, cjsEsmDefaultSnapshotSymbol)) return;
+    const state = { captured: false, value: undefined };
+    Object.defineProperty(mod, cjsEsmDefaultSnapshotSymbol, {
+        value: function cjsEsmDefaultSnapshotSlot(token, op, value) {
+            if (token !== cjsEsmDefaultSnapshotToken) return undefined;
+            if (op === 'set') {
+                if (!state.captured) {
+                    state.captured = true;
+                    state.value = value;
+                }
+                return state.value;
+            }
+            if (op === 'has') return state.captured;
+            if (op === 'get') return state.value;
+            return undefined;
+        },
+        writable: false,
+        configurable: false,
+        enumerable: false,
+    });
+}
+
+function cjsEsmDefaultSnapshotSlot(mod) {
+    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function')) return undefined;
+    const slot = mod[cjsEsmDefaultSnapshotSymbol];
+    return typeof slot === 'function' ? slot : undefined;
+}
 
 function captureCjsEsmDefaultSnapshot(mod) {
-    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function') || cjsEsmDefaultSnapshots.has(mod)) return;
-    cjsEsmDefaultSnapshots.set(mod, mod.exports);
+    installCjsEsmDefaultSnapshotSlot(mod);
+    const slot = cjsEsmDefaultSnapshotSlot(mod);
+    if (!slot || slot(cjsEsmDefaultSnapshotToken, 'has')) return;
+    slot(cjsEsmDefaultSnapshotToken, 'set', mod.exports);
 }
 
 function hasCjsEsmDefaultSnapshot(cache, filename) {
     if (!cache || typeof cache !== 'object') return false;
     const mod = cache[filename];
-    return !!(mod && (typeof mod === 'object' || typeof mod === 'function') && cjsEsmDefaultSnapshots.has(mod));
+    const slot = cjsEsmDefaultSnapshotSlot(mod);
+    return !!(slot && slot(cjsEsmDefaultSnapshotToken, 'has'));
 }
 
 function getCjsEsmDefaultSnapshot(cache, filename) {
     const mod = cache && cache[filename];
-    return mod && (typeof mod === 'object' || typeof mod === 'function')
-        ? cjsEsmDefaultSnapshots.get(mod)
-        : undefined;
+    const slot = cjsEsmDefaultSnapshotSlot(mod);
+    return slot ? slot(cjsEsmDefaultSnapshotToken, 'get') : undefined;
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', {
@@ -4738,6 +4770,7 @@ function loadModule(resolvedFilename, source, parentModule) {
         mod.paths = _nodeModulePaths(pathModule.dirname(filename));
         mod._compile = makeModuleCompile(mod);
         mod.require = makeModuleRequire(mod);
+        installCjsEsmDefaultSnapshotSlot(mod);
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
@@ -4754,6 +4787,7 @@ function loadModule(resolvedFilename, source, parentModule) {
         };
         mod._compile = makeModuleCompile(mod);
         mod.require = makeModuleRequire(mod);
+        installCjsEsmDefaultSnapshotSlot(mod);
     }
 
     // Cache before executing (handles circular dependencies)
@@ -4971,6 +5005,7 @@ function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
     };
     mod._compile = makeModuleCompile(mod);
     mod.require = makeModuleRequire(mod);
+    installCjsEsmDefaultSnapshotSlot(mod);
     moduleCache[cacheKey] = mod;
     registerSourceMapForCjs(filename, source, mod);
     try {
@@ -5009,6 +5044,7 @@ const mainModule = {
 };
 mainModule._compile = makeModuleCompile(mainModule);
 mainModule.require = makeModuleRequire(mainModule);
+installCjsEsmDefaultSnapshotSlot(mainModule);
 
 function splitPackageName(id) {
     // Scoped packages: @scope/pkg or @scope/pkg/subpath
@@ -6255,6 +6291,7 @@ function Module(id, parent) {
     if (parent && parent.children) {
         Array.prototype.push.call(parent.children, this);
     }
+    installCjsEsmDefaultSnapshotSlot(this);
 }
 
 Module.prototype.require = function require(id) {
