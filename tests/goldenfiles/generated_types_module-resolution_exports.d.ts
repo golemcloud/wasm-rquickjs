@@ -1,6 +1,22 @@
 declare module 'module-resolution' {
   export function testEsmPackageMapEdgeCases(): Promise<boolean>;
+  export function testEsmEncodedRelativePaths(): Promise<boolean>;
+  export function testEsmInvalidPackageSpecifiers(): Promise<boolean>;
+  export function testEsmDataUrlImportAttributes(): Promise<boolean>;
+  export function testEsmJsonUrlCacheKeys(): Promise<boolean>;
+  export function testStaticLoaderAbsoluteEntrySpecifier(): Promise<boolean>;
+  export function testRegisteredLoaderModuleRealmIsolation(): Promise<boolean>;
+  export function testEsmForbiddenCjsGlobals(): Promise<boolean>;
+  export function testImportMetaResolve(): Promise<boolean>;
+  export function testCjsDynamicImportAttributeScanner(): Promise<boolean>;
+  export function testLoaderCommonjsSourceNamedExports(): Promise<boolean>;
+  export function testLoaderModuleSourceValidation(): Promise<boolean>;
+  export function testPackageCustomConditions(): Promise<boolean>;
+  export function testCjsPackageJsonParseCache(): Promise<boolean>;
+  export function testSyncBuiltinEsmExports(): Promise<boolean>;
+  export function testEsmResolutionErrorUrls(): Promise<boolean>;
   export function testCjsDirectNamedExports(): Promise<boolean>;
+  export function testEsmImportsSideEffectCommonJs(): Promise<boolean>;
   export function testCjsDefinePropertyNamedExports(): Promise<boolean>;
   export function testCjsReexportNamedExports(): Promise<boolean>;
   export function testCjsAnalyzerFalsePositiveGuards(): Promise<boolean>;
@@ -8,9 +24,13 @@ declare module 'module-resolution' {
   export function testModuleSyntaxDetectionAndDiagnostics(): Promise<boolean>;
   export function testCjsPackageReexportNamedExports(): Promise<boolean>;
   export function testFindPackageJson(): Promise<boolean>;
+  export function testVmMainContextDefaultLoader(): Promise<boolean>;
+  export function testVmSourceTextModuleLinkSemantics(): Promise<boolean>;
   export function testRequireEsmErrorHandling(): Promise<boolean>;
   export function testRequireEsmTlaRetry(): Promise<boolean>;
+  export function testRequireEsmRejectionTracking(): Promise<boolean>;
   export function testRequireEsmCycleGuards(): Promise<boolean>;
+  export function testCjsEsmDefaultSnapshotTiming(): Promise<boolean>;
   export function testEsmSymlinkModuleIdentity(): Promise<boolean>;
   export function testCjsSymlinkCircularCache(): Promise<boolean>;
   export function testCjsNodeModuleLoadingCompat(): Promise<boolean>;
