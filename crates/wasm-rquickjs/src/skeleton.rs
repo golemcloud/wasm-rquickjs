@@ -898,6 +898,35 @@ mod tests {
     }
 
     #[test]
+    fn loader_cjs_optional_semicolon_parser_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function skipLoaderOptionalSemicolon(source, pos) { return source.charCodeAt(pos) === 0x3b ? skipWhitespaceAndComments(source, pos + 1) : pos; }"
+            ),
+            "loader CJS optional semicolon skipping must stay centralized"
+        );
+
+        let callback_start = module_js
+            .find("function loaderCallbackHasReexport(")
+            .expect("loaderCallbackHasReexport function must exist");
+        let callback_end = module_js[callback_start..]
+            .find("function readLoaderObjectKeysReexport(")
+            .expect("loaderCallbackHasReexport must precede Object.keys parser")
+            + callback_start;
+        let callback_parser = &module_js[callback_start..callback_end];
+        assert!(
+            callback_parser
+                .matches("skipLoaderOptionalSemicolon(source, i)")
+                .count()
+                == 2
+                && !callback_parser.contains("source.charCodeAt(i) === 0x3b"),
+            "loader reexport callback parser must share optional semicolon consumption after return guards"
+        );
+    }
+
+    #[test]
     fn registered_loader_format_normalization_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

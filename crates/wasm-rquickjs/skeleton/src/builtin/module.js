@@ -3549,6 +3549,10 @@ function readLoaderDefinePropertyReexport(source, pos, binding, key) {
     return close + 1;
 }
 
+function skipLoaderOptionalSemicolon(source, pos) {
+    return source.charCodeAt(pos) === 0x3b ? skipWhitespaceAndComments(source, pos + 1) : pos;
+}
+
 function loaderCallbackHasReexport(source, binding, key) {
     let i = skipWhitespaceAndComments(source, 0);
     const conditional = readLoaderHasOwnConditionalReexport(source, i, binding, key);
@@ -3556,12 +3560,12 @@ function loaderCallbackHasReexport(source, binding, key) {
     const guarded = readLoaderDefaultEsModuleReturnGuard(source, i, key);
     if (guarded === null) return false;
     i = skipWhitespaceAndComments(source, guarded);
-    if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
+    i = skipLoaderOptionalSemicolon(source, i);
     for (;;) {
         const nextGuard = readLoaderDuplicateExportReturnGuard(source, i, binding, key);
         if (nextGuard === null) break;
         i = skipWhitespaceAndComments(source, nextGuard);
-        if (source.charCodeAt(i) === 0x3b) i = skipWhitespaceAndComments(source, i + 1);
+        i = skipLoaderOptionalSemicolon(source, i);
     }
     const direct = readLoaderDirectReexportAssignment(source, i, binding, key);
     if (direct !== null) return true;
