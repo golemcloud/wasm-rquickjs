@@ -5620,6 +5620,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function registeredLoaderFinalLoadFormat(loaded, fallbackFormat) {
+        return loaded && loaded.format !== undefined && loaded.format !== null
+            ? validateRegisteredLoaderLoadFormat(loaded.format)
+            : validateRegisteredLoaderLoadFormat(fallbackFormat);
+    }
+
     function registeredLoaderNextContext(context, contextForNext) {
         return contextForNext === undefined ? context : Object.assign({}, context, contextForNext);
     }
@@ -5770,9 +5776,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loadContext = registeredLoaderLoadContext(baseContext, resolved, resolvedFormat);
         const loaded = await runLoad(modules.length - 1, resolved.url, loadContext);
         const loadedHasSource = registeredLoaderHasSource(loaded);
-        const loadedFormat = loaded && loaded.format !== undefined && loaded.format !== null
-            ? validateRegisteredLoaderLoadFormat(loaded.format)
-            : validateRegisteredLoaderLoadFormat(resolvedFormat);
+        const loadedFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (mode === 'static-raw') {
             const raw = { url: resolved.url, format: loadedFormat };
             if (loadedHasSource) raw.source = loaded.source;
@@ -5931,9 +5935,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const loaded = runLoad(modules.length - 1, resolved.url, registeredLoaderLoadContext(baseContext, resolved, resolvedFormat));
-        const finalFormat = loaded && loaded.format !== undefined && loaded.format !== null
-            ? validateRegisteredLoaderLoadFormat(loaded.format)
-            : validateRegisteredLoaderLoadFormat(resolvedFormat);
+        const finalFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (finalFormat === 'builtin') return { url: resolved.url, format: finalFormat };
         if (!loaded && resolved.source === undefined) return undefined;
         let source = registeredLoaderHasSource(loaded)

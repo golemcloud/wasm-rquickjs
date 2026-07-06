@@ -728,6 +728,27 @@ mod tests {
             "registered-loader resolve results must use the shared format normalizer"
         );
 
+        assert!(
+            module_js.contains(
+                "function registeredLoaderFinalLoadFormat(loaded, fallbackFormat) { return loaded && loaded.format !== undefined && loaded.format !== null ? validateRegisteredLoaderLoadFormat(loaded.format) : validateRegisteredLoaderLoadFormat(fallbackFormat); }"
+            ),
+            "registered-loader final load format selection must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderFinalLoadFormat(")
+                .count(),
+            3,
+            "async and sync registered-loader load result paths must use the shared final-format helper"
+        );
+        assert_eq!(
+            module_js
+                .matches("loaded.format !== undefined && loaded.format !== null")
+                .count(),
+            1,
+            "registered-loader final load format nullish check must only appear inside the shared helper"
+        );
+
         let static_start = module_js
             .find("function staticRegisteredLoaderReturn(loaded)")
             .expect("staticRegisteredLoaderReturn function must exist");
