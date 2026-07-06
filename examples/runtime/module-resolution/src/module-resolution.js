@@ -7785,6 +7785,95 @@ export const testCjsSymlinkCircularCache = async () => {
     }
 };
 
+export const testEsmSymlinkModuleIdentity = async () => {
+    try {
+        const root = '/esm-symlink-identity-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(`${root}/real.mjs`, 'export const url = import.meta.url; export default [];');
+        try {
+            fs.symlinkSync('real.mjs', `${root}/link.mjs`);
+        } catch (error) {
+            if (!error || error.code !== 'EEXIST') {
+                throw error;
+            }
+        }
+
+        const real = await import(`${root}/real.mjs`);
+        const linked = await import(`${root}/link.mjs`);
+        const linkedByUrl = await import(pathToFileURL(`${root}/link.mjs`).href);
+        assert.strictEqual(linked.default, real.default);
+        assert.strictEqual(linked.url, real.url);
+        assert.strictEqual(linkedByUrl.default, real.default);
+        assert.strictEqual(linkedByUrl.url, real.url);
+
+        fs.mkdirSync(`${root}/packages/pkg`, { recursive: true });
+        fs.mkdirSync(`${root}/app/node_modules`, { recursive: true });
+        fs.writeFileSync(`${root}/packages/pkg/package.json`, JSON.stringify({
+            type: 'module',
+            exports: './index.mjs',
+        }));
+        fs.writeFileSync(`${root}/packages/pkg/index.mjs`, 'export const url = import.meta.url; export default [];');
+        fs.writeFileSync(`${root}/app/entry.mjs`, "export default await import('pkg');");
+        try {
+            fs.symlinkSync(`${root}/packages/pkg`, `${root}/app/node_modules/pkg`, 'dir');
+        } catch (error) {
+            if (!error || error.code !== 'EEXIST') {
+                throw error;
+            }
+        }
+        const directPackage = await import(`${root}/packages/pkg/index.mjs`);
+        const packageThroughSymlink = (await import(`${root}/app/entry.mjs`)).default;
+        assert.strictEqual(packageThroughSymlink.default, directPackage.default);
+        assert.strictEqual(packageThroughSymlink.url, directPackage.url);
+
+        const preserveRoot = '/esm-symlink-preserve-app';
+        fs.mkdirSync(`${preserveRoot}/packages/preserve-pkg`, { recursive: true });
+        fs.mkdirSync(`${preserveRoot}/app/node_modules`, { recursive: true });
+        fs.writeFileSync(`${preserveRoot}/packages/preserve-pkg/package.json`, JSON.stringify({
+            type: 'module',
+            exports: './index.mjs',
+        }));
+        fs.writeFileSync(
+            `${preserveRoot}/packages/preserve-pkg/index.mjs`,
+            "import childUrl from './child.mjs'; export { childUrl }; export const url = import.meta.url; export default [];",
+        );
+        fs.writeFileSync(`${preserveRoot}/packages/preserve-pkg/child.mjs`, 'export default import.meta.url;');
+        fs.writeFileSync(`${preserveRoot}/app/entry.mjs`, "export default await import('preserve-pkg');");
+        try {
+            fs.symlinkSync(`${preserveRoot}/packages/preserve-pkg`, `${preserveRoot}/app/node_modules/preserve-pkg`, 'dir');
+        } catch (error) {
+            if (!error || error.code !== 'EEXIST') {
+                throw error;
+            }
+        }
+        const originalExecArgv = process.execArgv.slice();
+        try {
+            process.execArgv.push('--preserve-symlinks');
+            const directPreservePackage = await import(`${preserveRoot}/packages/preserve-pkg/index.mjs`);
+            const preservedPackageThroughSymlink = (await import(`${preserveRoot}/app/entry.mjs`)).default;
+            assert.notStrictEqual(preservedPackageThroughSymlink.default, directPreservePackage.default);
+            assert.strictEqual(
+                preservedPackageThroughSymlink.url,
+                pathToFileURL(`${preserveRoot}/app/node_modules/preserve-pkg/index.mjs`).href,
+            );
+            assert.strictEqual(
+                preservedPackageThroughSymlink.childUrl,
+                pathToFileURL(`${preserveRoot}/app/node_modules/preserve-pkg/child.mjs`).href,
+            );
+        } finally {
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) {
+                process.execArgv.push(arg);
+            }
+        }
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsNodeModuleLoadingCompat = async () => {
     try {
         const { createRequire } = await import('node:module');

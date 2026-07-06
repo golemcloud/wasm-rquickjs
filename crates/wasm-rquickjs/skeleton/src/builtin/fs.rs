@@ -382,6 +382,13 @@ fn resolve_emulated_symlinks(path: &str) -> String {
     resolve_emulated_symlinks_checked(path).unwrap_or_else(|_| path.to_string())
 }
 
+pub(super) fn realpath_for_module_resolution(path: &str) -> Option<String> {
+    let resolved_path = resolve_emulated_symlinks_checked(path).ok()?;
+    std::fs::symlink_metadata(&resolved_path)
+        .ok()
+        .map(|_| resolved_path)
+}
+
 fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
     match err.kind() {
         std::io::ErrorKind::NotFound => ("ENOENT", -2, "no such file or directory"),

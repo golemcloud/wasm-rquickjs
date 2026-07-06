@@ -11,6 +11,7 @@ declare module 'module-resolution' {
   export function testRequireEsmErrorHandling(): Promise<boolean>;
   export function testRequireEsmTlaRetry(): Promise<boolean>;
   export function testRequireEsmCycleGuards(): Promise<boolean>;
+  export function testEsmSymlinkModuleIdentity(): Promise<boolean>;
   export function testCjsSymlinkCircularCache(): Promise<boolean>;
   export function testCjsNodeModuleLoadingCompat(): Promise<boolean>;
   export function testCjsNestedDependencyCacheShape(): Promise<boolean>;

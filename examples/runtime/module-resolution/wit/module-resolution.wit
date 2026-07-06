@@ -33,6 +33,7 @@ world module-resolution {
   export test-require-esm-rejection-tracking: func() -> bool;
   export test-require-esm-cycle-guards: func() -> bool;
   export test-cjs-esm-default-snapshot-timing: func() -> bool;
+  export test-esm-symlink-module-identity: func() -> bool;
   export test-cjs-symlink-circular-cache: func() -> bool;
   export test-cjs-node-module-loading-compat: func() -> bool;
   export test-cjs-nested-dependency-cache-shape: func() -> bool;

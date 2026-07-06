@@ -498,4 +498,44 @@ mod tests {
             "module-kind package-scope checks must not keep unused parallel wrappers"
         );
     }
+
+    #[test]
+    fn esm_file_resolution_realpaths_symlinks_by_default() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains("fn has_exec_argv_flag(ctx: &Ctx<'_>, flag: &str) -> bool")
+                && internal_rs.contains("let prefixed = format!(\"{flag}=\");")
+                && internal_rs.contains("arg == flag || arg.starts_with(&prefixed)"),
+            "Rust ESM file resolver must mirror JS execArgv flag matching"
+        );
+        assert!(
+            internal_rs.contains(
+                "fn module_identity_path_for_existing_file( normalized: &str, preserve_symlinks: bool, ) -> String"
+            ) && internal_rs.contains("let realpath_input = crate::builtin::realpath_for_module_resolution(normalized)")
+                && internal_rs.contains("std::fs::canonicalize(&realpath_input)")
+                && internal_rs.contains("crate::builtin::realpath_for_module_resolution(normalized)")
+                && internal_rs.contains("CjsEvalResolver::normalize_path(&path)")
+                && internal_rs
+                    .contains("Self::has_exec_argv_flag(ctx, \"--preserve-symlinks\")")
+                && internal_rs
+                    .contains("Self::resolve_candidate(candidate, &suffix, preserve_symlinks)"),
+            "Rust ESM file resolver must resolve emulated symlinks, canonicalize native symlinks, and honor --preserve-symlinks"
+        );
+        assert!(
+            internal_rs
+                .matches("module_identity_path_for_existing_file(")
+                .count()
+                >= 7,
+            "file URL and package ESM resolution paths must share the module identity helper"
+        );
+        assert!(
+            compact_whitespace(include_str!("../skeleton/src/builtin/mod.rs")).contains(
+                "pub(crate) fn realpath_for_module_resolution(path: &str) -> Option<String> { fs::realpath_for_module_resolution(path) }"
+            ) && compact_whitespace(include_str!("../skeleton/src/builtin/fs.rs")).contains(
+                "pub(super) fn realpath_for_module_resolution(path: &str) -> Option<String>"
+            ),
+            "Rust ESM file resolver must share builtin fs realpath behavior"
+        );
+    }
 }

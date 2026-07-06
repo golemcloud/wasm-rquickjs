@@ -2524,7 +2524,7 @@ impl Resolver for FileUrlResolver {
         if let Some((path, suffix)) = Self::file_url_to_path_parts(name) {
             let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
             let url = NodeFileResolver::module_url_for_file_specifier(name);
-            if std::path::Path::new(&normalized).is_dir() {
+            if NodeFileResolver::module_resolution_is_dir(&normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -2537,7 +2537,7 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            if !std::path::Path::new(&normalized).is_file() {
+            if !NodeFileResolver::module_resolution_is_file(&normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -2546,11 +2546,12 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            let resolved = format!(
-                "{}{}",
-                normalized,
-                Self::with_loader_realm_suffix(base, suffix)
+            let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
+            let identity = NodeFileResolver::module_identity_path_for_existing_file(
+                &normalized,
+                preserve_symlinks,
             );
+            let resolved = format!("{}{}", identity, Self::with_loader_realm_suffix(base, suffix));
             transfer_import_type_rewrite_token(name, &resolved);
             Ok(resolved)
         } else {
@@ -2869,17 +2870,70 @@ impl NodeFileResolver {
         Err(ctx.throw(error_obj.into_value()))
     }
 
-    fn resolve_candidate(candidate: std::path::PathBuf, suffix: &str) -> Option<String> {
+    fn has_exec_argv_flag(ctx: &Ctx<'_>, flag: &str) -> bool {
+        let Ok(process) = ctx.globals().get::<_, Object>("process") else {
+            return false;
+        };
+        let Ok(exec_argv) = process.get::<_, rquickjs::Array>("execArgv") else {
+            return false;
+        };
+        let prefixed = format!("{flag}=");
+        for i in 0..exec_argv.len() {
+            let Ok(arg) = exec_argv.get::<String>(i) else {
+                continue;
+            };
+            if arg == flag || arg.starts_with(&prefixed) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn module_identity_path_for_existing_file(
+        normalized: &str,
+        preserve_symlinks: bool,
+    ) -> String {
+        if preserve_symlinks {
+            return normalized.to_string();
+        }
+        let realpath_input = crate::builtin::realpath_for_module_resolution(normalized)
+            .unwrap_or_else(|| normalized.to_string());
+        std::fs::canonicalize(&realpath_input)
+            .map(|path| CjsEvalResolver::normalize_path(&path))
+            .unwrap_or(realpath_input)
+    }
+
+    fn module_resolution_path(normalized: &str) -> String {
+        crate::builtin::realpath_for_module_resolution(normalized)
+            .unwrap_or_else(|| normalized.to_string())
+    }
+
+    fn module_resolution_is_file(normalized: &str) -> bool {
+        std::path::Path::new(&Self::module_resolution_path(normalized)).is_file()
+    }
+
+    fn module_resolution_is_dir(normalized: &str) -> bool {
+        std::path::Path::new(&Self::module_resolution_path(normalized)).is_dir()
+    }
+
+    fn resolve_candidate(
+        candidate: std::path::PathBuf,
+        suffix: &str,
+        preserve_symlinks: bool,
+    ) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
-        if std::path::Path::new(&normalized).is_file() {
-            return Some(format!("{normalized}{suffix}"));
+        if Self::module_resolution_is_file(&normalized) {
+            let identity = Self::module_identity_path_for_existing_file(&normalized, preserve_symlinks);
+            return Some(format!("{identity}{suffix}"));
         }
 
         if std::path::Path::new(&normalized).extension().is_none() {
             for ext in ["js", "mjs", "json"] {
                 let with_ext = format!("{}.{}", normalized, ext);
-                if std::path::Path::new(&with_ext).is_file() {
-                    return Some(format!("{with_ext}{suffix}"));
+                if Self::module_resolution_is_file(&with_ext) {
+                    let identity =
+                        Self::module_identity_path_for_existing_file(&with_ext, preserve_symlinks);
+                    return Some(format!("{identity}{suffix}"));
                 }
             }
         }
@@ -3056,7 +3110,8 @@ impl Resolver for NodeFileResolver {
         }
 
         let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
-        if let Some(resolved) = Self::resolve_candidate(candidate, &suffix) {
+        let preserve_symlinks = Self::has_exec_argv_flag(ctx, "--preserve-symlinks");
+        if let Some(resolved) = Self::resolve_candidate(candidate, &suffix, preserve_symlinks) {
             transfer_import_type_rewrite_token(name, &resolved);
             return Ok(resolved);
         }
@@ -3321,7 +3376,9 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         if let Some(cached) = self.file_probe_cache.get(normalized) {
             return *cached;
         }
-        let is_file = std::path::Path::new(normalized).is_file();
+        let fs_path = crate::builtin::realpath_for_module_resolution(normalized)
+            .unwrap_or_else(|| normalized.to_string());
+        let is_file = std::path::Path::new(&fs_path).is_file();
         self.file_probe_cache
             .insert(normalized.to_string(), is_file);
         is_file
@@ -3354,6 +3411,13 @@ enum CjsAnalysisProbe {
 }
 
 impl NodeModulesResolver {
+    fn module_resolution_path(path: &std::path::Path) -> std::path::PathBuf {
+        let normalized = CjsEvalResolver::normalize_path(path);
+        crate::builtin::realpath_for_module_resolution(&normalized)
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| path.to_path_buf())
+    }
+
     fn try_resolve_with_context(
         &self,
         base: &str,
@@ -3388,7 +3452,7 @@ impl NodeModulesResolver {
         let mut dir = base_dir.to_path_buf();
         loop {
             let package_path = dir.join("node_modules").join(package_name);
-            if package_path.is_dir() {
+            if Self::module_resolution_path(&package_path).is_dir() {
                 if let Some(resolved) = Self::try_resolve_package_directory(
                     base,
                     name,
@@ -3479,12 +3543,15 @@ impl NodeModulesResolver {
         )
     }
 
-    fn read_package_json_optional(pkg_path: &std::path::Path) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
+    fn read_package_json_optional(
+        pkg_path: &std::path::Path,
+    ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
         if let Some(cached) = PACKAGE_JSON_CACHE.with_borrow(|cache| cache.get(&cache_key).cloned()) {
             return Ok(Some(cached));
         }
-        match std::fs::read_to_string(pkg_path) {
+        let read_path = Self::module_resolution_path(pkg_path);
+        match std::fs::read_to_string(&read_path) {
             Ok(pkg_content) => {
                 let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
                     NodePackageResolveError::InvalidPackageConfig {
@@ -4967,7 +5034,12 @@ fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String
     let result = resolver.try_resolve_with_context(&base, &specifier, &mut resolution);
     emit_node_package_deprecation_warnings(&ctx, &warnings)?;
     match result {
-        Ok(Some(resolved)) => Ok(Some(path_to_file_url(&resolved))),
+        Ok(Some(resolved)) => {
+            let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(&ctx, "--preserve-symlinks");
+            let resolved =
+                NodeFileResolver::module_identity_path_for_existing_file(&resolved, preserve_symlinks);
+            Ok(Some(path_to_file_url(&resolved)))
+        }
         Ok(None) => Ok(None),
         Err(err) => throw_node_package_resolve_error(&ctx, err).map(Some),
     }
@@ -5055,6 +5127,12 @@ fn loader_default_resolve_package<'js>(
     emit_node_package_deprecation_warnings(&ctx, &warnings)?;
     match result {
         Ok(Some(resolved)) => {
+            let resolved = if mode == NodePackageResolveMode::EsmImport {
+                let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(&ctx, "--preserve-symlinks");
+                NodeFileResolver::module_identity_path_for_existing_file(&resolved, preserve_symlinks)
+            } else {
+                resolved
+            };
             let result = Object::new(ctx.clone())?;
             result.set("url", path_to_file_url(&resolved))?;
             match std::path::Path::new(&resolved)
@@ -5262,7 +5340,7 @@ fn import_meta_trailing_slash_package_has_exports(
     let mut dir = base_dir.to_path_buf();
     loop {
         let package_path = dir.join("node_modules").join(package_name);
-        if package_path.is_dir() {
+        if NodeModulesResolver::module_resolution_path(&package_path).is_dir() {
             let pkg_path = package_path.join("package.json");
             return NodeModulesResolver::read_package_json_optional(&pkg_path).map(|package| {
                 package.is_some_and(|package| {
@@ -5311,6 +5389,11 @@ impl Resolver for NodeModulesResolver {
         match result {
             Ok(Some(resolved)) => {
                 let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
+                let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
+                let resolved = NodeFileResolver::module_identity_path_for_existing_file(
+                    &resolved,
+                    preserve_symlinks,
+                );
                 let resolved = if suffix.is_empty() {
                     resolved
                 } else {
@@ -7360,7 +7443,8 @@ impl Loader for CjsCompatLoader {
             return throw_import_attr_type_incompatible(ctx);
         }
 
-        let source = match std::fs::read_to_string(fs_path) {
+        let source_path = module_source_filesystem_path(path);
+        let source = match std::fs::read_to_string(&source_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -7635,6 +7719,11 @@ fn split_module_path_suffix(path: &str) -> (&str, &str) {
 
 fn module_filesystem_path(path: &str) -> &str {
     split_module_path_suffix(path).0
+}
+
+fn module_source_filesystem_path(path: &str) -> String {
+    let fs_path = module_filesystem_path(path);
+    crate::builtin::realpath_for_module_resolution(fs_path).unwrap_or_else(|| fs_path.to_string())
 }
 
 fn require_esm_in_progress(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
@@ -8366,7 +8455,8 @@ impl Loader for ImportMetaLoader {
             return throw_import_attr_type_incompatible(ctx);
         }
 
-        let mut source = match std::fs::read_to_string(fs_path) {
+        let source_path = module_source_filesystem_path(path);
+        let mut source = match std::fs::read_to_string(&source_path) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 let globals = ctx.globals();
@@ -8468,7 +8558,8 @@ impl Loader for JsonFileLoader {
         }
 
         let import_attr_type = import_attr_type_from_path(path);
-        let source = std::fs::read_to_string(fs_path).map_err(|_| Error::new_loading(path))?;
+        let source_path = module_source_filesystem_path(path);
+        let source = std::fs::read_to_string(&source_path).map_err(|_| Error::new_loading(path))?;
         let module_source = if import_attr_type.as_deref() != Some("json") {
             let escaped = DataUrlLoader::js_string_escape(path);
             format!(

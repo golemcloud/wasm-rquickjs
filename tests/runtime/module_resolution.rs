@@ -573,6 +573,23 @@ async fn cjs_symlink_circular_cache(
 }
 
 #[test]
+async fn esm_symlink_module_identity(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-esm-symlink-module-identity",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn cjs_node_module_loading_compat(
     #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {
