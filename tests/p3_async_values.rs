@@ -174,7 +174,42 @@ fn base_linker(engine: &Engine) -> Result<Linker<Host>> {
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    add_wasi_logging_stub(&mut linker)?;
     Ok(linker)
+}
+
+/// Mock logging level for `wasi:logging/logging`.
+#[derive(wasmtime::component::ComponentType, wasmtime::component::Lift)]
+#[component(enum)]
+#[repr(u8)]
+#[allow(dead_code)]
+enum LogLevel {
+    #[component(name = "trace")]
+    Trace,
+    #[component(name = "debug")]
+    Debug,
+    #[component(name = "info")]
+    Info,
+    #[component(name = "warn")]
+    Warn,
+    #[component(name = "error")]
+    Error,
+    #[component(name = "critical")]
+    Critical,
+}
+
+/// No-op `wasi:logging/logging` stub: the generated P3 crates are built with the default
+/// `normal-p3` feature tier, which includes `logging`, so the components import this interface
+/// even though these tests never assert on log output.
+fn add_wasi_logging_stub(linker: &mut Linker<Host>) -> Result<()> {
+    let mut logging = linker.instance("wasi:logging/logging")?;
+    logging.func_wrap(
+        "log",
+        |_ctx: StoreContextMut<'_, Host>,
+         (_level, _context, _message): (LogLevel, String, String)|
+         -> Result<(), wasmtime::Error> { Ok(()) },
+    )?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
