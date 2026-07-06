@@ -854,6 +854,58 @@ mod tests {
     }
 
     #[test]
+    fn cjs_require_id_validation_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function validateRequireId(id) { if (typeof id !== 'string') { throw new ERR_INVALID_ARG_TYPE('id', 'string', id); } if (id === '') { const argErr = new TypeError(\"The argument 'id' must be a non-empty string. Received ''\"); argErr.code = 'ERR_INVALID_ARG_VALUE'; throw argErr; } }"
+            ),
+            "ordinary and loader-created CJS require() must share id validation"
+        );
+        assert_eq!(
+            module_js.matches("validateRequireId(id);").count(),
+            2,
+            "ordinary and loader-created CJS require() must both use the shared id validator"
+        );
+        assert_eq!(
+            module_js
+                .matches("The argument 'id' must be a non-empty string. Received ''")
+                .count(),
+            1,
+            "empty require id error construction must not be duplicated"
+        );
+
+        let loader_require_start = module_js
+            .find("function loaderRequire(id) {")
+            .expect("loader-created CJS require function must exist");
+        let loader_require_end = module_js[loader_require_start..]
+            .find("loaderRequire.resolve = function resolve(id, options)")
+            .expect("loader-created CJS require must precede its resolve helper")
+            + loader_require_start;
+        let loader_require = &module_js[loader_require_start..loader_require_end];
+        assert!(
+            loader_require.find("validateRequireId(id);")
+                < loader_require.find("__wasm_rquickjs_run_registered_loaders_sync"),
+            "loader-created CJS require must validate id before registered-loader hooks"
+        );
+
+        let local_require_start = module_js
+            .find("function localRequire(id) {")
+            .expect("ordinary CJS require function must exist");
+        let local_require_end = module_js[local_require_start..]
+            .find("localRequire.cache = moduleCache;")
+            .expect("ordinary CJS require must precede require property setup")
+            + local_require_start;
+        let local_require = &module_js[local_require_start..local_require_end];
+        assert!(
+            local_require.find("validateRequireId(id);")
+                < local_require.find("return traceModuleRequire(id, parentFilename"),
+            "ordinary CJS require must validate id before tracing or resolution"
+        );
+    }
+
+    #[test]
     fn loader_cjs_function_header_parser_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

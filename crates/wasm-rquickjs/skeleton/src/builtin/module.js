@@ -4694,6 +4694,17 @@ function makeModuleRequire(mod) {
     };
 }
 
+function validateRequireId(id) {
+    if (typeof id !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
+    }
+    if (id === '') {
+        const argErr = new TypeError("The argument 'id' must be a non-empty string. Received ''");
+        argErr.code = 'ERR_INVALID_ARG_VALUE';
+        throw argErr;
+    }
+}
+
 function markRequireEsmForcedModule(resolvedFilename) {
     let registry = globalThis.__wasm_rquickjs_require_esm_forced_module;
     if (!registry || typeof registry !== 'object') {
@@ -4978,14 +4989,7 @@ function loadModule(resolvedFilename, source, parentModule) {
 function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFilename) {
     const fallbackRequire = makeRequire(parentDir, parentModule, parentFilename);
     function loaderRequire(id) {
-        if (typeof id !== 'string') {
-            throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
-        }
-        if (id === '') {
-            const argErr = new TypeError("The argument 'id' must be a non-empty string. Received ''");
-            argErr.code = 'ERR_INVALID_ARG_VALUE';
-            throw argErr;
-        }
+        validateRequireId(id);
         if (typeof globalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
             const loaded = globalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id);
             if (loaded) {
@@ -5211,14 +5215,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         ? parentModule.paths.concat(globalPaths)
         : null;
     function localRequire(id) {
-        if (typeof id !== 'string') {
-            throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
-        }
-        if (id === '') {
-            const argErr = new TypeError("The argument 'id' must be a non-empty string. Received ''");
-            argErr.code = 'ERR_INVALID_ARG_VALUE';
-            throw argErr;
-        }
+        validateRequireId(id);
 
         return traceModuleRequire(id, parentFilename, () => {
         // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
