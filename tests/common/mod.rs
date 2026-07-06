@@ -263,6 +263,9 @@ fn output_fresh_for_inputs(
     let Ok(stamp_mtime) = modified_time(stamp) else {
         return false;
     };
+    if stamp_mtime < output_mtime {
+        return false;
+    }
     let Ok(input_mtime) = newest_modified_time_of_existing(inputs) else {
         return false;
     };
@@ -316,6 +319,55 @@ impl TestCacheLock {
 impl Drop for TestCacheLock {
     fn drop(&mut self) {
         let _ = fs::remove_dir(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_r::test;
+
+    #[test]
+    fn artifact_cache_stamp_must_not_be_older_than_output() -> anyhow::Result<()> {
+        if test_drop_cache_enabled() {
+            return Ok(());
+        }
+
+        let temp = Utf8TempDir::new()?;
+        let input = temp.path().join("input.txt");
+        let output = temp.path().join("output.wasm");
+        let stamp = temp.path().join("output.stamp");
+        let signature = "test-signature";
+        fs::write(&input, "input")?;
+        fs::write(&output, "output-v1")?;
+        refresh_cache_stamp(&stamp, signature)?;
+
+        assert!(output_fresh_for_inputs(
+            &output,
+            &stamp,
+            &[input.clone()],
+            signature,
+        ));
+
+        let stamp_mtime = modified_time(&stamp)?;
+        let started = Instant::now();
+        loop {
+            thread::sleep(Duration::from_millis(10));
+            fs::write(&output, format!("output-v2-{:?}", started.elapsed()))?;
+            if modified_time(&output)? > stamp_mtime {
+                break;
+            }
+            if started.elapsed() > Duration::from_secs(2) {
+                anyhow::bail!("output mtime did not advance beyond cache stamp mtime");
+            }
+        }
+
+        assert!(
+            !output_fresh_for_inputs(&output, &stamp, &[input], signature),
+            "a stale stamp must not validate an artifact rewritten after the stamp was produced"
+        );
+
+        Ok(())
     }
 }
 
