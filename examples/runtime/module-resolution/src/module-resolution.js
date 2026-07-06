@@ -50,8 +50,13 @@ export const testImportMetaResolve = async () => {
     const appDir = '/import-meta-resolve-app';
     const entryUrl = `${pathToFileURL(`${appDir}/entry.mjs`).href}`;
     fs.mkdirSync(`${appDir}/node_modules/pkg-dir`, { recursive: true });
+    fs.mkdirSync(`${appDir}/node_modules/exports-pkg`, { recursive: true });
 
     assert.strictEqual(import.meta.resolve('./local.mjs', entryUrl), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve('./sp ce.mjs', entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve('./sp%20ce.mjs', entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve(`${appDir}/sp ce.mjs`, entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve(`${appDir}/sp%20ce.mjs`, entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
     assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
@@ -68,6 +73,48 @@ export const testImportMetaResolve = async () => {
         'data:text/javascript,export default import.meta.resolve("does-not-exist")',
         'ERR_UNSUPPORTED_RESOLVE_REQUEST',
     );
+
+    fs.writeFileSync(`${appDir}/package.json`, JSON.stringify({
+        type: 'module',
+        imports: {
+            '#local': './local-import.mjs',
+        },
+    }));
+    fs.writeFileSync(`${appDir}/local-import.mjs`, 'export default "local";');
+    fs.writeFileSync(`${appDir}/node_modules/exports-pkg/package.json`, JSON.stringify({
+        type: 'module',
+        exports: {
+            '.': './main.mjs',
+            './feature': './feature.mjs',
+            './blocked': null,
+        },
+    }));
+    fs.writeFileSync(`${appDir}/node_modules/exports-pkg/main.mjs`, 'export default "main";');
+    fs.writeFileSync(`${appDir}/node_modules/exports-pkg/feature.mjs`, 'export default "feature";');
+    fs.writeFileSync(`${appDir}/entry.mjs`, `
+        export const packageRoot = import.meta.resolve('exports-pkg');
+        export const packageFeature = import.meta.resolve('exports-pkg/feature');
+        export const packageImport = import.meta.resolve('#local');
+        export let blockedCode;
+        try {
+            import.meta.resolve('exports-pkg/blocked');
+        } catch (error) {
+            blockedCode = error && error.code;
+        }
+        export let blockedSlashCode;
+        try {
+            import.meta.resolve('exports-pkg/');
+        } catch (error) {
+            blockedSlashCode = error && error.code;
+        }
+    `);
+
+    const packageResolve = await import(`${appDir}/entry.mjs`);
+    assert.strictEqual(packageResolve.packageRoot, `${pathToFileURL(`${appDir}/node_modules/exports-pkg/main.mjs`).href}`);
+    assert.strictEqual(packageResolve.packageFeature, `${pathToFileURL(`${appDir}/node_modules/exports-pkg/feature.mjs`).href}`);
+    assert.strictEqual(packageResolve.packageImport, `${pathToFileURL(`${appDir}/local-import.mjs`).href}`);
+    assert.strictEqual(packageResolve.blockedCode, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+    assert.strictEqual(packageResolve.blockedSlashCode, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
     return true;
 };
 
@@ -81,6 +128,9 @@ export const testEsmPackageMapEdgeCases = async () => {
             exports: {
                 './public': './public.mjs',
                 './encoded-target': './sp%20ce.mjs',
+                './double-encoded-dot-target': './%252e%252e/main.mjs',
+                './double-encoded-dot-file-target': './sub/%252e%252e.mjs',
+                './encoded-slash-target': './a%2Fb.mjs',
                 './root-directory': './',
                 './deprecated-double': './/public.mjs',
                 './pattern-slash*': './subpath*.mjs',
@@ -137,11 +187,20 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './directory': './subdir',
                 './no-ext': './real',
             },
+            imports: {
+                '#double-encoded-dot-target': './%252e%252e/main.mjs',
+                '#double-encoded-dot-file-target': './sub/%252e%252e.mjs',
+                '#encoded-slash-target': './a%2Fb.mjs',
+            },
         }));
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/main.mjs', 'export default { main: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/private.mjs', 'export default { private: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/public.mjs', 'export default { public: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/sp ce.mjs', 'export default { encoded: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/%2e%2e', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/%2e%2e/main.mjs', 'export default { doubleEncodedDot: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/sub', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/sub/%2e%2e.mjs', 'export default { doubleEncodedDotFile: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/default.mjs', 'export default { condition: "default" };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/import.mjs', 'export default { condition: "import" };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/trailing-pattern-slash', { recursive: true });
@@ -175,6 +234,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/entry.mjs', [
             'export const publicValue = (await import("exported-pkg/public")).default;',
             'export const encodedTarget = (await import("exported-pkg/encoded-target")).default;',
+            'export const doubleEncodedDotTarget = (await import("exported-pkg/double-encoded-dot-target")).default;',
+            'export const doubleEncodedDotFileTarget = (await import("exported-pkg/double-encoded-dot-file-target")).default;',
             'export const conditionOrder = (await import("exported-pkg/condition-order")).default;',
             'export const arrayFallback = (await import("exported-pkg/array-fallback")).default;',
             'export const arrayBlocked = (await import("exported-pkg/array-blocked")).default;',
@@ -186,6 +247,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         const entry = await import('/esm-package-map-edge-app/entry.mjs');
         assert.deepStrictEqual(entry.publicValue, { public: true });
         assert.deepStrictEqual(entry.encodedTarget, { encoded: true });
+        assert.deepStrictEqual(entry.doubleEncodedDotTarget, { doubleEncodedDot: true });
+        assert.deepStrictEqual(entry.doubleEncodedDotFileTarget, { doubleEncodedDotFile: true });
         assert.deepStrictEqual(entry.conditionOrder, { condition: 'default' });
         assert.deepStrictEqual(entry.arrayFallback, { public: true });
         assert.deepStrictEqual(entry.arrayBlocked, { public: true });
@@ -247,7 +310,7 @@ export const testEsmPackageMapEdgeCases = async () => {
                         'exported-pkg/suppressed-pattern-slash/',
                         pathToFileURL('/esm-package-map-edge-app/suppressed-resolve-parent.mjs').href,
                     ),
-                    'file:///esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash/',
+                    'file:///esm-package-map-edge-app/node_modules/exported-pkg/suppressed-pattern-slash/index.mjs',
                 );
                 const requireSuppressed = createRequire('/esm-package-map-edge-app/suppressed-require-entry.cjs');
                 assert.deepStrictEqual(requireSuppressed('exported-pkg/suppressed-require-slash/'), { suppressedRequire: true });
@@ -420,6 +483,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         writeImportEntry('/esm-package-map-edge-app/node-modules-target-subpath.mjs', 'exported-pkg/node-modules-target');
         writeImportEntry('/esm-package-map-edge-app/dot-segment-target-subpath.mjs', 'exported-pkg/dot-segment-target');
         writeImportEntry('/esm-package-map-edge-app/encoded-dot-target-subpath.mjs', 'exported-pkg/encoded-dot-target');
+        writeImportEntry('/esm-package-map-edge-app/encoded-slash-target-subpath.mjs', 'exported-pkg/encoded-slash-target');
         writeImportEntry('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'exported-pkg/blocked-null');
         writeImportEntry('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'exported-pkg/blocked-false');
         writeImportEntry('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'exported-pkg/array-missing-first');
@@ -447,6 +511,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/node-modules-target-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/dot-segment-target-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/encoded-dot-target-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
+        await expectImportError('/esm-package-map-edge-app/encoded-slash-target-subpath.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportError('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
         await expectImportError('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
@@ -459,6 +524,45 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.throws(() => requireRootDirectory('exported-pkg/root-directory'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => requireRootDirectory('exported-pkg/array-root-first'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => requireRootDirectory('root-export-pkg'), { code: 'MODULE_NOT_FOUND' });
+        const requireNoExportsSubpath = createRequire('/esm-package-map-edge-app/cjs-package-subpath-entry.cjs');
+        assert.deepStrictEqual(requireNoExportsSubpath('no-exports-warn/foo.js').default, { exactSubpath: true });
+        assert.deepStrictEqual(requireNoExportsSubpath('no-exports-warn/foo').default, { exactSubpath: true });
+        assert.deepStrictEqual(requireNoExportsSubpath('no-exports-warn/dir').default, { directorySubpath: true });
+        assert.throws(() => requireNoExportsSubpath('no-exports-warn/sp%20ce.js'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => requireNoExportsSubpath('no-exports-warn/a%2Fb.js'), { code: 'MODULE_NOT_FOUND' });
+        assert.deepStrictEqual(requireNoExportsSubpath('exported-pkg/double-encoded-dot-target').default, { doubleEncodedDot: true });
+        assert.deepStrictEqual(requireNoExportsSubpath('exported-pkg/double-encoded-dot-file-target').default, { doubleEncodedDotFile: true });
+        assert.throws(() => requireNoExportsSubpath('exported-pkg/encoded-slash-target'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
+
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/imports-double-encoded-entry.mjs', [
+            'export const doubleEncodedDotTarget = (await import("#double-encoded-dot-target")).default;',
+            'export const doubleEncodedDotFileTarget = (await import("#double-encoded-dot-file-target")).default;',
+            'export let encodedSlashCode;',
+            'try { await import("#encoded-slash-target"); } catch (error) { encodedSlashCode = error && error.code; }',
+        ].join('\n'));
+        const importsDoubleEncodedEntry = await import('/esm-package-map-edge-app/node_modules/exported-pkg/imports-double-encoded-entry.mjs');
+        assert.deepStrictEqual(importsDoubleEncodedEntry.doubleEncodedDotTarget, { doubleEncodedDot: true });
+        assert.deepStrictEqual(importsDoubleEncodedEntry.doubleEncodedDotFileTarget, { doubleEncodedDotFile: true });
+        assert.strictEqual(importsDoubleEncodedEntry.encodedSlashCode, 'ERR_INVALID_MODULE_SPECIFIER');
+        const requireExportedPackage = createRequire('/esm-package-map-edge-app/node_modules/exported-pkg/entry.cjs');
+        assert.deepStrictEqual(requireExportedPackage('#double-encoded-dot-target').default, { doubleEncodedDot: true });
+        assert.deepStrictEqual(requireExportedPackage('#double-encoded-dot-file-target').default, { doubleEncodedDotFile: true });
+        assert.throws(() => requireExportedPackage('#encoded-slash-target'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
+
+        fs.mkdirSync('/package-import-validation-no-map', { recursive: true });
+        fs.writeFileSync('/package-import-validation-no-map/package.json', JSON.stringify({ type: 'module' }));
+        fs.writeFileSync('/package-import-validation-no-map/imports-trailing-slash-entry.mjs', 'export default await import("#foo/");');
+        fs.writeFileSync('/package-import-validation-no-map/imports-missing-entry.mjs', 'export default await import("#foo");');
+        await expectImportError('/package-import-validation-no-map/imports-trailing-slash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        await expectImportError('/package-import-validation-no-map/imports-missing-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+        const requireNoImportsMap = createRequire('/package-import-validation-no-map/entry.cjs');
+        assert.throws(() => requireNoImportsMap('#foo'), { code: 'MODULE_NOT_FOUND' });
+        assert.throws(() => requireNoImportsMap('#foo/'), { code: 'MODULE_NOT_FOUND' });
+        fs.mkdirSync('/package-import-validation-with-map', { recursive: true });
+        fs.writeFileSync('/package-import-validation-with-map/package.json', JSON.stringify({ type: 'module', imports: {} }));
+        const requireWithImportsMap = createRequire('/package-import-validation-with-map/entry.cjs');
+        assert.throws(() => requireWithImportsMap('#foo'), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
+        assert.throws(() => requireWithImportsMap('#foo/'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
 
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/external-pkg', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/external-pkg/package.json', JSON.stringify({
@@ -576,6 +680,10 @@ export const testEsmDataUrlImportAttributes = async () => {
         const { register } = await import('node:module');
         globalThis.__wasm_rquickjs_module_resolution_assert = assert;
         globalThis.__wasm_rquickjs_module_resolution_register = register;
+        const resetRegisteredLoaders = () => {
+            globalThis.__wasm_rquickjs_registered_loaders = [];
+            globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
+        };
 
         const importJsonDataUrl = (url) => import('data:text/javascript,' + encodeURIComponent(
             `import value from ${JSON.stringify(url)} with { type: "json" }; export default value;`,
@@ -936,6 +1044,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  }',
             '  if (String(context.parentURL).endsWith("/loader-relative-app/main.mjs")) {',
             '    if (specifier !== "./data.json") throw new Error("resolve hook did not receive original relative specifier");',
+            '    if (JSON.stringify(context.importAttributes) !== "{\\"type\\":\\"json\\"}") throw new Error("static loader resolve hook did not receive JSON import attributes: " + JSON.stringify(context.importAttributes));',
             '    globalThis.__loader_relative_seen = true;',
             '  }',
             '  return next(specifier, context);',
@@ -945,6 +1054,45 @@ export const testEsmDataUrlImportAttributes = async () => {
             'assert.strictEqual(globalThis.__loader_relative_seen, true);',
             'assert.strictEqual((await import("data:text/javascript,export default 5", {})).default, 5);',
         ].join('\n')));
+        resetRegisteredLoaders();
+        fs.writeFileSync('/loader-relative-app/async-main.mjs', 'import value from "./data.json" with { type: "json" }; export default value;');
+        fs.writeFileSync('/loader-relative-app/async-quoted-key.mjs', 'import value from "./data.json" with { "type": "json" }; export default value;');
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            'async function resolve(specifier, context, next) {',
+            '  if (String(context.parentURL).endsWith("/loader-relative-app/async-main.mjs") || String(context.parentURL).endsWith("/loader-relative-app/async-quoted-key.mjs")) {',
+            '    if (specifier !== "./data.json") throw new Error("async static resolve hook did not receive original relative specifier");',
+            '    if (JSON.stringify(context.importAttributes) !== "{\\"type\\":\\"json\\"}") throw new Error("async static resolve hook did not receive JSON import attributes: " + JSON.stringify(context.importAttributes));',
+            '    globalThis.__async_loader_relative_seen = (globalThis.__async_loader_relative_seen || 0) + 1;',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export " + resolve));',
+            `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-relative-app/async-main.mjs').href)})).default, { hookRelative: true });`,
+            `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-relative-app/async-quoted-key.mjs').href)})).default, { hookRelative: true });`,
+            'assert.strictEqual(globalThis.__async_loader_relative_seen, 2);',
+        ].join('\n')));
+        resetRegisteredLoaders();
+        fs.mkdirSync('/loader-cache-invalidation-app', { recursive: true });
+        fs.writeFileSync('/loader-cache-invalidation-app/data.json', '{"cached":true}');
+        fs.writeFileSync('/loader-cache-invalidation-app/first.mjs', 'import value from "./data.json" with { type: "json" }; export default value;');
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            'async function firstResolve(specifier, context, next) {',
+            '  if (String(context.parentURL).endsWith("/loader-cache-invalidation-app/first.mjs")) {',
+            '    return { shortCircuit: true, url: "data:application/json,{%22cached%22:%22first%22}", format: "json", importAttributes: context.importAttributes };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'register("data:text/javascript," + encodeURIComponent("export { firstResolve as resolve }; " + firstResolve));',
+            `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-cache-invalidation-app/first.mjs').href)})).default, { cached: "first" });`,
+            'assert.notStrictEqual(Object.keys(globalThis.__wasm_rquickjs_static_registered_loader_cache || {}).length, 0);',
+            'register("data:text/javascript,export function resolve(specifier, context, next) { return next(specifier, context); }");',
+            'assert.strictEqual(Object.keys(globalThis.__wasm_rquickjs_static_registered_loader_cache || {}).length, 0);',
+        ].join('\n')));
+        resetRegisteredLoaders();
         fs.writeFileSync(
             '/loader-relative-app/relative-loader.mjs',
             [
@@ -1155,7 +1303,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             (await import('/loader-next-app/main.mjs')).default,
             { nextResolvePackage: true },
         );
-        globalThis.__wasm_rquickjs_registered_loaders = [];
+        resetRegisteredLoaders();
         await import('data:text/javascript,' + encodeURIComponent([
             'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
             'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
@@ -1352,6 +1500,34 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         );
         fs.writeFileSync(`${root}/node_modules/static-condition-pkg/custom.mjs`, 'export default "custom";');
         fs.writeFileSync(`${root}/node_modules/static-condition-pkg/default.mjs`, 'export default "default";');
+        fs.mkdirSync(`${root}/node_modules/static-mode-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${root}/node_modules/static-mode-pkg/package.json`,
+            JSON.stringify({
+                name: 'static-mode-pkg',
+                exports: {
+                    import: './import.mjs',
+                    require: './require.cjs',
+                    default: './default.mjs',
+                },
+            }),
+        );
+        fs.writeFileSync(`${root}/node_modules/static-mode-pkg/import.mjs`, 'export default "import-branch";');
+        fs.writeFileSync(`${root}/node_modules/static-mode-pkg/require.cjs`, 'exports.value = "require-branch";');
+        fs.writeFileSync(`${root}/node_modules/static-mode-pkg/default.mjs`, 'export default "default-branch";');
+        fs.writeFileSync(
+            `${root}/package.json`,
+            JSON.stringify({
+                imports: {
+                    '#loader-import-condition': {
+                        customStatic: './imports-custom.mjs',
+                        default: './imports-default.mjs',
+                    },
+                },
+            }),
+        );
+        fs.writeFileSync(`${root}/imports-custom.mjs`, 'export default "imports-custom";');
+        fs.writeFileSync(`${root}/imports-default.mjs`, 'export default "imports-default";');
         fs.writeFileSync(`${root}/from-data-parent.mjs`, 'export default "should-not-resolve";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
@@ -1361,6 +1537,12 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
             '  }',
             '  if (specifier === "virtual:static-condition") {',
             '    return next("static-condition-pkg", { ...context, conditions: ["customStatic"] });',
+            '  }',
+            '  if (specifier === "virtual:static-imports-condition") {',
+            '    return next("#loader-import-condition", { ...context, conditions: ["customStatic"] });',
+            '  }',
+            '  if (specifier === "virtual:static-mode") {',
+            '    return next("static-mode-pkg", context);',
             '  }',
             '  if (specifier === "virtual:rooted-data-parent") {',
             `    const resolved = next(${JSON.stringify(`${root}/from-data-parent.mjs`)}, { ...context, parentURL: "data:text/javascript,export%20default%200" });`,
@@ -1394,6 +1576,27 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
                 'virtual:static-condition',
             ),
             `${root}/node_modules/static-condition-pkg/custom.mjs`,
+        );
+        assert.strictEqual(
+            globalThis.__wasm_rquickjs_resolve_static_registered_loader(
+                pathToFileURL(`${root}/entry.mjs`).href,
+                'virtual:static-imports-condition',
+            ),
+            `${root}/imports-custom.mjs`,
+        );
+        assert.strictEqual(
+            globalThis.__wasm_rquickjs_resolve_static_registered_loader(
+                `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
+                'virtual:static-imports-condition',
+            ),
+            `${root}/imports-custom.mjs`,
+        );
+        assert.strictEqual(
+            globalThis.__wasm_rquickjs_resolve_static_registered_loader(
+                pathToFileURL(`${root}/entry.mjs`).href,
+                'virtual:static-mode',
+            ),
+            `${root}/node_modules/static-mode-pkg/import.mjs`,
         );
         assert.strictEqual(
             globalThis.__wasm_rquickjs_resolve_static_registered_loader(
@@ -1582,6 +1785,57 @@ export const testEsmForbiddenCjsGlobals = async () => {
             name: 'ReferenceError',
             message: /exports is not defined/,
         });
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('if (false) { const exports = 1; } Object.keys(exports);')),
+            {
+                name: 'ReferenceError',
+                message: /exports is not defined in ES module scope/,
+            },
+        );
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('for (let exports of []) {} Object.keys(exports);')),
+            {
+                name: 'ReferenceError',
+                message: /exports is not defined in ES module scope/,
+            },
+        );
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('for (let exports of [1]) Object.keys(exports); Object.keys(exports);')),
+            {
+                name: 'ReferenceError',
+                message: /exports is not defined in ES module scope/,
+            },
+        );
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('for await (let exports of []) {} Object.keys(exports);')),
+            {
+                name: 'ReferenceError',
+                message: /exports is not defined in ES module scope/,
+            },
+        );
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('export default ({ var: exports });')),
+            {
+                name: 'ReferenceError',
+                message: /exports is not defined in ES module scope/,
+            },
+        );
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('export default ({ const: exports });')),
+            {
+                name: 'ReferenceError',
+                message: /exports is not defined in ES module scope/,
+            },
+        );
+        await import('data:text/javascript,' + encodeURIComponent('if (true) { const exports = 1; Object.keys(exports); } export default 1;'));
+        await import('data:text/javascript,' + encodeURIComponent('try { throw { a: 1 }; } catch (exports) { Object.keys(exports); } export default 1;'));
+        await assert.rejects(
+            import('data:text/javascript,' + encodeURIComponent('if (false) { var exports = 1; } Object.keys(exports); export default 1;')),
+            {
+                name: 'TypeError',
+                message: /Cannot convert undefined or null to object/,
+            },
+        );
         return true;
     } catch (error) {
         console.error(error);
@@ -1651,11 +1905,37 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
         fs.writeFileSync('/loader-cjs-source-app/package.json', JSON.stringify({
             imports: {
                 '#loader-import': './imports-target.cjs',
+                '#sync-loader-import-condition': {
+                    customSyncLoader: './sync-loader-import-custom.cjs',
+                    default: './sync-loader-import-default.cjs',
+                },
+                '#sync-loader-missing-target': './sync-loader-missing-target.cjs',
             },
         }));
         fs.writeFileSync('/loader-cjs-source-app/dep.cjs', 'module.exports = { depValue: 17 };');
         fs.writeFileSync('/loader-cjs-source-app/imports-target.cjs', 'exports.importsReexported = 102;');
+        fs.writeFileSync('/loader-cjs-source-app/sync-loader-import-custom.cjs', 'exports.syncLoaderImportValue = "custom-import";');
+        fs.writeFileSync('/loader-cjs-source-app/sync-loader-import-default.cjs', 'exports.syncLoaderImportValue = "default-import";');
         fs.writeFileSync('/loader-cjs-source-app/reexport-dep.cjs', 'exports.reexported = 91;');
+        fs.writeFileSync('/loader-cjs-source-app/export-star-dep.cjs', 'exports.starFromDep = 104;');
+        fs.writeFileSync('/loader-cjs-source-app/on-disk-helper-reexport.cjs', [
+            'const tslib_1 = {};',
+            'tslib_1.__exportStar = function (module, target) {',
+            '  for (const key of Object.keys(module)) {',
+            '    if (key !== "default" && key !== "__esModule") target[key] = module[key];',
+            '  }',
+            '};',
+            'tslib_1.__exportStar(require("./export-star-dep.cjs"), exports);',
+        ].join('\n'));
+        fs.writeFileSync('/loader-cjs-source-app/on-disk-deep-helper-reexport.cjs', [
+            'const ns = { helpers: {} };',
+            'ns.helpers.__exportStar = function (module, target) {',
+            '  for (const key of Object.keys(module)) {',
+            '    if (key !== "default" && key !== "__esModule") target[key] = module[key];',
+            '  }',
+            '};',
+            'ns.helpers.__exportStar(require("./export-star-dep.cjs"), exports);',
+        ].join('\n'));
         fs.mkdirSync('/loader-cjs-source-app/dot-reexport-dir', { recursive: true });
         fs.writeFileSync('/loader-cjs-source-app/dot-reexport-dir/index.js', 'exports.dotReexported = 103;');
         fs.writeFileSync('/loader-cjs-source-app/guard-dep.cjs', 'exports.foo = "foo"; exports.bar = "bar";');
@@ -1668,6 +1948,37 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
         fs.mkdirSync('/loader-cjs-source-app/node_modules/loader-bare-dep', { recursive: true });
         fs.writeFileSync('/loader-cjs-source-app/node_modules/loader-bare-dep/package.json', JSON.stringify({ main: 'index.cjs' }));
         fs.writeFileSync('/loader-cjs-source-app/node_modules/loader-bare-dep/index.cjs', 'exports.bareReexported = 101;');
+        fs.mkdirSync('/loader-cjs-source-app/node_modules/sync-loader-pkg', { recursive: true });
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-pkg/package.json', JSON.stringify({
+            name: 'sync-loader-pkg',
+            exports: {
+                customSyncLoader: './custom.cjs',
+                default: './default.cjs',
+            },
+        }));
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-pkg/custom.cjs', 'exports.syncLoaderPackageValue = "custom-package";');
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-pkg/default.cjs', 'exports.syncLoaderPackageValue = "default-package";');
+        fs.mkdirSync('/loader-cjs-source-app/node_modules/sync-loader-mode-pkg', { recursive: true });
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-mode-pkg/package.json', JSON.stringify({
+            name: 'sync-loader-mode-pkg',
+            exports: {
+                import: './import.mjs',
+                require: './require.cjs',
+                default: './default.cjs',
+            },
+        }));
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-mode-pkg/import.mjs', 'export default "import-branch";');
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-mode-pkg/require.cjs', 'exports.syncLoaderModeValue = "require-branch";');
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-mode-pkg/default.cjs', 'exports.syncLoaderModeValue = "default-branch";');
+        fs.mkdirSync('/loader-cjs-source-app/node_modules/sync-loader-missing-pkg', { recursive: true });
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-missing-pkg/package.json', JSON.stringify({
+            name: 'sync-loader-missing-pkg',
+            exports: {
+                customSyncLoader: './missing.cjs',
+                default: './default.cjs',
+            },
+        }));
+        fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-missing-pkg/default.cjs', 'exports.unused = true;');
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
             'import { register } from "node:module";',
@@ -1683,6 +1994,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  }',
             '  if (specifier === "virtual:loader-cjs-reexport") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-helper-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/helper-reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-deep-helper-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/deep-helper-reexport.cjs", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "virtual:loader-cjs-helper-noncopy-reexport") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/helper-noncopy-reexport.cjs", format: "commonjs" };',
             '  }',
             '  if (specifier === "virtual:loader-cjs-bare-reexport") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/bare-reexport.cjs", format: "commonjs" };',
@@ -1834,6 +2154,24 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  if (specifier === "alias-from-next") {',
             '    return next("./aliased-dep.cjs", { parentURL: "file:///loader-cjs-source-app/entry.cjs" });',
             '  }',
+            '  if (specifier === "alias-imports-from-next") {',
+            '    return next("#sync-loader-import-condition", { parentURL: "file:///loader-cjs-source-app/entry.cjs", conditions: ["customSyncLoader"] });',
+            '  }',
+            '  if (specifier === "alias-package-from-next") {',
+            '    return next("sync-loader-pkg", { parentURL: "file:///loader-cjs-source-app/entry.cjs", conditions: ["customSyncLoader"] });',
+            '  }',
+            '  if (specifier === "alias-mode-package-from-next") {',
+            '    return next("sync-loader-mode-pkg", { parentURL: "file:///loader-cjs-source-app/entry.cjs" });',
+            '  }',
+            '  if (specifier === "alias-missing-imports-from-next") {',
+            '    return next("#sync-loader-missing-target", { parentURL: "file:///loader-cjs-source-app/entry.cjs" });',
+            '  }',
+            '  if (specifier === "alias-missing-package-from-next") {',
+            '    return next("sync-loader-missing-pkg", { parentURL: "file:///loader-cjs-source-app/entry.cjs", conditions: ["customSyncLoader"] });',
+            '  }',
+            '  if (specifier === "alias-virtual-parent-package-from-next") {',
+            '    return next("sync-loader-pkg", { parentURL: "virtual:loader-cjs", conditions: ["customSyncLoader"] });',
+            '  }',
             '  if (specifier === "alias-fs") {',
             '    return { shortCircuit: true, url: "node:fs", format: "builtin" };',
             '  }',
@@ -1879,6 +2217,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '        "module.exports.childValue = child.value;",',
             '        "module.exports.aliasValue = require(\\"alias-from-next\\").aliasValue;",',
             '        "module.exports.aliasResolved = require.resolve(\\"alias-from-next\\");",',
+            '        "module.exports.aliasImportValue = require(\\"alias-imports-from-next\\").syncLoaderImportValue;",',
+            '        "module.exports.aliasImportResolved = require.resolve(\\"alias-imports-from-next\\");",',
+            '        "module.exports.aliasPackageValue = require(\\"alias-package-from-next\\").syncLoaderPackageValue;",',
+            '        "module.exports.aliasPackageResolved = require.resolve(\\"alias-package-from-next\\");",',
+            '        "module.exports.aliasModePackageValue = require(\\"alias-mode-package-from-next\\").syncLoaderModeValue;",',
+            '        "module.exports.aliasModePackageResolved = require.resolve(\\"alias-mode-package-from-next\\");",',
+            '        "try { require(\\"alias-missing-imports-from-next\\"); } catch (e) { module.exports.aliasMissingImportCode = e.code; }",',
+            '        "try { require(\\"alias-missing-package-from-next\\"); } catch (e) { module.exports.aliasMissingPackageCode = e.code; }",',
+            '        "try { require(\\"alias-virtual-parent-package-from-next\\"); } catch (e) { module.exports.aliasVirtualParentPackageCode = e.code; }",',
             '        "module.exports.aliasFsReadFile = require(\\"alias-fs\\").readFile;",',
             '        "module.exports.aliasFsResolved = require.resolve(\\"alias-fs\\");",',
             '        "module.exports.childConditions = child.conditions;",',
@@ -2028,6 +2375,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  }',
             '  if (url === "file:///loader-cjs-source-app/reexport.cjs") {',
             '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\"./reexport-dep.cjs\\");" };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/helper-reexport.cjs") {',
+            '    return { shortCircuit: true, format: "commonjs", source: "const tslib_1 = {}; tslib_1.__exportStar = function (module, target) { for (const key of Object.keys(module)) { if (key !== \\"default\\" && key !== \\"__esModule\\") target[key] = module[key]; } }; tslib_1.__exportStar(require(\\"./export-star-dep.cjs\\"), exports);" };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/deep-helper-reexport.cjs") {',
+            '    return { shortCircuit: true, format: "commonjs", source: "const ns = { helpers: {} }; ns.helpers.__exportStar = function (module, target) { for (const key of Object.keys(module)) { if (key !== \\"default\\" && key !== \\"__esModule\\") target[key] = module[key]; } }; ns.helpers.__exportStar(require(\\"./export-star-dep.cjs\\"), exports);" };',
+            '  }',
+            '  if (url === "file:///loader-cjs-source-app/helper-noncopy-reexport.cjs") {',
+            '    return { shortCircuit: true, format: "commonjs", source: "const helper = {}; helper.__exportStar = function (_module, _target) {}; helper.__exportStar(require(\\"./export-star-dep.cjs\\"), exports);" };',
             '  }',
             '  if (url === "file:///loader-cjs-source-app/bare-reexport.cjs") {',
             '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\\"loader-bare-dep\\");" };',
@@ -2476,6 +2832,15 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'assert.strictEqual(ns.childValue, 123);',
             'assert.strictEqual(ns.aliasValue, 77);',
             'assert.strictEqual(ns.aliasResolved, "/loader-cjs-source-app/aliased-dep.cjs");',
+            'assert.strictEqual(ns.aliasImportValue, "custom-import");',
+            'assert.strictEqual(ns.aliasImportResolved, "/loader-cjs-source-app/sync-loader-import-custom.cjs");',
+            'assert.strictEqual(ns.aliasPackageValue, "custom-package");',
+            'assert.strictEqual(ns.aliasPackageResolved, "/loader-cjs-source-app/node_modules/sync-loader-pkg/custom.cjs");',
+            'assert.strictEqual(ns.aliasModePackageValue, "require-branch");',
+            'assert.strictEqual(ns.aliasModePackageResolved, "/loader-cjs-source-app/node_modules/sync-loader-mode-pkg/require.cjs");',
+            'assert.strictEqual(ns.aliasMissingImportCode, "MODULE_NOT_FOUND");',
+            'assert.strictEqual(ns.aliasMissingPackageCode, "MODULE_NOT_FOUND");',
+            'assert.strictEqual(ns.aliasVirtualParentPackageCode, "MODULE_NOT_FOUND");',
             'assert.strictEqual(typeof ns.aliasFsReadFile, "function");',
             'assert.strictEqual(ns.aliasFsResolved, "fs");',
             'assert.strictEqual(ns.childFromView, true);',
@@ -2606,6 +2971,13 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'assert.strictEqual(fileQueryA.moduleFilename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual(fileQueryB.moduleFilename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual((await import("virtual:loader-cjs-reexport")).reexported, 91);',
+            'assert.strictEqual((await import("virtual:loader-cjs-helper-reexport")).starFromDep, 104);',
+            'assert.strictEqual((await import("virtual:loader-cjs-deep-helper-reexport")).starFromDep, 104);',
+            'const helperNoncopyReexport = await import("virtual:loader-cjs-helper-noncopy-reexport");',
+            'assert.strictEqual(Object.prototype.hasOwnProperty.call(helperNoncopyReexport, "starFromDep"), true);',
+            'assert.strictEqual(helperNoncopyReexport.starFromDep, undefined);',
+            'assert.strictEqual((await import("file:///loader-cjs-source-app/on-disk-helper-reexport.cjs")).starFromDep, 104);',
+            'assert.strictEqual((await import("file:///loader-cjs-source-app/on-disk-deep-helper-reexport.cjs")).starFromDep, 104);',
             'assert.strictEqual((await import("virtual:loader-cjs-bare-reexport")).bareReexported, 101);',
             'assert.strictEqual((await import("virtual:loader-cjs-imports-reexport")).importsReexported, 102);',
             'assert.strictEqual((await import("virtual:loader-cjs-dot-reexport")).dotReexported, 103);',
@@ -4163,7 +4535,6 @@ export const testCjsSharedLoaderIdentity = async () => {
             count: 1,
             loadCount: 1,
         });
-
         const { createRequire } = await import('node:module');
         const require = createRequire('/cjs-shared-loader-app/main.cjs');
         const originalJsHandler = require.extensions['.js'];
@@ -4263,17 +4634,17 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.writeFileSync('/module-syntax-app/create-require-idiom.js', [
             'import { createRequire } from "node:module";',
             'const require = createRequire(import.meta.url);',
-            'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
+            'export default { kind: typeof require, main: require.main, resolved: require.resolve("./false-positive.cjs") };',
         ].join('\n'));
         fs.writeFileSync('/module-syntax-app/create-require-spaced.js', [
             'import { createRequire } from "node:module";',
             'const require = createRequire(import . meta . url);',
-            'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
+            'export default { kind: typeof require, main: require.main, resolved: require.resolve("./false-positive.cjs") };',
         ].join('\n'));
         fs.writeFileSync('/module-syntax-app/create-require-commented.js', [
             'import { createRequire } from "node:module";',
             'const require = createRequire(import/*x*/.meta.url);',
-            'export default { kind: typeof require, resolved: require.resolve("./false-positive.cjs") };',
+            'export default { kind: typeof require, main: require.main, resolved: require.resolve("./false-positive.cjs") };',
         ].join('\n'));
         fs.writeFileSync('/module-syntax-app/create-require-ambiguous-spaced.js', [
             'const require = createRequire(import . meta . url);',
@@ -4453,6 +4824,40 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
             'const exported = 3;',
             'module.exports = { value: exported };',
         ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/template-import-meta.js', [
+            'globalThis.__moduleSyntaxTemplateImportMeta = `${import.meta.url}`;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/template-regex-import-meta.js', [
+            'globalThis.__moduleSyntaxTemplateRegexImportMeta = `${/}/.source + import.meta.url}`;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-property.js', [
+            'exports.await = 4;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-object-property.js', [
+            'module.exports = { await: 5 };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-method-property.js', [
+            'module.exports = { await() { return 6; } };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-getter-property.js', [
+            'module.exports = { get await() { return 7; } };',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-comment-dot-property.js', [
+            'exports./*x*/await = 8;',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-nested-method-property.js', [
+            'module.exports = {',
+            '  nested: {',
+            '    await() { return 11; },',
+            '    get awaitGetter() { return 12; },',
+            '  },',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync('/module-syntax-app/await-block-expression.js', [
+            'globalThis.__moduleSyntaxBlockTlaOnly = "before";',
+            '{ await Promise.resolve(); }',
+            'globalThis.__moduleSyntaxBlockTlaOnly = "after";',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/module-syntax-app/main.cjs');
@@ -4478,6 +4883,23 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         assert.deepStrictEqual(require('/module-syntax-app/line-start-template-export.js'), { value: true });
         assert.deepStrictEqual(require('/module-syntax-app/import-prefix-identifiers.js'), { value: 3 });
         assert.deepStrictEqual(require('/module-syntax-app/export-prefix-identifier.js'), { value: 3 });
+        globalThis.__moduleSyntaxTemplateImportMeta = undefined;
+        require('/module-syntax-app/template-import-meta.js');
+        assert.strictEqual(globalThis.__moduleSyntaxTemplateImportMeta, 'file:///module-syntax-app/template-import-meta.js');
+        globalThis.__moduleSyntaxTemplateRegexImportMeta = undefined;
+        require('/module-syntax-app/template-regex-import-meta.js');
+        assert.strictEqual(globalThis.__moduleSyntaxTemplateRegexImportMeta, '}file:///module-syntax-app/template-regex-import-meta.js');
+        assert.strictEqual((await import('/module-syntax-app/await-property.js')).default.await, 4);
+        assert.deepStrictEqual((await import('/module-syntax-app/await-object-property.js')).default, { await: 5 });
+        assert.strictEqual((await import('/module-syntax-app/await-method-property.js')).default.await(), 6);
+        assert.strictEqual((await import('/module-syntax-app/await-getter-property.js')).default.await, 7);
+        assert.strictEqual((await import('/module-syntax-app/await-comment-dot-property.js')).default.await, 8);
+        const awaitNestedMethod = (await import('/module-syntax-app/await-nested-method-property.js')).default;
+        assert.strictEqual(awaitNestedMethod.nested.await(), 11);
+        assert.strictEqual(awaitNestedMethod.nested.awaitGetter, 12);
+        globalThis.__moduleSyntaxBlockTlaOnly = undefined;
+        await import('/module-syntax-app/await-block-expression.js');
+        assert.strictEqual(globalThis.__moduleSyntaxBlockTlaOnly, 'after');
         globalThis.__moduleSyntaxTlaOnly = undefined;
         await import('/module-syntax-app/tla-only.js');
         assert.strictEqual(globalThis.__moduleSyntaxTlaOnly, 'after');
@@ -4492,6 +4914,7 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         const createRequireIdiom = require('/module-syntax-app/create-require-idiom.js').default;
         assert.deepStrictEqual(createRequireIdiom, {
             kind: 'function',
+            main: undefined,
             resolved: '/module-syntax-app/false-positive.cjs',
         });
         assert.deepStrictEqual(require('/module-syntax-app/create-require-spaced.js').default, createRequireIdiom);
@@ -4514,7 +4937,7 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
 
         const originalArgv = process.argv.slice();
         const originalMainModule = process.mainModule;
-        const originalRequireMain = {
+        const originalRequireMain = require.main && {
             id: require.main.id,
             filename: require.main.filename,
             path: require.main.path,
@@ -4566,7 +4989,19 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
                 'undefined',
             ]);
         } finally {
-            Object.assign(require.main, originalRequireMain);
+            if (require.main && originalRequireMain) {
+                Object.assign(require.main, originalRequireMain);
+            } else if (process.mainModule) {
+                Object.assign(process.mainModule, {
+                    id: '.',
+                    filename: '/',
+                    path: '/',
+                    exports: {},
+                    loaded: true,
+                    parent: null,
+                    children: [],
+                });
+            }
             process.argv = originalArgv;
             process.mainModule = originalMainModule;
         }
@@ -4662,6 +5097,32 @@ export const testPackageCustomConditions = async () => {
     const originalPackageConditions = globalThis.__wasm_rquickjs_package_conditions;
     try {
         globalThis.__wasm_rquickjs_package_conditions = ['custom-condition', 'another'];
+        assert.deepStrictEqual(
+            globalThis.__wasm_rquickjs_package_default_conditions('loader'),
+            ['node', 'import', 'module-sync', 'node-addons'],
+        );
+        assert.throws(
+            () => globalThis.__wasm_rquickjs_package_default_conditions('typo'),
+            { code: 'ERR_INVALID_ARG_VALUE' },
+        );
+        assert.throws(
+            () => globalThis.__wasm_rquickjs_loader_default_resolve_package(
+                'file:///package-custom-conditions-app/entry.mjs',
+                'conditional-pkg/condition',
+                [],
+                'typo',
+            ),
+            { code: 'ERR_INVALID_ARG_VALUE' },
+        );
+        assert.throws(
+            () => globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
+                '/package-custom-conditions-app/entry.mjs',
+                'conditional-pkg/condition',
+                [],
+                'typo',
+            ),
+            { code: 'ERR_INVALID_ARG_VALUE' },
+        );
 
         fs.mkdirSync('/package-custom-conditions-app/node_modules/conditional-pkg', { recursive: true });
         fs.writeFileSync('/package-custom-conditions-app/node_modules/conditional-pkg/package.json', JSON.stringify({
@@ -4833,6 +5294,17 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-package-reexport-app/reexport-subpath.cjs', 'module.exports = require("pkg/subpath");');
         fs.writeFileSync('/cjs-package-reexport-app/node_modules/file-pkg.js', 'exports.file = "file";');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-file-package.cjs', 'module.exports = require("file-pkg");');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/probe-precedence', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/probe-precedence/exact', 'exports.probeExact = "exact";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/probe-precedence/exact.js', 'exports.probeExact = "exact-js";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/probe-precedence/js-first.js', 'exports.probeJs = "js";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/probe-precedence/js-first.json', '{"probeJs":"json"}');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/probe-precedence/dir', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/probe-precedence/dir/index.js', 'exports.probeIndex = "index-js";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/probe-precedence/dir/index.json', '{"probeIndex":"index-json"}');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-probe-exact.cjs', 'module.exports = require("probe-precedence/exact");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-probe-js.cjs', 'module.exports = require("probe-precedence/js-first");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-probe-index.cjs', 'module.exports = require("probe-precedence/dir");');
         fs.mkdirSync('/cjs-package-reexport-app/node_modules/bare-non-string-main', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/node_modules/bare-non-string-main/package.json', JSON.stringify({
             main: {},
@@ -4919,6 +5391,8 @@ export const testCjsPackageReexportNamedExports = async () => {
                     default: './imports-default.cjs',
                 },
                 '#pattern/*': './imports-pattern/*.cjs',
+                '#bare-external-exact': 'imports-bare-external/sub.js',
+                '#bare-external-extensionless': 'imports-bare-external/sub',
             },
         }));
         fs.writeFileSync('/cjs-package-reexport-app/imports-target.cjs', 'exports.imported = "imported";');
@@ -4931,6 +5405,15 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.writeFileSync('/cjs-package-reexport-app/reexport-imports.cjs', 'module.exports = require("#dep");');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-imports-condition.cjs', 'module.exports = require("#condition");');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-imports-pattern.cjs', 'module.exports = require("#pattern/target");');
+        fs.mkdirSync('/cjs-package-reexport-app/node_modules/imports-bare-external', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/imports-bare-external/sub.js', 'exports.importsBareExternal = "bare-external";');
+        fs.writeFileSync('/cjs-package-reexport-app/node_modules/imports-bare-external/index.js', 'exports.importsBareExternalIndex = "bare-external-index";');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-imports-bare-external-exact.cjs', 'module.exports = require("#bare-external-exact");');
+        fs.writeFileSync('/cjs-package-reexport-app/reexport-imports-bare-external-extensionless.cjs', 'module.exports = require("#bare-external-extensionless");');
+        fs.writeFileSync('/cjs-package-reexport-app/imports-bare-external-extensionless-entry.mjs', [
+            'import { importsBareExternal } from "./reexport-imports-bare-external-extensionless.cjs";',
+            'export default importsBareExternal;',
+        ].join('\n'));
 
         fs.mkdirSync('/cjs-package-reexport-app/relative-main-pkg', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/relative-main-pkg/package.json', JSON.stringify({
@@ -4941,6 +5424,18 @@ export const testCjsPackageReexportNamedExports = async () => {
         fs.mkdirSync('/cjs-package-reexport-app/relative-index-pkg', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/relative-index-pkg/index.js', 'exports.relativeIndex = "relative-index";');
         fs.writeFileSync('/cjs-package-reexport-app/reexport-relative-index.cjs', 'module.exports = require("./relative-index-pkg");');
+        fs.mkdirSync('/cjs-package-reexport-app/dot-reexport-pkg', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/dot-reexport-pkg/index.js', 'exports.dotName = "dot";');
+        fs.writeFileSync('/cjs-package-reexport-app/dot-reexport-pkg/reexport-dot.cjs', [
+            'const __exportStar = (mod, target) => { for (const key of Object.keys(mod)) target[key] = mod[key]; };',
+            '__exportStar(require("."), exports);',
+        ].join('\n'));
+        fs.mkdirSync('/cjs-package-reexport-app/dotdot-reexport-pkg/child', { recursive: true });
+        fs.writeFileSync('/cjs-package-reexport-app/dotdot-reexport-pkg/index.js', 'exports.dotdotName = "dotdot";');
+        fs.writeFileSync('/cjs-package-reexport-app/dotdot-reexport-pkg/child/reexport-dotdot.cjs', [
+            'const __exportStar = (mod, target) => { for (const key of Object.keys(mod)) target[key] = mod[key]; };',
+            '__exportStar(require(".."), exports);',
+        ].join('\n'));
         fs.mkdirSync('/cjs-package-reexport-app/non-string-main-pkg', { recursive: true });
         fs.writeFileSync('/cjs-package-reexport-app/non-string-main-pkg/package.json', JSON.stringify({
             main: {},
@@ -5027,6 +5522,9 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import packageDefault, { alpha, beta } from "./reexport-package.cjs";',
             'import { sub } from "./reexport-subpath.cjs";',
             'import { file } from "./reexport-file-package.cjs";',
+            'import { probeExact } from "./reexport-probe-exact.cjs";',
+            'import { probeJs } from "./reexport-probe-js.cjs";',
+            'import { probeIndex } from "./reexport-probe-index.cjs";',
             'import { bareNonStringMain } from "./reexport-bare-non-string-main.cjs";',
             'import { bareNullMain } from "./reexport-bare-null-main.cjs";',
             'import { main } from "./reexport-exported-root.cjs";',
@@ -5035,14 +5533,17 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import { imported } from "./reexport-imports.cjs";',
             'import { importsCondition } from "./reexport-imports-condition.cjs";',
             'import { importsPattern } from "./reexport-imports-pattern.cjs";',
+            'import { importsBareExternal } from "./reexport-imports-bare-external-exact.cjs";',
             'import { relativeMain } from "./reexport-relative-main.cjs";',
             'import { relativeIndex } from "./reexport-relative-index.cjs";',
+            'import { dotName } from "./dot-reexport-pkg/reexport-dot.cjs";',
+            'import { dotdotName } from "./dotdot-reexport-pkg/child/reexport-dotdot.cjs";',
             'import { nonStringMainIndex } from "./reexport-non-string-main.cjs";',
             'import { gamma, delta } from "./reexport-transpiler.cjs";',
             'import * as continuation from "./reexport-continuation.cjs";',
             'import * as cycle from "./cycle-a.cjs";',
             'export default {',
-            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, bareNonStringMain, bareNullMain, main, feature, condition, imported, importsCondition, importsPattern, relativeMain, relativeIndex, nonStringMainIndex, gamma, delta,',
+            '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, probeExact, probeJs, probeIndex, bareNonStringMain, bareNullMain, main, feature, condition, imported, importsCondition, importsPattern, importsBareExternal, relativeMain, relativeIndex, dotName, dotdotName, nonStringMainIndex, gamma, delta,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default" && key !== "own"),',
             '  continuationOwn: continuation.own,',
             '  cycleKeys: Object.keys(cycle).filter((key) => key !== "default").sort(),',
@@ -5056,6 +5557,9 @@ export const testCjsPackageReexportNamedExports = async () => {
             defaultAlpha: 'alpha',
             sub: 'sub',
             file: 'file',
+            probeExact: 'exact',
+            probeJs: 'js',
+            probeIndex: 'index-js',
             bareNonStringMain: 'bare-non-string-main',
             bareNullMain: 'bare-null-main',
             main: 'main',
@@ -5064,14 +5568,32 @@ export const testCjsPackageReexportNamedExports = async () => {
             imported: 'imported',
             importsCondition: 'module-sync',
             importsPattern: 'pattern',
+            importsBareExternal: 'bare-external',
             relativeMain: 'relative-main',
             relativeIndex: 'relative-index',
+            dotName: 'dot',
+            dotdotName: 'dotdot',
             nonStringMainIndex: 'non-string-main-index',
             gamma: 'gamma',
             delta: 'delta',
             continuationKeys: [],
             continuationOwn: 'own',
             cycleKeys: ['a', 'b'],
+        });
+        const packageRequire = createRequire('/cjs-package-reexport-app/entry.cjs');
+        assert.strictEqual(packageRequire('#bare-external-exact').importsBareExternal, 'bare-external');
+        assert.throws(() => packageRequire('#bare-external-extensionless'), {
+            code: 'MODULE_NOT_FOUND',
+        });
+        try {
+            packageRequire('#bare-external-extensionless');
+            assert.fail('Expected #bare-external-extensionless to fail');
+        } catch (error) {
+            assert.match(error.message, /imports-bare-external\/sub/);
+        }
+        await assert.rejects(() => import('/cjs-package-reexport-app/imports-bare-external-extensionless-entry.mjs'), {
+            name: 'SyntaxError',
+            message: /Named export 'importsBareExternal' not found/,
         });
         await assert.rejects(() => import('/cjs-package-reexport-app/native-named-entry.mjs'), {
             name: 'SyntaxError',
@@ -6869,6 +7391,35 @@ export const testRequireEsmRejectionTracking = async () => {
 export const testRequireEsmCycleGuards = async () => {
     try {
         fs.mkdirSync('/require-esm-cycle-app', { recursive: true });
+        fs.mkdirSync('/require-esm-cycle-app/node_modules/graph-cycle-pkg', { recursive: true });
+        fs.mkdirSync('/require-esm-cycle-app/node_modules/blocked-graph-pkg', { recursive: true });
+        fs.writeFileSync('/require-esm-cycle-app/package.json', JSON.stringify({
+            imports: {
+                '#graph-cycle-import': './imports-cycle-target.mjs',
+            },
+        }));
+        fs.writeFileSync('/require-esm-cycle-app/node_modules/graph-cycle-pkg/package.json', JSON.stringify({
+            exports: './index.mjs',
+        }));
+        fs.writeFileSync('/require-esm-cycle-app/node_modules/blocked-graph-pkg/package.json', JSON.stringify({
+            exports: {
+                './allowed': './allowed.mjs',
+            },
+        }));
+        fs.writeFileSync('/require-esm-cycle-app/node_modules/blocked-graph-pkg/allowed.mjs', [
+            'export const allowed = true;',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/node_modules/graph-cycle-pkg/index.mjs', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("/require-esm-cycle-app/package-cycle-entry.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export { cycleCode };',
+        ].join('\n'));
         fs.writeFileSync('/require-esm-cycle-app/a.mjs', [
             'import { createRequire } from "node:module";',
             'const require = createRequire(import.meta.url);',
@@ -6922,6 +7473,31 @@ export const testRequireEsmCycleGuards = async () => {
             'export const value = 5;',
             'export { cycleCode };',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/package-cycle-entry.mjs', [
+            'import { cycleCode } from "graph-cycle-pkg";',
+            'export const value = 6;',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/imports-cycle-entry.mjs', [
+            'import { cycleCode } from "#graph-cycle-import";',
+            'export const value = 7;',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/imports-cycle-target.mjs', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("/require-esm-cycle-app/imports-cycle-entry.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/blocked-export-entry.mjs', [
+            'import "blocked-graph-pkg/blocked";',
+            'export const value = 8;',
+        ].join('\n'));
         fs.writeFileSync('/require-esm-cycle-app/commented-static-edge-b.mjs', [
             'import { createRequire } from "node:module";',
             'const require = createRequire(import.meta.url);',
@@ -6955,9 +7531,161 @@ export const testRequireEsmCycleGuards = async () => {
             const commentedStaticEdge = require('/require-esm-cycle-app/commented-static-edge-a.mjs');
             assert.strictEqual(commentedStaticEdge.value, 5);
             assert.strictEqual(commentedStaticEdge.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const packageCycle = require('/require-esm-cycle-app/package-cycle-entry.mjs');
+            assert.strictEqual(packageCycle.value, 6);
+            assert.strictEqual(packageCycle.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const importsCycle = require('/require-esm-cycle-app/imports-cycle-entry.mjs');
+            assert.strictEqual(importsCycle.value, 7);
+            assert.strictEqual(importsCycle.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
         } finally {
             Array.prototype[Symbol.iterator] = arrayIterator;
         }
+        assert.throws(() => require('/require-esm-cycle-app/blocked-export-entry.mjs'), {
+            code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
+        });
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
+export const testCjsEsmDefaultSnapshotTiming = async () => {
+    try {
+        const root = '/cjs-esm-default-snapshot-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(`${root}/primitive.js`, 'module.exports = 1;');
+        fs.writeFileSync(`${root}/primitive-mutator.js`, [
+            'const filename = require.resolve("./primitive.js");',
+            'require("./primitive.js");',
+            'require.cache[filename].exports++;',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/primitive-entry.mjs`, [
+            'import "./primitive-mutator.js";',
+            'import value from "./primitive.js";',
+            'globalThis.__cjsEsmPrimitiveSnapshot = value;',
+        ].join('\n'));
+
+        fs.writeFileSync(`${root}/object.js`, 'module.exports = { value: 1 };');
+        fs.writeFileSync(`${root}/object-mutator.js`, [
+            'const filename = require.resolve("./object.js");',
+            'require("./object.js");',
+            'require.cache[filename].exports.value = 2;',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/object-entry.mjs`, [
+            'import "./object-mutator.js";',
+            'import value from "./object.js";',
+            'globalThis.__cjsEsmObjectSnapshot = value.value;',
+        ].join('\n'));
+
+        fs.writeFileSync(`${root}/replace.js`, 'module.exports = { value: 1 };');
+        fs.writeFileSync(`${root}/replace-mutator.js`, [
+            'const filename = require.resolve("./replace.js");',
+            'require("./replace.js");',
+            'require.cache[filename].exports = { value: 2 };',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/replace-entry.mjs`, [
+            'import "./replace-mutator.js";',
+            'import value from "./replace.js";',
+            'globalThis.__cjsEsmReplaceSnapshot = value.value;',
+        ].join('\n'));
+
+        await import(`${root}/primitive-entry.mjs`);
+        assert.strictEqual(globalThis.__cjsEsmPrimitiveSnapshot, 1);
+        await import(`${root}/object-entry.mjs`);
+        assert.strictEqual(globalThis.__cjsEsmObjectSnapshot, 2);
+        await import(`${root}/replace-entry.mjs`);
+        assert.strictEqual(globalThis.__cjsEsmReplaceSnapshot, 1);
+
+        const { createRequire } = await import('node:module');
+        const require = createRequire(`${root}/main.cjs`);
+        fs.writeFileSync(`${root}/dynamic-primitive.js`, 'module.exports = 1;');
+        const dynamicPrimitive = require.resolve(`${root}/dynamic-primitive.js`);
+        require(dynamicPrimitive);
+        require.cache[dynamicPrimitive].exports++;
+        assert.strictEqual((await import(`${root}/dynamic-primitive.js`)).default, 1);
+
+        fs.writeFileSync(`${root}/dynamic-object.js`, 'module.exports = { value: 1 };');
+        const dynamicObject = require.resolve(`${root}/dynamic-object.js`);
+        require(dynamicObject);
+        require.cache[dynamicObject].exports.value = 2;
+        assert.strictEqual((await import(`${root}/dynamic-object.js`)).default.value, 2);
+
+        fs.writeFileSync(`${root}/dynamic-replace.js`, 'module.exports = { value: 1 };');
+        const dynamicReplace = require.resolve(`${root}/dynamic-replace.js`);
+        require(dynamicReplace);
+        require.cache[dynamicReplace].exports = { value: 2 };
+        assert.strictEqual((await import(`${root}/dynamic-replace.js`)).default.value, 1);
+
+        fs.writeFileSync(`${root}/delete-before-import.js`, 'module.exports = 1;');
+        const deleteBeforeImport = require.resolve(`${root}/delete-before-import.js`);
+        require(deleteBeforeImport);
+        delete require.cache[deleteBeforeImport];
+        fs.writeFileSync(`${root}/delete-before-import.js`, 'module.exports = 5;');
+        assert.strictEqual((await import(`${root}/delete-before-import.js`)).default, 5);
+
+        fs.writeFileSync(`${root}/delete-rerequire-primitive.js`, 'module.exports = 1;');
+        const deleteRerequirePrimitive = require.resolve(`${root}/delete-rerequire-primitive.js`);
+        require(deleteRerequirePrimitive);
+        delete require.cache[deleteRerequirePrimitive];
+        fs.writeFileSync(`${root}/delete-rerequire-primitive.js`, 'module.exports = 3;');
+        require(deleteRerequirePrimitive);
+        require.cache[deleteRerequirePrimitive].exports++;
+        assert.strictEqual((await import(`${root}/delete-rerequire-primitive.js`)).default, 3);
+
+        fs.writeFileSync(`${root}/delete-rerequire-replace.js`, 'module.exports = { value: 1 };');
+        const deleteRerequireReplace = require.resolve(`${root}/delete-rerequire-replace.js`);
+        require(deleteRerequireReplace);
+        delete require.cache[deleteRerequireReplace];
+        fs.writeFileSync(`${root}/delete-rerequire-replace.js`, 'module.exports = { value: 3 };');
+        require(deleteRerequireReplace);
+        require.cache[deleteRerequireReplace].exports = { value: 4 };
+        assert.strictEqual((await import(`${root}/delete-rerequire-replace.js`)).default.value, 3);
+
+        fs.writeFileSync(`${root}/symlink-target.js`, 'module.exports = { value: 1 };');
+        try {
+            fs.symlinkSync(`${root}/symlink-target.js`, `${root}/symlink-link.js`);
+        } catch (error) {
+            if (!error || error.code !== 'EEXIST') {
+                throw error;
+            }
+        }
+        const symlinkResolved = require.resolve(`${root}/symlink-link.js`);
+        require(`${root}/symlink-link.js`);
+        require.cache[symlinkResolved].exports = { value: 2 };
+        assert.strictEqual((await import(`${root}/symlink-link.js`)).default.value, 1);
+
+        const originalHasSnapshot = globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot;
+        const originalGetSnapshot = globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot;
+        try {
+            globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot = () => false;
+        } catch (_) {}
+        try {
+            globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot = () => ({ value: 99 });
+        } catch (_) {}
+        try {
+            delete globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot;
+        } catch (_) {}
+        try {
+            delete globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot;
+        } catch (_) {}
+        assert.strictEqual(globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot, originalHasSnapshot);
+        assert.strictEqual(globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot, originalGetSnapshot);
+
+        const moduleBuiltin = require('node:module');
+        const originalCreateRequire = moduleBuiltin.createRequire;
+        try {
+            moduleBuiltin.createRequire = () => {
+                throw new Error('public createRequire should not drive generated CJS facades');
+            };
+            moduleBuiltin.syncBuiltinESMExports();
+            fs.writeFileSync(`${root}/public-create-require-poison.js`, 'module.exports = { value: 1 };');
+            assert.strictEqual((await import(`${root}/public-create-require-poison.js`)).default.value, 1);
+        } finally {
+            moduleBuiltin.createRequire = originalCreateRequire;
+            moduleBuiltin.syncBuiltinESMExports();
+        }
+
         return true;
     } catch (error) {
         console.error(error);

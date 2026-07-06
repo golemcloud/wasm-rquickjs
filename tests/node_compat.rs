@@ -608,14 +608,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 SubtestDiscovery::Block(blocks) => blocks.len(),
                 SubtestDiscovery::NodeTest(tests) => tests.len(),
             };
-            if discovered_count != entry.subtests.len() {
-                eprintln!(
-                    "WARNING: Subtest count mismatch for {}: config has {}, discovered {}. Run migration tool.",
-                    path,
-                    entry.subtests.len(),
-                    discovered_count
-                );
-            }
+            assert_eq!(
+                discovered_count,
+                entry.subtests.len(),
+                "Subtest count mismatch for {path}: config has {}, discovered {discovered_count}. Run migration tool.",
+                entry.subtests.len()
+            );
 
             for subtest in &entry.subtests {
                 let test_name = format!("{}__{}", file_test_name, subtest.name);

@@ -9,9 +9,11 @@ use futures::FutureExt;
 use heck::ToSnakeCase;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::io::Write;
+use std::hash::{Hash, Hasher};
+use std::io::{Read, Write};
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
@@ -111,7 +113,7 @@ fn test_prepared_component_cache_enabled() -> bool {
 }
 
 fn test_wasmtime_cache_enabled() -> bool {
-    test_cache_enabled(TEST_WASMTIME_CACHE_ENV)
+    test_cache_enabled(TEST_WASMTIME_CACHE_ENV) && !test_drop_cache_enabled()
 }
 
 fn test_cache_stamp_dir() -> Utf8PathBuf {
@@ -128,6 +130,70 @@ fn test_cache_stamp(
         name.to_snake_case(),
         feature_combination.label()
     ))
+}
+
+fn test_cache_lock(name: &str, feature_combination: FeatureCombination, kind: &str) -> Utf8PathBuf {
+    test_cache_stamp_dir().join(format!(
+        "{}-{}-{kind}.lock",
+        name.to_snake_case(),
+        feature_combination.label()
+    ))
+}
+
+fn rustc_version_verbose() -> String {
+    Command::new("rustc")
+        .arg("-Vv")
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                Some(String::from_utf8_lossy(&output.stdout).to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "rustc-version-unavailable".to_string())
+}
+
+fn cache_stamp_signature(
+    name: &str,
+    feature_combination: FeatureCombination,
+    kind: &str,
+    extra: &[(&str, String)],
+) -> String {
+    static RUSTC_VERSION_VERBOSE: OnceLock<String> = OnceLock::new();
+    let rustc_version = RUSTC_VERSION_VERBOSE.get_or_init(rustc_version_verbose);
+    let mut signature = format!(
+        "wasm-rquickjs-test-cache-v2\nname={name}\nfeature={}\nkind={kind}\nrustc={rustc_version}\n",
+        feature_combination.label(),
+    );
+
+    for env_name in [
+        "CARGO",
+        "CARGO_BUILD_TARGET",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "CARGO_PROFILE_TEST_OPT_LEVEL",
+        "CARGO_TARGET_DIR",
+        "RUSTC",
+        "RUSTFLAGS",
+        "RUSTUP_TOOLCHAIN",
+    ] {
+        if let Ok(value) = std::env::var(env_name) {
+            signature.push_str(env_name);
+            signature.push('=');
+            signature.push_str(&value);
+            signature.push('\n');
+        }
+    }
+
+    for (key, value) in extra {
+        signature.push_str(key);
+        signature.push('=');
+        signature.push_str(value);
+        signature.push('\n');
+    }
+
+    signature
 }
 
 fn modified_time(path: &Utf8Path) -> anyhow::Result<SystemTime> {
@@ -158,8 +224,20 @@ fn newest_modified_time_of_existing(paths: &[Utf8PathBuf]) -> anyhow::Result<Sys
     Ok(newest)
 }
 
-fn output_fresh_for_inputs(output: &Utf8Path, stamp: &Utf8Path, inputs: &[Utf8PathBuf]) -> bool {
+fn output_fresh_for_inputs(
+    output: &Utf8Path,
+    stamp: &Utf8Path,
+    inputs: &[Utf8PathBuf],
+    signature: &str,
+) -> bool {
     if !output.exists() || !stamp.exists() || test_drop_cache_enabled() {
+        return false;
+    }
+
+    let Ok(stamp_contents) = fs::read_to_string(stamp) else {
+        return false;
+    };
+    if stamp_contents != signature {
         return false;
     }
 
@@ -176,12 +254,53 @@ fn output_fresh_for_inputs(output: &Utf8Path, stamp: &Utf8Path, inputs: &[Utf8Pa
     output_mtime >= input_mtime && stamp_mtime >= input_mtime
 }
 
-fn refresh_cache_stamp(stamp: &Utf8Path) -> anyhow::Result<()> {
+fn refresh_cache_stamp(stamp: &Utf8Path, signature: &str) -> anyhow::Result<()> {
     if let Some(parent) = stamp.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(stamp, b"ok")?;
+    fs::write(stamp, signature)?;
     Ok(())
+}
+
+struct TestCacheLock {
+    path: Utf8PathBuf,
+}
+
+impl TestCacheLock {
+    fn acquire(path: Utf8PathBuf) -> anyhow::Result<Self> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let started = Instant::now();
+        loop {
+            match fs::create_dir(&path) {
+                Ok(()) => return Ok(Self { path }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if fs::metadata(&path)
+                        .and_then(|metadata| metadata.modified())
+                        .ok()
+                        .and_then(|modified| modified.elapsed().ok())
+                        .is_some_and(|age| age > Duration::from_secs(10 * 60))
+                    {
+                        let _ = fs::remove_dir_all(&path);
+                        continue;
+                    }
+                    if started.elapsed() > Duration::from_secs(120) {
+                        anyhow::bail!("timed out waiting for test artifact cache lock {path}");
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+}
+
+impl Drop for TestCacheLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir(&self.path);
+    }
 }
 
 fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Result<()> {
@@ -1206,10 +1325,7 @@ impl TestInstance {
             .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
             .inherit_network()
             .allow_ip_name_lookup(true);
-        #[cfg(feature = "use-golem-wasmtime")]
         let (ctx, io_ctx) = ctx_builder.build();
-        #[cfg(not(feature = "use-golem-wasmtime"))]
-        let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
         let host = Host {
             table: Arc::new(Mutex::new(ResourceTable::new())),
@@ -1218,7 +1334,6 @@ impl TestInstance {
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
         };
 
@@ -1361,21 +1476,63 @@ impl TestInstance {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct PreparedComponentCacheKey {
+    path: Utf8PathBuf,
+    len: u64,
+    modified: Duration,
+    content_hash: u64,
+}
+
+fn prepared_component_cache_key(wasm_path: &Utf8Path) -> anyhow::Result<PreparedComponentCacheKey> {
+    let metadata = fs::metadata(wasm_path)?;
+    let path = fs::canonicalize(wasm_path)
+        .ok()
+        .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+        .unwrap_or_else(|| wasm_path.to_path_buf());
+    let modified = metadata
+        .modified()?
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut file = fs::File::open(wasm_path)?;
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        buffer[..read].hash(&mut hasher);
+    }
+    Ok(PreparedComponentCacheKey {
+        path,
+        len: metadata.len(),
+        modified,
+        content_hash: hasher.finish(),
+    })
+}
+
 fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<PreparedComponent>> {
-    static PREPARED_COMPONENTS: OnceLock<Mutex<HashMap<Utf8PathBuf, Arc<PreparedComponent>>>> =
-        OnceLock::new();
+    static PREPARED_COMPONENTS: OnceLock<
+        Mutex<HashMap<PreparedComponentCacheKey, Arc<PreparedComponent>>>,
+    > = OnceLock::new();
 
     let mut prepared = PREPARED_COMPONENTS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .unwrap();
 
-    if let Some(component) = prepared.get(wasm_path) {
+    if test_drop_cache_enabled() {
+        prepared.clear();
+    }
+
+    let key = prepared_component_cache_key(wasm_path)?;
+    if let Some(component) = prepared.get(&key) {
         return Ok(component.clone());
     }
 
     let component = Arc::new(PreparedComponent::new(wasm_path)?);
-    prepared.insert(wasm_path.to_path_buf(), component.clone());
+    prepared.insert(key, component.clone());
     Ok(component)
 }
 
@@ -1488,9 +1645,48 @@ impl CompiledTest {
                 .join("wasi-logging")
                 .join("Cargo.toml"),
         ];
+        let compile_signature = cache_stamp_signature(
+            name,
+            feature_combination,
+            "compile",
+            &[
+                ("target", "wasm32-wasip2".to_string()),
+                ("use_shared_target", use_shared_target.to_string()),
+                ("cargo_args", feature_combination.cargo_args().join("|")),
+            ],
+        );
 
         if test_artifact_cache_enabled()
-            && output_fresh_for_inputs(&compiled_wasm_path, &compile_stamp, &compile_inputs)
+            && output_fresh_for_inputs(
+                &compiled_wasm_path,
+                &compile_stamp,
+                &compile_inputs,
+                &compile_signature,
+            )
+        {
+            println!("Reusing cached wrapper component {compiled_wasm_path}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(compiled_wasm_path),
+            });
+        }
+
+        let _cache_lock = if test_artifact_cache_enabled() {
+            Some(TestCacheLock::acquire(test_cache_lock(
+                name,
+                feature_combination,
+                "compile",
+            ))?)
+        } else {
+            None
+        };
+
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(
+                &compiled_wasm_path,
+                &compile_stamp,
+                &compile_inputs,
+                &compile_signature,
+            )
         {
             println!("Reusing cached wrapper component {compiled_wasm_path}");
             return Ok(CompiledTest {
@@ -1531,7 +1727,7 @@ impl CompiledTest {
             })?;
 
         if test_artifact_cache_enabled() {
-            refresh_cache_stamp(&compile_stamp)?;
+            refresh_cache_stamp(&compile_stamp, &compile_signature)?;
         }
 
         Ok(CompiledTest {
@@ -1545,9 +1741,60 @@ impl CompiledTest {
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
         let optimize_stamp = input.with_extension("optimized.stamp");
-        let optimize_inputs = vec![input.to_path_buf()];
+        let optimize_inputs = vec![
+            input.to_path_buf(),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("src")
+                .join("optimize.rs"),
+            Utf8Path::new("Cargo.toml").to_path_buf(),
+            Utf8Path::new("Cargo.lock").to_path_buf(),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("Cargo.toml"),
+        ];
+        let optimize_signature = cache_stamp_signature(
+            input.file_stem().unwrap_or("component"),
+            FeatureCombination::Normal,
+            "optimize",
+            &[
+                ("input", input.to_string()),
+                ("init_func", "wizer-initialize".to_string()),
+                ("optimizer", "wasm_rquickjs::optimize_component".to_string()),
+            ],
+        );
         if test_artifact_cache_enabled()
-            && output_fresh_for_inputs(&optimized, &optimize_stamp, &optimize_inputs)
+            && output_fresh_for_inputs(
+                &optimized,
+                &optimize_stamp,
+                &optimize_inputs,
+                &optimize_signature,
+            )
+        {
+            println!("Reusing cached optimized component {optimized}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(optimized),
+            });
+        }
+
+        let _cache_lock = if test_artifact_cache_enabled() {
+            let lock_name = input.file_stem().unwrap_or("component");
+            Some(TestCacheLock::acquire(test_cache_lock(
+                lock_name,
+                FeatureCombination::Normal,
+                "optimize",
+            ))?)
+        } else {
+            None
+        };
+
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(
+                &optimized,
+                &optimize_stamp,
+                &optimize_inputs,
+                &optimize_signature,
+            )
         {
             println!("Reusing cached optimized component {optimized}");
             return Ok(CompiledTest {
@@ -1558,7 +1805,7 @@ impl CompiledTest {
         println!("Optimizing component {input} -> {optimized}");
         wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
         if test_artifact_cache_enabled() {
-            refresh_cache_stamp(&optimize_stamp)?;
+            refresh_cache_stamp(&optimize_stamp, &optimize_signature)?;
         }
         Ok(CompiledTest {
             wasm: Precompiled(optimized),
@@ -1658,7 +1905,6 @@ pub struct Host {
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
-    #[cfg(feature = "use-golem-wasmtime")]
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
 }
 
@@ -1673,7 +1919,6 @@ impl WasiView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
-            #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::get_mut(&mut self.io_ctx)
                 .expect("IoCtx is shared and cannot be borrowed mutably")
                 .get_mut()

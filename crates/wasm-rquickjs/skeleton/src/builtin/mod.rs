@@ -581,12 +581,20 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
   }
   if (specifier.startsWith('/')) {
     ensureSupportedBase();
+    if (typeof globalThis.__wasm_rquickjs_import_meta_resolve_path === 'function') {
+      var pathResolved = globalThis.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
+      if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
+    }
     var parts = splitSuffix(specifier);
     var path = preserveTrailingSlash(normalizePath(parts[0]), parts[0]);
     return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
   }
   if (specifier.startsWith('.')) {
     ensureSupportedBase();
+    if (typeof globalThis.__wasm_rquickjs_import_meta_resolve_path === 'function') {
+      var pathResolved = globalThis.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
+      if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
+    }
     var base = baseUrl;
     if (base.startsWith('file://')) base = base.slice(7);
     base = splitSuffix(base)[0];
@@ -597,6 +605,10 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
   }
   if (NODE_BUILTINS.has(specifier)) return 'node:' + specifier;
   ensureSupportedBase();
+  if (typeof globalThis.__wasm_rquickjs_import_meta_resolve_package === 'function') {
+    var packageResolved = globalThis.__wasm_rquickjs_import_meta_resolve_package(baseUrl, specifier);
+    if (packageResolved !== undefined && packageResolved !== null) return packageResolved;
+  }
   if (specifier.endsWith('/') && baseUrl.startsWith('file://')) {
     var base = splitSuffix(baseUrl.slice(7))[0];
     var dir = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
@@ -791,6 +803,15 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, 
       discardGeneratedRewriteToken();
     }
     return cached.promise;
+  }
+  if (
+    globalThis.__wasm_rquickjs_registered_loaders &&
+    globalThis.__wasm_rquickjs_registered_loaders.length > 0 &&
+    typeof globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph === 'function' &&
+    !String(prepared).startsWith('data:application/json') &&
+    !/[.]json(?:[?#]|$)/.test(String(prepared))
+  ) {
+    await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared);
   }
   var promise = importFn(prepared);
   var entry = { promise: promise, preparedKey: key };

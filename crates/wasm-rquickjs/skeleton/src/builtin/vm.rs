@@ -3,6 +3,8 @@ use rquickjs::promise::PromiseState;
 use rquickjs::{CaughtError, FromJs, Persistent, Promise, Value};
 use std::ptr::NonNull;
 
+use crate::internal::path_to_file_url;
+
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use rquickjs::{Ctx, Value};
@@ -152,10 +154,8 @@ fn require_esm_impl<'js>(
     // the FileUrlResolver → ImportMetaLoader chain.
     let file_url = if filename.starts_with("file://") {
         filename.to_string()
-    } else if filename.starts_with('/') {
-        format!("file://{}", filename)
     } else {
-        format!("file:///{}", filename)
+        path_to_file_url(filename)
     };
 
     // Escape the URL for use inside a JS string literal

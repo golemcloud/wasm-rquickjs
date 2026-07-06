@@ -1437,6 +1437,19 @@ There are a few important things to keep in mind when working on the project:
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
 
+- Runtime and node compatibility tests that use the shared `CompiledTest` harness support opt-in local caches for faster
+  iteration:
+  `WASM_RQUICKJS_TEST_FAST=1 cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time --test-threads 1`.
+  The caches are off by default and preserve a fresh Wasmtime `Store`, component instance, WASI context, temporary
+  directory, and QuickJS runtime state for each test. `WASM_RQUICKJS_TEST_FAST=1` enables the wrapper/optimized artifact
+  cache, prepared component cache, and Wasmtime compilation cache together. Use `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1`,
+  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1`, or `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` to enable only one layer, and
+  `WASM_RQUICKJS_TEST_DROP_CACHE=1` when the generated wrapper or optimized component artifacts must be rebuilt; it also
+  clears the in-process prepared component cache and bypasses the Wasmtime compilation cache for that run. The prepared
+  component cache currently applies to the normal `TestInstance::new` path; node-compat tests that instantiate through
+  `GolemPreparedComponent` still benefit from artifact and Wasmtime compilation caches, but do not use that prepared
+  component cache layer.
+
 ## Acknowledgements
 
 The builtin JS modules are based on the work of several other projects:

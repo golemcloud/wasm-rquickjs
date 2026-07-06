@@ -6080,7 +6080,7 @@
     "es-module/test-esm-scope-node-modules.mjs": { "category": "runnable" },
     "es-module/test-esm-shared-loader-dep.mjs": { "category": "runnable" },
     "es-module/test-esm-shebang.mjs": { "category": "runnable" },
-    "es-module/test-esm-snapshot.mjs": { "category": "known-gap", "reason": "V8 startup snapshot fixture mutates CommonJS require.cache; the WASM runner does not model Node/V8 startup snapshot and cache coupling" },
+    "es-module/test-esm-snapshot.mjs": { "category": "runnable" },
     "es-module/test-esm-source-map.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-syntax-error.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-throw-undefined.mjs": { "category": "runnable" },
@@ -9263,6 +9263,7 @@
     "parallel/test-vm-module-import-meta.js": { "category": "runnable" },
     "parallel/test-vm-module-link.js": { "category": "runnable" },
     "parallel/test-vm-module-reevaluate.js": { "category": "runnable" },
+    "parallel/test-vm-module-referrer-realm.mjs": { "category": "engine-difference", "reason": "vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host" },
     "parallel/test-vm-module-synthetic.js": { "category": "runnable" },
     "parallel/test-vm-new-script-new-context.js": {
       "split": true,

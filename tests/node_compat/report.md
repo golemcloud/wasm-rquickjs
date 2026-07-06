@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-03 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-07-06 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3240/4423 (73.3%)
+**Primary compatibility (CI-enforced):** 3241/4423 (73.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3240 | 73.3% | 56.4% | 47.2% |
-| 🧩 known gap | 1183 | 26.7% | 20.6% | 17.2% |
+| ✅ passing (runnable) | 3241 | 73.3% | 56.4% | 47.2% |
+| 🧩 known gap | 1182 | 26.7% | 20.6% | 17.2% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
-| ⚙️ engine difference (excluded) | 164 | — | 2.9% | 2.4% |
+| ⚙️ engine difference (excluded) | 165 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1122 | — | — | 16.3% |
-| **Total** | **6865** |  |  | **100.0%** |
+| **Total** | **6866** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3240/5743 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3241/5744 (56.4%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 613 | 188 | 144 | 86 | 12 | 0 | 183 | 56.6% | 43.7% |
+| other | 614 | 189 | 143 | 86 | 13 | 0 | 183 | 56.9% | 43.9% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1183)
+### known gap (1182)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -952,7 +952,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws) | 1 | `parallel/test-http-early-hints-invalid-argument.js` |
 | ServerResponse.writeHead() does not throw ERR_HTTP_TRAILER_INVALID when Trailer is set with Content-Length | 1 | `parallel/test-http-server-de-chunked-trailer.js` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
-| V8 startup snapshot fixture mutates CommonJS require.cache; the WASM runner does not model Node/V8 startup snapshot and cache coupling | 1 | `es-module/test-esm-snapshot.mjs` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
 | WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags | 1 | `parallel/test-runner-module-mocking.js#test_16_wrong_import_syntax_should_throw_error_after_module_mocking` |
@@ -1508,7 +1507,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
 | wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied | 1 | `parallel/test-http-write-head.js` |
 
-### engine difference (164)
+### engine difference (165)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1550,6 +1549,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | v8.writeHeapSnapshot heap-introspection behavior is V8-specific and unavailable in QuickJS | 1 | `sequential/test-write-heapsnapshot-options.js` |
 | vm.Script cachedData/produceCachedData relies on V8 code cache format unavailable in QuickJS | 1 | `parallel/test-vm-cached-data.js` |
 | vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-createcacheddata.js` |
+| vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host | 1 | `parallel/test-vm-module-referrer-realm.mjs` |
 
 ### unevaluated (0)
 

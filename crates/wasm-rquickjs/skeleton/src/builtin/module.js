@@ -786,9 +786,12 @@ function withSuppressedPackageDeprecationWarnings(callback) {
     }
 }
 
-const cjsDefaultPackageConditions = ['golem', 'node', 'require', 'module-sync', 'default'];
-const esmDefaultPackageConditions = ['golem', 'node', 'module-sync', 'import', 'default'];
-const loaderDefaultConditions = ['node', 'import', 'module-sync', 'node-addons'];
+function defaultPackageConditions(mode) {
+    if (typeof globalThis.__wasm_rquickjs_package_default_conditions !== 'function') {
+        throw new Error('Internal package condition provider is not initialized');
+    }
+    return globalThis.__wasm_rquickjs_package_default_conditions(mode);
+}
 
 function addPackageCondition(conditions, condition) {
     if (typeof condition === 'string' && condition.length > 0) conditions.add(condition);
@@ -809,15 +812,15 @@ function packageConditions(defaults) {
 }
 
 function cjsPackageConditions() {
-    return packageConditions(cjsDefaultPackageConditions);
+    return packageConditions(defaultPackageConditions('cjs-analysis'));
 }
 
 function esmPackageConditions() {
-    return packageConditions(esmDefaultPackageConditions);
+    return packageConditions(defaultPackageConditions('import'));
 }
 
 function loaderHookConditions() {
-    return Array.from(packageConditions(loaderDefaultConditions));
+    return Array.from(packageConditions(defaultPackageConditions('loader')));
 }
 const packageTargetNoMatch = { __packageTargetNoMatch: true };
 const packageTargetBlocked = { __packageTargetBlocked: true };
@@ -834,9 +837,15 @@ function makePackagePathNotExportedError(packageName, subpath, noExportsMain) {
     return err;
 }
 
-function makePackageImportNotDefinedError(specifier) {
+function makePackageImportNotDefinedError(specifier, noImportsField) {
     const err = new Error('Package import specifier ' + JSON.stringify(specifier) + ' is not defined');
     err.code = 'ERR_PACKAGE_IMPORT_NOT_DEFINED';
+    if (noImportsField) {
+        Object.defineProperty(err, '__wasmNoImportsField', {
+            value: true,
+            configurable: true,
+        });
+    }
     return err;
 }
 
@@ -847,7 +856,7 @@ function makeInvalidModuleSpecifierError(specifier, message) {
 }
 
 function validatePackageImportSpecifier(specifier) {
-    if (specifier === '#' || specifier.startsWith('#/')) {
+    if (specifier === '#' || specifier.startsWith('#/') || specifier.endsWith('/')) {
         throw makeInvalidModuleSpecifierError(specifier, 'is not a valid internal imports specifier name');
     }
 }
@@ -872,6 +881,16 @@ function makeModuleNotFoundError(id) {
     const err = new Error("Cannot find module '" + id + "'");
     err.code = 'MODULE_NOT_FOUND';
     return err;
+}
+
+function makeCjsModuleNotFoundFromErrModuleNotFound(err, fallbackId) {
+    const cjsErr = new Error(
+        err && typeof err.message === 'string'
+            ? err.message
+            : "Cannot find module '" + fallbackId + "'"
+    );
+    cjsErr.code = 'MODULE_NOT_FOUND';
+    return cjsErr;
 }
 
 function addPackageErrorContext(err, specifier) {
@@ -1000,8 +1019,27 @@ function validatePackageTargetPath(target) {
     return true;
 }
 
-function resolveExactPackageFile(filename) {
+function makePackageTargetResolutionContext(conditions, allowBareTarget, patternSubstitution, warningContext) {
+    return {
+        conditions,
+        allowBareTarget,
+        patternSubstitution,
+        warningContext,
+        seen: new Set(),
+        exactFileCache: Object.create(null),
+    };
+}
+
+function resolveExactPackageFile(filename, resolution) {
+    if (resolution && Object.prototype.hasOwnProperty.call(resolution.exactFileCache, filename)) {
+        const cached = resolution.exactFileCache[filename];
+        if (cached !== null) return cached;
+        throw makeModuleNotFoundError(filename);
+    }
     const content = tryReadFile(filename);
+    if (resolution) {
+        resolution.exactFileCache[filename] = content === null ? null : { filename, content };
+    }
     if (content !== null) return { filename, content };
     throw makeModuleNotFoundError(filename);
 }
@@ -1073,55 +1111,68 @@ function packagePatternCompare(a, b) {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBareTarget, patternSubstitution, warningContext) {
-    seen = seen || new Set();
+function resolvePackageImportsBareTarget(target, packageDir, conditions) {
+    if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
+        throw makeModuleNotFoundError(target);
+    }
+    const resolved = globalThis.__wasm_rquickjs_loader_default_resolve_package(
+        nodeUrl.pathToFileURL(pathModule.join(packageDir, 'package.json')).href,
+        target,
+        Array.from(conditions || cjsPackageConditions()),
+        'import',
+    );
+    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) {
+        throw makeModuleNotFoundError(target);
+    }
+    return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)));
+}
+
+function resolvePackageTargetValue(packageDir, target, resolution) {
     if (target === null) return packageTargetBlocked;
     if (target === false) {
-        throw makeInvalidPackageTargetError('false', allowBareTarget ? 'imports' : 'exports');
+        throw makeInvalidPackageTargetError('false', resolution.allowBareTarget ? 'imports' : 'exports');
     }
 
     if (typeof target === 'string') {
-        if (patternSubstitution !== undefined && patternSubstitution !== null) {
-            target = target.replace(/\*/g, () => patternSubstitution);
+        if (resolution.patternSubstitution !== undefined && resolution.patternSubstitution !== null) {
+            target = target.replace(/\*/g, () => resolution.patternSubstitution);
         }
-        if (warningContext) {
+        if (resolution.warningContext) {
             emitDeprecatedPackageTargetWarning(
-                warningContext.kind,
-                warningContext.specifier,
+                resolution.warningContext.kind,
+                resolution.warningContext.specifier,
                 target,
-                patternSubstitution,
+                resolution.patternSubstitution,
                 packageDir,
-                warningContext.patternKey,
-                warningContext.importer
+                resolution.warningContext.patternKey,
+                resolution.warningContext.importer
             );
         }
-        if (allowBareTarget && isBarePackageSpecifier(target)) {
-            const resolved = resolveFromNodeModules(target, packageDir, pathModule.join(packageDir, 'package.json'), conditions);
-            if (resolved !== null) return resolved;
-            throw makeModuleNotFoundError(target);
+        if (resolution.allowBareTarget && isBarePackageSpecifier(target)) {
+            return resolvePackageImportsBareTarget(target, packageDir, resolution.conditions);
         }
         if (hasEncodedSlashOrBackslash(target)) {
             throw makeInvalidModuleSpecifierError(target, 'must not include encoded "/" or "\\" characters');
         }
         if (!target.startsWith('./')) {
-            throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
+            throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
         }
         if (!validatePackageTargetPath(target)) {
-            throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
+            throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
         }
         const candidate = pathModule.resolve(packageDir, decodePackageTargetPath(target));
         const relative = pathModule.relative(packageDir, candidate);
         if (relative.startsWith('..') || pathModule.isAbsolute(relative)) {
-            throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
+            throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
         }
-        return resolveExactPackageFile(candidate);
+        return resolveExactPackageFile(candidate, resolution);
     }
 
     if (Array.isArray(target)) {
         let lastFallbackError = null;
         for (let i = 0; i < target.length; i++) {
             try {
-                const resolved = resolvePackageTargetValue(packageDir, target[i], conditions, seen, allowBareTarget, patternSubstitution, warningContext);
+                const resolved = resolvePackageTargetValue(packageDir, target[i], resolution);
                 if (resolved === packageTargetBlocked) continue;
                 if (resolved !== packageTargetNoMatch) return resolved;
             } catch (err) {
@@ -1134,13 +1185,13 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
     }
 
     if (target && typeof target === 'object') {
-        if (seen.has(target)) return null;
-        seen.add(target);
+        if (resolution.seen.has(target)) return null;
+        resolution.seen.add(target);
         const keys = Object.keys(target);
         for (let i = 0; i < keys.length; i++) {
             const condition = keys[i];
-            if (conditions.has(condition)) {
-                const resolved = resolvePackageTargetValue(packageDir, target[condition], conditions, seen, allowBareTarget, patternSubstitution, warningContext);
+            if (resolution.conditions.has(condition)) {
+                const resolved = resolvePackageTargetValue(packageDir, target[condition], resolution);
                 if (resolved === packageTargetNoMatch) continue;
                 return resolved;
             }
@@ -1148,12 +1199,13 @@ function resolvePackageTargetValue(packageDir, target, conditions, seen, allowBa
         return packageTargetNoMatch;
     }
 
-    throw makeInvalidPackageTargetError(target, allowBareTarget ? 'imports' : 'exports');
+    throw makeInvalidPackageTargetError(target, resolution.allowBareTarget ? 'imports' : 'exports');
 }
 
 function resolvePackageTargetWithContext(packageDir, target, conditions, allowBareTarget, patternSubstitution, warningContext) {
+    const resolution = makePackageTargetResolutionContext(conditions, allowBareTarget, patternSubstitution, warningContext);
     try {
-        return resolvePackageTargetValue(packageDir, target, conditions, undefined, allowBareTarget, patternSubstitution, warningContext);
+        return resolvePackageTargetValue(packageDir, target, resolution);
     } catch (err) {
         if (err && err.code === 'ERR_INVALID_PACKAGE_TARGET') {
             throw addPackageErrorContext(err, warningContext.specifier);
@@ -1246,22 +1298,33 @@ function readCjsPackageCandidate(filename, packageDir) {
     return content === null ? null : { filename, content, packageDir };
 }
 
+const cjsPackageFileProbeProfile = [
+    (candidate) => candidate,
+    (candidate) => candidate + '.js',
+    (candidate) => candidate + '.json',
+    (candidate) => candidate + '.node',
+];
+
+const cjsPackageIndexProbeProfile = [
+    (candidate) => pathModule.join(candidate, 'index.js'),
+    (candidate) => pathModule.join(candidate, 'index.json'),
+    (candidate) => pathModule.join(candidate, 'index.node'),
+];
+
+function readCjsPackageProbeProfile(candidate, packageDir, profile) {
+    for (let i = 0; i < profile.length; i++) {
+        const resolved = readCjsPackageCandidate(profile[i](candidate), packageDir);
+        if (resolved !== null) return resolved;
+    }
+    return null;
+}
+
 function readCjsPackageFileCandidates(candidate, packageDir) {
-    let resolved = readCjsPackageCandidate(candidate, packageDir);
-    if (resolved !== null) return resolved;
-    resolved = readCjsPackageCandidate(candidate + '.js', packageDir);
-    if (resolved !== null) return resolved;
-    resolved = readCjsPackageCandidate(candidate + '.json', packageDir);
-    if (resolved !== null) return resolved;
-    return readCjsPackageCandidate(candidate + '.node', packageDir);
+    return readCjsPackageProbeProfile(candidate, packageDir, cjsPackageFileProbeProfile);
 }
 
 function readCjsPackageIndexCandidates(candidate, packageDir) {
-    let resolved = readCjsPackageCandidate(pathModule.join(candidate, 'index.js'), packageDir);
-    if (resolved !== null) return resolved;
-    resolved = readCjsPackageCandidate(pathModule.join(candidate, 'index.json'), packageDir);
-    if (resolved !== null) return resolved;
-    return readCjsPackageCandidate(pathModule.join(candidate, 'index.node'), packageDir);
+    return readCjsPackageProbeProfile(candidate, packageDir, cjsPackageIndexProbeProfile);
 }
 
 function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause) {
@@ -1329,25 +1392,27 @@ function findPackageScope(startDir) {
 }
 
 function resolvePackageImports(id, parentDir, conditions) {
-    const scope = findPackageScope(parentDir);
-    if (!scope || !scope.pkg || !scope.pkg.imports || typeof scope.pkg.imports !== 'object') {
+    if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
+        throw new Error('Internal package resolver is not initialized');
+    }
+    let resolved;
+    try {
+        resolved = globalThis.__wasm_rquickjs_loader_default_resolve_package(
+            nodeUrl.pathToFileURL(pathModule.join(parentDir, 'package.json')).href,
+            id,
+            Array.from(conditions || cjsPackageConditions()),
+            'cjs-analysis',
+        );
+    } catch (err) {
+        if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
+            throw makeCjsModuleNotFoundFromErrModuleNotFound(err, id);
+        }
+        throw err;
+    }
+    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) {
         throw makePackageImportNotDefinedError(id);
     }
-    validatePackageImportSpecifier(id);
-    const match = findPackageMapTarget(scope.pkg.imports, id, 'request is not a valid match in pattern');
-    if (match === null) {
-        throw makePackageImportNotDefinedError(id);
-    }
-    const resolved = resolvePackageTargetWithContext(
-        scope.dir,
-        match.target,
-        conditions,
-        true,
-        match.patternSubstitution,
-        { kind: 'imports', specifier: id, patternKey: match.patternKey }
-    );
-    if (resolved !== packageTargetNoMatch && resolved !== packageTargetBlocked) return resolved;
-    throw makePackageImportNotDefinedError(id);
+    return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)));
 }
 
 function resolveFilename(id, parentDir) {
@@ -2329,6 +2394,27 @@ function previousSignificantChar(source, pos) {
     return -1;
 }
 
+function previousSignificantCodeChar(source, pos) {
+    let previous = -1;
+    scanSourceCodePositions(source.substring(0, pos), { skipRegex: true }, (_i, code) => {
+        if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) previous = code;
+        return undefined;
+    });
+    return previous;
+}
+
+function previousIdentifierBefore(source, pos) {
+    let previous = null;
+    scanSourceCodePositions(source.substring(0, pos), { skipRegex: true }, (i, code) => {
+        if (!isIdentifierStartCode(code)) return undefined;
+        let end = i + 1;
+        while (end < pos && isIdentifierContinueCode(source.charCodeAt(end))) end++;
+        previous = { start: i, name: source.substring(i, end) };
+        return end;
+    });
+    return previous;
+}
+
 function previousSignificantCharOnSameLine(source, pos) {
     for (let i = pos - 1; i >= 0; i--) {
         const ch = source.charCodeAt(i);
@@ -2554,7 +2640,76 @@ function isStaticImportSyntax(source, pos) {
         isIdentifierStartCode(ch);
 }
 
+function sourceHasImportMeta(source) {
+    let found = false;
+    const completed = scanImportMetaPositions(source, (i) => {
+        if (readImportMeta(source, i) !== null) {
+            found = true;
+            return false;
+        }
+        return undefined;
+    });
+    return found || completed === false;
+}
+
+function scanImportMetaPositions(source, visitor) {
+    let i = 0;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x60) {
+            if (templateContainsImportMeta(source, i)) return false;
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, source.length);
+            continue;
+        }
+        if (code === 0x2f && isRegexLiteralStartInSource(source, i)) {
+            i = skipRegexLiteralInSource(source, i);
+            continue;
+        }
+
+        const next = visitor(i);
+        if (next === false) return false;
+        i = typeof next === 'number' ? next : i + 1;
+    }
+    return true;
+}
+
+function templateContainsImportMeta(source, templateStart) {
+    let i = templateStart + 1;
+    while (i < source.length) {
+        const code = source.charCodeAt(i);
+        if (code === 0x5c) {
+            i += 2;
+        } else if (code === 0x60) {
+            return false;
+        } else if (code === 0x24 && i + 1 < source.length && source.charCodeAt(i + 1) === 0x7b) {
+            const expressionStart = i + 2;
+            const expressionEnd = Math.max(expressionStart, skipTemplateExpression(source, expressionStart) - 1);
+            if (sourceHasImportMeta(source.slice(expressionStart, expressionEnd))) return true;
+            i = expressionEnd + 1;
+        } else {
+            i++;
+        }
+    }
+    return false;
+}
+
 function looksLikeEsmSource(source) {
+    if (sourceHasImportMeta(source)) return true;
     let found = false;
     scanSourceCodePositions(source, { skipRegex: true }, (i) => {
         if (startsWithKeywordAt(source, 'export', i) && isStaticExportSyntax(source, i)) {
@@ -2563,10 +2718,6 @@ function looksLikeEsmSource(source) {
         }
         if (startsWithKeywordAt(source, 'import', i)) {
             if (isStaticImportSyntax(source, i)) {
-                found = true;
-                return false;
-            }
-            if (readImportMeta(source, i) !== null) {
                 found = true;
                 return false;
             }
@@ -2627,7 +2778,8 @@ function sourceHasTopLevelAwait(source) {
                 classDepth++;
                 pendingClassBody = false;
             } else {
-                braces.push('normal');
+                const inObjectLikeBrace = !!(braces.length > 0 && braces[braces.length - 1].objectLike);
+                braces.push({ objectLike: isLikelyObjectLiteralOpen(source, i, inObjectLikeBrace) });
             }
         } else if (code === 0x7d) {
             const context = braces.pop();
@@ -2639,7 +2791,17 @@ function sourceHasTopLevelAwait(source) {
             return undefined;
         }
 
-        if (startsWithKeywordAt(source, 'await', i) && functionDepth === 0 && classDepth === 0) {
+        if (
+            startsWithKeywordAt(source, 'await', i) &&
+            functionDepth === 0 &&
+            classDepth === 0 &&
+            isTopLevelAwaitExpression(
+                source,
+                i,
+                i + 5,
+                !!(braces.length > 0 && braces[braces.length - 1].objectLike)
+            )
+        ) {
             found = true;
             return false;
         }
@@ -2651,6 +2813,33 @@ function sourceHasTopLevelAwait(source) {
         return undefined;
     });
     return found;
+}
+
+function isLikelyObjectLiteralOpen(source, pos, inObjectLikeBrace) {
+    const previous = previousSignificantCodeChar(source, pos);
+    return previous === 0x3d || previous === 0x28 || previous === 0x5b ||
+        previous === 0x2c || previous === 0x3f || // = ( [ , ?
+        (inObjectLikeBrace && previous === 0x3a); // nested object property value
+}
+
+function isTopLevelAwaitExpression(source, start, end, inObjectLikeBrace) {
+    if (previousSignificantCodeChar(source, start) === 0x2e) return false; // member property
+    const next = skipWhitespaceAndComments(source, end);
+    if (source.charCodeAt(next) === 0x3a) return false; // property key or label
+    if (inObjectLikeBrace && isObjectAwaitKey(source, start, next)) return false;
+    return true;
+}
+
+function isObjectAwaitKey(source, start, next) {
+    const previous = previousSignificantCodeChar(source, start);
+    if (previous === 0x7b || previous === 0x2c || previous === 0x2a) { // { , *
+        const nextCode = source.charCodeAt(next);
+        return nextCode === 0x28 || nextCode === 0x7d || nextCode === 0x2c; // ( } ,
+    }
+    const ident = previousIdentifierBefore(source, start);
+    if (!ident || (ident.name !== 'get' && ident.name !== 'set' && ident.name !== 'async')) return false;
+    const beforeIdent = previousSignificantCodeChar(source, ident.start);
+    return source.charCodeAt(next) === 0x28 && (beforeIdent === 0x7b || beforeIdent === 0x2c); // ( after { ,
 }
 
 function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
@@ -3867,21 +4056,6 @@ function readLoaderObjectKeysReexport(source, pos, requireBindings) {
     return { specifier, end: callEnd + 1 };
 }
 
-function resolveLoaderCjsReexport(specifier, filename) {
-    if (!filename || isBuiltin(specifier) || specifier.startsWith('node:') || specifier.includes(':')) return null;
-    const parentDir = pathModule.dirname(filename);
-    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')) {
-        return resolveFilename(specifier, parentDir);
-    }
-    if (specifier.startsWith('#')) {
-        return resolvePackageImports(specifier, parentDir, cjsPackageConditions());
-    }
-    if (isBarePackageSpecifier(specifier)) {
-        return resolveFromNodeModules(specifier, parentDir, filename, cjsPackageConditions());
-    }
-    return null;
-}
-
 function scanLoaderCjsTopLevelPositions(source, visitor) {
     let i = 0;
     let braceDepth = 0;
@@ -3935,9 +4109,7 @@ function scanLoaderCjsTopLevelPositions(source, visitor) {
     return true;
 }
 
-function addLoaderCjsNames(names, nameSet, source, filename, seen) {
-    if (seen && filename && seen[filename]) return;
-    if (seen && filename) seen[filename] = true;
+function addLoaderCjsNames(names, nameSet, source, filename, rootReexports) {
     const requireBindings = Object.create(null);
     scanLoaderCjsTopLevelPositions(source, (i, braceDepth, statementStart) => {
         if (braceDepth === 0 && statementStart) {
@@ -3963,11 +4135,7 @@ function addLoaderCjsNames(names, nameSet, source, filename, seen) {
             }
             if (filename) {
                 for (let j = 0; j < objectLiteral.reexports.length; j++) {
-                    const reexport = objectLiteral.reexports[j];
-                    try {
-                        const resolved = resolveLoaderCjsReexport(reexport, filename);
-                        if (resolved !== null) addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
-                    } catch (_) {}
+                    rootReexports.push(objectLiteral.reexports[j]);
                 }
             }
             return objectLiteral.end;
@@ -3975,10 +4143,7 @@ function addLoaderCjsNames(names, nameSet, source, filename, seen) {
         const keysReexport = braceDepth === 0 && statementStart ? readLoaderObjectKeysReexport(source, i, requireBindings) : null;
         const reexport = keysReexport !== null ? keysReexport.specifier : readLoaderModuleExportsRequire(source, i);
         if (reexport !== null && filename) {
-            try {
-                const resolved = resolveLoaderCjsReexport(reexport, filename);
-                if (resolved !== null) addLoaderCjsNames(names, nameSet, resolved.content, resolved.filename, seen || Object.create(null));
-            } catch (_) {}
+            rootReexports.push(reexport);
         }
         if (keysReexport !== null) return keysReexport.end;
         return undefined;
@@ -3987,7 +4152,19 @@ function addLoaderCjsNames(names, nameSet, source, filename, seen) {
 
 function loaderCjsNamedExports(source, filename) {
     const names = [];
-    addLoaderCjsNames(names, new Set(), source, filename, Object.create(null));
+    const nameSet = new Set();
+    const rootReexports = [];
+    addLoaderCjsNames(names, nameSet, source, filename, rootReexports);
+    if (filename !== undefined && typeof globalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names === 'function') {
+        const rustNames = globalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names(filename, source, rootReexports);
+        for (let i = 0; i < rustNames.length; i++) {
+            const name = rustNames[i];
+            if (!nameSet.has(name)) {
+                nameSet.add(name);
+                names.push(name);
+            }
+        }
+    }
     return names;
 }
 
@@ -4022,12 +4199,55 @@ function statementEndForStaticImport(source, start) {
     return source.length;
 }
 
+function staticImportAttrsAfter(source, start, end) {
+    let i = skipWhitespaceAndComments(source, start);
+    if (
+        i + 4 > end ||
+        source.substring(i, i + 4) !== 'with' ||
+        (i + 4 < end && isIdentifierContinueCode(source.charCodeAt(i + 4)))
+    ) {
+        return undefined;
+    }
+    i = skipWhitespaceAndComments(source, i + 4);
+    if (source.charCodeAt(i) !== 0x7b) return undefined;
+    const attrsStart = i + 1;
+    let depth = 1;
+    i++;
+    while (i < end && depth > 0) {
+        const code = source.charCodeAt(i);
+        if (code === 0x27 || code === 0x22 || code === 0x60) {
+            i = skipQuotedOrTemplate(source, i);
+            continue;
+        }
+        if (code === 0x2f && i + 1 < end && source.charCodeAt(i + 1) === 0x2f) {
+            i += 2;
+            while (i < end && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
+            continue;
+        }
+        if (code === 0x2f && i + 1 < end && source.charCodeAt(i + 1) === 0x2a) {
+            i += 2;
+            while (i + 1 < end && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
+            i = Math.min(i + 2, end);
+            continue;
+        }
+        if (code === 0x7b) depth++;
+        else if (code === 0x7d) depth--;
+        i++;
+    }
+    if (depth !== 0) return undefined;
+
+    const attrs = source.substring(attrsStart, i - 1);
+    const match = /(?:^|[,{])\s*(?:(["'])type\1|type)\s*:\s*(["'])((?:\\.|(?!\2)[^\\])*)\2/.exec(attrs);
+    return match ? { typeValue: match[3].replace(/\\(['"\\])/g, '$1') } : undefined;
+}
+
 function staticImportEdgeAt(source, pos) {
     if (startsWithKeywordAt(source, 'import', pos)) {
         const afterImport = skipWhitespaceAndComments(source, pos + 6);
         const bare = readStaticSpecifierString(source, afterImport);
         if (bare) {
-            return { specifier: bare.value };
+            const end = statementEndForStaticImport(source, bare.end);
+            return { specifier: bare.value, attrs: staticImportAttrsAfter(source, bare.end, end) };
         }
 
         const end = statementEndForStaticImport(source, afterImport);
@@ -4041,7 +4261,7 @@ function staticImportEdgeAt(source, pos) {
             if (startsWithKeywordAt(source, 'from', i)) {
                 const spec = readStaticSpecifierString(source, i + 4);
                 if (spec && spec.end <= end + 1) {
-                    return { specifier: spec.value };
+                    return { specifier: spec.value, attrs: staticImportAttrsAfter(source, spec.end, end) };
                 }
             }
             i++;
@@ -4060,7 +4280,7 @@ function staticImportEdgeAt(source, pos) {
             if (startsWithKeywordAt(source, 'from', i)) {
                 const spec = readStaticSpecifierString(source, i + 4);
                 if (spec && spec.end <= end + 1) {
-                    return { specifier: spec.value };
+                    return { specifier: spec.value, attrs: staticImportAttrsAfter(source, spec.end, end) };
                 }
             }
             i++;
@@ -4259,11 +4479,44 @@ function fileUrlForPath(filename) {
     return 'file://' + filename;
 }
 
-function resolveEsmGraphSpecifier(specifier, parentFilename, conditions) {
+const cjsEsmDefaultSnapshots = new WeakMap();
+
+function captureCjsEsmDefaultSnapshot(mod) {
+    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function') || cjsEsmDefaultSnapshots.has(mod)) return;
+    cjsEsmDefaultSnapshots.set(mod, mod.exports);
+}
+
+function hasCjsEsmDefaultSnapshot(cache, filename) {
+    if (!cache || typeof cache !== 'object') return false;
+    const mod = cache[filename];
+    return !!(mod && (typeof mod === 'object' || typeof mod === 'function') && cjsEsmDefaultSnapshots.has(mod));
+}
+
+function getCjsEsmDefaultSnapshot(cache, filename) {
+    const mod = cache && cache[filename];
+    return mod && (typeof mod === 'object' || typeof mod === 'function')
+        ? cjsEsmDefaultSnapshots.get(mod)
+        : undefined;
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', {
+    value: hasCjsEsmDefaultSnapshot,
+    writable: false,
+    configurable: false,
+});
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot', {
+    value: getCjsEsmDefaultSnapshot,
+    writable: false,
+    configurable: false,
+});
+
+function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
     conditions = conditions || esmPackageConditions();
+    mode = mode || 'import';
     if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;
     const parentDir = pathModule.dirname(parentFilename);
-    if (specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/')) {
+    if (isRelativeOrAbsoluteSpecifier(specifier)) {
         try {
             return resolveFilename(specifier, parentDir);
         } catch (_) {
@@ -4272,15 +4525,26 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions) {
     }
     if (specifier.startsWith('#')) {
         try {
-            const resolved = resolvePackageImports(specifier, parentDir, conditions);
-            if (resolved && !resolved.builtin) return resolved;
+            const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
+                parentFilename,
+                specifier,
+                Array.from(conditions),
+                mode,
+            );
+            if (resolved) return { filename: resolved };
         } catch (_) {
             return null;
         }
         return null;
     }
     try {
-        return resolveFromNodeModules(specifier, parentDir, parentFilename, conditions);
+        const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
+            parentFilename,
+            specifier,
+            Array.from(conditions),
+            mode,
+        );
+        return resolved ? { filename: resolved } : null;
     } catch (_) {
         return null;
     }
@@ -4325,7 +4589,7 @@ function esmGraphReachesAny(filename, stack, seen, fileInfoCache) {
         : collectLiteralRequireSpecifiers(source);
     const conditions = isEsm ? esmPackageConditions() : cjsPackageConditions();
     for (let i = 0; i < specifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions);
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions, isEsm ? 'import' : 'cjs-analysis');
         if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen, fileInfoCache)) return true;
     }
 
@@ -4336,7 +4600,7 @@ function esmGraphReachesAny(filename, stack, seen, fileInfoCache) {
             aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
         );
         for (let i = 0; i < bridgeSpecifiers.length; i++) {
-            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions());
+            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
             if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen, fileInfoCache)) return true;
         }
     }
@@ -4356,7 +4620,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
     if (!isEsm) {
         const requireSpecifiers = collectLiteralRequireSpecifiers(source);
         for (let i = 0; i < requireSpecifiers.length; i++) {
-            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions());
+            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
             if (resolved && resolved.filename) {
                 const targetInfo = readEsmGraphFileInfo(resolved.filename, fileInfoCache);
                 if (targetInfo.source !== null && targetInfo.isEsm && esmGraphReachesAny(resolved.filename, stack, undefined, fileInfoCache)) {
@@ -4373,7 +4637,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
 
     const specifiers = collectStaticEsmSpecifiers(source);
     for (let i = 0; i < specifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions());
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions(), 'import');
         if (resolved && resolved.filename) {
             scanRequireEsmGraph(resolved.filename, marked, seen, stack, fileInfoCache);
         }
@@ -4384,7 +4648,7 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
         aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
     );
     for (let i = 0; i < createRequireSpecifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions());
+        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
         if (resolved && resolved.filename) {
             const targetInfo = readEsmGraphFileInfo(resolved.filename, fileInfoCache);
             if (targetInfo.source !== null && targetInfo.isEsm && esmGraphReachesAny(resolved.filename, stack, undefined, fileInfoCache)) {
@@ -4572,13 +4836,6 @@ function resultForEsmFileUrl(url) {
     return { url: url.href, format: defaultLoaderFormatForFilename(filename) };
 }
 
-function resultForPackageFile(filename) {
-    const stat = _stat(filename);
-    if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
-    if (stat !== 0) throw makeEsmModuleNotFoundError(filename);
-    return { url: nodeUrl.pathToFileURL(filename).href, format: defaultLoaderFormatForFilename(filename) };
-}
-
 function parentFilenameForLoaderResolve(parentURL, baseUrl) {
     parentURL = String(parentURL || baseUrl);
     if (parentURL.startsWith('file://')) {
@@ -4590,61 +4847,111 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
     return null;
 }
 
-function conditionsForLoaderResolve(context) {
-    if (context && Array.isArray(context.conditions)) {
-        const conditions = setFromArray(context.conditions);
-        conditions.add('default');
-        return conditions;
-    }
-    return esmPackageConditions();
-}
-
-function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
-    return resultForEsmFileUrl(new URL(specifier, parentURL));
-}
-
-function decodeEsmPackageSubpath(subpath) {
-    if (hasEncodedSlashOrBackslash(subpath)) {
-        throw makeInvalidModuleSpecifierError(subpath, 'must not include encoded "/" or "\\" characters');
-    }
-    try {
-        return decodeURIComponent(subpath);
-    } catch (_) {
-        return subpath;
-    }
-}
-
-function resolveEsmPackageForLoader(id, parentDir, parentFilename, conditions) {
-    const parts = splitPackageName(id);
-    const hasSubpath = parts.subpath.length > 0;
-
-    const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions);
-    if (selfResolved !== undefined) {
-        if (selfResolved.builtin) return { url: selfResolved.builtin };
-        return resultForPackageFile(selfResolved.filename);
+    function packageConditionsForLoaderResolve(context, defaultConditions) {
+        if (context && Array.isArray(context.conditions)) {
+            const conditions = setFromArray(context.conditions);
+            conditions.add('default');
+            return conditions;
+        }
+        return defaultConditions;
     }
 
-    const dirs = _nodeModulePaths(parentDir);
-    for (let i = 0; i < dirs.length; i++) {
-        const pkgDir = pathModule.join(dirs[i], parts.name);
-        const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
-        const packageEntry = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
-        if (packageEntry === null) continue;
+    function packageConditionArrayForLoaderResolve(context, defaultConditions) {
+        return Array.from(packageConditionsForLoaderResolve(context, defaultConditions));
+    }
 
-        if (packageEntry.exportsResolved !== undefined) {
-            if (packageEntry.exportsResolved.builtin) return { url: packageEntry.exportsResolved.builtin };
-            return resultForPackageFile(packageEntry.exportsResolved.filename);
+    function packageResolutionForLoaderResult(resolved) {
+        if (!resolved || !resolved.url) return undefined;
+        return {
+            url: String(resolved.url),
+            format: resolved.format === undefined || resolved.format === null
+                ? undefined
+                : String(resolved.format),
+        };
+    }
+
+    function cjsPackageResolutionForLoaderResult(resolved) {
+        const packageResolved = packageResolutionForLoaderResult(resolved);
+        if (!packageResolved) return undefined;
+        if (!packageResolved.url.startsWith('file://')) return packageResolved;
+        const filename = nodeUrl.fileURLToPath(packageResolved.url);
+        const source = tryReadFile(filename);
+        if (source === null) return undefined;
+        return {
+            url: packageResolved.url,
+            format: packageResolved.format || (filename.endsWith('.json') ? 'json' : 'commonjs'),
+            source,
+        };
+    }
+
+    function resolvePackageDefaultForLoader(specifier, parentURL, context, defaultConditions, mode, mapNotFoundToCjs) {
+        if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
+            throw new Error('Internal package resolver provider is not initialized');
+        }
+        try {
+            return globalThis.__wasm_rquickjs_loader_default_resolve_package(
+                parentURL,
+                specifier,
+                packageConditionArrayForLoaderResolve(context, defaultConditions),
+                mode,
+            );
+        } catch (err) {
+            if (mapNotFoundToCjs && err && err.code === 'ERR_MODULE_NOT_FOUND') {
+                throw makeModuleNotFoundError(specifier);
+            }
+            throw err;
+        }
+    }
+
+    function resolveEsmPackageDefaultForLoader(specifier, parentURL, context) {
+        return packageResolutionForLoaderResult(
+            resolvePackageDefaultForLoader(specifier, parentURL, context, esmPackageConditions(), 'import', false)
+        );
+    }
+
+    function resolveCjsPackageDefaultForLoader(specifier, parentURL, context) {
+        const resolved = resolvePackageDefaultForLoader(
+            specifier,
+            parentURL,
+            context,
+            cjsPackageConditions(),
+            'cjs-analysis',
+            true,
+        );
+        return cjsPackageResolutionForLoaderResult(resolved);
+    }
+
+    function resolveCjsDefaultForLoader(specifier, parentURL, context) {
+        if (specifier.startsWith('node:')) {
+            return { url: specifier, format: 'builtin' };
+        }
+        if (isBuiltin(specifier)) {
+            return { url: 'node:' + specifier, format: 'builtin' };
         }
 
-        if (hasSubpath) {
-            return resultForPackageFile(pathModule.join(pkgDir, decodeEsmPackageSubpath(parts.subpath)));
+        const parentFilename = parentFilenameForLoaderResolve(parentURL, fileUrlForPath('/'));
+        const parentDir = parentFilename ? pathModule.dirname(parentFilename) : '/';
+        if (specifier.startsWith('file://')) {
+            const filename = nodeUrl.fileURLToPath(specifier);
+            const source = tryReadFile(filename);
+            if (source === null) return undefined;
+            return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : 'commonjs', source };
         }
-
-        return resolveFromNodeModules(id, parentDir, parentFilename, conditions);
+        if (isRelativeOrAbsoluteSpecifier(specifier)) {
+            const resolved = resolveFilename(specifier, parentDir);
+            return { url: nodeUrl.pathToFileURL(resolved.filename).href, format: resolved.filename.endsWith('.json') ? 'json' : 'commonjs', source: resolved.content };
+        }
+        if (specifier.startsWith('#') && parentFilename) {
+            return resolveCjsPackageDefaultForLoader(specifier, parentURL, context);
+        }
+        const packageResolved = resolveCjsPackageDefaultForLoader(specifier, parentURL, context);
+        if (packageResolved) return packageResolved;
+        return undefined;
     }
 
-    return null;
-}
+    function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
+        return resultForEsmFileUrl(new URL(specifier, parentURL));
+    }
 
 function isLoaderSourceValue(value) {
     return typeof value === 'string' ||
@@ -4849,6 +5156,7 @@ function loadModule(resolvedFilename, source, parentModule) {
 
     // Check cache
     if (moduleCache[filename]) {
+        throwIfRequireEsmGraphCycle(filename);
         const cached = moduleCache[filename];
         if (cached.__wasmRequireEsmInProgress) {
             const err = new Error('Cannot require() ES Module ' + filename + ' in a cycle.');
@@ -4900,12 +5208,15 @@ function loadModule(resolvedFilename, source, parentModule) {
         parentModule.children.push(mod);
     }
 
+    let cjsEsmDefaultSnapshotEligible = false;
+
     // Check for custom extension handler
     const ext = findLongestRegisteredExtension(filename);
     const handler = requireExtensions[ext];
     if (handler && !_defaultExtHandlers.has(handler)) {
         try {
             handler(mod, filename);
+            cjsEsmDefaultSnapshotEligible = true;
         } catch (err) {
             delete moduleCache[filename];
             unlinkModuleFromParent(parentModule, mod);
@@ -5029,11 +5340,15 @@ function loadModule(resolvedFilename, source, parentModule) {
                         globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
                     }
                 }
+                cjsEsmDefaultSnapshotEligible = true;
             }
         }
     }
 
     mod.loaded = true;
+    if (cjsEsmDefaultSnapshotEligible) {
+        captureCjsEsmDefaultSnapshot(mod);
+    }
     return mod;
 }
 
@@ -5107,6 +5422,7 @@ function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
         mod.require = loaderRequire;
         compileModuleInto(mod, source, filename, loaderRequire);
         mod.loaded = true;
+        captureCjsEsmDefaultSnapshot(mod);
         return mod;
     } catch (err) {
         delete moduleCache[cacheKey];
@@ -5212,7 +5528,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
             argErr.code = 'ERR_INVALID_ARG_VALUE';
             throw argErr;
         }
-        const isRelative = id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/');
+        const isRelative = isRelativeOrAbsoluteSpecifier(id);
         for (let pi = 0; pi < searchPaths.length; pi++) {
             if (typeof searchPaths[pi] !== 'string') {
                 const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
@@ -5239,7 +5555,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
         err.code = 'MODULE_NOT_FOUND';
         throw addRequireStackToModuleNotFound(err, id, parentFilename);
     }
-    if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
+    if (isRelativeOrAbsoluteSpecifier(id)) {
         try {
             const resolved = resolveFilename(id, parentDir);
             return toCjsCanonicalFilename(resolved.filename, false);
@@ -5258,6 +5574,9 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
             }
             const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
             if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
+            if (err.__wasmNoImportsField === true) {
+                throw makeModuleNotFoundError(id);
+            }
             throw err;
         }
     }
@@ -5271,7 +5590,11 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
     throw err;
 }
 
-function makeRequire(parentDir, parentModule, parentFilenameOverride) {
+function currentRequireMain() {
+    return mainModule.filename === '/' ? undefined : mainModule;
+}
+
+function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride) {
     const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     const parentLookupPaths = parentModule && Array.isArray(parentModule.paths)
         ? parentModule.paths.concat(globalPaths)
@@ -5321,6 +5644,12 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         // (allows shadowing builtins via require.cache)
         const cached = moduleCache[id];
         if (cached !== undefined) {
+            throwIfRequireEsmGraphCycle(id);
+            if (cached.__wasmRequireEsmInProgress) {
+                const err = new Error('Cannot require() ES Module ' + id + ' in a cycle.');
+                err.code = 'ERR_REQUIRE_CYCLE_MODULE';
+                throw err;
+            }
             return cached.exports;
         }
 
@@ -5331,7 +5660,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
         }
 
         // Relative or absolute file paths
-        if (id === '.' || id === '..' || id.startsWith('./') || id.startsWith('../') || id.startsWith('/')) {
+        if (isRelativeOrAbsoluteSpecifier(id)) {
             let resolved;
             try {
                 resolved = resolveFilename(id, parentDir);
@@ -5356,6 +5685,9 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
                 if (nmResolved) {
                     const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
                     return mod.exports;
+                }
+                if (err.__wasmNoImportsField === true) {
+                    throw makeModuleNotFoundError(id);
                 }
                 throw err;
             }
@@ -5392,7 +5724,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride) {
     };
 
     Object.defineProperty(localRequire, 'main', {
-        value: mainModule,
+        value: arguments.length >= 4 ? requireMainOverride : mainModule,
         writable: true,
         configurable: true,
         enumerable: true,
@@ -5447,12 +5779,13 @@ export let createRequire = function createRequire(filename) {
         children: [],
         paths: _nodeModulePaths(dir),
     };
-    return makeRequire(dir, syntheticParent, filepath);
+    return makeRequire(dir, syntheticParent, filepath, currentRequireMain());
 };
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_create_require', {
     value: createRequire,
-    configurable: true,
+    writable: false,
+    configurable: false,
 });
 
 function isUrlInstance(value) {
@@ -5621,6 +5954,7 @@ export let register = function register(specifier, parentURL, options) {
         (globalThis.__wasm_rquickjs_registered_loader_realm_counter || 0) + 1;
     const loader = { url, parent, data, realm, module: undefined, initialized: false, initializing: undefined };
     loaders.push(loader);
+    globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
     if (typeof globalThis.__wasm_rquickjs_start_registered_loader === 'function') {
         globalThis.__wasm_rquickjs_start_registered_loader(loader);
     }
@@ -5694,17 +6028,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
         }
 
-        if (parentFilename !== null && specifier.startsWith('#')) {
-            const resolved = resolvePackageImports(specifier, pathModule.dirname(parentFilename), conditionsForLoaderResolve(context));
-            if (resolved && resolved.builtin) return { url: resolved.builtin };
-            if (resolved && resolved.filename) {
-                return { url: nodeUrl.pathToFileURL(resolved.filename).href, format: resolved.filename.endsWith('.json') ? 'json' : undefined };
-            }
-        }
-
         if (parentFilename !== null) {
-            const resolved = resolveEsmPackageForLoader(specifier, pathModule.dirname(parentFilename), parentFilename, conditionsForLoaderResolve(context));
-            if (resolved) return resolved;
+            const packageResolved = resolveEsmPackageDefaultForLoader(specifier, parentURL, context);
+            if (packageResolved) return packageResolved;
             if (missingAsUndefined) return undefined;
             throw makeEsmModuleNotFoundError(specifier);
         }
@@ -5915,33 +6241,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (isImportMode) {
                 return resolveEsmDefaultForLoader(specifierString, parentURL, context, baseContext.parentURL, true, false);
             }
-            let parentFilename = null;
-            if (parentURL.startsWith('file://')) {
-                parentFilename = nodeUrl.fileURLToPath(parentURL);
-            } else if (parentURL.startsWith('/')) {
-                parentFilename = parentURL;
-            }
-            const parentDir = parentFilename ? pathModule.dirname(parentFilename) : '/';
-            if (specifierString.startsWith('file://')) {
-                const filename = nodeUrl.fileURLToPath(specifierString);
-                const source = tryReadFile(filename);
-                if (source === null) return undefined;
-                return { url: nodeUrl.pathToFileURL(filename).href, format: filename.endsWith('.json') ? 'json' : 'commonjs', source };
-            }
-            if (specifierString === '.' || specifierString === '..' || specifierString.startsWith('./') || specifierString.startsWith('../') || specifierString.startsWith('/')) {
-                const resolved = resolveFilename(specifierString, parentDir);
-                return { url: nodeUrl.pathToFileURL(resolved.filename).href, format: resolved.filename.endsWith('.json') ? 'json' : 'commonjs', source: resolved.content };
-            }
-            if (specifierString.startsWith('#') && parentFilename) {
-                const importsResolved = resolvePackageImports(specifierString, parentDir, cjsPackageConditions());
-                if (importsResolved.builtin) return { url: importsResolved.builtin, format: 'builtin' };
-                return { url: nodeUrl.pathToFileURL(importsResolved.filename).href, format: importsResolved.filename.endsWith('.json') ? 'json' : 'commonjs', source: importsResolved.content };
-            }
-            const nmResolved = resolveFromNodeModules(specifierString, parentDir, parentFilename, cjsPackageConditions());
-            if (nmResolved) {
-                return { url: nodeUrl.pathToFileURL(nmResolved.filename).href, format: nmResolved.filename.endsWith('.json') ? 'json' : 'commonjs', source: nmResolved.content };
-            }
-            return undefined;
+            return resolveCjsDefaultForLoader(specifierString, parentURL, context);
         };
 
         const runResolve = (index, nextSpecifier, context) => {
@@ -6035,8 +6335,40 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return { url: resolved.url, format: finalFormat, source };
     };
 
-    function staticRegisteredLoaderCacheKey(baseUrl, specifier) {
-        return String(baseUrl) + '\0' + String(specifier) + '\0';
+    function staticRegisteredLoaderCacheParts(specifier, attrs) {
+        let value = String(specifier);
+        let typeValue = attrs && attrs.typeValue !== undefined ? String(attrs.typeValue) : '';
+        if (typeValue === '') {
+            let match = /^data:([^,]*);__wasm_rquickjs_import_type=([^;,]+)(,.*)$/.exec(value);
+            if (match) {
+                value = 'data:' + match[1] + match[3];
+                typeValue = match[2].split('-')[0];
+            } else {
+                match = /([?#&])__wasm_rquickjs_import_type=([^&#]+)(&?)/.exec(value);
+                if (match) {
+                    const tokenStart = match.index;
+                    const tokenEnd = tokenStart + match[0].length;
+                    const prefix = value.slice(0, tokenStart);
+                    const suffix = value.slice(tokenEnd);
+                    const separator = match[1];
+                    if (separator === '&') {
+                        value = prefix + (suffix ? '&' + suffix : '');
+                    } else if (match[3] === '&') {
+                        value = prefix + separator + suffix;
+                    } else {
+                        value = prefix + suffix;
+                    }
+                    if (value.endsWith('?') || value.endsWith('#')) value = value.slice(0, -1);
+                    typeValue = match[2].split('-')[0];
+                }
+            }
+        }
+        return { specifier: value, typeValue };
+    }
+
+    function staticRegisteredLoaderCacheKey(baseUrl, specifier, attrs) {
+        const parts = staticRegisteredLoaderCacheParts(specifier, attrs);
+        return String(baseUrl) + '\0' + parts.specifier + '\0' + parts.typeValue + '\0';
     }
 
     function staticRegisteredLoaderReturn(loaded) {
@@ -6069,6 +6401,23 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return nodeUrl.fileURLToPath(url);
         }
         return url;
+    }
+
+    function staticRegisteredLoaderReturnForEdge(loaded, attrs) {
+        if (
+            attrs &&
+            attrs.typeValue === 'json' &&
+            loaded &&
+            loaded.format === 'json' &&
+            !Object.prototype.hasOwnProperty.call(loaded, 'source') &&
+            loaded.url &&
+            typeof globalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
+        ) {
+            const url = String(loaded.url);
+            const target = url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
+            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
+        }
+        return staticRegisteredLoaderReturn(loaded);
     }
 
     function staticRegisteredLoaderSourceForUrl(url) {
@@ -6127,11 +6476,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const edges = collectStaticEsmEdges(source);
         for (let i = 0; i < edges.length; i++) {
             const specifier = edges[i].specifier;
-            const key = staticRegisteredLoaderCacheKey(parentUrl, specifier);
+            const attrs = edges[i].attrs;
+            const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
             if (!Object.prototype.hasOwnProperty.call(globalThis.__wasm_rquickjs_static_registered_loader_cache, key)) {
                 try {
-                    const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, undefined, 'static-raw');
-                    const value = staticRegisteredLoaderReturn(loaded);
+                    const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');
+                    const value = staticRegisteredLoaderReturnForEdge(loaded, attrs);
                     globalThis.__wasm_rquickjs_static_registered_loader_cache[key] = { value, loaded };
                 } catch (error) {
                     globalThis.__wasm_rquickjs_static_registered_loader_cache[key] = { error };

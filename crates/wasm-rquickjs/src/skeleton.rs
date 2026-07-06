@@ -93,3 +93,201 @@ fn recursive_copy_sources(dir: &Dir, output: &Utf8Path) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    fn compact_whitespace(source: &str) -> String {
+        source.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    fn rust_string_array_after(source: &str, marker: &str) -> Vec<String> {
+        let marker_pos = source
+            .find(marker)
+            .unwrap_or_else(|| panic!("missing array marker {marker}"));
+        let initializer_pos = source[marker_pos..]
+            .find('=')
+            .unwrap_or_else(|| panic!("missing array initializer after {marker}"))
+            + marker_pos;
+        let array_start = source[initializer_pos..]
+            .find('[')
+            .unwrap_or_else(|| panic!("missing array start after {marker}"))
+            + initializer_pos
+            + 1;
+        let array_end = source[array_start..]
+            .find("];")
+            .unwrap_or_else(|| panic!("missing array terminator after {marker}"))
+            + array_start;
+
+        source[array_start..array_end]
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .map(|entry| {
+                entry
+                    .strip_prefix('"')
+                    .and_then(|entry| entry.strip_suffix('"'))
+                    .unwrap_or_else(|| {
+                        panic!("unsupported string array entry {entry:?} after {marker}")
+                    })
+                    .to_string()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn package_condition_sets_are_rust_owned() {
+        let module_js = include_str!("../skeleton/src/builtin/module.js");
+        let internal_rs = include_str!("../skeleton/src/internal.rs");
+        let internal_rs_compact = compact_whitespace(internal_rs);
+
+        assert!(
+            !module_js.contains("fallbackDefaultPackageConditions"),
+            "package default conditions must not have a JS fallback copy"
+        );
+        assert!(
+            !module_js.contains("DefaultPackageConditions = ["),
+            "package default conditions must not be duplicated as JS arrays"
+        );
+        assert!(
+            module_js.contains("__wasm_rquickjs_package_default_conditions(mode)"),
+            "module.js must request package condition defaults from the Rust provider"
+        );
+        assert!(
+            module_js.contains("defaultPackageConditions('cjs-analysis')"),
+            "CJS package conditions must request Rust's cjs-analysis defaults"
+        );
+        assert!(
+            module_js.contains("defaultPackageConditions('import')"),
+            "ESM package conditions must request Rust's import defaults"
+        );
+        assert!(
+            module_js.contains("defaultPackageConditions('loader')"),
+            "loader hook conditions must request Rust's loader defaults"
+        );
+        assert!(
+            internal_rs.contains("\"__wasm_rquickjs_package_default_conditions\""),
+            "internal.rs must register the Rust package condition provider"
+        );
+        assert_eq!(
+            rust_string_array_after(internal_rs, "const ESM_CONDITIONS:"),
+            ["golem", "node", "module-sync", "import", "default"]
+        );
+        assert_eq!(
+            rust_string_array_after(internal_rs, "const CJS_ANALYSIS_CONDITIONS:"),
+            ["golem", "node", "require", "module-sync", "default"]
+        );
+        assert_eq!(
+            rust_string_array_after(internal_rs, "const LOADER_CONDITIONS:"),
+            ["node", "import", "module-sync", "node-addons"]
+        );
+        assert!(
+            internal_rs_compact.contains(r#""import" => Some(Self::EsmImport),"#),
+            "Rust provider must map import mode to ESM defaults"
+        );
+        assert!(
+            internal_rs_compact
+                .contains(r#""cjs-analysis" | "require" => Some(Self::CjsAnalysis),"#),
+            "Rust provider must map cjs-analysis and require to CJS defaults"
+        );
+        assert!(
+            internal_rs_compact.contains(r#""loader" => Some(Self::Loader),"#),
+            "Rust provider must map loader mode to loader defaults"
+        );
+        assert!(
+            internal_rs.contains("NodePackageConditionMode::from_js_mode(&mode)")
+                && internal_rs.contains("Unknown internal package condition mode")
+                && internal_rs_compact.contains(r#""loader" => Some(Self::Loader),"#)
+                && internal_rs_compact.contains(r#"_ => None,"#),
+            "Rust provider must fail closed for unknown package condition modes"
+        );
+        assert!(
+            internal_rs.contains("NodePackageResolveMode::from_js_mode(mode)")
+                && internal_rs.contains("Unknown internal package resolution mode")
+                && internal_rs.contains("NodePackageResolveMode::CjsAnalysis.condition_mode()")
+                && internal_rs.contains("NodePackageResolveMode::EsmImport.condition_mode()"),
+            "Rust package resolution mode parser must fail closed for unknown modes"
+        );
+        assert!(
+            internal_rs.contains(
+                "fn conditions_from_global(ctx: &Ctx<'_>, mode: NodePackageConditionMode)"
+            ) && !internal_rs.contains("NodePackageResolveMode::EsmImport.default_conditions()")
+                && !internal_rs
+                    .contains("NodePackageResolveMode::CjsAnalysis.default_conditions()"),
+            "Rust package condition collection must use condition modes instead of raw default arrays"
+        );
+    }
+
+    #[test]
+    fn package_map_primitives_stay_cross_language_aligned() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            module_js.contains("function packagePatternKeyMatch(patternKey, key)")
+                && module_js
+                    .contains("if (key.length <= prefix.length + suffix.length) return null;")
+                && internal_rs.contains(
+                    "fn package_pattern_key_match(pattern_key: &str, key: &str) -> Option<String>"
+                )
+                && internal_rs
+                    .contains("if key.len() <= prefix.len() + suffix.len() { return None; }"),
+            "JS and Rust package pattern matching must both reject empty wildcard substitutions"
+        );
+        assert!(
+            module_js.contains("function packagePatternCompare(a, b)")
+                && module_js.contains("if (aBase !== bBase) return bBase - aBase;")
+                && module_js.contains("if (aTrailer !== bTrailer) return bTrailer - aTrailer;")
+                && module_js.contains("if (a.length !== b.length) return b.length - a.length;")
+                && internal_rs
+                    .contains("fn package_pattern_compare(a: &str, b: &str) -> std::cmp::Ordering")
+                && internal_rs.contains("match b_star.cmp(&a_star)")
+                && internal_rs.contains("match b_trailer.cmp(&a_trailer)")
+                && internal_rs.contains("match b.len().cmp(&a.len())"),
+            "JS and Rust package pattern precedence must stay mechanically aligned"
+        );
+        assert!(
+            module_js.contains("function findPackageMapTarget(map, specifier, invalidPatternMessage)")
+                && module_js.contains("Object.prototype.hasOwnProperty.call(map, specifier)")
+                && module_js.contains("const pattern = findBestPackagePattern(map, specifier);")
+                && internal_rs.contains(
+                    "fn find_package_map_target<'a>( map: &'a IndexMap<String, PackageTarget>, specifier: &str,"
+                )
+                && internal_rs.contains("if let Some(target) = map.get(specifier)")
+                && internal_rs.contains("Self::find_best_package_pattern(map, specifier)"),
+            "JS and Rust package map target selection must check exact keys before patterns"
+        );
+        assert!(
+            module_js.contains("isInvalidPackagePatternSubstitution(pattern.substitution)")
+                && module_js.contains(
+                    "invalidPackagePatternSubstitutionMessage(pattern.substitution, invalidPatternMessage)"
+                )
+                && internal_rs.contains(
+                    "Self::is_invalid_package_pattern_substitution(&pattern_substitution)"
+                )
+                && internal_rs.contains("NodePackageResolveError::InvalidPackagePatternMatch")
+                && internal_rs.contains(
+                    "Self::invalid_package_pattern_substitution_message( &pattern_substitution, invalid_pattern_message,"
+                ),
+            "JS and Rust package map target selection must reject invalid pattern substitutions"
+        );
+        assert!(
+            module_js.contains("function hasEncodedSlashOrBackslash(value)")
+                && module_js.contains("/%(?:2f|5c)/i.test(value)")
+                && internal_rs.contains("fn has_encoded_slash_or_backslash(value: &str) -> bool")
+                && internal_rs.contains("lower.contains(\"%2f\") || lower.contains(\"%5c\")"),
+            "JS and Rust encoded slash/backslash checks must stay aligned"
+        );
+        assert!(
+            module_js.contains("decoded = decodeURIComponent(segment);")
+                && module_js.contains("decoded = decoded.toLowerCase();")
+                && module_js
+                    .contains("decoded === '.' || decoded === '..' || decoded === 'node_modules'")
+                && internal_rs.contains(
+                    "let decoded = percent_decode(segment).unwrap_or_else(|| segment.to_string());"
+                )
+                && internal_rs
+                    .contains("matches!(decoded.to_ascii_lowercase().as_str(), \".\" | \"..\" | \"node_modules\")"),
+            "JS and Rust invalid package target segment checks must stay aligned"
+        );
+    }
+}

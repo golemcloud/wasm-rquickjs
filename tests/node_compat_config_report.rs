@@ -163,6 +163,87 @@ fn module_related_node_compat_entries_are_configured() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
+    let entries = load_node_compat_config(CONFIG_PATH)?;
+    let module_entrypoints = collect_module_related_entrypoints()?;
+    let items = expand_entries(&entries);
+
+    let unexpected: Vec<_> = items
+        .iter()
+        .filter(|item| {
+            (module_entrypoints.contains(&item.file_path) || is_module_adjacent_known_gap(item))
+                && item.category == NodeCompatCategory::KnownGap
+                && !is_accepted_module_known_gap_reason(item.reason.as_deref())
+        })
+        .map(|item| {
+            format!(
+                "{}: {}",
+                item.key,
+                item.reason.as_deref().unwrap_or("<missing reason>")
+            )
+        })
+        .collect();
+
+    assert!(
+        unexpected.is_empty(),
+        "module-related known-gap entries need an accepted deferral or same-process coverage reason:\n{}",
+        unexpected.join("\n")
+    );
+
+    Ok(())
+}
+
+fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
+    let Some(reason) = reason else {
+        return false;
+    };
+    let reason = reason.to_ascii_lowercase();
+    let has_cli_or_spawn_deferral = [
+        "process.execpath",
+        "simulated node cli",
+        "cli mode",
+        "cli flag",
+        "cli loader",
+        "--input-type=module",
+        "spawn(",
+        "spawnsync",
+        "spawnpromisified",
+        "child_process",
+        "child-process",
+        "child emulation",
+        " entry-point ",
+    ]
+    .iter()
+    .any(|accepted| reason.contains(accepted));
+    let has_typescript_deferral = reason.contains("typescript") || reason.contains("amaro");
+    let has_wasm_or_platform_boundary = [
+        "webassembly",
+        ".wasm",
+        "wasm module",
+        "webassembly global",
+        "worker_threads",
+        "messagechannel",
+        "native addon",
+        "windows-specific",
+        "wasi",
+        "single-threaded wasm",
+    ]
+    .iter()
+    .any(|accepted| reason.contains(accepted));
+    let has_engine_boundary = reason.contains("v8-specific")
+        || reason.contains("engine difference")
+        || (reason.contains("quickjs") && reason.contains("cannot"));
+    let has_same_process_coverage = reason.contains("same-process")
+        && (reason.contains("covered") || reason.contains("coverage"));
+
+    has_cli_or_spawn_deferral
+        || has_typescript_deferral
+        || has_wasm_or_platform_boundary
+        || has_engine_boundary
+        || has_same_process_coverage
+}
+
 fn collect_module_related_entrypoints() -> anyhow::Result<BTreeSet<String>> {
     let mut entries = BTreeSet::new();
     collect_matching_files("es-module", is_es_module_entrypoint, &mut entries)?;
@@ -220,6 +301,19 @@ fn is_parallel_module_entrypoint(name: &str) -> bool {
 
 fn is_sequential_module_entrypoint(name: &str) -> bool {
     is_js_entrypoint(name) && name.starts_with("test-module")
+}
+
+fn is_module_adjacent_known_gap(item: &InventoryItem) -> bool {
+    match item.file_path.as_str() {
+        "parallel/test-cli-eval.js" => item
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("--input-type=module")),
+        "parallel/test-cli-syntax-piped-good.js" => true,
+        "parallel/test-runner-import-no-scheme.js" => true,
+        "parallel/test-runner-module-mocking.js" => true,
+        _ => false,
+    }
 }
 
 fn expand_entries(entries: &[NodeCompatTestEntry]) -> Vec<InventoryItem> {

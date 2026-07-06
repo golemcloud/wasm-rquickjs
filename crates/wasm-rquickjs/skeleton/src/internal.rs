@@ -1410,7 +1410,7 @@ struct StaticNamedImport {
 
 fn cjs_named_import_error_module_source(ctx: &Ctx<'_>, filename: &str, source: &str) -> Option<String> {
     let conditions =
-        NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.default_conditions());
+        NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
     find_cjs_named_import_error(filename, source, &conditions).map(|message| {
         let escaped = DataUrlLoader::js_string_escape(&message);
         format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
@@ -1476,7 +1476,7 @@ fn could_resolve_to_cjs_for_named_import_error(specifier: &str) -> bool {
     if specifier.starts_with("node:") || specifier.starts_with("data:") || specifier.contains("://") {
         return false;
     }
-    if specifier.starts_with("./") || specifier.starts_with("../") || specifier.starts_with('/') {
+    if is_relative_or_absolute_specifier(specifier) {
         let (path, _) = split_module_path_suffix(specifier);
         return match std::path::Path::new(path).extension().and_then(|ext| ext.to_str()) {
             Some("cjs" | "js") | None => true,
@@ -1484,6 +1484,14 @@ fn could_resolve_to_cjs_for_named_import_error(specifier: &str) -> bool {
         };
     }
     true
+}
+
+fn is_relative_or_absolute_specifier(specifier: &str) -> bool {
+    specifier == "."
+        || specifier == ".."
+        || specifier.starts_with("./")
+        || specifier.starts_with("../")
+        || specifier.starts_with('/')
 }
 
 fn format_cjs_named_import_binding(named_import: &StaticNamedImport) -> String {
@@ -1583,18 +1591,64 @@ fn find_bare_cjs_global_in_esm(source: &str) -> Option<&'static str> {
     find_bare_cjs_global_in_esm_among(source, &CJS_GLOBAL_NAMES)
 }
 
+struct CjsGlobalScannerScope {
+    bindings: Vec<String>,
+    end: Option<usize>,
+}
+
 fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str]) -> Option<&'static str> {
     let bytes = source.as_bytes();
     let mut i = 0usize;
-    let mut declared = Vec::<String>::new();
+    let mut scopes = vec![CjsGlobalScannerScope {
+        bindings: Vec::new(),
+        end: None,
+    }];
+    let mut pending_block_scope_bindings = None;
     while i < bytes.len() {
+        while scopes.len() > 1 && scopes.last().and_then(|scope| scope.end).is_some_and(|end| i >= end) {
+            scopes.pop();
+        }
+
         if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
         }
 
+        if bytes[i] == b'}' {
+            if scopes.len() > 1 && scopes.last().is_some_and(|scope| scope.end.is_none()) {
+                scopes.pop();
+            }
+            i = next_char_boundary(source, i);
+            continue;
+        }
+
+        if let Some((bindings, body_start, body_end)) = parse_for_lexical_header_bindings(source, i) {
+            let mut body_scope = Vec::new();
+            add_declared_cjs_global_bindings(bindings, names, &mut body_scope);
+            if bytes.get(body_start) == Some(&b'{') {
+                pending_block_scope_bindings = Some(body_scope);
+            } else {
+                scopes.push(CjsGlobalScannerScope {
+                    bindings: body_scope,
+                    end: Some(body_end),
+                });
+            }
+            i = body_start;
+            continue;
+        }
+
+        if let Some((bindings, body_start)) = parse_catch_parameter_bindings(source, i) {
+            let mut block_scope = Vec::new();
+            add_declared_cjs_global_bindings(bindings, names, &mut block_scope);
+            pending_block_scope_bindings = Some(block_scope);
+            i = body_start;
+            continue;
+        }
+
         if let Some((bindings, next)) = parse_import_declaration_bindings(source, i) {
-            add_declared_cjs_global_bindings(bindings, names, &mut declared);
+            if let Some(scope) = scopes.last_mut() {
+                add_declared_cjs_global_bindings(bindings, names, &mut scope.bindings);
+            }
             i = next;
             continue;
         }
@@ -1604,8 +1658,18 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
             continue;
         }
 
-        if let Some((bindings, _)) = parse_variable_declaration_span(source, i) {
-            add_declared_cjs_global_bindings(bindings, names, &mut declared);
+        if let Some((bindings, _)) = parse_lexical_variable_declaration_span(source, i) {
+            if let Some(scope) = scopes.last_mut() {
+                add_declared_cjs_global_bindings(bindings, names, &mut scope.bindings);
+            }
+            i = next_char_boundary(source, i);
+            continue;
+        }
+
+        if let Some((bindings, _)) = parse_var_variable_declaration_span(source, i) {
+            if let Some(scope) = scopes.first_mut() {
+                add_declared_cjs_global_bindings(bindings, names, &mut scope.bindings);
+            }
             i = next_char_boundary(source, i);
             continue;
         }
@@ -1613,7 +1677,9 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
         if let Some((bindings, next)) = parse_function_declaration_span(source, i)
             .or_else(|| parse_class_declaration_span(source, i))
         {
-            add_declared_cjs_global_bindings(bindings, names, &mut declared);
+            if let Some(scope) = scopes.last_mut() {
+                add_declared_cjs_global_bindings(bindings, names, &mut scope.bindings);
+            }
             i = next;
             continue;
         }
@@ -1622,7 +1688,10 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
             if let Some(name_end) = parse_free_ident_name(source, i, name)
                 && previous_significant_byte(source, i) != Some(b'.')
                 && !is_typeof_operand(source, i)
-                && !declared.iter().any(|declared| declared == name)
+                && !scopes
+                    .iter()
+                    .rev()
+                    .any(|scope| scope.bindings.iter().any(|declared| declared == name))
             {
                 let next = skip_ws_comments(source, name_end);
                 if next < bytes.len() && bytes[next] == b':' {
@@ -1630,6 +1699,14 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
                 }
                 return Some(name);
             }
+        }
+        if bytes[i] == b'{' {
+            scopes.push(CjsGlobalScannerScope {
+                bindings: pending_block_scope_bindings.take().unwrap_or_default(),
+                end: None,
+            });
+        } else if pending_block_scope_bindings.is_some() && !bytes[i].is_ascii_whitespace() {
+            pending_block_scope_bindings = None;
         }
         i = next_char_boundary(source, i);
     }
@@ -1846,16 +1923,72 @@ fn parse_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usiz
     None
 }
 
+fn parse_for_lexical_header_bindings(source: &str, pos: usize) -> Option<(Vec<String>, usize, usize)> {
+    let bytes = source.as_bytes();
+    let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "for")?);
+    if let Some(await_end) = parse_ident_name(source, i, "await") {
+        i = skip_ws_comments(source, await_end);
+    }
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    let header_end = find_matching_paren(source, i)?;
+    let header_start = skip_ws_comments(source, i + 1);
+    if header_start >= header_end {
+        return None;
+    }
+    let (bindings, _) = parse_lexical_variable_declaration_span(source, header_start)?;
+    let body_start = skip_ws_comments(source, header_end + 1);
+    let body_end = if bytes.get(body_start) == Some(&b'{') {
+        find_matching_brace(source, body_start)? + 1
+    } else {
+        find_statement_end(source, body_start)
+    };
+    Some((bindings, body_start, body_end))
+}
+
+fn parse_catch_parameter_bindings(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    let bytes = source.as_bytes();
+    let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "catch")?);
+    if i >= bytes.len() || bytes[i] != b'(' {
+        return None;
+    }
+    let params_end = find_matching_paren(source, i)?;
+    let params_start = skip_ws_comments(source, i + 1);
+    let bindings = collect_cjs_global_binding_names_in_variable_declaration(source, params_start, params_end);
+    i = skip_ws_comments(source, params_end + 1);
+    if bytes.get(i) != Some(&b'{') {
+        return None;
+    }
+    Some((bindings, i))
+}
+
 fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
-    let start = skip_ws_comments(source, parse_variable_declaration_keyword(source, pos)?);
+    let start = parse_variable_declaration_binding_start(source, parse_variable_declaration_keyword(source, pos)?)?;
     let end = find_variable_declaration_end(source, start);
     Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
 }
 
 fn parse_lexical_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
-    let start = skip_ws_comments(source, parse_lexical_variable_declaration_keyword(source, pos)?);
+    let start =
+        parse_variable_declaration_binding_start(source, parse_lexical_variable_declaration_keyword(source, pos)?)?;
     let end = find_variable_declaration_end(source, start);
     Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+}
+
+fn parse_var_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
+    let start = parse_variable_declaration_binding_start(source, parse_free_ident_name(source, pos, "var")?)?;
+    let end = find_variable_declaration_end(source, start);
+    Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+}
+
+fn parse_variable_declaration_binding_start(source: &str, keyword_end: usize) -> Option<usize> {
+    let start = skip_ws_comments(source, keyword_end);
+    let bytes = source.as_bytes();
+    if start >= bytes.len() || matches!(bytes[start], b':' | b'(') {
+        return None;
+    }
+    Some(start)
 }
 
 fn parse_lexical_variable_declaration_keyword(source: &str, pos: usize) -> Option<usize> {
@@ -2811,10 +2944,21 @@ impl NodeFileResolver {
             let package_json_path = std::path::Path::new(normalized_dir).join("package.json");
             if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional(&package_json_path)
                 && let Some(main) = package.main.as_deref()
-                && let Some((suggestion, _)) =
-                    NodeModulesResolver::resolve_package_legacy_main(std::path::Path::new(normalized_dir), main)
             {
-                message.push_str(&format!("\nDid you mean to import \"{suggestion}\"?"));
+                let conditions = Vec::new();
+                let mut warnings = Vec::new();
+                let mut resolution = NodePackageResolutionContext::new(
+                    NodePackageResolveMode::EsmImport,
+                    &conditions,
+                    &mut warnings,
+                );
+                if let Some((suggestion, _)) = NodeModulesResolver::resolve_package_legacy_main(
+                    std::path::Path::new(normalized_dir),
+                    main,
+                    &mut resolution,
+                ) {
+                    message.push_str(&format!("\nDid you mean to import \"{suggestion}\"?"));
+                }
             }
         }
         message
@@ -2968,7 +3112,10 @@ enum NodePackageResolveError {
         subpath: String,
         no_exports_main: bool,
     },
-    PackageImportNotDefined { specifier: String },
+    PackageImportNotDefined {
+        specifier: String,
+        no_imports_field: bool,
+    },
     InvalidPackageTarget { kind: &'static str, target: String },
     InvalidPackageConfig {
         path: String,
@@ -2987,6 +3134,7 @@ enum PackageTargetResolution {
 struct PackageTargetResolveContext<'a> {
     package_dir: &'a std::path::Path,
     allow_bare_target: bool,
+    nested_bare_target_resolution_mode: NodePackageResolveMode,
     kind: &'static str,
     conditions: &'a [String],
     pattern_substitution: Option<&'a str>,
@@ -3067,20 +3215,55 @@ pub(crate) fn mark_node_package_deprecation_warning_seen(key: String) {
 
 struct NodeModulesResolver;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum NodePackageResolveMode {
     EsmImport,
     CjsAnalysis,
 }
 
-impl NodePackageResolveMode {
+enum NodePackageConditionMode {
+    EsmImport,
+    CjsAnalysis,
+    Loader,
+}
+
+impl NodePackageConditionMode {
     const ESM_CONDITIONS: [&'static str; 5] = ["golem", "node", "module-sync", "import", "default"];
     const CJS_ANALYSIS_CONDITIONS: [&'static str; 5] =
         ["golem", "node", "require", "module-sync", "default"];
+    const LOADER_CONDITIONS: [&'static str; 4] = ["node", "import", "module-sync", "node-addons"];
 
     fn default_conditions(&self) -> &'static [&'static str] {
         match self {
-            NodePackageResolveMode::EsmImport => &Self::ESM_CONDITIONS,
-            NodePackageResolveMode::CjsAnalysis => &Self::CJS_ANALYSIS_CONDITIONS,
+            NodePackageConditionMode::EsmImport => &Self::ESM_CONDITIONS,
+            NodePackageConditionMode::CjsAnalysis => &Self::CJS_ANALYSIS_CONDITIONS,
+            NodePackageConditionMode::Loader => &Self::LOADER_CONDITIONS,
+        }
+    }
+
+    fn from_js_mode(mode: &str) -> Option<Self> {
+        match mode {
+            "import" => Some(Self::EsmImport),
+            "cjs-analysis" | "require" => Some(Self::CjsAnalysis),
+            "loader" => Some(Self::Loader),
+            _ => None,
+        }
+    }
+}
+
+impl NodePackageResolveMode {
+    fn from_js_mode(mode: &str) -> Option<Self> {
+        match mode {
+            "import" => Some(Self::EsmImport),
+            "cjs-analysis" | "require" => Some(Self::CjsAnalysis),
+            _ => None,
+        }
+    }
+
+    fn condition_mode(&self) -> NodePackageConditionMode {
+        match self {
+            NodePackageResolveMode::EsmImport => NodePackageConditionMode::EsmImport,
+            NodePackageResolveMode::CjsAnalysis => NodePackageConditionMode::CjsAnalysis,
         }
     }
 
@@ -3093,6 +3276,60 @@ impl NodePackageResolveMode {
 
     fn probes_missing_package_root_file(&self) -> bool {
         matches!(self, NodePackageResolveMode::CjsAnalysis)
+    }
+}
+
+fn package_default_conditions<'js>(ctx: Ctx<'js>, mode: String) -> rquickjs::Result<rquickjs::Array<'js>> {
+    let Some(mode) = NodePackageConditionMode::from_js_mode(&mode) else {
+        return throw_native_coded_error(
+            &ctx,
+            "Unknown internal package condition mode",
+            "ERR_INVALID_ARG_VALUE",
+            false,
+        );
+    };
+    let conditions = mode.default_conditions();
+    let result = rquickjs::Array::new(ctx)?;
+    for (index, condition) in conditions.iter().enumerate() {
+        result.set(index, *condition)?;
+    }
+    Ok(result)
+}
+
+struct NodePackageResolutionContext<'a, 'w> {
+    mode: NodePackageResolveMode,
+    conditions: &'a [String],
+    warnings: &'w mut Vec<NodePackageWarning>,
+    file_probe_cache: HashMap<String, bool>,
+}
+
+impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
+    fn new(
+        mode: NodePackageResolveMode,
+        conditions: &'a [String],
+        warnings: &'w mut Vec<NodePackageWarning>,
+    ) -> Self {
+        Self {
+            mode,
+            conditions,
+            warnings,
+            file_probe_cache: HashMap::new(),
+        }
+    }
+
+    fn normalized_is_file(&mut self, normalized: &str) -> bool {
+        if let Some(cached) = self.file_probe_cache.get(normalized) {
+            return *cached;
+        }
+        let is_file = std::path::Path::new(normalized).is_file();
+        self.file_probe_cache
+            .insert(normalized.to_string(), is_file);
+        is_file
+    }
+
+    fn is_file(&mut self, path: &std::path::Path) -> bool {
+        let normalized = CjsEvalResolver::normalize_path(path);
+        self.normalized_is_file(&normalized)
     }
 }
 
@@ -3109,45 +3346,24 @@ enum CjsAnalysisDirectoryFallbackStep {
     RootDirectory,
 }
 
+#[derive(Clone, Copy)]
+enum CjsAnalysisProbe {
+    Exact,
+    Extension(&'static str),
+    Index(&'static str),
+}
+
 impl NodeModulesResolver {
-    fn try_resolve(
+    fn try_resolve_with_context(
         &self,
         base: &str,
         name: &str,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
-    ) -> Result<Option<String>, NodePackageResolveError> {
-        self.try_resolve_package(base, name, conditions, warnings, NodePackageResolveMode::EsmImport)
-    }
-
-    fn try_resolve_for_cjs_analysis(
-        &self,
-        base: &str,
-        name: &str,
-        conditions: &[String],
-    ) -> Result<Option<String>, NodePackageResolveError> {
-        let mut ignored_warnings = Vec::new();
-        self.try_resolve_package(
-            base,
-            name,
-            conditions,
-            &mut ignored_warnings,
-            NodePackageResolveMode::CjsAnalysis,
-        )
-    }
-
-    fn try_resolve_package(
-        &self,
-        base: &str,
-        name: &str,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
-        mode: NodePackageResolveMode,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
 
         if name.starts_with('#') {
-            return self.try_resolve_package_import_with_conditions(base, name, conditions, warnings);
+            return self.try_resolve_package_import_with_context(base, name, resolution);
         }
 
         if name.starts_with('.') || name.starts_with('/') || name.contains("://") {
@@ -3162,14 +3378,8 @@ impl NodeModulesResolver {
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
         };
-        if let Some(resolved) = Self::try_resolve_package_self(
-            base_dir,
-            base,
-            package_name,
-            subpath,
-            conditions,
-            warnings,
-        )?
+        if let Some(resolved) =
+            Self::try_resolve_package_self(base_dir, base, package_name, subpath, resolution)?
         {
             return Ok(Some(resolved));
         }
@@ -3184,17 +3394,16 @@ impl NodeModulesResolver {
                     package_name,
                     subpath,
                     &package_path,
-                    conditions,
-                    warnings,
-                    &mode,
+                    resolution,
                 )? {
                     return Ok(Some(resolved));
                 }
             }
 
-            if mode.probes_missing_package_root_file()
+            if resolution.mode.probes_missing_package_root_file()
                 && subpath.is_empty()
-                && let Some(resolved) = Self::resolve_cjs_analysis_package_root_file(&package_path)
+                && let Some(resolved) =
+                    Self::resolve_cjs_analysis_package_root_file(&package_path, resolution)
             {
                 return Ok(Some(resolved));
             }
@@ -3213,9 +3422,7 @@ impl NodeModulesResolver {
         package_name: &str,
         subpath: &str,
         package_path: &std::path::Path,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
-        mode: &NodePackageResolveMode,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         let pkg_path = package_path.join("package.json");
         let package = Self::read_package_json_optional(&pkg_path)?;
@@ -3228,15 +3435,14 @@ impl NodeModulesResolver {
                     package_path,
                     exports_field,
                     subpath,
-                    conditions,
-                    warnings,
-                    mode.package_exports_importer(base),
+                    resolution,
+                    resolution.mode.package_exports_importer(base),
                 )
                 .map(Some);
             }
         }
 
-        match mode {
+        match resolution.mode {
             NodePackageResolveMode::EsmImport => {
                 Self::try_resolve_package_directory_esm(
                     base,
@@ -3244,7 +3450,7 @@ impl NodeModulesResolver {
                     subpath,
                     package_path,
                     package.as_deref(),
-                    warnings,
+                    resolution,
                 )
             }
             NodePackageResolveMode::CjsAnalysis => {
@@ -3252,6 +3458,7 @@ impl NodeModulesResolver {
                     subpath,
                     package_path,
                     package.as_deref(),
+                    resolution,
                 ))
             }
         }
@@ -3285,7 +3492,7 @@ impl NodeModulesResolver {
         subpath: &str,
         package_path: &std::path::Path,
         package: Option<&PackageJson>,
-        warnings: &mut Vec<NodePackageWarning>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         let package_type = package.and_then(|package| package.package_type.as_ref());
         if subpath.is_empty()
@@ -3293,10 +3500,10 @@ impl NodeModulesResolver {
             && let Some(main) = package.main.as_ref()
         {
             let is_module_package = package.package_type.as_deref() == Some("module");
-            let resolved = Self::resolve_package_legacy_main(package_path, main);
+            let resolved = Self::resolve_package_legacy_main(package_path, main, resolution);
             if let Some((resolved, used_extension_lookup)) = resolved {
                 if is_module_package && used_extension_lookup {
-                    warnings.push(NodePackageWarning {
+                    resolution.warnings.push(NodePackageWarning {
                         message: format!(
                             "Package {}/ has a \"main\" field set to {:?}, excluding the full filename and extension to the resolved file at {:?}, imported from {}.\nAutomatic extension resolution of the \"main\" field is deprecated for ES modules.",
                             package_path.to_string_lossy().trim_end_matches('/'),
@@ -3317,7 +3524,8 @@ impl NodeModulesResolver {
         }
 
         if !subpath.is_empty()
-            && let Some(resolved) = Self::resolve_package_subpath(package_path, subpath, base, specifier)?
+            && let Some(resolved) =
+                Self::resolve_package_subpath(package_path, subpath, base, specifier, resolution)?
         {
             return Ok(Some(resolved));
         }
@@ -3330,11 +3538,11 @@ impl NodeModulesResolver {
                 package_path.join("index.node"),
             ];
             for fallback in &fallbacks {
-                if fallback.is_file() {
+                if resolution.is_file(fallback) {
                     if is_module_package
                         && fallback.extension().and_then(|ext| ext.to_str()) == Some("js")
                     {
-                        warnings.push(NodePackageWarning {
+                        resolution.warnings.push(NodePackageWarning {
                             message: format!(
                                 "No \"main\" or \"exports\" field defined in the package.json for {}/ resolving the main entry point \"index.js\", imported from {}.\nDefault \"index\" lookups for the main are deprecated for ES modules.",
                                 package_path.to_string_lossy().trim_end_matches('/'),
@@ -3356,6 +3564,7 @@ impl NodeModulesResolver {
         subpath: &str,
         package_path: &std::path::Path,
         package: Option<&PackageJson>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Option<String> {
         let steps = [
             CjsAnalysisPackageFallbackStep::RootFile,
@@ -3369,6 +3578,7 @@ impl NodeModulesResolver {
                 subpath,
                 package_path,
                 package,
+                resolution,
             ) {
                 return Some(resolved);
             }
@@ -3382,6 +3592,7 @@ impl NodeModulesResolver {
         subpath: &str,
         package_path: &std::path::Path,
         package: Option<&PackageJson>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Option<String> {
         match step {
             CjsAnalysisPackageFallbackStep::RootFile => {
@@ -3390,6 +3601,7 @@ impl NodeModulesResolver {
                         CjsAnalysisDirectoryFallbackStep::RootFile,
                         package_path,
                         package,
+                        resolution,
                     )
                 }).flatten()
             }
@@ -3401,13 +3613,14 @@ impl NodeModulesResolver {
                     CjsAnalysisDirectoryFallbackStep::PackageMain,
                     package_path,
                     package,
+                    resolution,
                 )
             }
             CjsAnalysisPackageFallbackStep::Subpath => {
                 if subpath.is_empty() {
                     None
                 } else {
-                    Self::resolve_cjs_analysis_file_or_directory(package_path, subpath)
+                    Self::resolve_cjs_analysis_file_or_directory(package_path, subpath, resolution)
                 }
             }
             CjsAnalysisPackageFallbackStep::RootDirectory => {
@@ -3416,20 +3629,24 @@ impl NodeModulesResolver {
                         CjsAnalysisDirectoryFallbackStep::RootDirectory,
                         package_path,
                         package,
+                        resolution,
                     )
                 }).flatten()
             }
         }
     }
 
-    fn try_resolve_package_import_with_conditions(
+    fn try_resolve_package_import_with_context(
         &self,
         base: &str,
         name: &str,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         use std::path::Path;
+
+        if resolution.mode == NodePackageResolveMode::EsmImport {
+            Self::validate_package_import_specifier(name)?;
+        }
 
         let Some(parent) = Path::new(base).parent() else {
             return Ok(None);
@@ -3439,6 +3656,7 @@ impl NodeModulesResolver {
             if dir.file_name().is_some_and(|name| name == "node_modules") {
                 return Err(NodePackageResolveError::PackageImportNotDefined {
                     specifier: name.to_string(),
+                    no_imports_field: true,
                 });
             }
 
@@ -3447,10 +3665,18 @@ impl NodeModulesResolver {
                 let Some(imports) = package.imports.as_ref() else {
                     return Err(NodePackageResolveError::PackageImportNotDefined {
                         specifier: name.to_string(),
+                        no_imports_field: true,
                     });
                 };
                 Self::validate_package_import_specifier(name)?;
-                return Self::resolve_package_import(&dir, imports, name, conditions, warnings, Some(base)).map(Some);
+                return Self::resolve_package_import(
+                    &dir,
+                    imports,
+                    name,
+                    resolution,
+                    Some(base),
+                )
+                .map(Some);
             }
 
             if !dir.pop() {
@@ -3460,6 +3686,7 @@ impl NodeModulesResolver {
 
         Err(NodePackageResolveError::PackageImportNotDefined {
             specifier: name.to_string(),
+            no_imports_field: true,
         })
     }
 
@@ -3468,8 +3695,7 @@ impl NodeModulesResolver {
         importer: &str,
         package_name: &str,
         subpath: &str,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         let mut dir = base_dir.to_path_buf();
         loop {
@@ -3488,8 +3714,7 @@ impl NodeModulesResolver {
                         &dir,
                         exports_field,
                         subpath,
-                        conditions,
-                        warnings,
+                        resolution,
                         Some(importer),
                     )
                     .map(Some);
@@ -3543,7 +3768,7 @@ impl NodeModulesResolver {
     }
 
     fn validate_package_import_specifier(specifier: &str) -> Result<(), NodePackageResolveError> {
-        if specifier == "#" || specifier.starts_with("#/") {
+        if specifier == "#" || specifier.starts_with("#/") || specifier.ends_with('/') {
             return Err(NodePackageResolveError::InvalidPackagePatternMatch {
                 specifier: specifier.to_string(),
                 message: "is not a valid internal imports specifier name".to_string(),
@@ -3557,6 +3782,7 @@ impl NodeModulesResolver {
         subpath: &str,
         base: &str,
         specifier: &str,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         if Self::has_encoded_slash_or_backslash(subpath) {
             return Err(NodePackageResolveError::InvalidModuleSpecifier {
@@ -3566,7 +3792,7 @@ impl NodeModulesResolver {
         }
         let decoded_subpath = percent_decode(subpath).unwrap_or_else(|| subpath.to_string());
         let target_path = package_dir.join(decoded_subpath);
-        if target_path.is_file() {
+        if resolution.is_file(&target_path) {
             return Ok(Some(target_path.to_string_lossy().into_owned()));
         }
         if target_path.is_dir() {
@@ -3580,44 +3806,77 @@ impl NodeModulesResolver {
     fn resolve_package_legacy_main(
         package_dir: &std::path::Path,
         target: &str,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Option<(String, bool)> {
         let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        if target_path.is_file() {
+        if resolution.is_file(&target_path) {
             return Some((target_path.to_string_lossy().into_owned(), false));
         }
         if target_path.extension().is_none() {
             let js_target = Self::with_appended_extension(&target_path, ".js");
-            if js_target.is_file() {
+            if resolution.is_file(&js_target) {
                 return Some((js_target.to_string_lossy().into_owned(), true));
             }
             let json_target = Self::with_appended_extension(&target_path, ".json");
-            if json_target.is_file() {
+            if resolution.is_file(&json_target) {
                 return Some((json_target.to_string_lossy().into_owned(), false));
             }
             let node_target = Self::with_appended_extension(&target_path, ".node");
-            if node_target.is_file() {
+            if resolution.is_file(&node_target) {
                 return Some((node_target.to_string_lossy().into_owned(), false));
             }
         }
         let index_js = target_path.join("index.js");
-        if index_js.is_file() {
+        if resolution.is_file(&index_js) {
             return Some((index_js.to_string_lossy().into_owned(), true));
         }
         let index_json = target_path.join("index.json");
-        if index_json.is_file() {
+        if resolution.is_file(&index_json) {
             return Some((index_json.to_string_lossy().into_owned(), false));
         }
         let index_node = target_path.join("index.node");
-        if index_node.is_file() {
+        if resolution.is_file(&index_node) {
             return Some((index_node.to_string_lossy().into_owned(), false));
         }
         None
     }
 
-    fn first_existing_normalized<const N: usize>(candidates: [std::path::PathBuf; N]) -> Option<String> {
-        for candidate in candidates {
+    const CJS_ANALYSIS_ROOT_FILE_PROBES: [CjsAnalysisProbe; 4] = [
+        CjsAnalysisProbe::Exact,
+        CjsAnalysisProbe::Extension(".js"),
+        CjsAnalysisProbe::Extension(".json"),
+        CjsAnalysisProbe::Extension(".node"),
+    ];
+    const CJS_ANALYSIS_FILE_OR_DIRECTORY_PROBES: [CjsAnalysisProbe; 7] = [
+        CjsAnalysisProbe::Exact,
+        CjsAnalysisProbe::Extension(".js"),
+        CjsAnalysisProbe::Extension(".json"),
+        CjsAnalysisProbe::Extension(".node"),
+        CjsAnalysisProbe::Index("index.js"),
+        CjsAnalysisProbe::Index("index.json"),
+        CjsAnalysisProbe::Index("index.node"),
+    ];
+    const CJS_ANALYSIS_ROOT_DIRECTORY_PROBES: [CjsAnalysisProbe; 3] = [
+        CjsAnalysisProbe::Index("index.js"),
+        CjsAnalysisProbe::Index("index.json"),
+        CjsAnalysisProbe::Index("index.node"),
+    ];
+
+    fn first_existing_cjs_analysis_probe(
+        target_path: &std::path::Path,
+        probes: &[CjsAnalysisProbe],
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
+        for probe in probes {
+            let candidate = match probe {
+                CjsAnalysisProbe::Exact => target_path.to_path_buf(),
+                CjsAnalysisProbe::Extension(extension) => {
+                    Self::with_appended_extension(target_path, extension)
+                }
+                CjsAnalysisProbe::Index(index) => target_path.join(index),
+            };
             let normalized = CjsEvalResolver::normalize_path(&candidate);
-            if std::path::Path::new(&normalized).is_file() {
+            if resolution.normalized_is_file(&normalized) {
                 return Some(normalized);
             }
         }
@@ -3629,60 +3888,70 @@ impl NodeModulesResolver {
         std::path::PathBuf::from(format!("{}{}", path.to_string_lossy(), extension))
     }
 
-    fn resolve_cjs_analysis_file_or_directory(package_dir: &std::path::Path, target: &str) -> Option<String> {
+    fn resolve_cjs_analysis_file_or_directory(
+        package_dir: &std::path::Path,
+        target: &str,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
         let target_path = package_dir.join(target.strip_prefix("./").unwrap_or(target));
-        Self::first_existing_normalized([
-            target_path.to_path_buf(),
-            Self::with_appended_extension(&target_path, ".js"),
-            Self::with_appended_extension(&target_path, ".json"),
-            Self::with_appended_extension(&target_path, ".node"),
-            target_path.join("index.js"),
-            target_path.join("index.json"),
-            target_path.join("index.node"),
-        ])
+        Self::first_existing_cjs_analysis_probe(
+            &target_path,
+            &Self::CJS_ANALYSIS_FILE_OR_DIRECTORY_PROBES,
+            resolution,
+        )
     }
 
-    fn resolve_cjs_analysis_package_root_file(package_dir: &std::path::Path) -> Option<String> {
-        Self::first_existing_normalized([
-            package_dir.to_path_buf(),
-            Self::with_appended_extension(package_dir, ".js"),
-            Self::with_appended_extension(package_dir, ".json"),
-            Self::with_appended_extension(package_dir, ".node"),
-        ])
+    fn resolve_cjs_analysis_package_root_file(
+        package_dir: &std::path::Path,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
+        Self::first_existing_cjs_analysis_probe(
+            package_dir,
+            &Self::CJS_ANALYSIS_ROOT_FILE_PROBES,
+            resolution,
+        )
     }
 
-    fn resolve_cjs_analysis_package_root_directory(package_dir: &std::path::Path) -> Option<String> {
-        Self::first_existing_normalized([
-            package_dir.join("index.js"),
-            package_dir.join("index.json"),
-            package_dir.join("index.node"),
-        ])
+    fn resolve_cjs_analysis_package_root_directory(
+        package_dir: &std::path::Path,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
+        Self::first_existing_cjs_analysis_probe(
+            package_dir,
+            &Self::CJS_ANALYSIS_ROOT_DIRECTORY_PROBES,
+            resolution,
+        )
     }
 
     fn resolve_cjs_analysis_directory_fallback_step(
         step: CjsAnalysisDirectoryFallbackStep,
         directory_path: &std::path::Path,
         package: Option<&PackageJson>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Option<String> {
         match step {
             CjsAnalysisDirectoryFallbackStep::RootFile => {
-                Self::resolve_cjs_analysis_package_root_file(directory_path)
+                Self::resolve_cjs_analysis_package_root_file(directory_path, resolution)
             }
             CjsAnalysisDirectoryFallbackStep::PackageMain => {
                 let main = package.and_then(|package| package.main.as_ref())?;
-                Self::resolve_cjs_analysis_file_or_directory(directory_path, main)
+                Self::resolve_cjs_analysis_file_or_directory(directory_path, main, resolution)
             }
             CjsAnalysisDirectoryFallbackStep::RootDirectory => {
-                Self::resolve_cjs_analysis_package_root_directory(directory_path)
+                Self::resolve_cjs_analysis_package_root_directory(directory_path, resolution)
             }
         }
     }
 
-    fn resolve_cjs_analysis_relative(target_path: &std::path::Path) -> Option<String> {
+    fn resolve_cjs_analysis_relative(
+        target_path: &std::path::Path,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
         if let Some(resolved) = Self::resolve_cjs_analysis_directory_fallback_step(
             CjsAnalysisDirectoryFallbackStep::RootFile,
             target_path,
             None,
+            resolution,
         ) {
             return Some(resolved);
         }
@@ -3702,7 +3971,12 @@ impl NodeModulesResolver {
         ];
         for step in steps {
             if let Some(resolved) =
-                Self::resolve_cjs_analysis_directory_fallback_step(step, target_path, package.as_deref())
+                Self::resolve_cjs_analysis_directory_fallback_step(
+                    step,
+                    target_path,
+                    package.as_deref(),
+                    resolution,
+                )
             {
                 return Some(resolved);
             }
@@ -3716,8 +3990,7 @@ impl NodeModulesResolver {
         package_dir: &std::path::Path,
         exports: &PackageTarget,
         subpath: &str,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
         importer: Option<&str>,
     ) -> Result<String, NodePackageResolveError> {
         let key = if subpath.is_empty() {
@@ -3736,18 +4009,18 @@ impl NodeModulesResolver {
                     no_exports_main: false,
                 });
             }
-            return Self::resolve_package_target_with_context(
+            let ctx = PackageTargetResolveContext {
                 package_dir,
-                exports,
-                false,
-                "exports",
-                conditions,
-                None,
-                &key,
-                None,
-                importer,
-                warnings,
-            )
+                allow_bare_target: false,
+                nested_bare_target_resolution_mode: NodePackageResolveMode::EsmImport,
+                kind: "exports",
+                conditions: resolution.conditions,
+                pattern_substitution: None,
+                warning_specifier: &key,
+                warning_pattern_key: None,
+                warning_importer: importer,
+            };
+            return Self::resolve_package_target_with_context(exports, ctx, resolution)
             .and_then(|resolution| {
                 Self::target_resolution_to_export_result(
                     resolution,
@@ -3762,18 +4035,18 @@ impl NodeModulesResolver {
             if let Some((target, pattern_substitution, pattern_key)) =
                 Self::find_package_map_target(map, &key, "is not a valid match in pattern")?
             {
-                return Self::resolve_package_target_with_context(
+                let ctx = PackageTargetResolveContext {
                     package_dir,
-                    target,
-                    false,
-                    "exports",
-                    conditions,
-                    pattern_substitution.as_deref(),
-                    &key,
-                    pattern_key,
-                    importer,
-                    warnings,
-                )
+                    allow_bare_target: false,
+                    nested_bare_target_resolution_mode: NodePackageResolveMode::EsmImport,
+                    kind: "exports",
+                    conditions: resolution.conditions,
+                    pattern_substitution: pattern_substitution.as_deref(),
+                    warning_specifier: &key,
+                    warning_pattern_key: pattern_key,
+                    warning_importer: importer,
+                };
+                return Self::resolve_package_target_with_context(target, ctx, resolution)
                 .and_then(|resolution| {
                     Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
                 });
@@ -3791,8 +4064,7 @@ impl NodeModulesResolver {
         package_dir: &std::path::Path,
         imports: &PackageTarget,
         specifier: &str,
-        conditions: &[String],
-        warnings: &mut Vec<NodePackageWarning>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
         importer: Option<&str>,
     ) -> Result<String, NodePackageResolveError> {
         if let PackageTarget::Object(map) = imports
@@ -3804,18 +4076,20 @@ impl NodeModulesResolver {
                     "request is not a valid match in pattern",
                 )?
             {
-                return Self::resolve_package_target_with_context(
+                let ctx = PackageTargetResolveContext {
                     package_dir,
-                    target,
-                    true,
-                    "imports",
-                    conditions,
-                    pattern_substitution.as_deref(),
-                    specifier,
-                    pattern_key,
-                    importer,
-                    warnings,
-                )
+                    allow_bare_target: true,
+                    // Bare targets inside package imports are resolved with ESM package
+                    // fallback rules even when the surrounding caller is CJS export analysis.
+                    nested_bare_target_resolution_mode: NodePackageResolveMode::EsmImport,
+                    kind: "imports",
+                    conditions: resolution.conditions,
+                    pattern_substitution: pattern_substitution.as_deref(),
+                    warning_specifier: specifier,
+                    warning_pattern_key: pattern_key,
+                    warning_importer: importer,
+                };
+                return Self::resolve_package_target_with_context(target, ctx, resolution)
                 .and_then(
                     |resolution| Self::target_resolution_to_import_result(resolution, specifier),
                 );
@@ -3823,6 +4097,7 @@ impl NodeModulesResolver {
         }
         Err(NodePackageResolveError::PackageImportNotDefined {
             specifier: specifier.to_string(),
+            no_imports_field: false,
         })
     }
 
@@ -3871,37 +4146,20 @@ impl NodeModulesResolver {
     }
 
     fn resolve_package_target_with_context(
-        package_dir: &std::path::Path,
         target: &PackageTarget,
-        allow_bare_target: bool,
-        kind: &'static str,
-        conditions: &[String],
-        pattern_substitution: Option<&str>,
-        warning_specifier: &str,
-        warning_pattern_key: Option<&str>,
-        warning_importer: Option<&str>,
-        warnings: &mut Vec<NodePackageWarning>,
+        ctx: PackageTargetResolveContext<'_>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
-        let ctx = PackageTargetResolveContext {
-            package_dir,
-            allow_bare_target,
-            kind,
-            conditions,
-            pattern_substitution,
-            warning_specifier,
-            warning_pattern_key,
-            warning_importer,
-        };
         Self::add_invalid_package_target_context(
-            Self::resolve_package_target_value(target, &ctx, warnings),
-            warning_specifier,
+            Self::resolve_package_target_value(target, &ctx, resolution),
+            ctx.warning_specifier,
         )
     }
 
     fn resolve_package_target_value(
         target: &PackageTarget,
         ctx: &PackageTargetResolveContext<'_>,
-        warnings: &mut Vec<NodePackageWarning>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<PackageTargetResolution, NodePackageResolveError> {
         match target {
             PackageTarget::Null => {
@@ -3932,7 +4190,7 @@ impl NodeModulesResolver {
                     target_str.clone()
                 };
                 Self::push_package_deprecation_warning(
-                    warnings,
+                    resolution.warnings,
                     ctx.package_dir,
                     ctx.kind,
                     ctx.warning_specifier,
@@ -3945,8 +4203,13 @@ impl NodeModulesResolver {
                     let base = ctx.package_dir.join("package.json");
                     let base_str = base.to_string_lossy();
                     let resolver = NodeModulesResolver;
+                    let mut nested_resolution = NodePackageResolutionContext::new(
+                        ctx.nested_bare_target_resolution_mode,
+                        ctx.conditions,
+                        &mut *resolution.warnings,
+                    );
                     if let Some(resolved) =
-                        resolver.try_resolve(&base_str, &target_str, ctx.conditions, warnings)?
+                        resolver.try_resolve_with_context(&base_str, &target_str, &mut nested_resolution)?
                     {
                         return Ok(PackageTargetResolution::Resolved(resolved));
                     }
@@ -3966,21 +4229,25 @@ impl NodeModulesResolver {
                         target: target_str,
                     });
                 }
-                let decoded_target = Self::decode_package_target_path(&target_str);
-                let Some(candidate) =
-                    Self::resolve_valid_package_target_path(ctx.package_dir, &decoded_target)
-                else {
+                if !Self::is_valid_package_target_path(&target_str) {
                     return Err(NodePackageResolveError::InvalidPackageTarget {
                         kind: ctx.kind,
                         target: target_str,
                     });
-                };
-                if candidate.is_file() {
+                }
+                let decoded_target = Self::decode_package_target_path(&target_str);
+                let candidate = Self::resolve_package_target_path(ctx.package_dir, &decoded_target);
+                if resolution.is_file(&candidate) {
                     return Ok(PackageTargetResolution::Resolved(
                         candidate.to_string_lossy().into_owned(),
                     ));
                 }
                 if candidate.is_dir() {
+                    if resolution.mode == NodePackageResolveMode::CjsAnalysis {
+                        return Err(NodePackageResolveError::ModuleNotFound {
+                            request: candidate.to_string_lossy().into_owned(),
+                        });
+                    }
                     return Err(NodePackageResolveError::UnsupportedDirectoryImport {
                         request: candidate.to_string_lossy().into_owned(),
                     });
@@ -3992,7 +4259,7 @@ impl NodeModulesResolver {
             PackageTarget::Array(array) => {
                 let mut last_fallback_error = None;
                 for item in array {
-                    match Self::resolve_package_target_value(item, ctx, warnings) {
+                    match Self::resolve_package_target_value(item, ctx, resolution) {
                         Ok(PackageTargetResolution::Resolved(path)) => {
                             return Ok(PackageTargetResolution::Resolved(path));
                         }
@@ -4017,7 +4284,7 @@ impl NodeModulesResolver {
                         .iter()
                         .any(|candidate| candidate == condition)
                     {
-                        match Self::resolve_package_target_value(value, ctx, warnings)? {
+                        match Self::resolve_package_target_value(value, ctx, resolution)? {
                             PackageTargetResolution::NoMatch => continue,
                             resolution => return Ok(resolution),
                         }
@@ -4176,6 +4443,7 @@ impl NodeModulesResolver {
             PackageTargetResolution::NoMatch | PackageTargetResolution::Blocked => {
                 Err(NodePackageResolveError::PackageImportNotDefined {
                     specifier: specifier.to_string(),
+                    no_imports_field: false,
                 })
             }
         }
@@ -4189,23 +4457,30 @@ impl NodeModulesResolver {
             && !target.contains(':')
     }
 
-    fn resolve_valid_package_target_path(
-        package_dir: &std::path::Path,
-        target: &str,
-    ) -> Option<std::path::PathBuf> {
+    fn is_valid_package_target_path(target: &str) -> bool {
+        target
+            .strip_prefix("./")
+            .is_some_and(|rest| {
+                rest.split('/').all(|part| {
+                    part.is_empty() || !Self::is_invalid_package_target_segment(part)
+                })
+            })
+    }
+
+    fn resolve_package_target_path(package_dir: &std::path::Path, target: &str) -> std::path::PathBuf {
         let mut relative_parts = Vec::<&str>::new();
-        for part in target.strip_prefix("./")?.split('/') {
-            match part {
-                "" => {}
-                part if Self::is_invalid_package_target_segment(part) => return None,
-                part => relative_parts.push(part),
+        if let Some(rest) = target.strip_prefix("./") {
+            for part in rest.split('/') {
+                if !part.is_empty() {
+                    relative_parts.push(part);
+                }
             }
         }
         let mut candidate = package_dir.to_path_buf();
         for part in relative_parts {
             candidate.push(part);
         }
-        Some(candidate)
+        candidate
     }
 
     fn is_invalid_package_target_segment(segment: &str) -> bool {
@@ -4313,12 +4588,12 @@ impl NodeModulesResolver {
         }
     }
 
-    fn default_conditions(defaults: &[&str]) -> Vec<String> {
-        defaults.iter().map(|condition| (*condition).to_string()).collect()
-    }
-
-    fn conditions_from_global(ctx: &Ctx<'_>, defaults: &[&str]) -> Vec<String> {
-        let mut conditions = Self::default_conditions(defaults);
+    fn conditions_from_global(ctx: &Ctx<'_>, mode: NodePackageConditionMode) -> Vec<String> {
+        let mut conditions = mode
+            .default_conditions()
+            .iter()
+            .map(|condition| (*condition).to_string())
+            .collect();
         let Ok(user_conditions) = ctx.globals().get::<_, rquickjs::Array>("__wasm_rquickjs_package_conditions") else {
             return conditions;
         };
@@ -4411,6 +4686,34 @@ fn throw_node_package_resolve_error<'js>(
     ctx: &Ctx<'js>,
     err: NodePackageResolveError,
 ) -> rquickjs::Result<String> {
+    let err = match err {
+        NodePackageResolveError::PackageImportNotDefined {
+            specifier,
+            no_imports_field,
+        } => {
+            let message = format!("Package import specifier '{}' is not defined", specifier);
+            let error_value = Exception::from_message(ctx.clone(), &message)?.into_value();
+            let Some(error_obj) = error_value.clone().into_object() else {
+                return Err(ctx.throw(error_value));
+            };
+            error_obj.prop(
+                "code",
+                Property::from("ERR_PACKAGE_IMPORT_NOT_DEFINED")
+                    .writable()
+                    .enumerable()
+                    .configurable(),
+            )?;
+            if no_imports_field {
+                error_obj.prop(
+                    "__wasmNoImportsField",
+                    Property::from(true).writable().configurable(),
+                )?;
+            }
+            return Err(ctx.throw(error_obj.into_value()));
+        }
+        err => err,
+    };
+
     let (code, message, type_error) = match err {
         NodePackageResolveError::InvalidModuleSpecifier { specifier, base } => (
             "ERR_INVALID_MODULE_SPECIFIER",
@@ -4449,17 +4752,15 @@ fn throw_node_package_resolve_error<'js>(
                 )
             }
         }
-        NodePackageResolveError::PackageImportNotDefined { specifier } => (
-            "ERR_PACKAGE_IMPORT_NOT_DEFINED",
-            format!("Package import specifier '{}' is not defined", specifier),
-            false,
-        ),
         NodePackageResolveError::InvalidPackageTarget { kind, target } => {
             let mut message = format!("Invalid \"{}\" target '{}'", kind, target);
             if kind == "exports" && !target.starts_with("./") {
                 message.push_str("; targets must start with \"./\"");
             }
             ("ERR_INVALID_PACKAGE_TARGET", message, false)
+        }
+        NodePackageResolveError::PackageImportNotDefined { .. } => {
+            unreachable!("package import errors are handled before generic error mapping")
         }
         NodePackageResolveError::InvalidPackageConfig { path, reason } => (
             "ERR_INVALID_PACKAGE_CONFIG",
@@ -4487,6 +4788,216 @@ fn throw_node_package_resolve_error<'js>(
     throw_native_coded_error(ctx, &message, code, type_error)
 }
 
+fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String) -> rquickjs::Result<Option<String>> {
+    let base = if let Some(path) = FileUrlResolver::file_url_to_path(&base_url) {
+        path
+    } else {
+        base_url.clone()
+    };
+    let conditions =
+        NodeModulesResolver::conditions_from_global(&ctx, NodePackageResolveMode::EsmImport.condition_mode());
+    let mut warnings = Vec::new();
+    let resolver = NodeModulesResolver;
+    if specifier.ends_with('/')
+        && !specifier.starts_with('#')
+        && let Some((package_name, subpath)) = NodeModulesResolver::split_package_name(&specifier)
+        && subpath.is_empty()
+    {
+        if let Err(err) = NodeModulesResolver::validate_package_name(&base, &specifier, package_name) {
+            return throw_node_package_resolve_error(&ctx, err).map(Some);
+        }
+        let trailing_slash_package_has_exports =
+            match import_meta_trailing_slash_package_has_exports(&base, package_name) {
+                Ok(value) => value,
+                Err(err) => return throw_node_package_resolve_error(&ctx, err).map(Some),
+            };
+        if trailing_slash_package_has_exports {
+            return throw_node_package_resolve_error(
+                &ctx,
+                NodePackageResolveError::PackagePathNotExported {
+                    package_name: package_name.to_string(),
+                    subpath: "/".to_string(),
+                    no_exports_main: false,
+                },
+            )
+            .map(Some);
+        }
+    }
+    let mut resolution = NodePackageResolutionContext::new(
+        NodePackageResolveMode::EsmImport,
+        &conditions,
+        &mut warnings,
+    );
+    let result = resolver.try_resolve_with_context(&base, &specifier, &mut resolution);
+    emit_node_package_deprecation_warnings(&ctx, &warnings)?;
+    match result {
+        Ok(Some(resolved)) => Ok(Some(path_to_file_url(&resolved))),
+        Ok(None) => Ok(None),
+        Err(err) => throw_node_package_resolve_error(&ctx, err).map(Some),
+    }
+}
+
+fn import_meta_resolve_path(base_url: String, specifier: String) -> Option<String> {
+    if !(specifier.starts_with('.') || specifier.starts_with('/')) {
+        return None;
+    }
+    if !base_url.starts_with("file://") {
+        return None;
+    }
+
+    let (specifier_path, suffix) = split_module_path_suffix(&specifier);
+    let resolved = if specifier_path.starts_with('/') {
+        std::path::PathBuf::from(specifier_path)
+    } else {
+        let (base_path, _) = FileUrlResolver::file_url_to_path_parts(&base_url)?;
+        let base_dir = std::path::Path::new(&base_path).parent()?;
+        base_dir.join(specifier_path)
+    };
+
+    let mut normalized = CjsEvalResolver::normalize_path(&resolved);
+    if specifier_path.ends_with('/') && !normalized.ends_with('/') {
+        normalized.push('/');
+    }
+
+    let mut url = path_with_preserved_escapes_to_file_url(&normalized);
+    url.push_str(suffix);
+    Some(url)
+}
+
+fn package_resolve_mode_from_loader_mode<'js>(
+    ctx: &Ctx<'js>,
+    mode: &str,
+) -> rquickjs::Result<NodePackageResolveMode> {
+    let Some(mode) = NodePackageResolveMode::from_js_mode(mode) else {
+        return throw_native_coded_error(
+            ctx,
+            "Unknown internal package resolution mode",
+            "ERR_INVALID_ARG_VALUE",
+            false,
+        );
+    };
+    Ok(mode)
+}
+
+fn package_conditions_from_js_array<'js>(conditions: &rquickjs::Array<'js>) -> Vec<String> {
+    let mut condition_vec = Vec::new();
+    for i in 0..conditions.len() {
+        if let Ok(condition) = conditions.get::<String>(i) {
+            NodeModulesResolver::add_condition(&mut condition_vec, &condition);
+        }
+    }
+    condition_vec
+}
+
+fn loader_default_resolve_package<'js>(
+    ctx: Ctx<'js>,
+    base_url: String,
+    specifier: String,
+    conditions: rquickjs::Array<'js>,
+    mode: String,
+) -> rquickjs::Result<Option<Object<'js>>> {
+    let mode = package_resolve_mode_from_loader_mode(&ctx, &mode)?;
+    let Some((base, _)) = FileUrlResolver::file_url_to_path_parts(&base_url) else {
+        return Ok(None);
+    };
+    let condition_vec = package_conditions_from_js_array(&conditions);
+
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);
+    let resolver = NodeModulesResolver;
+    let result = resolver.try_resolve_with_context(&base, &specifier, &mut resolution);
+    emit_node_package_deprecation_warnings(&ctx, &warnings)?;
+    match result {
+        Ok(Some(resolved)) => {
+            let result = Object::new(ctx.clone())?;
+            result.set("url", path_to_file_url(&resolved))?;
+            match std::path::Path::new(&resolved)
+                .extension()
+                .and_then(|ext| ext.to_str())
+            {
+                Some("json") => result.set("format", "json")?,
+                Some("mjs") if mode == NodePackageResolveMode::EsmImport => {
+                    result.set("format", "module")?
+                }
+                Some("cjs") | Some("mjs") => result.set("format", "commonjs")?,
+                _ if mode == NodePackageResolveMode::CjsAnalysis => {
+                    result.set("format", "commonjs")?
+                }
+                _ => {}
+            }
+            Ok(Some(result))
+        }
+        Ok(None) => Ok(None),
+        Err(err) => {
+            let _: String = throw_node_package_resolve_error(&ctx, err)?;
+            unreachable!()
+        }
+    }
+}
+
+fn require_esm_graph_resolve_package<'js>(
+    _ctx: Ctx<'js>,
+    parent_filename: String,
+    specifier: String,
+    conditions: rquickjs::Array<'js>,
+    mode: String,
+) -> rquickjs::Result<Option<String>> {
+    let condition_vec = package_conditions_from_js_array(&conditions);
+    let mode = package_resolve_mode_from_loader_mode(&_ctx, &mode)?;
+    let mut warnings = Vec::new();
+    let mut resolution =
+        NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);
+    let resolver = NodeModulesResolver;
+    Ok(resolver
+        .try_resolve_with_context(&parent_filename, &specifier, &mut resolution)
+        .ok()
+        .flatten())
+}
+
+fn import_meta_trailing_slash_package_has_exports(
+    base: &str,
+    package_name: &str,
+) -> Result<bool, NodePackageResolveError> {
+    let Some(base_dir) = std::path::Path::new(base).parent() else {
+        return Ok(false);
+    };
+
+    let mut dir = base_dir.to_path_buf();
+    loop {
+        if dir.file_name().is_some_and(|name| name == "node_modules") {
+            return Ok(false);
+        }
+
+        let pkg_path = dir.join("package.json");
+        if let Some(package) = NodeModulesResolver::read_package_json_optional(&pkg_path)? {
+            if package.name.as_deref() == Some(package_name) {
+                return Ok(package.exports.is_some());
+            }
+            break;
+        }
+
+        if !dir.pop() {
+            break;
+        }
+    }
+
+    let mut dir = base_dir.to_path_buf();
+    loop {
+        let package_path = dir.join("node_modules").join(package_name);
+        if package_path.is_dir() {
+            let pkg_path = package_path.join("package.json");
+            return NodeModulesResolver::read_package_json_optional(&pkg_path)
+                .map(|package| package.is_some_and(|package| package.exports.is_some()));
+        }
+
+        if !dir.pop() {
+            break;
+        }
+    }
+
+    Ok(false)
+}
+
 impl Resolver for NodeModulesResolver {
     fn resolve<'js>(
         &mut self,
@@ -4495,7 +5006,7 @@ impl Resolver for NodeModulesResolver {
         name: &str,
     ) -> rquickjs::Result<String> {
         let conditions =
-            Self::conditions_from_global(ctx, NodePackageResolveMode::EsmImport.default_conditions());
+            Self::conditions_from_global(ctx, NodePackageResolveMode::EsmImport.condition_mode());
         let mut warnings = Vec::new();
         let (resolution_name, suffix) = if has_import_type_rewrite_token(name) {
             split_module_path_suffix(name)
@@ -4506,7 +5017,12 @@ impl Resolver for NodeModulesResolver {
             || !(resolution_name.starts_with('.')
                 || resolution_name.starts_with('/')
                 || resolution_name.contains("://"));
-        let result = self.try_resolve(base, resolution_name, &conditions, &mut warnings);
+        let mut resolution = NodePackageResolutionContext::new(
+            NodePackageResolveMode::EsmImport,
+            &conditions,
+            &mut warnings,
+        );
+        let result = self.try_resolve_with_context(base, resolution_name, &mut resolution);
         emit_node_package_deprecation_warnings(ctx, &warnings)?;
         match result {
             Ok(Some(resolved)) => {
@@ -4746,10 +5262,47 @@ fn skip_string_or_template(source: &str, pos: usize) -> usize {
     while i < bytes.len() {
         if bytes[i] == b'\\' {
             i += 2;
+        } else if quote == b'`' && bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+            i = skip_template_expression(source, i + 2);
         } else if bytes[i] == quote {
             return i + 1;
         } else {
             i += 1;
+        }
+    }
+    i
+}
+
+fn skip_template_expression(source: &str, start: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = start;
+    let mut depth = 1usize;
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'\'' | b'"' | b'`' => i = skip_string_or_template(source, i),
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+            }
+            b'/' if is_regex_literal_start(source, i) => i = skip_regex_literal(source, i),
+            b'{' | b'(' | b'[' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' | b')' | b']' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            _ => i += 1,
         }
     }
     i
@@ -5295,17 +5848,22 @@ fn parse_export_star_reexport(source: &str, pos: usize) -> Option<(String, usize
                 return Some(export_end);
             }
         }
-        if let Some(tslib_end) = parse_free_ident_name(source, pos, "tslib") {
-            let mut i = skip_ws_comments(source, tslib_end);
-            if i >= bytes.len() || bytes[i] != b'.' {
-                return None;
-            }
-            i = skip_ws_comments(source, i + 1);
-            if let Some(export_star_end) = parse_ident_name(source, i, "__exportStar") {
-                return Some(export_star_end);
-            }
-            if let Some(export_end) = parse_ident_name(source, i, "__export") {
-                return Some(export_end);
+        if is_free_ident_start(bytes, pos) {
+            let (_, mut i) = read_ident_span(source, pos)?;
+            loop {
+                i = skip_ws_comments(source, i);
+                if i >= bytes.len() || bytes[i] != b'.' {
+                    return None;
+                }
+                i = skip_ws_comments(source, i + 1);
+                let Some((member_start, member_end)) = read_ident_span(source, i) else {
+                    return None;
+                };
+                let member = &source[member_start..member_end];
+                if member == "__exportStar" || member == "__export" {
+                    return Some(member_end);
+                }
+                i = member_end;
             }
         }
         None
@@ -6019,10 +6577,31 @@ fn previous_significant_byte(source: &str, pos: usize) -> Option<u8> {
 }
 
 fn previous_significant_byte_before_import_meta(source: &str, pos: usize) -> Option<u8> {
+    previous_significant_code_byte(source, pos)
+}
+
+fn previous_significant_code_byte(source: &str, pos: usize) -> Option<u8> {
     let mut previous = None;
     let _ = scan_code_positions(&source[..pos], true, |_, byte| {
         if !byte.is_ascii_whitespace() {
             previous = Some(byte);
+        }
+        ControlFlow::Continue(None)
+    });
+    previous
+}
+
+fn previous_identifier_before(source: &str, pos: usize) -> Option<(usize, &str)> {
+    let mut previous = None;
+    let _ = scan_code_positions(&source[..pos], true, |i, byte| {
+        if is_js_identifier_start(byte) {
+            let mut end = i + 1;
+            let bytes = source.as_bytes();
+            while end < pos && is_js_identifier_continue(bytes[end]) {
+                end += 1;
+            }
+            previous = Some((i, &source[i..end]));
+            return ControlFlow::Continue(Some(end));
         }
         ControlFlow::Continue(None)
     });
@@ -6265,11 +6844,83 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     analysis
 }
 
+fn collect_cjs_export_star_reexports(source: &str) -> Vec<String> {
+    let mut reexports = Vec::new();
+    let _ = scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
+        if brace_depth == 0
+            && let Some((specifier, next)) = parse_export_star_reexport(source, i)
+        {
+            add_unique(&mut reexports, specifier);
+            return ControlFlow::Continue(Some(next));
+        }
+        ControlFlow::Continue(None)
+    });
+    reexports
+}
+
+fn is_node_builtin_specifier(specifier: &str) -> bool {
+    let bare = specifier.strip_prefix("node:").unwrap_or(specifier);
+    matches!(
+        bare,
+        "fs"
+            | "path"
+            | "os"
+            | "crypto"
+            | "http"
+            | "https"
+            | "url"
+            | "util"
+            | "stream"
+            | "events"
+            | "buffer"
+            | "querystring"
+            | "string_decoder"
+            | "zlib"
+            | "assert"
+            | "module"
+            | "net"
+            | "tls"
+            | "child_process"
+            | "timers"
+            | "dns"
+            | "dgram"
+            | "cluster"
+            | "constants"
+            | "readline"
+            | "tty"
+            | "v8"
+            | "vm"
+            | "worker_threads"
+            | "perf_hooks"
+            | "async_hooks"
+            | "diagnostics_channel"
+            | "trace_events"
+            | "inspector"
+            | "punycode"
+            | "console"
+            | "process"
+            | "test"
+            | "sqlite"
+            | "domain"
+            | "http2"
+            | "repl"
+    )
+}
+
 fn resolve_cjs_reexport_path(filename: &str, specifier: &str, conditions: &[String]) -> Option<String> {
-    if !specifier.starts_with("./") && !specifier.starts_with("../") && !specifier.starts_with('/') {
+    if is_node_builtin_specifier(specifier) || specifier.contains(':') {
+        return None;
+    }
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(
+        NodePackageResolveMode::CjsAnalysis,
+        conditions,
+        &mut warnings,
+    );
+    if !is_relative_or_absolute_specifier(specifier) {
         let resolver = NodeModulesResolver;
         return resolver
-            .try_resolve_for_cjs_analysis(filename, specifier, conditions)
+            .try_resolve_with_context(filename, specifier, &mut resolution)
             .ok()
             .flatten();
     }
@@ -6278,7 +6929,7 @@ fn resolve_cjs_reexport_path(filename: &str, specifier: &str, conditions: &[Stri
     } else {
         std::path::Path::new(filename).parent()?.join(specifier)
     };
-    NodeModulesResolver::resolve_cjs_analysis_relative(&base)
+    NodeModulesResolver::resolve_cjs_analysis_relative(&base, &mut resolution)
 }
 
 fn is_cjs_analysis_source_path(path: &str) -> bool {
@@ -6380,6 +7031,39 @@ fn cjs_named_export_source(names: &[String]) -> String {
     out
 }
 
+fn analyze_loader_cjs_reexport_names(
+    ctx: Ctx<'_>,
+    filename: String,
+    source: String,
+    reexports: rquickjs::Array<'_>,
+) -> Vec<String> {
+    let cjs_conditions =
+        NodeModulesResolver::conditions_from_global(&ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
+    let mut reexport_specifiers = collect_cjs_export_star_reexports(&source);
+    for i in 0..reexports.len() {
+        if let Ok(reexport) = reexports.get::<String>(i) {
+            add_unique(&mut reexport_specifiers, reexport);
+        }
+    }
+    let mut names = Vec::new();
+    let mut seen = HashSet::new();
+    seen.insert(filename.clone());
+    for reexport in reexport_specifiers {
+        if let Some(path) = resolve_cjs_reexport_path(&filename, &reexport, &cjs_conditions)
+            && is_cjs_analysis_source_path(&path)
+            && let Ok(source) = std::fs::read_to_string(&path)
+        {
+            let child = analyze_cjs_exports_for_file(&path, &source, &mut seen, &cjs_conditions);
+            for name in child.exports {
+                if name != "default" {
+                    add_unique(&mut names, name);
+                }
+            }
+        }
+    }
+    names
+}
+
 impl Loader for CjsCompatLoader {
     fn load<'js>(
         &mut self,
@@ -6468,7 +7152,7 @@ impl Loader for CjsCompatLoader {
         }
 
         let cjs_conditions =
-            NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.default_conditions());
+            NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
         let detected_analysis =
             analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
         let named_exports = cjs_named_export_source(&detected_analysis.exports);
@@ -6477,10 +7161,19 @@ impl Loader for CjsCompatLoader {
         // facade only exposes the shared module.exports object to ESM.
         let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
-            r#"import {{ createRequire as __wasm_rquickjs_createRequire }} from 'node:module';
-{}
-var __wasm_rquickjs_require = __wasm_rquickjs_createRequire("{}");
-var __cjs_default = __wasm_rquickjs_require("{}");
+            r#"{}
+var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require("{}");
+var __wasm_rquickjs_filename = "{}";
+var __wasm_rquickjs_resolved_filename = __wasm_rquickjs_require.resolve(__wasm_rquickjs_filename);
+var __cjs_default = globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot(
+  __wasm_rquickjs_require.cache,
+  __wasm_rquickjs_resolved_filename
+)
+  ? globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot(
+      __wasm_rquickjs_require.cache,
+      __wasm_rquickjs_resolved_filename
+    )
+  : __wasm_rquickjs_require(__wasm_rquickjs_filename);
 export default __cjs_default;
 {}
 "#,
@@ -6513,7 +7206,7 @@ fn ensure_absolute_path(path: &str) -> String {
     absolute
 }
 
-fn path_to_file_url(path: &str) -> String {
+pub(crate) fn path_to_file_url(path: &str) -> String {
     let stripped_path = strip_loader_realm_param(path);
     let abs_path = ensure_absolute_path(&stripped_path);
     let (abs_path, suffix) = split_module_path_suffix(&abs_path);
@@ -6776,7 +7469,7 @@ fn escape_js_string(s: &str) -> String {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum JsBraceContext {
-    Normal,
+    Normal { object_like: bool },
     Function,
     Class,
 }
@@ -6858,8 +7551,18 @@ fn source_has_top_level_await(source: &str) -> bool {
             }
             let ident = &source[start..i];
             if skip_arrow_expression.is_none() {
+                let in_object_like_brace = matches!(
+                    braces.last(),
+                    Some(JsBraceContext::Normal { object_like: true })
+                );
                 match ident {
-                    "await" if function_depth == 0 && class_depth == 0 => return true,
+                    "await"
+                        if function_depth == 0
+                            && class_depth == 0
+                            && is_top_level_await_expression(source, start, i, in_object_like_brace) =>
+                    {
+                        return true
+                    }
                     "function" => pending_function_body = true,
                     "class" => pending_class_body = true,
                     _ => {}
@@ -6897,7 +7600,13 @@ fn source_has_top_level_await(source: &str) -> bool {
                     class_depth += 1;
                     pending_class_body = false;
                 } else {
-                    braces.push(JsBraceContext::Normal);
+                    let in_object_like_brace = matches!(
+                        braces.last(),
+                        Some(JsBraceContext::Normal { object_like: true })
+                    );
+                    braces.push(JsBraceContext::Normal {
+                        object_like: is_likely_object_literal_open(source, i, in_object_like_brace),
+                    });
                 }
             }
             b'}' => {
@@ -6905,7 +7614,7 @@ fn source_has_top_level_await(source: &str) -> bool {
                     match context {
                         JsBraceContext::Function => function_depth = function_depth.saturating_sub(1),
                         JsBraceContext::Class => class_depth = class_depth.saturating_sub(1),
-                        JsBraceContext::Normal => {}
+                        JsBraceContext::Normal { .. } => {}
                     }
                 }
             }
@@ -6915,6 +7624,46 @@ fn source_has_top_level_await(source: &str) -> bool {
     }
 
     false
+}
+
+fn is_likely_object_literal_open(source: &str, pos: usize, in_object_like_brace: bool) -> bool {
+    matches!(
+        previous_significant_code_byte(source, pos),
+        Some(b'=' | b'(' | b'[' | b',' | b'?')
+    ) || (in_object_like_brace && previous_significant_code_byte(source, pos) == Some(b':'))
+}
+
+fn is_top_level_await_expression(source: &str, start: usize, end: usize, in_object_like_brace: bool) -> bool {
+    if previous_significant_code_byte(source, start) == Some(b'.') {
+        return false;
+    }
+
+    let next = skip_ws_comments(source, end);
+    if matches!(source.as_bytes().get(next), Some(b':')) {
+        return false;
+    }
+    if in_object_like_brace && is_object_await_key(source, start, next) {
+        return false;
+    }
+    true
+}
+
+fn is_object_await_key(source: &str, start: usize, next: usize) -> bool {
+    if matches!(
+        previous_significant_code_byte(source, start),
+        Some(b'{' | b',' | b'*')
+    ) {
+        return matches!(source.as_bytes().get(next), Some(b'(' | b'}' | b','));
+    }
+    let Some((ident_start, ident)) = previous_identifier_before(source, start) else {
+        return false;
+    };
+    matches!(source.as_bytes().get(next), Some(b'('))
+        && matches!(ident, "get" | "set" | "async")
+        && matches!(
+            previous_significant_code_byte(source, ident_start),
+            Some(b'{' | b',')
+        )
 }
 
 fn source_looks_like_esm(source: &str) -> bool {
@@ -7063,7 +7812,7 @@ fn line_starts_with_static_import(line: &str) -> bool {
 }
 
 fn source_has_import_meta(source: &str) -> bool {
-    scan_code_positions(source, true, |i, _| {
+    scan_import_meta_positions(source, |i| {
         if parse_import_meta(source, i).is_some()
             && !is_static_import_syntax(source, i)
             && previous_significant_byte(source, i) != Some(b'.')
@@ -7073,6 +7822,82 @@ fn source_has_import_meta(source: &str) -> bool {
         ControlFlow::Continue(None)
     })
     .is_break()
+}
+
+fn scan_import_meta_positions<F>(source: &str, mut visitor: F) -> ControlFlow<()>
+where
+    F: FnMut(usize) -> ControlFlow<(), Option<usize>>,
+{
+    let bytes = source.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' | b'"' => {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'`' => {
+                if template_contains_import_meta(source, i) {
+                    return ControlFlow::Break(());
+                }
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && !matches!(bytes[i], b'\n' | b'\r') {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, i) => {
+                i = skip_regex_literal(source, i);
+                continue;
+            }
+            _ => {}
+        }
+
+        match visitor(i) {
+            ControlFlow::Break(()) => return ControlFlow::Break(()),
+            ControlFlow::Continue(Some(next)) => i = next,
+            ControlFlow::Continue(None) => i = next_char_boundary(source, i),
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn template_contains_import_meta(source: &str, template_start: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut i = template_start + 1;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i = (i + 2).min(bytes.len()),
+            b'`' => return false,
+            b'$' if i + 1 < bytes.len() && bytes[i + 1] == b'{' => {
+                let expression_start = i + 2;
+                let expression_end = skip_template_expression(source, expression_start);
+                let expression_end = expression_end.saturating_sub(1).min(source.len());
+                if expression_start <= expression_end
+                    && source
+                        .get(expression_start..expression_end)
+                        .is_some_and(source_has_import_meta)
+                {
+                    return true;
+                }
+                i = expression_end + 1;
+            }
+            _ => i += 1,
+        }
+    }
+    false
 }
 
 fn is_static_export_syntax(source: &str, pos: usize) -> bool {
@@ -7551,6 +8376,48 @@ impl JsState {
                 .expect("Failed to create import attribute rewrite discard"),
             )
             .expect("Failed to initialize import attribute rewrite discard");
+
+            global.set(
+                "__wasm_rquickjs_analyze_loader_cjs_reexport_names",
+                Function::new(ctx.clone(), analyze_loader_cjs_reexport_names)
+                    .expect("Failed to create loader CJS reexport analyzer"),
+            )
+            .expect("Failed to initialize loader CJS reexport analyzer");
+
+            global.set(
+                "__wasm_rquickjs_import_meta_resolve_package",
+                Function::new(ctx.clone(), import_meta_resolve_package)
+                    .expect("Failed to create import.meta package resolver"),
+            )
+            .expect("Failed to initialize import.meta package resolver");
+
+            global.set(
+                "__wasm_rquickjs_import_meta_resolve_path",
+                Function::new(ctx.clone(), import_meta_resolve_path)
+                    .expect("Failed to create import.meta path resolver"),
+            )
+            .expect("Failed to initialize import.meta path resolver");
+
+            global.set(
+                "__wasm_rquickjs_loader_default_resolve_package",
+                Function::new(ctx.clone(), loader_default_resolve_package)
+                    .expect("Failed to create loader default package resolver"),
+            )
+            .expect("Failed to initialize loader default package resolver");
+
+            global.set(
+                "__wasm_rquickjs_package_default_conditions",
+                Function::new(ctx.clone(), package_default_conditions)
+                    .expect("Failed to create package default condition provider"),
+            )
+            .expect("Failed to initialize package default condition provider");
+
+            global.set(
+                "__wasm_rquickjs_require_esm_graph_resolve_package",
+                Function::new(ctx.clone(), require_esm_graph_resolve_package)
+                    .expect("Failed to create require(esm) graph package resolver"),
+            )
+            .expect("Failed to initialize require(esm) graph package resolver");
         })
         .await;
 
@@ -8621,6 +9488,7 @@ mod cjs_export_analyzer_tests {
             &[],
             &["./dep.cjs"],
         );
+        assert_analysis(r#"exports = require("./dep.cjs");"#, true, &[], &[]);
         assert_analysis(
             r#"module.exports = require("./dep.cjs").nested;"#,
             true,
@@ -8818,18 +9686,27 @@ mod cjs_export_analyzer_tests {
     }
 
     #[test]
-    fn detects_only_documented_export_star_helper_reexports() {
+    fn detects_export_star_helper_reexports() {
         assert_analysis(
             r#"
                 __export(require("./dep-a.cjs"));
                 __exportStar(require("./dep-b.cjs"), exports);
                 tslib.__export(require("./dep-c.cjs"), exports);
                 tslib.__exportStar(require("./dep-d.cjs"), exports);
+                ns.helpers.__export(require("./dep-e.cjs"), exports);
+                ns.helpers.__exportStar(require("./dep-f.cjs"), exports);
                 exports.own = "own";
             "#,
             true,
             &["own"],
-            &["./dep-a.cjs", "./dep-b.cjs", "./dep-c.cjs", "./dep-d.cjs"],
+            &[
+                "./dep-a.cjs",
+                "./dep-b.cjs",
+                "./dep-c.cjs",
+                "./dep-d.cjs",
+                "./dep-e.cjs",
+                "./dep-f.cjs",
+            ],
         );
 
         assert_analysis(
@@ -8844,7 +9721,7 @@ mod cjs_export_analyzer_tests {
             "#,
             true,
             &["own"],
-            &[],
+            &["./dep-b.cjs"],
         );
     }
 
@@ -9038,6 +9915,58 @@ mod cjs_export_analyzer_tests {
         assert!(esm_preflight_error_module_source("const require = 1; export default require;", true, false).is_none());
         assert!(esm_preflight_error_module_source("export default typeof require;", false, false).is_none());
         assert!(esm_preflight_error_module_source("export default typeof (exports);", false, false).is_none());
+        assert!(esm_preflight_error_module_source(
+            "if (true) { const exports = 1; Object.keys(exports); }",
+            false,
+            false
+        )
+        .is_none());
+        let block_scoped_exports_diag = esm_preflight_error_module_source(
+            "if (false) { const exports = 1; } Object.keys(exports);",
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(block_scoped_exports_diag.contains("exports is not defined in ES module scope"));
+        let for_scoped_exports_diag = esm_preflight_error_module_source(
+            "for (let exports of []) {} Object.keys(exports);",
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(for_scoped_exports_diag.contains("exports is not defined in ES module scope"));
+        let unbraced_for_scoped_exports_diag = esm_preflight_error_module_source(
+            "for (let exports of [1]) Object.keys(exports); Object.keys(exports);",
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(unbraced_for_scoped_exports_diag.contains("exports is not defined in ES module scope"));
+        let for_await_scoped_exports_diag = esm_preflight_error_module_source(
+            "for await (let exports of []) {} Object.keys(exports);",
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(for_await_scoped_exports_diag.contains("exports is not defined in ES module scope"));
+        assert!(esm_preflight_error_module_source(
+            "try { throw { a: 1 }; } catch (exports) { Object.keys(exports); } export default 1;",
+            false,
+            false,
+        )
+        .is_none());
+        assert!(esm_preflight_error_module_source(
+            "if (false) { var exports = 1; } Object.keys(exports);",
+            false,
+            false,
+        )
+        .is_none());
+        let object_key_exports_diag =
+            esm_preflight_error_module_source("export default ({ var: exports });", false, false).unwrap();
+        assert!(object_key_exports_diag.contains("exports is not defined in ES module scope"));
+        let lexical_object_key_exports_diag =
+            esm_preflight_error_module_source("export default ({ const: exports });", false, false).unwrap();
+        assert!(lexical_object_key_exports_diag.contains("exports is not defined in ES module scope"));
         let raw_exports_diag = esm_preflight_error_module_source("Object.keys(exports);", false, true).unwrap();
         assert!(raw_exports_diag.contains("exports is not defined"));
         assert!(!raw_exports_diag.contains("ES module scope"));

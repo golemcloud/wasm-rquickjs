@@ -539,6 +539,23 @@ async fn require_esm_cycle_guards(
 }
 
 #[test]
+async fn cjs_esm_default_snapshot_timing(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-cjs-esm-default-snapshot-timing",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn cjs_symlink_circular_cache(
     #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {
