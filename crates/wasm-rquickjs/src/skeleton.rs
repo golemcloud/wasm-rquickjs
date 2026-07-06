@@ -303,7 +303,9 @@ mod tests {
             resolve_package_imports.contains("__wasm_rquickjs_loader_default_resolve_package(")
                 && resolve_package_imports.contains("'cjs-analysis'")
                 && resolve_package_imports.contains("makeCjsModuleNotFoundFromErrModuleNotFound")
-                && resolve_package_imports.contains("return resolveExactPackageFile(")
+                && resolve_package_imports
+                    .contains("const resolvedFile = resolvePackageFileFromRustResult(resolved);")
+                && resolve_package_imports.contains("return resolvedFile;")
                 && !resolve_package_imports.contains("findPackageScope(")
                 && !resolve_package_imports.contains("findPackageMapTarget(")
                 && !resolve_package_imports.contains("resolveCjsPackageFallbacks(")
@@ -339,13 +341,19 @@ mod tests {
 
         assert!(
             resolve_package_exports_entry.contains("__wasm_rquickjs_cjs_resolve_package_exports(")
-                && resolve_package_exports_entry.contains("resolveExactPackageFile(")
+                && resolve_package_exports_entry
+                    .contains("resolved = resolvePackageFileFromRustResult(resolved);")
                 && resolve_package_exports_entry
                     .contains("makeCjsModuleNotFoundFromErrModuleNotFound")
                 && !module_js.contains("function resolvePackageExports(")
                 && !module_js.contains("function resolvePackageTargetWithContext(")
                 && !module_js.contains("function validatePackageExportsMap("),
             "CJS package exports must delegate package-map resolution to Rust and keep JS exact-file loading"
+        );
+        assert!(
+            module_js.contains("function resolvePackageFileFromRustResult(resolved, resolution)")
+                && module_js.contains("return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)), resolution);"),
+            "CJS package imports and exports must share Rust-result-to-exact-file shaping"
         );
         assert!(
             internal_rs.contains("fn cjs_resolve_package_exports<'js>(")

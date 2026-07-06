@@ -828,6 +828,11 @@ function resolveExactPackageFile(filename, resolution) {
     throw makeModuleNotFoundError(filename);
 }
 
+function resolvePackageFileFromRustResult(resolved, resolution) {
+    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) return undefined;
+    return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)), resolution);
+}
+
 function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions) {
     if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
     if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
@@ -848,8 +853,8 @@ function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditi
         }
         throw err;
     }
-    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) return undefined;
-    resolved = resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)));
+    resolved = resolvePackageFileFromRustResult(resolved);
+    if (!resolved) return undefined;
     resolved.packageDir = packageDir;
     return resolved;
 }
@@ -944,10 +949,11 @@ function resolvePackageImports(id, parentDir, conditions) {
         }
         throw err;
     }
-    if (!resolved || !resolved.url || !String(resolved.url).startsWith('file://')) {
+    const resolvedFile = resolvePackageFileFromRustResult(resolved);
+    if (!resolvedFile) {
         throw makePackageImportNotDefinedError(id);
     }
-    return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)));
+    return resolvedFile;
 }
 
 function resolveFilename(id, parentDir) {
