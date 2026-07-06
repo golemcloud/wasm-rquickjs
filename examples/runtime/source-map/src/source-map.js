@@ -1,5 +1,7 @@
 import fs from 'node:fs';
-import module from 'node:module';
+import module, { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 function assert(condition, message) {
     if (!condition) {

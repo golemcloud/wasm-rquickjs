@@ -1134,7 +1134,10 @@ function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelper
         'const __wasm_rquickjs_vm_key = __wasm_rquickjs_vm_sandbox_key_list[__wasm_rquickjs_vm_i];' +
         'const __wasm_rquickjs_vm_desc = __wasm_rquickjs_vm_descriptors[__wasm_rquickjs_vm_key];' +
         'if (__wasm_rquickjs_vm_desc !== undefined) {' +
+        'const __wasm_rquickjs_vm_current_desc = __wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_key);' +
+        'if (!__wasm_rquickjs_vm_same_desc(__wasm_rquickjs_vm_current_desc, __wasm_rquickjs_vm_desc)) {' +
         '__wasm_rquickjs_vm_define(globalThis, __wasm_rquickjs_vm_key, __wasm_rquickjs_vm_desc);' +
+        '}' +
         '}' +
         '}' +
         '}' +
@@ -1144,7 +1147,10 @@ function createSandboxEvalSource(code, helperName, sandboxKeys, descriptorHelper
         'const __wasm_rquickjs_vm_symbol = __wasm_rquickjs_vm_sandbox_symbol_list[__wasm_rquickjs_vm_i];' +
         'const __wasm_rquickjs_vm_desc = __wasm_rquickjs_vm_sandbox_symbol_descriptors[__wasm_rquickjs_vm_i];' +
         'if (__wasm_rquickjs_vm_desc !== undefined) {' +
+        'const __wasm_rquickjs_vm_current_desc = __wasm_rquickjs_vm_get_desc(globalThis, __wasm_rquickjs_vm_symbol);' +
+        'if (!__wasm_rquickjs_vm_same_desc(__wasm_rquickjs_vm_current_desc, __wasm_rquickjs_vm_desc)) {' +
         '__wasm_rquickjs_vm_define(globalThis, __wasm_rquickjs_vm_symbol, __wasm_rquickjs_vm_desc);' +
+        '}' +
         '}' +
         '}' +
         'const __wasm_rquickjs_vm_baseline = __wasm_rquickjs_vm_create(null);' +
@@ -1295,10 +1301,6 @@ function evalCodeInNewContext(code, sandbox, helperName) {
         const bindings = collectSandboxBindings(sandbox);
         sandboxKeys = bindings.keys;
         deletedGlobalKeys = bindings.deletedGlobalKeys;
-        for (let i = 0; i < bindings.keys.length; i++) {
-            keys.push(bindings.keys[i]);
-            values.push(bindings.values[i]);
-        }
         if (bindings.keys.length > 0) {
             descriptorHelperName = chooseSandboxDescriptorsHelperName(code, bindings.keys);
             keys.push(descriptorHelperName);
@@ -1418,10 +1420,6 @@ function evalCodeInContext(code, context, helperName) {
     const keys = [];
     const values = [];
     const bindings = collectSandboxBindings(context);
-    for (let i = 0; i < bindings.keys.length; i++) {
-        keys.push(bindings.keys[i]);
-        values.push(bindings.values[i]);
-    }
     let descriptorHelperName;
     let symbolHelperName;
     if (bindings.keys.length > 0) {
