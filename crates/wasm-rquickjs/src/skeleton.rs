@@ -538,4 +538,26 @@ mod tests {
             "Rust ESM file resolver must share builtin fs realpath behavior"
         );
     }
+
+    #[test]
+    fn import_meta_resolve_honors_directory_file_url_bases() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains("fn file_url_resolution_base_path(base_path: &str) -> Option<std::path::PathBuf>")
+                && internal_rs.contains("if base_path.ends_with('/') { Some(path.to_path_buf()) } else { path.parent().map(|parent| parent.to_path_buf()) }")
+                && internal_rs.contains("let base_dir = FileUrlResolver::file_url_resolution_base_path(&base_path)?;"),
+            "import.meta.resolve must treat trailing-slash file URLs as directory bases"
+        );
+        assert!(
+            internal_rs
+                .contains("fn file_url_package_resolution_base(base_path: String) -> String")
+                && internal_rs
+                    .contains("format!(\"{base_path}.wasm-rquickjs-import-meta-resolve-base\")")
+                && internal_rs.contains(
+                    "let base = FileUrlResolver::file_url_package_resolution_base(base);"
+                ),
+            "package import.meta.resolve must search from trailing-slash file URL directories"
+        );
+    }
 }

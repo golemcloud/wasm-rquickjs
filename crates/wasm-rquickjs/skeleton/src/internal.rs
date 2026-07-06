@@ -2489,6 +2489,23 @@ impl FileUrlResolver {
         CjsEvalResolver::normalize_path(base_parent) == CjsEvalResolver::normalize_path(target_parent)
     }
 
+    fn file_url_resolution_base_path(base_path: &str) -> Option<std::path::PathBuf> {
+        let path = std::path::Path::new(base_path);
+        if base_path.ends_with('/') {
+            Some(path.to_path_buf())
+        } else {
+            path.parent().map(|parent| parent.to_path_buf())
+        }
+    }
+
+    fn file_url_package_resolution_base(base_path: String) -> String {
+        if base_path.ends_with('/') {
+            format!("{base_path}.wasm-rquickjs-import-meta-resolve-base")
+        } else {
+            base_path
+        }
+    }
+
     fn hex_val(b: u8) -> Option<u8> {
         match b {
             b'0'..=b'9' => Some(b - b'0'),
@@ -4997,6 +5014,7 @@ fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String
     } else {
         base_url.clone()
     };
+    let base = FileUrlResolver::file_url_package_resolution_base(base);
     let conditions =
         NodeModulesResolver::conditions_from_global(&ctx, NodePackageResolveMode::EsmImport.condition_mode());
     let mut warnings = Vec::new();
@@ -5058,7 +5076,7 @@ fn import_meta_resolve_path(base_url: String, specifier: String) -> Option<Strin
         std::path::PathBuf::from(specifier_path)
     } else {
         let (base_path, _) = FileUrlResolver::file_url_to_path_parts(&base_url)?;
-        let base_dir = std::path::Path::new(&base_path).parent()?;
+        let base_dir = FileUrlResolver::file_url_resolution_base_path(&base_path)?;
         base_dir.join(specifier_path)
     };
 

@@ -70,9 +70,11 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(import.meta.resolve('./sp%20ce.mjs', entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
     assert.strictEqual(import.meta.resolve(`${appDir}/sp ce.mjs`, entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
     assert.strictEqual(import.meta.resolve(`${appDir}/sp%20ce.mjs`, entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve('./local.mjs', `${pathToFileURL(`${appDir}/`).href}`), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
     assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
+    assert.strictEqual(import.meta.resolve('pkg-dir/', `${pathToFileURL(`${appDir}/`).href}`), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
     assert.strictEqual(import.meta.resolve('primitive-exports-false/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-false/`).href}`);
     assert.strictEqual(import.meta.resolve('primitive-exports-true/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-true/`).href}`);
     assert.strictEqual(import.meta.resolve('primitive-exports-number/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-number/`).href}`);
