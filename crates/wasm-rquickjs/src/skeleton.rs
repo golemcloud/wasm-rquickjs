@@ -612,6 +612,38 @@ mod tests {
     }
 
     #[test]
+    fn static_registered_loader_url_returns_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function staticRegisteredLoaderUrlReturn(url) { url = String(url); return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url; }"
+            ),
+            "static registered-loader URL/path return conversion must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("staticRegisteredLoaderUrlReturn(")
+                .count(),
+            4,
+            "static registered-loader module/default/JSON-edge return paths must use the shared URL/path converter"
+        );
+
+        let static_start = module_js
+            .find("function staticRegisteredLoaderReturn(loaded)")
+            .expect("staticRegisteredLoaderReturn function must exist");
+        let edge_end = module_js[static_start..]
+            .find("function staticRegisteredLoaderSourceForUrl(")
+            .expect("staticRegisteredLoaderReturnForEdge must precede source helper")
+            + static_start;
+        let static_return_helpers = &module_js[static_start..edge_end];
+        assert!(
+            !static_return_helpers.contains("nodeUrl.fileURLToPath("),
+            "static registered-loader return helpers must route file URL conversion through staticRegisteredLoaderUrlReturn"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

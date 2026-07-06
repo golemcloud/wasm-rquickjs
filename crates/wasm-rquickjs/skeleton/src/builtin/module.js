@@ -5640,6 +5640,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         );
     }
 
+    function staticRegisteredLoaderUrlReturn(url) {
+        url = String(url);
+        return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5992,7 +5997,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderModuleSourceReturn(loaded.source);
         }
         if (!hasSource && format === 'module') {
-            return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
+            return staticRegisteredLoaderUrlReturn(url);
         }
         if (hasSource && format === 'commonjs') {
             return loaderCommonJsSourceModule(loaded.source, url);
@@ -6006,10 +6011,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (hasSource && format === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
         }
-        if (url.startsWith('file://')) {
-            return nodeUrl.fileURLToPath(url);
-        }
-        return url;
+        return staticRegisteredLoaderUrlReturn(url);
     }
 
     function staticRegisteredLoaderReturnForEdge(loaded, attrs) {
@@ -6023,7 +6025,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             typeof globalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
         ) {
             const url = String(loaded.url);
-            const target = url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
+            const target = staticRegisteredLoaderUrlReturn(url);
             return globalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
         }
         return staticRegisteredLoaderReturn(loaded);
