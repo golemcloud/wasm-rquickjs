@@ -326,6 +326,16 @@ fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Resul
     Ok(())
 }
 
+fn test_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
+    let mut config = wasmtime::Config::default();
+    config.wasm_component_model(true);
+    config.epoch_interruption(true);
+    config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
+    config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
+    configure_test_wasmtime_cache(&mut config)?;
+    Ok(config)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NodeCompatCategory {
     /// The test exercises supported public API and should pass. Failures count against primary compatibility.
@@ -912,12 +922,7 @@ pub struct PreparedComponent {
 
 impl PreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let mut config = wasmtime::Config::default();
-        config.wasm_component_model(true);
-        config.epoch_interruption(true);
-        config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
-        config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
-        configure_test_wasmtime_cache(&mut config)?;
+        let config = test_wasmtime_config()?;
         let engine = Engine::new(&config)?;
 
         // Start a background thread that increments the epoch every 10ms,
@@ -1073,12 +1078,7 @@ pub struct GolemPreparedComponent {
 
 impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let mut config = wasmtime::Config::default();
-        config.wasm_component_model(true);
-        config.epoch_interruption(true);
-        config.async_stack_size(32 * 1024 * 1024);
-        config.max_wasm_stack(16 * 1024 * 1024);
-        configure_test_wasmtime_cache(&mut config)?;
+        let config = test_wasmtime_config()?;
         let engine = Engine::new(&config)?;
 
         // Start a background thread that increments the epoch every 10ms,
