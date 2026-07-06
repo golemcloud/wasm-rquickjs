@@ -5625,6 +5625,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
     }
 
+    function registeredLoaderHasSource(result) {
+        return result && Object.prototype.hasOwnProperty.call(result, 'source') && result.source !== null && result.source !== undefined;
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5749,7 +5753,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loadContext = registeredLoaderLoadContext(baseContext, resolved, resolvedFormat);
         const loaded = await runLoad(modules.length - 1, resolved.url, loadContext);
-        const loadedHasSource = loaded && Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== null && loaded.source !== undefined;
+        const loadedHasSource = registeredLoaderHasSource(loaded);
         const loadedFormat = loaded && loaded.format !== undefined && loaded.format !== null
             ? validateRegisteredLoaderLoadFormat(loaded.format)
             : validateRegisteredLoaderLoadFormat(resolvedFormat);
@@ -5919,7 +5923,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             : validateRegisteredLoaderLoadFormat(resolvedFormat);
         if (finalFormat === 'builtin') return { url: resolved.url, format: finalFormat };
         if (!loaded && resolved.source === undefined) return undefined;
-        let source = loaded && Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== null && loaded.source !== undefined
+        let source = registeredLoaderHasSource(loaded)
             ? loaded.source
             : resolved.source;
         if (source === undefined && isImportMode) {

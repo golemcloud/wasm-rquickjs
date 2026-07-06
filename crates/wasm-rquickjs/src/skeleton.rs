@@ -541,6 +541,27 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_source_presence_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderHasSource(result) { return result && Object.prototype.hasOwnProperty.call(result, 'source') && result.source !== null && result.source !== undefined; }"
+            ),
+            "registered-loader source presence checks must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderHasSource(").count(),
+            3,
+            "async/sync registered-loader load paths must use the shared source-presence helper"
+        );
+        assert!(
+            module_js.contains("? loaded.source : resolved.source"),
+            "sync registered-loader source fallback must preserve loaded-source-over-resolved-source precedence"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
