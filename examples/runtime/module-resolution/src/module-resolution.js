@@ -7770,6 +7770,50 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         };
         fs.writeFileSync(`${root}/custom.test`, 'VALUE = 42;');
         assert.strictEqual(require(`${root}/custom`).value, 42);
+        fs.mkdirSync(`${root}/node_modules/custom-ext-main`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/custom-ext-main/package.json`, JSON.stringify({ main: 'main' }));
+        fs.writeFileSync(`${root}/node_modules/custom-ext-main/main.test`, 'VALUE = "main";');
+        fs.mkdirSync(`${root}/node_modules/custom-ext-sub/subdir`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/custom-ext-sub/package.json`, JSON.stringify({}));
+        fs.writeFileSync(`${root}/node_modules/custom-ext-sub/subdir/index.test`, 'VALUE = "subdir";');
+        fs.mkdirSync(`${root}/node_modules/custom-ext-sub-main/subdir`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/custom-ext-sub-main/package.json`, JSON.stringify({}));
+        fs.writeFileSync(`${root}/node_modules/custom-ext-sub-main/subdir/package.json`, JSON.stringify({ main: 'main' }));
+        fs.writeFileSync(`${root}/node_modules/custom-ext-sub-main/subdir/main.test`, 'VALUE = "subdir-main";');
+        fs.mkdirSync(`${root}/node_modules/custom-ext-index`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/custom-ext-index/package.json`, JSON.stringify({}));
+        fs.writeFileSync(`${root}/node_modules/custom-ext-index/index.test`, 'VALUE = "index";');
+        assert.strictEqual(require('custom-ext-main').value, 'main');
+        assert.strictEqual(require('custom-ext-sub/subdir').value, 'subdir');
+        assert.strictEqual(require('custom-ext-sub-main/subdir').value, 'subdir-main');
+        assert.strictEqual(require('custom-ext-index').value, 'index');
+        require.extensions['.data'] = require.extensions['.json'];
+        require.extensions['.jx'] = require.extensions['.js'];
+        fs.mkdirSync(`${root}/node_modules/default-json-ext-main`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/default-json-ext-main/package.json`, JSON.stringify({ main: 'main' }));
+        fs.writeFileSync(`${root}/node_modules/default-json-ext-main/main.data`, JSON.stringify({ value: 'json-alias' }));
+        fs.mkdirSync(`${root}/node_modules/default-js-ext-main`, { recursive: true });
+        fs.writeFileSync(`${root}/node_modules/default-js-ext-main/package.json`, JSON.stringify({ main: 'main' }));
+        fs.writeFileSync(`${root}/node_modules/default-js-ext-main/main.jx`, 'module.exports = { value: "js-alias" };');
+        assert.deepStrictEqual(require('default-json-ext-main'), { value: 'json-alias' });
+        assert.deepStrictEqual(require('default-js-ext-main'), { value: 'js-alias' });
+        const originalJsonExtension = require.extensions['.json'];
+        const originalNodeExtension = require.extensions['.node'];
+        try {
+            require.extensions['.json'] = require.extensions['.js'];
+            require.extensions['.node'] = require.extensions['.js'];
+            fs.mkdirSync(`${root}/node_modules/reassigned-json-ext-main`, { recursive: true });
+            fs.writeFileSync(`${root}/node_modules/reassigned-json-ext-main/package.json`, JSON.stringify({ main: 'main.json' }));
+            fs.writeFileSync(`${root}/node_modules/reassigned-json-ext-main/main.json`, 'module.exports = { value: "json-as-js" };');
+            fs.mkdirSync(`${root}/node_modules/reassigned-node-ext-main`, { recursive: true });
+            fs.writeFileSync(`${root}/node_modules/reassigned-node-ext-main/package.json`, JSON.stringify({ main: 'main.node' }));
+            fs.writeFileSync(`${root}/node_modules/reassigned-node-ext-main/main.node`, 'module.exports = { value: "node-as-js" };');
+            assert.deepStrictEqual(require('reassigned-json-ext-main'), { value: 'json-as-js' });
+            assert.deepStrictEqual(require('reassigned-node-ext-main'), { value: 'node-as-js' });
+        } finally {
+            require.extensions['.json'] = originalJsonExtension;
+            require.extensions['.node'] = originalNodeExtension;
+        }
 
         fs.mkdirSync(`${root}/parent/child/node_modules/target`, { recursive: true });
         fs.writeFileSync(`${root}/parent/child/node_modules/target/index.js`, 'module.exports = { from: "child" };');

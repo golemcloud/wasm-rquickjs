@@ -609,10 +609,13 @@ function readPackageJson(pkgJsonPath) {
 
 // Shared require.extensions registry (mirrors Node.js Module._extensions)
 const requireExtensions = Object.create(null);
-requireExtensions['.js'] = function _defaultJs(mod, filename) { /* built-in */ };
-requireExtensions['.json'] = function _defaultJson(mod, filename) { /* built-in */ };
-requireExtensions['.node'] = function _defaultNode(mod, filename) { /* built-in */ };
-const _defaultExtHandlers = setFromArray([requireExtensions['.js'], requireExtensions['.json'], requireExtensions['.node']]);
+const defaultJsExtensionHandler = function _defaultJs(mod, filename) { /* built-in */ };
+const defaultJsonExtensionHandler = function _defaultJson(mod, filename) { /* built-in */ };
+const defaultNodeExtensionHandler = function _defaultNode(mod, filename) { /* built-in */ };
+requireExtensions['.js'] = defaultJsExtensionHandler;
+requireExtensions['.json'] = defaultJsonExtensionHandler;
+requireExtensions['.node'] = defaultNodeExtensionHandler;
+const _defaultExtHandlers = setFromArray([defaultJsExtensionHandler, defaultJsonExtensionHandler, defaultNodeExtensionHandler]);
 
 // Path cache (settable; used by tests to reset resolution state)
 let _pathCache = Object.create(null);
@@ -912,33 +915,29 @@ function readCjsPackageCandidate(filename, packageDir) {
     return content === null ? null : { filename, content, packageDir };
 }
 
-const cjsPackageFileProbeProfile = [
-    (candidate) => candidate,
-    (candidate) => candidate + '.js',
-    (candidate) => candidate + '.json',
-    (candidate) => candidate + '.node',
-];
+function cjsPackageExtensionKeys() {
+    return Object.keys(requireExtensions);
+}
 
-const cjsPackageIndexProbeProfile = [
-    (candidate) => pathModule.join(candidate, 'index.js'),
-    (candidate) => pathModule.join(candidate, 'index.json'),
-    (candidate) => pathModule.join(candidate, 'index.node'),
-];
+function readCjsPackageFileCandidates(candidate, packageDir) {
+    let resolved = readCjsPackageCandidate(candidate, packageDir);
+    if (resolved !== null) return resolved;
 
-function readCjsPackageProbeProfile(candidate, packageDir, profile) {
-    for (let i = 0; i < profile.length; i++) {
-        const resolved = readCjsPackageCandidate(profile[i](candidate), packageDir);
+    const exts = cjsPackageExtensionKeys();
+    for (let i = 0; i < exts.length; i++) {
+        resolved = readCjsPackageCandidate(candidate + exts[i], packageDir);
         if (resolved !== null) return resolved;
     }
     return null;
 }
 
-function readCjsPackageFileCandidates(candidate, packageDir) {
-    return readCjsPackageProbeProfile(candidate, packageDir, cjsPackageFileProbeProfile);
-}
-
 function readCjsPackageIndexCandidates(candidate, packageDir) {
-    return readCjsPackageProbeProfile(candidate, packageDir, cjsPackageIndexProbeProfile);
+    const exts = cjsPackageExtensionKeys();
+    for (let i = 0; i < exts.length; i++) {
+        const resolved = readCjsPackageCandidate(pathModule.join(candidate, 'index' + exts[i]), packageDir);
+        if (resolved !== null) return resolved;
+    }
+    return null;
 }
 
 function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause) {
@@ -966,12 +965,28 @@ function resolveCjsPackageMain(pkgDir, pkg, pkgJsonPath, id, fromPart) {
     }
 }
 
+function resolveCjsPackageDirectory(candidate, fallbackPackageDir, id, fromPart) {
+    const nestedPkgJsonPath = pathModule.join(candidate, 'package.json');
+    let nestedPackageEntry;
+    try {
+        nestedPackageEntry = readPackageJson(nestedPkgJsonPath);
+    } catch (e) {
+        throw makeInvalidPackageConfigWhileImporting(nestedPkgJsonPath, id, fromPart, e);
+    }
+    if (nestedPackageEntry !== null) {
+        const resolved = resolveCjsPackageMain(candidate, nestedPackageEntry.pkg, nestedPkgJsonPath, id, fromPart);
+        if (resolved !== null) return resolved;
+    }
+
+    return readCjsPackageIndexCandidates(candidate, fallbackPackageDir);
+}
+
 function resolveCjsPackageFallbacks(parts, pkgDir, pkg, pkgJsonPath, id, fromPart) {
     if (parts.subpath.length > 0) {
         const subCandidate = pathModule.join(pkgDir, parts.subpath);
         let resolved = readCjsPackageFileCandidates(subCandidate, pkgDir);
         if (resolved !== null) return resolved;
-        return readCjsPackageIndexCandidates(subCandidate, pkgDir);
+        return resolveCjsPackageDirectory(subCandidate, pkgDir, id, fromPart);
     }
 
     let resolved = readCjsPackageFileCandidates(pkgDir, pkgDir);
@@ -4836,13 +4851,13 @@ function loadModule(resolvedFilename, source, parentModule) {
             unlinkModuleFromParent(parentModule, mod);
             throw err;
         }
-    } else if (filename.endsWith('.node')) {
+    } else if (handler === defaultNodeExtensionHandler) {
         delete moduleCache[filename];
         unlinkModuleFromParent(parentModule, mod);
         const err = new Error("Native .node modules are not supported in WASM: '" + filename + "'");
         err.code = 'ERR_DLOPEN_FAILED';
         throw err;
-    } else if (filename.endsWith('.json')) {
+    } else if (handler === defaultJsonExtensionHandler) {
         try {
             if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
                 source = source.slice(1);
