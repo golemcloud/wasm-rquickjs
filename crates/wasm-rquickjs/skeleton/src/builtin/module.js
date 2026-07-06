@@ -4409,6 +4409,10 @@ function defaultLoaderFormatForFilename(filename) {
     return undefined;
 }
 
+function loaderFormatOrUndefined(format) {
+    return format === undefined || format === null ? undefined : String(format);
+}
+
 function resultForEsmFileUrl(url) {
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
@@ -4445,9 +4449,7 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
         if (!resolved || !resolved.url) return undefined;
         return {
             url: String(resolved.url),
-            format: resolved.format === undefined || resolved.format === null
-                ? undefined
-                : String(resolved.format),
+            format: loaderFormatOrUndefined(resolved.format),
         };
     }
 
@@ -5599,7 +5601,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
         resolved.url = normalizeLoaderResolvedUrl(String(resolved.url));
         return {
-            format: resolved.format === undefined || resolved.format === null ? undefined : String(resolved.format),
+            format: loaderFormatOrUndefined(resolved.format),
         };
     }
 
@@ -5970,7 +5972,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     function staticRegisteredLoaderReturn(loaded) {
         if (!loaded || !loaded.url) return undefined;
         const url = String(loaded.url);
-        const format = loaded.format === undefined || loaded.format === null ? undefined : String(loaded.format);
+        const format = loaderFormatOrUndefined(loaded.format);
         const hasSource = Object.prototype.hasOwnProperty.call(loaded, 'source') && loaded.source !== undefined && loaded.source !== null;
         if (hasSource && (format === undefined || format === 'module')) {
             return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(loaded.source));
@@ -6094,7 +6096,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             const specifier = edges[i].specifier;
             const attrs = edges[i].attrs;
             let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, true);
-            if (cacheEntry && typeof cacheEntry.then === 'function') cacheEntry = await cacheEntry;
+            if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached } = cacheEntry;
             if (cached && cached.error) continue;
             if (cached && !cached.error && cached.value !== undefined) {
@@ -6114,7 +6116,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
             const specifier = String(entrySpecifier);
             let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, undefined, false);
-            if (cacheEntry && typeof cacheEntry.then === 'function') cacheEntry = await cacheEntry;
+            if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached, created } = cacheEntry;
             if (created && cached && cached.error) return;
             const aliases = staticRegisteredLoaderParentAliases(parentUrl);
