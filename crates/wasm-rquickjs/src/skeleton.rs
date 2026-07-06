@@ -906,6 +906,72 @@ mod tests {
     }
 
     #[test]
+    fn cjs_require_resolve_request_validation_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function validateRequireRequest(request) { if (typeof request !== 'string') { throw new ERR_INVALID_ARG_TYPE('request', 'string', request); } }"
+            ),
+            "require.resolve request validation must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("validateRequireRequest(").count(),
+            4,
+            "loader require.resolve, ordinary require.resolve, and require.resolve.paths must use the shared request validator"
+        );
+        assert_eq!(
+            module_js
+                .matches("new ERR_INVALID_ARG_TYPE('request', 'string'")
+                .count(),
+            1,
+            "request argument type error construction must not be duplicated"
+        );
+
+        let loader_resolve_start = module_js
+            .find("loaderRequire.resolve = function resolve(id, options)")
+            .expect("loader-created require.resolve function must exist");
+        let loader_resolve_end = module_js[loader_resolve_start..]
+            .find("loaderRequire.main = fallbackRequire.main;")
+            .expect("loader-created require.resolve must precede require.main setup")
+            + loader_resolve_start;
+        let loader_resolve = &module_js[loader_resolve_start..loader_resolve_end];
+        assert!(
+            loader_resolve.find("validateRequireRequest(id);")
+                < loader_resolve.find("__wasm_rquickjs_run_registered_loaders_sync"),
+            "loader-created require.resolve must validate request before registered-loader hooks"
+        );
+
+        let resolve_for_require_start = module_js
+            .find("function resolveForRequire(id, options, parentDir, parentFilename, parentLookupPaths)")
+            .expect("ordinary require.resolve helper must exist");
+        let resolve_for_require_end = module_js[resolve_for_require_start..]
+            .find("function currentRequireMain()")
+            .expect("ordinary require.resolve helper must precede currentRequireMain")
+            + resolve_for_require_start;
+        let resolve_for_require = &module_js[resolve_for_require_start..resolve_for_require_end];
+        assert!(
+            resolve_for_require.find("validateRequireRequest(id);")
+                < resolve_for_require.find("if (isBuiltin(id))"),
+            "ordinary require.resolve must validate request before resolution"
+        );
+
+        let resolve_paths_start = module_js
+            .find("localRequire.resolve.paths = function paths(request)")
+            .expect("require.resolve.paths function must exist");
+        let resolve_paths_end = module_js[resolve_paths_start..]
+            .find("Object.defineProperty(localRequire, 'main'")
+            .expect("require.resolve.paths must precede require.main setup")
+            + resolve_paths_start;
+        let resolve_paths = &module_js[resolve_paths_start..resolve_paths_end];
+        assert!(
+            resolve_paths.find("validateRequireRequest(request);")
+                < resolve_paths.find("if (isBuiltinResolveTarget(request))"),
+            "require.resolve.paths must validate request before builtin handling"
+        );
+    }
+
+    #[test]
     fn loader_cjs_function_header_parser_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

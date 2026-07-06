@@ -4705,6 +4705,12 @@ function validateRequireId(id) {
     }
 }
 
+function validateRequireRequest(request) {
+    if (typeof request !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('request', 'string', request);
+    }
+}
+
 function markRequireEsmForcedModule(resolvedFilename) {
     let registry = globalThis.__wasm_rquickjs_require_esm_forced_module;
     if (!registry || typeof registry !== 'object') {
@@ -5010,9 +5016,7 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
         return fallbackRequire(id);
     }
     loaderRequire.resolve = function resolve(id, options) {
-        if (typeof id !== 'string') {
-            throw new ERR_INVALID_ARG_TYPE('request', 'string', id);
-        }
+        validateRequireRequest(id);
         if (typeof globalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
             const loaded = globalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id, true);
             if (loaded && loaded.url) {
@@ -5136,9 +5140,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
 }
 
 function resolveForRequire(id, options, parentDir, parentFilename, parentLookupPaths) {
-    if (typeof id !== 'string') {
-        throw new ERR_INVALID_ARG_TYPE('request', 'string', id);
-    }
+    validateRequireRequest(id);
     if (isBuiltin(id)) {
         return id;
     }
@@ -5307,9 +5309,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
     };
 
     localRequire.resolve.paths = function paths(request) {
-        if (typeof request !== 'string') {
-            throw new ERR_INVALID_ARG_TYPE('request', 'string', request);
-        }
+        validateRequireRequest(request);
         if (isBuiltinResolveTarget(request)) {
             return null;
         }
