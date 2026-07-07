@@ -599,6 +599,60 @@ mod tests {
     }
 
     #[test]
+    fn esm_package_identity_path_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains("fn esm_package_identity_path(ctx: &Ctx<'_>, resolved: &str) -> String")
+                && internal_rs.contains("let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, \"--preserve-symlinks\");")
+                && internal_rs.contains("NodeFileResolver::module_identity_path_for_existing_file(resolved, preserve_symlinks)"),
+            "ESM package symlink identity normalization must be centralized"
+        );
+
+        let import_meta_start = internal_rs
+            .find("fn import_meta_resolve_package(")
+            .expect("import_meta_resolve_package must exist");
+        let import_meta_end = internal_rs[import_meta_start..]
+            .find("fn import_meta_resolve_path(")
+            .expect("import.meta package resolver must precede path resolver")
+            + import_meta_start;
+        let import_meta = &internal_rs[import_meta_start..import_meta_end];
+        assert!(
+            import_meta.contains("let resolved = esm_package_identity_path(&ctx, &resolved);")
+                && !import_meta.contains("has_exec_argv_flag(&ctx, \"--preserve-symlinks\")"),
+            "import.meta.resolve package path must use the shared ESM package identity helper"
+        );
+
+        let loader_start = internal_rs
+            .find("fn loader_default_resolve_package<'js>(")
+            .expect("loader_default_resolve_package must exist");
+        let loader_end = internal_rs[loader_start..]
+            .find("fn cjs_resolve_package_exports<'js>(")
+            .expect("loader package bridge must precede CJS package exports bridge")
+            + loader_start;
+        let loader_bridge = &internal_rs[loader_start..loader_end];
+        assert!(
+            loader_bridge.contains("esm_package_identity_path(&ctx, &resolved)")
+                && !loader_bridge.contains("has_exec_argv_flag(&ctx, \"--preserve-symlinks\")"),
+            "registered-loader ESM package path must use the shared ESM package identity helper"
+        );
+
+        let resolver_start = internal_rs
+            .find("impl Resolver for NodeModulesResolver")
+            .expect("NodeModulesResolver Resolver impl must exist");
+        let resolver_end = internal_rs[resolver_start..]
+            .find("impl Loader for CjsCompatLoader")
+            .expect("NodeModulesResolver Resolver impl must precede CJS compat loader")
+            + resolver_start;
+        let resolver_impl = &internal_rs[resolver_start..resolver_end];
+        assert!(
+            resolver_impl.contains("let resolved = esm_package_identity_path(ctx, &resolved);")
+                && !resolver_impl.contains("has_exec_argv_flag(ctx, \"--preserve-symlinks\")"),
+            "ESM resolver package path must use the shared ESM package identity helper"
+        );
+    }
+
+    #[test]
     fn cjs_package_directory_results_preserve_owning_package_metadata() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));

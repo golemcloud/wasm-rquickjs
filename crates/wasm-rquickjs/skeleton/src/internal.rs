@@ -5023,6 +5023,11 @@ fn try_resolve_package_with_global_conditions<'js>(
     Ok(result)
 }
 
+fn esm_package_identity_path(ctx: &Ctx<'_>, resolved: &str) -> String {
+    let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
+    NodeFileResolver::module_identity_path_for_existing_file(resolved, preserve_symlinks)
+}
+
 fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String) -> rquickjs::Result<Option<String>> {
     let base = if let Some(path) = FileUrlResolver::file_url_to_path(&base_url) {
         path
@@ -5065,9 +5070,7 @@ fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String
     )?;
     match result {
         Ok(Some(resolved)) => {
-            let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(&ctx, "--preserve-symlinks");
-            let resolved =
-                NodeFileResolver::module_identity_path_for_existing_file(&resolved, preserve_symlinks);
+            let resolved = esm_package_identity_path(&ctx, &resolved);
             Ok(Some(path_to_file_url(&resolved)))
         }
         Ok(None) => Ok(None),
@@ -5200,8 +5203,7 @@ fn loader_default_resolve_package<'js>(
     match result {
         Ok(Some(resolved)) => {
             let resolved = if mode == NodePackageResolveMode::EsmImport {
-                let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(&ctx, "--preserve-symlinks");
-                NodeFileResolver::module_identity_path_for_existing_file(&resolved, preserve_symlinks)
+                esm_package_identity_path(&ctx, &resolved)
             } else {
                 resolved
             };
@@ -5445,11 +5447,7 @@ impl Resolver for NodeModulesResolver {
         match result {
             Ok(Some(resolved)) => {
                 let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
-                let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
-                let resolved = NodeFileResolver::module_identity_path_for_existing_file(
-                    &resolved,
-                    preserve_symlinks,
-                );
+                let resolved = esm_package_identity_path(ctx, &resolved);
                 let resolved = if suffix.is_empty() {
                     resolved
                 } else {
