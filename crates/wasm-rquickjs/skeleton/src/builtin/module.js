@@ -5961,9 +5961,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return { url: resolved.url, format: finalFormat };
         }
         if (source === undefined && finalFormat === 'commonjs' && String(resolved.url).startsWith('file://')) {
-            try {
-                source = tryReadFile(nodeUrl.fileURLToPath(resolved.url));
-            } catch (_) {}
+            source = loaderFileUrlSource(resolved.url);
         }
         if (source === null) source = undefined;
         if (source === undefined) return undefined;

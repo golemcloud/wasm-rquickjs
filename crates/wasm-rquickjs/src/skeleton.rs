@@ -722,6 +722,19 @@ mod tests {
             module_js.contains("? loaded.source : resolved.source"),
             "sync registered-loader source fallback must preserve loaded-source-over-resolved-source precedence"
         );
+        let sync_start = module_js
+            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .expect("sync registered-loader runner must exist");
+        let sync_end = module_js[sync_start..]
+            .find("function staticRegisteredLoaderCacheParts(")
+            .expect("sync registered-loader runner must precede static cache helpers")
+            + sync_start;
+        let sync_runner = &module_js[sync_start..sync_end];
+        assert!(
+            sync_runner.contains("source = loaderFileUrlSource(resolved.url);")
+                && !sync_runner.contains("tryReadFile(nodeUrl.fileURLToPath(resolved.url))"),
+            "sync registered-loader CommonJS file fallback must share loaderFileUrlSource"
+        );
         assert!(
             module_js.contains("!Object.prototype.hasOwnProperty.call(loaded, 'source')"),
             "static JSON edge handling must keep checking source property presence separately from usable source"
