@@ -845,7 +845,7 @@ function resolvePackageFileFromRustResult(resolved, resolution) {
     return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)), resolution);
 }
 
-function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions) {
+function resolvePackageExportsEntry(parts, packageDir, pkg, conditions) {
     if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
     if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
         throw new Error('Internal CJS package exports resolver is not initialized');
@@ -874,17 +874,13 @@ function resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditi
 function resolvePackageSelfReference(parts, parentDir, conditions) {
     const scope = findPackageScope(parentDir);
     if (!scope || !scope.pkg || scope.pkg.name !== parts.name) return undefined;
-    return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, scope.pkgJsonPath, conditions);
+    return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, conditions);
 }
 
 function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions) {
     const packageJsonEntry = readPackageJson(pkgJsonPath);
     if (packageJsonEntry === null) return null;
-    const pkg = packageJsonEntry.pkg;
-    return {
-        pkg,
-        exportsResolved: resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath, conditions),
-    };
+    return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions);
 }
 
 function readCjsPackageCandidate(filename, packageDir) {
@@ -5131,10 +5127,10 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
         const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
 
         try {
-            const packageEntry = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
-            if (packageEntry !== null) {
-                if (packageEntry.exportsResolved !== undefined) {
-                    return packageEntry.exportsResolved;
+            const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
+            if (exportsResolved !== null) {
+                if (exportsResolved !== undefined) {
+                    return exportsResolved;
                 }
             }
         } catch (e) {
