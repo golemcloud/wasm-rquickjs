@@ -1170,6 +1170,7 @@ pub struct GolemSpan {
     pub name: String,
     pub attributes: Vec<(String, String)>,
     pub finished: bool,
+    resource_rep: Option<u32>,
 }
 
 /// A PreparedComponent that includes a mock golem:api/context host implementation.
@@ -1177,7 +1178,6 @@ pub struct GolemPreparedComponent {
     engine: Engine,
     linker: Linker<Host>,
     component: Component,
-    pub spans: Arc<Mutex<Vec<GolemSpan>>>,
 }
 
 impl GolemPreparedComponent {
@@ -1189,42 +1189,46 @@ impl GolemPreparedComponent {
         let mut linker = test_linker_with_common_hosts(&engine)?;
 
         // Mock golem:api/context@1.5.0
-        let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
-        let spans_clone = spans.clone();
-
         let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
 
         // Register the span resource type
         let span_resource_type = ResourceType::host::<GolemSpan>();
         golem_ctx.resource("span", span_resource_type, {
-            let spans = spans_clone.clone();
             move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
                 // Destructor: mark span as finished if not already
                 let table = ctx.data_mut().table.lock().unwrap();
                 // Resource already dropped by wasmtime
-                let _ = (spans.as_ref(), rep, table);
+                let _ = (rep, table);
                 Ok(())
             }
         })?;
 
         // start-span: func(name: string) -> span
         golem_ctx.func_wrap("start-span", {
-            let spans = spans_clone.clone();
             move |mut ctx: StoreContextMut<'_, Host>,
                   (name,): (String,)|
                   -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
                 let span = GolemSpan {
-                    name,
+                    name: name.clone(),
                     attributes: Vec::new(),
                     finished: false,
+                    resource_rep: None,
                 };
+                let spans = ctx.data().golem_spans.clone();
                 let mut table = ctx.data_mut().table.lock().unwrap();
                 let resource = table.push(span)?;
-                spans.lock().unwrap().push(GolemSpan {
-                    name: String::new(), // placeholder, real data is in table
-                    attributes: Vec::new(),
-                    finished: false,
-                });
+                let resource_rep = resource.rep();
+                if let Ok(span) = table.get_mut(&resource) {
+                    span.resource_rep = Some(resource_rep);
+                }
+                if let Some(spans) = spans.as_ref() {
+                    spans.lock().unwrap().push(GolemSpan {
+                        name,
+                        attributes: Vec::new(),
+                        finished: false,
+                        resource_rep: Some(resource_rep),
+                    });
+                }
                 Ok((resource,))
             }
         })?;
@@ -1238,7 +1242,6 @@ impl GolemPreparedComponent {
         // A variant with one case lifts as (discriminant: u32, payload: string) but wasmtime component
         // may represent it as an enum. Let's use a tuple.
         golem_ctx.func_wrap("[method]span.set-attribute", {
-            let spans = spans_clone.clone();
             move |mut ctx: StoreContextMut<'_, Host>,
                   (span_res, attr_name, attr_value): (
                 wasmtime::component::Resource<GolemSpan>,
@@ -1249,14 +1252,21 @@ impl GolemPreparedComponent {
                 let value_str = match &attr_value {
                     AttributeValue::String(s) => s.clone(),
                 };
+                let resource_rep = span_res.rep();
+                let spans = ctx.data().golem_spans.clone();
                 let mut table = ctx.data_mut().table.lock().unwrap();
                 if let Ok(span) = table.get_mut(&span_res) {
                     span.attributes.push((attr_name.clone(), value_str.clone()));
                 }
-                // Also record in the shared spans list
-                let mut shared = spans.lock().unwrap();
-                if let Some(last) = shared.last_mut() {
-                    last.attributes.push((attr_name, value_str));
+                if let Some(spans) = spans.as_ref() {
+                    let mut shared = spans.lock().unwrap();
+                    if let Some(recorded) = shared
+                        .iter_mut()
+                        .rev()
+                        .find(|span| span.resource_rep == Some(resource_rep))
+                    {
+                        recorded.attributes.push((attr_name, value_str));
+                    }
                 }
                 Ok(())
             }
@@ -1264,21 +1274,28 @@ impl GolemPreparedComponent {
 
         // [method]span.finish: func()
         golem_ctx.func_wrap("[method]span.finish", {
-            let spans = spans_clone.clone();
             move |mut ctx: StoreContextMut<'_, Host>,
                   (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
                   -> Result<(), wasmtime::Error> {
+                let resource_rep = span_res.rep();
+                let spans = ctx.data().golem_spans.clone();
                 let mut table = ctx.data_mut().table.lock().unwrap();
                 if let Ok(span) = table.get_mut(&span_res) {
                     span.finished = true;
-                    // Copy final state to shared spans
+                    // Copy final state to recorded spans
                     let name = span.name.clone();
                     let attributes = span.attributes.clone();
-                    let mut shared = spans.lock().unwrap();
-                    if let Some(last) = shared.last_mut() {
-                        last.name = name;
-                        last.finished = true;
-                        last.attributes = attributes;
+                    if let Some(spans) = spans.as_ref() {
+                        let mut shared = spans.lock().unwrap();
+                        if let Some(recorded) = shared
+                            .iter_mut()
+                            .rev()
+                            .find(|span| span.resource_rep == Some(resource_rep))
+                        {
+                            recorded.name = name;
+                            recorded.finished = true;
+                            recorded.attributes = attributes;
+                        }
                     }
                 }
                 Ok(())
@@ -1291,7 +1308,6 @@ impl GolemPreparedComponent {
             engine,
             linker,
             component,
-            spans,
         })
     }
 }
@@ -1306,6 +1322,7 @@ pub struct TestInstance {
     stdout_file: NamedUtf8TempFile,
     stderr_file: NamedUtf8TempFile,
     temp_dir: Utf8TempDir,
+    golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
 }
 
 impl TestInstance {
@@ -1320,17 +1337,30 @@ impl TestInstance {
     }
 
     pub async fn from_prepared(prepared: &PreparedComponent) -> anyhow::Result<Self> {
-        Self::from_parts(&prepared.engine, &prepared.linker, &prepared.component).await
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            None,
+        )
+        .await
     }
 
     pub async fn from_golem_prepared(prepared: &GolemPreparedComponent) -> anyhow::Result<Self> {
-        Self::from_parts(&prepared.engine, &prepared.linker, &prepared.component).await
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            Some(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .await
     }
 
     async fn from_parts(
         engine: &Engine,
         linker: &Linker<Host>,
         component: &Component,
+        golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
     ) -> anyhow::Result<Self> {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
@@ -1360,6 +1390,7 @@ impl TestInstance {
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
             io_ctx: Arc::new(Mutex::new(io_ctx)),
+            golem_spans: golem_spans.clone(),
         };
 
         let mut store = Store::new(engine, host);
@@ -1387,6 +1418,7 @@ impl TestInstance {
             stdout_file,
             stderr_file,
             temp_dir,
+            golem_spans,
         })
     }
 
@@ -1450,6 +1482,10 @@ impl TestInstance {
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
         self.temp_dir.path()
+    }
+
+    pub fn golem_spans(&self) -> Option<Arc<Mutex<Vec<GolemSpan>>>> {
+        self.golem_spans.clone()
     }
 
     pub fn read_stdout(&self) -> anyhow::Result<String> {
@@ -1951,6 +1987,7 @@ pub struct Host {
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
+    pub golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
 }
 
 impl WasiView for Host {
