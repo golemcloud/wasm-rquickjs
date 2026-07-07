@@ -1527,6 +1527,7 @@ fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<Prepa
     static PREPARED_COMPONENTS: OnceLock<
         Mutex<HashMap<PreparedComponentCacheKey, Arc<PreparedComponent>>>,
     > = OnceLock::new();
+    static DROPPED: OnceLock<()> = OnceLock::new();
 
     let key = prepared_component_cache_key(wasm_path)?;
     let mut prepared = PREPARED_COMPONENTS
@@ -1535,7 +1536,7 @@ fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<Prepa
         .unwrap();
 
     if test_drop_cache_enabled() {
-        prepared.clear();
+        DROPPED.get_or_init(|| prepared.clear());
     }
 
     if let Some(component) = prepared.get(&key) {
