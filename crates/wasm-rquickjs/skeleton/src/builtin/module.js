@@ -4454,19 +4454,13 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     return undefined;
 }
 
-    function packageConditionsForLoaderResolve(context, defaultConditions) {
+    function packageConditionArrayForLoaderResolve(context, defaultConditions) {
         if (context && Array.isArray(context.conditions)) {
             const conditions = setFromArray(context.conditions);
             conditions.add('default');
-            return conditions;
+            return Array.from(conditions);
         }
         return defaultConditions;
-    }
-
-    function packageConditionArrayForLoaderResolve(context, defaultConditions) {
-        return context && Array.isArray(context.conditions)
-            ? Array.from(packageConditionsForLoaderResolve(context, defaultConditions))
-            : defaultConditions;
     }
 
     function packageResolutionForLoaderResult(resolved) {

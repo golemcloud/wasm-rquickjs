@@ -434,9 +434,9 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "function packageConditionArrayForLoaderResolve(context, defaultConditions) { return context && Array.isArray(context.conditions) ? Array.from(packageConditionsForLoaderResolve(context, defaultConditions)) : defaultConditions; }"
-            ),
-            "registered-loader package resolution must only copy hook-provided conditions, not Rust-owned default condition arrays"
+                "function packageConditionArrayForLoaderResolve(context, defaultConditions) { if (context && Array.isArray(context.conditions)) { const conditions = setFromArray(context.conditions); conditions.add('default'); return Array.from(conditions); } return defaultConditions; }"
+            ) && !module_js.contains("function packageConditionsForLoaderResolve("),
+            "registered-loader package resolution must normalize only hook-provided conditions and pass Rust-owned default condition arrays through directly"
         );
         assert!(
             !module_js.contains(
