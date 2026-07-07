@@ -4560,6 +4560,10 @@ function isLoaderSourceValue(value) {
         ArrayBuffer.isView(value);
 }
 
+function registeredLoaderHasOwnSource(result) {
+    return result && Object.prototype.hasOwnProperty.call(result, 'source');
+}
+
 function validateRegisteredLoaderResult(result, hookName, context) {
     if (!result || typeof result !== 'object') {
         throw makeLoaderInvalidReturnValueError(hookName, result);
@@ -4570,7 +4574,7 @@ function validateRegisteredLoaderResult(result, hookName, context) {
             throw makeLoaderInvalidReturnPropertyValueError('format', hookName, 'a string or nullish value', format);
         }
     }
-    if (hookName === 'load' && Object.prototype.hasOwnProperty.call(result, 'source')) {
+    if (hookName === 'load' && registeredLoaderHasOwnSource(result)) {
         const source = result.source;
         if (source === null || source === undefined) {
             if (result.format === 'commonjs' || (result.format === undefined && context && context.format === 'commonjs')) return result;
@@ -5672,7 +5676,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function registeredLoaderHasSource(result) {
-        return result && Object.prototype.hasOwnProperty.call(result, 'source') && result.source !== null && result.source !== undefined;
+        return registeredLoaderHasOwnSource(result) && result.source !== null && result.source !== undefined;
     }
 
     function registeredLoaderPreferredSource(result, fallbackSource) {
@@ -6020,7 +6024,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             attrs.typeValue === 'json' &&
             loaded &&
             loaded.format === 'json' &&
-            !Object.prototype.hasOwnProperty.call(loaded, 'source') &&
+            !registeredLoaderHasOwnSource(loaded) &&
             loaded.url &&
             typeof globalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
         ) {

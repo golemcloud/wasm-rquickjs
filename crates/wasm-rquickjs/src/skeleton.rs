@@ -1192,9 +1192,28 @@ mod tests {
 
         assert!(
             module_js.contains(
-                "function registeredLoaderHasSource(result) { return result && Object.prototype.hasOwnProperty.call(result, 'source') && result.source !== null && result.source !== undefined; }"
+                "function registeredLoaderHasOwnSource(result) { return result && Object.prototype.hasOwnProperty.call(result, 'source'); }"
+            ) && module_js.contains(
+                "function registeredLoaderHasSource(result) { return registeredLoaderHasOwnSource(result) && result.source !== null && result.source !== undefined; }"
             ),
-            "registered-loader source presence checks must stay centralized"
+            "registered-loader source-property and usable-source checks must stay centralized"
+        );
+        let raw_source_property_checks = module_js
+            .match_indices("Object.prototype.hasOwnProperty.call(")
+            .filter(|(index, _)| {
+                module_js[*index..]
+                    .find(')')
+                    .is_some_and(|end| module_js[*index..*index + end].contains("'source'"))
+            })
+            .count();
+        assert_eq!(
+            raw_source_property_checks, 1,
+            "raw source-property presence must only be checked by the shared helper"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderHasOwnSource(").count(),
+            4,
+            "registered-loader validation, usable-source, and static JSON edge checks must share source-property presence"
         );
         assert_eq!(
             module_js.matches("registeredLoaderHasSource(").count(),
@@ -1221,7 +1240,7 @@ mod tests {
             "sync registered-loader CommonJS file fallback must share loaderFileUrlSource with the normalized URL"
         );
         assert!(
-            module_js.contains("!Object.prototype.hasOwnProperty.call(loaded, 'source')"),
+            module_js.contains("!registeredLoaderHasOwnSource(loaded)"),
             "static JSON edge handling must keep checking source property presence separately from usable source"
         );
     }
