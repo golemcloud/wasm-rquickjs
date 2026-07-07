@@ -775,7 +775,7 @@ function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, mi
     return globalThis.__wasm_rquickjs_loader_default_resolve_package(
         parentURL,
         specifier,
-        Array.from(conditions),
+        conditions,
         mode,
     );
 }

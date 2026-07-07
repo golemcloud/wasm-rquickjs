@@ -386,9 +386,9 @@ mod tests {
             module_js.contains(
                 "function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage)"
             ) && module_js.contains(
-                "return globalThis.__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, Array.from(conditions), mode, );"
+                "return globalThis.__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, conditions, mode, );"
             ),
-            "JS package resolver bridge calls must go through one helper"
+            "JS package resolver bridge calls must go through one helper with caller-shaped condition arrays"
         );
         assert_eq!(
             module_js
@@ -431,6 +431,12 @@ mod tests {
                     "if (mapNotFoundToCjs && err && err.code === 'ERR_MODULE_NOT_FOUND')"
                 ),
             "registered-loader package default resolution must keep loader conditions and CJS error mapping around the shared bridge"
+        );
+        assert!(
+            !module_js.contains(
+                "__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, Array.from(conditions), mode,"
+            ),
+            "raw Rust package resolver bridge must not copy condition arrays after callers have shaped them"
         );
     }
 
