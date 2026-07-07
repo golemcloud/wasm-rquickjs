@@ -4690,9 +4690,14 @@ function loaderFileUrlSource(url) {
     }
 }
 
-function registeredLoaderPathOrUrlReturn(url) {
+function registeredLoaderPathOrUrlReturn(url, preserveFileUrlSuffix) {
     url = String(url);
-    return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url;
+    if (!url.startsWith('file://')) return url;
+    const path = nodeUrl.fileURLToPath(url);
+    if (!preserveFileUrlSuffix) return path;
+    if (/[?#]/.test(path)) return path;
+    const suffixStart = url.search(/[?#]/);
+    return suffixStart < 0 ? path : path + url.slice(suffixStart);
 }
 
 function loaderCommonJsFilename(url) {
@@ -6034,15 +6039,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderModuleSourceReturn(loaded.source);
         }
         if (!hasSource && format === 'module') {
-            return registeredLoaderPathOrUrlReturn(url);
+            return registeredLoaderPathOrUrlReturn(url, true);
         }
         if (format === 'commonjs') {
-            return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url));
+            return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url, true));
         }
         if (hasSource && format === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
         }
-        return registeredLoaderPathOrUrlReturn(url);
+        return registeredLoaderPathOrUrlReturn(url, true);
     }
 
     function staticRegisteredLoaderReturnForEdge(loaded, attrs) {
@@ -6056,7 +6061,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             typeof globalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
         ) {
             const url = String(loaded.url);
-            const target = registeredLoaderPathOrUrlReturn(url);
+            const target = registeredLoaderPathOrUrlReturn(url, true);
             return globalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
         }
         return staticRegisteredLoaderReturn(loaded);

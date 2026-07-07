@@ -1552,11 +1552,22 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/imports-custom.mjs`, 'export default "imports-custom";');
         fs.writeFileSync(`${root}/imports-default.mjs`, 'export default "imports-default";');
         fs.writeFileSync(`${root}/from-data-parent.mjs`, 'export default "should-not-resolve";');
+        fs.writeFileSync(`${root}/child-query.mjs`, 'import value from "./child-grandchild.mjs"; export default value;');
+        fs.writeFileSync(`${root}/child-grandchild.mjs`, 'export default "child-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
             '  if (specifier.startsWith("/")) throw new Error("static loader received absolute path: " + specifier);',
             '  if (specifier.startsWith("file://") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
+            '  }',
+            '  if (specifier === "virtual:static-child-query") {',
+            `    return { shortCircuit: true, url: ${JSON.stringify(`${pathToFileURL(`${root}/child-query.mjs`).href}?cache#frag`)}, format: "module" };`,
+            '  }',
+            '  if (specifier === "./child-grandchild.mjs") {',
+            '    if (!String(context.parentURL).includes("/static-loader-absolute-entry-app/child-query.mjs?cache#frag")) {',
+            '      throw new Error("static child graph parent URL did not preserve query/hash: " + context.parentURL);',
+            '    }',
+            '    globalThis.__static_loader_child_query_seen = context.parentURL;',
             '  }',
             '  if (specifier === "virtual:static-condition") {',
             '    return next("static-condition-pkg", { ...context, conditions: ["customStatic"] });',
@@ -1594,6 +1605,16 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
             `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
         );
         assert.strictEqual(
+            (await import('data:text/javascript,' + encodeURIComponent(
+                'import value from "virtual:static-child-query"; export default value;',
+            ))).default,
+            'child-grandchild',
+        );
+        assert.strictEqual(
+            globalThis.__static_loader_child_query_seen,
+            `${pathToFileURL(`${root}/child-query.mjs`).href}?cache#frag`,
+        );
+        assert.strictEqual(
             globalThis.__wasm_rquickjs_resolve_static_registered_loader(
                 pathToFileURL(`${root}/entry.mjs`).href,
                 'virtual:static-condition',
@@ -1629,9 +1650,11 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
             'data:text/javascript,export default true',
         );
         delete globalThis.__static_loader_absolute_entry_seen;
+        delete globalThis.__static_loader_child_query_seen;
         return true;
     } catch (error) {
         delete globalThis.__static_loader_absolute_entry_seen;
+        delete globalThis.__static_loader_child_query_seen;
         console.error(error);
         throw error;
     }

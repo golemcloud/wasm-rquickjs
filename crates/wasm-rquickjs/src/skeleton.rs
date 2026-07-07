@@ -1112,7 +1112,7 @@ mod tests {
             module_js.contains(
                 "return registeredLoaderCommonJsReturn(loaded, normalizedResolved.url, undefined);"
             ) && module_js.contains(
-                "return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url));"
+                "return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url, true));"
             ),
             "dynamic CommonJS loader returns must stay undefined on missing source while static returns preserve path/URL fallback"
         );
@@ -1250,9 +1250,9 @@ mod tests {
 
         assert!(
             module_js.contains(
-                "function registeredLoaderPathOrUrlReturn(url) { url = String(url); return url.startsWith('file://') ? nodeUrl.fileURLToPath(url) : url; }"
+                "function registeredLoaderPathOrUrlReturn(url, preserveFileUrlSuffix) { url = String(url); if (!url.startsWith('file://')) return url; const path = nodeUrl.fileURLToPath(url); if (!preserveFileUrlSuffix) return path; if (/[?#]/.test(path)) return path; const suffixStart = url.search(/[?#]/); return suffixStart < 0 ? path : path + url.slice(suffixStart); }"
             ),
-            "registered-loader URL/path return conversion must stay centralized"
+            "registered-loader URL/path return conversion must stay centralized and expose an explicit static file-URL suffix preservation mode without changing path-shaped resolver returns"
         );
         assert_eq!(
             module_js
@@ -1279,6 +1279,11 @@ mod tests {
         assert!(
             !static_return_helpers.contains("nodeUrl.fileURLToPath("),
             "static registered-loader return helpers must route file URL conversion through registeredLoaderPathOrUrlReturn"
+        );
+        assert!(
+            static_return_helpers.contains("registeredLoaderPathOrUrlReturn(url, true)")
+                && module_js.contains("return registeredLoaderPathOrUrlReturn(loaded.url);"),
+            "static registered-loader returns must preserve file URL suffixes while require.resolve keeps path-shaped results"
         );
     }
 
