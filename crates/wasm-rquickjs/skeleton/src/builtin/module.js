@@ -5675,6 +5675,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return result && Object.prototype.hasOwnProperty.call(result, 'source') && result.source !== null && result.source !== undefined;
     }
 
+    function registeredLoaderPreferredSource(result, fallbackSource) {
+        return registeredLoaderHasSource(result) ? result.source : fallbackSource;
+    }
+
     function registeredLoaderModuleSourceReturn(source) {
         return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source));
     }
@@ -5942,9 +5946,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const finalFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (finalFormat === 'builtin') return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
         if (!loaded && resolved.source === undefined) return undefined;
-        let source = registeredLoaderHasSource(loaded)
-            ? loaded.source
-            : resolved.source;
+        let source = registeredLoaderPreferredSource(loaded, resolved.source);
         if (source === undefined && isImportMode) {
             return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
         }

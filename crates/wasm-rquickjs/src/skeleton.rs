@@ -1199,11 +1199,13 @@ mod tests {
         assert_eq!(
             module_js.matches("registeredLoaderHasSource(").count(),
             5,
-            "async/sync/static registered-loader load paths must use the shared source-presence helper"
+            "registered-loader source decision points must use the shared source-presence helper"
         );
         assert!(
-            module_js.contains("? loaded.source : resolved.source"),
-            "sync registered-loader source fallback must preserve loaded-source-over-resolved-source precedence"
+            module_js.contains(
+                "function registeredLoaderPreferredSource(result, fallbackSource) { return registeredLoaderHasSource(result) ? result.source : fallbackSource; }"
+            ) && module_js.contains("let source = registeredLoaderPreferredSource(loaded, resolved.source);"),
+            "sync registered-loader source fallback must preserve loaded-source-over-resolved-source precedence through the shared helper"
         );
         let sync_start = module_js
             .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
