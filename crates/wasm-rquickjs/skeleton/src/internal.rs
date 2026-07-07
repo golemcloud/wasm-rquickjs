@@ -3375,7 +3375,7 @@ impl NodePackageResolveMode {
     }
 }
 
-fn package_default_conditions<'js>(ctx: Ctx<'js>, mode: String) -> rquickjs::Result<rquickjs::Array<'js>> {
+fn package_global_conditions<'js>(ctx: Ctx<'js>, mode: String) -> rquickjs::Result<rquickjs::Array<'js>> {
     let Some(mode) = NodePackageConditionMode::from_js_mode(&mode) else {
         return throw_native_coded_error(
             &ctx,
@@ -3384,10 +3384,10 @@ fn package_default_conditions<'js>(ctx: Ctx<'js>, mode: String) -> rquickjs::Res
             false,
         );
     };
-    let conditions = mode.default_conditions();
+    let conditions = NodeModulesResolver::conditions_from_global(&ctx, mode);
     let result = rquickjs::Array::new(ctx)?;
     for (index, condition) in conditions.iter().enumerate() {
-        result.set(index, *condition)?;
+        result.set(index, condition.as_str())?;
     }
     Ok(result)
 }
@@ -8907,11 +8907,11 @@ impl JsState {
             .expect("Failed to initialize CJS package fallback resolver");
 
             global.set(
-                "__wasm_rquickjs_package_default_conditions",
-                Function::new(ctx.clone(), package_default_conditions)
-                    .expect("Failed to create package default condition provider"),
+                "__wasm_rquickjs_package_global_conditions",
+                Function::new(ctx.clone(), package_global_conditions)
+                    .expect("Failed to create package global condition provider"),
             )
-            .expect("Failed to initialize package default condition provider");
+            .expect("Failed to initialize package global condition provider");
 
             global.set(
                 "__wasm_rquickjs_require_esm_graph_resolve_package",

@@ -155,24 +155,39 @@ mod tests {
             "package deprecation warning emission must stay on the Rust resolver side"
         );
         assert!(
-            module_js.contains("__wasm_rquickjs_package_default_conditions(mode)"),
-            "module.js must request package condition defaults from the Rust provider"
+            module_js.contains("__wasm_rquickjs_package_global_conditions(mode)")
+                && module_js.contains(
+                    "return setFromArray(globalThis.__wasm_rquickjs_package_global_conditions(mode));"
+                ),
+            "module.js must request merged default and user package conditions from the Rust provider"
         );
         assert!(
-            module_js.contains("defaultPackageConditions('cjs-analysis')"),
-            "CJS package conditions must request Rust's cjs-analysis defaults"
+            !module_js.contains("function defaultPackageConditions(")
+                && !module_js.contains("function addPackageCondition(")
+                && !module_js.contains(
+                    "const userConditions = globalThis.__wasm_rquickjs_package_conditions"
+                ),
+            "module.js must not duplicate package user-condition filtering or de-duping"
         );
         assert!(
-            module_js.contains("defaultPackageConditions('import')"),
-            "ESM package conditions must request Rust's import defaults"
+            module_js.contains("packageConditions('cjs-analysis')"),
+            "CJS package conditions must request Rust's cjs-analysis global conditions"
         );
         assert!(
-            module_js.contains("defaultPackageConditions('loader')"),
-            "loader hook conditions must request Rust's loader defaults"
+            module_js.contains("packageConditions('import')"),
+            "ESM package conditions must request Rust's import global conditions"
         );
         assert!(
-            internal_rs.contains("\"__wasm_rquickjs_package_default_conditions\""),
-            "internal.rs must register the Rust package condition provider"
+            module_js.contains("packageConditions('loader')"),
+            "loader hook conditions must request Rust's loader global conditions"
+        );
+        assert!(
+            internal_rs.contains("\"__wasm_rquickjs_package_global_conditions\"")
+                && internal_rs.contains("fn package_global_conditions<'js>(")
+                && internal_rs.contains("NodeModulesResolver::conditions_from_global(&ctx, mode)")
+                && !internal_rs.contains("fn package_default_conditions<'js>(")
+                && !internal_rs.contains("\"__wasm_rquickjs_package_default_conditions\""),
+            "internal.rs must register the Rust package global condition provider without a default-only bridge"
         );
         assert_eq!(
             rust_string_array_after(internal_rs, "const ESM_CONDITIONS:"),

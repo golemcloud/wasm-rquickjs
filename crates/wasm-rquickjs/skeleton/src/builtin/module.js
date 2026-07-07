@@ -749,41 +749,23 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
     );
 }
 
-function defaultPackageConditions(mode) {
-    if (typeof globalThis.__wasm_rquickjs_package_default_conditions !== 'function') {
+function packageConditions(mode) {
+    if (typeof globalThis.__wasm_rquickjs_package_global_conditions !== 'function') {
         throw new Error('Internal package condition provider is not initialized');
     }
-    return globalThis.__wasm_rquickjs_package_default_conditions(mode);
-}
-
-function addPackageCondition(conditions, condition) {
-    if (typeof condition === 'string' && condition.length > 0) conditions.add(condition);
-}
-
-function packageConditions(defaults) {
-    const conditions = setFromArray(defaults);
-    const userConditions = globalThis.__wasm_rquickjs_package_conditions;
-    if (!Array.isArray(userConditions)) {
-        return conditions;
-    }
-
-    for (let i = 0; i < userConditions.length; i++) {
-        addPackageCondition(conditions, userConditions[i]);
-    }
-
-    return conditions;
+    return setFromArray(globalThis.__wasm_rquickjs_package_global_conditions(mode));
 }
 
 function cjsPackageConditions() {
-    return packageConditions(defaultPackageConditions('cjs-analysis'));
+    return packageConditions('cjs-analysis');
 }
 
 function esmPackageConditions() {
-    return packageConditions(defaultPackageConditions('import'));
+    return packageConditions('import');
 }
 
 function loaderHookConditions() {
-    return Array.from(packageConditions(defaultPackageConditions('loader')));
+    return Array.from(packageConditions('loader'));
 }
 
 function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage) {
