@@ -369,6 +369,27 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn prepared_component_cache_key_includes_content_hash() -> anyhow::Result<()> {
+        let temp = Utf8TempDir::new()?;
+        let wasm = temp.path().join("component.wasm");
+
+        fs::write(&wasm, b"aaaa")?;
+        let first = prepared_component_cache_key(&wasm)?;
+
+        fs::write(&wasm, b"bbbb")?;
+        let second = prepared_component_cache_key(&wasm)?;
+
+        assert_eq!(first.path, second.path);
+        assert_eq!(first.len, second.len);
+        assert_ne!(
+            first.content_hash, second.content_hash,
+            "prepared component cache keys must change when same-length component bytes change"
+        );
+
+        Ok(())
+    }
 }
 
 fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Result<()> {
