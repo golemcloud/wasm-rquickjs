@@ -833,6 +833,58 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_base_context_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderBaseContext(conditions, importAttributes, parentURL) { return { conditions, importAttributes, parentURL: String(parentURL), }; }"
+            ),
+            "registered-loader base context object construction must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderBaseContext(").count(),
+            3,
+            "async and sync registered-loader runners must use the shared base context helper"
+        );
+        assert_eq!(
+            module_js.matches("parentURL: String(").count(),
+            1,
+            "registered-loader base-context parentURL coercion must only appear inside the shared helper"
+        );
+
+        let async_start = module_js
+            .find("globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(")
+            .expect("async registered-loader runner must exist");
+        let sync_start = module_js[async_start..]
+            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .expect("async runner must precede sync runner")
+            + async_start;
+        let async_runner = &module_js[async_start..sync_start];
+        assert!(
+            async_runner.contains(
+                "const baseContext = registeredLoaderBaseContext(loaderHookConditions(), importAttributes, baseUrl);"
+            ) && !async_runner.contains("conditions: loaderHookConditions(),")
+                && !async_runner.contains("parentURL: String(baseUrl)"),
+            "async registered-loader runner must share base context shaping while preserving async conditions and import attributes"
+        );
+
+        let sync_end = module_js[sync_start..]
+            .find("const defaultResolve = (nextSpecifier, context)")
+            .expect("sync base context must precede sync default resolve")
+            + sync_start;
+        let sync_setup = &module_js[sync_start..sync_end];
+        assert!(
+            sync_setup.contains(
+                "const baseContext = registeredLoaderBaseContext( isImportMode ? loaderHookConditions() : Array.from(cjsPackageConditions()), {}, baseUrl || fileUrlForPath('/'), );"
+            ) && !sync_setup.contains("conditions: isImportMode")
+                && !sync_setup.contains("importAttributes: {}")
+                && !sync_setup.contains("parentURL: String(baseUrl || fileUrlForPath('/'))"),
+            "sync registered-loader runner must share base context shaping while preserving import-vs-CJS conditions"
+        );
+    }
+
+    #[test]
     fn registered_loader_hook_entries_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

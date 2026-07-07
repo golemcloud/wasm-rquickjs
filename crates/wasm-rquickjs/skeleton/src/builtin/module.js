@@ -5622,6 +5622,14 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function registeredLoaderBaseContext(conditions, importAttributes, parentURL) {
+        return {
+            conditions,
+            importAttributes,
+            parentURL: String(parentURL),
+        };
+    }
+
     function registeredLoaderDefaultLoad(_nextUrl, context) {
         return { format: context && context.format };
     }
@@ -5778,11 +5786,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ? { type: attrs.typeValue }
             : {};
 
-        const baseContext = {
-            conditions: loaderHookConditions(),
-            importAttributes,
-            parentURL: String(baseUrl),
-        };
+        const baseContext = registeredLoaderBaseContext(loaderHookConditions(), importAttributes, baseUrl);
 
         const defaultResolve = async (nextSpecifier, context) => {
             const inputs = registeredLoaderResolveInputs(nextSpecifier, context, String(baseUrl));
@@ -5903,11 +5907,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         if (entries.length === 0) return undefined;
 
-        const baseContext = {
-            conditions: isImportMode ? loaderHookConditions() : Array.from(cjsPackageConditions()),
-            importAttributes: {},
-            parentURL: String(baseUrl || fileUrlForPath('/')),
-        };
+        const baseContext = registeredLoaderBaseContext(
+            isImportMode ? loaderHookConditions() : Array.from(cjsPackageConditions()),
+            {},
+            baseUrl || fileUrlForPath('/'),
+        );
 
         const defaultResolve = (nextSpecifier, context) => {
             const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);
