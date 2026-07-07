@@ -731,9 +731,9 @@ mod tests {
             + sync_start;
         let sync_runner = &module_js[sync_start..sync_end];
         assert!(
-            sync_runner.contains("source = loaderFileUrlSource(resolved.url);")
-                && !sync_runner.contains("tryReadFile(nodeUrl.fileURLToPath(resolved.url))"),
-            "sync registered-loader CommonJS file fallback must share loaderFileUrlSource"
+            sync_runner.contains("source = loaderFileUrlSource(normalizedResolved.url);")
+                && !sync_runner.contains("tryReadFile(nodeUrl.fileURLToPath("),
+            "sync registered-loader CommonJS file fallback must share loaderFileUrlSource with the normalized URL"
         );
         assert!(
             module_js.contains("!Object.prototype.hasOwnProperty.call(loaded, 'source')"),
@@ -784,7 +784,7 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "return registeredLoaderCommonJsReturn(loaded, resolved.url, undefined);"
+                "return registeredLoaderCommonJsReturn(loaded, normalizedResolved.url, undefined);"
             ) && module_js.contains(
                 "return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url));"
             ),
@@ -1304,8 +1304,13 @@ mod tests {
             + resolved_start;
         let resolved_result = &module_js[resolved_start..resolved_end];
         assert!(
-            resolved_result.contains("format: loaderFormatOrUndefined(resolved.format),"),
-            "registered-loader resolve results must use the shared format normalizer"
+            (resolved_result.contains("url: normalizeLoaderResolvedUrl(String(resolved.url)),")
+                || resolved_result
+                    .contains("url:normalizeLoaderResolvedUrl(String(resolved.url)),"))
+                && resolved_result.contains("format: loaderFormatOrUndefined(resolved.format),")
+                && !resolved_result.contains("resolved.url = normalizeLoaderResolvedUrl(")
+                && !resolved_result.contains("resolved.url=normalizeLoaderResolvedUrl("),
+            "registered-loader resolve normalization must return a normalized URL/format pair without mutating the hook result"
         );
 
         assert!(

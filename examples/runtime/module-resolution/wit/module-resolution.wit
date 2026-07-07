@@ -8,6 +8,7 @@ world module-resolution {
   export test-esm-json-url-cache-keys: func() -> bool;
   export test-static-loader-absolute-entry-specifier: func() -> bool;
   export test-registered-loader-module-realm-isolation: func() -> bool;
+  export test-registered-loader-resolve-result-not-mutated: func() -> bool;
   export test-esm-forbidden-cjs-globals: func() -> bool;
   export test-import-meta-resolve: func() -> bool;
   export test-cjs-dynamic-import-attribute-scanner: func() -> bool;

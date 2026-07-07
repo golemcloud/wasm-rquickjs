@@ -1711,6 +1711,60 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
     }
 };
 
+export const testRegisteredLoaderResolveResultNotMutated = async () => {
+    try {
+        const root = '/registered-loader-normalize-app';
+        const targetPath = `${root}/target.mjs`;
+        const returnedUrl = pathToFileURL(targetPath).href;
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(targetPath, 'export default true;');
+        fs.writeFileSync(
+            `${root}/loader.mjs`,
+            [
+                `const returnedUrl = ${JSON.stringify(returnedUrl)};`,
+                'let returned;',
+                'let urlReads = 0;',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:normalized-path") {',
+                '    returned = {',
+                '      shortCircuit: true,',
+                '      get url() { urlReads++; return returnedUrl; },',
+                '      set url(value) { throw new Error("resolve result URL was mutated: " + value); },',
+                '      format: "module",',
+                '    };',
+                '    return returned;',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === returnedUrl) {',
+                '    if (!returned) throw new Error("resolve result was not captured");',
+                '    if (urlReads === 0) throw new Error("resolve result URL was not read");',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        globalThis.__wasm_rquickjs_module_resolution_assert = assert;
+        globalThis.__wasm_rquickjs_module_resolution_register = (await import('node:module')).register;
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(pathToFileURL(`${root}/loader.mjs`).href)});`,
+            'assert.strictEqual((await import("virtual:normalized-path")).default, true);',
+        ].join('\n')));
+        delete globalThis.__wasm_rquickjs_module_resolution_assert;
+        delete globalThis.__wasm_rquickjs_module_resolution_register;
+        return true;
+    } catch (error) {
+        delete globalThis.__wasm_rquickjs_module_resolution_assert;
+        delete globalThis.__wasm_rquickjs_module_resolution_register;
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testEsmForbiddenCjsGlobals = async () => {
     try {
         const root = '/esm-forbidden-cjs-globals-app';
