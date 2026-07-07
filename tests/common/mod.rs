@@ -98,7 +98,11 @@ fn truthy_env(name: &str) -> bool {
 }
 
 fn test_cache_enabled(name: &str) -> bool {
-    truthy_env(TEST_FAST_ENV) || truthy_env(name)
+    test_cache_enabled_from(truthy_env(TEST_FAST_ENV), truthy_env(name))
+}
+
+fn test_cache_enabled_from(fast: bool, specific: bool) -> bool {
+    fast || specific
 }
 
 fn test_artifact_cache_enabled() -> bool {
@@ -118,7 +122,15 @@ fn test_unoptimized_enabled() -> bool {
 }
 
 fn test_wasmtime_cache_enabled() -> bool {
-    test_cache_enabled(TEST_WASMTIME_CACHE_ENV) && !test_drop_cache_enabled()
+    test_wasmtime_cache_enabled_from(
+        truthy_env(TEST_FAST_ENV),
+        truthy_env(TEST_WASMTIME_CACHE_ENV),
+        test_drop_cache_enabled(),
+    )
+}
+
+fn test_wasmtime_cache_enabled_from(fast: bool, specific: bool, drop_cache: bool) -> bool {
+    test_cache_enabled_from(fast, specific) && !drop_cache
 }
 
 fn test_cache_stamp_dir() -> Utf8PathBuf {
@@ -389,6 +401,19 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn fast_cache_env_enables_layers_but_drop_cache_bypasses_wasmtime() {
+        assert!(test_cache_enabled_from(true, false));
+        assert!(test_cache_enabled_from(false, true));
+        assert!(!test_cache_enabled_from(false, false));
+
+        assert!(test_wasmtime_cache_enabled_from(true, false, false));
+        assert!(test_wasmtime_cache_enabled_from(false, true, false));
+        assert!(!test_wasmtime_cache_enabled_from(false, false, false));
+        assert!(!test_wasmtime_cache_enabled_from(true, false, true));
+        assert!(!test_wasmtime_cache_enabled_from(false, true, true));
     }
 }
 
