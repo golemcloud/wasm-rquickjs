@@ -1340,7 +1340,7 @@ mod tests {
             module_js
                 .matches("registeredLoaderUrlFormatSourceResult(")
                 .count(),
-            3,
+            4,
             "registered-loader URL/format/source results must use the shared source result helper"
         );
 
@@ -1354,10 +1354,10 @@ mod tests {
         let async_runner = &module_js[async_start..sync_start];
         assert!(
             async_runner.contains(
-                "const raw = registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);"
-            ) && async_runner.contains("if (loadedHasSource) raw.source = loaded.source;")
+                "return loadedHasSource ? registeredLoaderUrlFormatSourceResult(normalizedResolved.url, loadedFormat, loaded.source) : registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);"
+            ) && !async_runner.contains("raw.source =")
                 && !async_runner.contains("const raw = { url: normalizedResolved.url"),
-            "async static-raw loader results must share URL/format construction while preserving optional source attachment"
+            "async static-raw loader results must share URL/format/source construction while preserving optional source attachment"
         );
 
         let sync_end = module_js[sync_start..]

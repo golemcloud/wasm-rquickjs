@@ -5809,9 +5809,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loadedHasSource = registeredLoaderHasSource(loaded);
         const loadedFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (mode === 'static-raw') {
-            const raw = registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);
-            if (loadedHasSource) raw.source = loaded.source;
-            return raw;
+            return loadedHasSource
+                ? registeredLoaderUrlFormatSourceResult(normalizedResolved.url, loadedFormat, loaded.source)
+                : registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);
         }
 
         if (loadedHasSource && loadedFormat === 'module') {
