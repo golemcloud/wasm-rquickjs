@@ -5713,6 +5713,16 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             : missingSourceReturn;
     }
 
+    function registeredLoaderUrlFormatResult(url, format) {
+        return { url, format };
+    }
+
+    function registeredLoaderUrlFormatSourceResult(url, format, source) {
+        const result = registeredLoaderUrlFormatResult(url, format);
+        result.source = source;
+        return result;
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5826,7 +5836,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loadedHasSource = registeredLoaderHasSource(loaded);
         const loadedFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (mode === 'static-raw') {
-            const raw = { url: normalizedResolved.url, format: loadedFormat };
+            const raw = registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);
             if (loadedHasSource) raw.source = loaded.source;
             return raw;
         }
@@ -5936,7 +5946,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
         if (!normalizedResolved) return undefined;
         const resolvedFormat = normalizedResolved.format;
-        if (resolveOnly) return { url: normalizedResolved.url, format: resolvedFormat };
+        if (resolveOnly) return registeredLoaderUrlFormatResult(normalizedResolved.url, resolvedFormat);
 
         const runLoad = (index, nextUrl, context) => {
             if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
@@ -5962,20 +5972,20 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = runLoad(entries.length - 1, normalizedResolved.url, registeredLoaderLoadContext(baseContext, resolved, resolvedFormat));
         const finalFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
-        if (finalFormat === 'builtin') return { url: normalizedResolved.url, format: finalFormat };
+        if (finalFormat === 'builtin') return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
         if (!loaded && resolved.source === undefined) return undefined;
         let source = registeredLoaderHasSource(loaded)
             ? loaded.source
             : resolved.source;
         if (source === undefined && isImportMode) {
-            return { url: normalizedResolved.url, format: finalFormat };
+            return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
         }
         if (source === undefined && finalFormat === 'commonjs' && String(normalizedResolved.url).startsWith('file://')) {
             source = loaderFileUrlSource(normalizedResolved.url);
         }
         if (source === null) source = undefined;
         if (source === undefined) return undefined;
-        return { url: normalizedResolved.url, format: finalFormat, source };
+        return registeredLoaderUrlFormatSourceResult(normalizedResolved.url, finalFormat, source);
     };
 
     function staticRegisteredLoaderCacheParts(specifier, attrs) {

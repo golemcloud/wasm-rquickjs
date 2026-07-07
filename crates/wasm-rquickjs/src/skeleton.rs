@@ -1043,6 +1043,69 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_raw_result_objects_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function registeredLoaderUrlFormatResult(url, format) { return { url, format }; }"
+            ) && module_js.contains(
+                "function registeredLoaderUrlFormatSourceResult(url, format, source) { const result = registeredLoaderUrlFormatResult(url, format); result.source = source; return result; }"
+            ),
+            "registered-loader raw URL/format result object construction must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderUrlFormatResult(")
+                .count(),
+            6,
+            "static-raw and sync registered-loader URL/format results must use the shared helper"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderUrlFormatSourceResult(")
+                .count(),
+            2,
+            "sync registered-loader source result must use the shared source result helper"
+        );
+
+        let async_start = module_js
+            .find("globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(")
+            .expect("async registered-loader runner must exist");
+        let sync_start = module_js[async_start..]
+            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .expect("async runner must precede sync runner")
+            + async_start;
+        let async_runner = &module_js[async_start..sync_start];
+        assert!(
+            async_runner.contains(
+                "const raw = registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);"
+            ) && async_runner.contains("if (loadedHasSource) raw.source = loaded.source;")
+                && !async_runner.contains("const raw = { url: normalizedResolved.url"),
+            "async static-raw loader results must share URL/format construction while preserving optional source attachment"
+        );
+
+        let sync_end = module_js[sync_start..]
+            .find("function staticRegisteredLoaderCacheParts(")
+            .expect("sync runner must precede static cache helpers")
+            + sync_start;
+        let sync_runner = &module_js[sync_start..sync_end];
+        assert!(
+            sync_runner.contains(
+                "if (resolveOnly) return registeredLoaderUrlFormatResult(normalizedResolved.url, resolvedFormat);"
+            ) && sync_runner.contains(
+                "if (finalFormat === 'builtin') return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);"
+            ) && sync_runner.contains(
+                "return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);"
+            ) && sync_runner.contains(
+                "return registeredLoaderUrlFormatSourceResult(normalizedResolved.url, finalFormat, source);"
+            ) && !sync_runner.contains("{ url: normalizedResolved.url, format:")
+                && !sync_runner.contains("format: finalFormat, source"),
+            "sync registered-loader raw result paths must share URL/format/source object construction"
+        );
+    }
+
+    #[test]
     fn registered_loader_builtin_resolution_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
