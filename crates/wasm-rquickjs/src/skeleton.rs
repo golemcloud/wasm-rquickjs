@@ -1512,6 +1512,35 @@ mod tests {
     }
 
     #[test]
+    fn static_registered_loader_source_reads_are_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        let source_start = module_js
+            .find("function staticRegisteredLoaderSourceForUrl(url)")
+            .expect("static registered-loader source helper must exist");
+        let source_end = module_js[source_start..]
+            .find("function staticRegisteredLoaderChildUrl(")
+            .expect("source helper must precede child URL helper")
+            + source_start;
+        let source_helper = &module_js[source_start..source_end];
+        assert!(
+            source_helper
+                .contains("if (url.startsWith('file://')) { return loaderFileUrlSource(url); }")
+                && source_helper.contains("if (url.startsWith('/')) { return tryReadFile(url); }")
+                && !source_helper.contains("tryReadFile(url); } catch"),
+            "static registered-loader file and path source reads must share existing null-on-failure helpers"
+        );
+        assert!(
+            source_helper.contains("if (url.startsWith('data:'))")
+                && source_helper.contains(
+                    "return meta.indexOf(';base64') >= 0 ? atob(body) : decodeURIComponent(body);"
+                )
+                && source_helper.contains("return null;"),
+            "static registered-loader source helper must keep data URL decoding and null fallback behavior"
+        );
+    }
+
+    #[test]
     fn rust_module_kind_detection_uses_shared_esm_helper() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));

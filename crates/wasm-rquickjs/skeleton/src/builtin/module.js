@@ -6048,11 +6048,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return loaderFileUrlSource(url);
         }
         if (url.startsWith('/')) {
-            try {
-                return tryReadFile(url);
-            } catch (_) {
-                return null;
-            }
+            return tryReadFile(url);
         }
         if (url.startsWith('data:')) {
             const comma = url.indexOf(',');
