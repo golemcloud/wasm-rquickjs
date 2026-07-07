@@ -972,6 +972,94 @@ mod tests {
     }
 
     #[test]
+    fn cjs_module_record_initialization_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        let initializer_start = module_js
+            .find("function initializeCjsModuleRecord(")
+            .expect("CJS module record initializer must exist");
+        let initializer_end = module_js[initializer_start..]
+            .find("function loadModule(")
+            .expect("CJS module record initializer must precede loadModule")
+            + initializer_start;
+        let initializer = &module_js[initializer_start..initializer_end];
+        assert!(
+            initializer.contains("mod.id = id;")
+                && initializer.contains("mod.filename = filename;")
+                && initializer.contains("mod.path = dirname;")
+                && initializer.contains("mod.exports = {};")
+                && initializer.contains("mod.loaded = false;")
+                && initializer.contains("mod.parent = parentModule || null;")
+                && initializer.contains("mod.children = [];")
+                && initializer.contains("mod.paths = _nodeModulePaths(pathsBase);")
+                && initializer.contains("mod._compile = makeModuleCompile(mod);")
+                && initializer.contains("mod.require = makeModuleRequire(mod);")
+                && initializer.contains("installCjsEsmDefaultSnapshotSlot(mod);")
+                && initializer.contains("return mod;"),
+            "CJS module record shape and built-in methods must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("initializeCjsModuleRecord(").count(),
+            4,
+            "main, ordinary, and loader-provided CJS module records must use the shared initializer"
+        );
+        assert_eq!(
+            module_js
+                .matches("installCjsEsmDefaultSnapshotSlot(mod);")
+                .count(),
+            2,
+            "CJS default snapshot slot installation should be limited to record initialization and snapshot capture"
+        );
+        assert_eq!(
+            module_js
+                .matches("mod._compile = makeModuleCompile(mod);")
+                .count(),
+            1,
+            "CJS _compile setup must only happen inside the shared initializer"
+        );
+        assert_eq!(
+            module_js
+                .matches("mod.require = makeModuleRequire(mod);")
+                .count(),
+            1,
+            "default CJS require setup must only happen inside the shared initializer"
+        );
+
+        let load_module_start = module_js
+            .find("function loadModule(resolvedFilename, source, parentModule)")
+            .expect("ordinary CJS loadModule must exist");
+        let load_module_end = module_js[load_module_start..]
+            .find("function makeLoaderCommonJsRequire(")
+            .expect("loadModule must precede loader-created require")
+            + load_module_start;
+        let load_module = &module_js[load_module_start..load_module_end];
+        assert!(
+            load_module.contains("initializeCjsModuleRecord(mod, '.', filename, dirname, null, dirname);")
+                && load_module.contains(
+                    "mod = initializeCjsModuleRecord({}, filename, filename, dirname, parentModule, dirname);"
+                )
+                && load_module.contains("globalThis.process.mainModule = mod;")
+                && load_module.contains("if (parentModule && parentModule.children) { parentModule.children.push(mod); }"),
+            "ordinary CJS loading must share record setup while keeping main-module and parent-child side effects outside it"
+        );
+
+        let loader_source_start = module_js
+            .find("function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey)")
+            .expect("loader CommonJS source module helper must exist");
+        let loader_source_end = module_js[loader_source_start..]
+            .find("if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source")
+            .expect("loader source helper must precede global bridge setup")
+            + loader_source_start;
+        let loader_source = &module_js[loader_source_start..loader_source_end];
+        assert!(
+            loader_source.contains(
+                "const mod = initializeCjsModuleRecord( {}, filename, filename, dirname, null, pathModule.isAbsolute(filename) ? dirname : '/', );"
+            ) && loader_source.contains("moduleCache[cacheKey] = mod;"),
+            "loader-provided CommonJS source must share record setup while keeping its cache key behavior"
+        );
+    }
+
+    #[test]
     fn loader_cjs_function_header_parser_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

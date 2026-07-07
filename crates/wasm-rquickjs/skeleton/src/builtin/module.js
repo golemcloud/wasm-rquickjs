@@ -4788,9 +4788,25 @@ function unlinkModuleFromParent(parentModule, mod) {
     if (index !== -1) parentModule.children.splice(index, 1);
 }
 
+function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pathsBase) {
+    mod.id = id;
+    mod.filename = filename;
+    mod.path = dirname;
+    mod.exports = {};
+    mod.loaded = false;
+    mod.parent = parentModule || null;
+    mod.children = [];
+    mod.paths = _nodeModulePaths(pathsBase);
+    mod._compile = makeModuleCompile(mod);
+    mod.require = makeModuleRequire(mod);
+    installCjsEsmDefaultSnapshotSlot(mod);
+    return mod;
+}
+
 function loadModule(resolvedFilename, source, parentModule) {
     const isMainModuleLoad = isMainEntryFilename(resolvedFilename);
     const filename = toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
+    const dirname = pathModule.dirname(filename);
 
     // Check cache
     if (moduleCache[filename]) {
@@ -4810,34 +4826,12 @@ function loadModule(resolvedFilename, source, parentModule) {
     let mod;
     if (isMainModuleLoad) {
         mod = mainModule;
-        mod.id = '.';
-        mod.filename = filename;
-        mod.path = pathModule.dirname(filename);
-        mod.exports = {};
-        mod.loaded = false;
-        mod.parent = null;
-        mod.children = [];
-        mod.paths = _nodeModulePaths(pathModule.dirname(filename));
-        mod._compile = makeModuleCompile(mod);
-        mod.require = makeModuleRequire(mod);
-        installCjsEsmDefaultSnapshotSlot(mod);
+        initializeCjsModuleRecord(mod, '.', filename, dirname, null, dirname);
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
     } else {
-        mod = {
-            id: filename,
-            filename: filename,
-            path: pathModule.dirname(filename),
-            exports: {},
-            loaded: false,
-            parent: parentModule || null,
-            children: [],
-            paths: _nodeModulePaths(pathModule.dirname(filename)),
-        };
-        mod._compile = makeModuleCompile(mod);
-        mod.require = makeModuleRequire(mod);
-        installCjsEsmDefaultSnapshotSlot(mod);
+        mod = initializeCjsModuleRecord({}, filename, filename, dirname, parentModule, dirname);
     }
 
     // Cache before executing (handles circular dependencies)
@@ -5034,19 +5028,14 @@ function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
     cacheKey = cacheKey || filename;
     if (moduleCache[cacheKey]) return moduleCache[cacheKey];
     const dirname = pathModule.isAbsolute(filename) ? pathModule.dirname(filename) : '.';
-    const mod = {
-        id: filename,
-        filename: filename,
-        path: dirname,
-        exports: {},
-        loaded: false,
-        parent: null,
-        children: [],
-        paths: _nodeModulePaths(pathModule.isAbsolute(filename) ? dirname : '/'),
-    };
-    mod._compile = makeModuleCompile(mod);
-    mod.require = makeModuleRequire(mod);
-    installCjsEsmDefaultSnapshotSlot(mod);
+    const mod = initializeCjsModuleRecord(
+        {},
+        filename,
+        filename,
+        dirname,
+        null,
+        pathModule.isAbsolute(filename) ? dirname : '/',
+    );
     moduleCache[cacheKey] = mod;
     registerSourceMapForCjs(filename, source, mod);
     try {
