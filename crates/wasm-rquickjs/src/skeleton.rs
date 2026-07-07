@@ -546,6 +546,21 @@ mod tests {
             "Mode-specific package bridges must share their resolver context construction"
         );
 
+        let directory_message_start = internal_rs
+            .find("fn directory_import_message(")
+            .expect("directory_import_message must exist");
+        let directory_message_end = internal_rs[directory_message_start..]
+            .find("fn format_importer(")
+            .expect("directory_import_message must precede format_importer")
+            + directory_message_start;
+        let directory_message = &internal_rs[directory_message_start..directory_message_end];
+        assert!(
+            directory_message.contains(
+                "let mut resolution = esm_import_resolution_context(&conditions, &mut warnings);"
+            ) && !directory_message.contains("NodePackageResolutionContext::new("),
+            "ESM directory-import suggestions must use the shared ESM resolver context"
+        );
+
         let loader_start = internal_rs
             .find("fn loader_default_resolve_package<'js>(")
             .expect("loader_default_resolve_package must exist");

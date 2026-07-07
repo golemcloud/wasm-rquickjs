@@ -3046,11 +3046,7 @@ impl NodeFileResolver {
             {
                 let conditions = Vec::new();
                 let mut warnings = Vec::new();
-                let mut resolution = NodePackageResolutionContext::new(
-                    NodePackageResolveMode::EsmImport,
-                    &conditions,
-                    &mut warnings,
-                );
+                let mut resolution = esm_import_resolution_context(&conditions, &mut warnings);
                 if let Some((suggestion, _)) = NodeModulesResolver::resolve_package_legacy_main(
                     std::path::Path::new(normalized_dir),
                     main,
