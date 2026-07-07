@@ -7394,6 +7394,28 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
     !matches!(extension, Some("json" | "node"))
 }
 
+fn analyze_cjs_reexport_specifier_names(
+    filename: &str,
+    reexport_specifiers: Vec<String>,
+    seen: &mut HashSet<String>,
+    conditions: &[String],
+) -> Vec<String> {
+    let mut names = Vec::new();
+    for reexport in reexport_specifiers {
+        if let Some(path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
+            && !seen.contains(&path)
+            && is_cjs_analysis_source_path(&path)
+            && let Ok(source) = std::fs::read_to_string(&path)
+        {
+            let child = analyze_cjs_exports_for_file(&path, &source, seen, conditions);
+            for name in child.exports {
+                add_unique(&mut names, name);
+            }
+        }
+    }
+    names
+}
+
 fn analyze_cjs_exports_for_file(
     filename: &str,
     source: &str,
@@ -7405,17 +7427,8 @@ fn analyze_cjs_exports_for_file(
         return analysis;
     }
     let reexports = analysis.reexports.clone();
-    for reexport in reexports {
-        if let Some(path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
-            && !seen.contains(&path)
-            && is_cjs_analysis_source_path(&path)
-            && let Ok(source) = std::fs::read_to_string(&path)
-        {
-            let child = analyze_cjs_exports_for_file(&path, &source, seen, conditions);
-            for name in child.exports {
-                add_unique(&mut analysis.exports, name);
-            }
-        }
+    for name in analyze_cjs_reexport_specifier_names(filename, reexports, seen, conditions) {
+        add_unique(&mut analysis.exports, name);
     }
     analysis
 }
@@ -7496,20 +7509,12 @@ fn analyze_loader_cjs_reexport_names(
             add_unique(&mut reexport_specifiers, reexport);
         }
     }
-    let mut names = Vec::new();
     let mut seen = HashSet::new();
     seen.insert(filename.clone());
-    for reexport in reexport_specifiers {
-        if let Some(path) = resolve_cjs_reexport_path(&filename, &reexport, &cjs_conditions)
-            && is_cjs_analysis_source_path(&path)
-            && let Ok(source) = std::fs::read_to_string(&path)
-        {
-            let child = analyze_cjs_exports_for_file(&path, &source, &mut seen, &cjs_conditions);
-            for name in child.exports {
-                if name != "default" {
-                    add_unique(&mut names, name);
-                }
-            }
+    let mut names = Vec::new();
+    for name in analyze_cjs_reexport_specifier_names(&filename, reexport_specifiers, &mut seen, &cjs_conditions) {
+        if name != "default" {
+            add_unique(&mut names, name);
         }
     }
     names

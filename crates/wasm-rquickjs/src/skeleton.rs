@@ -1778,6 +1778,59 @@ mod tests {
     }
 
     #[test]
+    fn cjs_reexport_recursion_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        let helper_start = internal_rs
+            .find("fn analyze_cjs_reexport_specifier_names(")
+            .expect("shared CJS reexport recursion helper must exist");
+        let helper_end = internal_rs[helper_start..]
+            .find("fn analyze_cjs_exports_for_file(")
+            .expect("shared CJS reexport recursion helper must precede file analyzer")
+            + helper_start;
+        let helper = &internal_rs[helper_start..helper_end];
+        assert!(
+            helper.contains("resolve_cjs_reexport_path(filename, &reexport, conditions)")
+                && helper.contains("!seen.contains(&path)")
+                && helper.contains("is_cjs_analysis_source_path(&path)")
+                && helper.contains("std::fs::read_to_string(&path)")
+                && helper
+                    .contains("analyze_cjs_exports_for_file(&path, &source, seen, conditions)"),
+            "shared CJS reexport recursion helper must own resolution, source filtering, source reads, and recursion"
+        );
+
+        let file_start = helper_end;
+        let file_end = internal_rs[file_start..]
+            .find("struct PackageScopeInfo")
+            .expect("file analyzer must precede package scope info")
+            + file_start;
+        let file_analyzer = &internal_rs[file_start..file_end];
+        assert!(
+            file_analyzer.contains(
+                "analyze_cjs_reexport_specifier_names(filename, reexports, seen, conditions)"
+            ) && !file_analyzer.contains("resolve_cjs_reexport_path(")
+                && !file_analyzer.contains("std::fs::read_to_string(&path)"),
+            "on-disk CJS analyzer must use the shared reexport recursion helper"
+        );
+
+        let loader_start = internal_rs
+            .find("fn analyze_loader_cjs_reexport_names(")
+            .expect("loader CJS reexport analyzer must exist");
+        let loader_end = internal_rs[loader_start..]
+            .find("impl Loader for CjsCompatLoader")
+            .expect("loader CJS reexport analyzer must precede CJS compat loader")
+            + loader_start;
+        let loader_analyzer = &internal_rs[loader_start..loader_end];
+        assert!(
+            loader_analyzer.contains(
+                "analyze_cjs_reexport_specifier_names(&filename, reexport_specifiers, &mut seen, &cjs_conditions)"
+            ) && !loader_analyzer.contains("resolve_cjs_reexport_path(")
+                && !loader_analyzer.contains("std::fs::read_to_string(&path)"),
+            "loader-provided CJS analyzer must use the shared reexport recursion helper"
+        );
+    }
+
+    #[test]
     fn registered_loader_format_normalization_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
