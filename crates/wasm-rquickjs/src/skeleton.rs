@@ -433,6 +433,12 @@ mod tests {
             "registered-loader package default resolution must keep loader conditions and CJS error mapping around the shared bridge"
         );
         assert!(
+            module_js.contains(
+                "function packageConditionArrayForLoaderResolve(context, defaultConditions) { return context && Array.isArray(context.conditions) ? Array.from(packageConditionsForLoaderResolve(context, defaultConditions)) : defaultConditions; }"
+            ),
+            "registered-loader package resolution must only copy hook-provided conditions, not Rust-owned default condition arrays"
+        );
+        assert!(
             !module_js.contains(
                 "__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, Array.from(conditions), mode,"
             ),

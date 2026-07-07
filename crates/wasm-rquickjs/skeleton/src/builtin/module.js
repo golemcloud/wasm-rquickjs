@@ -4460,7 +4460,9 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function packageConditionArrayForLoaderResolve(context, defaultConditions) {
-        return Array.from(packageConditionsForLoaderResolve(context, defaultConditions));
+        return context && Array.isArray(context.conditions)
+            ? Array.from(packageConditionsForLoaderResolve(context, defaultConditions))
+            : defaultConditions;
     }
 
     function packageResolutionForLoaderResult(resolved) {
