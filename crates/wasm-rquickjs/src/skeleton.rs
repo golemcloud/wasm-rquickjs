@@ -1721,6 +1721,25 @@ mod tests {
     }
 
     #[test]
+    fn js_module_scanner_has_no_dead_plain_whitespace_helper() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            !module_js.contains("function skipWhitespace(source, start)"),
+            "module.js scanner should not keep an unused plain-whitespace helper beside the comment-aware helpers"
+        );
+        assert!(
+            module_js.contains(
+                "function skipWhitespaceAndCommentsImpl(source, start, trackLineTerminator)"
+            ) && module_js.contains("function skipWhitespaceAndComments(source, start)")
+                && module_js.contains(
+                    "function skipWhitespaceAndCommentsWithLineTerminator(source, start)"
+                ),
+            "module.js scanner whitespace handling must stay on the shared comment-aware helpers"
+        );
+    }
+
+    #[test]
     fn loader_cjs_optional_semicolon_parser_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

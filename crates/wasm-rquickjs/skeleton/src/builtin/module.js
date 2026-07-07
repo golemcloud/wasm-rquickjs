@@ -2065,16 +2065,6 @@ function skipRegexLiteralInSource(source, start) {
     return start + 1;
 }
 
-function skipWhitespace(source, start) {
-    let i = start;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) break;
-        i++;
-    }
-    return i;
-}
-
 function skipWhitespaceAndCommentsImpl(source, start, trackLineTerminator) {
     let i = start;
     let hasLineTerminator = false;
