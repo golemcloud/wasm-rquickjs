@@ -5228,11 +5228,11 @@ export const testPackageCustomConditions = async () => {
     try {
         globalThis.__wasm_rquickjs_package_conditions = ['custom-condition', 'another'];
         assert.deepStrictEqual(
-            globalThis.__wasm_rquickjs_package_default_conditions('loader'),
-            ['node', 'import', 'module-sync', 'node-addons'],
+            globalThis.__wasm_rquickjs_package_global_conditions('loader'),
+            ['node', 'import', 'module-sync', 'node-addons', 'custom-condition', 'another'],
         );
         assert.throws(
-            () => globalThis.__wasm_rquickjs_package_default_conditions('typo'),
+            () => globalThis.__wasm_rquickjs_package_global_conditions('typo'),
             { code: 'ERR_INVALID_ARG_VALUE' },
         );
         assert.throws(

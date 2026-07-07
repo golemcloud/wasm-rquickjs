@@ -3429,6 +3429,18 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         let normalized = CjsEvalResolver::normalize_path(path);
         self.normalized_is_file(&normalized)
     }
+
+    fn with_mode<T>(
+        &mut self,
+        mode: NodePackageResolveMode,
+        f: impl FnOnce(&mut Self) -> Result<T, NodePackageResolveError>,
+    ) -> Result<T, NodePackageResolveError> {
+        let previous_mode = self.mode;
+        self.mode = mode;
+        let result = f(self);
+        self.mode = previous_mode;
+        result
+    }
 }
 
 enum CjsAnalysisPackageFallbackStep {
@@ -4447,14 +4459,10 @@ impl NodeModulesResolver {
                     let base = ctx.package_dir.join("package.json");
                     let base_str = base.to_string_lossy();
                     let resolver = NodeModulesResolver;
-                    let mut nested_resolution = NodePackageResolutionContext::new(
+                    if let Some(resolved) = resolution.with_mode(
                         ctx.nested_bare_target_resolution_mode,
-                        ctx.conditions,
-                        &mut *resolution.warnings,
-                    );
-                    if let Some(resolved) =
-                        resolver.try_resolve_with_context(&base_str, &target_str, &mut nested_resolution)?
-                    {
+                        |resolution| resolver.try_resolve_with_context(&base_str, &target_str, resolution),
+                    )? {
                         return Ok(PackageTargetResolution::Resolved(resolved));
                     }
                     return Err(NodePackageResolveError::ModuleNotFound {

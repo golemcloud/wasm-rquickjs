@@ -747,6 +747,23 @@ mod tests {
                 && !cjs_fallback_bridge.contains("emit_node_package_deprecation_warnings("),
             "CJS package fallback bridge must use the shared CJS-analysis context helper without JS conditions or package warning emission"
         );
+
+        let target_value_start = internal_rs
+            .find("fn resolve_package_target_value(")
+            .expect("package target resolver must exist");
+        let target_value_end = internal_rs[target_value_start..]
+            .find("fn package_pattern_key_match(")
+            .expect("package target resolver must precede pattern helpers")
+            + target_value_start;
+        let target_value = &internal_rs[target_value_start..target_value_end];
+        assert!(
+            internal_rs.contains(
+                "fn with_mode<T>( &mut self, mode: NodePackageResolveMode, f: impl FnOnce(&mut Self) -> Result<T, NodePackageResolveError>, ) -> Result<T, NodePackageResolveError>"
+            ) && target_value.contains(
+                "resolution.with_mode( ctx.nested_bare_target_resolution_mode, |resolution| resolver.try_resolve_with_context(&base_str, &target_str, resolution), )?"
+            ) && !target_value.contains("let mut nested_resolution"),
+            "nested bare package targets must reuse the active resolution context and file-probe cache while switching mode explicitly"
+        );
     }
 
     #[test]
