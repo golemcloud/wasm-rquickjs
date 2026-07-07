@@ -5162,6 +5162,18 @@ fn package_resolved_url_object<'js>(
     Ok(result)
 }
 
+fn loader_package_resolved_object<'js>(
+    ctx: &Ctx<'js>,
+    resolved: &str,
+    mode: NodePackageResolveMode,
+) -> rquickjs::Result<Object<'js>> {
+    let result = package_resolved_url_object(ctx, resolved)?;
+    if let Some(format) = loader_package_result_format(resolved, mode) {
+        result.set("format", format)?;
+    }
+    Ok(result)
+}
+
 fn try_resolve_package_with_js_conditions<'js>(
     ctx: &Ctx<'js>,
     base: &str,
@@ -5207,11 +5219,7 @@ fn loader_default_resolve_package<'js>(
             } else {
                 resolved
             };
-            let result = package_resolved_url_object(&ctx, &resolved)?;
-            if let Some(format) = loader_package_result_format(&resolved, mode) {
-                result.set("format", format)?;
-            }
-            Ok(Some(result))
+            loader_package_resolved_object(&ctx, &resolved, mode).map(Some)
         }
         Ok(None) => Ok(None),
         Err(err) => {

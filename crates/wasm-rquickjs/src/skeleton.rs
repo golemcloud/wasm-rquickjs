@@ -458,6 +458,15 @@ mod tests {
                 && internal_rs.contains("_ if mode == NodePackageResolveMode::CjsAnalysis => Some(\"commonjs\"),"),
             "registered-loader package bridge format mapping must stay mode-specific"
         );
+        assert!(
+            internal_rs.contains(
+                "fn loader_package_resolved_object<'js>( ctx: &Ctx<'js>, resolved: &str, mode: NodePackageResolveMode, ) -> rquickjs::Result<Object<'js>>"
+            ) && internal_rs.contains("let result = package_resolved_url_object(ctx, resolved)?;")
+                && internal_rs.contains(
+                    "if let Some(format) = loader_package_result_format(resolved, mode) { result.set(\"format\", format)?; }"
+                ),
+            "registered-loader package result URL and format shaping must stay centralized"
+        );
 
         let loader_start = internal_rs
             .find("fn loader_default_resolve_package<'js>(")
@@ -468,11 +477,10 @@ mod tests {
             + loader_start;
         let loader_bridge = &internal_rs[loader_start..loader_end];
         assert!(
-            loader_bridge.contains("let result = package_resolved_url_object(&ctx, &resolved)?;")
-                && loader_bridge.contains(
-                    "if let Some(format) = loader_package_result_format(&resolved, mode) { result.set(\"format\", format)?; }"
-                ),
-            "registered-loader package bridge must share URL object construction and own format attachment"
+            loader_bridge
+                .contains("loader_package_resolved_object(&ctx, &resolved, mode).map(Some)")
+                && !loader_bridge.contains("result.set(\"format\", format)?;"),
+            "registered-loader package bridge must delegate URL and format shaping to the shared helper"
         );
 
         let cjs_start = loader_end;
@@ -484,6 +492,7 @@ mod tests {
         assert!(
             cjs_bridge.contains("package_resolved_url_object(&ctx, &resolved).map(Some)")
                 && !cjs_bridge.contains("loader_package_result_format(")
+                && !cjs_bridge.contains("loader_package_resolved_object(")
                 && !cjs_bridge.contains("\"format\""),
             "CJS package exports bridge must share URL object construction without attaching loader format"
         );
