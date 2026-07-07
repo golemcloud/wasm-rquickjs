@@ -1402,8 +1402,8 @@ mod tests {
         );
         assert_eq!(
             module_js.matches("registeredLoaderBuiltinResolve(").count(),
-            4,
-            "ESM, CJS, and sync registered-loader default resolution must share builtin shaping"
+            3,
+            "ESM and sync registered-loader default resolution must share builtin shaping without a duplicate CJS helper branch"
         );
 
         let sync_start = module_js
@@ -1419,6 +1419,18 @@ mod tests {
                 && !sync_runner.contains("inputs.specifier.startsWith('node:')")
                 && !sync_runner.contains("isBuiltin(inputs.specifier)"),
             "sync registered-loader default resolution must not keep a second builtin result shaper"
+        );
+        let cjs_default_start = module_js
+            .find("function resolveCjsDefaultForLoader(specifier, parentURL, context)")
+            .expect("resolveCjsDefaultForLoader function must exist");
+        let cjs_default_end = module_js[cjs_default_start..]
+            .find("function resultForRelativeOrAbsoluteSpecifier(")
+            .expect("CJS default resolver must precede ESM relative resolver")
+            + cjs_default_start;
+        let cjs_default = &module_js[cjs_default_start..cjs_default_end];
+        assert!(
+            !cjs_default.contains("registeredLoaderBuiltinResolve("),
+            "sync registered-loader builtin shaping must stay in the shared default resolver, not the CJS helper"
         );
     }
 

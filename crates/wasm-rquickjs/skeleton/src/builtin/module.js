@@ -4529,9 +4529,6 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function resolveCjsDefaultForLoader(specifier, parentURL, context) {
-        const builtin = registeredLoaderBuiltinResolve(specifier, true);
-        if (builtin) return builtin;
-
         const parentFilename = parentFilenameForLoaderResolve(parentURL, fileUrlForPath('/'));
         const parentDir = parentFilename ? pathModule.dirname(parentFilename) : '/';
         if (specifier.startsWith('file://')) {
