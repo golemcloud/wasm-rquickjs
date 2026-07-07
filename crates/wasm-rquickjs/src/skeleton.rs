@@ -455,6 +455,9 @@ mod tests {
 
         assert!(
             resolve_package_exports_entry.contains("__wasm_rquickjs_cjs_resolve_package_exports(")
+                && resolve_package_exports_entry.contains("conditions || cjsPackageConditions(),")
+                && !resolve_package_exports_entry
+                    .contains("Array.from(conditions || cjsPackageConditions())")
                 && resolve_package_exports_entry
                     .contains("resolved = resolvePackageFileFromRustResult(resolved);")
                 && resolve_package_exports_entry

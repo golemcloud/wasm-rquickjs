@@ -832,7 +832,7 @@ function resolvePackageExportsEntry(parts, packageDir, pkg, conditions) {
             packageDir,
             parts.name,
             parts.subpath,
-            Array.from(conditions || cjsPackageConditions()),
+            conditions || cjsPackageConditions(),
             '',
         );
     } catch (err) {
