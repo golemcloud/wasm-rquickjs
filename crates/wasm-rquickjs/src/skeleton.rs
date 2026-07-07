@@ -1060,6 +1060,67 @@ mod tests {
     }
 
     #[test]
+    fn cjs_load_failure_cleanup_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        let cleanup_start = module_js
+            .find("function discardCjsModuleLoad(")
+            .expect("CJS load failure cleanup helper must exist");
+        let cleanup_end = module_js[cleanup_start..]
+            .find("function initializeCjsModuleRecord(")
+            .expect("CJS load failure cleanup helper must precede CJS record initialization")
+            + cleanup_start;
+        let cleanup = &module_js[cleanup_start..cleanup_end];
+        assert!(
+            cleanup.contains("delete moduleCache[cacheKey];")
+                && cleanup.contains("unlinkModuleFromParent(parentModule, mod);"),
+            "CJS load failure cleanup must centralize cache removal and parent-child unlinking"
+        );
+
+        let load_module_start = module_js
+            .find("function loadModule(resolvedFilename, source, parentModule)")
+            .expect("ordinary CJS loadModule must exist");
+        let load_module_end = module_js[load_module_start..]
+            .find("function makeLoaderCommonJsRequire(")
+            .expect("loadModule must precede loader-created require")
+            + load_module_start;
+        let load_module = &module_js[load_module_start..load_module_end];
+        assert_eq!(
+            load_module
+                .matches("discardCjsModuleLoad(filename, parentModule, mod);")
+                .count(),
+            9,
+            "ordinary CJS load failure paths must use the shared cleanup helper"
+        );
+        assert!(
+            !load_module.contains("delete moduleCache[filename];")
+                && !load_module.contains("unlinkModuleFromParent(parentModule, mod);"),
+            "ordinary CJS load failure paths must not duplicate cleanup details"
+        );
+        assert!(
+            load_module.contains(
+                "discardCjsModuleLoad(filename, parentModule, mod); maybeSetArrowMessageOnSyntaxError(err, filename, source); throw err;"
+            ) && load_module.contains(
+                "discardCjsModuleLoad(filename, parentModule, mod); maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source); throw cjsSyntaxError;"
+            ),
+            "CJS syntax and execution failures must clean cache and parent links before decorating and rethrowing errors"
+        );
+
+        let loader_source_start = module_js
+            .find("function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey)")
+            .expect("loader CommonJS source module helper must exist");
+        let loader_source_end = module_js[loader_source_start..]
+            .find("if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source")
+            .expect("loader source helper must precede global bridge setup")
+            + loader_source_start;
+        let loader_source = &module_js[loader_source_start..loader_source_end];
+        assert!(
+            loader_source.contains("discardCjsModuleLoad(cacheKey, null, mod);"),
+            "loader-provided CommonJS source must share cache cleanup while preserving parentless loading"
+        );
+    }
+
+    #[test]
     fn loader_cjs_function_header_parser_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

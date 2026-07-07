@@ -4788,6 +4788,11 @@ function unlinkModuleFromParent(parentModule, mod) {
     if (index !== -1) parentModule.children.splice(index, 1);
 }
 
+function discardCjsModuleLoad(cacheKey, parentModule, mod) {
+    delete moduleCache[cacheKey];
+    unlinkModuleFromParent(parentModule, mod);
+}
+
 function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pathsBase) {
     mod.id = id;
     mod.filename = filename;
@@ -4852,13 +4857,11 @@ function loadModule(resolvedFilename, source, parentModule) {
             handler(mod, filename);
             cjsEsmDefaultSnapshotEligible = true;
         } catch (err) {
-            delete moduleCache[filename];
-            unlinkModuleFromParent(parentModule, mod);
+            discardCjsModuleLoad(filename, parentModule, mod);
             throw err;
         }
     } else if (handler === defaultNodeExtensionHandler) {
-        delete moduleCache[filename];
-        unlinkModuleFromParent(parentModule, mod);
+        discardCjsModuleLoad(filename, parentModule, mod);
         const err = new Error("Native .node modules are not supported in WASM: '" + filename + "'");
         err.code = 'ERR_DLOPEN_FAILED';
         throw err;
@@ -4869,8 +4872,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             }
             mod.exports = JSON.parse(source);
         } catch (e) {
-            delete moduleCache[filename];
-            unlinkModuleFromParent(parentModule, mod);
+            discardCjsModuleLoad(filename, parentModule, mod);
             const err = new SyntaxError(filename + ': ' + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
@@ -4883,8 +4885,7 @@ function loadModule(resolvedFilename, source, parentModule) {
         const isEsm = filename.endsWith('.mjs') ||
             (filename.endsWith('.js') && explicitPackageType === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
-            delete moduleCache[filename];
-            unlinkModuleFromParent(parentModule, mod);
+            discardCjsModuleLoad(filename, parentModule, mod);
             const esmErr = new Error(
                 "require() of ES Module " + filename + " not supported. " +
                 "Instead change the require of " + filename + " to a dynamic " +
@@ -4897,8 +4898,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             try {
                 mod.exports = requireEsmWithCacheGuard(mod, filename);
             } catch (err) {
-                delete moduleCache[filename];
-                unlinkModuleFromParent(parentModule, mod);
+                discardCjsModuleLoad(filename, parentModule, mod);
                 throw err;
             }
         } else {
@@ -4926,16 +4926,14 @@ function loadModule(resolvedFilename, source, parentModule) {
                 if (canFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
-                    delete moduleCache[filename];
-                    unlinkModuleFromParent(parentModule, mod);
+                    discardCjsModuleLoad(filename, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
             }
             if (cjsSyntaxError || cjsWrapperLexicalRedeclaration) {
                 if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
-                    delete moduleCache[filename];
-                    unlinkModuleFromParent(parentModule, mod);
+                    discardCjsModuleLoad(filename, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
@@ -4943,8 +4941,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 try {
                     mod.exports = requireEsmWithCacheGuard(mod, filename, true);
                 } catch (esmErr) {
-                    delete moduleCache[filename];
-                    unlinkModuleFromParent(parentModule, mod);
+                    discardCjsModuleLoad(filename, parentModule, mod);
                     if (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
@@ -4964,8 +4961,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 try {
                     compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);
                 } catch (err) {
-                    delete moduleCache[filename];
-                    unlinkModuleFromParent(parentModule, mod);
+                    discardCjsModuleLoad(filename, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 } finally {
@@ -5046,7 +5042,7 @@ function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
         captureCjsEsmDefaultSnapshot(mod);
         return mod;
     } catch (err) {
-        delete moduleCache[cacheKey];
+        discardCjsModuleLoad(cacheKey, null, mod);
         throw err;
     }
 }
