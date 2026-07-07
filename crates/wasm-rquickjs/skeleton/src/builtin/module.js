@@ -929,7 +929,7 @@ function findPackageScope(startDir) {
         const pkgJsonPath = pathModule.join(dir, 'package.json');
         const packageJsonEntry = readPackageJson(pkgJsonPath);
         if (packageJsonEntry !== null) {
-            const scope = { dir, pkg: packageJsonEntry.pkg, pkgJsonPath };
+            const scope = { dir, pkg: packageJsonEntry.pkg };
             packageScopeCache[dir] = scope;
             return scope;
         }

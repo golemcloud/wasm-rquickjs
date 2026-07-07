@@ -439,6 +439,20 @@ mod tests {
                 && !module_js.contains("resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath"),
             "CJS package-directory exports helper must not carry unused package data after Rust resolution"
         );
+        let scope_start = module_js
+            .find("function findPackageScope(startDir)")
+            .expect("findPackageScope function must exist");
+        let scope_end = module_js[scope_start..]
+            .find("function resolvePackageImports(id, parentDir, conditions)")
+            .expect("findPackageScope must precede resolvePackageImports")
+            + scope_start;
+        let package_scope = &module_js[scope_start..scope_end];
+        assert!(
+            package_scope.contains("const scope = { dir, pkg: packageJsonEntry.pkg };")
+                && !package_scope.contains("scope.pkgJsonPath")
+                && !package_scope.contains("pkg: packageJsonEntry.pkg, pkgJsonPath"),
+            "CJS package self-reference scope cache must not retain unused package.json path state"
+        );
         assert!(
             module_js.contains("function resolvePackageFileFromRustResult(resolved, resolution)")
                 && module_js.contains("return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)), resolution);"),
