@@ -619,6 +619,7 @@ mod tests {
 
     #[test]
     fn rust_js_condition_package_resolution_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 
         assert!(
@@ -694,6 +695,20 @@ mod tests {
                 && graph_bridge.contains("false,")
                 && !graph_bridge.contains("emit_node_package_deprecation_warnings("),
             "require(esm) graph marking must share JS-condition resolution without emitting package warnings"
+        );
+        let js_graph_start = module_js
+            .find("function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode)")
+            .expect("resolveEsmGraphSpecifier must exist");
+        let js_graph_end = module_js[js_graph_start..]
+            .find("function addRequireEsmGraphMark(")
+            .expect("resolveEsmGraphSpecifier must precede require(esm) graph marking")
+            + js_graph_start;
+        let js_graph = &module_js[js_graph_start..js_graph_end];
+        assert!(
+            js_graph.contains("__wasm_rquickjs_require_esm_graph_resolve_package(")
+                && js_graph.contains("parentFilename, specifier, conditions, mode,")
+                && !js_graph.contains("Array.from(conditions)"),
+            "require(esm) graph JS resolver must pass caller-shaped condition arrays to the Rust bridge"
         );
 
         let cjs_exports_start = internal_rs

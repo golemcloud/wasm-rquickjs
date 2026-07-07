@@ -4119,7 +4119,7 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
             const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
                 parentFilename,
                 specifier,
-                Array.from(conditions),
+                conditions,
                 mode,
             );
             if (resolved) return { filename: resolved };
@@ -4132,7 +4132,7 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
         const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
             parentFilename,
             specifier,
-            Array.from(conditions),
+            conditions,
             mode,
         );
         return resolved ? { filename: resolved } : null;
