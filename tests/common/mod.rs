@@ -1528,6 +1528,7 @@ fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<Prepa
         Mutex<HashMap<PreparedComponentCacheKey, Arc<PreparedComponent>>>,
     > = OnceLock::new();
 
+    let key = prepared_component_cache_key(wasm_path)?;
     let mut prepared = PREPARED_COMPONENTS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
@@ -1537,7 +1538,6 @@ fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<Prepa
         prepared.clear();
     }
 
-    let key = prepared_component_cache_key(wasm_path)?;
     if let Some(component) = prepared.get(&key) {
         return Ok(component.clone());
     }
