@@ -688,6 +688,29 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
     format = 'module';
   }
 
+  if (typeValue !== undefined && typeValue !== 'json' && !(typeValue === 'css' && format === 'css')) {
+    return semanticError(Object.assign(
+      new TypeError('Import attribute type "' + typeValue + '" is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
+  }
+
+  var moduleTypeErrorCache;
+  if (asyncSemanticErrors) {
+    moduleTypeErrorCache = globalThis.__wasm_rquickjs_import_attr_module_type_error_cache;
+    if (moduleTypeErrorCache === undefined) {
+      moduleTypeErrorCache = Object.create(null);
+      globalThis.__wasm_rquickjs_import_attr_module_type_error_cache = moduleTypeErrorCache;
+    }
+    if (moduleTypeErrorCache[value] !== undefined) return moduleTypeErrorCache[value];
+  }
+
+  function moduleTypeSemanticError(error) {
+    var prepared = semanticError(error);
+    if (asyncSemanticErrors) moduleTypeErrorCache[value] = prepared;
+    return prepared;
+  }
+
   if (unsupportedKey !== undefined) {
     var unsupportedValueText = typeof unsupportedValue === 'string'
       ? '"' + unsupportedValue + '"'
@@ -701,24 +724,19 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
   if (typeValue !== undefined) {
     if (typeValue === 'json') {
       if (format === 'module') {
-        return semanticError(Object.assign(
+        return moduleTypeSemanticError(Object.assign(
           new TypeError('Cannot use import attributes to change the type of a JavaScript module'),
           { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' }
         ));
       }
     } else if (typeValue === 'css' && format === 'css') {
       // Let the loader report unsupported CSS modules as an unknown format.
-    } else {
-      return semanticError(Object.assign(
-        new TypeError('Import attribute type "' + typeValue + '" is not supported'),
-        { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-      ));
     }
   }
 
   if (format === 'json') {
     if (typeValue !== 'json') {
-      return semanticError(Object.assign(
+      return moduleTypeSemanticError(Object.assign(
         new TypeError('Module "' + value + '" needs an import attribute of "type: json"'),
         { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' }
       ));

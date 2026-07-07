@@ -440,6 +440,21 @@ mod tests {
     }
 
     #[test]
+    fn cjs_named_import_preflight_uses_esm_resolution_before_cjs_analysis() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "fn resolve_esm_named_import_candidate_path( filename: &str, specifier: &str, conditions: &[String], ) -> Option<String>"
+            ) && internal_rs.contains("NodePackageResolveMode::EsmImport")
+                && internal_rs.contains(
+                    "resolve_esm_named_import_candidate_path(filename, specifier, esm_conditions) .or_else(|| resolve_cjs_reexport_path(filename, specifier, cjs_conditions))?"
+                ),
+            "CJS named-import preflight must first resolve bare package specifiers as ESM imports before falling back to CJS analysis"
+        );
+    }
+
+    #[test]
     fn rust_package_bridge_results_share_url_and_keep_loader_format_separate() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 

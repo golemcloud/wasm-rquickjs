@@ -1409,19 +1409,28 @@ struct StaticNamedImport {
 }
 
 fn cjs_named_import_error_module_source(ctx: &Ctx<'_>, filename: &str, source: &str) -> Option<String> {
-    let conditions =
+    let esm_conditions =
+        NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::EsmImport.condition_mode());
+    let cjs_conditions =
         NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
-    find_cjs_named_import_error(filename, source, &conditions).map(|message| {
+    find_cjs_named_import_error(filename, source, &esm_conditions, &cjs_conditions).map(|message| {
         let escaped = DataUrlLoader::js_string_escape(&message);
         format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
     })
 }
 
-fn find_cjs_named_import_error(filename: &str, source: &str, conditions: &[String]) -> Option<String> {
+fn find_cjs_named_import_error(
+    filename: &str,
+    source: &str,
+    esm_conditions: &[String],
+    cjs_conditions: &[String],
+) -> Option<String> {
     let mut result = None;
     let _ = scan_code_positions(source, true, |i, _| {
         if let Some((specifier, named_imports, next)) = parse_static_named_import(source, i) {
-            if let Some(message) = cjs_named_import_error_message(filename, &specifier, &named_imports, conditions) {
+            if let Some(message) =
+                cjs_named_import_error_message(filename, &specifier, &named_imports, esm_conditions, cjs_conditions)
+            {
                 result = Some(message);
                 return ControlFlow::Break(());
             }
@@ -1436,17 +1445,19 @@ fn cjs_named_import_error_message(
     filename: &str,
     specifier: &str,
     named_imports: &[StaticNamedImport],
-    conditions: &[String],
+    esm_conditions: &[String],
+    cjs_conditions: &[String],
 ) -> Option<String> {
     if named_imports.is_empty() || !could_resolve_to_cjs_for_named_import_error(specifier) {
         return None;
     }
-    let resolved = resolve_cjs_reexport_path(filename, specifier, conditions)?;
+    let resolved = resolve_esm_named_import_candidate_path(filename, specifier, esm_conditions)
+        .or_else(|| resolve_cjs_reexport_path(filename, specifier, cjs_conditions))?;
     if !resolved.ends_with(".cjs") && !is_cjs_js_file_for_named_import_error(&resolved) {
         return None;
     }
     let source = std::fs::read_to_string(&resolved).ok()?;
-    let analysis = analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new(), conditions);
+    let analysis = analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new(), cjs_conditions);
     if !analysis.is_cjs && analysis.exports.is_empty() && analysis.reexports.is_empty() {
         return None;
     }
@@ -1470,6 +1481,27 @@ fn cjs_named_import_error_message(
         }
     }
     None
+}
+
+fn resolve_esm_named_import_candidate_path(
+    filename: &str,
+    specifier: &str,
+    conditions: &[String],
+) -> Option<String> {
+    if is_relative_or_absolute_specifier(specifier) {
+        return None;
+    }
+    let resolver = NodeModulesResolver;
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(
+        NodePackageResolveMode::EsmImport,
+        conditions,
+        &mut warnings,
+    );
+    resolver
+        .try_resolve_with_context(filename, specifier, &mut resolution)
+        .ok()
+        .flatten()
 }
 
 fn could_resolve_to_cjs_for_named_import_error(specifier: &str) -> bool {
