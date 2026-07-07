@@ -515,6 +515,14 @@ mod tests {
                 && internal_rs.contains("if emit_warnings { emit_node_package_deprecation_warnings(ctx, &warnings)?; }"),
             "Rust bridges receiving JS condition arrays must share condition parsing and package resolution execution"
         );
+        assert!(
+            internal_rs.contains(
+                "fn cjs_analysis_resolution_context<'a, 'w>( conditions: &'a [String], warnings: &'w mut Vec<NodePackageWarning>, ) -> NodePackageResolutionContext<'a, 'w>"
+            ) && internal_rs.contains(
+                "NodePackageResolutionContext::new(NodePackageResolveMode::CjsAnalysis, conditions, warnings)"
+            ),
+            "CJS-analysis package bridges must share their resolver context construction"
+        );
 
         let loader_start = internal_rs
             .find("fn loader_default_resolve_package<'js>(")
@@ -549,6 +557,43 @@ mod tests {
                 && graph_bridge.contains("false,")
                 && !graph_bridge.contains("emit_node_package_deprecation_warnings("),
             "require(esm) graph marking must share JS-condition resolution without emitting package warnings"
+        );
+
+        let cjs_exports_start = internal_rs
+            .find("fn cjs_resolve_package_exports<'js>(")
+            .expect("CJS package exports bridge must exist");
+        let cjs_exports_end = internal_rs[cjs_exports_start..]
+            .find("fn throw_cjs_invalid_package_config_while_importing")
+            .expect("CJS package exports bridge must precede invalid-package-config helper")
+            + cjs_exports_start;
+        let cjs_exports_bridge = &internal_rs[cjs_exports_start..cjs_exports_end];
+        assert!(
+            cjs_exports_bridge.contains(
+                "let mut resolution = cjs_analysis_resolution_context(&condition_vec, &mut warnings);"
+            ) && !cjs_exports_bridge.contains("NodePackageResolutionContext::new("),
+            "CJS package exports bridge must use the shared CJS-analysis context helper with JS-provided conditions"
+        );
+        assert!(
+            cjs_exports_bridge.contains("NodeModulesResolver::resolve_package_exports(")
+                && cjs_exports_bridge
+                    .contains("emit_node_package_deprecation_warnings(&ctx, &warnings)?;"),
+            "CJS package exports bridge must preserve package warning emission after Rust package-map resolution"
+        );
+
+        let cjs_fallback_start = internal_rs
+            .find("fn cjs_resolve_package_fallback<'js>(")
+            .expect("CJS package fallback bridge must exist");
+        let cjs_fallback_end = internal_rs[cjs_fallback_start..]
+            .find("fn require_esm_graph_resolve_package<'js>(")
+            .expect("CJS package fallback bridge must precede require(esm) graph resolver")
+            + cjs_fallback_start;
+        let cjs_fallback_bridge = &internal_rs[cjs_fallback_start..cjs_fallback_end];
+        assert!(
+            cjs_fallback_bridge.contains(
+                "let mut resolution = cjs_analysis_resolution_context(&[], &mut warnings);"
+            ) && !cjs_fallback_bridge.contains("NodePackageResolutionContext::new(")
+                && !cjs_fallback_bridge.contains("emit_node_package_deprecation_warnings("),
+            "CJS package fallback bridge must use the shared CJS-analysis context helper without JS conditions or package warning emission"
         );
     }
 

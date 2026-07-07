@@ -5140,6 +5140,13 @@ fn package_extensions_from_js_array<'js>(extensions: &rquickjs::Array<'js>) -> V
     extension_vec
 }
 
+fn cjs_analysis_resolution_context<'a, 'w>(
+    conditions: &'a [String],
+    warnings: &'w mut Vec<NodePackageWarning>,
+) -> NodePackageResolutionContext<'a, 'w> {
+    NodePackageResolutionContext::new(NodePackageResolveMode::CjsAnalysis, conditions, warnings)
+}
+
 fn loader_package_result_format(resolved: &str, mode: NodePackageResolveMode) -> Option<&'static str> {
     match std::path::Path::new(resolved)
         .extension()
@@ -5261,11 +5268,7 @@ fn cjs_resolve_package_exports<'js>(
 
     let condition_vec = package_conditions_from_js_array(&conditions);
     let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(
-        NodePackageResolveMode::CjsAnalysis,
-        &condition_vec,
-        &mut warnings,
-    );
+    let mut resolution = cjs_analysis_resolution_context(&condition_vec, &mut warnings);
     let importer = if importer.is_empty() {
         None
     } else {
@@ -5321,11 +5324,7 @@ fn cjs_resolve_package_fallback<'js>(
 ) -> rquickjs::Result<Option<Object<'js>>> {
     let extension_vec = package_extensions_from_js_array(&extensions);
     let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(
-        NodePackageResolveMode::CjsAnalysis,
-        &[],
-        &mut warnings,
-    );
+    let mut resolution = cjs_analysis_resolution_context(&[], &mut warnings);
     let result = NodeModulesResolver::resolve_runtime_cjs_package_fallback(
         &std::path::PathBuf::from(package_dir),
         &subpath,
