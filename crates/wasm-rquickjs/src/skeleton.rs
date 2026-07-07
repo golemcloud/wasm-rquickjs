@@ -814,6 +814,46 @@ mod tests {
     }
 
     #[test]
+    fn registered_loader_builtin_resolution_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        let helper_start = module_js
+            .find("function registeredLoaderBuiltinResolve(specifier, cjsMode)")
+            .expect("registeredLoaderBuiltinResolve function must exist");
+        let helper_end = module_js[helper_start..]
+            .find("function resolveEsmDefaultForLoader(")
+            .expect("builtin helper must precede ESM default resolver")
+            + helper_start;
+        let helper = &module_js[helper_start..helper_end];
+        assert!(
+            helper.contains(
+                "return cjsMode ? { url: specifier, format: 'builtin' } : { url: specifier };"
+            ) && helper.contains("return { url: 'node:' + specifier, format: 'builtin' };"),
+            "registered-loader builtin helper must preserve node:-specifier and bare-builtin format differences"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderBuiltinResolve(").count(),
+            4,
+            "ESM, CJS, and sync registered-loader default resolution must share builtin shaping"
+        );
+
+        let sync_start = module_js
+            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .expect("sync registered-loader runner must exist");
+        let sync_end = module_js[sync_start..]
+            .find("function staticRegisteredLoaderCacheParts(")
+            .expect("sync registered-loader runner must precede static cache helpers")
+            + sync_start;
+        let sync_runner = &module_js[sync_start..sync_end];
+        assert!(
+            sync_runner.contains("registeredLoaderBuiltinResolve(inputs.specifier, !isImportMode)")
+                && !sync_runner.contains("inputs.specifier.startsWith('node:')")
+                && !sync_runner.contains("isBuiltin(inputs.specifier)"),
+            "sync registered-loader default resolution must not keep a second builtin result shaper"
+        );
+    }
+
+    #[test]
     fn registered_loader_path_or_url_returns_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

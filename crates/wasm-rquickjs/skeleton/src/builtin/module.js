@@ -4458,6 +4458,16 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
     return null;
 }
 
+function registeredLoaderBuiltinResolve(specifier, cjsMode) {
+    if (specifier.startsWith('node:')) {
+        return cjsMode ? { url: specifier, format: 'builtin' } : { url: specifier };
+    }
+    if (cjsMode ? isBuiltin(specifier) : publicBuiltinWithoutSchemeSet.has(specifier)) {
+        return { url: 'node:' + specifier, format: 'builtin' };
+    }
+    return undefined;
+}
+
     function packageConditionsForLoaderResolve(context, defaultConditions) {
         if (context && Array.isArray(context.conditions)) {
             const conditions = setFromArray(context.conditions);
@@ -4542,12 +4552,8 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
     }
 
     function resolveCjsDefaultForLoader(specifier, parentURL, context) {
-        if (specifier.startsWith('node:')) {
-            return { url: specifier, format: 'builtin' };
-        }
-        if (isBuiltin(specifier)) {
-            return { url: 'node:' + specifier, format: 'builtin' };
-        }
+        const builtin = registeredLoaderBuiltinResolve(specifier, true);
+        if (builtin) return builtin;
 
         const parentFilename = parentFilenameForLoaderResolve(parentURL, fileUrlForPath('/'));
         const parentDir = parentFilename ? pathModule.dirname(parentFilename) : '/';
@@ -5700,9 +5706,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
-        if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
+        if (specifier.startsWith('data:')) {
             return { url: specifier };
         }
+        const builtin = registeredLoaderBuiltinResolve(specifier, false);
+        if (builtin) return builtin;
         if (specifier.startsWith('file://')) {
             return resultForEsmFileUrl(new URL(specifier));
         }
@@ -5715,9 +5723,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return resultForEsmFileUrl(new URL(normalizeLoaderResolvedUrl(specifier)));
         }
 
-        if (publicBuiltinWithoutSchemeSet.has(specifier)) {
-            return { url: 'node:' + specifier };
-        }
         if (parentFilename !== null && isRelativeOrAbsoluteSpecifier(specifier)) {
             return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
         }
@@ -5888,12 +5893,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const defaultResolve = (nextSpecifier, context) => {
             const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);
-            if (inputs.specifier.startsWith('node:')) {
-                return { url: inputs.specifier, format: isImportMode ? undefined : 'builtin' };
-            }
-            if (isBuiltin(inputs.specifier)) {
-                return { url: 'node:' + inputs.specifier, format: isImportMode ? undefined : 'builtin' };
-            }
+            const builtin = registeredLoaderBuiltinResolve(inputs.specifier, !isImportMode);
+            if (builtin) return builtin;
             if (isImportMode) {
                 return resolveEsmDefaultForLoader(inputs.specifier, inputs.parentURL, context, baseContext.parentURL, true, false);
             }
