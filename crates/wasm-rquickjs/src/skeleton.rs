@@ -1077,8 +1077,9 @@ mod tests {
         let sync_setup = &module_js[sync_start..sync_end];
         assert!(
             sync_setup.contains(
-                "const baseContext = registeredLoaderBaseContext( isImportMode ? loaderHookConditions() : Array.from(cjsPackageConditions()), {}, baseUrl || fileUrlForPath('/'), );"
+                "const baseContext = registeredLoaderBaseContext( isImportMode ? loaderHookConditions() : cjsPackageConditions(), {}, baseUrl || fileUrlForPath('/'), );"
             ) && !sync_setup.contains("conditions: isImportMode")
+                && !sync_setup.contains("Array.from(cjsPackageConditions())")
                 && !sync_setup.contains("importAttributes: {}")
                 && !sync_setup.contains("parentURL: String(baseUrl || fileUrlForPath('/'))"),
             "sync registered-loader runner must share base context shaping while preserving import-vs-CJS conditions"

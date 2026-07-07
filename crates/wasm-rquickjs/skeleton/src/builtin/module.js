@@ -5872,7 +5872,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (entries.length === 0) return undefined;
 
         const baseContext = registeredLoaderBaseContext(
-            isImportMode ? loaderHookConditions() : Array.from(cjsPackageConditions()),
+            isImportMode ? loaderHookConditions() : cjsPackageConditions(),
             {},
             baseUrl || fileUrlForPath('/'),
         );
