@@ -1493,11 +1493,7 @@ fn resolve_esm_named_import_candidate_path(
     }
     let resolver = NodeModulesResolver;
     let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(
-        NodePackageResolveMode::EsmImport,
-        conditions,
-        &mut warnings,
-    );
+    let mut resolution = esm_import_resolution_context(conditions, &mut warnings);
     resolver
         .try_resolve_with_context(filename, specifier, &mut resolution)
         .ok()
@@ -5179,6 +5175,13 @@ fn cjs_analysis_resolution_context<'a, 'w>(
     NodePackageResolutionContext::new(NodePackageResolveMode::CjsAnalysis, conditions, warnings)
 }
 
+fn esm_import_resolution_context<'a, 'w>(
+    conditions: &'a [String],
+    warnings: &'w mut Vec<NodePackageWarning>,
+) -> NodePackageResolutionContext<'a, 'w> {
+    NodePackageResolutionContext::new(NodePackageResolveMode::EsmImport, conditions, warnings)
+}
+
 fn loader_package_result_format(resolved: &str, mode: NodePackageResolveMode) -> Option<&'static str> {
     match std::path::Path::new(resolved)
         .extension()
@@ -7372,11 +7375,7 @@ fn resolve_cjs_reexport_path(filename: &str, specifier: &str, conditions: &[Stri
         return None;
     }
     let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(
-        NodePackageResolveMode::CjsAnalysis,
-        conditions,
-        &mut warnings,
-    );
+    let mut resolution = cjs_analysis_resolution_context(conditions, &mut warnings);
     if !is_relative_or_absolute_specifier(specifier) {
         let resolver = NodeModulesResolver;
         return resolver

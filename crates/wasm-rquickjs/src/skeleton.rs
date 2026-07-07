@@ -446,10 +446,13 @@ mod tests {
         assert!(
             internal_rs.contains(
                 "fn resolve_esm_named_import_candidate_path( filename: &str, specifier: &str, conditions: &[String], ) -> Option<String>"
-            ) && internal_rs.contains("NodePackageResolveMode::EsmImport")
-                && internal_rs.contains(
-                    "resolve_esm_named_import_candidate_path(filename, specifier, esm_conditions) .or_else(|| resolve_cjs_reexport_path(filename, specifier, cjs_conditions))?"
-                ),
+            ) && internal_rs.contains(
+                "let mut resolution = esm_import_resolution_context(conditions, &mut warnings);"
+            ) && internal_rs.contains(
+                "let mut resolution = cjs_analysis_resolution_context(conditions, &mut warnings);"
+            ) && internal_rs.contains(
+                "resolve_esm_named_import_candidate_path(filename, specifier, esm_conditions) .or_else(|| resolve_cjs_reexport_path(filename, specifier, cjs_conditions))?"
+            ),
             "CJS named-import preflight must first resolve bare package specifiers as ESM imports before falling back to CJS analysis"
         );
     }
@@ -535,8 +538,12 @@ mod tests {
                 "fn cjs_analysis_resolution_context<'a, 'w>( conditions: &'a [String], warnings: &'w mut Vec<NodePackageWarning>, ) -> NodePackageResolutionContext<'a, 'w>"
             ) && internal_rs.contains(
                 "NodePackageResolutionContext::new(NodePackageResolveMode::CjsAnalysis, conditions, warnings)"
+            ) && internal_rs.contains(
+                "fn esm_import_resolution_context<'a, 'w>( conditions: &'a [String], warnings: &'w mut Vec<NodePackageWarning>, ) -> NodePackageResolutionContext<'a, 'w>"
+            ) && internal_rs.contains(
+                "NodePackageResolutionContext::new(NodePackageResolveMode::EsmImport, conditions, warnings)"
             ),
-            "CJS-analysis package bridges must share their resolver context construction"
+            "Mode-specific package bridges must share their resolver context construction"
         );
 
         let loader_start = internal_rs
