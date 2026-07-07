@@ -490,6 +490,60 @@ mod tests {
     }
 
     #[test]
+    fn rust_js_condition_package_resolution_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "fn try_resolve_package_with_js_conditions<'js>( ctx: &Ctx<'js>, base: &str, specifier: &str, conditions: &rquickjs::Array<'js>, mode: NodePackageResolveMode, emit_warnings: bool,"
+            ) && internal_rs.contains("let condition_vec = package_conditions_from_js_array(conditions);")
+                && internal_rs.contains(
+                    "let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);"
+                )
+                && internal_rs.contains(
+                    "let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);"
+                )
+                && internal_rs.contains("if emit_warnings { emit_node_package_deprecation_warnings(ctx, &warnings)?; }"),
+            "Rust bridges receiving JS condition arrays must share condition parsing and package resolution execution"
+        );
+
+        let loader_start = internal_rs
+            .find("fn loader_default_resolve_package<'js>(")
+            .expect("loader_default_resolve_package must exist");
+        let loader_end = internal_rs[loader_start..]
+            .find("fn cjs_resolve_package_exports<'js>(")
+            .expect("loader package bridge must precede CJS package exports bridge")
+            + loader_start;
+        let loader_bridge = &internal_rs[loader_start..loader_end];
+        assert!(
+            loader_bridge.contains("try_resolve_package_with_js_conditions(")
+                && loader_bridge.contains("&base,")
+                && loader_bridge.contains("&specifier,")
+                && loader_bridge.contains("&conditions,")
+                && loader_bridge.contains("true,"),
+            "registered-loader package resolution must use the shared JS-condition resolver and emit package warnings"
+        );
+
+        let graph_start = internal_rs
+            .find("fn require_esm_graph_resolve_package<'js>(")
+            .expect("require_esm_graph_resolve_package must exist");
+        let graph_end = internal_rs[graph_start..]
+            .find("fn import_meta_trailing_slash_package_has_exports(")
+            .expect("require(esm) graph resolver must precede import.meta helper")
+            + graph_start;
+        let graph_bridge = &internal_rs[graph_start..graph_end];
+        assert!(
+            graph_bridge.contains("try_resolve_package_with_js_conditions(")
+                && graph_bridge.contains("&parent_filename,")
+                && graph_bridge.contains("&specifier,")
+                && graph_bridge.contains("&conditions,")
+                && graph_bridge.contains("false,")
+                && !graph_bridge.contains("emit_node_package_deprecation_warnings("),
+            "require(esm) graph marking must share JS-condition resolution without emitting package warnings"
+        );
+    }
+
+    #[test]
     fn cjs_package_directory_results_preserve_owning_package_metadata() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));

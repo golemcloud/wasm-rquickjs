@@ -5147,6 +5147,25 @@ fn package_resolved_url_object<'js>(
     Ok(result)
 }
 
+fn try_resolve_package_with_js_conditions<'js>(
+    ctx: &Ctx<'js>,
+    base: &str,
+    specifier: &str,
+    conditions: &rquickjs::Array<'js>,
+    mode: NodePackageResolveMode,
+    emit_warnings: bool,
+) -> rquickjs::Result<Result<Option<String>, NodePackageResolveError>> {
+    let condition_vec = package_conditions_from_js_array(conditions);
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);
+    let resolver = NodeModulesResolver;
+    let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);
+    if emit_warnings {
+        emit_node_package_deprecation_warnings(ctx, &warnings)?;
+    }
+    Ok(result)
+}
+
 fn loader_default_resolve_package<'js>(
     ctx: Ctx<'js>,
     base_url: String,
@@ -5158,13 +5177,14 @@ fn loader_default_resolve_package<'js>(
     let Some((base, _)) = FileUrlResolver::file_url_to_path_parts(&base_url) else {
         return Ok(None);
     };
-    let condition_vec = package_conditions_from_js_array(&conditions);
-
-    let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);
-    let resolver = NodeModulesResolver;
-    let result = resolver.try_resolve_with_context(&base, &specifier, &mut resolution);
-    emit_node_package_deprecation_warnings(&ctx, &warnings)?;
+    let result = try_resolve_package_with_js_conditions(
+        &ctx,
+        &base,
+        &specifier,
+        &conditions,
+        mode,
+        true,
+    )?;
     match result {
         Ok(Some(resolved)) => {
             let resolved = if mode == NodePackageResolveMode::EsmImport {
@@ -5321,16 +5341,17 @@ fn require_esm_graph_resolve_package<'js>(
     conditions: rquickjs::Array<'js>,
     mode: String,
 ) -> rquickjs::Result<Option<String>> {
-    let condition_vec = package_conditions_from_js_array(&conditions);
     let mode = package_resolve_mode_from_loader_mode(&_ctx, &mode)?;
-    let mut warnings = Vec::new();
-    let mut resolution =
-        NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);
-    let resolver = NodeModulesResolver;
-    Ok(resolver
-        .try_resolve_with_context(&parent_filename, &specifier, &mut resolution)
-        .ok()
-        .flatten())
+    Ok(try_resolve_package_with_js_conditions(
+        &_ctx,
+        &parent_filename,
+        &specifier,
+        &conditions,
+        mode,
+        false,
+    )?
+    .ok()
+    .flatten())
 }
 
 fn import_meta_trailing_slash_package_has_exports(
