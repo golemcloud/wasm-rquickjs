@@ -827,7 +827,7 @@ mod tests {
             module_js
                 .matches("registeredLoaderPathOrUrlReturn(")
                 .count(),
-            5,
+            6,
             "registered-loader require.resolve and static return paths must use the shared URL/path converter"
         );
         assert!(
@@ -1616,6 +1616,9 @@ mod tests {
             .expect("loadModule must precede loader require helper")
             + load_start;
         let load_module = &module_js[load_start..load_end];
+        let initializer_pos = load_module
+            .find("initializeCjsModuleRecord(")
+            .expect("CJS loader must initialize module records through the shared helper");
         let cache_pos = load_module
             .find("moduleCache[filename] = mod;")
             .expect("CJS loader must cache module objects before execution");
@@ -1628,10 +1631,14 @@ mod tests {
             .find("if (cjsEsmDefaultSnapshotEligible) { captureCjsEsmDefaultSnapshot(mod); }")
             .expect("CJS loader must capture default snapshot after eligible loads");
         assert!(
-            load_module[..cache_pos].contains("installCjsEsmDefaultSnapshotSlot(mod);")
+            initializer_pos < cache_pos
+                && module_js.contains(
+                    "function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pathsBase)"
+                )
+                && module_js.contains("installCjsEsmDefaultSnapshotSlot(mod);")
                 && cache_pos < compile_call_pos
                 && compile_call_pos < capture_pos,
-            "regular CJS load path must install the snapshot slot before caching and capture after wrapper execution"
+            "regular CJS load path must initialize the snapshot slot before caching and capture after wrapper execution"
         );
         assert!(
             module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', { value: hasCjsEsmDefaultSnapshot, writable: false, configurable: false,")
