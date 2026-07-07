@@ -859,8 +859,15 @@ mod tests {
             module_js.contains("function cjsLoaderFileFormat(filename, format) {")
                 && module_js
                     .contains("function cjsLoaderFileResult(filename, source, format, url) {")
+                && module_js.contains("function cjsLoaderFileUrlResult(url, format, resultUrl) {")
                 && module_js.contains("format: cjsLoaderFileFormat(filename, format),"),
             "registered-loader CJS file results must use one format/source adapter"
+        );
+        assert!(
+            module_js.contains(
+                "function cjsLoaderFileUrlResult(url, format, resultUrl) { const filename = nodeUrl.fileURLToPath(url); return cjsLoaderFileResult(filename, tryReadFile(filename), format, resultUrl); }"
+            ),
+            "registered-loader CJS file URL results must centralize file URL conversion and source reads"
         );
 
         let package_start = module_js
@@ -872,8 +879,11 @@ mod tests {
             + package_start;
         let package_result = &module_js[package_start..package_end];
         assert!(
-            package_result.contains("return cjsLoaderFileResult(filename, source, packageResolved.format, packageResolved.url);"),
-            "registered-loader package CJS result must use the shared file adapter"
+            package_result.contains(
+                "return cjsLoaderFileUrlResult(packageResolved.url, packageResolved.format, packageResolved.url);"
+            ) && !package_result.contains("nodeUrl.fileURLToPath(packageResolved.url)")
+                && !package_result.contains("tryReadFile(filename)"),
+            "registered-loader package CJS result must use the shared file URL adapter while preserving package URL identity"
         );
 
         let default_start = module_js
@@ -885,10 +895,10 @@ mod tests {
             + default_start;
         let default_resolver = &module_js[default_start..default_end];
         assert!(
-            default_resolver.contains("return cjsLoaderFileResult(filename, source);")
+            default_resolver.contains("return cjsLoaderFileUrlResult(specifier);")
                 && default_resolver
                     .contains("return cjsLoaderFileResult(resolved.filename, resolved.content);"),
-            "registered-loader CJS file URL and relative paths must use the shared file adapter"
+            "registered-loader CJS file URL and relative paths must use the shared file adapters"
         );
     }
 

@@ -4492,13 +4492,16 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
         };
     }
 
+    function cjsLoaderFileUrlResult(url, format, resultUrl) {
+        const filename = nodeUrl.fileURLToPath(url);
+        return cjsLoaderFileResult(filename, tryReadFile(filename), format, resultUrl);
+    }
+
     function cjsPackageResolutionForLoaderResult(resolved) {
         const packageResolved = packageResolutionForLoaderResult(resolved);
         if (!packageResolved) return undefined;
         if (!packageResolved.url.startsWith('file://')) return packageResolved;
-        const filename = nodeUrl.fileURLToPath(packageResolved.url);
-        const source = tryReadFile(filename);
-        return cjsLoaderFileResult(filename, source, packageResolved.format, packageResolved.url);
+        return cjsLoaderFileUrlResult(packageResolved.url, packageResolved.format, packageResolved.url);
     }
 
     function resolvePackageDefaultForLoader(specifier, parentURL, context, defaultConditions, mode, mapNotFoundToCjs) {
@@ -4549,9 +4552,7 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
         const parentFilename = parentFilenameForLoaderResolve(parentURL, fileUrlForPath('/'));
         const parentDir = parentFilename ? pathModule.dirname(parentFilename) : '/';
         if (specifier.startsWith('file://')) {
-            const filename = nodeUrl.fileURLToPath(specifier);
-            const source = tryReadFile(filename);
-            return cjsLoaderFileResult(filename, source);
+            return cjsLoaderFileUrlResult(specifier);
         }
         if (isRelativeOrAbsoluteSpecifier(specifier)) {
             const resolved = resolveFilename(specifier, parentDir);
