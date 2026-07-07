@@ -300,8 +300,9 @@ mod tests {
         let resolve_package_imports = &module_js[function_start..function_end];
 
         assert!(
-            resolve_package_imports.contains("__wasm_rquickjs_loader_default_resolve_package(")
+            resolve_package_imports.contains("resolvePackageWithRustBridge(")
                 && resolve_package_imports.contains("'cjs-analysis'")
+                && resolve_package_imports.contains("Internal package resolver is not initialized")
                 && resolve_package_imports.contains("makeCjsModuleNotFoundFromErrModuleNotFound")
                 && resolve_package_imports
                     .contains("const resolvedFile = resolvePackageFileFromRustResult(resolved);")
@@ -341,6 +342,62 @@ mod tests {
                     "nested_bare_target_resolution_mode: NodePackageResolveMode::EsmImport"
                 ),
             "Rust package imports must preserve CJS fallback metadata, validation ownership, and ESM nested bare-target semantics"
+        );
+    }
+
+    #[test]
+    fn package_resolver_bridge_call_is_shared_in_js() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains(
+                "function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage)"
+            ) && module_js.contains(
+                "return globalThis.__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, Array.from(conditions), mode, );"
+            ),
+            "JS package resolver bridge calls must go through one helper"
+        );
+        assert_eq!(
+            module_js
+                .matches("__wasm_rquickjs_loader_default_resolve_package(")
+                .count(),
+            1,
+            "JS must not duplicate the raw Rust package resolver bridge call"
+        );
+
+        let cjs_imports_start = module_js
+            .find("function resolvePackageImports(id, parentDir, conditions)")
+            .expect("resolvePackageImports function must exist");
+        let cjs_imports_end = module_js[cjs_imports_start..]
+            .find("function resolveCjsPackageImportOrNodeModules")
+            .expect("resolvePackageImports must precede CJS package-import fallback helper")
+            + cjs_imports_start;
+        let cjs_imports = &module_js[cjs_imports_start..cjs_imports_end];
+        assert!(
+            cjs_imports.contains("resolvePackageWithRustBridge(")
+                && cjs_imports.contains("'cjs-analysis'")
+                && cjs_imports.contains("makeCjsModuleNotFoundFromErrModuleNotFound"),
+            "CJS package imports must keep their mode and error mapping around the shared bridge"
+        );
+
+        let loader_start = module_js
+            .find("function resolvePackageDefaultForLoader(")
+            .expect("resolvePackageDefaultForLoader function must exist");
+        let loader_end = module_js[loader_start..]
+            .find("function resolveEsmPackageDefaultForLoader(")
+            .expect("loader package default resolver must precede ESM wrapper")
+            + loader_start;
+        let loader_resolver = &module_js[loader_start..loader_end];
+        assert!(
+            loader_resolver.contains("resolvePackageWithRustBridge(")
+                && loader_resolver
+                    .contains("packageConditionArrayForLoaderResolve(context, defaultConditions)")
+                && loader_resolver
+                    .contains("Internal package resolver provider is not initialized")
+                && loader_resolver.contains(
+                    "if (mapNotFoundToCjs && err && err.code === 'ERR_MODULE_NOT_FOUND')"
+                ),
+            "registered-loader package default resolution must keep loader conditions and CJS error mapping around the shared bridge"
         );
     }
 

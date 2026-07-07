@@ -786,6 +786,18 @@ function loaderHookConditions() {
     return Array.from(packageConditions(defaultPackageConditions('loader')));
 }
 
+function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage) {
+    if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
+        throw new Error(missingProviderMessage);
+    }
+    return globalThis.__wasm_rquickjs_loader_default_resolve_package(
+        parentURL,
+        specifier,
+        Array.from(conditions),
+        mode,
+    );
+}
+
 function makePackageImportNotDefinedError(specifier, noImportsField) {
     const err = new Error('Package import specifier ' + JSON.stringify(specifier) + ' is not defined');
     err.code = 'ERR_PACKAGE_IMPORT_NOT_DEFINED';
@@ -932,16 +944,14 @@ function findPackageScope(startDir) {
 }
 
 function resolvePackageImports(id, parentDir, conditions) {
-    if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
-        throw new Error('Internal package resolver is not initialized');
-    }
     let resolved;
     try {
-        resolved = globalThis.__wasm_rquickjs_loader_default_resolve_package(
+        resolved = resolvePackageWithRustBridge(
             nodeUrl.pathToFileURL(pathModule.join(parentDir, 'package.json')).href,
             id,
-            Array.from(conditions || cjsPackageConditions()),
+            conditions || cjsPackageConditions(),
             'cjs-analysis',
+            'Internal package resolver is not initialized',
         );
     } catch (err) {
         if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
@@ -4515,15 +4525,13 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function resolvePackageDefaultForLoader(specifier, parentURL, context, defaultConditions, mode, mapNotFoundToCjs) {
-        if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
-            throw new Error('Internal package resolver provider is not initialized');
-        }
         try {
-            return globalThis.__wasm_rquickjs_loader_default_resolve_package(
+            return resolvePackageWithRustBridge(
                 parentURL,
                 specifier,
                 packageConditionArrayForLoaderResolve(context, defaultConditions),
                 mode,
+                'Internal package resolver provider is not initialized',
             );
         } catch (err) {
             if (mapNotFoundToCjs && err && err.code === 'ERR_MODULE_NOT_FOUND') {
