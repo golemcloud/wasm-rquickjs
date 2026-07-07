@@ -715,7 +715,7 @@ mod tests {
         );
         assert_eq!(
             module_js.matches("registeredLoaderHasSource(").count(),
-            4,
+            5,
             "async/sync/static registered-loader load paths must use the shared source-presence helper"
         );
         assert!(
@@ -744,6 +744,12 @@ mod tests {
             ),
             "registered-loader JSON source return conversion must stay centralized"
         );
+        assert!(
+            module_js.contains(
+                "function registeredLoaderCommonJsReturn(loaded, url, missingSourceReturn) { const source = registeredLoaderHasSource(loaded) ? loaded.source : loaderFileUrlSource(url); return source !== null && source !== undefined ? loaderCommonJsSourceModule(source, url) : missingSourceReturn; }"
+            ),
+            "registered-loader CommonJS source/file return conversion must stay centralized"
+        );
         assert_eq!(
             module_js
                 .matches("registeredLoaderModuleSourceReturn(")
@@ -759,6 +765,19 @@ mod tests {
             "dynamic and static registered-loader JSON source paths must use the shared converter"
         );
         assert_eq!(
+            module_js.matches("registeredLoaderCommonJsReturn(").count(),
+            3,
+            "dynamic and static registered-loader CommonJS paths must use the shared converter"
+        );
+        assert!(
+            module_js.contains(
+                "return registeredLoaderCommonJsReturn(loaded, resolved.url, undefined);"
+            ) && module_js.contains(
+                "return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url));"
+            ),
+            "dynamic CommonJS loader returns must stay undefined on missing source while static returns preserve path/URL fallback"
+        );
+        assert_eq!(
             module_js
                 .matches("'data:text/javascript,' + encodeURIComponent(loaderSourceToString(")
                 .count(),
@@ -771,6 +790,13 @@ mod tests {
                 .count(),
             1,
             "registered-loader JSON source data URL construction must only appear inside the shared converter"
+        );
+        assert_eq!(
+            module_js
+                .matches("? loaderCommonJsSourceModule(source, url)")
+                .count(),
+            1,
+            "registered-loader CommonJS source loading must only appear inside the shared converter"
         );
     }
 

@@ -5689,6 +5689,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         );
     }
 
+    function registeredLoaderCommonJsReturn(loaded, url, missingSourceReturn) {
+        const source = registeredLoaderHasSource(loaded)
+            ? loaded.source
+            : loaderFileUrlSource(url);
+        return source !== null && source !== undefined
+            ? loaderCommonJsSourceModule(source, url)
+            : missingSourceReturn;
+    }
+
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('node:') || specifier.startsWith('data:')) {
             return { url: specifier };
@@ -5822,14 +5831,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 return registeredLoaderModuleSourceReturn(fileSource);
             }
         }
-        if (loadedHasSource && loadedFormat === 'commonjs') {
-            return loaderCommonJsSourceModule(loaded.source, resolved.url);
-        }
-        if (!loadedHasSource && loadedFormat === 'commonjs') {
-            const fileSource = loaderFileUrlSource(resolved.url);
-            if (fileSource !== null) {
-                return loaderCommonJsSourceModule(fileSource, resolved.url);
-            }
+        if (loadedFormat === 'commonjs') {
+            return registeredLoaderCommonJsReturn(loaded, resolved.url, undefined);
         }
         if (loadedHasSource && loadedFormat === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
@@ -6014,14 +6017,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!hasSource && format === 'module') {
             return registeredLoaderPathOrUrlReturn(url);
         }
-        if (hasSource && format === 'commonjs') {
-            return loaderCommonJsSourceModule(loaded.source, url);
-        }
-        if (!hasSource && format === 'commonjs') {
-            const fileSource = loaderFileUrlSource(url);
-            if (fileSource !== null) {
-                return loaderCommonJsSourceModule(fileSource, url);
-            }
+        if (format === 'commonjs') {
+            return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url));
         }
         if (hasSource && format === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
