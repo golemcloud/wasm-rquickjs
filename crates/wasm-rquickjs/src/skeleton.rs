@@ -1110,15 +1110,15 @@ mod tests {
             module_js
                 .matches("registeredLoaderUrlFormatResult(")
                 .count(),
-            6,
-            "static-raw and sync registered-loader URL/format results must use the shared helper"
+            10,
+            "registered-loader URL/format results must use the shared helper across file, builtin, package, static-raw, and sync paths"
         );
         assert_eq!(
             module_js
                 .matches("registeredLoaderUrlFormatSourceResult(")
                 .count(),
-            2,
-            "sync registered-loader source result must use the shared source result helper"
+            3,
+            "registered-loader URL/format/source results must use the shared source result helper"
         );
 
         let async_start = module_js
@@ -1171,8 +1171,10 @@ mod tests {
         let helper = &module_js[helper_start..helper_end];
         assert!(
             helper.contains(
-                "return cjsMode ? { url: specifier, format: 'builtin' } : { url: specifier };"
-            ) && helper.contains("return { url: 'node:' + specifier, format: 'builtin' };"),
+                "return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : { url: specifier };"
+            ) && helper.contains(
+                "return registeredLoaderUrlFormatResult('node:' + specifier, 'builtin');"
+            ),
             "registered-loader builtin helper must preserve node:-specifier and bare-builtin format differences"
         );
         assert_eq!(
@@ -1244,7 +1246,9 @@ mod tests {
                 && module_js
                     .contains("function cjsLoaderFileResult(filename, source, format, url) {")
                 && module_js.contains("function cjsLoaderFileUrlResult(url, format, resultUrl) {")
-                && module_js.contains("format: cjsLoaderFileFormat(filename, format),"),
+                && module_js.contains(
+                    "return registeredLoaderUrlFormatSourceResult( url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url), cjsLoaderFileFormat(filename, format), source, );"
+                ),
             "registered-loader CJS file results must use one format/source adapter"
         );
         assert!(
@@ -1679,8 +1683,10 @@ mod tests {
             + package_start;
         let package_result = &module_js[package_start..package_end];
         assert!(
-            package_result.contains("format: loaderFormatOrUndefined(resolved.format),"),
-            "registered-loader package result shaping must use the shared format normalizer"
+            package_result.contains(
+                "return registeredLoaderUrlFormatResult(String(resolved.url), loaderFormatOrUndefined(resolved.format));"
+            ),
+            "registered-loader package result shaping must use the shared URL/format result helper and format normalizer"
         );
 
         let resolved_start = module_js

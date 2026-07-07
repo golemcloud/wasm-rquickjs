@@ -4449,12 +4449,22 @@ function loaderFormatOrUndefined(format) {
     return format === undefined || format === null ? undefined : String(format);
 }
 
+function registeredLoaderUrlFormatResult(url, format) {
+    return { url, format };
+}
+
+function registeredLoaderUrlFormatSourceResult(url, format, source) {
+    const result = registeredLoaderUrlFormatResult(url, format);
+    result.source = source;
+    return result;
+}
+
 function resultForEsmFileUrl(url) {
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
     if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
     if (stat !== 0) throw makeEsmModuleNotFoundError(url.href);
-    return { url: url.href, format: defaultLoaderFormatForFilename(filename) };
+    return registeredLoaderUrlFormatResult(url.href, defaultLoaderFormatForFilename(filename));
 }
 
 function parentFilenameForLoaderResolve(parentURL, baseUrl) {
@@ -4470,10 +4480,10 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
 
 function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     if (specifier.startsWith('node:')) {
-        return cjsMode ? { url: specifier, format: 'builtin' } : { url: specifier };
+        return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : { url: specifier };
     }
     if (cjsMode ? isBuiltin(specifier) : publicBuiltinWithoutSchemeSet.has(specifier)) {
-        return { url: 'node:' + specifier, format: 'builtin' };
+        return registeredLoaderUrlFormatResult('node:' + specifier, 'builtin');
     }
     return undefined;
 }
@@ -4493,10 +4503,7 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
 
     function packageResolutionForLoaderResult(resolved) {
         if (!resolved || !resolved.url) return undefined;
-        return {
-            url: String(resolved.url),
-            format: loaderFormatOrUndefined(resolved.format),
-        };
+        return registeredLoaderUrlFormatResult(String(resolved.url), loaderFormatOrUndefined(resolved.format));
     }
 
     function cjsLoaderFileFormat(filename, format) {
@@ -4505,11 +4512,11 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
 
     function cjsLoaderFileResult(filename, source, format, url) {
         if (source === null) return undefined;
-        return {
-            url: url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url),
-            format: cjsLoaderFileFormat(filename, format),
+        return registeredLoaderUrlFormatSourceResult(
+            url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url),
+            cjsLoaderFileFormat(filename, format),
             source,
-        };
+        );
     }
 
     function cjsLoaderFileUrlResult(url, format, resultUrl) {
@@ -5719,16 +5726,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return source !== null && source !== undefined
             ? loaderCommonJsSourceModule(source, url)
             : missingSourceReturn;
-    }
-
-    function registeredLoaderUrlFormatResult(url, format) {
-        return { url, format };
-    }
-
-    function registeredLoaderUrlFormatSourceResult(url, format, source) {
-        const result = registeredLoaderUrlFormatResult(url, format);
-        result.source = source;
-        return result;
     }
 
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
