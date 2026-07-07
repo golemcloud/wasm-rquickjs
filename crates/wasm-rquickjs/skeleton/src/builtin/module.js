@@ -753,7 +753,7 @@ function packageConditions(mode) {
     if (typeof globalThis.__wasm_rquickjs_package_global_conditions !== 'function') {
         throw new Error('Internal package condition provider is not initialized');
     }
-    return setFromArray(globalThis.__wasm_rquickjs_package_global_conditions(mode));
+    return globalThis.__wasm_rquickjs_package_global_conditions(mode);
 }
 
 function cjsPackageConditions() {
@@ -765,7 +765,7 @@ function esmPackageConditions() {
 }
 
 function loaderHookConditions() {
-    return Array.from(packageConditions('loader'));
+    return packageConditions('loader');
 }
 
 function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage) {

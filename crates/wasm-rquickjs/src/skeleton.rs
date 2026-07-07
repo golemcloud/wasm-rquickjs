@@ -156,9 +156,8 @@ mod tests {
         );
         assert!(
             module_js.contains("__wasm_rquickjs_package_global_conditions(mode)")
-                && module_js.contains(
-                    "return setFromArray(globalThis.__wasm_rquickjs_package_global_conditions(mode));"
-                ),
+                && module_js
+                    .contains("return globalThis.__wasm_rquickjs_package_global_conditions(mode);"),
             "module.js must request merged default and user package conditions from the Rust provider"
         );
         assert!(
@@ -166,8 +165,11 @@ mod tests {
                 && !module_js.contains("function addPackageCondition(")
                 && !module_js.contains(
                     "const userConditions = globalThis.__wasm_rquickjs_package_conditions"
+                )
+                && !module_js.contains(
+                    "setFromArray(globalThis.__wasm_rquickjs_package_global_conditions(mode))"
                 ),
-            "module.js must not duplicate package user-condition filtering or de-duping"
+            "module.js must not duplicate package user-condition filtering, de-duping, or Rust-provided condition array shaping"
         );
         assert!(
             module_js.contains("packageConditions('cjs-analysis')"),
