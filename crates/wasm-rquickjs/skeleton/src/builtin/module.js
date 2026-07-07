@@ -798,15 +798,9 @@ function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, mi
     );
 }
 
-function makePackageImportNotDefinedError(specifier, noImportsField) {
+function makePackageImportNotDefinedError(specifier) {
     const err = new Error('Package import specifier ' + JSON.stringify(specifier) + ' is not defined');
     err.code = 'ERR_PACKAGE_IMPORT_NOT_DEFINED';
-    if (noImportsField) {
-        Object.defineProperty(err, '__wasmNoImportsField', {
-            value: true,
-            configurable: true,
-        });
-    }
     return err;
 }
 

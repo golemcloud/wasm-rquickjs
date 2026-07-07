@@ -343,6 +343,20 @@ mod tests {
                 ),
             "Rust package imports must preserve CJS fallback metadata, validation ownership, and ESM nested bare-target semantics"
         );
+        let js_error_start = module_js
+            .find("function makePackageImportNotDefinedError(specifier)")
+            .expect("JS package-import fallback error helper must exist");
+        let js_error_end = module_js[js_error_start..]
+            .find("function makeModuleNotFoundError(")
+            .expect("JS package-import fallback error helper must precede MODULE_NOT_FOUND helper")
+            + js_error_start;
+        let js_package_import_error = &module_js[js_error_start..js_error_end];
+        assert!(
+            !js_package_import_error.contains("noImportsField")
+                && !js_package_import_error.contains("__wasmNoImportsField")
+                && module_js.contains("if (err.__wasmNoImportsField === true) { throw makeModuleNotFoundError(id); }"),
+            "CJS package-import no-imports metadata is Rust-owned; JS may consume it for CJS fallback but must not recreate it in fallback error shaping"
+        );
     }
 
     #[test]
