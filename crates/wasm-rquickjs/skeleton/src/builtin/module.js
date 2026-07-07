@@ -4514,7 +4514,7 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
 
     function cjsLoaderFileUrlResult(url, format, resultUrl) {
         const filename = nodeUrl.fileURLToPath(url);
-        return cjsLoaderFileResult(filename, tryReadFile(filename), format, resultUrl);
+        return cjsLoaderFileResult(filename, loaderFileUrlSource(url), format, resultUrl);
     }
 
     function cjsPackageResolutionForLoaderResult(resolved) {

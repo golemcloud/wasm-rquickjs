@@ -1134,9 +1134,9 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "function cjsLoaderFileUrlResult(url, format, resultUrl) { const filename = nodeUrl.fileURLToPath(url); return cjsLoaderFileResult(filename, tryReadFile(filename), format, resultUrl); }"
+                "function cjsLoaderFileUrlResult(url, format, resultUrl) { const filename = nodeUrl.fileURLToPath(url); return cjsLoaderFileResult(filename, loaderFileUrlSource(url), format, resultUrl); }"
             ),
-            "registered-loader CJS file URL results must centralize file URL conversion and source reads"
+            "registered-loader CJS file URL results must centralize file URL conversion and use the shared file-URL source reader"
         );
 
         let package_start = module_js
@@ -1168,6 +1168,10 @@ mod tests {
                 && default_resolver
                     .contains("return cjsLoaderFileResult(resolved.filename, resolved.content);"),
             "registered-loader CJS file URL and relative paths must use the shared file adapters"
+        );
+        assert!(
+            !default_resolver.contains("tryReadFile(nodeUrl.fileURLToPath("),
+            "registered-loader CJS file URL default resolution must not duplicate file URL source reads"
         );
     }
 
