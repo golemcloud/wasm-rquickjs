@@ -1345,12 +1345,18 @@ mod tests {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
         assert!(
-            module_js.contains(
+            module_js.contains("function registeredLoaderUrlResult(url) { return { url }; }")
+                && module_js.contains(
                 "function registeredLoaderUrlFormatResult(url, format) { return { url, format }; }"
             ) && module_js.contains(
                 "function registeredLoaderUrlFormatSourceResult(url, format, source) { const result = registeredLoaderUrlFormatResult(url, format); result.source = source; return result; }"
             ),
-            "registered-loader raw URL/format result object construction must stay centralized"
+            "registered-loader raw URL result object construction must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderUrlResult(").count(),
+            4,
+            "registered-loader URL-only results must use the shared helper across node:, data:, and import-meta fallback paths"
         );
         assert_eq!(
             module_js
@@ -1417,7 +1423,7 @@ mod tests {
         let helper = &module_js[helper_start..helper_end];
         assert!(
             helper.contains(
-                "return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : { url: specifier };"
+                "return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : registeredLoaderUrlResult(specifier);"
             ) && helper.contains(
                 "return registeredLoaderUrlFormatResult('node:' + specifier, 'builtin');"
             ),

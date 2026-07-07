@@ -4411,6 +4411,10 @@ function loaderFormatOrUndefined(format) {
     return format === undefined || format === null ? undefined : String(format);
 }
 
+function registeredLoaderUrlResult(url) {
+    return { url };
+}
+
 function registeredLoaderUrlFormatResult(url, format) {
     return { url, format };
 }
@@ -4442,7 +4446,7 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
 
 function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     if (specifier.startsWith('node:')) {
-        return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : { url: specifier };
+        return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : registeredLoaderUrlResult(specifier);
     }
     if (cjsMode ? isBuiltin(specifier) : publicBuiltinWithoutSchemeSet.has(specifier)) {
         return registeredLoaderUrlFormatResult('node:' + specifier, 'builtin');
@@ -5704,7 +5708,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         if (specifier.startsWith('data:')) {
-            return { url: specifier };
+            return registeredLoaderUrlResult(specifier);
         }
         const builtin = registeredLoaderBuiltinResolve(specifier, false);
         if (builtin) return builtin;
@@ -5733,7 +5737,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (missingAsUndefined) return undefined;
 
         let url = globalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
-        return { url: normalizeLoaderResolvedUrl(url) };
+        return registeredLoaderUrlResult(normalizeLoaderResolvedUrl(url));
     }
 
     globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(baseUrl, specifier, attrs, mode) {
