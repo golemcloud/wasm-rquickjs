@@ -5008,6 +5008,21 @@ fn throw_node_package_resolve_error<'js>(
     throw_native_coded_error(ctx, &message, code, type_error)
 }
 
+fn try_resolve_package_with_global_conditions<'js>(
+    ctx: &Ctx<'js>,
+    resolver: &NodeModulesResolver,
+    base: &str,
+    specifier: &str,
+    mode: NodePackageResolveMode,
+) -> rquickjs::Result<Result<Option<String>, NodePackageResolveError>> {
+    let conditions = NodeModulesResolver::conditions_from_global(ctx, mode.condition_mode());
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(mode, &conditions, &mut warnings);
+    let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);
+    emit_node_package_deprecation_warnings(ctx, &warnings)?;
+    Ok(result)
+}
+
 fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String) -> rquickjs::Result<Option<String>> {
     let base = if let Some(path) = FileUrlResolver::file_url_to_path(&base_url) {
         path
@@ -5015,9 +5030,6 @@ fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String
         base_url.clone()
     };
     let base = FileUrlResolver::file_url_package_resolution_base(base);
-    let conditions =
-        NodeModulesResolver::conditions_from_global(&ctx, NodePackageResolveMode::EsmImport.condition_mode());
-    let mut warnings = Vec::new();
     let resolver = NodeModulesResolver;
     if specifier.ends_with('/')
         && !specifier.starts_with('#')
@@ -5044,13 +5056,13 @@ fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String
             .map(Some);
         }
     }
-    let mut resolution = NodePackageResolutionContext::new(
+    let result = try_resolve_package_with_global_conditions(
+        &ctx,
+        &resolver,
+        &base,
+        &specifier,
         NodePackageResolveMode::EsmImport,
-        &conditions,
-        &mut warnings,
-    );
-    let result = resolver.try_resolve_with_context(&base, &specifier, &mut resolution);
-    emit_node_package_deprecation_warnings(&ctx, &warnings)?;
+    )?;
     match result {
         Ok(Some(resolved)) => {
             let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(&ctx, "--preserve-symlinks");
@@ -5414,9 +5426,6 @@ impl Resolver for NodeModulesResolver {
         base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
-        let conditions =
-            Self::conditions_from_global(ctx, NodePackageResolveMode::EsmImport.condition_mode());
-        let mut warnings = Vec::new();
         let (resolution_name, suffix) = if has_import_type_rewrite_token(name) {
             split_module_path_suffix(name)
         } else {
@@ -5426,13 +5435,13 @@ impl Resolver for NodeModulesResolver {
             || !(resolution_name.starts_with('.')
                 || resolution_name.starts_with('/')
                 || resolution_name.contains("://"));
-        let mut resolution = NodePackageResolutionContext::new(
+        let result = try_resolve_package_with_global_conditions(
+            ctx,
+            self,
+            base,
+            resolution_name,
             NodePackageResolveMode::EsmImport,
-            &conditions,
-            &mut warnings,
-        );
-        let result = self.try_resolve_with_context(base, resolution_name, &mut resolution);
-        emit_node_package_deprecation_warnings(ctx, &warnings)?;
+        )?;
         match result {
             Ok(Some(resolved)) => {
                 let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());

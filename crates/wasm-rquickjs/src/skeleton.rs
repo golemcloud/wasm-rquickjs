@@ -544,6 +544,61 @@ mod tests {
     }
 
     #[test]
+    fn rust_global_condition_package_resolution_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "fn try_resolve_package_with_global_conditions<'js>( ctx: &Ctx<'js>, resolver: &NodeModulesResolver, base: &str, specifier: &str, mode: NodePackageResolveMode,"
+            ) && internal_rs.contains(
+                "let conditions = NodeModulesResolver::conditions_from_global(ctx, mode.condition_mode());"
+            ) && internal_rs.contains(
+                "let mut resolution = NodePackageResolutionContext::new(mode, &conditions, &mut warnings);"
+            ) && internal_rs.contains(
+                "let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);"
+            ) && internal_rs.contains("emit_node_package_deprecation_warnings(ctx, &warnings)?;"),
+            "Rust ESM package resolution paths using global conditions must share condition loading, resolver execution, and warning emission"
+        );
+
+        let import_meta_start = internal_rs
+            .find("fn import_meta_resolve_package(")
+            .expect("import_meta_resolve_package must exist");
+        let import_meta_end = internal_rs[import_meta_start..]
+            .find("fn import_meta_resolve_path(")
+            .expect("import.meta package resolver must precede path resolver")
+            + import_meta_start;
+        let import_meta = &internal_rs[import_meta_start..import_meta_end];
+        assert!(
+            import_meta.contains("try_resolve_package_with_global_conditions(")
+                && import_meta.contains("&base,")
+                && import_meta.contains("&specifier,")
+                && import_meta.contains("NodePackageResolveMode::EsmImport")
+                && import_meta.contains("Ok(Some(path_to_file_url(&resolved)))"),
+            "import.meta.resolve package handling must share global-condition package resolution while keeping URL return shaping"
+        );
+
+        let resolver_start = internal_rs
+            .find("impl Resolver for NodeModulesResolver")
+            .expect("NodeModulesResolver Resolver impl must exist");
+        let resolver_end = internal_rs[resolver_start..]
+            .find("impl Loader for CjsCompatLoader")
+            .expect("NodeModulesResolver Resolver impl must precede CJS compat loader")
+            + resolver_start;
+        let resolver_impl = &internal_rs[resolver_start..resolver_end];
+        assert!(
+            resolver_impl.contains("try_resolve_package_with_global_conditions(")
+                && resolver_impl.contains("base,")
+                && resolver_impl.contains("resolution_name,")
+                && resolver_impl.contains("NodePackageResolveMode::EsmImport")
+                && resolver_impl.contains(
+                    "append_loader_realm_param(suffix, loader_realm_param(base).as_deref())"
+                )
+                && resolver_impl.contains("transfer_import_type_rewrite_token(name, &resolved);"),
+            "ESM resolver package handling must share global-condition package resolution while keeping suffix and import-attribute token behavior"
+        );
+    }
+
+    #[test]
     fn cjs_package_directory_results_preserve_owning_package_metadata() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
