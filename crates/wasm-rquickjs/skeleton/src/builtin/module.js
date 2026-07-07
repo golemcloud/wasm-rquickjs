@@ -6091,7 +6091,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         fallback = String(fallback);
         if (fallback.startsWith('data:')) return fallback;
         if (loaded && loaded.url) return String(loaded.url);
-        return fallback.startsWith('/') ? nodeUrl.pathToFileURL(fallback).href : fallback;
+        return normalizeLoaderResolvedUrl(fallback);
     }
 
     function staticRegisteredLoaderParentAliases(parentUrl) {

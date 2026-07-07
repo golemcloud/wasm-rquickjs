@@ -1982,6 +1982,22 @@ mod tests {
                 && source_helper.contains("return null;"),
             "static registered-loader source helper must keep data URL decoding and null fallback behavior"
         );
+
+        let child_start = module_js
+            .find("function staticRegisteredLoaderChildUrl(loaded, fallback)")
+            .expect("static registered-loader child URL helper must exist");
+        let child_end = module_js[child_start..]
+            .find("function staticRegisteredLoaderParentAliases(")
+            .expect("child URL helper must precede parent alias helper")
+            + child_start;
+        let child_helper = &module_js[child_start..child_end];
+        assert!(
+            child_helper.contains("if (fallback.startsWith('data:')) return fallback;")
+                && child_helper.contains("if (loaded && loaded.url) return String(loaded.url);")
+                && child_helper.contains("return normalizeLoaderResolvedUrl(fallback);")
+                && !child_helper.contains("nodeUrl.pathToFileURL(fallback)"),
+            "static registered-loader child graph traversal must share loader URL normalization while preserving data URL and loaded URL precedence"
+        );
     }
 
     #[test]
