@@ -5040,10 +5040,24 @@ fn try_resolve_package_with_global_conditions<'js>(
     mode: NodePackageResolveMode,
 ) -> rquickjs::Result<Result<Option<String>, NodePackageResolveError>> {
     let conditions = NodeModulesResolver::conditions_from_global(ctx, mode.condition_mode());
+    try_resolve_package_with_conditions(ctx, resolver, base, specifier, &conditions, mode, true)
+}
+
+fn try_resolve_package_with_conditions<'js>(
+    ctx: &Ctx<'js>,
+    resolver: &NodeModulesResolver,
+    base: &str,
+    specifier: &str,
+    conditions: &[String],
+    mode: NodePackageResolveMode,
+    emit_warnings: bool,
+) -> rquickjs::Result<Result<Option<String>, NodePackageResolveError>> {
     let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(mode, &conditions, &mut warnings);
+    let mut resolution = NodePackageResolutionContext::new(mode, conditions, &mut warnings);
     let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);
-    emit_node_package_deprecation_warnings(ctx, &warnings)?;
+    if emit_warnings {
+        emit_node_package_deprecation_warnings(ctx, &warnings)?;
+    }
     Ok(result)
 }
 
@@ -5221,14 +5235,16 @@ fn try_resolve_package_with_js_conditions<'js>(
     emit_warnings: bool,
 ) -> rquickjs::Result<Result<Option<String>, NodePackageResolveError>> {
     let condition_vec = package_conditions_from_js_array(conditions);
-    let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);
     let resolver = NodeModulesResolver;
-    let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);
-    if emit_warnings {
-        emit_node_package_deprecation_warnings(ctx, &warnings)?;
-    }
-    Ok(result)
+    try_resolve_package_with_conditions(
+        ctx,
+        &resolver,
+        base,
+        specifier,
+        &condition_vec,
+        mode,
+        emit_warnings,
+    )
 }
 
 fn loader_default_resolve_package<'js>(

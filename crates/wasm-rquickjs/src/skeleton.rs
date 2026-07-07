@@ -550,16 +550,15 @@ mod tests {
 
         assert!(
             internal_rs.contains(
-                "fn try_resolve_package_with_js_conditions<'js>( ctx: &Ctx<'js>, base: &str, specifier: &str, conditions: &rquickjs::Array<'js>, mode: NodePackageResolveMode, emit_warnings: bool,"
-            ) && internal_rs.contains("let condition_vec = package_conditions_from_js_array(conditions);")
-                && internal_rs.contains(
-                    "let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);"
-                )
-                && internal_rs.contains(
-                    "let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);"
-                )
-                && internal_rs.contains("if emit_warnings { emit_node_package_deprecation_warnings(ctx, &warnings)?; }"),
-            "Rust bridges receiving JS condition arrays must share condition parsing and package resolution execution"
+                "fn try_resolve_package_with_conditions<'js>( ctx: &Ctx<'js>, resolver: &NodeModulesResolver, base: &str, specifier: &str, conditions: &[String], mode: NodePackageResolveMode, emit_warnings: bool,"
+            ) && internal_rs.contains("let mut resolution = NodePackageResolutionContext::new(mode, conditions, &mut warnings);")
+                && internal_rs.contains("let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);")
+                && internal_rs.contains("if emit_warnings { emit_node_package_deprecation_warnings(ctx, &warnings)?; }")
+                && internal_rs.contains("try_resolve_package_with_conditions(ctx, resolver, base, specifier, &conditions, mode, true)")
+                && internal_rs.contains("let condition_vec = package_conditions_from_js_array(conditions);")
+                && internal_rs.contains("try_resolve_package_with_conditions( ctx, &resolver, base, specifier, &condition_vec, mode, emit_warnings,")
+                && !internal_rs.contains("let mut resolution = NodePackageResolutionContext::new(mode, &condition_vec, &mut warnings);"),
+            "Rust package bridges must share resolver execution while keeping condition sources caller-owned"
         );
         assert!(
             internal_rs.contains(
@@ -672,10 +671,14 @@ mod tests {
             ) && internal_rs.contains(
                 "let conditions = NodeModulesResolver::conditions_from_global(ctx, mode.condition_mode());"
             ) && internal_rs.contains(
-                "let mut resolution = NodePackageResolutionContext::new(mode, &conditions, &mut warnings);"
+                "try_resolve_package_with_conditions(ctx, resolver, base, specifier, &conditions, mode, true)"
+            ) && internal_rs.contains(
+                "fn try_resolve_package_with_conditions<'js>( ctx: &Ctx<'js>, resolver: &NodeModulesResolver, base: &str, specifier: &str, conditions: &[String], mode: NodePackageResolveMode, emit_warnings: bool,"
+            ) && internal_rs.contains(
+                "let mut resolution = NodePackageResolutionContext::new(mode, conditions, &mut warnings);"
             ) && internal_rs.contains(
                 "let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);"
-            ) && internal_rs.contains("emit_node_package_deprecation_warnings(ctx, &warnings)?;"),
+            ) && internal_rs.contains("if emit_warnings { emit_node_package_deprecation_warnings(ctx, &warnings)?; }"),
             "Rust ESM package resolution paths using global conditions must share condition loading, resolver execution, and warning emission"
         );
 
