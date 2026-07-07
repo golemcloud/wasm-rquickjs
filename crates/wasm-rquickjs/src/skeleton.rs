@@ -354,7 +354,9 @@ mod tests {
         assert!(
             !js_package_import_error.contains("noImportsField")
                 && !js_package_import_error.contains("__wasmNoImportsField")
-                && module_js.contains("if (err.__wasmNoImportsField === true) { throw makeModuleNotFoundError(id); }"),
+                && module_js.contains(
+                    "if (err.__wasmNoImportsField === true) { throw makeModuleNotFoundError(id); }"
+                ),
             "CJS package-import no-imports metadata is Rust-owned; JS may consume it for CJS fallback but must not recreate it in fallback error shaping"
         );
     }
@@ -478,6 +480,37 @@ mod tests {
                 && internal_rs.contains("NodePackageResolveMode::CjsAnalysis")
                 && internal_rs.contains("NodeModulesResolver::resolve_package_exports("),
             "Rust package exports bridge must own CJS package-map resolution"
+        );
+    }
+
+    #[test]
+    fn package_map_error_strings_are_rust_owned() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains("ERR_PACKAGE_PATH_NOT_EXPORTED")
+                && internal_rs.contains("No \\\"exports\\\" main defined in package")
+                && internal_rs.contains(
+                    "Package subpath '{}' is not defined by \\\"exports\\\" in package {}"
+                )
+                && internal_rs.contains("ERR_INVALID_PACKAGE_TARGET")
+                && internal_rs.contains("Invalid \\\"{}\\\" target '{}'")
+                && internal_rs.contains("ERR_INVALID_MODULE_SPECIFIER")
+                && internal_rs.contains(
+                    "Invalid module \\\"{}\\\" is not a valid package name imported from {}"
+                ),
+            "package-map resolver errors must be shaped by the Rust resolver bridge"
+        );
+        assert!(
+            !module_js.contains("ERR_PACKAGE_PATH_NOT_EXPORTED")
+                && !module_js.contains("ERR_INVALID_PACKAGE_TARGET")
+                && !module_js.contains("Invalid package target")
+                && !module_js.contains("No \\\"exports\\\" main defined in package")
+                && !module_js.contains("Package subpath")
+                && !module_js.contains("is not defined by \\\"exports\\\"")
+                && !module_js.contains("is not a valid package name imported from"),
+            "JS CJS/loader paths must not regain package-map resolver error-string ownership"
         );
     }
 
