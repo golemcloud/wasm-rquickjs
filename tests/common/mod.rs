@@ -980,9 +980,7 @@ impl TestInstance {
         // test failure report (the `println!`s above are captured by the test runner
         // and are not part of the reported failure message on CI).
         let results = results.map_err(|err| {
-            err.context(format!(
-                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}"
-            ))
+            err.context(format!("guest stdout:\n{stdout}\nguest stderr:\n{stderr}"))
         });
 
         (
