@@ -48,6 +48,7 @@ serde_json = { workspace = true }
 test-r = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.18.1", features = ["v4"] }
 oxc_parser = { workspace = true }
 oxc_allocator = { workspace = true }

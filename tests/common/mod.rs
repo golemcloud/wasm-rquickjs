@@ -32,6 +32,27 @@ use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
 
+/// Installs a global tracing subscriber (once per process) so host-side `tracing` diagnostics
+/// are visible in test output. Most importantly, `wasmtime-wasi-http` flattens the underlying
+/// hyper error of a failed outgoing request into `ErrorCode::HttpProtocolError` and only reports
+/// the real error via `tracing::warn!` — without a subscriber that information is lost, which
+/// makes intermittent CI-only fetch failures undiagnosable.
+///
+/// The filter can be overridden with `RUST_LOG`; by default only `wasmtime-wasi-http` warnings
+/// are shown to keep output noise low.
+pub fn init_tracing() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("wasmtime_wasi_http=warn"));
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_test_writer()
+            .try_init();
+    });
+}
+
 /// Strip JSONC comments (// and /* */) while respecting string literals.
 pub fn strip_jsonc_comments(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
@@ -641,6 +662,7 @@ pub struct PreparedComponent {
 
 impl PreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        init_tracing();
         match test_target() {
             TestTarget::P2 => Self::new_p2(wasm_path),
             TestTarget::P3 => Self::new_p3(wasm_path),
@@ -746,6 +768,7 @@ pub struct GolemPreparedComponent {
 
 impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        init_tracing();
         match test_target() {
             TestTarget::P2 => Self::new_p2(wasm_path),
             TestTarget::P3 => Self::new_p3(wasm_path),
@@ -952,6 +975,15 @@ impl TestInstance {
         for line in stderr.lines() {
             println!("[stderr] {line}");
         }
+
+        // Attach the captured guest output to the error itself so it shows up in the
+        // test failure report (the `println!`s above are captured by the test runner
+        // and are not part of the reported failure message on CI).
+        let results = results.map_err(|err| {
+            err.context(format!(
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}"
+            ))
+        });
 
         (
             results.map(|results| results.first().cloned()),
