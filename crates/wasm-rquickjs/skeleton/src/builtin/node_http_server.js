@@ -1480,11 +1480,16 @@ function Server(options, requestListener) {
     this.on('listening', function () { _registerServer(self); });
     this.on('close', function () { _unregisterServer(self); });
     this.on('connection', function connectionListener(socket) {
-        // Force-close idle connections to prevent WASI resource exhaustion.
-        // In WASM, each socket consumes limited resources (pollables, streams),
-        // and wasi:http clients create new connections per request.
+        // Force-close idle keep-alive connections to prevent WASI resource
+        // exhaustion. In WASM, each socket consumes limited resources
+        // (pollables, streams), and wasi:http clients create new connections
+        // per request. Only connections that have already served at least one
+        // request are closed: a freshly accepted connection is also IDLE until
+        // its first request bytes arrive, and closing it here would race
+        // against the in-flight request (the client would see ECONNRESET).
         for (const conn of self._httpConnections) {
-            if (conn.state === IDLE && conn.socket && !conn.socket.destroyed) {
+            if (conn.state === IDLE && conn.requestsServed > 0 &&
+                conn.socket && !conn.socket.destroyed) {
                 // Use force_close on the native handle to immediately release
                 // WASI resources, even if async poll loops hold pollables.
                 if (conn.socket._handle && conn.socket._handle.force_close) {
