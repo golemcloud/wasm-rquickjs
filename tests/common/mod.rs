@@ -32,11 +32,57 @@ use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
 
+/// In-memory buffer holding host-side tracing output so it can be attached to test failure
+/// messages. On CI only the failure message itself is visible (in the ctrf report and the
+/// GitHub annotations); anything the test runner captures — including output written via
+/// `with_test_writer` — never appears in the logs. So the tracing output must travel inside
+/// the error itself, like the guest stdout/stderr already does.
+///
+/// The buffer is shared by all tests in the process and capped, keeping the most recent output.
+static HOST_TRACE: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+const HOST_TRACE_CAP: usize = 256 * 1024;
+
+#[derive(Clone, Copy)]
+struct HostTraceWriter;
+
+impl std::io::Write for HostTraceWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut trace = HOST_TRACE.lock().unwrap();
+        trace.extend_from_slice(buf);
+        let len = trace.len();
+        if len > HOST_TRACE_CAP {
+            trace.drain(..len - HOST_TRACE_CAP);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl tracing_subscriber::fmt::MakeWriter<'_> for HostTraceWriter {
+    type Writer = HostTraceWriter;
+
+    fn make_writer(&self) -> Self::Writer {
+        *self
+    }
+}
+
+/// Returns the host-side tracing output captured so far (see [`init_tracing`]).
+pub fn host_trace() -> String {
+    String::from_utf8_lossy(&HOST_TRACE.lock().unwrap()).into_owned()
+}
+
 /// Installs a global tracing subscriber (once per process) so host-side `tracing` diagnostics
 /// are visible in test output. Most importantly, `wasmtime-wasi-http` flattens the underlying
 /// hyper error of a failed outgoing request into `ErrorCode::HttpProtocolError` and only reports
 /// the real error via `tracing::warn!` — without a subscriber that information is lost, which
 /// makes intermittent CI-only fetch failures undiagnosable.
+///
+/// The output is collected into [`HOST_TRACE`] (not the test runner's capture buffer) so that
+/// failing tests can attach it to their error message, which is the only output channel visible
+/// in the CI failure reports.
 ///
 /// The filter can be overridden with `RUST_LOG`; by default only `wasmtime-wasi-http` warnings
 /// are shown to keep output noise low.
@@ -48,7 +94,8 @@ pub fn init_tracing() {
             .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("wasmtime_wasi_http=warn"));
         let _ = tracing_subscriber::fmt()
             .with_env_filter(filter)
-            .with_test_writer()
+            .with_writer(HostTraceWriter)
+            .with_ansi(false)
             .try_init();
     });
 }
@@ -976,11 +1023,15 @@ impl TestInstance {
             println!("[stderr] {line}");
         }
 
-        // Attach the captured guest output to the error itself so it shows up in the
-        // test failure report (the `println!`s above are captured by the test runner
-        // and are not part of the reported failure message on CI).
+        // Attach the captured guest output and the host-side tracing output to the error
+        // itself so they show up in the test failure report (the `println!`s above are
+        // captured by the test runner and are not part of the reported failure message
+        // on CI).
         let results = results.map_err(|err| {
-            err.context(format!("guest stdout:\n{stdout}\nguest stderr:\n{stderr}"))
+            let host_trace = host_trace();
+            err.context(format!(
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nhost trace:\n{host_trace}"
+            ))
         });
 
         (
