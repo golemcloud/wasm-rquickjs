@@ -1110,20 +1110,30 @@ impl TestInstance {
     }
 }
 
+/// Maximum attempts for guest invocations that fail with the intermittent
+/// wasmtime-wasi-http p3 scheduling race (see [`is_p3_http_flake`]).
+const P3_HTTP_FLAKE_MAX_ATTEMPTS: u32 = 3;
+
+/// wasmtime-wasi-http 46's p3 outgoing request path has a scheduling-sensitive
+/// race in its manual connection-driving loop: under load, hyper intermittently
+/// fails with `IncompleteMessage` or `Canceled(UnexpectedMessage)`, both of
+/// which are flattened into `ErrorCode::HttpProtocolError` before reaching the
+/// guest. The p3 rework in wasmtime 47 replaces this code, but until that is
+/// released (and supported by the Golem fork) we retry invocations that fail
+/// with this signature. Each retry uses a fresh `TestInstance`.
+fn is_p3_http_flake(err: &anyhow::Error) -> bool {
+    test_target() == TestTarget::P3 && format!("{err:#}").contains("ErrorCode::HttpProtocolError")
+}
+
 pub async fn invoke_and_capture_output(
     wasm_path: &Utf8Path,
     interface_name: Option<&str>,
     function_name: &str,
     args: &[Val],
 ) -> (anyhow::Result<Option<Val>>, String) {
-    match TestInstance::new(wasm_path).await {
-        Ok(mut test_instance) => {
-            test_instance
-                .invoke_and_capture_output(interface_name, function_name, args)
-                .await
-        }
-        Err(e) => (Err(e), String::new()),
-    }
+    let (results, stdout, _stderr) =
+        invoke_and_capture_output_with_stderr(wasm_path, interface_name, function_name, args).await;
+    (results, stdout)
 }
 
 pub async fn invoke_and_capture_output_with_stderr(
@@ -1132,14 +1142,28 @@ pub async fn invoke_and_capture_output_with_stderr(
     function_name: &str,
     args: &[Val],
 ) -> (anyhow::Result<Option<Val>>, String, String) {
-    match TestInstance::new(wasm_path).await {
-        Ok(mut test_instance) => {
-            test_instance
-                .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
-                .await
+    let mut last = None;
+    for attempt in 1..=P3_HTTP_FLAKE_MAX_ATTEMPTS {
+        let result = match TestInstance::new(wasm_path).await {
+            Ok(mut test_instance) => {
+                test_instance
+                    .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
+                    .await
+            }
+            Err(e) => (Err(e), String::new(), String::new()),
+        };
+        match &result.0 {
+            Err(e) if attempt < P3_HTTP_FLAKE_MAX_ATTEMPTS && is_p3_http_flake(e) => {
+                eprintln!(
+                    "Invocation of {function_name} failed with the intermittent p3 \
+                     HttpProtocolError (attempt {attempt}/{P3_HTTP_FLAKE_MAX_ATTEMPTS}), retrying"
+                );
+                last = Some(result);
+            }
+            _ => return result,
         }
-        Err(e) => (Err(e), String::new(), String::new()),
     }
+    last.expect("at least one invocation attempt must have run")
 }
 
 enum WasmSource {
