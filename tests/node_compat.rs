@@ -183,10 +183,11 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                         let stdout = instance.read_stdout().unwrap_or_default();
                                         let stderr = instance.read_stderr().unwrap_or_default();
                                         anyhow::bail!(
-                                            "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}",
+                                            "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
                                             test_timeout_secs,
                                             stdout.trim(),
-                                            stderr.trim()
+                                            stderr.trim(),
+                                            common::host_trace().trim()
                                         )
                                     }
                                 }
@@ -333,10 +334,11 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                             let stdout = instance.read_stdout().unwrap_or_default();
                                             let stderr = instance.read_stderr().unwrap_or_default();
                                             anyhow::bail!(
-                                                "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}",
+                                                "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
                                                 test_timeout_secs,
                                                 stdout.trim(),
-                                                stderr.trim()
+                                                stderr.trim(),
+                                                common::host_trace().trim()
                                             )
                                         }
                                     }
