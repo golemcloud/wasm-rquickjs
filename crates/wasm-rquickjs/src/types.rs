@@ -183,10 +183,9 @@ fn add_package_to_path(
             &escape_rust_ident(&package.name.namespace.to_snake_case()),
             Span::call_site(),
         );
-        let name_ident = Ident::new(
-            &escape_rust_ident(&package.name.name.to_snake_case()),
-            Span::call_site(),
-        );
+        let package_module_name =
+            wit_bindgen_core::name_package_module(&context.resolve, *package_id);
+        let name_ident = Ident::new(&escape_rust_ident(&package_module_name), Span::call_site());
 
         path.push(quote! { #ns_ident });
         path.push(quote! { #name_ident });
@@ -446,10 +445,39 @@ pub fn get_wrapped_type_internal(
                 TypeDefKind::Handle(Handle::Borrow(resource_type_id)) => {
                     get_wrapped_type_borrow_handle(ctx, resource_type_id)
                 }
-                TypeDefKind::Future(_) | TypeDefKind::Stream(_) => Err(anyhow!(
-                    "future<T> and stream<T> are only supported as a direct function parameter \
-                     or return type, not nested inside another type"
-                ))?,
+                TypeDefKind::Future(_) | TypeDefKind::Stream(_) => {
+                    if !context.target.is_p3() {
+                        return Err(anyhow!(
+                            "future<T> and stream<T> types are only supported by the WASI Preview 3 generation path"
+                        ));
+                    }
+
+                    let bridge = crate::async_values::payload_bridge_ident(*type_id);
+                    let wrapper = match &typ.kind {
+                        TypeDefKind::Future(_) => {
+                            quote! { crate::internal::FutureReaderWrapper }
+                        }
+                        TypeDefKind::Stream(_) => {
+                            quote! { crate::internal::StreamReaderWrapper }
+                        }
+                        _ => unreachable!(),
+                    };
+                    let wrapper_for_wrap = wrapper.clone();
+                    let bridge_for_wrap = bridge.clone();
+
+                    Ok(WrappedType {
+                        wrap: TokenStreamWrapper::new(move |ts| {
+                            quote! {
+                                #wrapper_for_wrap::<crate::conversions::#bridge_for_wrap>::new(#ts)
+                            }
+                        }),
+                        unwrap: TokenStreamWrapper::new(move |ts| quote! { #ts.into_inner() }),
+                        wrapped_type_ref: quote! {
+                            #wrapper<crate::conversions::#bridge>
+                        },
+                        original_type_ref: ctx.original_type_ref,
+                    })
+                }
                 TypeDefKind::Type(inner) => {
                     // Recursively dealiasing
                     let inner = get_wrapped_type_internal(

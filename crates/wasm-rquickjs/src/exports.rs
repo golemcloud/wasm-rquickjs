@@ -261,16 +261,7 @@ fn generate_guest_impl(
     for (name, function) in exports {
         match &function.kind {
             FunctionKind::Freestanding => {
-                if is_p3 {
-                    // The Preview 3 path has no Wizer pre-initialization (the
-                    // `wizer-initialize` export is never injected for P3) and does not support
-                    // synchronous exports at all. Reject every sync freestanding export here,
-                    // including a user-declared `wizer-initialize`, before the Preview 2
-                    // Wizer special-case below could accept it.
-                    return Err(anyhow!(
-                        "Synchronous exported functions are not supported by the WASI Preview 3 generation path (function '{name}'); declare it as `async func`"
-                    ));
-                } else if name == "wizer-initialize" {
+                if !is_p3 && name == "wizer-initialize" {
                     // wizer-initialize calls directly into the skeleton's
                     // pre-init function instead of dispatching to JS
                     func_impls.push(quote! {
@@ -539,16 +530,35 @@ fn generate_exported_function_impl(
         let reader_type = crate::async_values::reader_type(context, &async_value)?;
         let build_reader =
             crate::async_values::js_to_reader_expr(context, &async_value, quote! { __js_result })?;
-        return Ok(quote! {
-            async fn #func_name(#(#func_arg_list),*) -> #reader_type {
+        let body = quote! {
                 let __js_result = crate::internal::call_js_export_raw(
                     #wit_package_lit,
                     #js_func_path,
                     #param_refs_tuple
                 ).await;
                 #build_reader
-            }
-        });
+        };
+        return if context.target.is_p3() && matches!(function.kind, FunctionKind::Freestanding) {
+            Ok(quote! {
+                fn #func_name(#(#func_arg_list),*) -> #reader_type {
+                    crate::internal::run_sync(async move { #body })
+                }
+            })
+        } else {
+            Ok(quote! {
+                async fn #func_name(#(#func_arg_list),*) -> #reader_type {
+                    #body
+                }
+            })
+        };
+    }
+
+    if let Some(result) = &function.result
+        && crate::async_values::contains(context, result)?
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> nested inside an exported function result are not supported"
+        ));
     }
 
     let return_types = get_return_type(context, function, name, &rust_fn)?;
@@ -557,35 +567,42 @@ fn generate_exported_function_impl(
     let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
     let unwrap = &return_types.wit_level_ret.unwrap;
     let unwrap_result = unwrap.run(quote! { result });
-    let call = if return_types.expected_exception.is_some() {
-        quote! { call_js_export_returning_result }
-    } else {
-        quote! { call_js_export }
+    let has_exception = return_types.expected_exception.is_some();
+    let is_p3 = context.target.is_p3();
+    let is_async = matches!(function.kind, FunctionKind::AsyncFreestanding);
+    let call = match (is_p3, is_async, has_exception) {
+        (true, true, true) => quote! { call_js_export_returning_result },
+        (true, true, false) => quote! { call_js_export },
+        (true, false, true) => quote! { call_js_export_sync_returning_result },
+        (true, false, false) => quote! { call_js_export_sync },
+        (false, _, true) => quote! { call_js_export_returning_result },
+        (false, _, false) => quote! { call_js_export },
     };
-    // In the Preview 3 path the generated `Guest` trait method is itself `async fn`, so the JS
-    // dispatch is awaited directly. In the Preview 2 path the trait method is synchronous and the
-    // future is driven to completion by `async_exported_function` (which blocks on the executor).
-    let func_impl = if context.target.is_p3() {
+    let body = quote! {
+        let result: #wrapped_result = crate::internal::#call(
+            #wit_package_lit,
+            #js_func_path,
+            #param_refs_tuple
+        ).await;
+        #unwrap_result
+    };
+    let func_impl = if is_p3 && is_async {
         quote! {
            async fn #func_name(#(#func_arg_list),*) -> #original_result {
-               let result: #wrapped_result = crate::internal::#call(
-                   #wit_package_lit,
-                   #js_func_path,
-                   #param_refs_tuple
-               ).await;
-               #unwrap_result
+               #body
+            }
+        }
+    } else if is_p3 {
+        quote! {
+           fn #func_name(#(#func_arg_list),*) -> #original_result {
+               crate::internal::run_sync(async move { #body })
            }
         }
     } else {
         quote! {
            fn #func_name(#(#func_arg_list),*) -> #original_result {
                crate::internal::async_exported_function(async move {
-                   let result: #wrapped_result = crate::internal::#call(
-                       #wit_package_lit,
-                       #js_func_path,
-                       #param_refs_tuple
-                   ).await;
-                   #unwrap_result
+                   #body
                })
            }
         }
@@ -638,6 +655,14 @@ fn generate_exported_resource_function_impl(
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
+    if let Some(result) = &function.result
+        && crate::async_values::contains(context, result)?
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in exported resource function results are not supported"
+        ));
+    }
+
     let return_types = if matches!(function.kind, FunctionKind::Constructor(_)) {
         ReturnTypeInformation {
             wit_level_ret: WrappedType::no_wrapping(quote! { Self }),

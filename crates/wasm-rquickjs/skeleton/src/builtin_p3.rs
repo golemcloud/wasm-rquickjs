@@ -163,9 +163,8 @@ mod zlib_disabled;
 mod zlib {
     pub use super::zlib_disabled::*;
 }
-// WebSocket support via `golem:websocket@1.5.0`. The interface is fully synchronous (no
-// `wasi:io/poll`), so the same `builtin/websocket.rs` implementation is Preview 3-portable.
-// Opt-in because it adds a required `golem:websocket` host import that not every host provides.
+// WebSocket support via the asynchronous Preview 3 `golem:websocket@1.5.0` bindings. Opt-in
+// because it adds a required `golem:websocket` host import that not every host provides.
 #[cfg(feature = "websocket")]
 #[path = "builtin/websocket.rs"]
 mod websocket;

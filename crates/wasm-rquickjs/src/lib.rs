@@ -45,10 +45,9 @@ const WASI_REMAP_NAMESPACES_P3: &[(&str, &str)] = &[("clocks", "clocks")];
 /// [`GenerationTarget::WasiP3`] is the opt-in Preview 3 path. It uses the
 /// **same** skeleton crate compiled with the `p3` Cargo feature instead of `p2`: a
 /// minimal async runtime spine depending only on `rquickjs`, `wasip3` and a renamed
-/// `wit-bindgen` (so the Node.js builtins are not duplicated). It supports
-/// **async** WIT exports and imports (freestanding functions, and imported resource
-/// methods/statics). Synchronous exported functions and Wizer are rejected in this
-/// mode for now.
+/// `wit-bindgen` (so the Node.js builtins are not duplicated). It supports synchronous
+/// and asynchronous WIT exports and imports. Wizer pre-initialization is not available
+/// in this mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GenerationTarget {
     /// WASI Preview 2 (default).
@@ -254,11 +253,24 @@ pub fn generate_dts(
     output: &Utf8Path,
     world: Option<&str>,
 ) -> anyhow::Result<Vec<Utf8PathBuf>> {
+    generate_dts_with_target(wit, output, world, GenerationTarget::WasiP2)
+}
+
+/// Generates TypeScript module definitions, selecting the WASI generation via `target`.
+///
+/// Preview 2 permits a Promise-returning JavaScript implementation for every export. Preview 3
+/// follows the WIT function kind: plain functions are synchronous and `async func` functions
+/// return Promises.
+pub fn generate_dts_with_target(
+    wit: &Utf8Path,
+    output: &Utf8Path,
+    world: Option<&str>,
+    target: GenerationTarget,
+) -> anyhow::Result<Vec<Utf8PathBuf>> {
     // Making sure the target directories exist
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
 
-    // Resolving the WIT package (DTS generation is identical for both targets)
-    let context = GeneratorContext::new(output, wit, world, GenerationTarget::WasiP2)?;
+    let context = GeneratorContext::new(output, wit, world, target)?;
 
     let mut result = Vec::new();
     result.extend(

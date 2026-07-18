@@ -1,7 +1,7 @@
 use crate::cli::{Args, Command};
 use clap::Parser;
 use wasm_rquickjs::{
-    EmbeddingMode, JsModuleSpec, generate_dts, generate_wrapper_crate_with_target,
+    EmbeddingMode, JsModuleSpec, generate_dts_with_target, generate_wrapper_crate_with_target,
 };
 
 mod cli;
@@ -37,8 +37,15 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Command::GenerateDTS { wit, output, world } => {
-            if let Err(err) = generate_dts(wit, output, world.as_deref()) {
+        Command::GenerateDTS {
+            wit,
+            output,
+            world,
+            target,
+        } => {
+            if let Err(err) =
+                generate_dts_with_target(wit, output, world.as_deref(), (*target).into())
+            {
                 eprintln!("Error generating TypeScript .d.ts: {err:#}");
                 std::process::exit(1);
             }

@@ -47,12 +47,15 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
         }
     }
 
-    // Each global export is directly exported as an async function.
+    // Preview 2 permits every exported JavaScript function to return a Promise. Preview 3 mirrors
+    // the WIT function kind, so plain functions stay synchronous and `async func`s return Promises.
+    let async_by_default = !context.target.is_p3();
     declare_functions_and_resources(
         &mut result,
         context,
         &global_exports,
         &global_types,
+        async_by_default,
         true,
         &VecDeque::new(),
     )?;
@@ -79,6 +82,7 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
             context,
             &interface_exports,
             &interface_types,
+            async_by_default,
             true,
             &interface_stack,
         )?;
@@ -147,6 +151,7 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<Vec
                 &interface_imports,
                 &interface_types,
                 false,
+                false,
                 &interface_stack,
             )?;
 
@@ -177,6 +182,7 @@ fn declare_functions_and_resources(
     functions: &[(String, &Function)],
     types: &[TypeId],
     async_: bool,
+    is_export: bool,
     interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<()> {
     let mut resource_functions = BTreeMap::new();
@@ -219,14 +225,19 @@ fn declare_functions_and_resources(
                         &ts_boundary_type_reference(context, &param.ty, interface_stack)?,
                     );
                 }
-                define_return_type(context, interface_stack, function, &mut exported_function)?;
-            }
-            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
-                Err(anyhow!("Async resource methods are not supported yet"))?
+                define_return_type(
+                    context,
+                    interface_stack,
+                    function,
+                    &mut exported_function,
+                    is_export,
+                )?;
             }
             FunctionKind::Method(resource_id)
             | FunctionKind::Static(resource_id)
-            | FunctionKind::Constructor(resource_id) => {
+            | FunctionKind::Constructor(resource_id)
+            | FunctionKind::AsyncMethod(resource_id)
+            | FunctionKind::AsyncStatic(resource_id) => {
                 resource_functions
                     .entry(resource_id)
                     .or_insert_with(Vec::new)
@@ -258,8 +269,10 @@ fn declare_functions_and_resources(
             let js_name = escape_js_ident(get_function_name(name, function)?.to_lower_camel_case());
             let mut fun = match &function.kind {
                 FunctionKind::Method(_) if async_ => result.begin_async_method(&js_name),
+                FunctionKind::AsyncMethod(_) => result.begin_async_method(&js_name),
                 FunctionKind::Method(_) => result.begin_method(&js_name),
                 FunctionKind::Static(_) if async_ => result.begin_static_async_method(&js_name),
+                FunctionKind::AsyncStatic(_) => result.begin_static_async_method(&js_name),
                 FunctionKind::Static(_) => result.begin_static_method(&js_name),
                 FunctionKind::Constructor(_) => result.begin_constructor(),
                 _ => unreachable!(),
@@ -281,7 +294,7 @@ fn declare_functions_and_resources(
                 );
             }
             if !matches!(&function.kind, FunctionKind::Constructor(_)) {
-                define_return_type(context, interface_stack, function, &mut fun)?;
+                define_return_type(context, interface_stack, function, &mut fun, is_export)?;
             }
         }
 
@@ -358,8 +371,18 @@ fn define_return_type(
     interface_stack: &VecDeque<InterfaceId>,
     function: &Function,
     exported_function: &mut DtsFunctionWriter,
+    is_export: bool,
 ) -> anyhow::Result<()> {
     if let Some(result_type) = &function.result {
+        if is_export
+            && crate::async_values::detect(context, result_type)?.is_none()
+            && crate::async_values::contains(context, result_type)?
+        {
+            return Err(anyhow!(
+                "future<T> and stream<T> nested inside an exported function result are not supported"
+            ));
+        }
+
         let special_case_for_result = if let Type::Id(type_id) = result_type {
             let typ = context
                 .resolve
@@ -556,18 +579,32 @@ fn ts_boundary_type_reference(
     interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<String> {
     if let Some(async_value) = crate::async_values::detect(context, typ)? {
-        let inner_ts_type = match async_value.payload {
-            Some(inner) => ts_type_reference(context, &inner, false, interface_stack)?,
-            None => "void".to_string(),
-        };
-        return Ok(match async_value.kind {
-            crate::async_values::AsyncValueKind::Future => format!("Promise<{inner_ts_type}>"),
-            crate::async_values::AsyncValueKind::Stream => {
-                format!("AsyncIterable<{inner_ts_type}>")
-            }
-        });
+        return ts_async_value_reference(context, &async_value, interface_stack);
     }
     ts_type_reference(context, typ, false, interface_stack)
+}
+
+fn ts_async_value_reference(
+    context: &GeneratorContext,
+    async_value: &crate::async_values::AsyncValue,
+    interface_stack: &VecDeque<InterfaceId>,
+) -> anyhow::Result<String> {
+    if !context.target.is_p3() {
+        return Err(anyhow!(
+            "future<T> and stream<T> types are only supported by the WASI Preview 3 generation path"
+        ));
+    }
+
+    let inner_ts_type = match async_value.payload {
+        Some(inner) => ts_type_reference(context, &inner, false, interface_stack)?,
+        None => "void".to_string(),
+    };
+    Ok(match async_value.kind {
+        crate::async_values::AsyncValueKind::Future => format!("Promise<{inner_ts_type}>"),
+        crate::async_values::AsyncValueKind::Stream => {
+            format!("AsyncIterable<{inner_ts_type}>")
+        }
+    })
 }
 
 fn ts_type_reference(
@@ -591,16 +628,8 @@ fn ts_type_reference(
         Type::String => Ok("string".to_string()),
         Type::ErrorContext => Ok("ErrorContext".to_string()),
         Type::Id(type_id) => {
-            // Reaching here with a `future<T>` / `stream<T>` (directly or via a WIT alias) means it
-            // is used *nested* inside another type: the four direct function boundaries never call
-            // `ts_type_reference` for async values (they go through `ts_boundary_type_reference`).
-            // Nested async values have no TypeScript representation, so reject them here, mirroring
-            // the runtime restriction in `crate::types::get_wrapped_type`.
-            if crate::async_values::detect(context, typ)?.is_some() {
-                return Err(anyhow!(
-                    "future<T> and stream<T> are only supported as a direct function parameter \
-                     or return type, not nested inside another type"
-                ));
+            if let Some(async_value) = crate::async_values::detect(context, typ)? {
+                return ts_async_value_reference(context, &async_value, interface_stack);
             }
 
             let typ = context.typ(*type_id)?;
@@ -845,10 +874,21 @@ fn ts_type_definition(
             ts_type_reference(context, elem_type, false, interface_stack)?
         )),
         TypeDefKind::Type(aliased) => ts_type_reference(context, aliased, false, interface_stack),
-        TypeDefKind::Future(_) | TypeDefKind::Stream(_) => Err(anyhow!(
-            "future<T> and stream<T> are only supported as a direct function parameter \
-             or return type, not nested inside another type"
-        )),
+        TypeDefKind::Future(payload) | TypeDefKind::Stream(payload) => {
+            let kind = if matches!(&typ.kind, TypeDefKind::Future(_)) {
+                crate::async_values::AsyncValueKind::Future
+            } else {
+                crate::async_values::AsyncValueKind::Stream
+            };
+            ts_async_value_reference(
+                context,
+                &crate::async_values::AsyncValue {
+                    kind,
+                    payload: *payload,
+                },
+                interface_stack,
+            )
+        }
         TypeDefKind::Resource => ts_resource_reference(context, typ, interface_stack),
         TypeDefKind::Map(..) => Err(anyhow!("Map types are not supported yet")),
         TypeDefKind::Unknown => Err(anyhow!("Unknown type definition kind")),

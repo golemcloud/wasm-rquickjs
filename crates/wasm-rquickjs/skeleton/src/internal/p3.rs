@@ -1910,3 +1910,83 @@ where
         stream_reader_to_js(ctx, self.reader, self.wrap)
     }
 }
+
+pub trait FuturePayloadBridge: 'static {
+    type Component: 'static;
+    type Js: for<'js> FromJs<'js> + for<'js> IntoJs<'js> + 'static;
+
+    fn wrap(value: Self::Component) -> Self::Js;
+    fn unwrap(value: Self::Js) -> Self::Component;
+    fn channel() -> (
+        FutureWriter<Self::Component>,
+        FutureReader<Self::Component>,
+    );
+}
+
+pub struct FutureReaderWrapper<B: FuturePayloadBridge> {
+    reader: FutureReader<B::Component>,
+}
+
+impl<B: FuturePayloadBridge> FutureReaderWrapper<B> {
+    pub fn new(reader: FutureReader<B::Component>) -> Self {
+        Self { reader }
+    }
+
+    pub fn into_inner(self) -> FutureReader<B::Component> {
+        self.reader
+    }
+}
+
+impl<'js, B: FuturePayloadBridge> IntoJs<'js> for FutureReaderWrapper<B> {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        FutureReaderIntoJs::new(self.reader, B::wrap).into_js(ctx)
+    }
+}
+
+impl<'js, B: FuturePayloadBridge> FromJs<'js> for FutureReaderWrapper<B> {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let (writer, reader) = B::channel();
+        future_writer_from_js(ctx, value, writer, B::unwrap)?;
+        Ok(Self { reader })
+    }
+}
+
+pub trait StreamPayloadBridge: 'static {
+    type Component: 'static;
+    type Js: for<'js> FromJs<'js> + for<'js> IntoJs<'js> + 'static;
+
+    fn wrap(value: Self::Component) -> Self::Js;
+    fn unwrap(value: Self::Js) -> Self::Component;
+    fn channel() -> (
+        StreamWriter<Self::Component>,
+        StreamReader<Self::Component>,
+    );
+}
+
+pub struct StreamReaderWrapper<B: StreamPayloadBridge> {
+    reader: StreamReader<B::Component>,
+}
+
+impl<B: StreamPayloadBridge> StreamReaderWrapper<B> {
+    pub fn new(reader: StreamReader<B::Component>) -> Self {
+        Self { reader }
+    }
+
+    pub fn into_inner(self) -> StreamReader<B::Component> {
+        self.reader
+    }
+}
+
+impl<'js, B: StreamPayloadBridge> IntoJs<'js> for StreamReaderWrapper<B> {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        StreamReaderIntoJs::new(self.reader, B::wrap).into_js(ctx)
+    }
+}
+
+impl<'js, B: StreamPayloadBridge> FromJs<'js> for StreamReaderWrapper<B> {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+        let (writer, reader) = B::channel();
+        stream_writer_from_js(ctx, value, writer, B::unwrap)?;
+        Ok(Self { reader })
+    }
+}

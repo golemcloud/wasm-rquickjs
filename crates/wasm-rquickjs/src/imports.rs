@@ -715,7 +715,10 @@ fn generate_import_module(
                         &import_parameter,
                     )
                 })
-                .collect::<anyhow::Result<Vec<_>>>()?;
+                .collect::<anyhow::Result<Vec<_>>>()
+                .with_context(|| {
+                    format!("Failed to generate resource function {resource_name}.{name}")
+                })?;
 
             let param_list: Vec<TokenStream> = to_wrapped_func_arg_list(&parameters);
 

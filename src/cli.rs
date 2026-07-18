@@ -10,7 +10,7 @@ pub enum WasiTarget {
     #[default]
     #[value(name = "wasi-p2")]
     WasiP2,
-    /// WASI Preview 3 (opt-in, async): async exports/imports, minimal runtime spine.
+    /// WASI Preview 3 (opt-in): component-model async support and the Preview 3 runtime spine.
     #[value(name = "wasi-p3")]
     WasiP3,
 }
@@ -59,8 +59,7 @@ pub enum Command {
         world: Option<String>,
 
         /// The WASI generation target. `wasi-p2` (default) generates the historical
-        /// synchronous Preview 2 wrapper; `wasi-p3` generates the opt-in async Preview 3
-        /// wrapper (async exports/imports only).
+        /// synchronous Preview 2 wrapper; `wasi-p3` generates the opt-in Preview 3 wrapper.
         #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
         target: WasiTarget,
     },
@@ -77,6 +76,10 @@ pub enum Command {
         /// The WIT world to use
         #[arg(long)]
         world: Option<String>,
+
+        /// The WASI generation target whose JavaScript export contract is described.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        target: WasiTarget,
     },
     /// Pre-initialize a WebAssembly component using Wizer to speed up startup
     Optimize {

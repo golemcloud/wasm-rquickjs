@@ -23,9 +23,10 @@ use crate::GeneratorContext;
 use crate::rust_bindgen::{RustType, TypeOwnershipStyle, type_mode_for};
 use crate::types::{TokenStreamWrapper, get_wrapped_type, to_type_ref};
 use anyhow::anyhow;
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use wit_parser::{Type, TypeDefKind};
+use std::collections::BTreeSet;
+use wit_parser::{Type, TypeDefKind, TypeId};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AsyncValueKind {
@@ -39,6 +40,13 @@ pub enum AsyncValueKind {
 pub struct AsyncValue {
     pub kind: AsyncValueKind,
     pub payload: Option<Type>,
+}
+
+pub(crate) fn payload_bridge_ident(type_id: TypeId) -> Ident {
+    Ident::new(
+        &format!("AsyncValuePayload{}", type_id.index()),
+        Span::call_site(),
+    )
 }
 
 /// Detects whether `typ`, after following type aliases, is a `future<T>` / `stream<T>`.
@@ -73,6 +81,75 @@ pub fn detect(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::Result<Opti
             _ => return Ok(None),
         }
     }
+}
+
+pub fn contains(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::Result<bool> {
+    fn visit(
+        context: &GeneratorContext<'_>,
+        typ: &Type,
+        visited: &mut BTreeSet<TypeId>,
+    ) -> anyhow::Result<bool> {
+        let Type::Id(type_id) = typ else {
+            return Ok(false);
+        };
+        if !visited.insert(*type_id) {
+            return Ok(false);
+        }
+
+        let typ = context.typ(*type_id)?;
+        match &typ.kind {
+            TypeDefKind::Future(_) | TypeDefKind::Stream(_) => Ok(true),
+            TypeDefKind::Type(inner)
+            | TypeDefKind::Option(inner)
+            | TypeDefKind::List(inner)
+            | TypeDefKind::FixedLengthList(inner, _) => visit(context, inner, visited),
+            TypeDefKind::Record(record) => {
+                for field in &record.fields {
+                    if visit(context, &field.ty, visited)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            TypeDefKind::Tuple(tuple) => {
+                for item in &tuple.types {
+                    if visit(context, item, visited)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            TypeDefKind::Variant(variant) => {
+                for case in &variant.cases {
+                    if let Some(ty) = &case.ty
+                        && visit(context, ty, visited)?
+                    {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            TypeDefKind::Result(result) => {
+                if let Some(ok) = &result.ok
+                    && visit(context, ok, visited)?
+                {
+                    return Ok(true);
+                }
+                if let Some(err) = &result.err
+                    && visit(context, err, visited)?
+                {
+                    return Ok(true);
+                }
+                Ok(false)
+            }
+            TypeDefKind::Map(key, value) => {
+                Ok(visit(context, key, visited)? || visit(context, value, visited)?)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    visit(context, typ, &mut BTreeSet::new())
 }
 
 /// Ensures future/stream values are only used on the Preview 3 target, which is the only target
@@ -117,18 +194,18 @@ fn payload_original_ref(
 
 /// The JS-facing (rquickjs) representation of the payload, together with the `wrap`/`unwrap`
 /// conversions between it and the wit-bindgen payload type.
-struct PayloadBridge {
+pub(crate) struct PayloadBridge {
     /// wit-bindgen payload type (`T` in `FutureReader<T>`).
-    original_ref: TokenStream,
+    pub(crate) original_ref: TokenStream,
     /// rquickjs representation of the payload (implements `IntoJs` + `FromJs`).
-    wrapped_ref: TokenStream,
+    pub(crate) wrapped_ref: TokenStream,
     /// wit-bindgen payload -> rquickjs representation.
-    wrap: TokenStreamWrapper,
+    pub(crate) wrap: TokenStreamWrapper,
     /// rquickjs representation -> wit-bindgen payload.
-    unwrap: TokenStreamWrapper,
+    pub(crate) unwrap: TokenStreamWrapper,
 }
 
-fn payload_bridge(
+pub(crate) fn payload_bridge(
     context: &GeneratorContext<'_>,
     async_value: &AsyncValue,
 ) -> anyhow::Result<PayloadBridge> {

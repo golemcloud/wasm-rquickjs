@@ -3,23 +3,49 @@ use rquickjs::class::Trace;
 use rquickjs::{Ctx, Exception, JsLifetime};
 use std::cell::RefCell;
 
-/// Upper bound (in milliseconds) that a single `receive_with_timeout` host call may block the
-/// single-threaded runtime while waiting for the next message. The host returns as soon as a
-/// message arrives, so this only bounds how long the event loop can stall while the socket is
-/// idle before the receive loop yields.
+/// Upper bound (in milliseconds) that a Preview 2 `receive_with_timeout` host call may block the
+/// single-threaded runtime before the receive loop yields.
+#[cfg(feature = "p2")]
 const RECEIVE_POLL_TIMEOUT_MS: u64 = 50;
 
-/// Cooperative yield between receive polls. The new `golem:websocket` interface is fully
-/// synchronous (no `wasi:io/poll` pollables), so `receive` drives a bounded poll loop and
-/// yields to the async runtime between polls, using the same clock primitive as the timer
-/// subsystem so timers and other tasks keep making progress on both the Preview 2 and
-/// Preview 3 paths.
+/// Cooperative yield between Preview 2 receive polls.
+#[cfg(feature = "p2")]
 async fn receive_poll_yield() {
-    #[cfg(feature = "p2")]
     wstd::task::sleep(wstd::time::Duration::from_millis(0)).await;
+}
 
-    #[cfg(feature = "p3")]
-    wasip3::clocks::monotonic_clock::wait_for(0).await;
+fn receive_result_to_js<'js>(
+    ctx: &Ctx<'js>,
+    result: Result<Message, WsError>,
+) -> rquickjs::Result<rquickjs::Value<'js>> {
+    let arr = rquickjs::Array::new(ctx.clone())?;
+    match result {
+        Ok(Message::Text(text)) => {
+            arr.set(0, "text")?;
+            arr.set(1, text)?;
+        }
+        Ok(Message::Binary(data)) => {
+            arr.set(0, "binary")?;
+            let ab = rquickjs::ArrayBuffer::new(ctx.clone(), data)?;
+            arr.set(1, ab)?;
+        }
+        Err(WsError::Closed(info)) => {
+            arr.set(0, "closed")?;
+            let (code, reason) = match info {
+                Some(ci) => (ci.code as i32, ci.reason),
+                None => (1000, String::new()),
+            };
+            let close_obj = rquickjs::Object::new(ctx.clone())?;
+            close_obj.set("code", code)?;
+            close_obj.set("reason", reason)?;
+            arr.set(1, close_obj)?;
+        }
+        Err(error) => {
+            arr.set(0, "error")?;
+            arr.set(1, format!("{error:?}"))?;
+        }
+    }
+    Ok(arr.into_value())
 }
 
 #[rquickjs::module]
@@ -96,11 +122,8 @@ impl WsConnection {
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 
-    /// Async receive: drives a bounded cooperative poll loop over the synchronous
-    /// `receive_with_timeout` host call, yielding to the async runtime between polls so the
-    /// event loop (timers, other tasks) keeps making progress. The previous pollable-based
-    /// implementation is gone because the `golem:websocket` interface no longer exposes
-    /// `subscribe`/`wasi:io/poll`.
+    /// Async receive. Preview 3 directly awaits the asynchronous host import; Preview 2 drives a
+    /// bounded cooperative loop over `receive_with_timeout`.
     ///
     /// Returns: [type, data]
     ///   "text"    → data is the string
@@ -108,6 +131,19 @@ impl WsConnection {
     ///   "closed"  → data is { code, reason }
     ///   "error"   → data is an error description string
     pub async fn receive<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
+        #[cfg(feature = "p3")]
+        {
+            let result = {
+                let inner = self.inner.borrow();
+                let conn = inner
+                    .as_ref()
+                    .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
+                conn.receive().await
+            };
+            return receive_result_to_js(&ctx, result);
+        }
+
+        #[cfg(feature = "p2")]
         loop {
             let result = {
                 let inner = self.inner.borrow();
@@ -118,44 +154,14 @@ impl WsConnection {
             };
 
             match result {
-                Ok(Some(Message::Text(text))) => {
-                    let arr = rquickjs::Array::new(ctx.clone())?;
-                    arr.set(0, "text")?;
-                    arr.set(1, text)?;
-                    return Ok(arr.into_value());
-                }
-                Ok(Some(Message::Binary(data))) => {
-                    let arr = rquickjs::Array::new(ctx.clone())?;
-                    arr.set(0, "binary")?;
-                    let ab = rquickjs::ArrayBuffer::new(ctx.clone(), data)?;
-                    arr.set(1, ab)?;
-                    return Ok(arr.into_value());
-                }
+                Ok(Some(message)) => return receive_result_to_js(&ctx, Ok(message)),
                 Ok(None) => {
                     // No message arrived within the poll window. Yield so timers and other
                     // async tasks run, then poll again.
                     receive_poll_yield().await;
                     continue;
                 }
-                Err(WsError::Closed(info)) => {
-                    let arr = rquickjs::Array::new(ctx.clone())?;
-                    arr.set(0, "closed")?;
-                    let (code, reason) = match info {
-                        Some(ci) => (ci.code as i32, ci.reason),
-                        None => (1000, String::new()),
-                    };
-                    let close_obj = rquickjs::Object::new(ctx.clone())?;
-                    close_obj.set("code", code)?;
-                    close_obj.set("reason", reason)?;
-                    arr.set(1, close_obj)?;
-                    return Ok(arr.into_value());
-                }
-                Err(e) => {
-                    let arr = rquickjs::Array::new(ctx.clone())?;
-                    arr.set(0, "error")?;
-                    arr.set(1, format!("{e:?}"))?;
-                    return Ok(arr.into_value());
-                }
+                Err(error) => return receive_result_to_js(&ctx, Err(error)),
             }
         }
     }

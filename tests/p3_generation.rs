@@ -8,7 +8,8 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 use wasm_rquickjs::{
-    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_dts, generate_wrapper_crate_with_target,
+    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_dts_with_target,
+    generate_wrapper_crate_with_target,
 };
 
 /// Starts a minimal single-threaded HTTP/1.1 test server on an ephemeral loopback port and
@@ -306,6 +307,28 @@ fn generate_p3(root: &Utf8Path) -> anyhow::Result<()> {
     )
 }
 
+fn generate_p3_dts(wit: &Utf8Path, output: &Utf8Path) -> anyhow::Result<Vec<Utf8PathBuf>> {
+    generate_dts_with_target(wit, output, None, GenerationTarget::WasiP3)
+}
+
+fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
+    let manifest = root.join("out").join("Cargo.toml");
+    let contents = std::fs::read_to_string(&manifest)?;
+    let remote_patch = concat!(
+        "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
+        "branch = \"wasi-p3\" }"
+    );
+    let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
+    let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
+    let updated = contents.replace(remote_patch, &local_patch);
+    assert_ne!(
+        updated, contents,
+        "generated Cargo.toml did not contain the expected golem-websocket branch patch"
+    );
+    std::fs::write(manifest, updated)?;
+    Ok(())
+}
+
 fn build_p3(root: &Utf8Path, wasm_name: &str) -> anyhow::Result<Utf8PathBuf> {
     build_p3_with_features(root, wasm_name, Some(P3_NORMAL_NO_LOGGING_FEATURES))
 }
@@ -433,24 +456,25 @@ fn run_p3_string_export_with_dir(
 }
 
 #[test]
-fn p3_rejects_sync_wizer_initialize_export_from_input_wit() -> anyhow::Result<()> {
+fn p3_sync_freestanding_export_runs() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
         indoc! {r#"
-            package bug:wizer;
+            package bug:p3-sync-export;
 
-            world wizer {
-              export wizer-initialize: func();
+            world p3-sync-export {
+              export run: func() -> string;
             }
         "#},
-        "",
+        "export function run() { return 'sync-ok'; }\n",
     )?;
 
-    assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject synchronous exports even when the export is named wizer-initialize"
-    );
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_sync_export")?;
+    let result = run_p3_string_export(&wasm_path, "run")?;
+
+    assert_eq!(result, "sync-ok");
     Ok(())
 }
 
@@ -506,6 +530,65 @@ fn p3_generated_crate_builds_with_wasi_system_clock_import() -> anyhow::Result<(
     assert!(
         output.status.success(),
         "P3 generated crate with a wasi:clocks/system-clock import should build; stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_generated_crate_builds_with_multiple_wasi_package_versions() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:multiple-wasi-versions;
+
+            world multiple-wasi-versions {
+              import wasi:cli/environment@0.3.0;
+              export run: async func() -> u64;
+            }
+        "#},
+        "export async function run() { return 1n; }\n",
+    )?;
+    write_wit_dep(
+        temp.path(),
+        "cli-p3.wit",
+        indoc! {r#"
+            package wasi:cli@0.3.0;
+
+            interface environment {
+              get-environment: func() -> list<tuple<string, string>>;
+              get-arguments: func() -> list<string>;
+              get-initial-cwd: func() -> option<string>;
+            }
+        "#},
+    )?;
+    write_wit_dep(
+        temp.path(),
+        "cli-p2.wit",
+        indoc! {r#"
+            package wasi:cli@0.2.6;
+
+            interface environment {
+              get-environment: func() -> list<tuple<string, string>>;
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+
+    let output = Command::new("cargo")
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(temp.path().join("out").join("Cargo.toml"))
+        .arg("--target")
+        .arg("wasm32-wasip2")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "P3 generated crate with multiple versions of a WASI package should build; stdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
@@ -1058,7 +1141,7 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
     // `websocket` is an opt-in capability (like `logging`) intentionally kept out of the default
     // `normal-p3` and `full-p3` tiers because enabling it adds a required `golem:websocket/client`
     // host import that plain WASI hosts (including the wasmtime CLI used here) cannot satisfy. It
-    // uses the fully synchronous `golem:websocket@1.5.0` interface, which is Preview 3-portable.
+    // uses the Preview 3 interface with asynchronous receive operations.
     // There is no `golem:websocket` host in this harness, so this is a build-only check that the
     // websocket builtin compiles and links into a Preview 3 crate (the `WebSocket`/`WebSocketStream`
     // globals it installs are exercised by the P2 runtime tests / a Golem host, not here).
@@ -1080,6 +1163,7 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
     )?;
 
     generate_p3(temp.path())?;
+    use_local_golem_websocket(temp.path())?;
     // Build only: enabling `websocket` adds an unsatisfiable `golem:websocket` import under the
     // wasmtime CLI, so we assert compilation/linking succeeds rather than invoking the component.
     // Use the no-logging feature set for consistency with the P3 CLI-invoked tests.
@@ -2280,10 +2364,8 @@ fn p3_streaming_fetch_truncated_final_body_rejects_like_buffered_path() -> anyho
 
 #[test]
 fn p3_rejects_nested_future_in_record() -> anyhow::Result<()> {
-    // `future<T>` / `stream<T>` are only supported as a *direct* function parameter or return
-    // type (the four JS ⇄ component async-value boundaries). A future/stream nested inside another
-    // type (here a record field) has no lowering through the normal `WrappedType` pipeline, so
-    // generation must reject it up front with a clear message rather than emit a broken crate.
+    // Nested async values returned from an export need the export-side writer runtime, which the
+    // generic nested-value bridge cannot select from its FromJs implementation.
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -2302,7 +2384,7 @@ fn p3_rejects_nested_future_in_record() -> anyhow::Result<()> {
         .expect_err("P3 generation must reject a future<T> nested inside a record");
     let message = format!("{err:#}");
     assert!(
-        message.contains("only supported as a direct function parameter or return type"),
+        message.contains("nested inside an exported function result are not supported"),
         "unexpected error message: {message}"
     );
     Ok(())
@@ -2329,9 +2411,88 @@ fn p3_rejects_nested_stream_in_list() -> anyhow::Result<()> {
         .expect_err("P3 generation must reject a stream<T> nested inside a list");
     let message = format!("{err:#}");
     assert!(
-        message.contains("only supported as a direct function parameter or return type"),
+        message.contains("nested inside an exported function result are not supported"),
         "unexpected error message: {message}"
     );
+    Ok(())
+}
+
+#[test]
+fn p3_generated_crate_builds_with_nested_async_import_values() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:nested-async-imports;
+
+            interface host {
+              type byte-stream = stream<u8>;
+              record request { data: byte-stream }
+
+              resource transfer {
+                send: func(data: byte-stream) -> future<result<_, string>>;
+                send-request: async func(request: request) -> result<_, string>;
+                receive: func() -> result<byte-stream, string>;
+              }
+            }
+
+            world nested-async-imports {
+              import host;
+              export run: async func() -> string;
+            }
+        "#},
+        "export async function run() { return 'ok'; }\n",
+    )?;
+
+    generate_p3(temp.path())?;
+    build_p3(temp.path(), "nested_async_imports")?;
+    Ok(())
+}
+
+#[test]
+fn p3_dts_maps_nested_async_import_values() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-nested-async-imports;
+
+            interface host {
+              type byte-stream = stream<u8>;
+              record request { data: byte-stream }
+
+              resource transfer {
+                send: func(data: byte-stream) -> future<result<_, string>>;
+                send-request: async func(request: request) -> result<_, string>;
+                receive: func() -> result<byte-stream, string>;
+              }
+            }
+
+            world dts-nested-async-imports {
+              import host;
+            }
+        "#},
+        "",
+    )?;
+
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
+    let host_path = generated
+        .iter()
+        .find(|path| path.file_name().is_some_and(|name| name.contains("host")))
+        .expect("host import interface .d.ts should be generated");
+    let host = std::fs::read_to_string(host_path)?;
+
+    for expected in [
+        "data: AsyncIterable<number>",
+        "send(data: AsyncIterable<number>): Promise<Result<void, string>>;",
+        "sendRequest(request: Request): Promise<void>;",
+        "receive(): AsyncIterable<number>;",
+    ] {
+        assert!(
+            host.contains(expected),
+            "missing `{expected}` in generated declarations:\n{host}"
+        );
+    }
     Ok(())
 }
 
@@ -2351,11 +2512,11 @@ fn p3_dts_rejects_nested_future_in_record() -> anyhow::Result<()> {
         "export function run() { return { f: Promise.resolve(1) }; }\n",
     )?;
 
-    let err = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)
+    let err = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))
         .expect_err("DTS generation must reject a future<T> nested inside a record");
     let message = format!("{err:#}");
     assert!(
-        message.contains("only supported as a direct function parameter or return type"),
+        message.contains("nested inside an exported function result are not supported"),
         "unexpected error message: {message}"
     );
     Ok(())
@@ -2381,11 +2542,11 @@ fn p3_dts_rejects_nested_future_alias_in_record() -> anyhow::Result<()> {
         "export function run() { return { f: Promise.resolve(1) }; }\n",
     )?;
 
-    let err = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)
+    let err = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))
         .expect_err("DTS generation must reject a future<T> alias nested inside a record");
     let message = format!("{err:#}");
     assert!(
-        message.contains("only supported as a direct function parameter or return type"),
+        message.contains("nested inside an exported function result are not supported"),
         "unexpected error message: {message}"
     );
     Ok(())
@@ -2418,7 +2579,7 @@ fn p3_dts_maps_direct_future_and_stream_boundaries() -> anyhow::Result<()> {
          export function takeStream() { return 0; }\n",
     )?;
 
-    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
     let mut combined = String::new();
     for path in &generated {
         combined.push_str(&std::fs::read_to_string(path)?);
@@ -2457,7 +2618,7 @@ fn p3_dts_exported_future_return_is_not_double_wrapped() -> anyhow::Result<()> {
         "export function runFuture() { return Promise.resolve(1); }\n",
     )?;
 
-    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
     let exports_path = generated
         .iter()
         .find(|path| path.file_name() == Some("exports.d.ts"))
@@ -2504,7 +2665,7 @@ fn p3_dts_maps_direct_future_and_stream_alias_boundaries() -> anyhow::Result<()>
          export function takeStream() { return 0; }\n",
     )?;
 
-    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
     let mut combined = String::new();
     for path in &generated {
         combined.push_str(&std::fs::read_to_string(path)?);
@@ -2563,7 +2724,7 @@ fn p3_dts_emits_payload_type_definitions_for_async_value_boundaries() -> anyhow:
          export function takeResult() {}\n",
     )?;
 
-    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
     let exports_path = generated
         .iter()
         .find(|path| path.file_name() == Some("exports.d.ts"))
@@ -2646,7 +2807,7 @@ fn p3_dts_accepts_async_func_async_value_boundaries() -> anyhow::Result<()> {
          export async function takeStream() {}\n",
     )?;
 
-    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
     let exports_path = generated
         .iter()
         .find(|path| path.file_name() == Some("exports.d.ts"))
@@ -2660,6 +2821,85 @@ fn p3_dts_accepts_async_func_async_value_boundaries() -> anyhow::Result<()> {
     assert!(
         exports.contains("export function takeStream(s: AsyncIterable<number>): Promise<void>;"),
         "expected exported async stream<T> parameter to be declared as AsyncIterable<T>; generated:\n{exports}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_generates_async_resource_methods() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-async-resource;
+
+            interface host {
+              resource pending-value {
+                get: async func() -> u32;
+                %get-default: static async func() -> u32;
+              }
+            }
+
+            world dts-async-resource {
+              import host;
+            }
+        "#},
+        "",
+    )?;
+
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
+    let host_path = generated
+        .iter()
+        .find(|path| path.file_name().is_some_and(|name| name.contains("host")))
+        .expect("host import interface .d.ts should be generated");
+    let host = std::fs::read_to_string(host_path)?;
+
+    assert!(
+        host.contains("get(): Promise<number>;"),
+        "expected an async resource method to return a Promise; generated:\n{host}"
+    );
+    assert!(
+        host.contains("static getDefault(): Promise<number>;"),
+        "expected an async static resource method to return a Promise; generated:\n{host}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_dts_preserves_sync_and_async_export_kinds() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:dts-p3-export-kinds;
+
+            world dts-p3-export-kinds {
+              export sync-value: func() -> string;
+              export async-value: async func() -> string;
+            }
+        "#},
+        "",
+    )?;
+
+    let generated = generate_dts_with_target(
+        &temp.path().join("wit"),
+        &temp.path().join("dts"),
+        None,
+        GenerationTarget::WasiP3,
+    )?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
+
+    assert!(
+        exports.contains("export function syncValue(): string;"),
+        "expected a P3 synchronous export to have a synchronous declaration; generated:\n{exports}"
+    );
+    assert!(
+        exports.contains("export function asyncValue(): Promise<string>;"),
+        "expected a P3 async export to return a Promise; generated:\n{exports}"
     );
     Ok(())
 }
@@ -2693,7 +2933,7 @@ fn p3_dts_collects_dependencies_through_imported_async_value_aliases() -> anyhow
          export function getResult() { return Promise.resolve({ tag: 'ok', val: 1 }); }\n",
     )?;
 
-    let generated = generate_dts(&temp.path().join("wit"), &temp.path().join("dts"), None)?;
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
     let exports_path = generated
         .iter()
         .find(|path| path.file_name() == Some("exports.d.ts"))
@@ -2734,11 +2974,7 @@ fn p3_dts_generates_for_async_values_examples() -> anyhow::Result<()> {
 
     // Export-side example: future/stream at both export return and export parameter positions.
     let export_dts = out.path().join("export");
-    generate_dts(
-        Utf8Path::new("examples/p3/async-values/wit"),
-        &export_dts,
-        None,
-    )?;
+    generate_p3_dts(Utf8Path::new("examples/p3/async-values/wit"), &export_dts)?;
     let exports = std::fs::read_to_string(export_dts.join("exports.d.ts"))?;
     for needle in [
         "export function runFuture(): Promise<number>;",
@@ -2755,10 +2991,9 @@ fn p3_dts_generates_for_async_values_examples() -> anyhow::Result<()> {
     // Import-side example: future/stream at both import return and import parameter positions,
     // across sync `func` and `async func` imports.
     let import_dts = out.path().join("import");
-    let generated = generate_dts(
+    let generated = generate_p3_dts(
         Utf8Path::new("examples/p3/async-values-import/wit"),
         &import_dts,
-        None,
     )?;
     let host_path = generated
         .iter()

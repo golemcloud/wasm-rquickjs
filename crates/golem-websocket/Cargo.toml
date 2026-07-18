@@ -7,9 +7,13 @@ homepage.workspace = true
 repository.workspace = true
 description = "Packages golem:websocket as a simple Rust crate"
 
+[features]
+default = ["p2"]
+p2 = []
+p3 = []
+
 [dependencies]
-wit-bindgen-rt = { version = "0.42.1" }
-wit-bindgen = { version = "0.51.0", default-features = false, features = ["macros"] }
+wit-bindgen = { version = "0.58.0", default-features = false, features = ["async", "async-spawn", "macros", "inter-task-wakeup"] }
 
 [package.metadata.component.target.dependencies]
 "golem:websocket" = { path = "wit/deps/golem-websocket" }
