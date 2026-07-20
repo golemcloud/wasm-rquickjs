@@ -80,6 +80,23 @@ async fn esm_data_url_import_attributes(
 }
 
 #[test]
+async fn esm_injected_helpers_ignore_lexical_global_this(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-esm-injected-helpers-ignore-lexical-global-this",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn esm_json_url_cache_keys(
     #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

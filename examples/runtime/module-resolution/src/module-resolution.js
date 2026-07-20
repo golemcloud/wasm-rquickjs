@@ -1479,6 +1479,35 @@ export const testEsmDataUrlImportAttributes = async () => {
     }
 };
 
+export const testEsmInjectedHelpersIgnoreLexicalGlobalThis = async () => {
+    try {
+        const dynamicResult = (await import('data:text/javascript,' + encodeURIComponent([
+            'const p = import("data:text/javascript,export default 1");',
+            'const globalThis = 1;',
+            'export default (await p).default;',
+        ].join('\n')))).default;
+        assert.strictEqual(dynamicResult, 1);
+
+        const importMetaResult = (await import('data:text/javascript,' + encodeURIComponent([
+            'const globalThis = 1;',
+            'export default [typeof import.meta.resolve, import.meta.resolve("node:fs")];',
+        ].join('\n')))).default;
+        assert.deepStrictEqual(importMetaResult, ['function', 'node:fs']);
+
+        fs.mkdirSync('/esm-injected-helper-app', { recursive: true });
+        fs.writeFileSync('/esm-injected-helper-app/main.mjs', [
+            'const globalThis = 1;',
+            'export default import.meta.main;',
+        ].join('\n'));
+        assert.strictEqual((await import('/esm-injected-helper-app/main.mjs')).default, false);
+
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testEsmJsonUrlCacheKeys = async () => {
     try {
         const root = '/esm-json-url-cache-keys-app';

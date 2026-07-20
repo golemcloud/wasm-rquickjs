@@ -445,7 +445,7 @@ impl Loader for DataUrlLoader {
 
             let init = url_only_import_meta_init(path.to_string());
             let injected = inject_import_meta_prologue(&init, &source);
-            Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
+            declare_module_with_import_meta(ctx, path, &injected, &init)
         } else {
             let escaped_mime = Self::js_string_escape(base_mime);
             let escaped_path = Self::js_string_escape(path);
@@ -850,7 +850,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
             dynamic_import_binding_names
                 .expect("dynamic import bindings must be initialized when a dynamic import was rewritten");
         let prelude = format!(
-            "const {dynamic_import_reaction_name}=globalThis.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=globalThis.__wasm_rquickjs_dynamic_import_with_trace;\n"
+            "const {dynamic_import_reaction_name}=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;\n"
         );
         insert_after_shebang(&result, &prelude)
     } else {
@@ -7764,7 +7764,7 @@ impl Loader for CjsCompatLoader {
             named_exports
         );
 
-        Module::declare(ctx.clone(), path, wrapped.as_bytes().to_vec())
+        declare_module_with_import_meta(ctx, path, &wrapped, &init)
     }
 }
 
@@ -7773,6 +7773,26 @@ struct ImportMetaInit {
     filename: Option<String>,
     dirname: Option<String>,
     include_resolve: bool,
+}
+
+fn declare_module_with_import_meta<'js>(
+    ctx: &Ctx<'js>,
+    path: &str,
+    source: &str,
+    init: &ImportMetaInit,
+) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+    let module = Module::declare(ctx.clone(), path, source.as_bytes().to_vec())?;
+    initialize_module_import_meta(ctx, &module, init)?;
+    Ok(module)
+}
+
+fn initialize_module_import_meta<'js>(
+    ctx: &Ctx<'js>,
+    module: &Module<'js, rquickjs::module::Declared>,
+    _init: &ImportMetaInit,
+) -> rquickjs::Result<()> {
+    module.meta()?.prop("__wasm_rquickjs_global", ctx.globals())?;
+    Ok(())
 }
 
 fn url_only_import_meta_init(url: String) -> ImportMetaInit {
@@ -8569,6 +8589,7 @@ fn is_js_identifier_continue(byte: u8) -> bool {
 }
 
 fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
+    let global_name = unique_internal_name(source, "__wasm_rquickjs_global");
     let mut props = Vec::new();
 
     if let Some(ref dirname) = init.dirname {
@@ -8587,7 +8608,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
 
     if init.include_resolve {
         props.push(format!(
-            "resolve:{{value:(s,p)=>{{if(p!==undefined){{if(typeof p==='string'){{return globalThis.__wasm_rquickjs_import_meta_resolve(p,s);}}if(p instanceof URL){{return globalThis.__wasm_rquickjs_import_meta_resolve(p.href,s);}}const e=new TypeError('The \"parentURL\" argument must be of type string or an instance of URL.');e.code='ERR_INVALID_ARG_TYPE';throw e;}}return globalThis.__wasm_rquickjs_import_meta_resolve(\"{}\",s);}},writable:true,enumerable:true,configurable:true}}",
+            "resolve:{{value:(s,p)=>{{if(p!==undefined){{if(typeof p==='string'){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p,s);}}if(p instanceof {global_name}.URL){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p.href,s);}}const e=new {global_name}.TypeError('The \"parentURL\" argument must be of type string or an instance of URL.');e.code='ERR_INVALID_ARG_TYPE';throw e;}}return {global_name}.__wasm_rquickjs_import_meta_resolve(\"{}\",s);}},writable:true,enumerable:true,configurable:true}}",
             escape_js_string(&init.url)
         ));
     }
@@ -8598,11 +8619,8 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     ));
 
     let mut prologue = format!(
-        "Object.defineProperties(import.meta,{{{}}});",
+        "const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;{global_name}.Object.defineProperties(import.meta,{{{}}});",
         props.join(",")
-    );
-    prologue.push_str(
-        r##"if(!globalThis.__wasm_rquickjs_import_attr_specifier){globalThis.__wasm_rquickjs_import_attr_specifier=(s,t)=>{let v=String(s);let f=null;if(v.startsWith("data:")){const r=v.slice(5);const c=r.indexOf(",");const m=(c<0?r:r.slice(0,c)).split(";")[0].trim();if(m==="application/json")f="json";else if(m==="text/javascript"||m==="application/javascript")f="module";else if(m==="text/css")f="css";}else if(v.startsWith("node:"))f="module";else{const b=v.split(/[?#]/,1)[0];if(b.endsWith(".json"))f="json";else if(b.endsWith(".js")||b.endsWith(".mjs")||b.endsWith(".cjs"))f="module";}function er(c,m){return"data:text/javascript,"+encodeURIComponent(`await Promise.reject(Object.assign(new TypeError(${JSON.stringify(m)}),{code:${JSON.stringify(c)}}));`)}if(t&&t!=="json"&&t!=="css")return er("ERR_IMPORT_ATTRIBUTE_UNSUPPORTED",`Import attribute type "${t}" is not supported`);if(t==="json"&&f==="module")return er("ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE","Cannot use import attributes to change the type of a JavaScript module");if(f==="json"&&t!=="json")return er("ERR_IMPORT_ATTRIBUTE_MISSING",`Module "${v}" needs an import attribute of type: json`);if(t==="json"){if(v.startsWith("data:"))v=v.replace(/\"/g,"%22");return"data:text/javascript,"+encodeURIComponent("import value from "+JSON.stringify(v)+" with { type: \"json\" }; export default value;");}return v;};}"##,
     );
     let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
     let shadowed_cjs_globals: Vec<&str> = ["require"]
@@ -8620,7 +8638,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         .as_ref()
         .map(|filename| {
             format!(
-                "!!(globalThis.process&&Array.isArray(globalThis.process.argv)&&globalThis.process.argv[1]===\"{}\")",
+                "!!({global_name}.process&&{global_name}.Array.isArray({global_name}.process.argv)&&{global_name}.process.argv[1]===\"{}\")",
                 escape_js_string(filename)
             )
         })
@@ -8766,7 +8784,7 @@ fn declare_esm_file_module_from_source<'js>(
         );
         injected = format!("{}{}", marker, injected);
     }
-    match Module::declare(ctx.clone(), module_id, injected.as_bytes().to_vec()) {
+    match declare_module_with_import_meta(ctx, module_id, &injected, &init) {
         Ok(module) => Ok(module),
         Err(Error::Exception) => {
             let exception = ctx.catch();

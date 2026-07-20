@@ -1444,11 +1444,10 @@ mod tests {
                 && internal_rs.contains("dynamic_import_binding_names.get_or_insert_with(||")
                 && internal_rs.contains("unique_internal_name( source, \"__wasm_rquickjs_dynamic_import_reaction\", )")
                 && internal_rs.contains("unique_internal_name( source, \"__wasm_rquickjs_dynamic_import_with_trace\", )")
-                && internal_rs.contains("const {dynamic_import_reaction_name}=globalThis.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=globalThis.__wasm_rquickjs_dynamic_import_with_trace;")
+                && internal_rs.contains("const {dynamic_import_reaction_name}=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;")
                 && internal_rs.contains("((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))")
                 && internal_rs.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))")
                 && !internal_rs.contains("constructor(\\\"return this\\\")")
-                && !internal_rs.contains("import.meta.__wasm_rquickjs_dynamic_import_with_trace")
                 && !internal_rs.contains("import(\\\"node:module\\\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace")
                 && !internal_rs.contains("import(\\\"__wasm_rquickjs_builtin/module\\\")")
                 && !internal_rs.contains(
@@ -1875,8 +1874,28 @@ mod tests {
         assert!(
             internal_rs.contains("fn url_only_import_meta_init")
                 && internal_rs.contains("fn file_import_meta_init")
+                && internal_rs.contains("fn declare_module_with_import_meta")
+                && internal_rs
+                    .contains("module.meta()?.prop(\"__wasm_rquickjs_global\", ctx.globals())?;")
                 && internal_rs.matches("ImportMetaInit { url,").count() == 2,
             "URL-only and file-backed import.meta initialization must be centralized"
+        );
+
+        assert!(
+            internal_rs.contains(
+                "const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;{global_name}.Object.defineProperties(import.meta,"
+            ) && internal_rs.contains(
+                "return {global_name}.__wasm_rquickjs_import_meta_resolve"
+            ) && internal_rs.contains(
+                "{global_name}.Array.isArray({global_name}.process.argv)"
+            ) && !internal_rs.contains(
+                "\"Object.defineProperties(import.meta,"
+            ) && !internal_rs.contains(
+                "return globalThis.__wasm_rquickjs_import_meta_resolve"
+            ) && !internal_rs.contains(
+                "globalThis.process&&Array.isArray(globalThis.process.argv)"
+            ),
+            "generated import.meta prologues must use the per-module captured global object so user lexical globals cannot shadow loader internals"
         );
 
         let url_only_start = internal_rs
