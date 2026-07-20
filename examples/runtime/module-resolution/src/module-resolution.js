@@ -6034,6 +6034,7 @@ export const testFindPackageJson = async () => {
         fs.mkdirSync('/find-package-json-app/node_modules/pkg5/sub-dir-main/entry-dir', { recursive: true });
         fs.mkdirSync('/find-package-json-app/packages/nested/sub-pkg-cjs', { recursive: true });
         fs.mkdirSync('/find-package-json-app/packages/nested/sub-pkg-esm', { recursive: true });
+        fs.mkdirSync('/find-package-json-app/packages/self-cjs', { recursive: true });
 
         fs.writeFileSync('/find-package-json-app/package.json', JSON.stringify({ name: 'root-app' }));
         fs.writeFileSync('/find-package-json-app/packages/nested/package.json', JSON.stringify({ name: 'nested-parent' }));
@@ -6044,6 +6045,14 @@ export const testFindPackageJson = async () => {
         fs.writeFileSync('/find-package-json-app/packages/nested/sub-pkg-esm/index.mjs', [
             'import { findPackageJSON } from "node:module";',
             'export default findPackageJSON("..", import.meta.url);',
+        ].join('\n'));
+        fs.writeFileSync('/find-package-json-app/packages/self-cjs/package.json', JSON.stringify({
+            name: 'self-cjs',
+            exports: './index.cjs',
+        }));
+        fs.writeFileSync('/find-package-json-app/packages/self-cjs/index.cjs', [
+            'const { findPackageJSON } = require("node:module");',
+            'module.exports = findPackageJSON("self-cjs", __filename);',
         ].join('\n'));
 
         fs.writeFileSync('/find-package-json-app/node_modules/pkg/subfolder/index.js', 'module.exports = { subfolder: true };');
@@ -6109,6 +6118,7 @@ export const testFindPackageJson = async () => {
         const pkg3RootPackageJson = '/find-package-json-app/node_modules/pkg3/package.json';
         const pkg4RootPackageJson = '/find-package-json-app/node_modules/pkg4/package.json';
         const pkg5RootPackageJson = '/find-package-json-app/node_modules/pkg5/package.json';
+        const selfCjsPackageJson = '/find-package-json-app/packages/self-cjs/package.json';
 
         assert.strictEqual(
             findPackageJSON('./node_modules/pkg/subfolder/index.js', baseUrl.href),
@@ -6128,6 +6138,9 @@ export const testFindPackageJson = async () => {
 
         const esmParentPackageJson = (await import('/find-package-json-app/packages/nested/sub-pkg-esm/index.mjs')).default;
         assert.strictEqual(esmParentPackageJson, nestedPackageJson);
+
+        const selfCjsPackageJsonResult = require('/find-package-json-app/packages/self-cjs/index.cjs');
+        assert.strictEqual(selfCjsPackageJsonResult, selfCjsPackageJson);
 
         assert.strictEqual(findPackageJSON('pkg', baseUrl), pkgRootPackageJson);
         assert.strictEqual(findPackageJSON('pkg2', baseUrl), pkg2RootPackageJson);

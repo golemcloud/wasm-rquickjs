@@ -153,6 +153,7 @@ mod tests {
             "__wasm_rquickjs_import_meta_resolve_path",
             "__wasm_rquickjs_loader_default_resolve_package",
             "__wasm_rquickjs_cjs_resolve_package_exports",
+            "__wasm_rquickjs_cjs_resolve_package_self_reference",
             "__wasm_rquickjs_cjs_resolve_package_fallback",
             "__wasm_rquickjs_package_global_conditions",
             "__wasm_rquickjs_require_esm_graph_resolve_package",
@@ -540,19 +541,26 @@ mod tests {
                 && !module_js.contains("resolvePackageExportsEntry(parts, packageDir, pkg"),
             "CJS package-directory exports probing must not carry unused package data after Rust resolution"
         );
-        let scope_start = module_js
-            .find("function findPackageScope(startDir)")
-            .expect("findPackageScope function must exist");
-        let scope_end = module_js[scope_start..]
-            .find("function resolvePackageImports(id, parentDir, conditions, resolution)")
-            .expect("findPackageScope must precede resolvePackageImports")
-            + scope_start;
-        let package_scope = &module_js[scope_start..scope_end];
+        let self_start = module_js
+            .find("function resolvePackageSelfReference(parts, parentDir, conditions, resolution)")
+            .expect("resolvePackageSelfReference function must exist");
+        let self_end = module_js[self_start..]
+            .find("function readCjsPackageCandidate(filename, packageDir)")
+            .expect("resolvePackageSelfReference must precede fallback reader")
+            + self_start;
+        let package_self = &module_js[self_start..self_end];
         assert!(
-            package_scope.contains("const scope = { dir, pkg: packageJsonEntry.pkg };")
-                && !package_scope.contains("scope.pkgJsonPath")
-                && !package_scope.contains("pkg: packageJsonEntry.pkg, pkgJsonPath"),
-            "CJS package self-reference scope cache must not retain unused package.json path state"
+            package_self.contains("__wasm_rquickjs_cjs_resolve_package_self_reference(")
+                && package_self.contains("parentDir, parts.name, parts.subpath")
+                && package_self.contains("conditions || cjsPackageConditions(),")
+                && package_self.contains(
+                    "const resolvedFile = resolvePackageFileFromRustResult(resolved, resolution);"
+                )
+                && package_self.contains("resolvedFile.packageDir = resolved.packageDir;")
+                && !module_js.contains("function findPackageScope(")
+                && !module_js.contains("const packageScopeCache = Object.create(null)")
+                && !package_self.contains("readPackageJson("),
+            "CJS package self-reference scope and exports resolution must delegate to Rust without a JS package-scope cache"
         );
         assert!(
             module_js.contains("function resolvePackageFileFromRustResult(resolved, resolution)")
@@ -566,6 +574,16 @@ mod tests {
                 && internal_rs.contains("NodeModulesResolver::resolve_package_exports(")
                 && internal_rs.contains("&mut resolution, None,"),
             "Rust package exports bridge must own CJS package-map resolution without a dead importer parameter"
+        );
+        assert!(
+            internal_rs.contains("fn cjs_resolve_package_self_reference<'js>(")
+                && internal_rs.contains("\"__wasm_rquickjs_cjs_resolve_package_self_reference\"")
+                && internal_rs.contains("NodeModulesResolver::try_resolve_package_self(")
+                && internal_rs.contains("&package_name,")
+                && internal_rs.contains("&subpath,")
+                && internal_rs.contains("&mut resolution,")
+                && internal_rs.contains("result.set(\"packageDir\", package_dir)?;"),
+            "Rust package self-reference bridge must reuse the shared package-self resolver and return owning package metadata"
         );
     }
 

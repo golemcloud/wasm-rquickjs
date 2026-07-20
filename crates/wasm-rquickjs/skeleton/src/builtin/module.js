@@ -969,9 +969,29 @@ function resolvePackageExportsEntry(parts, packageDir, conditions, resolution) {
 }
 
 function resolvePackageSelfReference(parts, parentDir, conditions, resolution) {
-    const scope = findPackageScope(parentDir);
-    if (!scope || !scope.pkg || scope.pkg.name !== parts.name) return undefined;
-    return resolvePackageExportsEntry(parts, scope.dir, conditions, resolution);
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_self_reference !== 'function') {
+        throw new Error('Internal CJS package self-reference resolver is not initialized');
+    }
+    let resolved;
+    try {
+        resolved = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_self_reference(
+            parentDir,
+            parts.name,
+            parts.subpath,
+            conditions || cjsPackageConditions(),
+        );
+    } catch (err) {
+        if (err && err.code === 'ERR_MODULE_NOT_FOUND') {
+            throw makeCjsModuleNotFoundFromErrModuleNotFound(err, parts.name);
+        }
+        throw err;
+    }
+    const resolvedFile = resolvePackageFileFromRustResult(resolved, resolution);
+    if (!resolvedFile) return undefined;
+    if (typeof resolved.packageDir === 'string' && resolved.packageDir.length > 0) {
+        resolvedFile.packageDir = resolved.packageDir;
+    }
+    return resolvedFile;
 }
 
 function readCjsPackageCandidate(filename, packageDir) {
@@ -996,28 +1016,6 @@ function resolveCjsPackageFallbacks(parts, pkgDir, id, fromPart) {
     );
     if (resolved === null || resolved === undefined) return null;
     return readCjsPackageCandidate(String(resolved.filename), String(resolved.packageDir || pkgDir));
-}
-
-const packageScopeCache = Object.create(null);
-
-function findPackageScope(startDir) {
-    let dir = pathModule.resolve(startDir || '/');
-    while (true) {
-        if (pathModule.basename(dir) === 'node_modules') return null;
-        if (Object.prototype.hasOwnProperty.call(packageScopeCache, dir)) {
-            return packageScopeCache[dir];
-        }
-        const pkgJsonPath = pathModule.join(dir, 'package.json');
-        const packageJsonEntry = readPackageJson(pkgJsonPath);
-        if (packageJsonEntry !== null) {
-            const scope = { dir, pkg: packageJsonEntry.pkg };
-            packageScopeCache[dir] = scope;
-            return scope;
-        }
-        const parent = pathModule.dirname(dir);
-        if (parent === dir) return null;
-        dir = parent;
-    }
 }
 
 function resolvePackageImports(id, parentDir, conditions, resolution) {

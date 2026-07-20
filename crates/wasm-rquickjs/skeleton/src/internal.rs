@@ -3689,8 +3689,8 @@ impl NodeModulesResolver {
         let Some(base_dir) = Path::new(base).parent() else {
             return Ok(None);
         };
-        if let Some(resolved) =
-            Self::try_resolve_package_self(base_dir, base, package_name, subpath, resolution)?
+        if let Some((resolved, _package_dir)) =
+            Self::try_resolve_package_self(base_dir, Some(base), package_name, subpath, resolution)?
         {
             return Ok(Some(resolved));
         }
@@ -4022,11 +4022,11 @@ impl NodeModulesResolver {
 
     fn try_resolve_package_self(
         base_dir: &std::path::Path,
-        importer: &str,
+        importer: Option<&str>,
         package_name: &str,
         subpath: &str,
         resolution: &mut NodePackageResolutionContext<'_, '_>,
-    ) -> Result<Option<String>, NodePackageResolveError> {
+    ) -> Result<Option<(String, String)>, NodePackageResolveError> {
         let mut dir = base_dir.to_path_buf();
         loop {
             if dir.file_name().is_some_and(|name| name == "node_modules") {
@@ -4042,15 +4042,18 @@ impl NodeModulesResolver {
                         .filter(|exports| Self::is_active_package_exports(exports))
                 {
                     Self::validate_package_exports_map(&pkg_path, exports_field)?;
-                    return Self::resolve_package_exports(
+                    let resolved = Self::resolve_package_exports(
                         package_name,
                         &dir,
                         exports_field,
                         subpath,
                         resolution,
-                        Some(importer),
-                    )
-                    .map(Some);
+                        importer,
+                    )?;
+                    return Ok(Some((
+                        resolved,
+                        CjsEvalResolver::normalize_path(&dir),
+                    )));
                 }
                 return Ok(None);
             }
@@ -5529,6 +5532,38 @@ fn cjs_resolve_package_exports<'js>(
         Ok(resolved) => {
             package_resolved_url_object(&ctx, &resolved).map(Some)
         }
+        Err(err) => {
+            let _: String = throw_node_package_resolve_error(&ctx, err)?;
+            unreachable!()
+        }
+    }
+}
+
+fn cjs_resolve_package_self_reference<'js>(
+    ctx: Ctx<'js>,
+    parent_dir: String,
+    package_name: String,
+    subpath: String,
+    conditions: rquickjs::Array<'js>,
+) -> rquickjs::Result<Option<Object<'js>>> {
+    let condition_vec = package_conditions_from_js_array(&conditions);
+    let mut warnings = Vec::new();
+    let mut resolution = cjs_analysis_resolution_context(&condition_vec, &mut warnings);
+    let result = NodeModulesResolver::try_resolve_package_self(
+        &std::path::PathBuf::from(parent_dir),
+        None,
+        &package_name,
+        &subpath,
+        &mut resolution,
+    );
+    emit_node_package_deprecation_warnings(&ctx, &warnings)?;
+    match result {
+        Ok(Some((resolved, package_dir))) => {
+            let result = package_resolved_url_object(&ctx, &resolved)?;
+            result.set("packageDir", package_dir)?;
+            Ok(Some(result))
+        }
+        Ok(None) => Ok(None),
         Err(err) => {
             let _: String = throw_node_package_resolve_error(&ctx, err)?;
             unreachable!()
@@ -9194,6 +9229,14 @@ impl JsState {
                     .expect("Failed to create CJS package exports resolver"),
             )
             .expect("Failed to initialize CJS package exports resolver");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_cjs_resolve_package_self_reference",
+                Function::new(ctx.clone(), cjs_resolve_package_self_reference)
+                    .expect("Failed to create CJS package self-reference resolver"),
+            )
+            .expect("Failed to initialize CJS package self-reference resolver");
 
             set_non_replaceable_global(
                 &global,
