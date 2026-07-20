@@ -1681,7 +1681,7 @@ mod tests {
             .find("function _mockCanonicalKey(specifier, base)")
             .expect("module mock canonicalizer must exist");
         let mock_canonical_end = module_js[mock_canonical_start..]
-            .find("globalThis.__wasm_rquickjs_mock_canonical_key")
+            .find("Object.defineProperty(globalThis, '__wasm_rquickjs_mock_canonical_key'")
             .expect("module mock canonicalizer must precede global mock canonicalizer export")
             + mock_canonical_start;
         let mock_canonical = &module_js[mock_canonical_start..mock_canonical_end];
@@ -1695,6 +1695,36 @@ mod tests {
                 && !mock_canonical.contains("builtinModuleMap['node:' + bare]"),
             "module mock canonicalization must share builtin normalization so node:-only and internal modules do not alias bare package names"
         );
+        for helper in [
+            "__wasm_rquickjs_module_mocks",
+            "__wasm_rquickjs_mock_canonical_key",
+            "__wasm_rquickjs_register_module_mock",
+            "__wasm_rquickjs_resolve_require_mock",
+            "__wasm_rquickjs_materialize_cjs_mock",
+            "__wasm_rquickjs_has_import_mock",
+            "__wasm_rquickjs_get_mock_module_entry",
+            "__wasm_rquickjs_get_mock_module_source",
+        ] {
+            let descriptor_start = module_js
+                .find(&format!("Object.defineProperty(globalThis, '{}', {{", helper))
+                .unwrap_or_else(|| panic!("module mock bridge helper {helper} must be exposed through Object.defineProperty"));
+            let descriptor_end = module_js[descriptor_start..]
+                .find("});")
+                .unwrap_or_else(|| {
+                    panic!("module mock bridge helper {helper} descriptor must be closed")
+                })
+                + descriptor_start;
+            let descriptor = &module_js[descriptor_start..descriptor_end];
+            assert!(
+                descriptor.contains("writable: false,")
+                    && descriptor.contains("configurable: false,"),
+                "module mock bridge helper {helper} must be non-replaceable"
+            );
+            assert!(
+                !module_js.contains(&format!("globalThis.{} =", helper)),
+                "module mock bridge helper {helper} must not be exposed by plain assignment"
+            );
+        }
 
         let resolve_start = builtin_mod_rs
             .find("const IMPORT_META_RESOLVE_JS")

@@ -281,7 +281,11 @@ builtinModuleMap['internal/test/binding'] = internalTestBindingCjs;
 const _moduleMockRegistry = Object.create(null);
 const _moduleMockRegistryById = Object.create(null);
 let _moduleMockNextId = 1;
-globalThis.__wasm_rquickjs_module_mocks = _moduleMockRegistry;
+Object.defineProperty(globalThis, '__wasm_rquickjs_module_mocks', {
+    value: _moduleMockRegistry,
+    writable: false,
+    configurable: false,
+});
 
 function _mockCanonicalKey(specifier, base) {
     if (typeof specifier === 'object' && specifier !== null && typeof specifier.href === 'string') {
@@ -429,11 +433,31 @@ function _hasImportMock(specifier, base) {
     return !!(key && _moduleMockRegistry[key]);
 }
 
-globalThis.__wasm_rquickjs_mock_canonical_key = _mockCanonicalKey;
-globalThis.__wasm_rquickjs_register_module_mock = _registerModuleMock;
-globalThis.__wasm_rquickjs_resolve_require_mock = _resolveRequireMock;
-globalThis.__wasm_rquickjs_materialize_cjs_mock = _materializeCjsMock;
-globalThis.__wasm_rquickjs_has_import_mock = _hasImportMock;
+Object.defineProperty(globalThis, '__wasm_rquickjs_mock_canonical_key', {
+    value: _mockCanonicalKey,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_register_module_mock', {
+    value: _registerModuleMock,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_resolve_require_mock', {
+    value: _resolveRequireMock,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_materialize_cjs_mock', {
+    value: _materializeCjsMock,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_has_import_mock', {
+    value: _hasImportMock,
+    writable: false,
+    configurable: false,
+});
 
 function traceModuleRequire(id, parentFilename, fn) {
     if (globalThis.__wasm_rquickjs_suppress_module_require_diagnostics) {
@@ -521,18 +545,30 @@ globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics = function
 };
 
 // Lookup mock entry by ID (for ESM source generation)
-globalThis.__wasm_rquickjs_get_mock_module_entry = function(mockId) {
+function getMockModuleEntry(mockId) {
     return _moduleMockRegistryById[mockId] || null;
-};
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_mock_module_entry', {
+    value: getMockModuleEntry,
+    writable: false,
+    configurable: false,
+});
 
 // Generate ESM module source for a mock entry (called from Rust MockModuleLoader)
-globalThis.__wasm_rquickjs_get_mock_module_source = function(mockId) {
+function getMockModuleSource(mockId) {
     const entry = _moduleMockRegistryById[mockId];
     if (!entry) {
         throw new Error('Mock entry not found for id: ' + mockId);
     }
     return _generateMockEsmSource(entry);
-};
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_mock_module_source', {
+    value: getMockModuleSource,
+    writable: false,
+    configurable: false,
+});
 
 function _generateMockEsmSource(entry) {
     const storageKey = '__wasm_rquickjs_mock_data_' + entry.id;
