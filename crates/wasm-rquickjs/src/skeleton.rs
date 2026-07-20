@@ -1849,7 +1849,7 @@ mod tests {
         let helper = &internal_rs[helper_start..helper_end];
 
         assert!(
-            helper.contains("inject_import_meta_prologue(None, source)")
+            helper.contains("inject_module_source_prologue(None, source)")
                 && helper.contains("fn virtual_builtin_module_source(source: &str) -> String")
                 && !helper.contains("url_only_import_meta_init(")
                 && !helper.contains("ImportMetaInit"),
@@ -1870,7 +1870,7 @@ mod tests {
                 && new_base.matches("virtual_builtin_module_source(").count() == 2
                 && !new_base.contains("__wasm_rquickjs_virtual__")
                 && !new_base.contains("BuiltinLoader")
-                && !new_base.contains("inject_import_meta_prologue("),
+                && !new_base.contains("inject_module_source_prologue("),
             "new_base must install Rust-owned virtual builtin modules through the shared host-initializing loader"
         );
     }
@@ -1900,8 +1900,9 @@ mod tests {
 
         assert!(
             internal_rs
-                .contains("fn inject_import_meta_prologue(main_filename: Option<&str>, source: &str) -> String")
-                && !internal_rs.contains("fn inject_import_meta_prologue(init: &ImportMetaInit")
+                .contains("fn inject_module_source_prologue(main_filename: Option<&str>, source: &str) -> String")
+                && !internal_rs.contains("fn inject_import_meta_prologue")
+                && !internal_rs.contains("fn inject_module_source_prologue(init: &ImportMetaInit")
                 && internal_rs
                     .contains("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;")
                 && internal_rs.contains("{global_name}.Array.isArray({global_name}.process.argv)")
@@ -1910,7 +1911,7 @@ mod tests {
                 && !internal_rs.contains("return globalThis.__wasm_rquickjs_import_meta_resolve")
                 && !internal_rs
                     .contains("globalThis.process&&Array.isArray(globalThis.process.argv)"),
-            "generated import.meta prologues must use the per-module captured global object and avoid source-defined metadata"
+            "generated module source prologues must use the per-module captured global object and avoid source-defined import.meta metadata"
         );
 
         let url_only_start = internal_rs
@@ -2948,7 +2949,7 @@ mod tests {
                     "return declare_esm_file_module_from_source(ctx, path, fs_path, source, url, preflight_mode);"
                 )
                 && !cjs_loader.contains("ErrorKind::NotFound")
-                && !cjs_loader.contains("let injected = inject_import_meta_prologue(&init, &module_source);"),
+                && !cjs_loader.contains("let injected = inject_module_source_prologue(&init, &module_source);"),
             "CjsCompatLoader must route .js files classified as ESM through the shared filesystem ESM declaration helper while preserving package type-module preflight"
         );
     }
