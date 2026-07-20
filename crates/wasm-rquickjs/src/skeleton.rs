@@ -200,8 +200,9 @@ mod tests {
         );
         assert!(
             module_js.contains("__wasm_rquickjs_package_global_conditions(mode)")
-                && module_js
-                    .contains("return globalThis.__wasm_rquickjs_package_global_conditions(mode);"),
+                && module_js.contains(
+                    "return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_package_global_conditions(mode);"
+                ),
             "module.js must request merged default and user package conditions from the Rust provider"
         );
         assert!(
@@ -438,7 +439,7 @@ mod tests {
             module_js.contains(
                 "function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage)"
             ) && module_js.contains(
-                "return globalThis.__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, conditions, mode, );"
+                "return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_loader_default_resolve_package( parentURL, specifier, conditions, mode, );"
             ),
             "JS package resolver bridge calls must go through one helper with caller-shaped condition arrays"
         );

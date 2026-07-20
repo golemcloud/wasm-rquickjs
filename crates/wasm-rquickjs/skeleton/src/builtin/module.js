@@ -869,10 +869,10 @@ function emitInvalidMainWarning(pkgJsonPath, invalidMain) {
 }
 
 function packageConditions(mode) {
-    if (typeof globalThis.__wasm_rquickjs_package_global_conditions !== 'function') {
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_package_global_conditions !== 'function') {
         throw new Error('Internal package condition provider is not initialized');
     }
-    return globalThis.__wasm_rquickjs_package_global_conditions(mode);
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_package_global_conditions(mode);
 }
 
 function cjsPackageConditions() {
@@ -888,10 +888,10 @@ function loaderHookConditions() {
 }
 
 function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, missingProviderMessage) {
-    if (typeof globalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_loader_default_resolve_package !== 'function') {
         throw new Error(missingProviderMessage);
     }
-    return globalThis.__wasm_rquickjs_loader_default_resolve_package(
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_loader_default_resolve_package(
         parentURL,
         specifier,
         conditions,
@@ -946,12 +946,12 @@ function resolvePackageFileFromRustResult(resolved, resolution) {
 
 function resolvePackageExportsEntry(parts, packageDir, pkg, conditions, resolution) {
     if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
-    if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
         throw new Error('Internal CJS package exports resolver is not initialized');
     }
     let resolved;
     try {
-        resolved = globalThis.__wasm_rquickjs_cjs_resolve_package_exports(
+        resolved = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_exports(
             packageDir,
             parts.name,
             parts.subpath,
@@ -1001,10 +1001,10 @@ function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause
 }
 
 function resolveCjsPackageFallbacks(parts, pkgDir, id, fromPart) {
-    if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_fallback !== 'function') {
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_fallback !== 'function') {
         throw new Error('Internal CJS package fallback resolver is not initialized');
     }
-    const resolved = globalThis.__wasm_rquickjs_cjs_resolve_package_fallback(
+    const resolved = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_fallback(
         pkgDir,
         parts.subpath,
         cjsPackageExtensionKeys(),
@@ -4291,7 +4291,7 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
     conditions = conditions || (mode === 'cjs-analysis' ? cjsPackageConditions() : esmPackageConditions());
     if (specifier.startsWith('#')) {
         try {
-            const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
+            const resolved = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
                 parentFilename,
                 specifier,
                 conditions,
@@ -4304,7 +4304,7 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
         return null;
     }
     try {
-        const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
+        const resolved = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
             parentFilename,
             specifier,
             conditions,
