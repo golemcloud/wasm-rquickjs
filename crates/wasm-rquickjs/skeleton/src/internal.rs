@@ -3,7 +3,7 @@ use futures_concurrency::future::Join;
 use indexmap::IndexMap;
 use rquickjs::convert::Coerced;
 use rquickjs::function::{Args, Constructor, This};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver, Loader, Resolver};
+use rquickjs::loader::{BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::object::Property;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
@@ -444,7 +444,7 @@ impl Loader for DataUrlLoader {
             }
 
             let init = url_only_import_meta_init(path.to_string());
-            let injected = inject_import_meta_prologue(&init, &source, true);
+            let injected = inject_import_meta_prologue(&init, &source);
             declare_module_with_import_meta(ctx, path, &injected, &init)
         } else {
             let escaped_mime = Self::js_string_escape(base_mime);
@@ -7751,7 +7751,7 @@ impl Loader for CjsCompatLoader {
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
-        let prologue = inject_import_meta_prologue(&init, "", true);
+        let prologue = inject_import_meta_prologue(&init, "");
 	let wrapped = format!(
 	    r#"{}
 	import __wasm_rquickjs_module from "node:module";
@@ -8654,38 +8654,9 @@ fn is_js_identifier_continue(byte: u8) -> bool {
     is_js_identifier_start(byte) || byte.is_ascii_digit()
 }
 
-fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str, host_initialized: bool) -> String {
+fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     let global_name = unique_internal_name(source, "__wasm_rquickjs_global");
     let mut prologue = format!("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;");
-    if !host_initialized {
-        let mut props = Vec::new();
-        if let Some(ref dirname) = init.dirname {
-            props.push(format!(
-                "dirname:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
-                escape_js_string(dirname)
-            ));
-        }
-        if let Some(ref filename) = init.filename {
-            props.push(format!(
-                "filename:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
-                escape_js_string(filename)
-            ));
-        }
-        if init.include_resolve {
-            props.push(format!(
-                "resolve:{{value:(s,p=undefined)=>{{if(p!==undefined){{if(typeof p==='string'){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p,s);}}if(p instanceof {global_name}.URL){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p.href,s);}}const e=new {global_name}.TypeError('The \"parentURL\" argument must be of type string or an instance of URL.');e.code='ERR_INVALID_ARG_TYPE';throw e;}}return {global_name}.__wasm_rquickjs_import_meta_resolve(\"{}\",s);}},writable:true,enumerable:true,configurable:true}}",
-                escape_js_string(&init.url)
-            ));
-        }
-        props.push(format!(
-            "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
-            escape_js_string(&init.url)
-        ));
-        prologue.push_str(&format!(
-            "{global_name}.Object.defineProperties(import.meta,{{{}}});",
-            props.join(",")
-        ));
-    }
     let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
     let shadowed_cjs_globals: Vec<&str> = ["require"]
         .iter()
@@ -8727,8 +8698,33 @@ fn virtual_builtin_module_source(name: &str, source: &str) -> String {
     inject_import_meta_prologue(
         &url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name)),
         source,
-        false,
     )
+}
+
+#[derive(Default)]
+struct VirtualBuiltinModuleLoader {
+    modules: HashMap<String, String>,
+}
+
+impl VirtualBuiltinModuleLoader {
+    fn with_module(mut self, name: impl Into<String>, source: String) -> Self {
+        self.modules.insert(name.into(), source);
+        self
+    }
+}
+
+impl Loader for VirtualBuiltinModuleLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        let Some(source) = self.modules.get(path) else {
+            return Err(Error::new_loading(path));
+        };
+        let init = url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", path));
+        declare_module_with_import_meta(ctx, path, source, &init)
+    }
 }
 
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
@@ -8839,7 +8835,7 @@ fn declare_esm_file_module_from_source<'js>(
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
 
-    let mut injected = inject_import_meta_prologue(&init, &source, true);
+    let mut injected = inject_import_meta_prologue(&init, &source);
     if source_has_top_level_await(&source) {
         let escaped_path = escape_js_string(&module_abs_path);
         let escaped_url = escape_js_string(&init.url);
@@ -9046,20 +9042,20 @@ impl JsState {
             (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
         );
 
-        let mut builtin_loader = BuiltinLoader::default().with_module(
+        let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
             crate::JS_EXPORT_MODULE_NAME,
             virtual_builtin_module_source(crate::JS_EXPORT_MODULE_NAME, crate::js_export_module()),
         );
         for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
             let source = (get_module)();
             let injected = virtual_builtin_module_source(name, &source);
-            builtin_loader = builtin_loader.with_module(name.to_string(), injected);
+            virtual_builtin_loader = virtual_builtin_loader.with_module(name.to_string(), injected);
         }
 
         let loader = (
             (
                 MockModuleLoader,
-                builtin_loader,
+                virtual_builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
                 DataUrlLoader,

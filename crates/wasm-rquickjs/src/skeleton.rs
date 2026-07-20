@@ -1825,13 +1825,15 @@ mod tests {
     }
 
     #[test]
-    fn virtual_builtin_import_meta_source_is_shared() {
+    fn virtual_builtin_import_meta_init_is_host_owned() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 
         assert!(
-            internal_rs
-                .contains("fn virtual_builtin_module_source(name: &str, source: &str) -> String"),
-            "virtual builtin modules must share import.meta prologue setup"
+            internal_rs.contains("struct VirtualBuiltinModuleLoader")
+                && internal_rs.contains("impl Loader for VirtualBuiltinModuleLoader")
+                && internal_rs
+                    .contains("declare_module_with_import_meta(ctx, path, source, &init)"),
+            "virtual builtin modules must use a loader that can run the shared host import.meta initializer"
         );
 
         let helper_start = internal_rs
@@ -1847,7 +1849,7 @@ mod tests {
             helper.contains(
                 "url_only_import_meta_init(format!(\"file:///__wasm_rquickjs_virtual__/{}.mjs\", name))"
             ),
-            "virtual builtin module import.meta must preserve synthetic URL identity through the shared URL-only init helper"
+            "virtual builtin module source setup must preserve synthetic URL identity through the shared URL-only init helper"
         );
 
         let new_base_start = internal_rs
@@ -1860,10 +1862,12 @@ mod tests {
         let new_base = &internal_rs[new_base_start..new_base_end];
 
         assert!(
-            new_base.matches("virtual_builtin_module_source(").count() == 2
+            new_base.contains("VirtualBuiltinModuleLoader::default().with_module(")
+                && new_base.matches("virtual_builtin_module_source(").count() == 2
                 && !new_base.contains("__wasm_rquickjs_virtual__")
+                && !new_base.contains("BuiltinLoader")
                 && !new_base.contains("inject_import_meta_prologue("),
-            "new_base must use the shared virtual builtin module source helper for all Rust-installed builtin modules"
+            "new_base must install Rust-owned virtual builtin modules through the shared host-initializing loader"
         );
     }
 
@@ -1893,12 +1897,13 @@ mod tests {
         assert!(
             internal_rs
                 .contains("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;")
-                && internal_rs.contains("if !host_initialized")
                 && internal_rs.contains("{global_name}.Array.isArray({global_name}.process.argv)")
+                && !internal_rs.contains("Object.defineProperties(import.meta")
+                && !internal_rs.contains("host_initialized")
                 && !internal_rs.contains("return globalThis.__wasm_rquickjs_import_meta_resolve")
                 && !internal_rs
                     .contains("globalThis.process&&Array.isArray(globalThis.process.argv)"),
-            "generated import.meta prologues for host-initialized modules must use the per-module captured global object and avoid source-defined metadata"
+            "generated import.meta prologues must use the per-module captured global object and avoid source-defined metadata"
         );
 
         let url_only_start = internal_rs
