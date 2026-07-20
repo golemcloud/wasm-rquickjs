@@ -7872,6 +7872,25 @@ fn initialize_module_import_meta<'js>(
     Ok(())
 }
 
+fn mark_async_esm_module<'js>(
+    ctx: &Ctx<'js>,
+    globals: &Object<'js>,
+    filename: &str,
+    file_url: &str,
+) -> rquickjs::Result<()> {
+    let registry = match globals.get::<_, Value>("__wasm_rquickjs_async_esm_modules") {
+        Ok(value) if value.is_object() => value.into_object().unwrap(),
+        _ => {
+            let object = Object::new(ctx.clone())?;
+            globals.set("__wasm_rquickjs_async_esm_modules", object.clone())?;
+            object
+        }
+    };
+    registry.set(filename, true)?;
+    registry.set(file_url, true)?;
+    Ok(())
+}
+
 fn url_only_import_meta_init(url: String) -> ImportMetaInit {
     ImportMetaInit {
         url,
@@ -8841,18 +8860,15 @@ fn declare_esm_file_module_from_source<'js>(
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
 
-    let mut injected = inject_module_source_prologue(init.filename.as_deref(), &source);
-    if source_has_top_level_await(&source) {
-        let escaped_path = escape_js_string(&module_abs_path);
-        let escaped_url = escape_js_string(&init.url);
-        let marker = format!(
-            "globalThis.__wasm_rquickjs_async_esm_modules=globalThis.__wasm_rquickjs_async_esm_modules||Object.create(null);globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;\n",
-            escaped_path, escaped_url
-        );
-        injected = format!("{}{}", marker, injected);
-    }
+    let has_top_level_await = source_has_top_level_await(&source);
+    let injected = inject_module_source_prologue(init.filename.as_deref(), &source);
     match declare_module_with_import_meta(ctx, module_id, &injected, &init) {
-        Ok(module) => Ok(module),
+        Ok(module) => {
+            if has_top_level_await {
+                mark_async_esm_module(ctx, &globals, &module_abs_path, &init.url)?;
+            }
+            Ok(module)
+        }
         Err(Error::Exception) => {
             let exception = ctx.catch();
 

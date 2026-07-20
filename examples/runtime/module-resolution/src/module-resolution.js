@@ -1594,6 +1594,13 @@ export const testEsmInjectedHelpersIgnoreLexicalGlobalThis = async () => {
         ].join('\n'));
         assert.strictEqual((await import('/esm-injected-helper-app/main.mjs')).default, false);
 
+        fs.writeFileSync('/esm-injected-helper-app/tla.mjs', [
+            'const globalThis = 1;',
+            'await 0;',
+            'export default 2;',
+        ].join('\n'));
+        assert.strictEqual((await import('/esm-injected-helper-app/tla.mjs')).default, 2);
+
         return true;
     } catch (error) {
         console.error(error);

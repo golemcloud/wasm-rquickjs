@@ -2041,6 +2041,7 @@ mod tests {
                 && internal_rs.contains("fn file_import_meta_init")
                 && internal_rs.contains("fn declare_module_with_import_meta")
                 && internal_rs.contains("fn initialize_module_import_meta")
+                && internal_rs.contains("fn mark_async_esm_module")
                 && internal_rs.contains("meta.prop(\"__wasm_rquickjs_global\", globals.clone())?;")
                 && internal_rs.contains("meta.prop( \"url\", Property::from(init.url.clone())")
                 && internal_rs.contains("Property::from(filename.clone())")
@@ -2067,8 +2068,11 @@ mod tests {
                 && !internal_rs.contains("host_initialized")
                 && !internal_rs.contains("return globalThis.__wasm_rquickjs_import_meta_resolve")
                 && !internal_rs
-                    .contains("globalThis.process&&Array.isArray(globalThis.process.argv)"),
-            "generated module source prologues must use the per-module captured global object and avoid source-defined import.meta metadata"
+                    .contains("globalThis.process&&Array.isArray(globalThis.process.argv)")
+                && !internal_rs.contains(
+                    "globalThis.__wasm_rquickjs_async_esm_modules=globalThis.__wasm_rquickjs_async_esm_modules"
+                ),
+            "generated module source prologues must use the per-module captured global object and avoid source-defined import.meta metadata or async ESM markers"
         );
 
         let url_only_start = internal_rs
