@@ -62,6 +62,18 @@ import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
 
+const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+
+function cjsFacadeHasOwnProperty(value, key) {
+    return objectPrototypeHasOwnProperty(value, key);
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_cjs_facade_has_own', {
+    value: cjsFacadeHasOwnProperty,
+    writable: false,
+    configurable: false,
+});
+
 // CJS require() should return the default export (the "module object") when one
 // exists, not the ESM namespace wrapper.  When the default export is a function
 // or object, named exports are also attached to it so that both
@@ -4051,7 +4063,7 @@ const cjsEsmDefaultSnapshotSymbol = Symbol('wasm-rquickjs.cjs-esm-default-snapsh
 const cjsEsmDefaultSnapshotToken = {};
 
 function installCjsEsmDefaultSnapshotSlot(mod) {
-    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function') || Object.prototype.hasOwnProperty.call(mod, cjsEsmDefaultSnapshotSymbol)) return;
+    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function') || cjsFacadeHasOwnProperty(mod, cjsEsmDefaultSnapshotSymbol)) return;
     const state = { captured: false, value: undefined };
     Object.defineProperty(mod, cjsEsmDefaultSnapshotSymbol, {
         value: function cjsEsmDefaultSnapshotSlot(token, op, value) {
@@ -4665,7 +4677,7 @@ function loaderCommonJsSourceModule(source, url) {
     for (let i = 0; i < names.length; i++) {
         const local = '__wasm_rquickjs_loader_export_' + i;
         const nameLiteral = JSON.stringify(names[i]);
-        lines.push('const ' + local + ' = Object.prototype.hasOwnProperty.call(__cjs_default, ' + nameLiteral + ') ? __cjs_default[' + nameLiteral + '] : undefined;');
+        lines.push('const ' + local + ' = __wasm_rquickjs_cjs_facade_has_own(__cjs_default, ' + nameLiteral + ') ? __cjs_default[' + nameLiteral + '] : undefined;');
         lines.push('export { ' + local + ' as ' + nameLiteral + ' };');
     }
     return 'data:text/javascript,' + encodeURIComponent(lines.join('\n'));

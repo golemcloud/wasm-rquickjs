@@ -2746,6 +2746,7 @@ mod tests {
             install_helper.contains("const state = { captured: false, value: undefined };")
                 && install_helper.contains("Object.defineProperty(mod, cjsEsmDefaultSnapshotSymbol, { value: function cjsEsmDefaultSnapshotSlot(token, op, value)")
                 && install_helper.contains("if (token !== cjsEsmDefaultSnapshotToken) return undefined;")
+                && install_helper.contains("cjsFacadeHasOwnProperty(mod, cjsEsmDefaultSnapshotSymbol)")
                 && install_helper.contains("writable: false, configurable: false, enumerable: false,"),
             "CJS-to-ESM default snapshot slot must keep state behind a token-guarded non-configurable module property"
         );
@@ -2835,6 +2836,45 @@ mod tests {
                 && !internal_rs
                     .contains("globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot("),
             "Rust-generated CJS facades must delegate default/snapshot loading to the shared JS helper"
+        );
+        assert!(
+            module_js.contains(
+                "const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);"
+            ) && module_js.contains(
+                "function cjsFacadeHasOwnProperty(value, key) { return objectPrototypeHasOwnProperty(value, key); }"
+            ) && module_js.contains(
+                "Object.defineProperty(globalThis, '__wasm_rquickjs_cjs_facade_has_own', { value: cjsFacadeHasOwnProperty, writable: false, configurable: false,"
+            ),
+            "CJS facade named-binding own-property checks must use a captured non-replaceable helper"
+        );
+        let named_export_start = internal_rs
+            .find("fn cjs_named_export_source(names: &[String]) -> String")
+            .expect("CJS named export source generator must exist");
+        let named_export_end = internal_rs[named_export_start..]
+            .find("fn analyze_loader_cjs_reexport_names(")
+            .expect("CJS named export source generator must precede loader reexport analyzer")
+            + named_export_start;
+        let named_export_source = &internal_rs[named_export_start..named_export_end];
+        assert!(
+            named_export_source.contains("__wasm_rquickjs_cjs_facade_has_own(__cjs_default,")
+                && named_export_source.contains(": undefined;")
+                && !named_export_source.contains("globalThis.__wasm_rquickjs_cjs_facade_has_own")
+                && !named_export_source.contains("var {local} = __cjs_default["),
+            "Rust-generated CJS named bindings must export detected names but read only own properties through a non-replaceable global binding, matching Node's CJS facade semantics"
+        );
+        let loader_source_start = module_js
+            .find("function loaderCommonJsSourceModule(source, url)")
+            .expect("loader CommonJS source module helper must exist");
+        let loader_source_end = module_js[loader_source_start..]
+            .find("function loaderFileUrlSource(url)")
+            .expect("loader CommonJS source module helper must precede file URL source helper")
+            + loader_source_start;
+        let loader_source = &module_js[loader_source_start..loader_source_end];
+        assert!(
+            loader_source.contains("__wasm_rquickjs_cjs_facade_has_own(__cjs_default,")
+                && !loader_source.contains("globalThis.__wasm_rquickjs_cjs_facade_has_own")
+                && !loader_source.contains("Object.prototype.hasOwnProperty.call(__cjs_default,"),
+            "loader-provided CJS named bindings must share the captured facade own-property helper without mutable globalThis lookup"
         );
     }
 

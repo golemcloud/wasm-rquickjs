@@ -7589,7 +7589,7 @@ fn cjs_named_export_source(names: &[String]) -> String {
         let local = format!("__cjs_export_{}", index);
         let escaped = escape_js_string(name);
         out.push_str(&format!(
-            "var {local} = __cjs_default[\"{escaped}\"];\nexport {{ {local} as \"{escaped}\" }};\n"
+            "var {local} = __wasm_rquickjs_cjs_facade_has_own(__cjs_default, \"{escaped}\") ? __cjs_default[\"{escaped}\"] : undefined;\nexport {{ {local} as \"{escaped}\" }};\n"
         ));
     }
     out
