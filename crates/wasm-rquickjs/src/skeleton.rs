@@ -2781,10 +2781,8 @@ mod tests {
             .find("moduleCache[filename] = mod;")
             .expect("CJS loader must cache module objects before execution");
         let compile_call_pos = load_module
-            .find(
-                "compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);",
-            )
-            .expect("CJS loader must execute the compiled wrapper");
+            .find("callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);")
+            .expect("CJS loader must execute the compiled wrapper through the shared helper");
         let capture_pos = load_module
             .find("if (cjsEsmDefaultSnapshotEligible) { captureCjsEsmDefaultSnapshot(mod); }")
             .expect("CJS loader must capture default snapshot after eligible loads");
@@ -2794,22 +2792,49 @@ mod tests {
                     "function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pathsBase)"
                 )
                 && module_js.contains("installCjsEsmDefaultSnapshotSlot(mod);")
+                && module_js.contains(
+                    "return compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);"
+                )
                 && cache_pos < compile_call_pos
                 && compile_call_pos < capture_pos,
-            "regular CJS load path must initialize the snapshot slot before caching and capture after wrapper execution"
+            "regular CJS load path must initialize the snapshot slot before caching and capture after shared wrapper execution"
+        );
+        let facade_default_start = module_js
+            .find("function loadCjsEsmFacadeDefault(filename)")
+            .expect("CJS facade default helper must exist");
+        let facade_default_end = module_js[facade_default_start..]
+            .find("function resolveEsmGraphSpecifier(")
+            .expect("CJS facade default helper must precede require(esm) graph helpers")
+            + facade_default_start;
+        let facade_default = &module_js[facade_default_start..facade_default_end];
+        assert!(
+            facade_default
+                .contains("const require = globalThis.__wasm_rquickjs_create_require(filename);")
+                && facade_default.contains("const resolvedFilename = require.resolve(filename);")
+                && facade_default
+                    .contains("hasCjsEsmDefaultSnapshot(require.cache, resolvedFilename)")
+                && facade_default
+                    .contains("getCjsEsmDefaultSnapshot(require.cache, resolvedFilename)")
+                && facade_default.contains(": require(filename);"),
+            "CJS facade default helper must use the internal require factory, canonical cache key, and loader-owned snapshot before falling back to require()"
         );
         assert!(
             module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', { value: hasCjsEsmDefaultSnapshot, writable: false, configurable: false,")
-                && module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot', { value: getCjsEsmDefaultSnapshot, writable: false, configurable: false,"),
-            "generated CJS facades must call non-replaceable internal snapshot helpers"
+                && module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot', { value: getCjsEsmDefaultSnapshot, writable: false, configurable: false,")
+                && module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_load_cjs_esm_facade_default', { value: loadCjsEsmFacadeDefault, writable: false, configurable: false,"),
+            "generated CJS facades must call non-replaceable internal snapshot/default helpers"
         );
         assert!(
-            internal_rs.contains("var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require(")
-                && internal_rs.contains("var __wasm_rquickjs_resolved_filename = __wasm_rquickjs_require.resolve(__wasm_rquickjs_filename);")
-                && internal_rs.contains("globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot( __wasm_rquickjs_require.cache, __wasm_rquickjs_resolved_filename )")
-                && internal_rs.contains("globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot( __wasm_rquickjs_require.cache, __wasm_rquickjs_resolved_filename )")
-                && internal_rs.contains(": __wasm_rquickjs_require(__wasm_rquickjs_filename);"),
-            "CJS facades must use the internal require factory, canonical cache key, and loader-owned snapshot before falling back to require()"
+            internal_rs.contains(
+                "var __cjs_default = globalThis.__wasm_rquickjs_load_cjs_esm_facade_default("
+            ) && !internal_rs.contains(
+                "var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require("
+            ) && !internal_rs.contains("var __wasm_rquickjs_resolved_filename =")
+                && !internal_rs
+                    .contains("globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot(")
+                && !internal_rs
+                    .contains("globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot("),
+            "Rust-generated CJS facades must delegate default/snapshot loading to the shared JS helper"
         );
     }
 

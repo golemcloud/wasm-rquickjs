@@ -4111,6 +4111,20 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot'
     configurable: false,
 });
 
+function loadCjsEsmFacadeDefault(filename) {
+    const require = globalThis.__wasm_rquickjs_create_require(filename);
+    const resolvedFilename = require.resolve(filename);
+    return hasCjsEsmDefaultSnapshot(require.cache, resolvedFilename)
+        ? getCjsEsmDefaultSnapshot(require.cache, resolvedFilename)
+        : require(filename);
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_load_cjs_esm_facade_default', {
+    value: loadCjsEsmFacadeDefault,
+    writable: false,
+    configurable: false,
+});
+
 function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
     conditions = conditions || esmPackageConditions();
     mode = mode || 'import';

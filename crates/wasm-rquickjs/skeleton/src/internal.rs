@@ -7687,23 +7687,11 @@ impl Loader for CjsCompatLoader {
         let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
             r#"{}
-var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require("{}");
-var __wasm_rquickjs_filename = "{}";
-var __wasm_rquickjs_resolved_filename = __wasm_rquickjs_require.resolve(__wasm_rquickjs_filename);
-var __cjs_default = globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot(
-  __wasm_rquickjs_require.cache,
-  __wasm_rquickjs_resolved_filename
-)
-  ? globalThis.__wasm_rquickjs_get_cjs_esm_default_snapshot(
-      __wasm_rquickjs_require.cache,
-      __wasm_rquickjs_resolved_filename
-    )
-  : __wasm_rquickjs_require(__wasm_rquickjs_filename);
+var __cjs_default = globalThis.__wasm_rquickjs_load_cjs_esm_facade_default("{}");
 export default __cjs_default;
 {}
 "#,
             prologue.trim(),
-            escape_js_string(&fs_abs_path),
             escape_js_string(&fs_abs_path),
             named_exports
         );
