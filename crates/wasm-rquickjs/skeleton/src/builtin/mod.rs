@@ -547,7 +547,7 @@ pub fn wire_builtins() -> String {
     result
 }
 
-const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_resolve = function(baseUrl, specifier) {
+const IMPORT_META_RESOLVE_JS: &str = r#"function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
   baseUrl = String(baseUrl);
   specifier = String(specifier);
   if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
@@ -619,7 +619,12 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
     return 'file://' + (resolved.endsWith('/') ? resolved : resolved + '/');
   }
   throw codedError('Cannot find package "' + specifier + '" imported from ' + baseUrl, 'ERR_MODULE_NOT_FOUND', false);
-};"#;
+}
+Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve', {
+  value: __wasm_rquickjs_import_meta_resolve_impl,
+  writable: false,
+  configurable: false,
+});"#;
 
 const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
 const __wasm_rquickjs_import_attr_global = globalThis;

@@ -1669,12 +1669,13 @@ mod tests {
                 && module_js.contains("function requireBuiltinModule(id)")
                 && module_js.contains("const builtin = builtinModuleForSpecifier(id); if (builtin !== undefined) return builtin;")
                 && module_js.contains("err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';")
-                && module_js.contains("globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;")
+                && module_js.contains("Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin', {")
+                && !module_js.contains("globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;")
                 && module_js.contains("builtinModuleMap['node:sqlite'] = sqliteCjs;")
                 && module_js.contains("const schemelessBlockList = setFromArray(['test', 'sqlite']);")
                 && !module_js.contains("publicBuiltinIdSet")
                 && !module_js.contains("publicBuiltinWithoutSchemeSet"),
-            "import.meta.resolve builtin normalization must use the shared builtin map for node:-only modules and the shared bare-builtin set for schemeless modules"
+            "import.meta.resolve builtin normalization must use the shared non-replaceable builtin map for node:-only modules and the shared bare-builtin set for schemeless modules"
         );
 
         let mock_canonical_start = module_js
@@ -1732,9 +1733,20 @@ mod tests {
         let import_meta_resolve = &builtin_mod_rs[resolve_start..];
         assert!(
             import_meta_resolve.contains("__wasm_rquickjs_import_meta_resolve_builtin(specifier)")
+                && import_meta_resolve.contains(
+                    "function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier)"
+                )
+                && import_meta_resolve.contains(
+                    "Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve',"
+                )
+                && import_meta_resolve.contains("value: __wasm_rquickjs_import_meta_resolve_impl,")
+                && import_meta_resolve.contains("writable: false,")
+                && import_meta_resolve.contains("configurable: false,")
+                && !import_meta_resolve
+                    .contains("globalThis.__wasm_rquickjs_import_meta_resolve = function")
                 && !import_meta_resolve.contains("NODE_BUILTIN_NAMES")
                 && !import_meta_resolve.contains("NODE_BUILTINS"),
-            "import.meta.resolve must not maintain a separate hard-coded builtin list"
+            "import.meta.resolve must be non-replaceable and must not maintain a separate hard-coded builtin list"
         );
 
         let registered_loader_start = module_js

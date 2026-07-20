@@ -678,7 +678,11 @@ function requireBuiltinModule(id) {
     return undefined;
 }
 
-globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;
+Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin', {
+    value: builtinResolveSpecifier,
+    writable: false,
+    configurable: false,
+});
 
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
