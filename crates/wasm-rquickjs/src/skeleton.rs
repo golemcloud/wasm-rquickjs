@@ -1119,10 +1119,10 @@ mod tests {
         );
 
         let async_start = module_js
-            .find("globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(")
+            .find("async function runRegisteredLoaders(")
             .expect("async registered-loader runner must exist");
         let sync_start = module_js[async_start..]
-            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .find("function runRegisteredLoadersSync(")
             .expect("async runner must precede sync runner")
             + async_start;
         let async_runner = &module_js[async_start..sync_start];
@@ -1147,6 +1147,57 @@ mod tests {
                 && !sync_setup.contains("importAttributes: {}")
                 && !sync_setup.contains("parentURL: String(baseUrl || fileUrlForPath('/'))"),
             "sync registered-loader runner must share base context shaping while preserving import-vs-CJS conditions"
+        );
+    }
+
+    #[test]
+    fn registered_loader_bridge_helpers_are_non_replaceable() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        for (name, value) in [
+            (
+                "__wasm_rquickjs_start_registered_loader",
+                "startRegisteredLoader",
+            ),
+            (
+                "__wasm_rquickjs_run_registered_loaders",
+                "runRegisteredLoaders",
+            ),
+            (
+                "__wasm_rquickjs_run_registered_loaders_sync",
+                "runRegisteredLoadersSync",
+            ),
+            (
+                "__wasm_rquickjs_prepare_static_registered_loader_graph",
+                "prepareStaticRegisteredLoaderEntry",
+            ),
+            (
+                "__wasm_rquickjs_resolve_static_registered_loader",
+                "resolveStaticRegisteredLoader",
+            ),
+        ] {
+            assert!(
+                module_js.contains(&format!(
+                    "Object.defineProperty(globalThis, '{}', {{ value: {}, writable: false, configurable: false,",
+                    name, value
+                )),
+                "registered-loader bridge helper {name} must be a non-replaceable global"
+            );
+        }
+
+        assert!(
+            !module_js.contains("globalThis.__wasm_rquickjs_start_registered_loader = function")
+                && !module_js.contains("globalThis.__wasm_rquickjs_run_registered_loaders = async function")
+                && !module_js.contains(
+                    "globalThis.__wasm_rquickjs_run_registered_loaders_sync = function"
+                )
+                && !module_js.contains(
+                    "globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph = async function"
+                )
+                && !module_js.contains(
+                    "globalThis.__wasm_rquickjs_resolve_static_registered_loader = function"
+                ),
+            "registered-loader bridge helpers must not use replaceable global assignments"
         );
     }
 
@@ -1291,7 +1342,7 @@ mod tests {
             "sync registered-loader source fallback must preserve loaded-source-over-resolved-source precedence through the shared helper"
         );
         let sync_start = module_js
-            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .find("function runRegisteredLoadersSync(")
             .expect("sync registered-loader runner must exist");
         let sync_end = module_js[sync_start..]
             .find("function staticRegisteredLoaderCacheParts(")
@@ -1552,10 +1603,10 @@ mod tests {
         );
 
         let async_start = module_js
-            .find("globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(")
+            .find("async function runRegisteredLoaders(")
             .expect("async registered-loader runner must exist");
         let sync_start = module_js[async_start..]
-            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .find("function runRegisteredLoadersSync(")
             .expect("async runner must precede sync runner")
             + async_start;
         let async_runner = &module_js[async_start..sync_start];
@@ -1627,7 +1678,7 @@ mod tests {
         );
 
         let sync_start = module_js
-            .find("globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(")
+            .find("function runRegisteredLoadersSync(")
             .expect("sync registered-loader runner must exist");
         let sync_end = module_js[sync_start..]
             .find("function staticRegisteredLoaderCacheParts(")
@@ -2880,7 +2931,7 @@ mod tests {
             .find("async function prepareStaticRegisteredLoaderGraph(parentUrl, seen)")
             .expect("prepareStaticRegisteredLoaderGraph function must exist");
         let graph_end = module_js[graph_start..]
-            .find("globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph")
+            .find("async function prepareStaticRegisteredLoaderEntry(")
             .expect("graph preparation must precede entry preparation")
             + graph_start;
         let graph = &module_js[graph_start..graph_end];
@@ -2893,10 +2944,10 @@ mod tests {
         );
 
         let entry_start = module_js
-            .find("globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph")
+            .find("async function prepareStaticRegisteredLoaderEntry(")
             .expect("entry graph preparation function must exist");
         let entry_end = module_js[entry_start..]
-            .find("globalThis.__wasm_rquickjs_resolve_static_registered_loader")
+            .find("function resolveStaticRegisteredLoader(")
             .expect("entry graph preparation must precede static resolve")
             + entry_start;
         let entry = &module_js[entry_start..entry_end];

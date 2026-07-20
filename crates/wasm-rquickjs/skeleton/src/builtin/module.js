@@ -5739,7 +5739,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return beforeHash + separator + '__wasm_rquickjs_loader_realm=' + encodeURIComponent(String(realm)) + hash;
     }
 
-    globalThis.__wasm_rquickjs_start_registered_loader = function startRegisteredLoader(loader) {
+    function startRegisteredLoader(loader) {
         if (loader.initialized || loader.initializing) return loader.initializing;
         loader.initializing = (async () => {
             const module = await import(resolveRegisteredLoaderUrl(loader));
@@ -5751,7 +5751,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         })();
         loader.initializing.catch(() => {});
         return loader.initializing;
-    };
+    }
+    Object.defineProperty(globalThis, '__wasm_rquickjs_start_registered_loader', {
+        value: startRegisteredLoader,
+        writable: false,
+        configurable: false,
+    });
 
     function normalizeRegisteredLoaderResolvedResult(resolved) {
         if (!resolved || typeof resolved !== 'object' || resolved.url === undefined) return undefined;
@@ -5914,7 +5919,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return registeredLoaderUrlResult(normalizeLoaderResolvedUrl(url));
     }
 
-    globalThis.__wasm_rquickjs_run_registered_loaders = async function runRegisteredLoaders(baseUrl, specifier, attrs, mode) {
+    async function runRegisteredLoaders(baseUrl, specifier, attrs, mode) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
 
@@ -6018,7 +6023,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return globalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
         }
         return undefined;
-    };
+    }
+    Object.defineProperty(globalThis, '__wasm_rquickjs_run_registered_loaders', {
+        value: runRegisteredLoaders,
+        writable: false,
+        configurable: false,
+    });
 
     function isLoaderThenable(value) {
         return value && (typeof value === 'object' || typeof value === 'function') && typeof value.then === 'function';
@@ -6033,7 +6043,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return value;
     }
 
-    globalThis.__wasm_rquickjs_run_registered_loaders_sync = function runRegisteredLoadersSync(baseUrl, specifier, resolveOnly, mode) {
+    function runRegisteredLoadersSync(baseUrl, specifier, resolveOnly, mode) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
@@ -6137,7 +6147,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (source === null) source = undefined;
         if (source === undefined) return undefined;
         return registeredLoaderUrlFormatSourceResult(normalizedResolved.url, finalFormat, source);
-    };
+    }
+    Object.defineProperty(globalThis, '__wasm_rquickjs_run_registered_loaders_sync', {
+        value: runRegisteredLoadersSync,
+        writable: false,
+        configurable: false,
+    });
 
     function staticRegisteredLoaderCacheParts(specifier, attrs) {
         let value = String(specifier);
@@ -6298,7 +6313,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
     }
 
-    globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph = async function prepareStaticRegisteredLoaderEntry(entryUrl, entrySpecifier, entryParentUrl, entryAttrs) {
+    async function prepareStaticRegisteredLoaderEntry(entryUrl, entrySpecifier, entryParentUrl, entryAttrs) {
         if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
@@ -6317,9 +6332,14 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
         }
         await prepareStaticRegisteredLoaderGraph(entryUrl, Object.create(null));
-    };
+    }
+    Object.defineProperty(globalThis, '__wasm_rquickjs_prepare_static_registered_loader_graph', {
+        value: prepareStaticRegisteredLoaderEntry,
+        writable: false,
+        configurable: false,
+    });
 
-    globalThis.__wasm_rquickjs_resolve_static_registered_loader = function resolveStaticRegisteredLoader(baseUrl, specifier) {
+    function resolveStaticRegisteredLoader(baseUrl, specifier) {
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
         const key = staticRegisteredLoaderCacheKey(baseUrl, specifier);
         if (cache && Object.prototype.hasOwnProperty.call(cache, key)) {
@@ -6329,7 +6349,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         const loaded = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(baseUrl, specifier, false, 'import');
         return staticRegisteredLoaderReturn(loaded);
-    };
+    }
+    Object.defineProperty(globalThis, '__wasm_rquickjs_resolve_static_registered_loader', {
+        value: resolveStaticRegisteredLoader,
+        writable: false,
+        configurable: false,
+    });
 }
 
 // "node_modules" reversed as char codes: s-e-l-u-d-o-m-_-e-d-o-n
