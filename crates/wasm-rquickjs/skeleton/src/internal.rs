@@ -444,7 +444,7 @@ impl Loader for DataUrlLoader {
             }
 
             let init = url_only_import_meta_init(path.to_string());
-            let injected = inject_import_meta_prologue(&init, &source);
+            let injected = inject_import_meta_prologue(&init, &source, true);
             declare_module_with_import_meta(ctx, path, &injected, &init)
         } else {
             let escaped_mime = Self::js_string_escape(base_mime);
@@ -7751,7 +7751,7 @@ impl Loader for CjsCompatLoader {
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
-        let prologue = inject_import_meta_prologue(&init, "");
+        let prologue = inject_import_meta_prologue(&init, "", true);
 	let wrapped = format!(
 	    r#"{}
 	import __wasm_rquickjs_module from "node:module";
@@ -7789,9 +7789,75 @@ fn declare_module_with_import_meta<'js>(
 fn initialize_module_import_meta<'js>(
     ctx: &Ctx<'js>,
     module: &Module<'js, rquickjs::module::Declared>,
-    _init: &ImportMetaInit,
+    init: &ImportMetaInit,
 ) -> rquickjs::Result<()> {
-    module.meta()?.prop("__wasm_rquickjs_global", ctx.globals())?;
+    let meta = module.meta()?;
+    let globals = ctx.globals();
+    meta.prop("__wasm_rquickjs_global", globals.clone())?;
+    meta.prop(
+        "url",
+        Property::from(init.url.clone())
+            .writable()
+            .enumerable()
+            .configurable(),
+    )?;
+    if let Some(ref filename) = init.filename {
+        meta.prop(
+            "filename",
+            Property::from(filename.clone())
+                .writable()
+                .enumerable()
+                .configurable(),
+        )?;
+    }
+    if let Some(ref dirname) = init.dirname {
+        meta.prop(
+            "dirname",
+            Property::from(dirname.clone())
+                .writable()
+                .enumerable()
+                .configurable(),
+        )?;
+    }
+    if init.include_resolve {
+        let base_url = init.url.clone();
+        let resolve = Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'js>, specifier: String, parent_url: Opt<Value<'js>>| -> rquickjs::Result<String> {
+                let globals = ctx.globals();
+                let resolver: Function = globals.get("__wasm_rquickjs_import_meta_resolve")?;
+                if let Some(parent_url) = parent_url.0
+                    && !parent_url.is_undefined()
+                {
+                    if let Some(parent_url) = parent_url.as_string() {
+                        return resolver.call((parent_url.to_string()?, specifier));
+                    }
+                    if let Some(parent_url) = parent_url.as_object() {
+                        let url_ctor: Value = globals.get("URL")?;
+                        if parent_url.is_instance_of(&url_ctor) {
+                            let href: String = parent_url.get("href")?;
+                            return resolver.call((href, specifier));
+                        }
+                    }
+                    return throw_native_coded_error(
+                        &ctx,
+                        "The \"parentURL\" argument must be of type string or an instance of URL.",
+                        "ERR_INVALID_ARG_TYPE",
+                        true,
+                    );
+                }
+                resolver.call((base_url.clone(), specifier))
+            },
+        )?
+        .with_length(1)?;
+        meta.prop(
+            "resolve",
+            Property::from(resolve)
+                .writable()
+                .enumerable()
+                .configurable(),
+        )?;
+    }
     Ok(())
 }
 
@@ -8588,40 +8654,38 @@ fn is_js_identifier_continue(byte: u8) -> bool {
     is_js_identifier_start(byte) || byte.is_ascii_digit()
 }
 
-fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
+fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str, host_initialized: bool) -> String {
     let global_name = unique_internal_name(source, "__wasm_rquickjs_global");
-    let mut props = Vec::new();
-
-    if let Some(ref dirname) = init.dirname {
+    let mut prologue = format!("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;");
+    if !host_initialized {
+        let mut props = Vec::new();
+        if let Some(ref dirname) = init.dirname {
+            props.push(format!(
+                "dirname:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+                escape_js_string(dirname)
+            ));
+        }
+        if let Some(ref filename) = init.filename {
+            props.push(format!(
+                "filename:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
+                escape_js_string(filename)
+            ));
+        }
+        if init.include_resolve {
+            props.push(format!(
+                "resolve:{{value:(s,p=undefined)=>{{if(p!==undefined){{if(typeof p==='string'){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p,s);}}if(p instanceof {global_name}.URL){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p.href,s);}}const e=new {global_name}.TypeError('The \"parentURL\" argument must be of type string or an instance of URL.');e.code='ERR_INVALID_ARG_TYPE';throw e;}}return {global_name}.__wasm_rquickjs_import_meta_resolve(\"{}\",s);}},writable:true,enumerable:true,configurable:true}}",
+                escape_js_string(&init.url)
+            ));
+        }
         props.push(format!(
-            "dirname:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
-            escape_js_string(dirname)
-        ));
-    }
-
-    if let Some(ref filename) = init.filename {
-        props.push(format!(
-            "filename:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
-            escape_js_string(filename)
-        ));
-    }
-
-    if init.include_resolve {
-        props.push(format!(
-            "resolve:{{value:(s,p)=>{{if(p!==undefined){{if(typeof p==='string'){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p,s);}}if(p instanceof {global_name}.URL){{return {global_name}.__wasm_rquickjs_import_meta_resolve(p.href,s);}}const e=new {global_name}.TypeError('The \"parentURL\" argument must be of type string or an instance of URL.');e.code='ERR_INVALID_ARG_TYPE';throw e;}}return {global_name}.__wasm_rquickjs_import_meta_resolve(\"{}\",s);}},writable:true,enumerable:true,configurable:true}}",
+            "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
             escape_js_string(&init.url)
         ));
+        prologue.push_str(&format!(
+            "{global_name}.Object.defineProperties(import.meta,{{{}}});",
+            props.join(",")
+        ));
     }
-
-    props.push(format!(
-        "url:{{value:\"{}\",writable:true,enumerable:true,configurable:true}}",
-        escape_js_string(&init.url)
-    ));
-
-    let mut prologue = format!(
-        "const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;{global_name}.Object.defineProperties(import.meta,{{{}}});",
-        props.join(",")
-    );
     let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
     let shadowed_cjs_globals: Vec<&str> = ["require"]
         .iter()
@@ -8663,6 +8727,7 @@ fn virtual_builtin_module_source(name: &str, source: &str) -> String {
     inject_import_meta_prologue(
         &url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name)),
         source,
+        false,
     )
 }
 
@@ -8774,7 +8839,7 @@ fn declare_esm_file_module_from_source<'js>(
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
 
-    let mut injected = inject_import_meta_prologue(&init, &source);
+    let mut injected = inject_import_meta_prologue(&init, &source, true);
     if source_has_top_level_await(&source) {
         let escaped_path = escape_js_string(&module_abs_path);
         let escaped_url = escape_js_string(&init.url);

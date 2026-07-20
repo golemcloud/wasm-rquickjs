@@ -65,7 +65,22 @@ export const testImportMetaResolve = async () => {
         fs.writeFileSync(`${appDir}/node_modules/${name}/main.mjs`, 'export default true;');
     }
 
+    const metaDescriptors = Object.getOwnPropertyDescriptors(import.meta);
+    for (const [name, expected] of [
+        ['url', import.meta.url],
+        ['resolve', import.meta.resolve],
+    ]) {
+        assert.strictEqual(metaDescriptors[name].value, expected);
+        assert.strictEqual(metaDescriptors[name].writable, true);
+        assert.strictEqual(metaDescriptors[name].enumerable, true);
+        assert.strictEqual(metaDescriptors[name].configurable, true);
+    }
+    assert.strictEqual(import.meta.resolve.length, 1);
     assert.strictEqual(import.meta.resolve('./local.mjs', entryUrl), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve('./local.mjs', new URL(entryUrl)), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
+    assert.strictEqual(import.meta.resolve('./local.mjs', undefined), new URL('./local.mjs', import.meta.url).href);
+    assert.throws(() => import.meta.resolve('./local.mjs', null), { code: 'ERR_INVALID_ARG_TYPE' });
+    assert.throws(() => import.meta.resolve('./local.mjs', { href: entryUrl }), { code: 'ERR_INVALID_ARG_TYPE' });
     assert.strictEqual(import.meta.resolve('./sp ce.mjs', entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
     assert.strictEqual(import.meta.resolve('./sp%20ce.mjs', entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
     assert.strictEqual(import.meta.resolve(`${appDir}/sp ce.mjs`, entryUrl), `${pathToFileURL(`${appDir}/sp ce.mjs`).href}`);
@@ -120,6 +135,8 @@ export const testImportMetaResolve = async () => {
         export const packageRoot = import.meta.resolve('exports-pkg');
         export const packageFeature = import.meta.resolve('exports-pkg/feature');
         export const packageImport = import.meta.resolve('#local');
+        export const metaDescriptors = Object.getOwnPropertyDescriptors(import.meta);
+        export const resolveLength = import.meta.resolve.length;
         export let blockedCode;
         try {
             import.meta.resolve('exports-pkg/blocked');
@@ -138,6 +155,21 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(packageResolve.packageRoot, `${pathToFileURL(`${appDir}/node_modules/exports-pkg/main.mjs`).href}`);
     assert.strictEqual(packageResolve.packageFeature, `${pathToFileURL(`${appDir}/node_modules/exports-pkg/feature.mjs`).href}`);
     assert.strictEqual(packageResolve.packageImport, `${pathToFileURL(`${appDir}/local-import.mjs`).href}`);
+    assert.strictEqual(packageResolve.resolveLength, 1);
+    for (const [name, expected] of [
+        ['url', `${pathToFileURL(`${appDir}/entry.mjs`).href}`],
+        ['filename', `${appDir}/entry.mjs`],
+        ['dirname', appDir],
+    ]) {
+        assert.strictEqual(packageResolve.metaDescriptors[name].value, expected);
+        assert.strictEqual(packageResolve.metaDescriptors[name].writable, true);
+        assert.strictEqual(packageResolve.metaDescriptors[name].enumerable, true);
+        assert.strictEqual(packageResolve.metaDescriptors[name].configurable, true);
+    }
+    assert.strictEqual(typeof packageResolve.metaDescriptors.resolve.value, 'function');
+    assert.strictEqual(packageResolve.metaDescriptors.resolve.writable, true);
+    assert.strictEqual(packageResolve.metaDescriptors.resolve.enumerable, true);
+    assert.strictEqual(packageResolve.metaDescriptors.resolve.configurable, true);
     assert.strictEqual(packageResolve.blockedCode, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
     assert.strictEqual(packageResolve.blockedSlashCode, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
     return true;

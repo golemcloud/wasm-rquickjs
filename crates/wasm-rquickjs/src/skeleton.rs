@@ -1875,27 +1875,30 @@ mod tests {
             internal_rs.contains("fn url_only_import_meta_init")
                 && internal_rs.contains("fn file_import_meta_init")
                 && internal_rs.contains("fn declare_module_with_import_meta")
-                && internal_rs
-                    .contains("module.meta()?.prop(\"__wasm_rquickjs_global\", ctx.globals())?;")
+                && internal_rs.contains("fn initialize_module_import_meta")
+                && internal_rs.contains("meta.prop(\"__wasm_rquickjs_global\", globals.clone())?;")
+                && internal_rs.contains("meta.prop( \"url\", Property::from(init.url.clone())")
+                && internal_rs.contains("Property::from(filename.clone())")
+                && internal_rs.contains("Property::from(dirname.clone())")
+                && internal_rs.contains("Function::new( ctx.clone(), move |ctx: Ctx<'js>, specifier: String, parent_url: Opt<Value<'js>>|")
+                && internal_rs.contains(
+                    "let resolver: Function = globals.get(\"__wasm_rquickjs_import_meta_resolve\")?;"
+                )
+                && internal_rs.contains("if parent_url.is_instance_of(&url_ctor)")
+                && internal_rs.contains(".with_length(1)?")
                 && internal_rs.matches("ImportMetaInit { url,").count() == 2,
-            "URL-only and file-backed import.meta initialization must be centralized"
+            "URL-only and file-backed import.meta initialization must be centralized and host-owned for declared modules"
         );
 
         assert!(
-            internal_rs.contains(
-                "const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;{global_name}.Object.defineProperties(import.meta,"
-            ) && internal_rs.contains(
-                "return {global_name}.__wasm_rquickjs_import_meta_resolve"
-            ) && internal_rs.contains(
-                "{global_name}.Array.isArray({global_name}.process.argv)"
-            ) && !internal_rs.contains(
-                "\"Object.defineProperties(import.meta,"
-            ) && !internal_rs.contains(
-                "return globalThis.__wasm_rquickjs_import_meta_resolve"
-            ) && !internal_rs.contains(
-                "globalThis.process&&Array.isArray(globalThis.process.argv)"
-            ),
-            "generated import.meta prologues must use the per-module captured global object so user lexical globals cannot shadow loader internals"
+            internal_rs
+                .contains("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;")
+                && internal_rs.contains("if !host_initialized")
+                && internal_rs.contains("{global_name}.Array.isArray({global_name}.process.argv)")
+                && !internal_rs.contains("return globalThis.__wasm_rquickjs_import_meta_resolve")
+                && !internal_rs
+                    .contains("globalThis.process&&Array.isArray(globalThis.process.argv)"),
+            "generated import.meta prologues for host-initialized modules must use the per-module captured global object and avoid source-defined metadata"
         );
 
         let url_only_start = internal_rs
