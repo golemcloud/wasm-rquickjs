@@ -697,18 +697,22 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
   }
 
   var moduleTypeErrorCache;
+  var moduleTypeErrorCacheKey;
   if (asyncSemanticErrors) {
     moduleTypeErrorCache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache;
     if (moduleTypeErrorCache === undefined) {
       moduleTypeErrorCache = Object.create(null);
       __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache = moduleTypeErrorCache;
     }
-    if (moduleTypeErrorCache[value] !== undefined) return moduleTypeErrorCache[value];
+    moduleTypeErrorCacheKey = value + '\x00type=' + (typeValue === undefined ? '' : typeValue);
+    if (moduleTypeErrorCache[moduleTypeErrorCacheKey] !== undefined) {
+      return moduleTypeErrorCache[moduleTypeErrorCacheKey];
+    }
   }
 
   function moduleTypeSemanticError(error) {
     var prepared = semanticError(error);
-    if (asyncSemanticErrors) moduleTypeErrorCache[value] = prepared;
+    if (asyncSemanticErrors) moduleTypeErrorCache[moduleTypeErrorCacheKey] = prepared;
     return prepared;
   }
 

@@ -1488,6 +1488,14 @@ mod tests {
                 ),
             "dynamic import helper internals must use the captured global object for private loader state"
         );
+        assert!(
+            builtin_mod_rs.contains(
+                "moduleTypeErrorCacheKey = value + '\\x00type=' + (typeValue === undefined ? '' : typeValue);"
+            ) && builtin_mod_rs.contains("moduleTypeErrorCache[moduleTypeErrorCacheKey] = prepared;")
+                && !builtin_mod_rs.contains("if (moduleTypeErrorCache[value] !== undefined)")
+                && !builtin_mod_rs.contains("moduleTypeErrorCache[value] = prepared"),
+            "dynamic import attribute module-type failure cache must include the requested type so different import options stay independent"
+        );
 
         let static_loader_start = module_js
             .find("function staticRegisteredLoaderCacheEntry(")
@@ -2244,19 +2252,21 @@ mod tests {
             + initializer_start;
         let initializer = &module_js[initializer_start..initializer_end];
         assert!(
-            initializer.contains("mod.id = id;")
-                && initializer.contains("mod.filename = filename;")
-                && initializer.contains("mod.path = dirname;")
-                && initializer.contains("mod.exports = {};")
-                && initializer.contains("mod.loaded = false;")
-                && initializer.contains("mod.parent = parentModule || null;")
-                && initializer.contains("mod.children = [];")
-                && initializer.contains("mod.paths = _nodeModulePaths(pathsBase);")
+            module_js.contains("function defineEnumerableWritable(obj, name, value)")
+                && module_js.contains("Object.defineProperty(obj, name, { value, writable: true, enumerable: true, configurable: true, });")
+                && initializer.contains("defineEnumerableWritable(mod, 'id', id);")
+                && initializer.contains("defineEnumerableWritable(mod, 'filename', filename);")
+                && initializer.contains("defineEnumerableWritable(mod, 'path', dirname);")
+                && initializer.contains("defineEnumerableWritable(mod, 'exports', {});")
+                && initializer.contains("defineEnumerableWritable(mod, 'loaded', false);")
+                && initializer.contains("defineEnumerableWritable(mod, 'parent', parentModule || null);")
+                && initializer.contains("defineEnumerableWritable(mod, 'children', []);")
+                && initializer.contains("defineEnumerableWritable(mod, 'paths', _nodeModulePaths(pathsBase));")
                 && initializer.contains("mod._compile = makeModuleCompile(mod);")
                 && initializer.contains("mod.require = makeModuleRequire(mod);")
                 && initializer.contains("installCjsEsmDefaultSnapshotSlot(mod);")
                 && initializer.contains("return mod;"),
-            "CJS module record shape and built-in methods must stay centralized"
+            "CJS module record shape and built-in methods must stay centralized with own data properties"
         );
         assert_eq!(
             module_js.matches("initializeCjsModuleRecord(").count(),

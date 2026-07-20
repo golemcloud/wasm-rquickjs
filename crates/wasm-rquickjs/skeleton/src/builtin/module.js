@@ -4930,15 +4930,24 @@ function discardCjsModuleLoad(cacheKey, parentModule, mod) {
     unlinkModuleFromParent(parentModule, mod);
 }
 
+function defineEnumerableWritable(obj, name, value) {
+    Object.defineProperty(obj, name, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+}
+
 function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pathsBase) {
-    mod.id = id;
-    mod.filename = filename;
-    mod.path = dirname;
-    mod.exports = {};
-    mod.loaded = false;
-    mod.parent = parentModule || null;
-    mod.children = [];
-    mod.paths = _nodeModulePaths(pathsBase);
+    defineEnumerableWritable(mod, 'id', id);
+    defineEnumerableWritable(mod, 'filename', filename);
+    defineEnumerableWritable(mod, 'path', dirname);
+    defineEnumerableWritable(mod, 'exports', {});
+    defineEnumerableWritable(mod, 'loaded', false);
+    defineEnumerableWritable(mod, 'parent', parentModule || null);
+    defineEnumerableWritable(mod, 'children', []);
+    defineEnumerableWritable(mod, 'paths', _nodeModulePaths(pathsBase));
     mod._compile = makeModuleCompile(mod);
     mod.require = makeModuleRequire(mod);
     installCjsEsmDefaultSnapshotSlot(mod);
@@ -6434,13 +6443,13 @@ export let syncBuiltinESMExports = function() {
 };
 
 function Module(id, parent) {
-    this.id = id === undefined ? '' : id;
-    this.path = pathModule.dirname(this.id);
-    this.exports = {};
-    this.filename = null;
-    this.loaded = false;
-    this.children = [];
-    this.parent = parent || null;
+    defineEnumerableWritable(this, 'id', id === undefined ? '' : id);
+    defineEnumerableWritable(this, 'path', pathModule.dirname(this.id));
+    defineEnumerableWritable(this, 'exports', {});
+    defineEnumerableWritable(this, 'filename', null);
+    defineEnumerableWritable(this, 'loaded', false);
+    defineEnumerableWritable(this, 'children', []);
+    defineEnumerableWritable(this, 'parent', parent || null);
     if (parent && parent.children) {
         Array.prototype.push.call(parent.children, this);
     }
