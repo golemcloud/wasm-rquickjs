@@ -4228,7 +4228,6 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_load_cjs_esm_facade_default',
 });
 
 function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
-    conditions = conditions || esmPackageConditions();
     mode = mode || 'import';
     if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;
     const parentDir = pathModule.dirname(parentFilename);
@@ -4239,6 +4238,7 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
             return null;
         }
     }
+    conditions = conditions || (mode === 'cjs-analysis' ? cjsPackageConditions() : esmPackageConditions());
     if (specifier.startsWith('#')) {
         try {
             const resolved = globalThis.__wasm_rquickjs_require_esm_graph_resolve_package(
@@ -4302,7 +4302,9 @@ function esmGraphReachesAny(filename, stack, seen, fileInfoCache) {
     const specifiers = isEsm
         ? esmGraphStaticSpecifiers(fileInfo)
         : esmGraphRequireSpecifiers(fileInfo);
-    const conditions = isEsm ? esmPackageConditions() : cjsPackageConditions();
+    const conditions = specifiers.length === 0
+        ? null
+        : (isEsm ? esmPackageConditions() : cjsPackageConditions());
     for (let i = 0; i < specifiers.length; i++) {
         const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, conditions, isEsm ? 'import' : 'cjs-analysis');
         if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen, fileInfoCache)) return true;
@@ -4310,8 +4312,9 @@ function esmGraphReachesAny(filename, stack, seen, fileInfoCache) {
 
     if (isEsm) {
         const bridgeSpecifiers = esmGraphCreateRequireSpecifiers(fileInfo);
+        const cjsConditions = bridgeSpecifiers.length === 0 ? null : cjsPackageConditions();
         for (let i = 0; i < bridgeSpecifiers.length; i++) {
-            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
+            const resolved = resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsConditions, 'cjs-analysis');
             if (resolved && resolved.filename && esmGraphReachesAny(resolved.filename, stack, seen, fileInfoCache)) return true;
         }
     }
@@ -4327,10 +4330,11 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
     if (fileInfo.source === null) return;
 
     const isEsm = fileInfo.isEsm;
+    const cjsConditions = isEsm ? null : cjsPackageConditions();
     if (!isEsm) {
         const requireSpecifiers = esmGraphRequireSpecifiers(fileInfo);
         for (let i = 0; i < requireSpecifiers.length; i++) {
-            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
+            const resolved = resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsConditions, 'cjs-analysis');
             if (resolved && resolved.filename) {
                 const targetInfo = readEsmGraphFileInfo(resolved.filename, fileInfoCache);
                 if (targetInfo.source !== null && targetInfo.isEsm && esmGraphReachesAny(resolved.filename, stack, undefined, fileInfoCache)) {
@@ -4346,15 +4350,17 @@ function scanRequireEsmGraph(filename, marked, seen, stack, fileInfoCache) {
     stack.push(filename);
 
     const specifiers = esmGraphStaticSpecifiers(fileInfo);
+    const esmConditions = specifiers.length === 0 ? null : esmPackageConditions();
     for (let i = 0; i < specifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmPackageConditions(), 'import');
+        const resolved = resolveEsmGraphSpecifier(specifiers[i], filename, esmConditions, 'import');
         if (resolved && resolved.filename) {
             scanRequireEsmGraph(resolved.filename, marked, seen, stack, fileInfoCache);
         }
     }
     const createRequireSpecifiers = esmGraphCreateRequireSpecifiers(fileInfo);
+    const createRequireConditions = createRequireSpecifiers.length === 0 ? null : cjsPackageConditions();
     for (let i = 0; i < createRequireSpecifiers.length; i++) {
-        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, cjsPackageConditions(), 'cjs-analysis');
+        const resolved = resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, createRequireConditions, 'cjs-analysis');
         if (resolved && resolved.filename) {
             const targetInfo = readEsmGraphFileInfo(resolved.filename, fileInfoCache);
             if (targetInfo.source !== null && targetInfo.isEsm && esmGraphReachesAny(resolved.filename, stack, undefined, fileInfoCache)) {

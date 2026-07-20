@@ -940,10 +940,17 @@ mod tests {
             reaches_any.contains("esmGraphStaticSpecifiers(fileInfo)")
                 && reaches_any.contains("esmGraphRequireSpecifiers(fileInfo)")
                 && reaches_any.contains("esmGraphCreateRequireSpecifiers(fileInfo)")
+                && reaches_any.contains(
+                    "const conditions = specifiers.length === 0 ? null : (isEsm ? esmPackageConditions() : cjsPackageConditions());"
+                )
+                && reaches_any.contains("const cjsConditions = bridgeSpecifiers.length === 0 ? null : cjsPackageConditions();")
+                && reaches_any.contains(
+                    "resolveEsmGraphSpecifier(bridgeSpecifiers[i], filename, cjsConditions, 'cjs-analysis')"
+                )
                 && !reaches_any.contains("collectStaticEsmSpecifiers(source)")
                 && !reaches_any.contains("collectLiteralRequireSpecifiers(source)")
                 && !reaches_any.contains("collectCreateRequireFactoryNames(source)"),
-            "cycle reachability checks must reuse per-file graph scanner results"
+            "cycle reachability checks must reuse per-file graph scanner results and avoid repeated condition lookup"
         );
 
         let scan_start = reaches_end;
@@ -956,10 +963,42 @@ mod tests {
             scan_graph.contains("esmGraphStaticSpecifiers(fileInfo)")
                 && scan_graph.contains("esmGraphRequireSpecifiers(fileInfo)")
                 && scan_graph.contains("esmGraphCreateRequireSpecifiers(fileInfo)")
+                && scan_graph.contains("const cjsConditions = isEsm ? null : cjsPackageConditions();")
+                && scan_graph.contains(
+                    "resolveEsmGraphSpecifier(requireSpecifiers[i], filename, cjsConditions, 'cjs-analysis')"
+                )
+                && scan_graph.contains("const esmConditions = specifiers.length === 0 ? null : esmPackageConditions();")
+                && scan_graph.contains(
+                    "resolveEsmGraphSpecifier(specifiers[i], filename, esmConditions, 'import')"
+                )
+                && scan_graph.contains(
+                    "const createRequireConditions = createRequireSpecifiers.length === 0 ? null : cjsPackageConditions();"
+                )
+                && scan_graph.contains(
+                    "resolveEsmGraphSpecifier(createRequireSpecifiers[i], filename, createRequireConditions, 'cjs-analysis')"
+                )
                 && !scan_graph.contains("collectStaticEsmSpecifiers(source)")
                 && !scan_graph.contains("collectLiteralRequireSpecifiers(source)")
                 && !scan_graph.contains("collectCreateRequireFactoryNames(source)"),
-            "require(esm) graph traversal must reuse per-file scanner results"
+            "require(esm) graph traversal must reuse per-file scanner results and hoist condition lookup"
+        );
+
+        let resolver_start = module_js
+            .find("function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode)")
+            .expect("resolveEsmGraphSpecifier function must exist");
+        let resolver_end = module_js[resolver_start..]
+            .find("function addRequireEsmGraphMark(")
+            .expect("resolveEsmGraphSpecifier must precede graph marker helper")
+            + resolver_start;
+        let graph_resolver = &module_js[resolver_start..resolver_end];
+        assert!(
+            graph_resolver.contains(
+                "if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;"
+            ) && graph_resolver.contains("if (isRelativeOrAbsoluteSpecifier(specifier))")
+                && graph_resolver.contains(
+                    "conditions = conditions || (mode === 'cjs-analysis' ? cjsPackageConditions() : esmPackageConditions());"
+                ),
+            "require(esm) graph resolver must not request package conditions before builtin, data, or path-only exits"
         );
     }
 
