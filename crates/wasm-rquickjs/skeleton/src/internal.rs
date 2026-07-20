@@ -5211,7 +5211,7 @@ fn throw_node_package_resolve_error<'js>(
             "ERR_INVALID_PACKAGE_CONFIG",
             match reason {
                 Some(reason) => format!("Invalid package config {}. {}", path, reason),
-                None => format!("Invalid package config {}", path),
+                None => format!("Invalid package config {}.", path),
             },
             false,
         ),

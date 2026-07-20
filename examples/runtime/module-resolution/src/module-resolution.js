@@ -676,6 +676,26 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(requireNoExportsSubpath('exported-pkg/double-encoded-dot-target').default, { doubleEncodedDot: true });
         assert.deepStrictEqual(requireNoExportsSubpath('exported-pkg/double-encoded-dot-file-target').default, { doubleEncodedDotFile: true });
         assert.throws(() => requireNoExportsSubpath('exported-pkg/encoded-slash-target'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/invalid-json-pkg', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/invalid-json-pkg/package.json', '{ invalid json');
+        assert.throws(
+            () => requireNoExportsSubpath('invalid-json-pkg'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/esm-package-map-edge-app\/node_modules\/invalid-json-pkg\/package\.json\./);
+                assert.doesNotMatch(error.message, /while importing/);
+                return true;
+            },
+        );
+        assert.throws(
+            () => requireNoExportsSubpath.resolve('invalid-json-pkg'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/esm-package-map-edge-app\/node_modules\/invalid-json-pkg\/package\.json\./);
+                assert.doesNotMatch(error.message, /while importing/);
+                return true;
+            },
+        );
 
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/imports-double-encoded-entry.mjs', [
             'export const doubleEncodedDotTarget = (await import("#double-encoded-dot-target")).default;',

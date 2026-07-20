@@ -504,7 +504,7 @@ mod tests {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
         let function_start = module_js
-            .find("function resolvePackageExportsEntry(parts, packageDir, pkg, conditions, resolution)")
+            .find("function resolvePackageExportsEntry(parts, packageDir, conditions, resolution)")
             .expect("resolvePackageExportsEntry function must exist");
         let function_end = module_js[function_start..]
             .find("function resolvePackageSelfReference(parts, parentDir, conditions, resolution)")
@@ -522,24 +522,23 @@ mod tests {
                     .contains("resolved = resolvePackageFileFromRustResult(resolved, resolution);")
                 && resolve_package_exports_entry
                     .contains("makeCjsModuleNotFoundFromErrModuleNotFound")
+                && !resolve_package_exports_entry.contains("readPackageJson(")
+                && !resolve_package_exports_entry.contains("hasOwnProperty.call(pkg, 'exports')")
                 && !module_js.contains("function resolvePackageExports(")
                 && !module_js.contains("function resolvePackageTargetWithContext(")
                 && !module_js.contains("function validatePackageExportsMap("),
-            "CJS package exports must delegate package-map resolution to Rust and keep JS exact-file loading"
+            "CJS package exports must delegate package-map resolution and package.json parsing to Rust while keeping JS exact-file loading"
         );
         assert!(
             module_js.contains(
-                "function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions, resolution)"
-            ) && module_js.contains(
-                "return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions, resolution);"
-            ) && module_js.contains(
-                "const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions, resolution);"
-            ) && module_js.contains("if (exportsResolved !== null) {")
-                && module_js.contains("if (exportsResolved !== undefined) { return exportsResolved; }")
+                "const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, conditions, resolution);"
+            ) && module_js.contains("if (exportsResolved !== undefined) { return exportsResolved; }")
+                && !module_js.contains("function readPackageDirectoryForExports(")
+                && !module_js.contains("makeInvalidPackageConfigWhileImporting(")
                 && !module_js.contains("exportsResolved:")
                 && !module_js.contains("packageEntry.exportsResolved")
-                && !module_js.contains("resolvePackageExportsEntry(parts, packageDir, pkg, pkgJsonPath"),
-            "CJS package-directory exports helper must not carry unused package data after Rust resolution"
+                && !module_js.contains("resolvePackageExportsEntry(parts, packageDir, pkg"),
+            "CJS package-directory exports probing must not carry unused package data after Rust resolution"
         );
         let scope_start = module_js
             .find("function findPackageScope(startDir)")
@@ -586,7 +585,8 @@ mod tests {
                 && internal_rs.contains("ERR_INVALID_MODULE_SPECIFIER")
                 && internal_rs.contains(
                     "Invalid module \\\"{}\\\" is not a valid package name imported from {}"
-                ),
+                )
+                && internal_rs.contains("None => format!(\"Invalid package config {}.\", path)"),
             "package-map resolver errors must be shaped by the Rust resolver bridge"
         );
         assert!(

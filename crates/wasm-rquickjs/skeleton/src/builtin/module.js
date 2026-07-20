@@ -944,8 +944,7 @@ function resolvePackageFileFromRustResult(resolved, resolution) {
     return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)), resolution);
 }
 
-function resolvePackageExportsEntry(parts, packageDir, pkg, conditions, resolution) {
-    if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
+function resolvePackageExportsEntry(parts, packageDir, conditions, resolution) {
     if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
         throw new Error('Internal CJS package exports resolver is not initialized');
     }
@@ -972,13 +971,7 @@ function resolvePackageExportsEntry(parts, packageDir, pkg, conditions, resoluti
 function resolvePackageSelfReference(parts, parentDir, conditions, resolution) {
     const scope = findPackageScope(parentDir);
     if (!scope || !scope.pkg || scope.pkg.name !== parts.name) return undefined;
-    return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, conditions, resolution);
-}
-
-function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions, resolution) {
-    const packageJsonEntry = readPackageJson(pkgJsonPath);
-    if (packageJsonEntry === null) return null;
-    return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions, resolution);
+    return resolvePackageExportsEntry(parts, scope.dir, conditions, resolution);
 }
 
 function readCjsPackageCandidate(filename, packageDir) {
@@ -988,16 +981,6 @@ function readCjsPackageCandidate(filename, packageDir) {
 
 function cjsPackageExtensionKeys() {
     return Object.keys(requireExtensions);
-}
-
-function makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, fromPart, cause) {
-    const pkgErr = new Error(
-        'Invalid package config ' + pkgJsonPath +
-        ' while importing "' + id + '" from ' + fromPart + '.' +
-        (cause && cause.message ? ' ' + cause.message : '')
-    );
-    pkgErr.code = 'ERR_INVALID_PACKAGE_CONFIG';
-    return pkgErr;
 }
 
 function resolveCjsPackageFallbacks(parts, pkgDir, id, fromPart) {
@@ -5287,20 +5270,9 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
 
     for (let i = 0; i < dirs.length; i++) {
         const pkgDir = pathModule.join(dirs[i], parts.name);
-        const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
-
-        try {
-            const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions, resolution);
-            if (exportsResolved !== null) {
-                if (exportsResolved !== undefined) {
-                    return exportsResolved;
-                }
-            }
-        } catch (e) {
-            if (e && e.code) {
-                throw e;
-            }
-            throw makeInvalidPackageConfigWhileImporting(pkgJsonPath, id, parentFilename || parentDir, e);
+        const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, conditions, resolution);
+        if (exportsResolved !== undefined) {
+            return exportsResolved;
         }
 
         const fallbackResolved = resolveCjsPackageFallbacks(parts, pkgDir, id, parentFilename || parentDir);
