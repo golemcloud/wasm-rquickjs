@@ -135,6 +135,50 @@ mod tests {
     }
 
     #[test]
+    fn rust_bridge_globals_are_non_replaceable() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "fn set_non_replaceable_global<'js, T>( global: &Object<'js>, name: &str, value: T, ) -> rquickjs::Result<()> where T: IntoJs<'js>, { global.prop(name, Property::from(value)) }"
+            ),
+            "Rust-owned bridge globals must share one non-replaceable descriptor helper"
+        );
+
+        for name in [
+            "__wasm_rquickjs_register_import_attr_rewrite",
+            "__wasm_rquickjs_discard_import_attr_rewrite",
+            "__wasm_rquickjs_analyze_loader_cjs_reexport_names",
+            "__wasm_rquickjs_import_meta_resolve_package",
+            "__wasm_rquickjs_import_meta_resolve_path",
+            "__wasm_rquickjs_loader_default_resolve_package",
+            "__wasm_rquickjs_cjs_resolve_package_exports",
+            "__wasm_rquickjs_cjs_resolve_package_fallback",
+            "__wasm_rquickjs_package_global_conditions",
+            "__wasm_rquickjs_require_esm_graph_resolve_package",
+        ] {
+            assert!(
+                internal_rs.contains(&format!(
+                    "set_non_replaceable_global( &global, \"{}\",",
+                    name
+                )),
+                "Rust-owned bridge global {name} must not be installed as a writable global"
+            );
+            assert!(
+                !internal_rs.contains(&format!("global.set( \"{}\",", name)),
+                "Rust-owned bridge global {name} must not use global.set"
+            );
+        }
+
+        assert!(
+            internal_rs.contains("global.set(\"__wasm_rquickjs_mock_seq\", 0i64)")
+                && internal_rs
+                    .contains("global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))"),
+            "mutable runtime state globals must stay separate from non-replaceable function bridges"
+        );
+    }
+
+    #[test]
     fn package_condition_sets_are_rust_owned() {
         let module_js = include_str!("../skeleton/src/builtin/module.js");
         let internal_rs = include_str!("../skeleton/src/internal.rs");

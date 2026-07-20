@@ -3541,6 +3541,17 @@ fn package_global_conditions<'js>(ctx: Ctx<'js>, mode: String) -> rquickjs::Resu
     Ok(result)
 }
 
+fn set_non_replaceable_global<'js, T>(
+    global: &Object<'js>,
+    name: &str,
+    value: T,
+) -> rquickjs::Result<()>
+where
+    T: IntoJs<'js>,
+{
+    global.prop(name, Property::from(value))
+}
+
 struct NodePackageResolutionContext<'a, 'w> {
     mode: NodePackageResolveMode,
     conditions: &'a [String],
@@ -9070,7 +9081,8 @@ impl JsState {
             global.set("__wasm_rquickjs_mock_seq", 0i64)
                 .expect("Failed to initialize mock sequence counter");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_register_import_attr_rewrite",
                 Function::new(ctx.clone(), |specifier: String, import_type: String| {
                     if import_type == "json" {
@@ -9083,7 +9095,8 @@ impl JsState {
             )
             .expect("Failed to initialize import attribute rewrite registrar");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_discard_import_attr_rewrite",
                 Function::new(ctx.clone(), |specifier: String| {
                     discard_generated_import_type_rewrite_token(&specifier);
@@ -9092,56 +9105,64 @@ impl JsState {
             )
             .expect("Failed to initialize import attribute rewrite discard");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_analyze_loader_cjs_reexport_names",
                 Function::new(ctx.clone(), analyze_loader_cjs_reexport_names)
                     .expect("Failed to create loader CJS reexport analyzer"),
             )
             .expect("Failed to initialize loader CJS reexport analyzer");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_import_meta_resolve_package",
                 Function::new(ctx.clone(), import_meta_resolve_package)
                     .expect("Failed to create import.meta package resolver"),
             )
             .expect("Failed to initialize import.meta package resolver");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_import_meta_resolve_path",
                 Function::new(ctx.clone(), import_meta_resolve_path)
                     .expect("Failed to create import.meta path resolver"),
             )
             .expect("Failed to initialize import.meta path resolver");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_loader_default_resolve_package",
                 Function::new(ctx.clone(), loader_default_resolve_package)
                     .expect("Failed to create loader default package resolver"),
             )
             .expect("Failed to initialize loader default package resolver");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_cjs_resolve_package_exports",
                 Function::new(ctx.clone(), cjs_resolve_package_exports)
                     .expect("Failed to create CJS package exports resolver"),
             )
             .expect("Failed to initialize CJS package exports resolver");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_cjs_resolve_package_fallback",
                 Function::new(ctx.clone(), cjs_resolve_package_fallback)
                     .expect("Failed to create CJS package fallback resolver"),
             )
             .expect("Failed to initialize CJS package fallback resolver");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_package_global_conditions",
                 Function::new(ctx.clone(), package_global_conditions)
                     .expect("Failed to create package global condition provider"),
             )
             .expect("Failed to initialize package global condition provider");
 
-            global.set(
+            set_non_replaceable_global(
+                &global,
                 "__wasm_rquickjs_require_esm_graph_resolve_package",
                 Function::new(ctx.clone(), require_esm_graph_resolve_package)
                     .expect("Failed to create require(esm) graph package resolver"),

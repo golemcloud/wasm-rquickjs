@@ -46,6 +46,37 @@ function writeImportEntry(path, specifier) {
     fs.writeFileSync(path, `export default await import(${JSON.stringify(specifier)});`);
 }
 
+export const testRustBridgeGlobalsNonReplaceable = () => {
+    for (const name of [
+        '__wasm_rquickjs_register_import_attr_rewrite',
+        '__wasm_rquickjs_discard_import_attr_rewrite',
+        '__wasm_rquickjs_analyze_loader_cjs_reexport_names',
+        '__wasm_rquickjs_import_meta_resolve_package',
+        '__wasm_rquickjs_import_meta_resolve_path',
+        '__wasm_rquickjs_loader_default_resolve_package',
+        '__wasm_rquickjs_cjs_resolve_package_exports',
+        '__wasm_rquickjs_cjs_resolve_package_fallback',
+        '__wasm_rquickjs_package_global_conditions',
+        '__wasm_rquickjs_require_esm_graph_resolve_package',
+    ]) {
+        const original = globalThis[name];
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+        assert.strictEqual(typeof original, 'function', name);
+        assert.strictEqual(descriptor.value, original, name);
+        assert.strictEqual(descriptor.writable, false, name);
+        assert.strictEqual(descriptor.configurable, false, name);
+
+        assert.throws(() => {
+            globalThis[name] = () => 'replaced';
+        }, TypeError, name);
+        assert.throws(() => {
+            Object.defineProperty(globalThis, name, { value: () => 'redefined' });
+        }, TypeError, name);
+        assert.strictEqual(globalThis[name], original, name);
+    }
+    return true;
+};
+
 export const testImportMetaResolve = async () => {
     const appDir = '/import-meta-resolve-app';
     const entryUrl = `${pathToFileURL(`${appDir}/entry.mjs`).href}`;
