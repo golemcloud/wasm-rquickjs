@@ -1871,6 +1871,10 @@ mod tests {
                 && import_meta_resolve.contains("value: __wasm_rquickjs_import_meta_resolve_impl,")
                 && import_meta_resolve.contains("writable: false,")
                 && import_meta_resolve.contains("configurable: false,")
+                && import_meta_resolve.contains(
+                    "if (/^[a-zA-Z][a-zA-Z0-9+\\-.]*:/.test(specifier)) return specifier;"
+                )
+                && !import_meta_resolve.contains(":\\/\\/")
                 && !import_meta_resolve
                     .contains("globalThis.__wasm_rquickjs_import_meta_resolve = function")
                 && !import_meta_resolve.contains("NODE_BUILTIN_NAMES")

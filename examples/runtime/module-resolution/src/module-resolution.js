@@ -179,6 +179,10 @@ export const testImportMetaResolve = async () => {
 
     const resolvedFromData = await import('data:text/javascript,export default import.meta.resolve("http://example.com/value")');
     assert.strictEqual(resolvedFromData.default, 'http://example.com/value');
+    assert.strictEqual(import.meta.resolve('mailto:test@example.com', entryUrl), 'mailto:test@example.com');
+    assert.strictEqual(import.meta.resolve('urn:isbn:123', entryUrl), 'urn:isbn:123');
+    assert.strictEqual(import.meta.resolve('blob:https://example.com/id', entryUrl), 'blob:https://example.com/id');
+    assert.strictEqual(import.meta.resolve('foo:bar', entryUrl), 'foo:bar');
     const fileResolvedFromData = await import('data:text/javascript,export default import.meta.resolve("file:///tmp/value.mjs")');
     assert.strictEqual(fileResolvedFromData.default, 'file:///tmp/value.mjs');
     await expectImportRejectsCode(

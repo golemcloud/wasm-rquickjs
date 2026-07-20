@@ -550,7 +550,7 @@ pub fn wire_builtins() -> String {
 const IMPORT_META_RESOLVE_JS: &str = r#"function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
   baseUrl = String(baseUrl);
   specifier = String(specifier);
-  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(specifier) || specifier.startsWith('data:')) return specifier;
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(specifier)) return specifier;
   var builtinResolved = typeof globalThis.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
     ? globalThis.__wasm_rquickjs_import_meta_resolve_builtin(specifier)
     : undefined;
