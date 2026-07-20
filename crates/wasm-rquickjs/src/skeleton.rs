@@ -1425,9 +1425,13 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "function registeredLoaderJsonSourceReturn(source) { return globalThis.__wasm_rquickjs_register_import_attr_rewrite( 'data:application/json,' + encodeURIComponent(loaderSourceToString(source)), 'json', ); }"
+                "function registeredLoaderJsonSourceReturn(source) { return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite( 'data:application/json,' + encodeURIComponent(loaderSourceToString(source)), 'json', ); }"
             ),
             "registered-loader JSON source return conversion must stay centralized"
+        );
+        assert!(
+            !module_js.contains("globalThis.__wasm_rquickjs_register_import_attr_rewrite("),
+            "registered-loader JSON import-attribute rewrite calls must use the captured module global"
         );
         assert!(
             module_js.contains(
@@ -3303,6 +3307,20 @@ mod tests {
                 && !named_export_source.contains("globalThis.__wasm_rquickjs_cjs_facade_has_own")
                 && !named_export_source.contains("var {local} = __cjs_default["),
             "Rust-generated CJS named bindings must export detected names but read only own properties through the builtin module helper, matching Node's CJS facade semantics"
+        );
+        let loader_cjs_start = module_js
+            .find("function loaderCjsNamedExports(source, filename)")
+            .expect("loader CJS named-export analyzer must exist");
+        let loader_cjs_end = module_js[loader_cjs_start..]
+            .find("function loaderCommonJsSourceModule(source, url)")
+            .expect("loader CJS analyzer must precede loader source helper")
+            + loader_cjs_start;
+        let loader_cjs = &module_js[loader_cjs_start..loader_cjs_end];
+        assert!(
+            loader_cjs.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names(filename, source, rootReexports)"
+            ) && !loader_cjs.contains("globalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names"),
+            "loader-provided CJS reexport analysis must call the Rust bridge through the captured module global"
         );
         let loader_source_start = module_js
             .find("function loaderCommonJsSourceModule(source, url)")

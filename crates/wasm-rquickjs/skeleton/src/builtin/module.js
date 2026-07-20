@@ -3849,8 +3849,8 @@ function loaderCjsNamedExports(source, filename) {
     const nameSet = new Set();
     const rootReexports = [];
     addLoaderCjsNames(names, nameSet, source, filename, rootReexports);
-    if (filename !== undefined && typeof globalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names === 'function') {
-        const rustNames = globalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names(filename, source, rootReexports);
+    if (filename !== undefined && typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names === 'function') {
+        const rustNames = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names(filename, source, rootReexports);
         for (let i = 0; i < rustNames.length; i++) {
             const name = rustNames[i];
             if (!nameSet.has(name)) {
@@ -5893,7 +5893,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function registeredLoaderJsonSourceReturn(source) {
-        return globalThis.__wasm_rquickjs_register_import_attr_rewrite(
+        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(
             'data:application/json,' + encodeURIComponent(loaderSourceToString(source)),
             'json',
         );
@@ -6043,7 +6043,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderJsonSourceReturn(loaded.source);
         }
         if (loadContext.importAttributes && loadContext.importAttributes.type === 'json') {
-            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
+            return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
         }
         return undefined;
     }
@@ -6241,11 +6241,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             loaded.format === 'json' &&
             !registeredLoaderHasOwnSource(loaded) &&
             loaded.url &&
-            typeof globalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
+            typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
         ) {
             const url = String(loaded.url);
             const target = registeredLoaderPathOrUrlReturn(url, true);
-            return globalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
+            return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
         }
         return staticRegisteredLoaderReturn(loaded);
     }
