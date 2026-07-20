@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-06 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-07-21 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3241/4423 (73.3%)
+**Primary compatibility (CI-enforced):** 3240/4422 (73.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3241 | 73.3% | 56.4% | 47.2% |
+| ✅ passing (runnable) | 3240 | 73.3% | 56.4% | 47.2% |
 | 🧩 known gap | 1182 | 26.7% | 20.6% | 17.2% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 165 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1122 | — | — | 16.3% |
+| 🔒 Node.js internals (excluded) | 1123 | — | — | 16.4% |
 | **Total** | **6866** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3241/5744 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3240/5743 (56.4%)**.
 
 ## Inventory by Module
 
@@ -79,7 +79,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| util | 174 | 90 | 8 | 0 | 0 | 0 | 76 | 91.8% | 91.8% |
+| util | 174 | 89 | 8 | 0 | 0 | 0 | 77 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
 | vm | 121 | 74 | 34 | 3 | 10 | 0 | 0 | 68.5% | 61.2% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
@@ -582,7 +582,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-util-format.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
 | `test-util-getcallsites.js` | 13 | 13 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-inspect-getters-accessing-this.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-util-inspect.js` | 99 | 49 | 2 | 0 | 0 | 0 | 48 |
+| `test-util-inspect.js` | 99 | 48 | 2 | 0 | 0 | 0 | 49 |
 | `test-util-isDeepStrictEqual.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-promisify.js` | 19 | 0 | 0 | 0 | 0 | 0 | 19 |
 | `test-util-types.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -1555,7 +1555,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 _No entries._
 
-### Node.js internals (1122)
+### Node.js internals (1123)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1700,6 +1700,7 @@ _No entries._
 | imports internal/modules/esm/assert (Node internal module) | 1 | `es-module/test-esm-import-attributes-validation.js` |
 | imports internal/modules/esm/resolve (Node internal module) | 1 | `es-module/test-esm-loader-search.js` |
 | inherited: requires --expose-internals and internal/util | 1 | `parallel/test-internal-util-objects.js#block_00_block_00` |
+| inherits top-level internal/test/binding dependency | 1 | `parallel/test-util-inspect.js#block_78_block_78` |
 | invokes private req.client._events.close handlers directly | 1 | `parallel/test-http-req-close-robust-from-tampering.js` |
 | monkey-patches internalBinding('http_parser') and uses _http_common internals | 1 | `parallel/test-http-parser-lazy-loaded.js` |
 | monkey-patches internalBinding('os') | 1 | `parallel/test-os-checked-function.js` |

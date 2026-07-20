@@ -440,7 +440,7 @@
         "block_75_check_the_getter_option": { "category": "runnable" },
         "block_76_check_compact_number_mode": { "category": "runnable" },
         "block_77_block_77": { "category": "runnable" },
-        "block_78_block_78": { "category": "runnable" },
+        "block_78_block_78": { "category": "node-internals", "reason": "inherits top-level internal/test/binding dependency" },
         "block_79_block_79": { "category": "runnable" },
         "block_80_inspect_prototype_properties": { "category": "runnable" },
         "block_81_regression_test_for_https_github_com_nodejs_node_issues_3573": { "category": "runnable" },
