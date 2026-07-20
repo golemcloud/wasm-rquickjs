@@ -1341,6 +1341,107 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_import_helpers_use_loader_owned_bindings() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+        let builtin_mod_rs = compact_whitespace(include_str!("../skeleton/src/builtin/mod.rs"));
+
+        assert!(
+            module_js.contains(
+                "Object.defineProperty(globalThis, '__wasm_rquickjs_trace_module_import', { value: traceModuleImport, writable: false, configurable: false,"
+            ),
+            "dynamic import tracing must expose a non-replaceable internal helper"
+        );
+        assert!(
+            module_js.contains("const wasmRquickjsModuleGlobalThis = globalThis;"),
+            "module internals must capture the real global object before user code can replace globalThis"
+        );
+
+        let strip_start = module_js
+            .find("function stripImportAttributes(source, filename)")
+            .expect("dynamic import rewrite helper must exist");
+        let strip_end = module_js[strip_start..]
+            .find("function hasExecArgvFlag(flag)")
+            .expect("dynamic import rewrite helper must precede execArgv helper")
+            + strip_start;
+        let strip_import_attributes = &module_js[strip_start..strip_end];
+
+        assert!(
+            strip_import_attributes.contains("((__wasm_rquickjs_specifier)=>import(\"node:module\").then(({default:__wasm_rquickjs_module})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
+                && strip_import_attributes.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\"node:module\").then(({default:__wasm_rquickjs_module})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
+                && strip_import_attributes
+                    .contains("(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)")
+                && !strip_import_attributes
+                    .contains("globalThis.__wasm_rquickjs_trace_module_import")
+                && !strip_import_attributes
+                    .contains("globalThis.__wasm_rquickjs_import_attr_read_options")
+                && !strip_import_attributes
+                    .contains("globalThis.__wasm_rquickjs_import_attr_dynamic_import"),
+            "generated dynamic import wrappers must resolve internal helpers through the builtin module object without mutable globalThis or bare helper lookups"
+        );
+
+        assert!(
+            internal_rs.contains("((__wasm_rquickjs_specifier)=>import(\\\"node:module\\\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
+                && internal_rs.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\\\"node:module\\\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
+                && !internal_rs.contains(
+                    "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,"
+                )
+                && !internal_rs.contains("__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,"),
+            "Rust-generated dynamic import wrappers must resolve internal helpers through the builtin module object"
+        );
+
+        assert!(
+            module_js.contains("__wasm_rquickjs_dynamic_import_with_trace: { value: dynamicImportWithTrace, writable: false, configurable: false,"),
+            "builtin module default export must expose a non-replaceable private dynamic import helper"
+        );
+        assert!(
+            module_js.contains(
+                "const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);"
+            ) && module_js.contains(
+                "async () => wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed("
+            ) && module_js.contains(
+                "async () => wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import("
+            ) && builtin_mod_rs.contains(
+                "Object.defineProperty(__wasm_rquickjs_import_attr_global, name,"
+            ) && builtin_mod_rs.contains(
+                "'__wasm_rquickjs_import_attr_dynamic_import_parsed',"
+            ),
+            "builtin module dynamic import helper must use the captured global object and non-replaceable import-attribute helpers"
+        );
+
+        assert!(
+            builtin_mod_rs.contains("const __wasm_rquickjs_import_attr_global = globalThis;")
+                && builtin_mod_rs.contains(
+                    "var prepared = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed("
+                )
+                && !builtin_mod_rs.contains(
+                    "var prepared = await globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed("
+                ),
+            "dynamic import helper internals must use the captured global object for private loader state"
+        );
+
+        let static_loader_start = module_js
+            .find("function staticRegisteredLoaderCacheEntry(")
+            .expect("static registered-loader cache helper must exist");
+        let static_loader_end = module_js[static_loader_start..]
+            .find("// \"node_modules\" reversed as char codes")
+            .expect("static registered-loader helpers must precede node_modules marker")
+            + static_loader_start;
+        let static_loader = &module_js[static_loader_start..static_loader_end];
+
+        assert!(
+            static_loader.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync("
+            ) && static_loader.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache"
+            ) && !static_loader.contains("globalThis.__wasm_rquickjs_run_registered_loaders_sync(")
+                && !static_loader
+                    .contains("globalThis.__wasm_rquickjs_static_registered_loader_cache"),
+            "static registered-loader helpers must use the captured global object for private loader state"
+        );
+    }
+
+    #[test]
     fn registered_loader_raw_result_objects_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
@@ -2810,7 +2911,9 @@ mod tests {
         let facade_default = &module_js[facade_default_start..facade_default_end];
         assert!(
             facade_default
-                .contains("const require = globalThis.__wasm_rquickjs_create_require(filename);")
+                .contains(
+                    "const require = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_create_require(filename);"
+                )
                 && facade_default.contains("const resolvedFilename = require.resolve(filename);")
                 && facade_default
                     .contains("hasCjsEsmDefaultSnapshot(require.cache, resolvedFilename)")
@@ -2826,11 +2929,18 @@ mod tests {
             "generated CJS facades must call non-replaceable internal snapshot/default helpers"
         );
         assert!(
-            internal_rs.contains(
-                "var __cjs_default = globalThis.__wasm_rquickjs_load_cjs_esm_facade_default("
-            ) && !internal_rs.contains(
-                "var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require("
-            ) && !internal_rs.contains("var __wasm_rquickjs_resolved_filename =")
+            internal_rs
+                .contains("import __wasm_rquickjs_module from \"node:module\";")
+                && internal_rs.contains("var __cjs_default = __wasm_rquickjs_module.__wasm_rquickjs_load_cjs_esm_facade_default(")
+                && internal_rs.contains("__wasm_rquickjs_module.__wasm_rquickjs_cjs_facade_has_own(__cjs_default,")
+                && !internal_rs.contains("var __cjs_default = __wasm_rquickjs_load_cjs_esm_facade_default(")
+                && !internal_rs.contains(
+                    "var __cjs_default = globalThis.__wasm_rquickjs_load_cjs_esm_facade_default("
+                )
+                && !internal_rs.contains(
+                    "var __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require("
+                )
+                && !internal_rs.contains("var __wasm_rquickjs_resolved_filename =")
                 && !internal_rs
                     .contains("globalThis.__wasm_rquickjs_has_cjs_esm_default_snapshot(")
                 && !internal_rs
@@ -2856,11 +2966,13 @@ mod tests {
             + named_export_start;
         let named_export_source = &internal_rs[named_export_start..named_export_end];
         assert!(
-            named_export_source.contains("__wasm_rquickjs_cjs_facade_has_own(__cjs_default,")
+            named_export_source.contains(
+                "__wasm_rquickjs_module.__wasm_rquickjs_cjs_facade_has_own(__cjs_default,"
+            ) && !named_export_source.contains("var {local} = __wasm_rquickjs_cjs_facade_has_own(")
                 && named_export_source.contains(": undefined;")
                 && !named_export_source.contains("globalThis.__wasm_rquickjs_cjs_facade_has_own")
                 && !named_export_source.contains("var {local} = __cjs_default["),
-            "Rust-generated CJS named bindings must export detected names but read only own properties through a non-replaceable global binding, matching Node's CJS facade semantics"
+            "Rust-generated CJS named bindings must export detected names but read only own properties through the builtin module helper, matching Node's CJS facade semantics"
         );
         let loader_source_start = module_js
             .find("function loaderCommonJsSourceModule(source, url)")
@@ -2871,10 +2983,19 @@ mod tests {
             + loader_source_start;
         let loader_source = &module_js[loader_source_start..loader_source_end];
         assert!(
-            loader_source.contains("__wasm_rquickjs_cjs_facade_has_own(__cjs_default,")
+            loader_source.contains("import __wasm_rquickjs_module from \"node:module\";")
+                && loader_source.contains(
+                    "__wasm_rquickjs_module.__wasm_rquickjs_load_commonjs_loader_source("
+                )
+                && !loader_source
+                    .contains("globalThis.__wasm_rquickjs_load_commonjs_loader_source")
+                && loader_source.contains(
+                    "__wasm_rquickjs_module.__wasm_rquickjs_cjs_facade_has_own(__cjs_default,"
+                )
+                && !loader_source.contains(" = __wasm_rquickjs_cjs_facade_has_own(")
                 && !loader_source.contains("globalThis.__wasm_rquickjs_cjs_facade_has_own")
                 && !loader_source.contains("Object.prototype.hasOwnProperty.call(__cjs_default,"),
-            "loader-provided CJS named bindings must share the captured facade own-property helper without mutable globalThis lookup"
+            "loader-provided CJS source facades must use builtin module helpers without mutable globalThis or bare helper lookups"
         );
     }
 

@@ -856,7 +856,7 @@ fn rewrite_dynamic_import_call(
     if i < len && bytes[i] == b')' {
         return Some((
             format!(
-                "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
+                "((__wasm_rquickjs_specifier)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
                 &source[spec_literal_start..spec_literal_end]
             ),
             i + 1,
@@ -882,7 +882,7 @@ fn rewrite_dynamic_import_call(
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},{},true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
+                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
                             &source[spec_literal_start..spec_literal_end],
                             options
                         ),
@@ -1020,7 +1020,7 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                 let expr = source[expr_start..i].trim();
                 return Some((
                     format!(
-                        "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},undefined,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
+                        "((__wasm_rquickjs_specifier)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
                         expr
                     ),
                     i + 1,
@@ -1056,7 +1056,7 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,{},{},true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))",
+                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
                             expr, options
                         ),
                         i + 1,
@@ -7589,7 +7589,7 @@ fn cjs_named_export_source(names: &[String]) -> String {
         let local = format!("__cjs_export_{}", index);
         let escaped = escape_js_string(name);
         out.push_str(&format!(
-            "var {local} = __wasm_rquickjs_cjs_facade_has_own(__cjs_default, \"{escaped}\") ? __cjs_default[\"{escaped}\"] : undefined;\nexport {{ {local} as \"{escaped}\" }};\n"
+            "var {local} = __wasm_rquickjs_module.__wasm_rquickjs_cjs_facade_has_own(__cjs_default, \"{escaped}\") ? __cjs_default[\"{escaped}\"] : undefined;\nexport {{ {local} as \"{escaped}\" }};\n"
         ));
     }
     out
@@ -7685,12 +7685,13 @@ impl Loader for CjsCompatLoader {
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
         let prologue = inject_import_meta_prologue(&init, "");
-        let wrapped = format!(
-            r#"{}
-var __cjs_default = globalThis.__wasm_rquickjs_load_cjs_esm_facade_default("{}");
-export default __cjs_default;
-{}
-"#,
+	let wrapped = format!(
+	    r#"{}
+	import __wasm_rquickjs_module from "node:module";
+	var __cjs_default = __wasm_rquickjs_module.__wasm_rquickjs_load_cjs_esm_facade_default("{}");
+	export default __cjs_default;
+	{}
+	"#,
             prologue.trim(),
             escape_js_string(&fs_abs_path),
             named_exports

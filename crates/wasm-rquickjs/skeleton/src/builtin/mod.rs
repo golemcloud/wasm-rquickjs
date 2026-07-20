@@ -622,6 +622,8 @@ const IMPORT_META_RESOLVE_JS: &str = r#"globalThis.__wasm_rquickjs_import_meta_r
 };"#;
 
 const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
+const __wasm_rquickjs_import_attr_global = globalThis;
+
 globalThis.__wasm_rquickjs_import_attr_read_options = function(options) {
   var typeValue;
   var unsupportedKey;
@@ -696,10 +698,10 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
 
   var moduleTypeErrorCache;
   if (asyncSemanticErrors) {
-    moduleTypeErrorCache = globalThis.__wasm_rquickjs_import_attr_module_type_error_cache;
+    moduleTypeErrorCache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache;
     if (moduleTypeErrorCache === undefined) {
       moduleTypeErrorCache = Object.create(null);
-      globalThis.__wasm_rquickjs_import_attr_module_type_error_cache = moduleTypeErrorCache;
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache = moduleTypeErrorCache;
     }
     if (moduleTypeErrorCache[value] !== undefined) return moduleTypeErrorCache[value];
   }
@@ -743,29 +745,29 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
   }
 
   if (typeValue !== 'json') return value;
-  return globalThis.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
 };
 
 globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, asyncSemanticErrors) {
   var value = String(specifier);
-  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
-  return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
+  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 };
 
 globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function(baseUrl, specifier, options, asyncSemanticErrors) {
   var originalValue = String(specifier);
-  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
-  return globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors);
+  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors);
 };
 
 globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed = async function(baseUrl, originalValue, parsedOptions, asyncSemanticErrors) {
   originalValue = String(originalValue);
   parsedOptions = parsedOptions || {};
   if (
-    globalThis.__wasm_rquickjs_registered_loaders &&
-    globalThis.__wasm_rquickjs_registered_loaders.length > 0
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0
   ) {
-    var hooked = await globalThis.__wasm_rquickjs_run_registered_loaders(String(baseUrl), originalValue, parsedOptions);
+    var hooked = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_run_registered_loaders(String(baseUrl), originalValue, parsedOptions);
     if (hooked !== undefined) return hooked;
   }
   var value = originalValue;
@@ -775,21 +777,21 @@ globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed = async function(
     value.startsWith('/') ||
     value.startsWith('file://')
   ) {
-    value = globalThis.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
+    value = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
   }
-  return globalThis.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 };
 
 globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, specifier, options, asyncSemanticErrors, importer) {
   var originalSpecifier = String(specifier);
-  var parsedOptions = globalThis.__wasm_rquickjs_import_attr_read_options(options);
-  return globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer);
+  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer);
 };
 
 globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer) {
   originalSpecifier = String(originalSpecifier);
   parsedOptions = parsedOptions || {};
-  var prepared = await globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors);
+  var prepared = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors);
   var key = String(prepared);
   var completedKey = key;
   var originalHasRewriteToken = originalSpecifier.indexOf('__wasm_rquickjs_import_type=') >= 0;
@@ -817,14 +819,14 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(ba
   }
   var generatedRewriteToken = completedKey !== key && !originalHasRewriteToken;
   function discardGeneratedRewriteToken() {
-    if (generatedRewriteToken && typeof globalThis.__wasm_rquickjs_discard_import_attr_rewrite === 'function') {
-      globalThis.__wasm_rquickjs_discard_import_attr_rewrite(key);
+    if (generatedRewriteToken && typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_discard_import_attr_rewrite === 'function') {
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_discard_import_attr_rewrite(key);
     }
   }
   var importFn = typeof importer === 'function' ? importer : function(value) { return import(value); };
   if (
-    typeof globalThis.__wasm_rquickjs_has_import_mock === 'function' &&
-    globalThis.__wasm_rquickjs_has_import_mock(prepared, baseUrl)
+    typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_has_import_mock === 'function' &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_has_import_mock(prepared, baseUrl)
   ) {
     try {
       return await importFn(prepared);
@@ -832,10 +834,10 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(ba
       discardGeneratedRewriteToken();
     }
   }
-  var cache = globalThis.__wasm_rquickjs_import_attr_inflight;
+  var cache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight;
   if (!cache) {
     cache = Object.create(null);
-    globalThis.__wasm_rquickjs_import_attr_inflight = cache;
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
   }
   if (cache[completedKey] !== undefined) {
     var cached = cache[completedKey];
@@ -845,13 +847,13 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(ba
     return cached.promise;
   }
   if (
-    globalThis.__wasm_rquickjs_registered_loaders &&
-    globalThis.__wasm_rquickjs_registered_loaders.length > 0 &&
-    typeof globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph === 'function' &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0 &&
+    typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph === 'function' &&
     !String(prepared).startsWith('data:application/json') &&
     !/[.]json(?:[?#]|$)/.test(String(prepared))
   ) {
-    await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared);
+    await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared);
   }
   var promise = importFn(prepared);
   var entry = { promise: promise, preparedKey: key };
@@ -867,4 +869,20 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(ba
   } finally {
   }
 };
+
+[
+  '__wasm_rquickjs_import_attr_read_options',
+  '__wasm_rquickjs_import_attr_prepare_from_options',
+  '__wasm_rquickjs_import_attr_prepare',
+  '__wasm_rquickjs_import_attr_prepare_for_base',
+  '__wasm_rquickjs_import_attr_prepare_for_base_parsed',
+  '__wasm_rquickjs_import_attr_dynamic_import',
+  '__wasm_rquickjs_import_attr_dynamic_import_parsed',
+].forEach(function(name) {
+  Object.defineProperty(__wasm_rquickjs_import_attr_global, name, {
+    value: __wasm_rquickjs_import_attr_global[name],
+    writable: false,
+    configurable: false,
+  });
+});
 "#;
