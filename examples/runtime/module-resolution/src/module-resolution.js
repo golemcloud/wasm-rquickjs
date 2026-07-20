@@ -73,6 +73,8 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(import.meta.resolve('./local.mjs', `${pathToFileURL(`${appDir}/`).href}`), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
     assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('fs', entryUrl), 'node:fs');
+    assert.strictEqual(import.meta.resolve('node:_http_agent', entryUrl), 'node:_http_agent');
+    assert.strictEqual(import.meta.resolve('_http_agent', entryUrl), 'node:_http_agent');
     assert.strictEqual(import.meta.resolve('node:test', entryUrl), 'node:test');
     assert.strictEqual(import.meta.resolve('node:sqlite', entryUrl), 'node:sqlite');
     assert.throws(() => import.meta.resolve('test', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });

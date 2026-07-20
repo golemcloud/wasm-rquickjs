@@ -275,10 +275,9 @@ function _mockCanonicalKey(specifier, base) {
     }
     if (typeof specifier !== 'string') return null;
 
-    // Check if it's a builtin (with or without node: prefix)
-    const bare = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
-    if (builtinModuleMap[bare] !== undefined || builtinModuleMap['node:' + bare] !== undefined) {
-        return 'builtin:' + bare;
+    const builtinSpecifier = builtinResolveSpecifier(specifier);
+    if (builtinSpecifier !== undefined) {
+        return 'builtin:' + builtinSpecifier.slice(5);
     }
 
     // file:// URL
@@ -542,41 +541,26 @@ function setFromArray(values, mapper) {
 // Modules that require the 'node:' prefix (cannot be required as bare specifiers)
 const schemelessBlockList = setFromArray(['test', 'sqlite']);
 
-// Build public module ID sets matching Node.js semantics
-const publicBuiltinIdSet = new Set();
-const publicBuiltinWithoutSchemeSet = new Set();
-for (let _i = 0; _i < builtinModuleNames.length; _i++) {
-    const _name = builtinModuleNames[_i];
-    publicBuiltinIdSet.add(_name);
-    if (!schemelessBlockList.has(_name)) {
-        publicBuiltinWithoutSchemeSet.add(_name);
+function builtinResolveSpecifier(id) {
+    if (typeof id !== 'string') return undefined;
+    if (id.startsWith('node:')) {
+        return builtinModuleMap[id] !== undefined ? id : undefined;
     }
+    if (id.startsWith('internal/') || schemelessBlockList.has(id)) {
+        return undefined;
+    }
+    return builtinModuleMap[id] !== undefined ? 'node:' + id : undefined;
 }
 
 function isBuiltin(id) {
-    if (typeof id !== 'string') return false;
-    if (publicBuiltinWithoutSchemeSet.has(id)) return true;
-    if (id.startsWith('node:')) {
-        return publicBuiltinIdSet.has(id.slice(5));
-    }
-    return false;
+    return builtinResolveSpecifier(id) !== undefined;
 }
 
 function isBuiltinResolveTarget(id) {
-    if (typeof id !== 'string') return false;
-    if (id.startsWith('node:')) {
-        return publicBuiltinIdSet.has(id.slice(5));
-    }
-    return publicBuiltinIdSet.has(id);
+    return builtinResolveSpecifier(id) !== undefined;
 }
 
-globalThis.__wasm_rquickjs_import_meta_resolve_builtin = function importMetaResolveBuiltin(specifier) {
-    if (typeof specifier !== 'string') return undefined;
-    if (specifier.startsWith('node:')) {
-        return builtinModuleMap[specifier] !== undefined ? specifier : undefined;
-    }
-    return publicBuiltinWithoutSchemeSet.has(specifier) ? 'node:' + specifier : undefined;
-};
+globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;
 
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
@@ -4453,13 +4437,12 @@ function parentFilenameForLoaderResolve(parentURL, baseUrl) {
 }
 
 function registeredLoaderBuiltinResolve(specifier, cjsMode) {
+    const resolved = builtinResolveSpecifier(specifier);
+    if (resolved === undefined) return undefined;
     if (specifier.startsWith('node:')) {
-        return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : registeredLoaderUrlResult(specifier);
+        return cjsMode ? registeredLoaderUrlFormatResult(resolved, 'builtin') : registeredLoaderUrlResult(resolved);
     }
-    if (cjsMode ? isBuiltin(specifier) : publicBuiltinWithoutSchemeSet.has(specifier)) {
-        return registeredLoaderUrlFormatResult('node:' + specifier, 'builtin');
-    }
-    return undefined;
+    return registeredLoaderUrlFormatResult(resolved, 'builtin');
 }
 
     function packageConditionArrayForLoaderResolve(context, defaultConditions) {
@@ -5008,8 +4991,9 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
         if (typeof globalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
             const loaded = globalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id, true);
             if (loaded && loaded.url) {
-                if (String(loaded.url).startsWith('node:')) return String(loaded.url).slice(5);
-                return registeredLoaderPathOrUrlReturn(loaded.url);
+                const loadedUrl = String(loaded.url);
+                if (loadedUrl.startsWith('node:')) return id.startsWith('node:') ? loadedUrl : loadedUrl.slice(5);
+                return registeredLoaderPathOrUrlReturn(loadedUrl);
             }
         }
         return fallbackRequire.resolve(id, options);
@@ -5312,9 +5296,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
 // The global require, rooted at '/'
 const globalRequire = makeRequire('/', mainModule);
 
-export let require = function require(id) {
-    return globalRequire(id);
-};
+export let require = globalRequire;
 
 export let createRequire = function createRequire(filename) {
     let filepath;
@@ -6392,7 +6374,5 @@ builtinModuleMap['node:module'] = moduleExports;
 if (!builtinModuleNames.includes('module')) {
     builtinModuleNames.push('module');
 }
-publicBuiltinIdSet.add('module');
-publicBuiltinWithoutSchemeSet.add('module');
 
 export default moduleExports;

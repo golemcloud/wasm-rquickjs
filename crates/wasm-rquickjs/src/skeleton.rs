@@ -1422,11 +1422,24 @@ mod tests {
             + helper_start;
         let helper = &module_js[helper_start..helper_end];
         assert!(
+            helper.contains("const resolved = builtinResolveSpecifier(specifier);")
+                && helper.contains("if (resolved === undefined) return undefined;")
+                && helper.contains(
+                    "return cjsMode ? registeredLoaderUrlFormatResult(resolved, 'builtin') : registeredLoaderUrlResult(resolved);"
+                )
+                && helper.contains("return registeredLoaderUrlFormatResult(resolved, 'builtin');"),
+            "registered-loader builtin helper must preserve node:-specifier and bare-builtin format differences through the shared builtin policy"
+        );
+        assert!(
+            !helper.contains("publicBuiltinWithoutSchemeSet.has(specifier)")
+                && !helper.contains("isBuiltin(specifier)")
+                && !helper.contains("'node:' + specifier"),
+            "registered-loader builtin helper must not keep local builtin-policy branches"
+        );
+        assert!(
             helper.contains(
-                "return cjsMode ? registeredLoaderUrlFormatResult(specifier, 'builtin') : registeredLoaderUrlResult(specifier);"
-            ) && helper.contains(
-                "return registeredLoaderUrlFormatResult('node:' + specifier, 'builtin');"
-            ),
+                "return cjsMode ? registeredLoaderUrlFormatResult(resolved, 'builtin') : registeredLoaderUrlResult(resolved);"
+            ) && helper.contains("return registeredLoaderUrlFormatResult(resolved, 'builtin');"),
             "registered-loader builtin helper must preserve node:-specifier and bare-builtin format differences"
         );
         assert_eq!(
@@ -1469,13 +1482,35 @@ mod tests {
         let builtin_mod_rs = include_str!("../skeleton/src/builtin/mod.rs");
 
         assert!(
-            module_js.contains(
-                "globalThis.__wasm_rquickjs_import_meta_resolve_builtin = function importMetaResolveBuiltin(specifier)"
-            ) && module_js.contains("return builtinModuleMap[specifier] !== undefined ? specifier : undefined;")
-                && module_js.contains("publicBuiltinWithoutSchemeSet.has(specifier) ? 'node:' + specifier : undefined")
+            module_js.contains("function builtinResolveSpecifier(id)")
+                && module_js.contains("if (id.startsWith('node:')) { return builtinModuleMap[id] !== undefined ? id : undefined; }")
+                && module_js.contains("if (id.startsWith('internal/') || schemelessBlockList.has(id)) { return undefined; }")
+                && module_js.contains("return builtinModuleMap[id] !== undefined ? 'node:' + id : undefined;")
+                && module_js.contains("globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;")
                 && module_js.contains("builtinModuleMap['node:sqlite'] = sqliteCjs;")
-                && module_js.contains("const schemelessBlockList = setFromArray(['test', 'sqlite']);"),
+                && module_js.contains("const schemelessBlockList = setFromArray(['test', 'sqlite']);")
+                && !module_js.contains("publicBuiltinIdSet")
+                && !module_js.contains("publicBuiltinWithoutSchemeSet"),
             "import.meta.resolve builtin normalization must use the shared builtin map for node:-only modules and the shared bare-builtin set for schemeless modules"
+        );
+
+        let mock_canonical_start = module_js
+            .find("function _mockCanonicalKey(specifier, base)")
+            .expect("module mock canonicalizer must exist");
+        let mock_canonical_end = module_js[mock_canonical_start..]
+            .find("globalThis.__wasm_rquickjs_mock_canonical_key")
+            .expect("module mock canonicalizer must precede global mock canonicalizer export")
+            + mock_canonical_start;
+        let mock_canonical = &module_js[mock_canonical_start..mock_canonical_end];
+        assert!(
+            mock_canonical
+                .contains("const builtinSpecifier = builtinResolveSpecifier(specifier);")
+                && mock_canonical.contains(
+                    "if (builtinSpecifier !== undefined) { return 'builtin:' + builtinSpecifier.slice(5); }"
+                )
+                && !mock_canonical.contains("builtinModuleMap[bare]")
+                && !mock_canonical.contains("builtinModuleMap['node:' + bare]"),
+            "module mock canonicalization must share builtin normalization so node:-only and internal modules do not alias bare package names"
         );
 
         let resolve_start = builtin_mod_rs
@@ -1487,6 +1522,21 @@ mod tests {
                 && !import_meta_resolve.contains("NODE_BUILTIN_NAMES")
                 && !import_meta_resolve.contains("NODE_BUILTINS"),
             "import.meta.resolve must not maintain a separate hard-coded builtin list"
+        );
+
+        let registered_loader_start = module_js
+            .find("function registeredLoaderBuiltinResolve(specifier, cjsMode)")
+            .expect("registered-loader builtin helper must exist");
+        let registered_loader_end = module_js[registered_loader_start..]
+            .find("function packageConditionArrayForLoaderResolve")
+            .expect("builtin helper must precede loader package condition helper")
+            + registered_loader_start;
+        let registered_loader_builtin = &module_js[registered_loader_start..registered_loader_end];
+        assert!(
+            registered_loader_builtin
+                .contains("const resolved = builtinResolveSpecifier(specifier);")
+                && !registered_loader_builtin.contains("publicBuiltinWithoutSchemeSet"),
+            "registered-loader builtin normalization must share the same builtin policy"
         );
     }
 
@@ -1510,9 +1560,9 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "if (String(loaded.url).startsWith('node:')) return String(loaded.url).slice(5);"
+                "const loadedUrl = String(loaded.url); if (loadedUrl.startsWith('node:')) return id.startsWith('node:') ? loadedUrl : loadedUrl.slice(5); return registeredLoaderPathOrUrlReturn(loadedUrl);"
             ),
-            "registered-loader require.resolve must preserve Node's bare builtin return shape"
+            "registered-loader require.resolve must preserve Node's node:-prefixed and bare builtin return shapes"
         );
         assert!(
             internal_rs.contains("const STATIC_REGISTERED_FILE_URL_PREFIX: &str")
@@ -1545,7 +1595,7 @@ mod tests {
         );
         assert!(
             static_return_helpers.contains("registeredLoaderPathOrUrlReturn(url, true)")
-                && module_js.contains("return registeredLoaderPathOrUrlReturn(loaded.url);"),
+                && module_js.contains("return registeredLoaderPathOrUrlReturn(loadedUrl);"),
             "static registered-loader returns must preserve file URL suffixes while require.resolve keeps path-shaped results"
         );
     }
@@ -1851,6 +1901,12 @@ mod tests {
             module_js.matches("validateRequireRequest(").count(),
             4,
             "loader require.resolve, ordinary require.resolve, and require.resolve.paths must use the shared request validator"
+        );
+        assert!(
+            module_js.contains("const globalRequire = makeRequire('/', mainModule);")
+                && module_js.contains("export let require = globalRequire;")
+                && !module_js.contains("export let require = function require(id)"),
+            "global require must expose the same function object as makeRequire so resolve, paths, cache, and extensions stay available"
         );
         assert_eq!(
             module_js
