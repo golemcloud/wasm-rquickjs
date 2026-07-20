@@ -7624,18 +7624,7 @@ impl Loader for CjsCompatLoader {
         }
 
         let source_path = module_source_filesystem_path(path);
-        let source = match std::fs::read_to_string(&source_path) {
-            Ok(s) => s,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                let globals = ctx.globals();
-                let msg = format!("Cannot find module '{}'", path);
-                let error_ctor: Function = globals.get("Error")?;
-                let error_obj: Object = error_ctor.call((&msg,))?;
-                error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
-                return Err(ctx.throw(error_obj.into_value()));
-            }
-            Err(_) => return Err(Error::new_loading(path)),
-        };
+        let source = read_module_source_or_throw(ctx, path, &source_path)?;
 
         let fs_abs_path = ensure_absolute_path(fs_path);
         let url = path_to_file_url(path);
@@ -7892,6 +7881,25 @@ fn module_filesystem_path(path: &str) -> &str {
 fn module_source_filesystem_path(path: &str) -> String {
     let fs_path = module_filesystem_path(path);
     crate::builtin::realpath_for_module_resolution(fs_path).unwrap_or_else(|| fs_path.to_string())
+}
+
+fn read_module_source_or_throw<'js>(
+    ctx: &Ctx<'js>,
+    module_id: &str,
+    source_path: &str,
+) -> rquickjs::Result<String> {
+    match std::fs::read_to_string(source_path) {
+        Ok(s) => Ok(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let globals = ctx.globals();
+            let msg = format!("Cannot find module '{}'", module_id);
+            let error_ctor: Function = globals.get("Error")?;
+            let error_obj: Object = error_ctor.call((&msg,))?;
+            error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+            Err(ctx.throw(error_obj.into_value()))
+        }
+        Err(_) => Err(Error::new_loading(module_id)),
+    }
 }
 
 fn require_esm_in_progress(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
@@ -8623,18 +8631,7 @@ fn declare_esm_file_module<'js>(
     url: String,
     preflight_mode: EsmFilePreflightMode,
 ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-    let source = match std::fs::read_to_string(source_path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            let globals = ctx.globals();
-            let msg = format!("Cannot find module '{}'", module_id);
-            let error_ctor: Function = globals.get("Error")?;
-            let error_obj: Object = error_ctor.call((&msg,))?;
-            error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
-            return Err(ctx.throw(error_obj.into_value()));
-        }
-        Err(_) => return Err(Error::new_loading(module_id)),
-    };
+    let source = read_module_source_or_throw(ctx, module_id, source_path)?;
     declare_esm_file_module_from_source(ctx, module_id, fs_path, source, url, preflight_mode)
 }
 

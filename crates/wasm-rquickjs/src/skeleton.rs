@@ -2347,12 +2347,15 @@ mod tests {
         let cjs_loader = &internal_rs[cjs_loader_start..cjs_loader_end];
         assert!(
             internal_rs.contains("enum EsmFilePreflightMode")
+                && internal_rs.contains("fn read_module_source_or_throw")
                 && internal_rs.contains("fn esm_file_preflight_error_module_source(")
                 && cjs_loader.contains("EsmFilePreflightMode::PackageTypeModuleJs")
                 && cjs_loader.contains("EsmFilePreflightMode::RequireOnly")
+                && cjs_loader.contains("let source = read_module_source_or_throw(ctx, path, &source_path)?;")
                 && cjs_loader.contains(
                     "return declare_esm_file_module_from_source(ctx, path, fs_path, source, url, preflight_mode);"
                 )
+                && !cjs_loader.contains("ErrorKind::NotFound")
                 && !cjs_loader.contains("let injected = inject_import_meta_prologue(&init, &module_source);"),
             "CjsCompatLoader must route .js files classified as ESM through the shared filesystem ESM declaration helper while preserving package type-module preflight"
         );
