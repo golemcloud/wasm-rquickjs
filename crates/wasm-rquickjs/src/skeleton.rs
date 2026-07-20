@@ -1503,7 +1503,12 @@ mod tests {
     #[test]
     fn dynamic_import_helpers_use_loader_owned_bindings() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
-        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+        let internal_rs_source = include_str!("../skeleton/src/internal.rs");
+        let internal_impl = internal_rs_source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("internal.rs implementation must precede tests");
+        let internal_rs = compact_whitespace(internal_impl);
         let builtin_mod_rs = compact_whitespace(include_str!("../skeleton/src/builtin/mod.rs"));
 
         assert!(
@@ -1580,6 +1585,8 @@ mod tests {
                 && !internal_rs.contains(
                     "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,"
                 )
+                && !internal_rs.contains("globalThis.__wasm_rquickjs_dynamic_import_reaction")
+                && !internal_rs.contains("globalThis.__wasm_rquickjs_dynamic_import_with_trace")
                 && !internal_rs.contains("__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,"),
             "Rust-generated dynamic import wrappers must use captured collision-free helpers without mutable Promise, Function constructors, import.meta leaks, or loader-visible node:module imports"
         );

@@ -10251,8 +10251,10 @@ mod cjs_export_analyzer_tests {
         let rewritten = process_static_import_attrs(source, "/app/main.mjs");
 
         assert!(rewritten.contains(
-            "const __wasm_rquickjs_dynamic_import_reaction_1=globalThis.__wasm_rquickjs_dynamic_import_reaction;const __wasm_rquickjs_dynamic_import_with_trace_1=globalThis.__wasm_rquickjs_dynamic_import_with_trace;"
+            "const __wasm_rquickjs_dynamic_import_reaction_1=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const __wasm_rquickjs_dynamic_import_with_trace_1=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;"
         ));
+        assert!(!rewritten.contains("globalThis.__wasm_rquickjs_dynamic_import_reaction"));
+        assert!(!rewritten.contains("globalThis.__wasm_rquickjs_dynamic_import_with_trace"));
         assert!(rewritten.contains("__wasm_rquickjs_dynamic_import_reaction_1(()=>__wasm_rquickjs_dynamic_import_with_trace_1("));
     }
 
