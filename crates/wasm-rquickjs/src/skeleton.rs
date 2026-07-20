@@ -1573,6 +1573,50 @@ mod tests {
     }
 
     #[test]
+    fn virtual_builtin_import_meta_source_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs
+                .contains("fn virtual_builtin_module_source(name: &str, source: &str) -> String"),
+            "virtual builtin modules must share import.meta prologue setup"
+        );
+
+        let helper_start = internal_rs
+            .find("fn virtual_builtin_module_source")
+            .expect("virtual builtin module source helper must exist");
+        let helper_end = internal_rs[helper_start..]
+            .find("fn rewrite_import_meta_main")
+            .expect("virtual builtin helper must precede import.meta.main rewrite")
+            + helper_start;
+        let helper = &internal_rs[helper_start..helper_end];
+
+        assert!(
+            helper.contains("url: format!(\"file:///__wasm_rquickjs_virtual__/{}.mjs\", name)")
+                && helper.contains("filename: None")
+                && helper.contains("dirname: None")
+                && helper.contains("include_resolve: true"),
+            "virtual builtin module import.meta must preserve synthetic URL identity and omit filesystem metadata"
+        );
+
+        let new_base_start = internal_rs
+            .find("async fn new_base")
+            .expect("JsState::new_base must exist");
+        let new_base_end = internal_rs[new_base_start..]
+            .find("rt.set_loader(resolver, loader).await;")
+            .expect("new_base must install loaders")
+            + new_base_start;
+        let new_base = &internal_rs[new_base_start..new_base_end];
+
+        assert!(
+            new_base.matches("virtual_builtin_module_source(").count() == 2
+                && !new_base.contains("__wasm_rquickjs_virtual__")
+                && !new_base.contains("inject_import_meta_prologue("),
+            "new_base must use the shared virtual builtin module source helper for all Rust-installed builtin modules"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

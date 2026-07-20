@@ -8576,6 +8576,18 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     }
 }
 
+fn virtual_builtin_module_source(name: &str, source: &str) -> String {
+    inject_import_meta_prologue(
+        &ImportMetaInit {
+            url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
+            filename: None,
+            dirname: None,
+            include_resolve: true,
+        },
+        source,
+    )
+}
+
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
     let mut spans = Vec::new();
     let _ = scan_code_positions(source, true, |i, _| {
@@ -8899,30 +8911,11 @@ impl JsState {
 
         let mut builtin_loader = BuiltinLoader::default().with_module(
             crate::JS_EXPORT_MODULE_NAME,
-            inject_import_meta_prologue(
-                &ImportMetaInit {
-                    url: format!(
-                        "file:///__wasm_rquickjs_virtual__/{}.mjs",
-                        crate::JS_EXPORT_MODULE_NAME
-                    ),
-                    filename: None,
-                    dirname: None,
-                    include_resolve: true,
-                },
-                crate::js_export_module(),
-            ),
+            virtual_builtin_module_source(crate::JS_EXPORT_MODULE_NAME, crate::js_export_module()),
         );
         for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
             let source = (get_module)();
-            let injected = inject_import_meta_prologue(
-                &ImportMetaInit {
-                    url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
-                    filename: None,
-                    dirname: None,
-                    include_resolve: true,
-                },
-                &source,
-            );
+            let injected = virtual_builtin_module_source(name, &source);
             builtin_loader = builtin_loader.with_module(name.to_string(), injected);
         }
 
