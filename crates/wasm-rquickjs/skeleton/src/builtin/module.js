@@ -4310,19 +4310,11 @@ function compileCjs(filename, source) {
     return _evalWithFilename(wrappedSource, filename);
 }
 
-function compileModuleInto(mod, source, filename, requireOverride) {
-    filename = filename === undefined || filename === null ? mod.filename : filename;
-    const requireParentFilename = filename === '' && mod && typeof mod.filename === 'string'
-        ? mod.filename
-        : filename;
-    const dirname = pathModule.dirname(filename);
-    const requireDirname = pathModule.dirname(requireParentFilename);
-    const childRequire = requireOverride || makeRequire(requireDirname, mod, requireParentFilename);
-    const compiledFn = compileCjs(filename, String(source));
+function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire) {
     const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
     globalThis.__wasm_rquickjs_current_module = {
         filename: filename,
-        source: String(source)
+        source: source
     };
     const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
     globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
@@ -4336,6 +4328,19 @@ function compileModuleInto(mod, source, filename, requireOverride) {
             delete globalThis.__wasm_rquickjs_cjs_import_dir;
         }
     }
+}
+
+function compileModuleInto(mod, source, filename, requireOverride) {
+    filename = filename === undefined || filename === null ? mod.filename : filename;
+    source = String(source);
+    const requireParentFilename = filename === '' && mod && typeof mod.filename === 'string'
+        ? mod.filename
+        : filename;
+    const dirname = pathModule.dirname(filename);
+    const requireDirname = pathModule.dirname(requireParentFilename);
+    const childRequire = requireOverride || makeRequire(requireDirname, mod, requireParentFilename);
+    const compiledFn = compileCjs(filename, source);
+    return callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
 }
 
 function makeModuleCompile(mod) {
@@ -4949,24 +4954,12 @@ function loadModule(resolvedFilename, source, parentModule) {
                     throw cjsSyntaxError;
                 }
             } else if (compiledFn) {
-                const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
-                globalThis.__wasm_rquickjs_current_module = {
-                    filename: filename,
-                    source: source
-                };
-                const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
-                globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
                 try {
-                    compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);
+                    callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
                 } catch (err) {
                     discardCjsModuleLoad(filename, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
-                } finally {
-                    globalThis.__wasm_rquickjs_current_module = previousModuleContext;
-                    if (previousCjsImportDir !== undefined) {
-                        globalThis.__wasm_rquickjs_cjs_import_dir = previousCjsImportDir;
-                    }
                 }
                 cjsEsmDefaultSnapshotEligible = true;
             }

@@ -2155,6 +2155,62 @@ mod tests {
     }
 
     #[test]
+    fn cjs_compiled_execution_context_is_shared() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains("function callCompiledCjsFunction(")
+                && module_js.contains(
+                    "globalThis.__wasm_rquickjs_current_module = { filename: filename, source: source };"
+                )
+                && module_js
+                    .contains("globalThis.__wasm_rquickjs_cjs_import_dir = dirname;")
+                && module_js.contains(
+                    "return compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);"
+                )
+                && module_js.contains("delete globalThis.__wasm_rquickjs_cjs_import_dir;"),
+            "compiled CJS wrapper invocation and private execution-context restoration must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname)")
+                .count(),
+            1,
+            "ordinary and loader-provided CJS execution must not duplicate wrapper invocation"
+        );
+
+        let load_module_start = module_js
+            .find("function loadModule(resolvedFilename, source, parentModule)")
+            .expect("ordinary CJS loadModule must exist");
+        let load_module_end = module_js[load_module_start..]
+            .find("function makeLoaderCommonJsRequire(")
+            .expect("loadModule must precede loader-created require")
+            + load_module_start;
+        let load_module = &module_js[load_module_start..load_module_end];
+        assert!(
+            load_module.contains(
+                "callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);"
+            ) && !load_module.contains("__wasm_rquickjs_current_module = {"),
+            "ordinary CJS loading must use the shared compiled-wrapper executor after CJS/ESM fallback decisions"
+        );
+
+        let compile_into_start = module_js
+            .find("function compileModuleInto(")
+            .expect("Module._compile helper must exist");
+        let compile_into_end = module_js[compile_into_start..]
+            .find("function makeModuleCompile(")
+            .expect("compileModuleInto must precede makeModuleCompile")
+            + compile_into_start;
+        let compile_into = &module_js[compile_into_start..compile_into_end];
+        assert!(
+            compile_into.contains(
+                "return callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);"
+            ) && !compile_into.contains("__wasm_rquickjs_current_module = {"),
+            "Module._compile and loader-provided CJS source must use the shared compiled-wrapper executor"
+        );
+    }
+
+    #[test]
     fn loader_cjs_function_header_parser_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 
