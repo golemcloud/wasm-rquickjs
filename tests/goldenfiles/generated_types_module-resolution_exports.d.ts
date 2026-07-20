@@ -3,12 +3,15 @@ declare module 'module-resolution' {
   export function testEsmEncodedRelativePaths(): Promise<boolean>;
   export function testEsmInvalidPackageSpecifiers(): Promise<boolean>;
   export function testEsmDataUrlImportAttributes(): Promise<boolean>;
+  export function testEsmInjectedHelpersIgnoreLexicalGlobalThis(): Promise<boolean>;
   export function testEsmJsonUrlCacheKeys(): Promise<boolean>;
   export function testStaticLoaderAbsoluteEntrySpecifier(): Promise<boolean>;
   export function testRegisteredLoaderModuleRealmIsolation(): Promise<boolean>;
   export function testRegisteredLoaderResolveResultNotMutated(): Promise<boolean>;
   export function testEsmForbiddenCjsGlobals(): Promise<boolean>;
   export function testImportMetaResolve(): Promise<boolean>;
+  export function testRustBridgeGlobalsNonReplaceable(): Promise<boolean>;
+  export function testModuleBridgeGlobalsNonReplaceable(): Promise<boolean>;
   export function testCjsDynamicImportAttributeScanner(): Promise<boolean>;
   export function testLoaderCommonjsSourceNamedExports(): Promise<boolean>;
   export function testLoaderModuleSourceValidation(): Promise<boolean>;
