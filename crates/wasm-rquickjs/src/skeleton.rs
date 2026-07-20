@@ -1524,6 +1524,55 @@ mod tests {
     }
 
     #[test]
+    fn json_module_source_generation_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains("struct JsonModuleCjsCache")
+                && internal_rs.contains(
+                    "fn json_import_attribute_missing_module_source(path: &str) -> String"
+                )
+                && internal_rs.contains(
+                    "fn json_module_source(source: &str, cjs_cache: Option<JsonModuleCjsCache<'_>>) -> String"
+                ),
+            "JSON file and data URL loaders must share import-attribute and JSON source/error module generation"
+        );
+
+        let data_loader_start = internal_rs
+            .find("impl Loader for DataUrlLoader")
+            .expect("DataUrlLoader must exist");
+        let data_loader_end = internal_rs[data_loader_start..]
+            .find("fn base64_decode")
+            .expect("DataUrlLoader must precede base64 decoder")
+            + data_loader_start;
+        let data_loader = &internal_rs[data_loader_start..data_loader_end];
+        assert!(
+            data_loader
+                .contains("let module_source = json_import_attribute_missing_module_source(path);")
+                && data_loader.contains("let module_source = json_module_source(&source, None);")
+                && !data_loader.contains("make_json_error_module(&source)"),
+            "Data URL JSON loading must use the shared JSON module source helpers"
+        );
+
+        let json_loader_start = internal_rs
+            .find("impl Loader for JsonFileLoader")
+            .expect("JsonFileLoader must exist");
+        let json_loader_end = internal_rs[json_loader_start..]
+            .find("pub const RESOURCE_TABLE_NAME")
+            .expect("JsonFileLoader must precede resource constants")
+            + json_loader_start;
+        let json_loader = &internal_rs[json_loader_start..json_loader_end];
+        assert!(
+            json_loader.contains("json_import_attribute_missing_module_source(path)")
+                && json_loader.contains("Some(JsonModuleCjsCache")
+                && json_loader.contains("json_module_source(&source, cjs_cache)")
+                && !json_loader.contains("make_json_error_module(&source)")
+                && !json_loader.contains("format!(\"export default JSON.parse"),
+            "File JSON loading must share JSON source generation while preserving CJS cache interop for suffix-free files"
+        );
+    }
+
+    #[test]
     fn cjs_registered_loader_file_results_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

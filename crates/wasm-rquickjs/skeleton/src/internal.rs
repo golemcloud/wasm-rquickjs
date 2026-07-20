@@ -350,6 +350,36 @@ impl DataUrlLoader {
     }
 }
 
+struct JsonModuleCjsCache<'a> {
+    filename: &'a str,
+    dirname: &'a str,
+}
+
+fn json_import_attribute_missing_module_source(path: &str) -> String {
+    let escaped = DataUrlLoader::js_string_escape(path);
+    format!(
+        "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
+    )
+}
+
+fn json_module_source(source: &str, cjs_cache: Option<JsonModuleCjsCache<'_>>) -> String {
+    if !DataUrlLoader::is_valid_json(source) {
+        return DataUrlLoader::make_json_error_module(source);
+    }
+
+    let escaped = DataUrlLoader::js_string_escape(source);
+    if let Some(cjs_cache) = cjs_cache {
+        format!(
+            "const __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require(\"{}\");\nconst __wasm_rquickjs_filename = \"{}\";\nconst __wasm_rquickjs_cached = __wasm_rquickjs_require.cache[__wasm_rquickjs_filename];\nconst __wasm_rquickjs_value = __wasm_rquickjs_cached ? __wasm_rquickjs_cached.exports : JSON.parse('{escaped}');\nif (!__wasm_rquickjs_cached) __wasm_rquickjs_require.cache[__wasm_rquickjs_filename] = {{ id: __wasm_rquickjs_filename, filename: __wasm_rquickjs_filename, path: \"{}\", exports: __wasm_rquickjs_value, loaded: true, parent: null, children: [], paths: [] }};\nexport default __wasm_rquickjs_value;\n",
+            escape_js_string(cjs_cache.filename),
+            escape_js_string(cjs_cache.filename),
+            escape_js_string(cjs_cache.dirname)
+        )
+    } else {
+        format!("export default JSON.parse('{escaped}');\n")
+    }
+}
+
 impl Loader for DataUrlLoader {
     fn load<'js>(
         &mut self,
@@ -394,22 +424,10 @@ impl Loader for DataUrlLoader {
 
         if base_mime == "application/json" {
             if json_import_attr.as_deref() != Some("json") {
-                let escaped = DataUrlLoader::js_string_escape(path);
-                let module_source = format!(
-                    "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
-                );
+                let module_source = json_import_attribute_missing_module_source(path);
                 return Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec());
             }
-            // Validate JSON by attempting a simple parse check.
-            // For valid JSON: embed directly as a JS literal.
-            // For invalid JSON: throw a SyntaxError with V8-compatible message.
-            let json_valid = Self::is_valid_json(&source);
-            let module_source = if json_valid {
-                let escaped = Self::js_string_escape(&source);
-                format!("export default JSON.parse('{escaped}');\n")
-            } else {
-                Self::make_json_error_module(&source)
-            };
+            let module_source = json_module_source(&source, None);
             Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
         } else if base_mime == "text/javascript" || base_mime == "application/javascript" {
             // Check for static import attributes (e.g., `import "spec" with { type: "json" }`)
@@ -8767,30 +8785,21 @@ impl Loader for JsonFileLoader {
         let source_path = module_source_filesystem_path(path);
         let source = std::fs::read_to_string(&source_path).map_err(|_| Error::new_loading(path))?;
         let module_source = if import_attr_type.as_deref() != Some("json") {
-            let escaped = DataUrlLoader::js_string_escape(path);
-            format!(
-                "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
-            )
-        } else if DataUrlLoader::is_valid_json(&source) {
-            let escaped = DataUrlLoader::js_string_escape(&source);
-            let original_path = strip_import_type_rewrite_token(path);
-            if split_module_path_suffix(&original_path).1.is_empty() {
-                format!(
-                    "const __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require(\"{}\");\nconst __wasm_rquickjs_filename = \"{}\";\nconst __wasm_rquickjs_cached = __wasm_rquickjs_require.cache[__wasm_rquickjs_filename];\nconst __wasm_rquickjs_value = __wasm_rquickjs_cached ? __wasm_rquickjs_cached.exports : JSON.parse('{escaped}');\nif (!__wasm_rquickjs_cached) __wasm_rquickjs_require.cache[__wasm_rquickjs_filename] = {{ id: __wasm_rquickjs_filename, filename: __wasm_rquickjs_filename, path: \"{}\", exports: __wasm_rquickjs_value, loaded: true, parent: null, children: [], paths: [] }};\nexport default __wasm_rquickjs_value;\n",
-                    escape_js_string(fs_path),
-                    escape_js_string(fs_path),
-                    escape_js_string(
-                        std::path::Path::new(fs_path)
-                            .parent()
-                            .and_then(|path| path.to_str())
-                            .unwrap_or("/")
-                    )
-                )
-            } else {
-                format!("export default JSON.parse('{escaped}');\n")
-            }
+            json_import_attribute_missing_module_source(path)
         } else {
-            DataUrlLoader::make_json_error_module(&source)
+            let original_path = strip_import_type_rewrite_token(path);
+            let cjs_cache = if split_module_path_suffix(&original_path).1.is_empty() {
+                Some(JsonModuleCjsCache {
+                    filename: fs_path,
+                    dirname: std::path::Path::new(fs_path)
+                        .parent()
+                        .and_then(|path| path.to_str())
+                        .unwrap_or("/"),
+                })
+            } else {
+                None
+            };
+            json_module_source(&source, cjs_cache)
         };
         Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
     }
