@@ -1626,6 +1626,20 @@ export const testEsmInjectedHelpersIgnoreLexicalGlobalThis = async () => {
         ].join('\n'));
         assert.strictEqual((await import('/esm-injected-helper-app/tla.mjs')).default, 2);
 
+        fs.writeFileSync('/esm-injected-helper-app/poisoned-global-property.mjs', [
+            'export default [typeof import.meta.resolve, import.meta.resolve("node:fs")];',
+        ].join('\n'));
+        const originalGlobalThis = globalThis.globalThis;
+        try {
+            globalThis.globalThis = {};
+            assert.deepStrictEqual(
+                (await import('/esm-injected-helper-app/poisoned-global-property.mjs')).default,
+                ['function', 'node:fs'],
+            );
+        } finally {
+            globalThis.globalThis = originalGlobalThis;
+        }
+
         return true;
     } catch (error) {
         console.error(error);

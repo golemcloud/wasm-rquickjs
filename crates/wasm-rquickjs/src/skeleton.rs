@@ -2133,7 +2133,8 @@ mod tests {
                 && !internal_rs.contains("fn inject_import_meta_prologue")
                 && !internal_rs.contains("fn inject_module_source_prologue(init: &ImportMetaInit")
                 && internal_rs
-                    .contains("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;")
+                    .contains("const {global_name}=import.meta.__wasm_rquickjs_global;")
+                && !internal_rs.contains("import.meta.__wasm_rquickjs_global||globalThis")
                 && internal_rs.contains("{global_name}.Array.isArray({global_name}.process.argv)")
                 && !internal_rs.contains("Object.defineProperties(import.meta")
                 && !internal_rs.contains("host_initialized")

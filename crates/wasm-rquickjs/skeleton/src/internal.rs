@@ -8719,7 +8719,7 @@ fn is_js_identifier_continue(byte: u8) -> bool {
 
 fn inject_module_source_prologue(main_filename: Option<&str>, source: &str) -> String {
     let global_name = unique_internal_name(source, "__wasm_rquickjs_global");
-    let mut prologue = format!("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;");
+    let mut prologue = format!("const {global_name}=import.meta.__wasm_rquickjs_global;");
     let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
     let shadowed_cjs_globals: Vec<&str> = ["require"]
         .iter()
