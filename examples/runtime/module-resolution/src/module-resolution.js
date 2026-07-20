@@ -78,22 +78,33 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
 };
 
 export const testModuleBridgeGlobalsNonReplaceable = () => {
-    const name = '__wasm_rquickjs_with_suppressed_module_require_diagnostics';
-    const original = globalThis[name];
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
-    assert.strictEqual(typeof original, 'function');
-    assert.strictEqual(descriptor.value, original);
-    assert.strictEqual(descriptor.writable, false);
-    assert.strictEqual(descriptor.configurable, false);
+    for (const name of [
+        '__wasm_rquickjs_with_suppressed_module_require_diagnostics',
+        '__wasm_rquickjs_import_attr_read_options',
+        '__wasm_rquickjs_import_attr_prepare_from_options',
+        '__wasm_rquickjs_import_attr_prepare',
+        '__wasm_rquickjs_import_attr_prepare_for_base',
+        '__wasm_rquickjs_import_attr_prepare_for_base_parsed',
+        '__wasm_rquickjs_import_attr_dynamic_import',
+        '__wasm_rquickjs_import_attr_dynamic_import_parsed',
+    ]) {
+        const original = globalThis[name];
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+        assert.strictEqual(typeof original, 'function', name);
+        assert.strictEqual(descriptor.value, original, name);
+        assert.strictEqual(descriptor.writable, false, name);
+        assert.strictEqual(descriptor.configurable, false, name);
 
-    assert.throws(() => {
-        globalThis[name] = () => 'replaced';
-    }, TypeError);
-    assert.throws(() => {
-        Object.defineProperty(globalThis, name, { value: () => 'redefined' });
-    }, TypeError);
-    assert.strictEqual(globalThis[name], original);
+        assert.throws(() => {
+            globalThis[name] = () => 'replaced';
+        }, TypeError, name);
+        assert.throws(() => {
+            Object.defineProperty(globalThis, name, { value: () => 'redefined' });
+        }, TypeError, name);
+        assert.strictEqual(globalThis[name], original, name);
+    }
 
+    const original = globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics;
     let ran = false;
     assert.strictEqual(original(() => {
         ran = true;

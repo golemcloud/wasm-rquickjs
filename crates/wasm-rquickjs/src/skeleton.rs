@@ -1581,6 +1581,20 @@ mod tests {
                 "Object.defineProperty(__wasm_rquickjs_import_attr_global, name,"
             ) && builtin_mod_rs.contains(
                 "'__wasm_rquickjs_import_attr_dynamic_import_parsed',"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_read_options = function"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_prepare = function"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed = async function"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function"
+            ) && !builtin_mod_rs.contains(
+                "globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function"
             ),
             "builtin module dynamic import helper must use the captured global object and non-replaceable import-attribute helpers"
         );

@@ -629,7 +629,7 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve', {
 const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
 const __wasm_rquickjs_import_attr_global = globalThis;
 
-globalThis.__wasm_rquickjs_import_attr_read_options = function(options) {
+function __wasm_rquickjs_import_attr_read_options(options) {
   var typeValue;
   var unsupportedKey;
   var unsupportedValue;
@@ -659,9 +659,9 @@ globalThis.__wasm_rquickjs_import_attr_read_options = function(options) {
     }
   }
   return { typeValue: typeValue, unsupportedKey: unsupportedKey, unsupportedValue: unsupportedValue };
-};
+}
 
-globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, parsedOptions, asyncSemanticErrors) {
+function __wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors) {
   value = String(value);
   parsedOptions = parsedOptions || {};
   var typeValue = parsedOptions.typeValue;
@@ -755,21 +755,21 @@ globalThis.__wasm_rquickjs_import_attr_prepare_from_options = function(value, pa
 
   if (typeValue !== 'json') return value;
   return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
-};
+}
 
-globalThis.__wasm_rquickjs_import_attr_prepare = function(specifier, options, asyncSemanticErrors) {
+function __wasm_rquickjs_import_attr_prepare(specifier, options, asyncSemanticErrors) {
   var value = String(specifier);
   var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
   return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
-};
+}
 
-globalThis.__wasm_rquickjs_import_attr_prepare_for_base = async function(baseUrl, specifier, options, asyncSemanticErrors) {
+async function __wasm_rquickjs_import_attr_prepare_for_base(baseUrl, specifier, options, asyncSemanticErrors) {
   var originalValue = String(specifier);
   var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
   return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors);
-};
+}
 
-globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed = async function(baseUrl, originalValue, parsedOptions, asyncSemanticErrors) {
+async function __wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors) {
   originalValue = String(originalValue);
   parsedOptions = parsedOptions || {};
   if (
@@ -789,15 +789,15 @@ globalThis.__wasm_rquickjs_import_attr_prepare_for_base_parsed = async function(
     value = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
   }
   return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
-};
+}
 
-globalThis.__wasm_rquickjs_import_attr_dynamic_import = async function(baseUrl, specifier, options, asyncSemanticErrors, importer) {
+async function __wasm_rquickjs_import_attr_dynamic_import(baseUrl, specifier, options, asyncSemanticErrors, importer) {
   var originalSpecifier = String(specifier);
   var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
   return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer);
-};
+}
 
-globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer) {
+async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer) {
   originalSpecifier = String(originalSpecifier);
   parsedOptions = parsedOptions || {};
   var prepared = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors);
@@ -877,19 +877,21 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(ba
     throw error;
   } finally {
   }
-};
+}
 
 [
-  '__wasm_rquickjs_import_attr_read_options',
-  '__wasm_rquickjs_import_attr_prepare_from_options',
-  '__wasm_rquickjs_import_attr_prepare',
-  '__wasm_rquickjs_import_attr_prepare_for_base',
-  '__wasm_rquickjs_import_attr_prepare_for_base_parsed',
-  '__wasm_rquickjs_import_attr_dynamic_import',
-  '__wasm_rquickjs_import_attr_dynamic_import_parsed',
-].forEach(function(name) {
+  ['__wasm_rquickjs_import_attr_read_options', __wasm_rquickjs_import_attr_read_options],
+  ['__wasm_rquickjs_import_attr_prepare_from_options', __wasm_rquickjs_import_attr_prepare_from_options],
+  ['__wasm_rquickjs_import_attr_prepare', __wasm_rquickjs_import_attr_prepare],
+  ['__wasm_rquickjs_import_attr_prepare_for_base', __wasm_rquickjs_import_attr_prepare_for_base],
+  ['__wasm_rquickjs_import_attr_prepare_for_base_parsed', __wasm_rquickjs_import_attr_prepare_for_base_parsed],
+  ['__wasm_rquickjs_import_attr_dynamic_import', __wasm_rquickjs_import_attr_dynamic_import],
+  ['__wasm_rquickjs_import_attr_dynamic_import_parsed', __wasm_rquickjs_import_attr_dynamic_import_parsed],
+].forEach(function(entry) {
+  var name = entry[0];
+  var fn = entry[1];
   Object.defineProperty(__wasm_rquickjs_import_attr_global, name, {
-    value: __wasm_rquickjs_import_attr_global[name],
+    value: fn,
     writable: false,
     configurable: false,
   });
