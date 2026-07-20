@@ -1113,8 +1113,14 @@ function stripImportAttributes(source, filename) {
         }
         return name;
     }
-    const dynamicImportReactionName = uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction');
-    const dynamicImportWithTraceName = uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace');
+    let dynamicImportReactionName;
+    let dynamicImportWithTraceName;
+    function ensureDynamicImportBindingNames() {
+        if (dynamicImportReactionName === undefined) {
+            dynamicImportReactionName = uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction');
+            dynamicImportWithTraceName = uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace');
+        }
+    }
     function prevNonWs(pos) {
         while (pos > 0) {
             pos--;
@@ -1291,6 +1297,7 @@ function stripImportAttributes(source, filename) {
                     }
                     if (commaPos > -1) {
                         rewroteDynamicImport = true;
+                        ensureDynamicImportBindingNames();
                         const firstArg = processSubrange(argStart, commaPos);
                         const secondArg = processSubrange(commaPos + 1, i - 1);
                         out.push('((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>');
@@ -1308,6 +1315,7 @@ function stripImportAttributes(source, filename) {
                         out.push(')');
                     } else {
                         rewroteDynamicImport = true;
+                        ensureDynamicImportBindingNames();
                         const spec = processSubrange(argStart, i - 1);
                         out.push('((__wasm_rquickjs_specifier)=>');
                         out.push(dynamicImportReactionName);

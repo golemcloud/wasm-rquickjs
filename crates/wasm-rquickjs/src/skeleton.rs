@@ -1374,9 +1374,13 @@ mod tests {
 
         assert!(
             strip_import_attributes
-                .contains("uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction')")
+                .contains("function ensureDynamicImportBindingNames()")
+                && strip_import_attributes.contains(
+                    "dynamicImportReactionName = uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction')"
+                )
                 && strip_import_attributes
-                    .contains("uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace')")
+                    .contains("dynamicImportWithTraceName = uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace')")
+                && strip_import_attributes.matches("ensureDynamicImportBindingNames();").count() == 2
                 && strip_import_attributes.contains("out.push(dynamicImportReactionName);")
                 && strip_import_attributes.contains("out.push(dynamicImportWithTraceName);")
                 && strip_import_attributes
@@ -1395,8 +1399,10 @@ mod tests {
         );
 
         assert!(
-            internal_rs.contains("unique_internal_name(source, \"__wasm_rquickjs_dynamic_import_reaction\")")
-                && internal_rs.contains("unique_internal_name(source, \"__wasm_rquickjs_dynamic_import_with_trace\")")
+            internal_rs.contains("let mut dynamic_import_binding_names: Option<(String, String)> = None;")
+                && internal_rs.contains("dynamic_import_binding_names.get_or_insert_with(||")
+                && internal_rs.contains("unique_internal_name( source, \"__wasm_rquickjs_dynamic_import_reaction\", )")
+                && internal_rs.contains("unique_internal_name( source, \"__wasm_rquickjs_dynamic_import_with_trace\", )")
                 && internal_rs.contains("const {dynamic_import_reaction_name}=globalThis.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=globalThis.__wasm_rquickjs_dynamic_import_with_trace;")
                 && internal_rs.contains("((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))")
                 && internal_rs.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))")

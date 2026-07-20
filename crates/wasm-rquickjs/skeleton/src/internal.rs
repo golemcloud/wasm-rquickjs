@@ -651,10 +651,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
     let len = bytes.len();
     let mut result = String::with_capacity(len);
     let mut i = 0;
-    let dynamic_import_reaction_name =
-        unique_internal_name(source, "__wasm_rquickjs_dynamic_import_reaction");
-    let dynamic_import_with_trace_name =
-        unique_internal_name(source, "__wasm_rquickjs_dynamic_import_with_trace");
+    let mut dynamic_import_binding_names: Option<(String, String)> = None;
     let mut rewrote_dynamic_import = false;
 
     while i < len {
@@ -687,6 +684,19 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                     result.push_str(&source[import_start..i]);
                     continue;
                 }
+                let (dynamic_import_reaction_name, dynamic_import_with_trace_name) =
+                    dynamic_import_binding_names.get_or_insert_with(|| {
+                        (
+                            unique_internal_name(
+                                source,
+                                "__wasm_rquickjs_dynamic_import_reaction",
+                            ),
+                            unique_internal_name(
+                                source,
+                                "__wasm_rquickjs_dynamic_import_with_trace",
+                            ),
+                        )
+                    });
                 if let Some((rewritten, next)) = rewrite_dynamic_import_call(
                     source,
                     import_start,
@@ -836,6 +846,9 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
     }
 
     if rewrote_dynamic_import {
+        let (dynamic_import_reaction_name, dynamic_import_with_trace_name) =
+            dynamic_import_binding_names
+                .expect("dynamic import bindings must be initialized when a dynamic import was rewritten");
         let prelude = format!(
             "const {dynamic_import_reaction_name}=globalThis.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=globalThis.__wasm_rquickjs_dynamic_import_with_trace;\n"
         );
@@ -10087,6 +10100,21 @@ mod cjs_export_analyzer_tests {
         assert!(rewritten.contains("__wasm_rquickjs_import_attr_dynamic_import"));
         assert!(rewritten.contains(r#"./typed.json", { with: { type: "json" } }"#));
         assert!(!rewritten.contains(r#"import("./typed.json","#));
+    }
+
+    #[test]
+    fn dynamic_import_rewrite_uses_collision_free_helper_names() {
+        let source = r#"
+            const __wasm_rquickjs_dynamic_import_reaction = "user";
+            const __wasm_rquickjs_dynamic_import_with_trace = "user";
+            await import("./plain.mjs");
+        "#;
+        let rewritten = process_static_import_attrs(source, "/app/main.mjs");
+
+        assert!(rewritten.contains(
+            "const __wasm_rquickjs_dynamic_import_reaction_1=globalThis.__wasm_rquickjs_dynamic_import_reaction;const __wasm_rquickjs_dynamic_import_with_trace_1=globalThis.__wasm_rquickjs_dynamic_import_with_trace;"
+        ));
+        assert!(rewritten.contains("__wasm_rquickjs_dynamic_import_reaction_1(()=>__wasm_rquickjs_dynamic_import_with_trace_1("));
     }
 
     #[test]
