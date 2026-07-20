@@ -17,6 +17,22 @@ export const testRequireBuiltin = () => {
         const nodeAssert = require('node:assert');
         assert.strictEqual(assert, nodeAssert);
 
+        const fs = require('fs');
+        const nodeFs = require('node:fs');
+        assert.strictEqual(fs, nodeFs, 'require node:fs identity');
+        assert.strictEqual(typeof require('_http_agent').Agent, 'function', 'require _http_agent');
+        assert.strictEqual(typeof require('node:_http_agent').Agent, 'function', 'require node:_http_agent');
+        assert.strictEqual(typeof require('node:test'), 'function', 'require node:test');
+        assert.strictEqual(typeof require('node:sqlite'), 'object', 'require node:sqlite');
+        assert.throws(() => require('test'), { code: 'MODULE_NOT_FOUND' }, 'require bare test');
+        assert.throws(() => require('sqlite'), { code: 'MODULE_NOT_FOUND' }, 'require bare sqlite');
+        assert.throws(() => require('node:unknown'), { code: 'ERR_UNKNOWN_BUILTIN_MODULE' }, 'require node:unknown');
+
+        require.cache.fs = { exports: { marker: 'shadowed' } };
+        assert.strictEqual(require('fs').marker, 'shadowed', 'bare builtin cache shadow');
+        assert.strictEqual(require('node:fs'), nodeFs, 'node: builtin bypasses cache shadow');
+        delete require.cache.fs;
+
         // require('module') should work
         const mod = require('module');
         assert.ok(mod.createRequire);

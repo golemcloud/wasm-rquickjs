@@ -560,6 +560,17 @@ function isBuiltinResolveTarget(id) {
     return builtinResolveSpecifier(id) !== undefined;
 }
 
+function requireBuiltinModule(id) {
+    const resolved = builtinResolveSpecifier(id);
+    if (resolved !== undefined) return builtinModuleMap[resolved];
+    if (typeof id === 'string' && id.startsWith('node:')) {
+        const err = new Error('No such built-in module: ' + id);
+        err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
+        throw err;
+    }
+    return undefined;
+}
+
 globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;
 
 // Module cache: resolved absolute path -> Module object
@@ -5208,13 +5219,10 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
 
         // node:-prefixed requires always go to builtins, bypassing cache
         if (id.startsWith('node:')) {
-            const builtin = builtinModuleMap[id];
+            const builtin = requireBuiltinModule(id);
             if (builtin !== undefined) {
                 return builtin;
             }
-            const err = new Error('No such built-in module: ' + id);
-            err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
-            throw err;
         }
 
         // Check require.cache before builtins for non-node: specifiers
@@ -5231,7 +5239,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         }
 
         // Builtin modules
-        const builtin = schemelessBlockList.has(id) ? undefined : builtinModuleMap[id];
+        const builtin = requireBuiltinModule(id);
         if (builtin !== undefined) {
             return builtin;
         }

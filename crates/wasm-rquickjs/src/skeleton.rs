@@ -1486,6 +1486,9 @@ mod tests {
                 && module_js.contains("if (id.startsWith('node:')) { return builtinModuleMap[id] !== undefined ? id : undefined; }")
                 && module_js.contains("if (id.startsWith('internal/') || schemelessBlockList.has(id)) { return undefined; }")
                 && module_js.contains("return builtinModuleMap[id] !== undefined ? 'node:' + id : undefined;")
+                && module_js.contains("function requireBuiltinModule(id)")
+                && module_js.contains("const resolved = builtinResolveSpecifier(id); if (resolved !== undefined) return builtinModuleMap[resolved];")
+                && module_js.contains("err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';")
                 && module_js.contains("globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;")
                 && module_js.contains("builtinModuleMap['node:sqlite'] = sqliteCjs;")
                 && module_js.contains("const schemelessBlockList = setFromArray(['test', 'sqlite']);")
@@ -1956,6 +1959,25 @@ mod tests {
             resolve_paths.find("validateRequireRequest(request);")
                 < resolve_paths.find("if (isBuiltinResolveTarget(request))"),
             "require.resolve.paths must validate request before builtin handling"
+        );
+
+        let local_require_start = module_js
+            .find("function localRequire(id) {")
+            .expect("ordinary CJS require function must exist");
+        let local_require_end = module_js[local_require_start..]
+            .find("localRequire.cache = moduleCache;")
+            .expect("ordinary CJS require must precede require property setup")
+            + local_require_start;
+        let local_require = &module_js[local_require_start..local_require_end];
+        let local_require_after_cache = &local_require[local_require
+            .find("const cached = moduleCache[id];")
+            .expect("ordinary CJS require must check cache before bare builtins")..];
+        assert!(
+            local_require.contains("const builtin = requireBuiltinModule(id);")
+                && !local_require
+                    .contains("schemelessBlockList.has(id) ? undefined : builtinModuleMap[id]")
+                && local_require_after_cache.contains("const builtin = requireBuiltinModule(id);"),
+            "ordinary CJS require must share builtin classification while preserving cache shadowing for bare builtins"
         );
     }
 
