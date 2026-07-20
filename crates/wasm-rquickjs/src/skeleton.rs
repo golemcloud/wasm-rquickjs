@@ -1831,6 +1831,9 @@ mod tests {
         assert!(
             internal_rs.contains("struct VirtualBuiltinModuleLoader")
                 && internal_rs.contains("impl Loader for VirtualBuiltinModuleLoader")
+                && internal_rs.contains(
+                    "url_only_import_meta_init(format!(\"file:///__wasm_rquickjs_virtual__/{}.mjs\", path))"
+                )
                 && internal_rs
                     .contains("declare_module_with_import_meta(ctx, path, source, &init)"),
             "virtual builtin modules must use a loader that can run the shared host import.meta initializer"
@@ -1840,16 +1843,17 @@ mod tests {
             .find("fn virtual_builtin_module_source")
             .expect("virtual builtin module source helper must exist");
         let helper_end = internal_rs[helper_start..]
-            .find("fn rewrite_import_meta_main")
-            .expect("virtual builtin helper must precede import.meta.main rewrite")
+            .find("struct VirtualBuiltinModuleLoader")
+            .expect("virtual builtin helper must precede virtual builtin loader")
             + helper_start;
         let helper = &internal_rs[helper_start..helper_end];
 
         assert!(
-            helper.contains(
-                "url_only_import_meta_init(format!(\"file:///__wasm_rquickjs_virtual__/{}.mjs\", name))"
-            ),
-            "virtual builtin module source setup must preserve synthetic URL identity through the shared URL-only init helper"
+            helper.contains("inject_import_meta_prologue(None, source)")
+                && helper.contains("fn virtual_builtin_module_source(source: &str) -> String")
+                && !helper.contains("url_only_import_meta_init(")
+                && !helper.contains("ImportMetaInit"),
+            "virtual builtin source setup must stay separate from host-owned import.meta metadata"
         );
 
         let new_base_start = internal_rs
@@ -1896,7 +1900,10 @@ mod tests {
 
         assert!(
             internal_rs
-                .contains("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;")
+                .contains("fn inject_import_meta_prologue(main_filename: Option<&str>, source: &str) -> String")
+                && !internal_rs.contains("fn inject_import_meta_prologue(init: &ImportMetaInit")
+                && internal_rs
+                    .contains("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;")
                 && internal_rs.contains("{global_name}.Array.isArray({global_name}.process.argv)")
                 && !internal_rs.contains("Object.defineProperties(import.meta")
                 && !internal_rs.contains("host_initialized")

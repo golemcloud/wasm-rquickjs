@@ -444,7 +444,7 @@ impl Loader for DataUrlLoader {
             }
 
             let init = url_only_import_meta_init(path.to_string());
-            let injected = inject_import_meta_prologue(&init, &source);
+            let injected = inject_import_meta_prologue(init.filename.as_deref(), &source);
             declare_module_with_import_meta(ctx, path, &injected, &init)
         } else {
             let escaped_mime = Self::js_string_escape(base_mime);
@@ -7751,7 +7751,7 @@ impl Loader for CjsCompatLoader {
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
-        let prologue = inject_import_meta_prologue(&init, "");
+        let prologue = inject_import_meta_prologue(init.filename.as_deref(), "");
 	let wrapped = format!(
 	    r#"{}
 	import __wasm_rquickjs_module from "node:module";
@@ -8654,7 +8654,7 @@ fn is_js_identifier_continue(byte: u8) -> bool {
     is_js_identifier_start(byte) || byte.is_ascii_digit()
 }
 
-fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
+fn inject_import_meta_prologue(main_filename: Option<&str>, source: &str) -> String {
     let global_name = unique_internal_name(source, "__wasm_rquickjs_global");
     let mut prologue = format!("const {global_name}=import.meta.__wasm_rquickjs_global||globalThis;");
     let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
@@ -8668,9 +8668,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
         prologue.push_str(&shadowed_cjs_globals.join(","));
         prologue.push(';');
     }
-    let main_expr = init
-        .filename
-        .as_ref()
+    let main_expr = main_filename
         .map(|filename| {
             format!(
                 "!!({global_name}.process&&{global_name}.Array.isArray({global_name}.process.argv)&&{global_name}.process.argv[1]===\"{}\")",
@@ -8694,11 +8692,8 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
     }
 }
 
-fn virtual_builtin_module_source(name: &str, source: &str) -> String {
-    inject_import_meta_prologue(
-        &url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name)),
-        source,
-    )
+fn virtual_builtin_module_source(source: &str) -> String {
+    inject_import_meta_prologue(None, source)
 }
 
 #[derive(Default)]
@@ -8835,7 +8830,7 @@ fn declare_esm_file_module_from_source<'js>(
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
 
-    let mut injected = inject_import_meta_prologue(&init, &source);
+    let mut injected = inject_import_meta_prologue(init.filename.as_deref(), &source);
     if source_has_top_level_await(&source) {
         let escaped_path = escape_js_string(&module_abs_path);
         let escaped_url = escape_js_string(&init.url);
@@ -9044,11 +9039,11 @@ impl JsState {
 
         let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
             crate::JS_EXPORT_MODULE_NAME,
-            virtual_builtin_module_source(crate::JS_EXPORT_MODULE_NAME, crate::js_export_module()),
+            virtual_builtin_module_source(crate::js_export_module()),
         );
         for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
             let source = (get_module)();
-            let injected = virtual_builtin_module_source(name, &source);
+            let injected = virtual_builtin_module_source(&source);
             virtual_builtin_loader = virtual_builtin_loader.with_module(name.to_string(), injected);
         }
 
