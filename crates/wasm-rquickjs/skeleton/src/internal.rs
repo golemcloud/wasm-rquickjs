@@ -651,6 +651,11 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
     let len = bytes.len();
     let mut result = String::with_capacity(len);
     let mut i = 0;
+    let dynamic_import_reaction_name =
+        unique_internal_name(source, "__wasm_rquickjs_dynamic_import_reaction");
+    let dynamic_import_with_trace_name =
+        unique_internal_name(source, "__wasm_rquickjs_dynamic_import_with_trace");
+    let mut rewrote_dynamic_import = false;
 
     while i < len {
         if let Some(next) = skip_non_code(source, i, true) {
@@ -682,7 +687,14 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                     result.push_str(&source[import_start..i]);
                     continue;
                 }
-                if let Some((rewritten, next)) = rewrite_dynamic_import_call(source, import_start, i) {
+                if let Some((rewritten, next)) = rewrite_dynamic_import_call(
+                    source,
+                    import_start,
+                    i,
+                    &dynamic_import_reaction_name,
+                    &dynamic_import_with_trace_name,
+                ) {
+                    rewrote_dynamic_import = true;
                     result.push_str(&rewritten);
                     i = next;
                     continue;
@@ -823,7 +835,14 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
         }
     }
 
-    result
+    if rewrote_dynamic_import {
+        let prelude = format!(
+            "const {dynamic_import_reaction_name}=globalThis.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=globalThis.__wasm_rquickjs_dynamic_import_with_trace;\n"
+        );
+        insert_after_shebang(&result, &prelude)
+    } else {
+        result
+    }
 }
 
 fn rewrite_import_specifier_literal(literal: &str, specifier: &str, type_value: Option<&str>) -> String {
@@ -834,17 +853,44 @@ fn rewrite_import_specifier_literal(literal: &str, specifier: &str, type_value: 
     format!("\"{}\"", escape_js_string(&rewritten))
 }
 
+fn unique_internal_name(source: &str, base: &str) -> String {
+    let mut name = base.to_string();
+    let mut seq = 0usize;
+    while source.contains(&name) {
+        seq += 1;
+        name = format!("{base}_{seq}");
+    }
+    name
+}
+
+fn insert_after_shebang(source: &str, insertion: &str) -> String {
+    if let Some(rest) = source.strip_prefix("#!") {
+        if let Some(newline_pos) = rest.find('\n') {
+            let split = 2 + newline_pos + 1;
+            return format!("{}{}{}", &source[..split], insertion, &source[split..]);
+        }
+    }
+    format!("{insertion}{source}")
+}
+
 fn rewrite_dynamic_import_call(
     source: &str,
     import_start: usize,
     open_paren: usize,
+    dynamic_import_reaction_name: &str,
+    dynamic_import_with_trace_name: &str,
 ) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let len = bytes.len();
     let mut i = open_paren + 1;
     i = skip_ws_comments(source, i);
     if i >= len || (bytes[i] != b'"' && bytes[i] != b'\'') {
-        return rewrite_dynamic_import_expression_call(source, open_paren);
+        return rewrite_dynamic_import_expression_call(
+            source,
+            open_paren,
+            dynamic_import_reaction_name,
+            dynamic_import_with_trace_name,
+        );
     }
 
     let (spec_literal_start, spec_literal_end, _, _) =
@@ -856,7 +902,9 @@ fn rewrite_dynamic_import_call(
     if i < len && bytes[i] == b')' {
         return Some((
             format!(
-                "((__wasm_rquickjs_specifier)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
+                "((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
+                dynamic_import_reaction_name,
+                dynamic_import_with_trace_name,
                 &source[spec_literal_start..spec_literal_end]
             ),
             i + 1,
@@ -882,7 +930,9 @@ fn rewrite_dynamic_import_call(
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
+                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
+                            dynamic_import_reaction_name,
+                            dynamic_import_with_trace_name,
                             &source[spec_literal_start..spec_literal_end],
                             options
                         ),
@@ -1001,7 +1051,12 @@ fn is_object_method_shorthand_import(source: &str, import_start: usize, open_par
     }
 }
 
-fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Option<(String, usize)> {
+fn rewrite_dynamic_import_expression_call(
+    source: &str,
+    open_paren: usize,
+    dynamic_import_reaction_name: &str,
+    dynamic_import_with_trace_name: &str,
+) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let len = bytes.len();
     let mut i = open_paren + 1;
@@ -1020,7 +1075,9 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                 let expr = source[expr_start..i].trim();
                 return Some((
                     format!(
-                        "((__wasm_rquickjs_specifier)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
+                        "((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
+                        dynamic_import_reaction_name,
+                        dynamic_import_with_trace_name,
                         expr
                     ),
                     i + 1,
@@ -1056,8 +1113,11 @@ fn rewrite_dynamic_import_expression_call(source: &str, open_paren: usize) -> Op
                     let options = &source[options_start..i];
                     return Some((
                         format!(
-                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\"node:module\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
-                            expr, options
+                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
+                            dynamic_import_reaction_name,
+                            dynamic_import_with_trace_name,
+                            expr,
+                            options
                         ),
                         i + 1,
                     ));

@@ -64,6 +64,7 @@ import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } f
 
 const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
 const wasmRquickjsModuleGlobalThis = globalThis;
+const wasmRquickjsModulePromiseResolve = Promise.resolve.bind(Promise);
 
 function cjsFacadeHasOwnProperty(value, key) {
     return objectPrototypeHasOwnProperty(value, key);
@@ -458,17 +459,19 @@ function traceModuleImport(url, parentFilename, fn) {
 function dynamicImportWithTrace(parentFilename, baseUrl, specifier, options, hasOptions, importer) {
     const url = String(specifier);
     if (hasOptions) {
-        const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);
         return traceModuleImport(
             url,
             parentFilename,
-            async () => wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(
-                baseUrl,
-                url,
-                parsedOptions,
-                true,
-                importer,
-            ),
+            async () => {
+                const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);
+                return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(
+                    baseUrl,
+                    url,
+                    parsedOptions,
+                    true,
+                    importer,
+                );
+            },
         );
     }
     return traceModuleImport(
@@ -484,8 +487,22 @@ function dynamicImportWithTrace(parentFilename, baseUrl, specifier, options, has
     );
 }
 
+function dynamicImportReaction(fn) {
+    return wasmRquickjsModulePromiseResolve().then(fn);
+}
+
 Object.defineProperty(globalThis, '__wasm_rquickjs_trace_module_import', {
     value: traceModuleImport,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_with_trace', {
+    value: dynamicImportWithTrace,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_reaction', {
+    value: dynamicImportReaction,
     writable: false,
     configurable: false,
 });
@@ -1086,6 +1103,18 @@ function stripImportAttributes(source, filename) {
     let out = [];
     const filenameLiteral = JSON.stringify(filename);
     const baseUrlLiteral = JSON.stringify(nodeUrl.pathToFileURL(filename).href);
+    let rewroteDynamicImport = false;
+    function uniqueInternalName(base) {
+        let name = base;
+        let seq = 0;
+        while (source.indexOf(name) !== -1) {
+            seq++;
+            name = base + '_' + seq;
+        }
+        return name;
+    }
+    const dynamicImportReactionName = uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction');
+    const dynamicImportWithTraceName = uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace');
     function prevNonWs(pos) {
         while (pos > 0) {
             pos--;
@@ -1261,9 +1290,14 @@ function stripImportAttributes(source, filename) {
                         else { i++; }
                     }
                     if (commaPos > -1) {
+                        rewroteDynamicImport = true;
                         const firstArg = processSubrange(argStart, commaPos);
                         const secondArg = processSubrange(commaPos + 1, i - 1);
-                        out.push('((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import("node:module").then(({default:__wasm_rquickjs_module})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(');
+                        out.push('((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>');
+                        out.push(dynamicImportReactionName);
+                        out.push('(()=>');
+                        out.push(dynamicImportWithTraceName);
+                        out.push('(');
                         out.push(filenameLiteral);
                         out.push(',');
                         out.push(baseUrlLiteral);
@@ -1273,8 +1307,13 @@ function stripImportAttributes(source, filename) {
                         out.push(secondArg);
                         out.push(')');
                     } else {
+                        rewroteDynamicImport = true;
                         const spec = processSubrange(argStart, i - 1);
-                        out.push('((__wasm_rquickjs_specifier)=>import("node:module").then(({default:__wasm_rquickjs_module})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(');
+                        out.push('((__wasm_rquickjs_specifier)=>');
+                        out.push(dynamicImportReactionName);
+                        out.push('(()=>');
+                        out.push(dynamicImportWithTraceName);
+                        out.push('(');
                         out.push(filenameLiteral);
                         out.push(',');
                         out.push(baseUrlLiteral);
@@ -1298,7 +1337,15 @@ function stripImportAttributes(source, filename) {
         return rewritten;
     }
     processRange(0, len);
-    return out.join('');
+    return {
+        source: out.join(''),
+        dynamicImportBindings: rewroteDynamicImport
+            ? {
+                reactionName: dynamicImportReactionName,
+                traceName: dynamicImportWithTraceName,
+            }
+            : null,
+    };
 }
 function hasExecArgvFlag(flag) {
     const processObject = globalThis.process;
@@ -4352,6 +4399,16 @@ function wrap(script) {
     return activeWrapper[0] + script + activeWrapper[1];
 }
 
+function wrapForCompile(script, dynamicImportBindings) {
+    const activeWrapper = (typeof moduleExports !== 'undefined' && moduleExports.wrapper) || wrapper;
+    if (dynamicImportBindings) {
+        return '(function(' + dynamicImportBindings.reactionName + ',' + dynamicImportBindings.traceName + '){return ' +
+            activeWrapper[0] + script + activeWrapper[1] +
+            '\n})(__wasm_rquickjs_dynamic_import_reaction,__wasm_rquickjs_dynamic_import_with_trace);';
+    }
+    return activeWrapper[0] + script + activeWrapper[1];
+}
+
 function compileCjs(filename, source) {
     if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
         source = source.slice(1);
@@ -4363,12 +4420,13 @@ function compileCjs(filename, source) {
 
     source = transpileTypeScriptModule(filename, source);
     source = stripV8OptimizationIntrinsics(source);
-    source = stripImportAttributes(source, filename);
+    const strippedImportAttributes = stripImportAttributes(source, filename);
+    source = strippedImportAttributes.source;
 
     const cjsLineOffsets = getCjsLineOffsetRegistry();
     cjsLineOffsets[filename] = cjsLineOffset;
 
-    const wrappedSource = wrap(source + '\n//# sourceURL=' + filename + '\n');
+    const wrappedSource = wrapForCompile(source + '\n//# sourceURL=' + filename + '\n', strippedImportAttributes.dynamicImportBindings);
     return _evalWithFilename(wrappedSource, filename);
 }
 
@@ -5040,8 +5098,8 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
     const fallbackRequire = makeRequire(parentDir, parentModule, parentFilename);
     function loaderRequire(id) {
         validateRequireId(id);
-        if (typeof globalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
-            const loaded = globalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id);
+        if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
+            const loaded = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id);
             if (loaded) {
                 if (loaded.format === 'builtin' && loaded.url) {
                     const id = String(loaded.url).startsWith('node:') ? String(loaded.url) : 'node:' + String(loaded.url);
@@ -5061,8 +5119,8 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
     }
     loaderRequire.resolve = function resolve(id, options) {
         validateRequireRequest(id);
-        if (typeof globalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
-            const loaded = globalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id, true);
+        if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
+            const loaded = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id, true);
             if (loaded && loaded.url) {
                 const loadedUrl = String(loaded.url);
                 if (loadedUrl.startsWith('node:')) return id.startsWith('node:') ? loadedUrl : loadedUrl.slice(5);
@@ -6178,21 +6236,21 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
     }
 
-    globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph = async function prepareStaticRegisteredLoaderEntry(entryUrl, entrySpecifier, entryParentUrl) {
+    globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph = async function prepareStaticRegisteredLoaderEntry(entryUrl, entrySpecifier, entryParentUrl, entryAttrs) {
         if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
         if (entrySpecifier !== undefined && entryParentUrl !== undefined) {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
             const specifier = String(entrySpecifier);
-            let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, undefined, false);
+            let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, entryAttrs, false);
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached, created } = cacheEntry;
             if (created && cached && cached.error) return;
             const aliases = staticRegisteredLoaderParentAliases(parentUrl);
             for (let i = 1; i < aliases.length; i++) {
                 wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache[
-                    staticRegisteredLoaderCacheKey(aliases[i], specifier)
+                    staticRegisteredLoaderCacheKey(aliases[i], specifier, entryAttrs)
                 ] = cached;
             }
         }
@@ -6453,7 +6511,11 @@ Object.defineProperties(moduleExports, {
         configurable: false,
     },
     __wasm_rquickjs_load_commonjs_loader_source: {
-        value: loadCommonJsSourceModule,
+        value(filename, source) {
+            const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
+            const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
+            return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports;
+        },
         writable: false,
         configurable: false,
     },

@@ -853,7 +853,7 @@ globalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed = async function(ba
     !String(prepared).startsWith('data:application/json') &&
     !/[.]json(?:[?#]|$)/.test(String(prepared))
   ) {
-    await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared);
+    await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared, originalSpecifier, baseUrl, parsedOptions);
   }
   var promise = importFn(prepared);
   var entry = { promise: promise, preparedKey: key };

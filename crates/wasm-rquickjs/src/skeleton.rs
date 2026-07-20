@@ -1349,12 +1349,18 @@ mod tests {
         assert!(
             module_js.contains(
                 "Object.defineProperty(globalThis, '__wasm_rquickjs_trace_module_import', { value: traceModuleImport, writable: false, configurable: false,"
+            ) && module_js.contains(
+                "Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_with_trace', { value: dynamicImportWithTrace, writable: false, configurable: false,"
+            ) && module_js.contains(
+                "Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_reaction', { value: dynamicImportReaction, writable: false, configurable: false,"
             ),
-            "dynamic import tracing must expose a non-replaceable internal helper"
+            "dynamic import tracing must expose non-replaceable internal helpers"
         );
         assert!(
-            module_js.contains("const wasmRquickjsModuleGlobalThis = globalThis;"),
-            "module internals must capture the real global object before user code can replace globalThis"
+            module_js.contains("const wasmRquickjsModuleGlobalThis = globalThis;")
+                && module_js.contains("const wasmRquickjsModulePromiseResolve = Promise.resolve.bind(Promise);")
+                && module_js.contains("function dynamicImportReaction(fn) { return wasmRquickjsModulePromiseResolve().then(fn); }"),
+            "module internals must capture the real global object and promise deferral before user code can replace them"
         );
 
         let strip_start = module_js
@@ -1367,27 +1373,42 @@ mod tests {
         let strip_import_attributes = &module_js[strip_start..strip_end];
 
         assert!(
-            strip_import_attributes.contains("((__wasm_rquickjs_specifier)=>import(\"node:module\").then(({default:__wasm_rquickjs_module})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
-                && strip_import_attributes.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\"node:module\").then(({default:__wasm_rquickjs_module})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
+            strip_import_attributes
+                .contains("uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction')")
+                && strip_import_attributes
+                    .contains("uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace')")
+                && strip_import_attributes.contains("out.push(dynamicImportReactionName);")
+                && strip_import_attributes.contains("out.push(dynamicImportWithTraceName);")
                 && strip_import_attributes
                     .contains("(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared)")
+                && !strip_import_attributes.contains("Promise.resolve()")
+                && !strip_import_attributes.contains("constructor(\"return this\")")
+                && !strip_import_attributes.contains("import(\"node:module\")")
+                && !strip_import_attributes.contains("import(\"__wasm_rquickjs_builtin/module\")")
                 && !strip_import_attributes
                     .contains("globalThis.__wasm_rquickjs_trace_module_import")
                 && !strip_import_attributes
                     .contains("globalThis.__wasm_rquickjs_import_attr_read_options")
                 && !strip_import_attributes
                     .contains("globalThis.__wasm_rquickjs_import_attr_dynamic_import"),
-            "generated dynamic import wrappers must resolve internal helpers through the builtin module object without mutable globalThis or bare helper lookups"
+            "generated CJS dynamic import wrappers must use captured collision-free helpers without mutable Promise, globalThis, import.meta, wrapper arguments, Function constructors, or loader-visible node:module imports"
         );
 
         assert!(
-            internal_rs.contains("((__wasm_rquickjs_specifier)=>import(\\\"node:module\\\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
-                && internal_rs.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>import(\\\"node:module\\\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace(")
+            internal_rs.contains("unique_internal_name(source, \"__wasm_rquickjs_dynamic_import_reaction\")")
+                && internal_rs.contains("unique_internal_name(source, \"__wasm_rquickjs_dynamic_import_with_trace\")")
+                && internal_rs.contains("const {dynamic_import_reaction_name}=globalThis.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=globalThis.__wasm_rquickjs_dynamic_import_with_trace;")
+                && internal_rs.contains("((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))")
+                && internal_rs.contains("((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))")
+                && !internal_rs.contains("constructor(\\\"return this\\\")")
+                && !internal_rs.contains("import.meta.__wasm_rquickjs_dynamic_import_with_trace")
+                && !internal_rs.contains("import(\\\"node:module\\\").then(({{default:__wasm_rquickjs_module}})=>__wasm_rquickjs_module.__wasm_rquickjs_dynamic_import_with_trace")
+                && !internal_rs.contains("import(\\\"__wasm_rquickjs_builtin/module\\\")")
                 && !internal_rs.contains(
                     "globalThis.__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,"
                 )
                 && !internal_rs.contains("__wasm_rquickjs_import_attr_dynamic_import(import.meta.url,"),
-            "Rust-generated dynamic import wrappers must resolve internal helpers through the builtin module object"
+            "Rust-generated dynamic import wrappers must use captured collision-free helpers without mutable Promise, Function constructors, import.meta leaks, or loader-visible node:module imports"
         );
 
         assert!(
@@ -1398,7 +1419,9 @@ mod tests {
             module_js.contains(
                 "const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);"
             ) && module_js.contains(
-                "async () => wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed("
+                "async () => { const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);"
+            ) && module_js.contains(
+                "return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed("
             ) && module_js.contains(
                 "async () => wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import("
             ) && builtin_mod_rs.contains(
@@ -1977,6 +2000,16 @@ mod tests {
                 < loader_require.find("__wasm_rquickjs_run_registered_loaders_sync"),
             "loader-created CJS require must validate id before registered-loader hooks"
         );
+        assert!(
+            loader_require.contains(
+                "typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function'"
+            ) && loader_require.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id)"
+            ) && !loader_require.contains(
+                "globalThis.__wasm_rquickjs_run_registered_loaders_sync"
+            ),
+            "loader-created CJS require must use captured loader state rather than live globalThis"
+        );
 
         let local_require_start = module_js
             .find("function localRequire(id) {")
@@ -2034,6 +2067,16 @@ mod tests {
             loader_resolve.find("validateRequireRequest(id);")
                 < loader_resolve.find("__wasm_rquickjs_run_registered_loaders_sync"),
             "loader-created require.resolve must validate request before registered-loader hooks"
+        );
+        assert!(
+            loader_resolve.contains(
+                "typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function'"
+            ) && loader_resolve.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(parentUrl, id, true)"
+            ) && !loader_resolve.contains(
+                "globalThis.__wasm_rquickjs_run_registered_loaders_sync"
+            ),
+            "loader-created require.resolve must use captured loader state rather than live globalThis"
         );
 
         let resolve_for_require_start = module_js
@@ -2692,7 +2735,7 @@ mod tests {
         let helper = &module_js[helper_start..helper_end];
         assert!(
             helper.contains(
-                "const loaded = await globalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');"
+                "const loaded = await wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');"
             ) && helper.contains(
                 "const value = edgeReturn ? staticRegisteredLoaderReturnForEdge(loaded, attrs) : staticRegisteredLoaderReturn(loaded);"
             ) && helper.contains("cache[key] = { error };"),
@@ -2725,10 +2768,14 @@ mod tests {
         let entry = &module_js[entry_start..entry_end];
         assert!(
             entry.contains(
-                "staticRegisteredLoaderCacheEntry(parentUrl, specifier, undefined, false)"
+                "staticRegisteredLoaderCacheEntry(parentUrl, specifier, entryAttrs, false)"
             ) && entry.contains("if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;")
                 && entry.contains("if (created && cached && cached.error) return;"),
-            "entry graph preparation must use the shared cache helper and only abort on newly-created entry errors"
+            "entry graph preparation must use the shared cache helper, preserve entry attributes, and only abort on newly-created entry errors"
+        );
+        assert!(
+            entry.contains("staticRegisteredLoaderCacheKey(aliases[i], specifier, entryAttrs)"),
+            "entry graph aliasing must preserve import-attribute-aware cache keys"
         );
     }
 
@@ -2996,6 +3043,18 @@ mod tests {
                 && !loader_source.contains("globalThis.__wasm_rquickjs_cjs_facade_has_own")
                 && !loader_source.contains("Object.prototype.hasOwnProperty.call(__cjs_default,"),
             "loader-provided CJS source facades must use builtin module helpers without mutable globalThis or bare helper lookups"
+        );
+        let module_exports_start = module_js
+            .find("__wasm_rquickjs_load_commonjs_loader_source: {")
+            .expect("private loader CommonJS source helper export must exist");
+        let module_exports_end = module_js[module_exports_start..]
+            .find("writable: false, configurable: false,")
+            .expect("private loader CommonJS source helper export must be hardened")
+            + module_exports_start;
+        let module_exports = &module_js[module_exports_start..module_exports_end];
+        assert!(
+            module_exports.contains("return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports;"),
+            "private loader CommonJS source helper must return module.exports, not the internal Module record"
         );
     }
 

@@ -770,6 +770,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  }',
             '  throw new Error("Missing expected rejection: " + label);',
             '}',
+            'await expectReject("specifier coercion should reject asynchronously", import({ toString() { throw new Error("specifier coercion"); } }), { name: "Error", message: /specifier coercion/ });',
             'await expectReject("null import options should reject", import("data:text/javascript,export default 1", null), { name: "TypeError", message: /second argument to import\\(\\) must be an object/ });',
             'await expectReject("null import with option should reject", import("data:text/javascript,export default 1", { with: null }), { name: "TypeError", message: /\\x27with\\x27 option must be an object/ });',
             'await expectReject("non-object import with option should reject", import("data:text/javascript,export default 1", { with: 1 }), { name: "TypeError", message: /\\x27with\\x27 option must be an object/ });',
