@@ -1252,6 +1252,17 @@ mod tests {
                 ),
             "registered-loader bridge helpers must not use replaceable global assignments"
         );
+        assert!(
+            module_js.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader(loader);"
+            ) && module_js.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url)"
+            ) && module_js.contains(
+                "wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier)"
+            ) && !module_js.contains("globalThis.__wasm_rquickjs_start_registered_loader(loader);")
+                && !module_js.contains("globalThis.__wasm_rquickjs_import_meta_resolve("),
+            "registered-loader helper calls must use the captured module global while runtime loader state remains global"
+        );
     }
 
     #[test]

@@ -5726,8 +5726,8 @@ export let register = function register(specifier, parentURL, options) {
     const loader = { url, parent, data, realm, module: undefined, initialized: false, initializing: undefined };
     loaders.push(loader);
     globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
-    if (typeof globalThis.__wasm_rquickjs_start_registered_loader === 'function') {
-        globalThis.__wasm_rquickjs_start_registered_loader(loader);
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader === 'function') {
+        wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader(loader);
     }
 };
 
@@ -5748,7 +5748,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function resolveRegisteredLoaderUrl(loader) {
         const url = loader.parent !== undefined
-            ? normalizeLoaderResolvedUrl(globalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url))
+            ? normalizeLoaderResolvedUrl(wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url))
             : loader.url;
         return loaderRealmUrl(url, loader.realm);
     }
@@ -5938,7 +5938,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         if (missingAsUndefined) return undefined;
 
-        let url = globalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
+        let url = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
         return registeredLoaderUrlResult(normalizeLoaderResolvedUrl(url));
     }
 
@@ -5950,7 +5950,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         for (let i = 0; i < loaders.length; i++) {
             const loader = loaders[i];
             try {
-                await globalThis.__wasm_rquickjs_start_registered_loader(loader);
+                await wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader(loader);
             } catch (e) {
                 loader.initializing = undefined;
                 throw e;
