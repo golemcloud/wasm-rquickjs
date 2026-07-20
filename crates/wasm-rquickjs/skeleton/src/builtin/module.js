@@ -483,11 +483,11 @@ function traceModuleImport(url, parentFilename, fn) {
 function dynamicImportWithTrace(parentFilename, baseUrl, specifier, options, hasOptions, importer) {
     const url = String(specifier);
     if (hasOptions) {
+        const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);
         return traceModuleImport(
             url,
             parentFilename,
             async () => {
-                const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);
                 return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(
                     baseUrl,
                     url,
@@ -530,7 +530,7 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_reaction', {
     writable: false,
     configurable: false,
 });
-globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics = function(fn) {
+function withSuppressedModuleRequireDiagnostics(fn) {
     const previous = globalThis.__wasm_rquickjs_suppress_module_require_diagnostics;
     globalThis.__wasm_rquickjs_suppress_module_require_diagnostics = true;
     try {
@@ -542,7 +542,12 @@ globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics = function
             globalThis.__wasm_rquickjs_suppress_module_require_diagnostics = previous;
         }
     }
-};
+}
+Object.defineProperty(globalThis, '__wasm_rquickjs_with_suppressed_module_require_diagnostics', {
+    value: withSuppressedModuleRequireDiagnostics,
+    writable: false,
+    configurable: false,
+});
 
 // Lookup mock entry by ID (for ESM source generation)
 function getMockModuleEntry(mockId) {

@@ -77,6 +77,36 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
     return true;
 };
 
+export const testModuleBridgeGlobalsNonReplaceable = () => {
+    const name = '__wasm_rquickjs_with_suppressed_module_require_diagnostics';
+    const original = globalThis[name];
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+    assert.strictEqual(typeof original, 'function');
+    assert.strictEqual(descriptor.value, original);
+    assert.strictEqual(descriptor.writable, false);
+    assert.strictEqual(descriptor.configurable, false);
+
+    assert.throws(() => {
+        globalThis[name] = () => 'replaced';
+    }, TypeError);
+    assert.throws(() => {
+        Object.defineProperty(globalThis, name, { value: () => 'redefined' });
+    }, TypeError);
+    assert.strictEqual(globalThis[name], original);
+
+    let ran = false;
+    assert.strictEqual(original(() => {
+        ran = true;
+        return 'ok';
+    }), 'ok');
+    assert.strictEqual(ran, true);
+    assert.strictEqual(
+        Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_suppress_module_require_diagnostics'),
+        false,
+    );
+    return true;
+};
+
 export const testImportMetaResolve = async () => {
     const appDir = '/import-meta-resolve-app';
     const entryUrl = `${pathToFileURL(`${appDir}/entry.mjs`).href}`;

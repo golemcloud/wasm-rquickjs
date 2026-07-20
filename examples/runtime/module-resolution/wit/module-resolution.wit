@@ -13,6 +13,7 @@ world module-resolution {
   export test-esm-forbidden-cjs-globals: func() -> bool;
   export test-import-meta-resolve: func() -> bool;
   export test-rust-bridge-globals-non-replaceable: func() -> bool;
+  export test-module-bridge-globals-non-replaceable: func() -> bool;
   export test-cjs-dynamic-import-attribute-scanner: func() -> bool;
   export test-loader-commonjs-source-named-exports: func() -> bool;
   export test-loader-module-source-validation: func() -> bool;

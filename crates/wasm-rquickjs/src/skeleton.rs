@@ -1489,8 +1489,16 @@ mod tests {
                 "Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_with_trace', { value: dynamicImportWithTrace, writable: false, configurable: false,"
             ) && module_js.contains(
                 "Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_reaction', { value: dynamicImportReaction, writable: false, configurable: false,"
+            ) && module_js.contains(
+                "Object.defineProperty(globalThis, '__wasm_rquickjs_with_suppressed_module_require_diagnostics', { value: withSuppressedModuleRequireDiagnostics, writable: false, configurable: false,"
             ),
-            "dynamic import tracing must expose non-replaceable internal helpers"
+            "dynamic import and diagnostics tracing must expose non-replaceable internal helpers"
+        );
+        assert!(
+            !module_js.contains(
+                "globalThis.__wasm_rquickjs_with_suppressed_module_require_diagnostics = function"
+            ),
+            "module require diagnostics suppression helper must not use a replaceable global assignment"
         );
         assert!(
             module_js.contains("const wasmRquickjsModuleGlobalThis = globalThis;")
@@ -1556,14 +1564,18 @@ mod tests {
             module_js.contains("__wasm_rquickjs_dynamic_import_with_trace: { value: dynamicImportWithTrace, writable: false, configurable: false,"),
             "builtin module default export must expose a non-replaceable private dynamic import helper"
         );
+        let parsed_options_start = module_js
+            .find("const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);")
+            .expect("dynamic import with options must validate options before tracing starts");
+        let trace_start = module_js
+            .find("return traceModuleImport(")
+            .expect("dynamic import with options must still trace semantic import resolution");
+        let parsed_import_start = module_js
+            .find("return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed(")
+            .expect("dynamic import with options must pass parsed options into the import-attribute helper");
         assert!(
-            module_js.contains(
-                "const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);"
-            ) && module_js.contains(
-                "async () => { const parsedOptions = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_read_options(options);"
-            ) && module_js.contains(
-                "return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import_parsed("
-            ) && module_js.contains(
+            parsed_options_start < trace_start && trace_start < parsed_import_start
+                && module_js.contains(
                 "async () => wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_attr_dynamic_import("
             ) && builtin_mod_rs.contains(
                 "Object.defineProperty(__wasm_rquickjs_import_attr_global, name,"
