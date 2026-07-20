@@ -1592,11 +1592,10 @@ mod tests {
         let helper = &internal_rs[helper_start..helper_end];
 
         assert!(
-            helper.contains("url: format!(\"file:///__wasm_rquickjs_virtual__/{}.mjs\", name)")
-                && helper.contains("filename: None")
-                && helper.contains("dirname: None")
-                && helper.contains("include_resolve: true"),
-            "virtual builtin module import.meta must preserve synthetic URL identity and omit filesystem metadata"
+            helper.contains(
+                "url_only_import_meta_init(format!(\"file:///__wasm_rquickjs_virtual__/{}.mjs\", name))"
+            ),
+            "virtual builtin module import.meta must preserve synthetic URL identity through the shared URL-only init helper"
         );
 
         let new_base_start = internal_rs
@@ -1613,6 +1612,92 @@ mod tests {
                 && !new_base.contains("__wasm_rquickjs_virtual__")
                 && !new_base.contains("inject_import_meta_prologue("),
             "new_base must use the shared virtual builtin module source helper for all Rust-installed builtin modules"
+        );
+    }
+
+    #[test]
+    fn import_meta_init_construction_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains("fn url_only_import_meta_init")
+                && internal_rs.contains("fn file_import_meta_init")
+                && internal_rs.matches("ImportMetaInit { url,").count() == 2,
+            "URL-only and file-backed import.meta initialization must be centralized"
+        );
+
+        let url_only_start = internal_rs
+            .find("fn url_only_import_meta_init")
+            .expect("URL-only import.meta init helper must exist");
+        let url_only_end = internal_rs[url_only_start..]
+            .find("fn file_import_meta_init")
+            .expect("URL-only helper must precede file-backed helper")
+            + url_only_start;
+        let url_only_helper = &internal_rs[url_only_start..url_only_end];
+
+        let file_start = internal_rs
+            .find("fn file_import_meta_init")
+            .expect("file-backed import.meta init helper must exist");
+        let file_end = internal_rs[file_start..]
+            .find("fn module_filesystem_path")
+            .expect("file-backed helper must precede module path helpers")
+            + file_start;
+        let file_helper = &internal_rs[file_start..file_end];
+
+        assert!(
+            url_only_helper.contains("url,")
+                && url_only_helper.contains("filename: None")
+                && url_only_helper.contains("dirname: None")
+                && url_only_helper.contains("include_resolve: true"),
+            "URL-only import.meta initialization must omit filesystem metadata and keep import.meta.resolve enabled"
+        );
+
+        assert!(
+            file_helper.contains("filename: Some(filename)")
+                && file_helper.contains("dirname,")
+                && file_helper.contains("include_resolve: true"),
+            "file-backed import.meta initialization must expose filesystem metadata and keep import.meta.resolve enabled"
+        );
+
+        assert_eq!(
+            internal_rs.matches("ImportMetaInit { url,").count(),
+            2,
+            "all ImportMetaInit literals must stay inside the shared constructors"
+        );
+
+        let data_loader_start = internal_rs
+            .find("impl Loader for DataUrlLoader")
+            .expect("DataUrlLoader must exist");
+        let data_loader_end = internal_rs[data_loader_start..]
+            .find("fn base64_decode")
+            .expect("DataUrlLoader must precede base64 decoder")
+            + data_loader_start;
+        let data_loader = &internal_rs[data_loader_start..data_loader_end];
+
+        let cjs_loader_start = internal_rs
+            .find("impl Loader for CjsCompatLoader")
+            .expect("CjsCompatLoader must exist");
+        let cjs_loader_end = internal_rs[cjs_loader_start..]
+            .find("struct ImportMetaInit")
+            .expect("CjsCompatLoader must precede import.meta initialization")
+            + cjs_loader_start;
+        let cjs_loader = &internal_rs[cjs_loader_start..cjs_loader_end];
+
+        let esm_file_start = internal_rs
+            .find("fn declare_esm_file_module_from_source")
+            .expect("shared file ESM declaration must exist");
+        let esm_file_end = internal_rs[esm_file_start..]
+            .find("struct ImportMetaLoader")
+            .expect("file ESM declaration must precede ImportMetaLoader")
+            + esm_file_start;
+        let esm_file = &internal_rs[esm_file_start..esm_file_end];
+
+        assert!(
+            data_loader.contains("let init = url_only_import_meta_init(path.to_string());")
+                && cjs_loader
+                    .contains("let init = file_import_meta_init(cjs_url, fs_abs_path.clone());")
+                && esm_file.contains("let init = file_import_meta_init(url, fs_abs_path.clone());"),
+            "data URL ESM, CJS facades, and file ESM declarations must share import.meta initialization helpers"
         );
     }
 

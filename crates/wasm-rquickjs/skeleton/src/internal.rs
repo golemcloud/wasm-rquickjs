@@ -443,12 +443,7 @@ impl Loader for DataUrlLoader {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
 
-            let init = ImportMetaInit {
-                url: path.to_string(),
-                filename: None,
-                dirname: None,
-                include_resolve: true,
-            };
+            let init = url_only_import_meta_init(path.to_string());
             let injected = inject_import_meta_prologue(&init, &source);
             Module::declare(ctx.clone(), path, injected.as_bytes().to_vec())
         } else {
@@ -7688,14 +7683,7 @@ impl Loader for CjsCompatLoader {
 
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
-        let init = ImportMetaInit {
-            url: cjs_url,
-            filename: Some(fs_abs_path.clone()),
-            dirname: std::path::Path::new(&fs_abs_path)
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned()),
-            include_resolve: true,
-        };
+        let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
         let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
             r#"{}
@@ -7729,6 +7717,27 @@ struct ImportMetaInit {
     filename: Option<String>,
     dirname: Option<String>,
     include_resolve: bool,
+}
+
+fn url_only_import_meta_init(url: String) -> ImportMetaInit {
+    ImportMetaInit {
+        url,
+        filename: None,
+        dirname: None,
+        include_resolve: true,
+    }
+}
+
+fn file_import_meta_init(url: String, filename: String) -> ImportMetaInit {
+    let dirname = std::path::Path::new(&filename)
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned());
+    ImportMetaInit {
+        url,
+        filename: Some(filename),
+        dirname,
+        include_resolve: true,
+    }
 }
 
 /// Ensure a path is absolute. If relative, prepend `/` (WASI cwd is `/`).
@@ -8578,12 +8587,7 @@ fn inject_import_meta_prologue(init: &ImportMetaInit, source: &str) -> String {
 
 fn virtual_builtin_module_source(name: &str, source: &str) -> String {
     inject_import_meta_prologue(
-        &ImportMetaInit {
-            url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
-            filename: None,
-            dirname: None,
-            include_resolve: true,
-        },
+        &url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name)),
         source,
     )
 }
@@ -8676,13 +8680,7 @@ fn declare_esm_file_module_from_source<'js>(
     let fs_abs_path = ensure_absolute_path(fs_path);
     let module_abs_path = ensure_absolute_path(module_id);
     let source = process_static_import_attrs(&raw_source, module_id);
-    let std_path = std::path::Path::new(&fs_abs_path);
-    let init = ImportMetaInit {
-        url,
-        filename: Some(fs_abs_path.clone()),
-        dirname: std_path.parent().map(|p| p.to_string_lossy().into_owned()),
-        include_resolve: true,
-    };
+    let init = file_import_meta_init(url, fs_abs_path.clone());
     let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &init.url);
 
     let globals = ctx.globals();
