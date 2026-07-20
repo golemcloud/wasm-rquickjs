@@ -46,8 +46,7 @@ const WASI_REMAP_NAMESPACES_P3: &[(&str, &str)] = &[("clocks", "clocks")];
 /// **same** skeleton crate compiled with the `p3` Cargo feature instead of `p2`: a
 /// minimal async runtime spine depending only on `rquickjs`, `wasip3` and a renamed
 /// `wit-bindgen` (so the Node.js builtins are not duplicated). It supports synchronous
-/// and asynchronous WIT exports and imports. Wizer pre-initialization is not available
-/// in this mode.
+/// and asynchronous WIT exports and imports, including Wizer pre-initialization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GenerationTarget {
     /// WASI Preview 2 (default).
@@ -215,12 +214,9 @@ pub fn generate_wrapper_crate_with_target(
             .context("Failed to add get-script import to the WIT world")?;
     }
 
-    // Add wizer-initialize export for pre-initialization support. Wizer is not part of the
-    // Preview 3 path yet, so the export is only injected for Preview 2.
-    if !target.is_p3() {
-        add_wizer_init_export(&context.output.join("wit"), world)
-            .context("Failed to add wizer-initialize export to the WIT world")?;
-    }
+    // Add wizer-initialize export for pre-initialization support.
+    add_wizer_init_export(&context.output.join("wit"), world, target.is_p3())
+        .context("Failed to add wizer-initialize export to the WIT world")?;
 
     // Re-resolve the WIT package after modifications (wizer-initialize export was added)
     let modified_wit = output.join("wit");

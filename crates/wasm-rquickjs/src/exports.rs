@@ -261,7 +261,7 @@ fn generate_guest_impl(
     for (name, function) in exports {
         match &function.kind {
             FunctionKind::Freestanding => {
-                if !is_p3 && name == "wizer-initialize" {
+                if name == "wizer-initialize" {
                     // wizer-initialize calls directly into the skeleton's
                     // pre-init function instead of dispatching to JS
                     func_impls.push(quote! {
@@ -276,7 +276,13 @@ fn generate_guest_impl(
                 }
             }
             FunctionKind::AsyncFreestanding => {
-                if is_p3 {
+                if is_p3 && name == "wizer-initialize" {
+                    func_impls.push(quote! {
+                        async fn wizer_initialize() {
+                            crate::internal::wizer_initialize().await;
+                        }
+                    });
+                } else if is_p3 {
                     let func_impl =
                         generate_exported_function_impl(context, interface, name, function)?;
                     func_impls.push(func_impl);

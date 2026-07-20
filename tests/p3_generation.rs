@@ -479,6 +479,388 @@ fn p3_sync_freestanding_export_runs() -> anyhow::Result<()> {
 }
 
 #[test]
+fn p3_wizer_preinitializes_component_with_async_export() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-wizer;
+
+            world p3-wizer {
+              export run: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            globalThis.__p3WizerInitCount = (globalThis.__p3WizerInitCount ?? 0) + 1;
+            globalThis.__wasm_rquickjs_new_env = 'user-owned';
+
+            export async function run() {
+              return `${globalThis.__p3WizerInitCount}:${globalThis.__wasm_rquickjs_new_env}:${process.env.P3_WIZER_RUNTIME_ENV ?? 'missing'}`;
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_wizer")?;
+    let optimized_path = temp.path().join("p3-wizer-optimized.wasm");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(wasm_rquickjs::optimize_component(
+            &wasm_path,
+            &optimized_path,
+            "wizer-initialize",
+        ))?;
+
+    let output = Command::new("wasmtime")
+        .arg("run")
+        .arg("-S")
+        .arg("p3=y")
+        .arg("-S")
+        .arg("http=y")
+        .arg("--wasm")
+        .arg("component-model=y")
+        .arg("--wasm")
+        .arg("component-model-async=y")
+        .arg("--env")
+        .arg("P3_WIZER_RUNTIME_ENV=runtime")
+        .arg("--invoke")
+        .arg("run()")
+        .arg(&optimized_path)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "optimized P3 component invocation should succeed; stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: String = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(result, "1:user-owned:runtime");
+    Ok(())
+}
+
+#[test]
+fn p3_wizer_refreshes_named_process_argv0_export() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-wizer-argv0;
+
+            world p3-wizer-argv0 {
+              export run: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            import { argv0 } from 'node:process';
+
+            export async function run() {
+              return `${argv0}|${process.argv0}`;
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_wizer_argv0")?;
+    let optimized_path = temp.path().join("p3-wizer-argv0-optimized.wasm");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(wasm_rquickjs::optimize_component(
+            &wasm_path,
+            &optimized_path,
+            "wizer-initialize",
+        ))?;
+
+    let invoke = |component: &Utf8Path| -> anyhow::Result<String> {
+        let output = Command::new("wasmtime")
+            .arg("run")
+            .arg("-S")
+            .arg("p3=y")
+            .arg("-S")
+            .arg("http=y")
+            .arg("--wasm")
+            .arg("component-model=y")
+            .arg("--wasm")
+            .arg("component-model-async=y")
+            .arg("--invoke")
+            .arg("run()")
+            .arg(component)
+            .output()?;
+        assert!(
+            output.status.success(),
+            "P3 component invocation should succeed; stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+
+    for (kind, component) in [
+        ("unoptimized", wasm_path.as_path()),
+        ("optimized", optimized_path.as_path()),
+    ] {
+        let result = invoke(component)?;
+        let (named_argv0, process_argv0) = result
+            .split_once('|')
+            .expect("fixture should return both argv0 values");
+        assert_eq!(
+            named_argv0, process_argv0,
+            "the named node:process export must reflect process.argv0 in the {kind} component"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn p3_wizer_restores_runtime_argv_when_user_freezes_argv() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-wizer-frozen-argv;
+
+            world p3-wizer-frozen-argv {
+              export run: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            import { argv } from 'node:process';
+
+            Object.freeze(process.argv);
+
+            export async function run() {
+              return `${process.argv[0] ?? 'missing'}|${argv[0] ?? 'missing'}`;
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_wizer_frozen_argv")?;
+    let optimized_path = temp.path().join("p3-wizer-frozen-argv-optimized.wasm");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(wasm_rquickjs::optimize_component(
+            &wasm_path,
+            &optimized_path,
+            "wizer-initialize",
+        ))?;
+
+    let invoke = |component: &Utf8Path| -> anyhow::Result<String> {
+        let output = Command::new("wasmtime")
+            .arg("run")
+            .arg("-S")
+            .arg("p3=y")
+            .arg("-S")
+            .arg("http=y")
+            .arg("--wasm")
+            .arg("component-model=y")
+            .arg("--wasm")
+            .arg("component-model-async=y")
+            .arg("--argv0")
+            .arg("runtime-program")
+            .arg("--invoke")
+            .arg("run()")
+            .arg(component)
+            .output()?;
+        assert!(
+            output.status.success(),
+            "P3 component invocation should succeed; stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+
+    assert_eq!(invoke(&wasm_path)?, "runtime-program|runtime-program");
+    assert_eq!(invoke(&optimized_path)?, "runtime-program|runtime-program");
+    Ok(())
+}
+
+#[test]
+fn p3_wizer_restores_runtime_env_when_user_prevents_extensions() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-wizer-nonextensible-env;
+
+            world p3-wizer-nonextensible-env {
+              export run: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            import { env } from 'node:process';
+
+            process.env = Object.preventExtensions({ ...process.env });
+
+            export async function run() {
+              return `${process.env.P3_WIZER_RUNTIME_ENV ?? 'missing'}|${env.P3_WIZER_RUNTIME_ENV ?? 'missing'}`;
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_wizer_nonextensible_env")?;
+    let optimized_path = temp
+        .path()
+        .join("p3-wizer-nonextensible-env-optimized.wasm");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(wasm_rquickjs::optimize_component(
+            &wasm_path,
+            &optimized_path,
+            "wizer-initialize",
+        ))?;
+
+    let invoke = |component: &Utf8Path| -> anyhow::Result<String> {
+        let output = Command::new("wasmtime")
+            .arg("run")
+            .arg("-S")
+            .arg("p3=y")
+            .arg("-S")
+            .arg("http=y")
+            .arg("--wasm")
+            .arg("component-model=y")
+            .arg("--wasm")
+            .arg("component-model-async=y")
+            .arg("--env")
+            .arg("P3_WIZER_RUNTIME_ENV=runtime")
+            .arg("--invoke")
+            .arg("run()")
+            .arg(component)
+            .output()?;
+        assert!(
+            output.status.success(),
+            "P3 component invocation should succeed; stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+
+    assert_eq!(invoke(&wasm_path)?, "runtime|runtime");
+    assert_eq!(invoke(&optimized_path)?, "runtime|runtime");
+    Ok(())
+}
+
+#[test]
+fn p3_wizer_nonextensible_process_env_retains_string_coercion() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-wizer-nonextensible-proxy-env;
+
+            world p3-wizer-nonextensible-proxy-env {
+              export run: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            Object.preventExtensions(process.env);
+
+            export async function run() {
+              process.env.P3_WIZER_RUNTIME_ENV = 42;
+              return `${typeof process.env.P3_WIZER_RUNTIME_ENV}:${process.env.P3_WIZER_RUNTIME_ENV}`;
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_wizer_nonextensible_proxy_env")?;
+    let optimized_path = temp
+        .path()
+        .join("p3-wizer-nonextensible-proxy-env-optimized.wasm");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(wasm_rquickjs::optimize_component(
+            &wasm_path,
+            &optimized_path,
+            "wizer-initialize",
+        ))?;
+
+    let invoke = |component: &Utf8Path| -> anyhow::Result<String> {
+        let output = Command::new("wasmtime")
+            .arg("run")
+            .arg("-S")
+            .arg("p3=y")
+            .arg("-S")
+            .arg("http=y")
+            .arg("--wasm")
+            .arg("component-model=y")
+            .arg("--wasm")
+            .arg("component-model-async=y")
+            .arg("--env")
+            .arg("P3_WIZER_RUNTIME_ENV=runtime")
+            .arg("--invoke")
+            .arg("run()")
+            .arg(component)
+            .output()?;
+        assert!(
+            output.status.success(),
+            "P3 component invocation should succeed; stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+
+    assert_eq!(invoke(&wasm_path)?, "string:42");
+    assert_eq!(invoke(&optimized_path)?, "string:42");
+    Ok(())
+}
+
+#[test]
+fn p3_wizer_links_unused_async_imports() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-wizer-async-import;
+
+            interface host {
+              unused: async func();
+            }
+
+            world p3-wizer-async-import {
+              import host;
+              export run: async func() -> string;
+            }
+        "#},
+        "export async function run() { return 'ok'; }\n",
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_wizer_async_import")?;
+    let optimized_path = temp.path().join("p3-wizer-async-import-optimized.wasm");
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(wasm_rquickjs::optimize_component(
+            &wasm_path,
+            &optimized_path,
+            "wizer-initialize",
+        ))?;
+
+    let validation = Command::new("wasm-tools")
+        .arg("validate")
+        .arg("--features")
+        .arg("all")
+        .arg(&optimized_path)
+        .output()?;
+    assert!(
+        validation.status.success(),
+        "optimized P3 component should validate; stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&validation.stdout),
+        String::from_utf8_lossy(&validation.stderr)
+    );
+    Ok(())
+}
+
+#[test]
 fn p3_generated_crate_builds_with_wasi_system_clock_import() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(

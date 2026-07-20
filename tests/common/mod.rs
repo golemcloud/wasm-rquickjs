@@ -1195,13 +1195,7 @@ impl CompiledTest {
     ) -> anyhow::Result<CompiledTest> {
         let compiled =
             Self::compile_with_features(path, use_shared_target, feature_combination).await?;
-        // Wizer pre-initialization is only wired up for the Preview 2 generation path; the P3
-        // generator deliberately does not inject a `wizer-initialize` export, so optimizing a P3
-        // component would fail. Return the unoptimized artifact for P3.
-        match test_target() {
-            TestTarget::P2 => compiled.optimize().await,
-            TestTarget::P3 => Ok(compiled),
-        }
+        compiled.optimize().await
     }
 
     async fn compile_with_features(

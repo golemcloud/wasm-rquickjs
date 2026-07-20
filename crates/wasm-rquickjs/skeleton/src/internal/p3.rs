@@ -346,17 +346,69 @@ impl JsState {
         self.init_engine().await;
         self.init_user_module().await;
     }
+
+    /// Refresh host-derived process state after restoring a Wizer snapshot. The P3 wrapper still
+    /// imports the synchronous Preview 2 environment interface through `std`, so this can run
+    /// before the first async export enters the component executor.
+    async fn refresh_process_env(state: &JsState) {
+        let argv = wasip2::cli::environment::get_arguments();
+        let env_vars: std::collections::HashMap<String, String> =
+            wasip2::cli::environment::get_environment()
+                .into_iter()
+                .collect();
+
+        async_with!(state.ctx => |ctx| {
+            let globals = ctx.globals();
+            if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
+                let new_argv = rquickjs::Array::new(ctx.clone())
+                    .expect("failed to create process.argv for Wizer restoration");
+                for (i, arg) in argv.iter().enumerate() {
+                    new_argv
+                        .set(i, arg.as_str())
+                        .expect("failed to populate process.argv for Wizer restoration");
+                }
+
+                let new_env = rquickjs::Object::new(ctx.clone())
+                    .expect("failed to create process.env for Wizer restoration");
+                for (key, value) in &env_vars {
+                    new_env
+                        .set(key.as_str(), value.as_str())
+                        .expect("failed to populate process.env for Wizer restoration");
+                }
+
+                let refresh_process = ctx
+                    .eval::<rquickjs::Function, &str>(
+                        "((argv, env) => process[Symbol.for(\
+                            '__wasm_rquickjs_refresh_process_state'\
+                        )](argv, env))",
+                    )
+                    .expect("failed to load the Wizer process-state refresh hook");
+                assert!(
+                    refresh_process
+                        .call::<_, bool>((new_argv, new_env))
+                        .unwrap_or(false),
+                    "failed to restore process state after Wizer pre-initialization"
+                );
+            }
+        })
+        .await;
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum InitState {
     NotStarted,
     InProgress,
+    WizerPreInitialized,
     Done,
 }
 
 static mut STATE: Option<JsState> = None;
 static mut INIT: InitState = InitState::NotStarted;
+
+/// True while `wizer_initialize` is running. Builtins use this to avoid snapshotting
+/// wasi-libc caches populated from Wizer's empty filesystem and environment.
+static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Cooperative yield: returns `Pending` exactly once (re-waking immediately) so
 /// that another concurrent task can make progress. Used to wait for an in-flight
@@ -405,6 +457,17 @@ pub async fn ensure_initialized() -> &'static JsState {
             InitState::InProgress => {
                 YieldNow(false).await;
             }
+            InitState::WizerPreInitialized => {
+                unsafe {
+                    INIT = InitState::InProgress;
+                }
+                let state = unsafe { STATE.as_ref().unwrap() };
+                JsState::refresh_process_env(state).await;
+                unsafe {
+                    INIT = InitState::Done;
+                }
+                return state;
+            }
             InitState::Done => {
                 return unsafe { STATE.as_ref().unwrap() };
             }
@@ -412,15 +475,9 @@ pub async fn ensure_initialized() -> &'static JsState {
     }
 }
 
-/// Always `false` on the Preview 3 path.
-///
-/// Wizer pre-initialization is a Preview 2-only concept (see
-/// `crate::internal::is_wizer_active` in the P2 spine). The P3 path never runs a
-/// Wizer snapshot, so built-in modules that guard `std::fs`/`std::env` access
-/// during pre-init can share the same code across both targets.
 #[inline]
 pub fn is_wizer_active() -> bool {
-    false
+    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Returns the already-initialized shared state. Only valid to call after
@@ -727,6 +784,45 @@ where
 /// cannot be `async fn` but must call into the async QuickJS runtime.
 pub fn run_sync<T: 'static>(future: impl Future<Output = T>) -> T {
     wit_bindgen_p3::rt::async_support::block_on(future)
+}
+
+/// Fully initializes the P3 QuickJS runtime and leaves it quiescent for Wizer to snapshot.
+#[allow(static_mut_refs)]
+pub async fn wizer_initialize() {
+    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    unsafe {
+        INIT = InitState::InProgress;
+    }
+
+    let state = JsState::new_base().await;
+    unsafe {
+        STATE = Some(state);
+    }
+    let state = unsafe { STATE.as_ref().unwrap() };
+    state.finish_init().await;
+    drain_and_idle(state).await;
+    async_with!(state.ctx => |ctx| {
+        ctx.run_gc();
+        ctx.run_gc();
+    })
+    .await;
+    drain_and_idle(state).await;
+
+    assert!(
+        state.abort_handles.borrow().is_empty(),
+        "pending timers/tasks at snapshot time"
+    );
+    assert!(
+        state.unrefed_timers.borrow().is_empty(),
+        "unrefed timers still tracked at snapshot time"
+    );
+
+    unsafe {
+        INIT = InitState::WizerPreInitialized;
+    }
+
+    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Allocates the next monotonic exported-resource id. Ids start at 1 and are never reused, so a

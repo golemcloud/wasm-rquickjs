@@ -68,6 +68,16 @@ impl wasmtime_wasi_http::p2::WasiHttpView for WizerHost {
     }
 }
 
+impl wasmtime_wasi_http::p3::WasiHttpView for WizerHost {
+    fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
+        wasmtime_wasi_http::p3::WasiHttpCtxView {
+            ctx: &mut self.wasi_http,
+            table: &mut self.table,
+            hooks: wasmtime_wasi_http::p3::default_hooks(),
+        }
+    }
+}
+
 /// Pre-initialize a WebAssembly component using Wizer.
 ///
 /// Reads the component from `input`, runs the specified `init_func` to capture
@@ -88,6 +98,7 @@ pub async fn optimize_component(
 
     let mut config = Config::new();
     config.wasm_component_model(true);
+    config.wasm_component_model_async(true);
     let engine = Engine::new(&config)?;
 
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
@@ -128,12 +139,15 @@ pub async fn optimize_component(
             async |store: &mut Store<WizerHost>, component: &Component| {
                 let mut linker: Linker<WizerHost> = Linker::new(store.engine());
 
-                // Add real WASI and HTTP implementations
+                // Add real Preview 2 and Preview 3 WASI and HTTP implementations. Preview 3
+                // wrappers still have a small residual Preview 2 import surface from std.
                 wasmtime_wasi::p2::add_to_linker_with_options_async(
                     &mut linker,
                     &bindings::LinkOptions::default(),
                 )?;
                 wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
+                wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+                wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
 
                 // Implement wasi:logging/logging with actual log output
                 {
@@ -298,6 +312,18 @@ fn stub_component_item(
                     wasi_resources,
                 )?;
             }
+        }
+        ComponentItem::ComponentFunc(func_ty) if func_ty.async_() => {
+            let fqn = name.to_string();
+            linker_instance.func_new_concurrent(name, move |_accessor, _ty, _args, _results| {
+                let fqn = fqn.clone();
+                Box::pin(async move {
+                    Err(wasmtime::Error::msg(format!(
+                        "wizer pre-initialization called unknown import `{fqn}` — \
+                             this import is not available during pre-initialization"
+                    )))
+                })
+            })?;
         }
         ComponentItem::ComponentFunc(_) => {
             let fqn = name.to_string();

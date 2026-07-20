@@ -142,8 +142,12 @@ values, exported resources, and HTTP `fetch`.
 **Current limitations (Preview 3):**
 
 - **Composition** (`--js-modules name=@composition`) is not supported yet.
-- **Wizer** pre-initialization (`optimize`) is not applied to Preview 3 components.
 - **Golem** app-template integration targets Preview 2 (see the note above).
+
+Wizer pre-initialization (`optimize`) supports Preview 3 components. As with Preview 2, module
+initialization must become quiescent before the snapshot and cannot leave timers or tasks pending.
+Runtime arguments and environment variables are restored before the first export runs; modules
+must not capture their values or immutable aliases during top-level initialization.
 
 Preview 3 is opt-in and evolving; Preview 2 (`--target wasi-p2`) remains the default and stable
 path.
