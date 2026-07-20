@@ -2607,6 +2607,35 @@ impl Resolver for FileUrlResolver {
 
 struct RegisteredLoaderResolver;
 
+const STATIC_REGISTERED_FILE_URL_PREFIX: &str = "__wasm_rquickjs_static_file_url__:";
+
+fn static_registered_file_url_id(url: &str) -> String {
+    let mut encoded = String::with_capacity(STATIC_REGISTERED_FILE_URL_PREFIX.len() + url.len() * 2);
+    encoded.push_str(STATIC_REGISTERED_FILE_URL_PREFIX);
+    for byte in url.as_bytes() {
+        encoded.push_str(&format!("{byte:02X}"));
+    }
+    encoded
+}
+
+fn static_registered_file_url_from_id(id: &str) -> Option<String> {
+    let encoded = id.strip_prefix(STATIC_REGISTERED_FILE_URL_PREFIX)?;
+    if encoded.len() % 2 != 0 {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(encoded.len() / 2);
+    let mut i = 0;
+    while i < encoded.len() {
+        let hi = FileUrlResolver::hex_val(encoded.as_bytes()[i])?;
+        let lo = FileUrlResolver::hex_val(encoded.as_bytes()[i + 1])?;
+        bytes.push(hi << 4 | lo);
+        i += 2;
+    }
+    String::from_utf8(bytes)
+        .ok()
+        .filter(|url| url.starts_with("file://"))
+}
+
 impl Resolver for RegisteredLoaderResolver {
     fn resolve<'js>(
         &mut self,
@@ -2620,18 +2649,45 @@ impl Resolver for RegisteredLoaderResolver {
         else {
             return Err(Error::new_resolving(base, name));
         };
-        let base_url =
-            if base.starts_with("data:") || base.starts_with("file://") || base.starts_with("node:")
-            {
-                base.to_string()
-            } else {
-                path_to_file_url(base)
-            };
+        let base_url = if let Some(url) = static_registered_file_url_from_id(base) {
+            url
+        } else if base.starts_with("data:")
+            || base.starts_with("file://")
+            || base.starts_with("node:")
+        {
+            base.to_string()
+        } else {
+            path_to_file_url(base)
+        };
         let resolved: Option<String> = resolve_fn.call((base_url, name.to_string()))?;
         match resolved {
+            Some(resolved) if resolved.starts_with("file://") => {
+                Ok(static_registered_file_url_id(&resolved))
+            }
             Some(resolved) if !resolved.is_empty() => Ok(resolved),
             _ => Err(Error::new_resolving(base, name)),
         }
+    }
+}
+
+struct StaticRegisteredFileUrlLoader;
+
+impl Loader for StaticRegisteredFileUrlLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        let Some(url) = static_registered_file_url_from_id(path) else {
+            return Err(Error::new_loading(path));
+        };
+        let Some((file_path, _suffix)) = FileUrlResolver::file_url_to_path_parts(&url) else {
+            return Err(Error::new_loading(path));
+        };
+        let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
+        let source_path =
+            crate::builtin::realpath_for_module_resolution(&fs_path).unwrap_or_else(|| fs_path.clone());
+        declare_esm_file_module(ctx, path, &fs_path, &source_path, url)
     }
 }
 
@@ -8543,6 +8599,90 @@ fn parse_import_meta_main_span(source: &str, pos: usize) -> Option<usize> {
     parse_ident_name(source, i, "main")
 }
 
+fn declare_esm_file_module<'js>(
+    ctx: &Ctx<'js>,
+    module_id: &str,
+    fs_path: &str,
+    source_path: &str,
+    url: String,
+) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+    let mut source = match std::fs::read_to_string(source_path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let globals = ctx.globals();
+            let msg = format!("Cannot find module '{}'", module_id);
+            let error_ctor: Function = globals.get("Error")?;
+            let error_obj: Object = error_ctor.call((&msg,))?;
+            error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
+            return Err(ctx.throw(error_obj.into_value()));
+        }
+        Err(_) => return Err(Error::new_loading(module_id)),
+    };
+
+    let fs_abs_path = ensure_absolute_path(fs_path);
+    let module_abs_path = ensure_absolute_path(module_id);
+    source = process_static_import_attrs(&source, module_id);
+    let std_path = std::path::Path::new(&fs_abs_path);
+    let init = ImportMetaInit {
+        url,
+        filename: Some(fs_abs_path.clone()),
+        dirname: std_path.parent().map(|p| p.to_string_lossy().into_owned()),
+        include_resolve: true,
+    };
+    let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &init.url);
+
+    let globals = ctx.globals();
+    if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
+        && let Ok(cached_error) = cache.get::<_, Value>(module_id)
+        && !cached_error.is_undefined()
+    {
+        return Err(ctx.throw(cached_error));
+    }
+
+    if let Some(error_source) =
+        esm_require_global_preflight_error_module_source(&source, raw_cjs_global_messages)
+    {
+        return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
+    }
+    if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
+        return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
+    }
+
+    let mut injected = inject_import_meta_prologue(&init, &source);
+    if source_has_top_level_await(&source) {
+        let escaped_path = escape_js_string(&module_abs_path);
+        let escaped_url = escape_js_string(&init.url);
+        let marker = format!(
+            "globalThis.__wasm_rquickjs_async_esm_modules=globalThis.__wasm_rquickjs_async_esm_modules||Object.create(null);globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;\n",
+            escaped_path, escaped_url
+        );
+        injected = format!("{}{}", marker, injected);
+    }
+    match Module::declare(ctx.clone(), module_id, injected.as_bytes().to_vec()) {
+        Ok(module) => Ok(module),
+        Err(Error::Exception) => {
+            let exception = ctx.catch();
+
+            let cache: Object = match globals.get::<_, Value>("__esm_error_cache") {
+                Ok(v) if v.is_object() => v.into_object().unwrap(),
+                _ => {
+                    let obj = Object::new(ctx.clone()).map_err(|_| Error::new_loading(module_id))?;
+                    globals
+                        .set("__esm_error_cache", obj.clone())
+                        .map_err(|_| Error::new_loading(module_id))?;
+                    obj
+                }
+            };
+            cache
+                .set(module_id, exception.clone())
+                .map_err(|_| Error::new_loading(module_id))?;
+
+            Err(ctx.throw(exception))
+        }
+        Err(e) => Err(e),
+    }
+}
+
 struct ImportMetaLoader;
 
 impl Loader for ImportMetaLoader {
@@ -8573,89 +8713,7 @@ impl Loader for ImportMetaLoader {
         }
 
         let source_path = module_source_filesystem_path(path);
-        let mut source = match std::fs::read_to_string(&source_path) {
-            Ok(s) => s,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                let globals = ctx.globals();
-                let msg = format!("Cannot find module '{}'", path);
-                let error_ctor: Function = globals.get("Error")?;
-                let error_obj: Object = error_ctor.call((&msg,))?;
-                error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
-                return Err(ctx.throw(error_obj.into_value()));
-            }
-            Err(_) => return Err(Error::new_loading(path)),
-        };
-
-        let fs_abs_path = ensure_absolute_path(fs_path);
-        let module_abs_path = ensure_absolute_path(path);
-        source = process_static_import_attrs(&source, path);
-        let std_path = std::path::Path::new(&fs_abs_path);
-        let filename = Some(fs_abs_path.clone());
-        let dirname = std_path.parent().map(|p| p.to_string_lossy().into_owned());
-        let url = path_to_file_url(path);
-        let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &url);
-
-        let init = ImportMetaInit {
-            url,
-            filename,
-            dirname,
-            include_resolve: true,
-        };
-
-        // Check if there's a cached compilation error for this module.
-        // When a module fails to compile (e.g. SyntaxError), we cache the
-        // error so subsequent imports throw the exact same error object,
-        // matching Node.js/V8 behavior (ES spec §16.2.1.5.2).
-        let globals = ctx.globals();
-        if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
-            && let Ok(cached_error) = cache.get::<_, Value>(path)
-            && !cached_error.is_undefined()
-        {
-            return Err(ctx.throw(cached_error));
-        }
-
-        if let Some(error_source) =
-            esm_require_global_preflight_error_module_source(&source, raw_cjs_global_messages)
-        {
-            return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
-        }
-        if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
-            return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
-        }
-
-        let mut injected = inject_import_meta_prologue(&init, &source);
-        if source_has_top_level_await(&source) {
-            let escaped_path = escape_js_string(&module_abs_path);
-            let escaped_url = escape_js_string(&init.url);
-            let marker = format!(
-                "globalThis.__wasm_rquickjs_async_esm_modules=globalThis.__wasm_rquickjs_async_esm_modules||Object.create(null);globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;globalThis.__wasm_rquickjs_async_esm_modules[\"{}\"]=true;\n",
-                escaped_path, escaped_url
-            );
-            injected = format!("{}{}", marker, injected);
-        }
-        match Module::declare(ctx.clone(), path, injected.as_bytes().to_vec()) {
-            Ok(module) => Ok(module),
-            Err(Error::Exception) => {
-                let exception = ctx.catch();
-
-                let cache: Object = match globals.get::<_, Value>("__esm_error_cache") {
-                    Ok(v) if v.is_object() => v.into_object().unwrap(),
-                    _ => {
-                        let obj = Object::new(ctx.clone()).map_err(|_| Error::new_loading(path))?;
-                        globals
-                            .set("__esm_error_cache", obj.clone())
-                            .map_err(|_| Error::new_loading(path))?;
-                        obj
-                    }
-                };
-                cache
-                    .set(path, exception.clone())
-                    .map_err(|_| Error::new_loading(path))?;
-
-                Err(ctx.throw(exception))
-            }
-            Err(e) => Err(e),
-        }
+        declare_esm_file_module(ctx, path, fs_path, &source_path, path_to_file_url(path))
     }
 }
 
@@ -8829,14 +8887,15 @@ impl JsState {
         }
 
         let loader = (
-            MockModuleLoader,
-            builtin_loader,
-            crate::modules::module_loader(),
-            crate::builtin::module_loader(),
-            DataUrlLoader,
-            JsonFileLoader,
-            CjsCompatLoader,
-            ImportMetaLoader,
+            (
+                MockModuleLoader,
+                builtin_loader,
+                crate::modules::module_loader(),
+                crate::builtin::module_loader(),
+                DataUrlLoader,
+                StaticRegisteredFileUrlLoader,
+            ),
+            (JsonFileLoader, CjsCompatLoader, ImportMetaLoader),
         );
 
         rt.set_loader(resolver, loader).await;

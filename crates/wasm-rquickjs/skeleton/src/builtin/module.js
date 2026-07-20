@@ -4658,7 +4658,7 @@ function registeredLoaderPathOrUrlReturn(url, preserveFileUrlSuffix) {
     if (!url.startsWith('file://')) return url;
     const path = nodeUrl.fileURLToPath(url);
     if (!preserveFileUrlSuffix) return path;
-    if (/[?#]/.test(path)) return path;
+    if (/[?#]/.test(path)) return url;
     const suffixStart = url.search(/[?#]/);
     return suffixStart < 0 ? path : path + url.slice(suffixStart);
 }

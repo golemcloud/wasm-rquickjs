@@ -1466,12 +1466,13 @@ mod tests {
     #[test]
     fn registered_loader_path_or_url_returns_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = include_str!("../skeleton/src/internal.rs");
 
         assert!(
             module_js.contains(
-                "function registeredLoaderPathOrUrlReturn(url, preserveFileUrlSuffix) { url = String(url); if (!url.startsWith('file://')) return url; const path = nodeUrl.fileURLToPath(url); if (!preserveFileUrlSuffix) return path; if (/[?#]/.test(path)) return path; const suffixStart = url.search(/[?#]/); return suffixStart < 0 ? path : path + url.slice(suffixStart); }"
+                "function registeredLoaderPathOrUrlReturn(url, preserveFileUrlSuffix) { url = String(url); if (!url.startsWith('file://')) return url; const path = nodeUrl.fileURLToPath(url); if (!preserveFileUrlSuffix) return path; if (/[?#]/.test(path)) return url; const suffixStart = url.search(/[?#]/); return suffixStart < 0 ? path : path + url.slice(suffixStart); }"
             ),
-            "registered-loader URL/path return conversion must stay centralized and expose an explicit static file-URL suffix preservation mode without changing path-shaped resolver returns"
+            "registered-loader URL/path return conversion must stay centralized and preserve static file URL identity when decoded path delimiters would make a path-shaped return ambiguous"
         );
         assert_eq!(
             module_js
@@ -1485,6 +1486,22 @@ mod tests {
                 "if (String(loaded.url).startsWith('node:')) return String(loaded.url).slice(5);"
             ),
             "registered-loader require.resolve must preserve Node's bare builtin return shape"
+        );
+        assert!(
+            internal_rs.contains("const STATIC_REGISTERED_FILE_URL_PREFIX: &str")
+                && internal_rs.contains("fn static_registered_file_url_id(url: &str) -> String")
+                && internal_rs
+                    .contains("fn static_registered_file_url_from_id(id: &str) -> Option<String>")
+                && internal_rs.contains(".filter(|url| url.starts_with(\"file://\"))")
+                && internal_rs.contains("struct StaticRegisteredFileUrlLoader;")
+                && internal_rs.contains("static_registered_file_url_from_id(base)")
+                && internal_rs.contains("static_registered_file_url_id(&resolved)"),
+            "static registered-loader file URL returns must keep an internal identity that preserves original file URL parents"
+        );
+        assert!(
+            internal_rs.contains("StaticRegisteredFileUrlLoader")
+                && internal_rs.contains("(JsonFileLoader, CjsCompatLoader, ImportMetaLoader)"),
+            "static registered-loader file URL loader must stay installed without exceeding rquickjs loader tuple arity"
         );
 
         let static_start = module_js

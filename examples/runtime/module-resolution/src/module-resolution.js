@@ -1558,6 +1558,17 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/from-data-parent.mjs`, 'export default "should-not-resolve";');
         fs.writeFileSync(`${root}/child-query.mjs`, 'import value from "./child-grandchild.mjs"; export default value;');
         fs.writeFileSync(`${root}/child-grandchild.mjs`, 'export default "child-grandchild";');
+        const childLiteralUrl = `${pathToFileURL(`${root}/child?literal.mjs`).href}?cache#frag`;
+        const grandLiteralUrl = `${pathToFileURL(`${root}/grand#literal.mjs`).href}?v=1#h`;
+        fs.writeFileSync(`${root}/literal-relative.mjs`, 'export default "literal-relative";');
+        fs.writeFileSync(`${root}/child?literal.mjs`, [
+            `if (import.meta.url !== ${JSON.stringify(childLiteralUrl)}) throw new Error("literal import.meta.url mismatch: " + import.meta.url);`,
+            `if (import.meta.filename !== ${JSON.stringify(`${root}/child?literal.mjs`)}) throw new Error("literal import.meta.filename mismatch: " + import.meta.filename);`,
+            'import relative from "./literal-relative.mjs";',
+            'import value from "virtual:static-grand-literal";',
+            'export default [relative, value];',
+        ].join('\n'));
+        fs.writeFileSync(`${root}/grand#literal.mjs`, 'export default "literal-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
             '  if (specifier.startsWith("/")) throw new Error("static loader received absolute path: " + specifier);',
@@ -1572,6 +1583,20 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
             '      throw new Error("static child graph parent URL did not preserve query/hash: " + context.parentURL);',
             '    }',
             '    globalThis.__static_loader_child_query_seen = context.parentURL;',
+            '  }',
+            '  if (specifier === "virtual:static-child-literal") {',
+            `    return { shortCircuit: true, url: ${JSON.stringify(childLiteralUrl)}, format: "module" };`,
+            '  }',
+            '  if (specifier === "virtual:static-grand-literal") {',
+            `    if (context.parentURL !== ${JSON.stringify(childLiteralUrl)}) {`,
+            '      throw new Error("static child literal parent URL did not preserve query/hash: " + context.parentURL);',
+            '    }',
+            `    return { shortCircuit: true, url: ${JSON.stringify(grandLiteralUrl)}, format: "module" };`,
+            '  }',
+            '  if (specifier === "./literal-relative.mjs") {',
+            `    if (context.parentURL !== ${JSON.stringify(childLiteralUrl)}) {`,
+            '      throw new Error("static literal relative parent URL did not preserve query/hash: " + context.parentURL);',
+            '    }',
             '  }',
             '  if (specifier === "virtual:static-condition") {',
             '    return next("static-condition-pkg", { ...context, conditions: ["customStatic"] });',
@@ -1617,6 +1642,12 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         assert.strictEqual(
             globalThis.__static_loader_child_query_seen,
             `${pathToFileURL(`${root}/child-query.mjs`).href}?cache#frag`,
+        );
+        assert.deepStrictEqual(
+            (await import('data:text/javascript,' + encodeURIComponent(
+                'import value from "virtual:static-child-literal"; export default value;',
+            ))).default,
+            ['literal-relative', 'literal-grandchild'],
         );
         assert.strictEqual(
             globalThis.__wasm_rquickjs_resolve_static_registered_loader(
