@@ -907,7 +907,6 @@ function resolvePackageExportsEntry(parts, packageDir, pkg, conditions) {
             parts.name,
             parts.subpath,
             conditions || cjsPackageConditions(),
-            '',
         );
     } catch (err) {
         if (err && err.code === 'ERR_MODULE_NOT_FOUND') {

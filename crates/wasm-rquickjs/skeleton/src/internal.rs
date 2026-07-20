@@ -5446,7 +5446,6 @@ fn cjs_resolve_package_exports<'js>(
     package_name: String,
     subpath: String,
     conditions: rquickjs::Array<'js>,
-    importer: String,
 ) -> rquickjs::Result<Option<Object<'js>>> {
     let package_dir = std::path::PathBuf::from(package_dir);
     let pkg_path = package_dir.join("package.json");
@@ -5473,18 +5472,13 @@ fn cjs_resolve_package_exports<'js>(
     let condition_vec = package_conditions_from_js_array(&conditions);
     let mut warnings = Vec::new();
     let mut resolution = cjs_analysis_resolution_context(&condition_vec, &mut warnings);
-    let importer = if importer.is_empty() {
-        None
-    } else {
-        Some(importer.as_str())
-    };
     let result = NodeModulesResolver::resolve_package_exports(
         &package_name,
         &package_dir,
         exports,
         &subpath,
         &mut resolution,
-        importer,
+        None,
     );
     emit_node_package_deprecation_warnings(&ctx, &warnings)?;
     match result {

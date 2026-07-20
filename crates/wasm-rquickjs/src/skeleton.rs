@@ -462,6 +462,7 @@ mod tests {
         assert!(
             resolve_package_exports_entry.contains("__wasm_rquickjs_cjs_resolve_package_exports(")
                 && resolve_package_exports_entry.contains("conditions || cjsPackageConditions(),")
+                && !resolve_package_exports_entry.contains("'',")
                 && !resolve_package_exports_entry
                     .contains("Array.from(conditions || cjsPackageConditions())")
                 && resolve_package_exports_entry
@@ -510,8 +511,9 @@ mod tests {
             internal_rs.contains("fn cjs_resolve_package_exports<'js>(")
                 && internal_rs.contains("\"__wasm_rquickjs_cjs_resolve_package_exports\"")
                 && internal_rs.contains("NodePackageResolveMode::CjsAnalysis")
-                && internal_rs.contains("NodeModulesResolver::resolve_package_exports("),
-            "Rust package exports bridge must own CJS package-map resolution"
+                && internal_rs.contains("NodeModulesResolver::resolve_package_exports(")
+                && internal_rs.contains("&mut resolution, None,"),
+            "Rust package exports bridge must own CJS package-map resolution without a dead importer parameter"
         );
     }
 
