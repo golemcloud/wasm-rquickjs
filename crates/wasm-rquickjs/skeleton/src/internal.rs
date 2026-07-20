@@ -2974,22 +2974,14 @@ impl Resolver for CjsEvalResolver {
             .map_err(|_| Error::new_resolving(base, name))?;
 
         let module_dir = std::path::Path::new(&dir_str);
-        let resolved = module_dir.join(name);
-        let normalized = Self::normalize_path(&resolved);
-
-        let candidates = [
-            normalized.clone(),
-            format!("{}.js", normalized),
-            format!("{}.mjs", normalized),
-        ];
-
-        for candidate in &candidates {
-            if std::path::Path::new(candidate).is_file() {
-                return Ok(candidate.clone());
-            }
-        }
-
-        Err(Error::new_resolving(base, name))
+        NodeFileResolver::resolve_candidate_with_extensions(
+            module_dir.join(name),
+            "",
+            true,
+            &["js", "mjs"],
+            false,
+        )
+        .ok_or_else(|| Error::new_resolving(base, name))
     }
 }
 
@@ -3115,24 +3107,67 @@ impl NodeFileResolver {
         suffix: &str,
         preserve_symlinks: bool,
     ) -> Option<String> {
+        Self::resolve_candidate_with_extensions(
+            candidate,
+            suffix,
+            preserve_symlinks,
+            &["js", "mjs", "json"],
+            true,
+        )
+    }
+
+    fn resolve_candidate_with_extensions(
+        candidate: std::path::PathBuf,
+        suffix: &str,
+        preserve_symlinks: bool,
+        extensions: &[&str],
+        use_module_resolution_path: bool,
+    ) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
-        if Self::module_resolution_is_file(&normalized) {
-            let identity = Self::module_identity_path_for_existing_file(&normalized, preserve_symlinks);
+        if Self::candidate_is_file(&normalized, use_module_resolution_path) {
+            let identity = Self::candidate_identity(
+                &normalized,
+                preserve_symlinks,
+                use_module_resolution_path,
+            );
             return Some(format!("{identity}{suffix}"));
         }
 
         if std::path::Path::new(&normalized).extension().is_none() {
-            for ext in ["js", "mjs", "json"] {
+            for ext in extensions {
                 let with_ext = format!("{}.{}", normalized, ext);
-                if Self::module_resolution_is_file(&with_ext) {
-                    let identity =
-                        Self::module_identity_path_for_existing_file(&with_ext, preserve_symlinks);
+                if Self::candidate_is_file(&with_ext, use_module_resolution_path) {
+                    let identity = Self::candidate_identity(
+                        &with_ext,
+                        preserve_symlinks,
+                        use_module_resolution_path,
+                    );
                     return Some(format!("{identity}{suffix}"));
                 }
             }
         }
 
         None
+    }
+
+    fn candidate_is_file(normalized: &str, use_module_resolution_path: bool) -> bool {
+        if use_module_resolution_path {
+            Self::module_resolution_is_file(normalized)
+        } else {
+            std::path::Path::new(normalized).is_file()
+        }
+    }
+
+    fn candidate_identity(
+        normalized: &str,
+        preserve_symlinks: bool,
+        use_module_resolution_path: bool,
+    ) -> String {
+        if use_module_resolution_path {
+            Self::module_identity_path_for_existing_file(normalized, preserve_symlinks)
+        } else {
+            normalized.to_string()
+        }
     }
 
     fn module_url_for_encoded_path(path: &str, suffix: &str) -> String {

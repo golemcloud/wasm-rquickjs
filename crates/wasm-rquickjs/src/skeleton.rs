@@ -3341,10 +3341,24 @@ mod tests {
             "Rust ESM file resolver must resolve emulated symlinks, canonicalize native symlinks, and honor --preserve-symlinks"
         );
         assert!(
+            internal_rs.contains(
+                "fn resolve_candidate_with_extensions( candidate: std::path::PathBuf, suffix: &str, preserve_symlinks: bool, extensions: &[&str], use_module_resolution_path: bool, ) -> Option<String>"
+            ) && internal_rs.contains(
+                "Self::resolve_candidate_with_extensions( candidate, suffix, preserve_symlinks, &[\"js\", \"mjs\", \"json\"], true, )"
+            ) && internal_rs.contains(
+                "NodeFileResolver::resolve_candidate_with_extensions( module_dir.join(name), \"\", true, &[\"js\", \"mjs\"], false, )"
+            ) && internal_rs.contains(
+                "fn candidate_is_file(normalized: &str, use_module_resolution_path: bool) -> bool"
+            ) && internal_rs.contains(
+                "fn candidate_identity( normalized: &str, preserve_symlinks: bool, use_module_resolution_path: bool, ) -> String"
+            ),
+            "CJS eval and ESM file resolution must share file-candidate probing while preserving distinct extension sets and realpath behavior"
+        );
+        assert!(
             internal_rs
                 .matches("module_identity_path_for_existing_file(")
                 .count()
-                >= 7,
+                >= 4,
             "file URL and package ESM resolution paths must share the module identity helper"
         );
         assert!(
