@@ -1486,8 +1486,10 @@ mod tests {
                 && module_js.contains("if (id.startsWith('node:')) { return builtinModuleMap[id] !== undefined ? id : undefined; }")
                 && module_js.contains("if (id.startsWith('internal/') || schemelessBlockList.has(id)) { return undefined; }")
                 && module_js.contains("return builtinModuleMap[id] !== undefined ? 'node:' + id : undefined;")
+                && module_js.contains("function builtinModuleForSpecifier(id)")
+                && module_js.contains("const resolved = builtinResolveSpecifier(id); if (resolved !== undefined) return builtinModuleMap[resolved]; return undefined;")
                 && module_js.contains("function requireBuiltinModule(id)")
-                && module_js.contains("const resolved = builtinResolveSpecifier(id); if (resolved !== undefined) return builtinModuleMap[resolved];")
+                && module_js.contains("const builtin = builtinModuleForSpecifier(id); if (builtin !== undefined) return builtin;")
                 && module_js.contains("err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';")
                 && module_js.contains("globalThis.__wasm_rquickjs_import_meta_resolve_builtin = builtinResolveSpecifier;")
                 && module_js.contains("builtinModuleMap['node:sqlite'] = sqliteCjs;")
@@ -1978,6 +1980,28 @@ mod tests {
                     .contains("schemelessBlockList.has(id) ? undefined : builtinModuleMap[id]")
                 && local_require_after_cache.contains("const builtin = requireBuiltinModule(id);"),
             "ordinary CJS require must share builtin classification while preserving cache shadowing for bare builtins"
+        );
+        assert!(
+            local_require.contains(
+                "if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);"
+            ) && !local_require.contains(
+                "if (importsResolved.builtin) return builtinModuleMap[importsResolved.builtin];"
+            ),
+            "CJS package imports resolving to builtins must share require builtin loading"
+        );
+
+        let loader_require_start = module_js
+            .find("function loaderRequire(id) {")
+            .expect("loader-created CJS require function must exist");
+        let loader_require_end = module_js[loader_require_start..]
+            .find("loaderRequire.resolve = function resolve(id, options)")
+            .expect("loader-created CJS require must precede require.resolve")
+            + loader_require_start;
+        let loader_require = &module_js[loader_require_start..loader_require_end];
+        assert!(
+            loader_require.contains("const builtin = builtinModuleForSpecifier(id);")
+                && !loader_require.contains("const builtin = builtinModuleMap[id];"),
+            "loader-created CJS require builtin returns must share builtin lookup policy"
         );
     }
 

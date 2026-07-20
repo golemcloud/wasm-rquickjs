@@ -560,9 +560,15 @@ function isBuiltinResolveTarget(id) {
     return builtinResolveSpecifier(id) !== undefined;
 }
 
-function requireBuiltinModule(id) {
+function builtinModuleForSpecifier(id) {
     const resolved = builtinResolveSpecifier(id);
     if (resolved !== undefined) return builtinModuleMap[resolved];
+    return undefined;
+}
+
+function requireBuiltinModule(id) {
+    const builtin = builtinModuleForSpecifier(id);
+    if (builtin !== undefined) return builtin;
     if (typeof id === 'string' && id.startsWith('node:')) {
         const err = new Error('No such built-in module: ' + id);
         err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
@@ -4983,7 +4989,7 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
             if (loaded) {
                 if (loaded.format === 'builtin' && loaded.url) {
                     const id = String(loaded.url).startsWith('node:') ? String(loaded.url) : 'node:' + String(loaded.url);
-                    const builtin = builtinModuleMap[id];
+                    const builtin = builtinModuleForSpecifier(id);
                     if (builtin !== undefined) return builtin;
                 }
                 if (loaded.format === 'commonjs' && loaded.source !== undefined) {
@@ -5258,7 +5264,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
 
         if (id.startsWith('#')) {
             const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths);
-            if (importsResolved.builtin) return builtinModuleMap[importsResolved.builtin];
+            if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
             const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
             return mod.exports;
         }
