@@ -3342,15 +3342,31 @@ mod tests {
         );
         assert!(
             internal_rs.contains(
-                "fn resolve_candidate_with_extensions( candidate: std::path::PathBuf, suffix: &str, preserve_symlinks: bool, extensions: &[&str], use_module_resolution_path: bool, ) -> Option<String>"
+                "enum FileCandidateSemantics { ModuleResolution, DirectFilesystem, }"
             ) && internal_rs.contains(
-                "Self::resolve_candidate_with_extensions( candidate, suffix, preserve_symlinks, &[\"js\", \"mjs\", \"json\"], true, )"
+                "semantics: FileCandidateSemantics"
             ) && internal_rs.contains(
-                "NodeFileResolver::resolve_candidate_with_extensions( module_dir.join(name), \"\", true, &[\"js\", \"mjs\"], false, )"
+                "FileCandidateSemantics::ModuleResolution => Self::module_resolution_is_file(normalized)"
             ) && internal_rs.contains(
-                "fn candidate_is_file(normalized: &str, use_module_resolution_path: bool) -> bool"
+                "FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file()"
             ) && internal_rs.contains(
-                "fn candidate_identity( normalized: &str, preserve_symlinks: bool, use_module_resolution_path: bool, ) -> String"
+                "FileCandidateSemantics::ModuleResolution => { Self::module_identity_path_for_existing_file(normalized, preserve_symlinks) }"
+            ) && internal_rs.contains(
+                "FileCandidateSemantics::DirectFilesystem => normalized.to_string()"
+            ),
+            "file-candidate probing must spell out whether the caller wants module-resolution realpath semantics or direct filesystem semantics"
+        );
+        assert!(
+            internal_rs.contains(
+                "fn resolve_candidate_with_extensions( candidate: std::path::PathBuf, suffix: &str, preserve_symlinks: bool, extensions: &[&str], semantics: FileCandidateSemantics, ) -> Option<String>"
+            ) && internal_rs.contains(
+                "Self::resolve_candidate_with_extensions( candidate, suffix, preserve_symlinks, &[\"js\", \"mjs\", \"json\"], FileCandidateSemantics::ModuleResolution, )"
+            ) && internal_rs.contains(
+                "NodeFileResolver::resolve_candidate_with_extensions( module_dir.join(name), \"\", true, &[\"js\", \"mjs\"], FileCandidateSemantics::DirectFilesystem, )"
+            ) && internal_rs.contains(
+                "fn candidate_is_file(normalized: &str, semantics: FileCandidateSemantics) -> bool"
+            ) && internal_rs.contains(
+                "fn candidate_identity( normalized: &str, preserve_symlinks: bool, semantics: FileCandidateSemantics, ) -> String"
             ),
             "CJS eval and ESM file resolution must share file-candidate probing while preserving distinct extension sets and realpath behavior"
         );

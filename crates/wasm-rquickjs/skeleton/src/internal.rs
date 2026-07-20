@@ -2979,7 +2979,7 @@ impl Resolver for CjsEvalResolver {
             "",
             true,
             &["js", "mjs"],
-            false,
+            FileCandidateSemantics::DirectFilesystem,
         )
         .ok_or_else(|| Error::new_resolving(base, name))
     }
@@ -2992,6 +2992,12 @@ impl Resolver for CjsEvalResolver {
 /// needs Node-style filesystem handling for absolute paths and paths relative
 /// to the referrer module. `rquickjs::FileResolver` is kept as a fallback, but
 /// it does not reliably accept already-absolute guest paths in this WASI setup.
+#[derive(Clone, Copy)]
+enum FileCandidateSemantics {
+    ModuleResolution,
+    DirectFilesystem,
+}
+
 struct NodeFileResolver;
 
 impl NodeFileResolver {
@@ -3112,7 +3118,7 @@ impl NodeFileResolver {
             suffix,
             preserve_symlinks,
             &["js", "mjs", "json"],
-            true,
+            FileCandidateSemantics::ModuleResolution,
         )
     }
 
@@ -3121,27 +3127,19 @@ impl NodeFileResolver {
         suffix: &str,
         preserve_symlinks: bool,
         extensions: &[&str],
-        use_module_resolution_path: bool,
+        semantics: FileCandidateSemantics,
     ) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
-        if Self::candidate_is_file(&normalized, use_module_resolution_path) {
-            let identity = Self::candidate_identity(
-                &normalized,
-                preserve_symlinks,
-                use_module_resolution_path,
-            );
+        if Self::candidate_is_file(&normalized, semantics) {
+            let identity = Self::candidate_identity(&normalized, preserve_symlinks, semantics);
             return Some(format!("{identity}{suffix}"));
         }
 
         if std::path::Path::new(&normalized).extension().is_none() {
             for ext in extensions {
                 let with_ext = format!("{}.{}", normalized, ext);
-                if Self::candidate_is_file(&with_ext, use_module_resolution_path) {
-                    let identity = Self::candidate_identity(
-                        &with_ext,
-                        preserve_symlinks,
-                        use_module_resolution_path,
-                    );
+                if Self::candidate_is_file(&with_ext, semantics) {
+                    let identity = Self::candidate_identity(&with_ext, preserve_symlinks, semantics);
                     return Some(format!("{identity}{suffix}"));
                 }
             }
@@ -3150,23 +3148,23 @@ impl NodeFileResolver {
         None
     }
 
-    fn candidate_is_file(normalized: &str, use_module_resolution_path: bool) -> bool {
-        if use_module_resolution_path {
-            Self::module_resolution_is_file(normalized)
-        } else {
-            std::path::Path::new(normalized).is_file()
+    fn candidate_is_file(normalized: &str, semantics: FileCandidateSemantics) -> bool {
+        match semantics {
+            FileCandidateSemantics::ModuleResolution => Self::module_resolution_is_file(normalized),
+            FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
         }
     }
 
     fn candidate_identity(
         normalized: &str,
         preserve_symlinks: bool,
-        use_module_resolution_path: bool,
+        semantics: FileCandidateSemantics,
     ) -> String {
-        if use_module_resolution_path {
-            Self::module_identity_path_for_existing_file(normalized, preserve_symlinks)
-        } else {
-            normalized.to_string()
+        match semantics {
+            FileCandidateSemantics::ModuleResolution => {
+                Self::module_identity_path_for_existing_file(normalized, preserve_symlinks)
+            }
+            FileCandidateSemantics::DirectFilesystem => normalized.to_string(),
         }
     }
 
