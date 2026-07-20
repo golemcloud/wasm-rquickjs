@@ -370,7 +370,7 @@ fn json_module_source(source: &str, cjs_cache: Option<JsonModuleCjsCache<'_>>) -
     let escaped = DataUrlLoader::js_string_escape(source);
     if let Some(cjs_cache) = cjs_cache {
         format!(
-            "const __wasm_rquickjs_require = globalThis.__wasm_rquickjs_create_require(\"{}\");\nconst __wasm_rquickjs_filename = \"{}\";\nconst __wasm_rquickjs_cached = __wasm_rquickjs_require.cache[__wasm_rquickjs_filename];\nconst __wasm_rquickjs_value = __wasm_rquickjs_cached ? __wasm_rquickjs_cached.exports : JSON.parse('{escaped}');\nif (!__wasm_rquickjs_cached) __wasm_rquickjs_require.cache[__wasm_rquickjs_filename] = {{ id: __wasm_rquickjs_filename, filename: __wasm_rquickjs_filename, path: \"{}\", exports: __wasm_rquickjs_value, loaded: true, parent: null, children: [], paths: [] }};\nexport default __wasm_rquickjs_value;\n",
+            "const __wasm_rquickjs_require = import.meta.__wasm_rquickjs_global.__wasm_rquickjs_create_require(\"{}\");\nconst __wasm_rquickjs_filename = \"{}\";\nconst __wasm_rquickjs_cached = __wasm_rquickjs_require.cache[__wasm_rquickjs_filename];\nconst __wasm_rquickjs_value = __wasm_rquickjs_cached ? __wasm_rquickjs_cached.exports : JSON.parse('{escaped}');\nif (!__wasm_rquickjs_cached) __wasm_rquickjs_require.cache[__wasm_rquickjs_filename] = {{ id: __wasm_rquickjs_filename, filename: __wasm_rquickjs_filename, path: \"{}\", exports: __wasm_rquickjs_value, loaded: true, parent: null, children: [], paths: [] }};\nexport default __wasm_rquickjs_value;\n",
             escape_js_string(cjs_cache.filename),
             escape_js_string(cjs_cache.filename),
             escape_js_string(cjs_cache.dirname)
@@ -9001,7 +9001,8 @@ impl Loader for JsonFileLoader {
             };
             json_module_source(&source, cjs_cache)
         };
-        Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
+        let init = file_import_meta_init(path_to_file_url(path), fs_path.to_string());
+        declare_module_with_import_meta(ctx, path, &module_source, &init)
     }
 }
 

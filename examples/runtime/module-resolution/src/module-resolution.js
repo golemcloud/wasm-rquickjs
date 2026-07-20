@@ -1670,6 +1670,32 @@ export const testEsmJsonUrlCacheKeys = async () => {
     }
 };
 
+export const testEsmJsonImportIgnoresGlobalThisProperty = async () => {
+    try {
+        const root = '/esm-json-global-this-app';
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(`${root}/data.json`, JSON.stringify({ ok: true }));
+
+        const originalGlobalThis = globalThis.globalThis;
+        try {
+            const jsonUrl = pathToFileURL(`${root}/data.json`).href;
+            globalThis.globalThis = {};
+            const mod = (await import('data:text/javascript,' + encodeURIComponent([
+                `export default await import(${JSON.stringify(jsonUrl)}, { with: { type: "json" } });`,
+            ].join('\n')))).default;
+            const require = createRequire(import.meta.url);
+            assert.deepStrictEqual(mod.default, { ok: true });
+            assert.strictEqual(require(`${root}/data.json`), mod.default);
+        } finally {
+            globalThis.globalThis = originalGlobalThis;
+        }
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
     try {
         const root = '/static-loader-absolute-entry-app';

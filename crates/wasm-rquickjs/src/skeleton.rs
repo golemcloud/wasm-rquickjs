@@ -2028,9 +2028,27 @@ mod tests {
             json_loader.contains("json_import_attribute_missing_module_source(path)")
                 && json_loader.contains("Some(JsonModuleCjsCache")
                 && json_loader.contains("json_module_source(&source, cjs_cache)")
+                && json_loader.contains(
+                    "let init = file_import_meta_init(path_to_file_url(path), fs_path.to_string());"
+                )
+                && json_loader
+                    .contains("declare_module_with_import_meta(ctx, path, &module_source, &init)")
                 && !json_loader.contains("make_json_error_module(&source)")
                 && !json_loader.contains("format!(\"export default JSON.parse"),
             "File JSON loading must share JSON source generation while preserving CJS cache interop for suffix-free files"
+        );
+
+        let json_module_source = &internal_rs[internal_rs
+            .find("fn json_module_source")
+            .expect("json_module_source must exist")
+            ..internal_rs
+                .find("impl Loader for DataUrlLoader")
+                .expect("json_module_source must precede DataUrlLoader")];
+        assert!(
+            json_module_source
+                .contains("import.meta.__wasm_rquickjs_global.__wasm_rquickjs_create_require(")
+                && !json_module_source.contains("globalThis.__wasm_rquickjs_create_require"),
+            "file JSON cache interop source must use host-owned import.meta global capture, not mutable globalThis or loader-visible static imports"
         );
     }
 
