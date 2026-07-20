@@ -173,6 +173,16 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(import.meta.resolve('primitive-exports-number/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-number/`).href}`);
     assert.strictEqual(import.meta.resolve('primitive-exports-null/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-null/`).href}`);
     assert.throws(() => import.meta.resolve('does-not-exist', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });
+    const realGlobalThis = globalThis;
+    const originalGlobalThisProperty = globalThis.globalThis;
+    try {
+        globalThis.globalThis = {};
+        assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
+        assert.strictEqual(import.meta.resolve('./local.mjs', entryUrl), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
+        assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
+    } finally {
+        realGlobalThis.globalThis = originalGlobalThisProperty;
+    }
     assert.throws(() => import.meta.resolve('./relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
     assert.throws(() => import.meta.resolve('../relative.mjs', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });
     assert.throws(() => import.meta.resolve('does-not-exist', 'data:text/javascript,'), { code: 'ERR_UNSUPPORTED_RESOLVE_REQUEST' });

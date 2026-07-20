@@ -547,12 +547,13 @@ pub fn wire_builtins() -> String {
     result
 }
 
-const IMPORT_META_RESOLVE_JS: &str = r#"function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
+const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_meta_resolve_global = globalThis;
+function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
   baseUrl = String(baseUrl);
   specifier = String(specifier);
   if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(specifier)) return specifier;
-  var builtinResolved = typeof globalThis.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
-    ? globalThis.__wasm_rquickjs_import_meta_resolve_builtin(specifier)
+  var builtinResolved = typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
+    ? __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin(specifier)
     : undefined;
   if (builtinResolved !== undefined) return builtinResolved;
   function codedError(message, code, typeError) {
@@ -585,8 +586,8 @@ const IMPORT_META_RESOLVE_JS: &str = r#"function __wasm_rquickjs_import_meta_res
   }
   if (specifier.startsWith('/')) {
     ensureSupportedBase();
-    if (typeof globalThis.__wasm_rquickjs_import_meta_resolve_path === 'function') {
-      var pathResolved = globalThis.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
+    if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path === 'function') {
+      var pathResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
       if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
     }
     var parts = splitSuffix(specifier);
@@ -595,8 +596,8 @@ const IMPORT_META_RESOLVE_JS: &str = r#"function __wasm_rquickjs_import_meta_res
   }
   if (specifier.startsWith('.')) {
     ensureSupportedBase();
-    if (typeof globalThis.__wasm_rquickjs_import_meta_resolve_path === 'function') {
-      var pathResolved = globalThis.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
+    if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path === 'function') {
+      var pathResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
       if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
     }
     var base = baseUrl;
@@ -608,8 +609,8 @@ const IMPORT_META_RESOLVE_JS: &str = r#"function __wasm_rquickjs_import_meta_res
     return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
   }
   ensureSupportedBase();
-  if (typeof globalThis.__wasm_rquickjs_import_meta_resolve_package === 'function') {
-    var packageResolved = globalThis.__wasm_rquickjs_import_meta_resolve_package(baseUrl, specifier);
+  if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package === 'function') {
+    var packageResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package(baseUrl, specifier);
     if (packageResolved !== undefined && packageResolved !== null) return packageResolved;
   }
   if (specifier.endsWith('/') && baseUrl.startsWith('file://')) {

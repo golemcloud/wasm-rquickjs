@@ -1861,7 +1861,16 @@ mod tests {
             .expect("import.meta.resolve shim must exist");
         let import_meta_resolve = &builtin_mod_rs[resolve_start..];
         assert!(
-            import_meta_resolve.contains("__wasm_rquickjs_import_meta_resolve_builtin(specifier)")
+            import_meta_resolve.contains("const __wasm_rquickjs_import_meta_resolve_global = globalThis;")
+                && import_meta_resolve.contains(
+                    "__wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin(specifier)"
+                )
+                && import_meta_resolve.contains(
+                    "__wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier)"
+                )
+                && import_meta_resolve.contains(
+                    "__wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package(baseUrl, specifier)"
+                )
                 && import_meta_resolve.contains(
                     "function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier)"
                 )
@@ -1877,6 +1886,8 @@ mod tests {
                 && !import_meta_resolve.contains(":\\/\\/")
                 && !import_meta_resolve
                     .contains("globalThis.__wasm_rquickjs_import_meta_resolve = function")
+                && !import_meta_resolve
+                    .contains("typeof globalThis.__wasm_rquickjs_import_meta_resolve_")
                 && !import_meta_resolve.contains("NODE_BUILTIN_NAMES")
                 && !import_meta_resolve.contains("NODE_BUILTINS"),
             "import.meta.resolve must be non-replaceable and must not maintain a separate hard-coded builtin list"
