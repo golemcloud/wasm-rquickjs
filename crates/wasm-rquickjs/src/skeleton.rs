@@ -1464,6 +1464,33 @@ mod tests {
     }
 
     #[test]
+    fn import_meta_resolve_uses_shared_builtin_policy() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let builtin_mod_rs = include_str!("../skeleton/src/builtin/mod.rs");
+
+        assert!(
+            module_js.contains(
+                "globalThis.__wasm_rquickjs_import_meta_resolve_builtin = function importMetaResolveBuiltin(specifier)"
+            ) && module_js.contains("return builtinModuleMap[specifier] !== undefined ? specifier : undefined;")
+                && module_js.contains("publicBuiltinWithoutSchemeSet.has(specifier) ? 'node:' + specifier : undefined")
+                && module_js.contains("builtinModuleMap['node:sqlite'] = sqliteCjs;")
+                && module_js.contains("const schemelessBlockList = setFromArray(['test', 'sqlite']);"),
+            "import.meta.resolve builtin normalization must use the shared builtin map for node:-only modules and the shared bare-builtin set for schemeless modules"
+        );
+
+        let resolve_start = builtin_mod_rs
+            .find("const IMPORT_META_RESOLVE_JS")
+            .expect("import.meta.resolve shim must exist");
+        let import_meta_resolve = &builtin_mod_rs[resolve_start..];
+        assert!(
+            import_meta_resolve.contains("__wasm_rquickjs_import_meta_resolve_builtin(specifier)")
+                && !import_meta_resolve.contains("NODE_BUILTIN_NAMES")
+                && !import_meta_resolve.contains("NODE_BUILTINS"),
+            "import.meta.resolve must not maintain a separate hard-coded builtin list"
+        );
+    }
+
+    #[test]
     fn registered_loader_path_or_url_returns_are_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = include_str!("../skeleton/src/internal.rs");

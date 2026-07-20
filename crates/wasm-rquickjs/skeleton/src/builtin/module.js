@@ -570,6 +570,14 @@ function isBuiltinResolveTarget(id) {
     return publicBuiltinIdSet.has(id);
 }
 
+globalThis.__wasm_rquickjs_import_meta_resolve_builtin = function importMetaResolveBuiltin(specifier) {
+    if (typeof specifier !== 'string') return undefined;
+    if (specifier.startsWith('node:')) {
+        return builtinModuleMap[specifier] !== undefined ? specifier : undefined;
+    }
+    return publicBuiltinWithoutSchemeSet.has(specifier) ? 'node:' + specifier : undefined;
+};
+
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
 

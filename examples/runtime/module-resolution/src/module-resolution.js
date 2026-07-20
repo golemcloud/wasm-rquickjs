@@ -73,6 +73,10 @@ export const testImportMetaResolve = async () => {
     assert.strictEqual(import.meta.resolve('./local.mjs', `${pathToFileURL(`${appDir}/`).href}`), `${pathToFileURL(`${appDir}/local.mjs`).href}`);
     assert.strictEqual(import.meta.resolve('node:fs', entryUrl), 'node:fs');
     assert.strictEqual(import.meta.resolve('fs', entryUrl), 'node:fs');
+    assert.strictEqual(import.meta.resolve('node:test', entryUrl), 'node:test');
+    assert.strictEqual(import.meta.resolve('node:sqlite', entryUrl), 'node:sqlite');
+    assert.throws(() => import.meta.resolve('test', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });
+    assert.throws(() => import.meta.resolve('sqlite', entryUrl), { code: 'ERR_MODULE_NOT_FOUND' });
     assert.strictEqual(import.meta.resolve('pkg-dir/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
     assert.strictEqual(import.meta.resolve('pkg-dir/', `${pathToFileURL(`${appDir}/`).href}`), `${pathToFileURL(`${appDir}/node_modules/pkg-dir/`).href}`);
     assert.strictEqual(import.meta.resolve('primitive-exports-false/', entryUrl), `${pathToFileURL(`${appDir}/node_modules/primitive-exports-false/`).href}`);
