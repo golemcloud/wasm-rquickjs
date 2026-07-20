@@ -2687,7 +2687,14 @@ impl Loader for StaticRegisteredFileUrlLoader {
         let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
         let source_path =
             crate::builtin::realpath_for_module_resolution(&fs_path).unwrap_or_else(|| fs_path.clone());
-        declare_esm_file_module(ctx, path, &fs_path, &source_path, url)
+        declare_esm_file_module(
+            ctx,
+            path,
+            &fs_path,
+            &source_path,
+            url,
+            EsmFilePreflightMode::RequireOnly,
+        )
     }
 }
 
@@ -7631,20 +7638,8 @@ impl Loader for CjsCompatLoader {
         };
 
         let fs_abs_path = ensure_absolute_path(fs_path);
-        let module_source = process_static_import_attrs(&source, path);
-        let filename = Some(fs_abs_path.clone());
         let url = path_to_file_url(path);
-        let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &url);
         let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
-
-        let init = ImportMetaInit {
-            url,
-            filename,
-            dirname: std::path::Path::new(&fs_abs_path)
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned()),
-            include_resolve: true,
-        };
 
         let package_scope = if fs_abs_path.ends_with(".js") || is_extensionless {
             package_scope_info(&fs_abs_path)
@@ -7660,6 +7655,7 @@ impl Loader for CjsCompatLoader {
                 && package_scope
                     .as_ref()
                     .is_some_and(|scope| scope.is_node_modules_package));
+        let cjs_url = url.clone();
         let has_esm_syntax = force_module
             || source_looks_like_esm(&source)
             || has_cjs_wrapper_lexical_redeclaration(&source);
@@ -7669,21 +7665,12 @@ impl Loader for CjsCompatLoader {
             || is_commonjs_package_js
             || (!is_module_package_js && !has_esm_syntax);
         if !is_cjs {
-            let package_type_module_js = fs_path.ends_with(".js") && is_module_package_js;
-            let preflight_error_source = if package_type_module_js {
-                esm_preflight_error_module_source(&source, true, raw_cjs_global_messages)
+            let preflight_mode = if fs_path.ends_with(".js") && is_module_package_js {
+                EsmFilePreflightMode::PackageTypeModuleJs
             } else {
-                esm_require_global_preflight_error_module_source(&source, raw_cjs_global_messages)
+                EsmFilePreflightMode::RequireOnly
             };
-            if let Some(error_source) = preflight_error_source {
-                return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
-            }
-            if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, &source) {
-                return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
-            }
-            // Treat as ESM — inject import.meta prologue (handles shebangs)
-            let injected = inject_import_meta_prologue(&init, &module_source);
-            return Module::declare(ctx.clone(), path, injected.as_bytes().to_vec());
+            return declare_esm_file_module_from_source(ctx, path, fs_path, source, url, preflight_mode);
         }
 
         let cjs_conditions =
@@ -7694,6 +7681,14 @@ impl Loader for CjsCompatLoader {
 
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
+        let init = ImportMetaInit {
+            url: cjs_url,
+            filename: Some(fs_abs_path.clone()),
+            dirname: std::path::Path::new(&fs_abs_path)
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned()),
+            include_resolve: true,
+        };
         let prologue = inject_import_meta_prologue(&init, "");
         let wrapped = format!(
             r#"{}
@@ -8599,14 +8594,36 @@ fn parse_import_meta_main_span(source: &str, pos: usize) -> Option<usize> {
     parse_ident_name(source, i, "main")
 }
 
+#[derive(Clone, Copy)]
+enum EsmFilePreflightMode {
+    RequireOnly,
+    PackageTypeModuleJs,
+}
+
+fn esm_file_preflight_error_module_source(
+    source: &str,
+    mode: EsmFilePreflightMode,
+    raw_cjs_global_messages: bool,
+) -> Option<String> {
+    match mode {
+        EsmFilePreflightMode::RequireOnly => {
+            esm_require_global_preflight_error_module_source(source, raw_cjs_global_messages)
+        }
+        EsmFilePreflightMode::PackageTypeModuleJs => {
+            esm_preflight_error_module_source(source, true, raw_cjs_global_messages)
+        }
+    }
+}
+
 fn declare_esm_file_module<'js>(
     ctx: &Ctx<'js>,
     module_id: &str,
     fs_path: &str,
     source_path: &str,
     url: String,
+    preflight_mode: EsmFilePreflightMode,
 ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-    let mut source = match std::fs::read_to_string(source_path) {
+    let source = match std::fs::read_to_string(source_path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let globals = ctx.globals();
@@ -8618,10 +8635,20 @@ fn declare_esm_file_module<'js>(
         }
         Err(_) => return Err(Error::new_loading(module_id)),
     };
+    declare_esm_file_module_from_source(ctx, module_id, fs_path, source, url, preflight_mode)
+}
 
+fn declare_esm_file_module_from_source<'js>(
+    ctx: &Ctx<'js>,
+    module_id: &str,
+    fs_path: &str,
+    raw_source: String,
+    url: String,
+    preflight_mode: EsmFilePreflightMode,
+) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
     let fs_abs_path = ensure_absolute_path(fs_path);
     let module_abs_path = ensure_absolute_path(module_id);
-    source = process_static_import_attrs(&source, module_id);
+    let source = process_static_import_attrs(&raw_source, module_id);
     let std_path = std::path::Path::new(&fs_abs_path);
     let init = ImportMetaInit {
         url,
@@ -8640,7 +8667,7 @@ fn declare_esm_file_module<'js>(
     }
 
     if let Some(error_source) =
-        esm_require_global_preflight_error_module_source(&source, raw_cjs_global_messages)
+        esm_file_preflight_error_module_source(&source, preflight_mode, raw_cjs_global_messages)
     {
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
@@ -8713,7 +8740,14 @@ impl Loader for ImportMetaLoader {
         }
 
         let source_path = module_source_filesystem_path(path);
-        declare_esm_file_module(ctx, path, fs_path, &source_path, path_to_file_url(path))
+        declare_esm_file_module(
+            ctx,
+            path,
+            fs_path,
+            &source_path,
+            path_to_file_url(path),
+            EsmFilePreflightMode::RequireOnly,
+        )
     }
 }
 

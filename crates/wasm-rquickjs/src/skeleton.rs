@@ -2337,6 +2337,25 @@ mod tests {
                 && !module_js.contains("function getPackageScopeExplicitType("),
             "module-kind package-scope checks must not keep unused parallel wrappers"
         );
+        let cjs_loader_start = internal_rs
+            .find("impl Loader for CjsCompatLoader")
+            .expect("CjsCompatLoader must exist");
+        let cjs_loader_end = internal_rs[cjs_loader_start..]
+            .find("struct ImportMetaInit")
+            .expect("CjsCompatLoader must precede ImportMetaInit")
+            + cjs_loader_start;
+        let cjs_loader = &internal_rs[cjs_loader_start..cjs_loader_end];
+        assert!(
+            internal_rs.contains("enum EsmFilePreflightMode")
+                && internal_rs.contains("fn esm_file_preflight_error_module_source(")
+                && cjs_loader.contains("EsmFilePreflightMode::PackageTypeModuleJs")
+                && cjs_loader.contains("EsmFilePreflightMode::RequireOnly")
+                && cjs_loader.contains(
+                    "return declare_esm_file_module_from_source(ctx, path, fs_path, source, url, preflight_mode);"
+                )
+                && !cjs_loader.contains("let injected = inject_import_meta_prologue(&init, &module_source);"),
+            "CjsCompatLoader must route .js files classified as ESM through the shared filesystem ESM declaration helper while preserving package type-module preflight"
+        );
     }
 
     #[test]
