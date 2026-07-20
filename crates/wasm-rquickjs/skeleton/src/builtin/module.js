@@ -921,6 +921,10 @@ function makeCjsModuleNotFoundFromErrModuleNotFound(err, fallbackId) {
     return cjsErr;
 }
 
+function makeCjsResolutionState() {
+    return { exactFileCache: Object.create(null) };
+}
+
 function resolveExactPackageFile(filename, resolution) {
     if (resolution && Object.prototype.hasOwnProperty.call(resolution.exactFileCache, filename)) {
         const cached = resolution.exactFileCache[filename];
@@ -940,7 +944,7 @@ function resolvePackageFileFromRustResult(resolved, resolution) {
     return resolveExactPackageFile(nodeUrl.fileURLToPath(String(resolved.url)), resolution);
 }
 
-function resolvePackageExportsEntry(parts, packageDir, pkg, conditions) {
+function resolvePackageExportsEntry(parts, packageDir, pkg, conditions, resolution) {
     if (!pkg || !Object.prototype.hasOwnProperty.call(pkg, 'exports')) return undefined;
     if (typeof globalThis.__wasm_rquickjs_cjs_resolve_package_exports !== 'function') {
         throw new Error('Internal CJS package exports resolver is not initialized');
@@ -959,22 +963,22 @@ function resolvePackageExportsEntry(parts, packageDir, pkg, conditions) {
         }
         throw err;
     }
-    resolved = resolvePackageFileFromRustResult(resolved);
+    resolved = resolvePackageFileFromRustResult(resolved, resolution);
     if (!resolved) return undefined;
     resolved.packageDir = packageDir;
     return resolved;
 }
 
-function resolvePackageSelfReference(parts, parentDir, conditions) {
+function resolvePackageSelfReference(parts, parentDir, conditions, resolution) {
     const scope = findPackageScope(parentDir);
     if (!scope || !scope.pkg || scope.pkg.name !== parts.name) return undefined;
-    return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, conditions);
+    return resolvePackageExportsEntry(parts, scope.dir, scope.pkg, conditions, resolution);
 }
 
-function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions) {
+function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions, resolution) {
     const packageJsonEntry = readPackageJson(pkgJsonPath);
     if (packageJsonEntry === null) return null;
-    return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions);
+    return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions, resolution);
 }
 
 function readCjsPackageCandidate(filename, packageDir) {
@@ -1033,7 +1037,7 @@ function findPackageScope(startDir) {
     }
 }
 
-function resolvePackageImports(id, parentDir, conditions) {
+function resolvePackageImports(id, parentDir, conditions, resolution) {
     let resolved;
     try {
         resolved = resolvePackageWithRustBridge(
@@ -1049,21 +1053,22 @@ function resolvePackageImports(id, parentDir, conditions) {
         }
         throw err;
     }
-    const resolvedFile = resolvePackageFileFromRustResult(resolved);
+    const resolvedFile = resolvePackageFileFromRustResult(resolved, resolution);
     if (!resolvedFile) {
         throw makePackageImportNotDefinedError(id);
     }
     return resolvedFile;
 }
 
-function resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths) {
+function resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution) {
+    resolution = resolution || makeCjsResolutionState();
     try {
-        return resolvePackageImports(id, parentDir, cjsPackageConditions());
+        return resolvePackageImports(id, parentDir, cjsPackageConditions(), resolution);
     } catch (err) {
         if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
             throw err;
         }
-        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
         if (nmResolved) return nmResolved;
         if (err.__wasmNoImportsField === true) {
             throw makeModuleNotFoundError(id);
@@ -5267,14 +5272,15 @@ function splitPackageName(id) {
     return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
 }
 
-function resolveFromNodeModules(id, parentDir, parentFilename, conditions, lookupPaths) {
+function resolveFromNodeModules(id, parentDir, parentFilename, conditions, lookupPaths, resolution) {
+    resolution = resolution || makeCjsResolutionState();
     conditions = conditions || cjsPackageConditions();
     const dirs = Array.isArray(lookupPaths) ? lookupPaths : _nodeModulePaths(parentDir);
 
     // Split into package name and subpath for packages with subpath specifiers
     const parts = splitPackageName(id);
 
-    const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions);
+    const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions, resolution);
     if (selfResolved !== undefined) {
         return selfResolved;
     }
@@ -5284,7 +5290,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
         const pkgJsonPath = pathModule.join(pkgDir, 'package.json');
 
         try {
-            const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);
+            const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions, resolution);
             if (exportsResolved !== null) {
                 if (exportsResolved !== undefined) {
                     return exportsResolved;
@@ -5323,6 +5329,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
             throw argErr;
         }
         const isRelative = isRelativeOrAbsoluteSpecifier(id);
+        const resolution = isRelative ? null : makeCjsResolutionState();
         for (let pi = 0; pi < searchPaths.length; pi++) {
             if (typeof searchPaths[pi] !== 'string') {
                 const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
@@ -5341,7 +5348,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
                 }
             } else {
                 // Bare specifier: use node_modules resolution from search path
-                const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename);
+                const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename, undefined, undefined, resolution);
                 if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
             }
         }
@@ -5358,12 +5365,14 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
         }
     }
     if (id.startsWith('#')) {
-        const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths);
+        const resolution = makeCjsResolutionState();
+        const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
         if (importsResolved.builtin) return importsResolved.builtin;
         return toCjsCanonicalFilename(importsResolved.filename, false);
     }
     // node_modules resolution for bare specifiers
-    const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
+    const resolution = makeCjsResolutionState();
+    const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
     if (nmResolved) {
         return toCjsCanonicalFilename(nmResolved.filename, false);
     }
@@ -5444,14 +5453,16 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         }
 
         if (id.startsWith('#')) {
-            const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths);
+            const resolution = makeCjsResolutionState();
+            const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
             if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
             const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
             return mod.exports;
         }
 
         // node_modules resolution for bare specifiers
-        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths);
+        const resolution = makeCjsResolutionState();
+        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
         if (nmResolved) {
             const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
             return mod.exports;
@@ -5654,7 +5665,14 @@ function packageSearchStartDir(resolvedPath, sourceSpecifier) {
 }
 
 function findBarePackageJson(specifier, parentDir, parentFilename) {
-    const resolved = resolveFromNodeModules(specifier, parentDir, parentFilename, cjsPackageConditions());
+    const resolved = resolveFromNodeModules(
+        specifier,
+        parentDir,
+        parentFilename,
+        cjsPackageConditions(),
+        undefined,
+        makeCjsResolutionState(),
+    );
     if (resolved === null) return undefined;
 
     if (typeof resolved.packageDir === 'string' && resolved.packageDir.length > 0) {

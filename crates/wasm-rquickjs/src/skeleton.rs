@@ -352,7 +352,7 @@ mod tests {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
         let function_start = module_js
-            .find("function resolvePackageImports(id, parentDir, conditions)")
+            .find("function resolvePackageImports(id, parentDir, conditions, resolution)")
             .expect("resolvePackageImports function must exist");
         let function_end = module_js[function_start..]
             .find("function resolveCjsPackageImportOrNodeModules")
@@ -365,8 +365,9 @@ mod tests {
                 && resolve_package_imports.contains("'cjs-analysis'")
                 && resolve_package_imports.contains("Internal package resolver is not initialized")
                 && resolve_package_imports.contains("makeCjsModuleNotFoundFromErrModuleNotFound")
-                && resolve_package_imports
-                    .contains("const resolvedFile = resolvePackageFileFromRustResult(resolved);")
+                && resolve_package_imports.contains(
+                    "const resolvedFile = resolvePackageFileFromRustResult(resolved, resolution);"
+                )
                 && resolve_package_imports.contains("return resolvedFile;")
                 && !resolve_package_imports.contains("findPackageScope(")
                 && !resolve_package_imports.contains("findPackageMapTarget(")
@@ -385,14 +386,21 @@ mod tests {
         assert!(
             cjs_package_import_fallback
                 .contains("function resolveCjsPackageImportOrNodeModules(")
-                && cjs_package_import_fallback.contains("resolvePackageImports(id, parentDir, cjsPackageConditions())")
-                && cjs_package_import_fallback.contains("resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths)")
+                && cjs_package_import_fallback.contains("resolvePackageImports(id, parentDir, cjsPackageConditions(), resolution)")
+                && cjs_package_import_fallback.contains("resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution)")
                 && cjs_package_import_fallback.contains("throw makeModuleNotFoundError(id);"),
             "CJS require() and require.resolve() must share package-import fallback behavior"
         );
         assert!(
-            module_js.matches("resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths)").count() == 3,
+            module_js.matches("resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution)").count() == 3,
             "CJS package-import fallback helper should have exactly the definition plus require and require.resolve call sites"
+        );
+        assert!(
+            module_js.contains("function makeCjsResolutionState() { return { exactFileCache: Object.create(null) }; }")
+                && module_js.contains("const resolution = makeCjsResolutionState();")
+                && module_js.contains("function resolveExactPackageFile(filename, resolution)")
+                && module_js.contains("resolution.exactFileCache[filename] = content === null ? null : { filename, content };"),
+            "CJS package-map exact file reads must use a per-resolution cache instead of dead or global state"
         );
         assert!(
             internal_rs.contains("fn try_resolve_package_import_with_context(")
@@ -443,7 +451,7 @@ mod tests {
         );
 
         let cjs_imports_start = module_js
-            .find("function resolvePackageImports(id, parentDir, conditions)")
+            .find("function resolvePackageImports(id, parentDir, conditions, resolution)")
             .expect("resolvePackageImports function must exist");
         let cjs_imports_end = module_js[cjs_imports_start..]
             .find("function resolveCjsPackageImportOrNodeModules")
@@ -495,10 +503,10 @@ mod tests {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
         let function_start = module_js
-            .find("function resolvePackageExportsEntry(parts, packageDir, pkg, conditions)")
+            .find("function resolvePackageExportsEntry(parts, packageDir, pkg, conditions, resolution)")
             .expect("resolvePackageExportsEntry function must exist");
         let function_end = module_js[function_start..]
-            .find("function resolvePackageSelfReference(parts, parentDir, conditions)")
+            .find("function resolvePackageSelfReference(parts, parentDir, conditions, resolution)")
             .expect("resolvePackageExportsEntry must precede resolvePackageSelfReference")
             + function_start;
         let resolve_package_exports_entry = &module_js[function_start..function_end];
@@ -510,7 +518,7 @@ mod tests {
                 && !resolve_package_exports_entry
                     .contains("Array.from(conditions || cjsPackageConditions())")
                 && resolve_package_exports_entry
-                    .contains("resolved = resolvePackageFileFromRustResult(resolved);")
+                    .contains("resolved = resolvePackageFileFromRustResult(resolved, resolution);")
                 && resolve_package_exports_entry
                     .contains("makeCjsModuleNotFoundFromErrModuleNotFound")
                 && !module_js.contains("function resolvePackageExports(")
@@ -520,11 +528,11 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions)"
+                "function readPackageDirectoryForExports(parts, packageDir, pkgJsonPath, conditions, resolution)"
             ) && module_js.contains(
-                "return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions);"
+                "return resolvePackageExportsEntry(parts, packageDir, packageJsonEntry.pkg, conditions, resolution);"
             ) && module_js.contains(
-                "const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions);"
+                "const exportsResolved = readPackageDirectoryForExports(parts, pkgDir, pkgJsonPath, conditions, resolution);"
             ) && module_js.contains("if (exportsResolved !== null) {")
                 && module_js.contains("if (exportsResolved !== undefined) { return exportsResolved; }")
                 && !module_js.contains("exportsResolved:")
@@ -536,7 +544,7 @@ mod tests {
             .find("function findPackageScope(startDir)")
             .expect("findPackageScope function must exist");
         let scope_end = module_js[scope_start..]
-            .find("function resolvePackageImports(id, parentDir, conditions)")
+            .find("function resolvePackageImports(id, parentDir, conditions, resolution)")
             .expect("findPackageScope must precede resolvePackageImports")
             + scope_start;
         let package_scope = &module_js[scope_start..scope_end];
