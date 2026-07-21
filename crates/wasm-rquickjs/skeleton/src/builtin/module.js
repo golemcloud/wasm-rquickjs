@@ -4987,15 +4987,21 @@ function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pat
     return mod;
 }
 
-function loadModule(resolvedFilename, source, parentModule) {
-    const isMainModuleLoad = isMainEntryFilename(resolvedFilename);
-    const filename = toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
+function loadCommonJsTransaction(descriptor) {
+    const resolvedFilename = descriptor.filename;
+    let source = descriptor.source;
+    const parentModule = descriptor.parentModule || null;
+    const isLoaderSource = descriptor.sourceKind === 'loader';
+    const isMainModuleLoad = isLoaderSource ? false : isMainEntryFilename(resolvedFilename);
+    const filename = isLoaderSource ? resolvedFilename : toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
+    const cacheKey = descriptor.cacheKey || filename;
     const dirname = pathModule.dirname(filename);
+    const pathsBase = isLoaderSource && !pathModule.isAbsolute(filename) ? '/' : dirname;
 
     // Check cache
-    if (moduleCache[filename]) {
-        throwIfRequireEsmGraphCycle(filename);
-        const cached = moduleCache[filename];
+    if (moduleCache[cacheKey]) {
+        throwIfRequireEsmGraphCycle(cacheKey);
+        const cached = moduleCache[cacheKey];
         if (cached.__wasmRequireEsmInProgress) {
             const err = new Error('Cannot require() ES Module ' + filename + ' in a cycle.');
             err.code = 'ERR_REQUIRE_CYCLE_MODULE';
@@ -5015,11 +5021,11 @@ function loadModule(resolvedFilename, source, parentModule) {
             globalThis.process.mainModule = mod;
         }
     } else {
-        mod = initializeCjsModuleRecord({}, filename, filename, dirname, parentModule, dirname);
+        mod = initializeCjsModuleRecord({}, filename, filename, dirname, parentModule, pathsBase);
     }
 
     // Cache before executing (handles circular dependencies)
-    moduleCache[filename] = mod;
+    moduleCache[cacheKey] = mod;
     registerSourceMapForCjs(filename, source, mod);
 
     if (parentModule && parentModule.children) {
@@ -5028,6 +5034,22 @@ function loadModule(resolvedFilename, source, parentModule) {
 
     let cjsEsmDefaultSnapshotEligible = false;
 
+    if (isLoaderSource) {
+        try {
+            const loaderRequire = makeLoaderCommonJsRequire(
+                descriptor.sourceUrl || (pathModule.isAbsolute(filename) ? fileUrlForPath(filename) : filename),
+                pathModule.isAbsolute(filename) ? dirname : '/',
+                mod,
+                filename,
+            );
+            mod.require = loaderRequire;
+            compileModuleInto(mod, source, filename, loaderRequire);
+            cjsEsmDefaultSnapshotEligible = true;
+        } catch (err) {
+            discardCjsModuleLoad(cacheKey, parentModule, mod);
+            throw err;
+        }
+    } else {
     // Check for custom extension handler
     const ext = findLongestRegisteredExtension(filename);
     const handler = requireExtensions[ext];
@@ -5036,11 +5058,11 @@ function loadModule(resolvedFilename, source, parentModule) {
             handler(mod, filename);
             cjsEsmDefaultSnapshotEligible = true;
         } catch (err) {
-            discardCjsModuleLoad(filename, parentModule, mod);
+            discardCjsModuleLoad(cacheKey, parentModule, mod);
             throw err;
         }
     } else if (handler === defaultNodeExtensionHandler) {
-        discardCjsModuleLoad(filename, parentModule, mod);
+        discardCjsModuleLoad(cacheKey, parentModule, mod);
         const err = new Error("Native .node modules are not supported in WASM: '" + filename + "'");
         err.code = 'ERR_DLOPEN_FAILED';
         throw err;
@@ -5051,7 +5073,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             }
             mod.exports = JSON.parse(source);
         } catch (e) {
-            discardCjsModuleLoad(filename, parentModule, mod);
+            discardCjsModuleLoad(cacheKey, parentModule, mod);
             const err = new SyntaxError(filename + ': ' + e.message);
             err.code = 'ERR_INVALID_JSON';
             throw err;
@@ -5064,7 +5086,7 @@ function loadModule(resolvedFilename, source, parentModule) {
         const isEsm = filename.endsWith('.mjs') ||
             (filename.endsWith('.js') && explicitPackageType === 'module');
         if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
-            discardCjsModuleLoad(filename, parentModule, mod);
+            discardCjsModuleLoad(cacheKey, parentModule, mod);
             const esmErr = new Error(
                 "require() of ES Module " + filename + " not supported. " +
                 "Instead change the require of " + filename + " to a dynamic " +
@@ -5077,7 +5099,7 @@ function loadModule(resolvedFilename, source, parentModule) {
             try {
                 mod.exports = requireEsmWithCacheGuard(mod, filename);
             } catch (err) {
-                discardCjsModuleLoad(filename, parentModule, mod);
+                discardCjsModuleLoad(cacheKey, parentModule, mod);
                 throw err;
             }
         } else {
@@ -5105,14 +5127,14 @@ function loadModule(resolvedFilename, source, parentModule) {
                 if (canFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
-                    discardCjsModuleLoad(filename, parentModule, mod);
+                    discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
             }
             if (cjsSyntaxError || cjsWrapperLexicalRedeclaration) {
                 if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
-                    discardCjsModuleLoad(filename, parentModule, mod);
+                    discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
@@ -5120,7 +5142,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 try {
                     mod.exports = requireEsmWithCacheGuard(mod, filename, true);
                 } catch (esmErr) {
-                    discardCjsModuleLoad(filename, parentModule, mod);
+                    discardCjsModuleLoad(cacheKey, parentModule, mod);
                     if (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration) {
                         normalizeEsmSyntaxError(esmErr);
                         throw esmErr;
@@ -5133,7 +5155,7 @@ function loadModule(resolvedFilename, source, parentModule) {
                 try {
                     callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
                 } catch (err) {
-                    discardCjsModuleLoad(filename, parentModule, mod);
+                    discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
@@ -5142,11 +5164,24 @@ function loadModule(resolvedFilename, source, parentModule) {
         }
     }
 
+    }
+
     mod.loaded = true;
     if (cjsEsmDefaultSnapshotEligible) {
         captureCjsEsmDefaultSnapshot(mod);
     }
     return mod;
+}
+
+function loadModule(resolvedFilename, source, parentModule) {
+    return loadCommonJsTransaction({
+        cacheKey: undefined,
+        filename: resolvedFilename,
+        parentModule,
+        sourceKind: 'filesystem',
+        source,
+        sourceUrl: undefined,
+    });
 }
 
 function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFilename) {
@@ -5163,7 +5198,7 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
                 }
                 if (loaded.format === 'commonjs' && loaded.source !== undefined) {
                     const filename = loaderCommonJsFilename(loaded.url);
-                    return loadCommonJsLoaderSourceExports(filename, loaded.source, loaded.url, loaderCommonJsCacheKey(loaded.url, filename));
+                    return loadCommonJsLoaderSourceExports(filename, loaded.source, loaded.url, loaderCommonJsCacheKey(loaded.url, filename), parentModule);
                 }
                 if (loaded.format === 'json' && loaded.source !== undefined) {
                     return JSON.parse(loaderSourceToString(loaded.source));
@@ -5189,36 +5224,22 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
 }
 
 function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
-    cacheKey = cacheKey || filename;
-    if (moduleCache[cacheKey]) return moduleCache[cacheKey];
-    const dirname = pathModule.isAbsolute(filename) ? pathModule.dirname(filename) : '.';
-    const mod = initializeCjsModuleRecord(
-        {},
+    const parentModule = arguments.length > 4 ? arguments[4] : null;
+    return loadCommonJsTransaction({
+        cacheKey: cacheKey || filename,
         filename,
-        filename,
-        dirname,
-        null,
-        pathModule.isAbsolute(filename) ? dirname : '/',
-    );
-    moduleCache[cacheKey] = mod;
-    registerSourceMapForCjs(filename, source, mod);
-    try {
-        const loaderRequire = makeLoaderCommonJsRequire(sourceUrl || (pathModule.isAbsolute(filename) ? fileUrlForPath(filename) : filename), pathModule.isAbsolute(filename) ? dirname : '/', mod, filename);
-        mod.require = loaderRequire;
-        compileModuleInto(mod, source, filename, loaderRequire);
-        mod.loaded = true;
-        captureCjsEsmDefaultSnapshot(mod);
-        return mod;
-    } catch (err) {
-        discardCjsModuleLoad(cacheKey, null, mod);
-        throw err;
-    }
+        parentModule,
+        sourceKind: 'loader',
+        source,
+        sourceUrl,
+    });
 }
 
 function loadCommonJsLoaderSourceExports(filename, source) {
     const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
     const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
-    return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports;
+    const parentModule = arguments.length > 4 ? arguments[4] : null;
+    return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey, parentModule).exports;
 }
 
 if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function') {

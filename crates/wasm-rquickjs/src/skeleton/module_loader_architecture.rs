@@ -558,8 +558,7 @@ fn module_loader_architecture() {
     for owner in [
         "moduleCache",
         "requireExtensions",
-        "loadModule",
-        "loadCommonJsSourceModule",
+        "loadCommonJsTransaction",
     ] {
         assert_eq!(
             js_declarations.get(owner),
