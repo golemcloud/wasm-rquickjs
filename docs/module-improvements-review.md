@@ -43,7 +43,9 @@ The implemented flow is:
 One descriptor-driven JS transaction owns cache lookup, early cache insertion, parent/child
 linkage, live extension selection, source execution, default-snapshot capture, loaded state,
 and exact failure cleanup for filesystem, main-module, and loader-provided CommonJS. Pure
-resolution returns identity without reading source or creating module records.
+resolution returns identity without reading source or creating module records. Each descriptor
+supplies its canonical cache key, Node-visible filename, parent, source strategy and URL, and
+explicit main-module and ESM-fallback flags.
 
 ## CJS Analyzer And Facade
 

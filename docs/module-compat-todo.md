@@ -40,6 +40,8 @@ Add `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` for short rebuild loops. Use
 ## 3. Loader Unification
 
 - [x] Unify filesystem, main-module, and loader-provided CJS lifecycle in one JS transaction.
+- [x] Carry canonical cache identity, main-module state, and ESM-fallback policy explicitly in
+  the CJS load descriptor.
 - [x] Separate resolution identity from source reads and live extension execution.
 - [x] Share Rust analyzer/facade generation for disk and loader-provided CommonJS.
 - [x] Normalize sync/async registered-loader results, cache keys, and generation invalidation.

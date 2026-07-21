@@ -7,11 +7,11 @@ and audit logs are in `archive/`.
 ## Current Checkout
 
 - Branch: `module-improvments`
-- Loader-unification implementation commits: `091e9b0a`, `c7596f17`, `9e206316`,
-  `2d660698`, `8b276688`, and `40192157`.
+- Loader-unification commits before this final descriptor checkpoint: `091e9b0a`, `c7596f17`,
+  `9e206316`, `2d660698`, `8b276688`, `40192157`, `1859ae09`, and `40f5f587`.
 - The branch is ahead of `origin/module-improvments`.
 - Root `Cargo.toml` and `Cargo.lock` contain local Golem/Wasmtime setup and are out of scope.
-- The active architecture, status, and todo documents are part of the final audit batch.
+- The active architecture, status, and todo documents are committed and maintained together.
 
 ## Current Loader Boundary
 
@@ -28,8 +28,9 @@ and audit logs are in `archive/`.
 The completed slices replace literal source guards with the structural checker, unify CJS
 lifecycle in one descriptor-driven JS transaction, separate resolution from source reads,
 share Rust CJS facade generation, normalize registered-loader results/caches, and canonicalize
-recursive CJS analysis paths. Public Node APIs and the JS/Rust ownership boundary are
-preserved.
+recursive CJS analysis paths. The completion audit retired the obsolete loader-source
+delegate and made canonical cache identity plus main-module and ESM-fallback decisions
+explicit descriptor fields. Public Node APIs and the JS/Rust ownership boundary are preserved.
 
 ## Test Harness And Timings
 
@@ -42,8 +43,8 @@ A 2026-07-21 measurement of
 `runner_programmatic_registered_loader_chain` measured:
 
 - rebuild-inclusive with artifact + Wasmtime caches and `WASM_RQUICKJS_TEST_DROP_CACHE=1`:
-  690.41s;
-- immediate warm artifact + Wasmtime caches: 23.16s.
+  666.87s;
+- immediate warm artifact + Wasmtime caches: 23.80s.
 
 Prepared-component caching was not enabled because the prior measurement showed no benefit.
 Each runtime/node_compat case must retain
@@ -55,14 +56,14 @@ state. Caches may reuse only generated, optimized, or compiled artifacts.
 - The current module audit found no actionable same-process module behavior hidden as a
   known gap.
 - With Node 22.14.0 selected where Node baselines are required, focused runtime
-  `cjs_require:: module_resolution` passed 55/55 in 19.186s warm.
-- `node_modules_app__module_interop` passed 21/21 in 151.867s against the strict Node
+  `cjs_require:: module_resolution` passed 55/55 in 111.035s after rebuilding the two artifacts.
+- `node_modules_app__module_interop` passed 21/21 in 146.675s against the strict Node
   22.14.0 baseline.
 - The two focused registered-loader node_compat cases passed 2/2 in both the rebuild-inclusive
   and warm timing runs.
 - Module-related report guards
   `module_related_node_compat_entries_are_configured` and
-  `module_related_known_gaps_are_deferred_or_covered` passed 2/2 in 0.576s.
+  `module_related_known_gaps_are_deferred_or_covered` passed 2/2 in 0.660s.
 - Cache-policy/key tests passed 2/2, and the structural architecture checker passed 15/15.
 - The known-gap audit added addon resolution to the module-adjacent scope so a future
   `known-gap` classification must use an accepted reason, and removed same-process coverage

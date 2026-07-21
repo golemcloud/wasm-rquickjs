@@ -4009,13 +4009,13 @@ function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pat
 }
 
 function loadCommonJsTransaction(descriptor) {
-    const resolvedFilename = descriptor.filename;
+    const filename = descriptor.filename;
     let source = descriptor.source;
     const parentModule = descriptor.parentModule || null;
     const isLoaderSource = descriptor.sourceKind === 'loader';
-    const isMainModuleLoad = isLoaderSource ? false : isMainEntryFilename(resolvedFilename);
-    const filename = isLoaderSource ? resolvedFilename : toCjsCanonicalFilename(resolvedFilename, isMainModuleLoad);
-    const cacheKey = descriptor.cacheKey || filename;
+    const isMainModuleLoad = descriptor.isMainModule === true;
+    const canFallbackToEsm = descriptor.allowEsmFallback === true;
+    const cacheKey = descriptor.cacheKey;
     const dirname = pathModule.dirname(filename);
     const pathsBase = isLoaderSource && !pathModule.isAbsolute(filename) ? '/' : dirname;
 
@@ -4140,7 +4140,7 @@ function loadCommonJsTransaction(descriptor) {
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
             let cjsSyntaxError = null;
-            const canFallbackToEsm = !filename.endsWith('.cjs') && !isCommonJsPackage;
+            const shouldFallbackToEsm = canFallbackToEsm && !filename.endsWith('.cjs') && !isCommonJsPackage;
             let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
             try {
@@ -4153,11 +4153,11 @@ function loadCommonJsTransaction(descriptor) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (canFallbackToEsm && err && err.name === 'SyntaxError') {
+                if (shouldFallbackToEsm && err && err.name === 'SyntaxError') {
                     cjsSourceLooksEsm = looksLikeEsmSource(source);
                     cjsWrapperLexicalRedeclaration = hasCjsWrapperLexicalRedeclaration(source);
                 }
-                if (canFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
+                if (shouldFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
                     discardCjsModuleLoad(cacheKey, parentModule, mod);
@@ -4207,13 +4207,17 @@ function loadCommonJsTransaction(descriptor) {
 }
 
 function loadFilesystemCommonJs(resolvedFilename, parentModule) {
+    const isMainModule = isMainEntryFilename(resolvedFilename);
+    const filename = toCjsCanonicalFilename(resolvedFilename, isMainModule);
     return loadCommonJsTransaction({
-        cacheKey: undefined,
-        filename: resolvedFilename,
+        cacheKey: filename,
+        filename,
         parentModule,
         sourceKind: 'filesystem',
         source: undefined,
         sourceUrl: undefined,
+        isMainModule,
+        allowEsmFallback: true,
     });
 }
 
@@ -4275,6 +4279,8 @@ function loadCommonJsLoaderSourceExports(filename, source) {
         sourceKind: 'loader',
         source: loaderSourceToString(source),
         sourceUrl,
+        isMainModule: false,
+        allowEsmFallback: false,
     }).exports;
 }
 
