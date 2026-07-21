@@ -22,6 +22,10 @@ export const testRequireBuiltin = () => {
         assert.strictEqual(fs, nodeFs, 'require node:fs identity');
         assert.strictEqual(typeof require('_http_agent').Agent, 'function', 'require _http_agent');
         assert.strictEqual(typeof require('node:_http_agent').Agent, 'function', 'require node:_http_agent');
+        const streamReadable = require('_stream_readable');
+        assert.strictEqual(require('node:_stream_readable'), streamReadable, 'require node:_stream_readable identity');
+        assert.strictEqual(typeof require('internal/test/binding'), 'object', 'require internal/test/binding');
+        assert.strictEqual(typeof require('internal/util'), 'object', 'require internal/util');
         assert.strictEqual(typeof require('node:test'), 'function', 'require node:test');
         assert.strictEqual(typeof require('node:sqlite'), 'object', 'require node:sqlite');
         assert.throws(() => require('test'), { code: 'MODULE_NOT_FOUND' }, 'require bare test');
@@ -37,6 +41,8 @@ export const testRequireBuiltin = () => {
         const mod = require('module');
         assert.ok(mod.createRequire);
         assert.ok(Array.isArray(mod.builtinModules));
+        assert.strictEqual(mod.builtinModules.includes('test'), false, 'builtinModules excludes bare test');
+        assert.strictEqual(mod.builtinModules.includes('sqlite'), false, 'builtinModules excludes bare sqlite');
         assert.strictEqual(mod.isBuiltin('fs'), true, 'module.isBuiltin fs');
         assert.strictEqual(mod.isBuiltin('node:fs'), true, 'module.isBuiltin node:fs');
         assert.strictEqual(mod.isBuiltin('_http_agent'), true, 'module.isBuiltin _http_agent');
@@ -45,6 +51,7 @@ export const testRequireBuiltin = () => {
         assert.strictEqual(mod.isBuiltin('test'), false, 'module.isBuiltin bare test');
         assert.strictEqual(mod.isBuiltin('node:sqlite'), true, 'module.isBuiltin node:sqlite');
         assert.strictEqual(mod.isBuiltin('sqlite'), false, 'module.isBuiltin bare sqlite');
+        assert.strictEqual(mod.isBuiltin('internal/test/binding'), false, 'module.isBuiltin internal/test/binding');
         assert.strictEqual(require.resolve('fs'), 'fs', 'require.resolve fs');
         assert.strictEqual(require.resolve('node:fs'), 'node:fs', 'require.resolve node:fs');
         assert.strictEqual(require.resolve('_http_agent'), '_http_agent', 'require.resolve _http_agent');

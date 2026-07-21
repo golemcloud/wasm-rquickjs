@@ -261,11 +261,11 @@ registerBuiltin(builtinModuleMap, 'worker_threads', workerThreadsCjs);
 registerBuiltin(builtinModuleMap, 'zlib', zlibCjs);
 builtinModuleMap['node:sqlite'] = sqliteCjs;
 registerBuiltin(builtinModuleMap, 'util/types', utilTypes);
-builtinModuleMap['_stream_readable'] = streamCjs && streamCjs.Readable;
-builtinModuleMap['_stream_writable'] = streamCjs && streamCjs.Writable;
-builtinModuleMap['_stream_duplex'] = streamCjs && streamCjs.Duplex;
-builtinModuleMap['_stream_transform'] = streamCjs && streamCjs.Transform;
-builtinModuleMap['_stream_passthrough'] = streamCjs && streamCjs.PassThrough;
+registerBuiltin(builtinModuleMap, '_stream_readable', streamCjs && streamCjs.Readable);
+registerBuiltin(builtinModuleMap, '_stream_writable', streamCjs && streamCjs.Writable);
+registerBuiltin(builtinModuleMap, '_stream_duplex', streamCjs && streamCjs.Duplex);
+registerBuiltin(builtinModuleMap, '_stream_transform', streamCjs && streamCjs.Transform);
+registerBuiltin(builtinModuleMap, '_stream_passthrough', streamCjs && streamCjs.PassThrough);
 builtinModuleMap['internal/http'] = internalHttpCjs;
 builtinModuleMap['internal/fs/utils'] = internalFsUtilsCjs;
 builtinModuleMap['internal/url'] = internalUrlCjs;
@@ -632,10 +632,6 @@ function _generateMockEsmSource(entry) {
 
 // Self-reference will be added after the module object is created (see bottom of file)
 
-const builtinModuleNames = Object.keys(builtinModuleMap).filter(
-    (name) => !name.startsWith('node:') && !name.startsWith('internal/') && !name.startsWith('_')
-);
-
 function setFromArray(values, mapper) {
     const set = new Set();
     for (let i = 0; i < values.length; i++) {
@@ -647,15 +643,29 @@ function setFromArray(values, mapper) {
 // Modules that require the 'node:' prefix (cannot be required as bare specifiers)
 const schemelessBlockList = setFromArray(['test', 'sqlite']);
 
+const builtinModuleNames = Object.keys(builtinModuleMap).filter(
+    (name) => !name.startsWith('node:') && !name.startsWith('internal/') &&
+        !name.startsWith('_') && !schemelessBlockList.has(name)
+);
+
+const publicBuiltinIdSet = new Set();
+for (const name of Object.keys(builtinModuleMap)) {
+    if (name.startsWith('node:')) {
+        publicBuiltinIdSet.add(name.slice(5));
+    } else if (!name.startsWith('internal/')) {
+        publicBuiltinIdSet.add(name);
+    }
+}
+
 function builtinResolveSpecifier(id) {
     if (typeof id !== 'string') return undefined;
     if (id.startsWith('node:')) {
-        return builtinModuleMap[id] !== undefined ? id : undefined;
+        return publicBuiltinIdSet.has(id.slice(5)) ? id : undefined;
     }
     if (id.startsWith('internal/') || schemelessBlockList.has(id)) {
         return undefined;
     }
-    return builtinModuleMap[id] !== undefined ? 'node:' + id : undefined;
+    return publicBuiltinIdSet.has(id) ? 'node:' + id : undefined;
 }
 
 function isBuiltin(id) {
@@ -663,8 +673,8 @@ function isBuiltin(id) {
 }
 
 function builtinModuleForSpecifier(id) {
-    const resolved = builtinResolveSpecifier(id);
-    if (resolved !== undefined) return builtinModuleMap[resolved];
+    if (typeof id !== 'string' || schemelessBlockList.has(id)) return undefined;
+    if (objectPrototypeHasOwnProperty(builtinModuleMap, id)) return builtinModuleMap[id];
     return undefined;
 }
 
@@ -5754,6 +5764,7 @@ moduleExports.Module = Module;
 // Add self-reference so require('module') works
 builtinModuleMap['module'] = moduleExports;
 builtinModuleMap['node:module'] = moduleExports;
+publicBuiltinIdSet.add('module');
 if (!builtinModuleNames.includes('module')) {
     builtinModuleNames.push('module');
 }
