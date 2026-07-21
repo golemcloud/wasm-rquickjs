@@ -5141,7 +5141,7 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
                 }
                 if (loaded.format === 'commonjs' && loaded.source !== undefined) {
                     const filename = loaderCommonJsFilename(loaded.url);
-                    return loadCommonJsSourceModule(filename, loaderSourceToString(loaded.source), loaded.url, loaderCommonJsCacheKey(loaded.url, filename)).exports;
+                    return loadCommonJsLoaderSourceExports(filename, loaded.source, loaded.url, loaderCommonJsCacheKey(loaded.url, filename));
                 }
                 if (loaded.format === 'json' && loaded.source !== undefined) {
                     return JSON.parse(loaderSourceToString(loaded.source));
@@ -5193,12 +5193,15 @@ function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
     }
 }
 
+function loadCommonJsLoaderSourceExports(filename, source) {
+    const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
+    const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
+    return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports;
+}
+
 if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function') {
     Object.defineProperty(globalThis, '__wasm_rquickjs_load_commonjs_loader_source', {
-        value(filename, source) {
-            const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
-            return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, arguments.length > 3 ? String(arguments[3]) : undefined).exports;
-        },
+        value: loadCommonJsLoaderSourceExports,
         writable: true,
         configurable: true,
     });
@@ -5838,6 +5841,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return registeredLoaderHasSource(result) ? result.source : fallbackSource;
     }
 
+    function registeredLoaderFileSourceFallback(url) {
+        url = String(url);
+        return url.startsWith('file://') ? loaderFileUrlSource(url) : undefined;
+    }
+
     function registeredLoaderModuleSourceReturn(source) {
         return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source));
     }
@@ -5852,7 +5860,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     function registeredLoaderCommonJsReturn(loaded, url, missingSourceReturn) {
         const source = registeredLoaderHasSource(loaded)
             ? loaded.source
-            : loaderFileUrlSource(url);
+            : registeredLoaderFileSourceFallback(url);
         return source !== null && source !== undefined
             ? loaderCommonJsSourceModule(source, url)
             : missingSourceReturn;
@@ -5981,8 +5989,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     if (nodeUrl.fileURLToPath(normalizedResolved.url).endsWith('.mjs')) return normalizedResolved.url;
                 } catch (_) {}
             }
-            const fileSource = loaderFileUrlSource(normalizedResolved.url);
-            if (fileSource !== null) {
+            const fileSource = registeredLoaderFileSourceFallback(normalizedResolved.url);
+            if (fileSource !== null && fileSource !== undefined) {
                 return registeredLoaderModuleSourceReturn(fileSource);
             }
         }
@@ -6114,8 +6122,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (source === undefined && isImportMode) {
             return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
         }
-        if (source === undefined && finalFormat === 'commonjs' && String(normalizedResolved.url).startsWith('file://')) {
-            source = loaderFileUrlSource(normalizedResolved.url);
+        if (source === undefined && finalFormat === 'commonjs') {
+            source = registeredLoaderFileSourceFallback(normalizedResolved.url);
         }
         return registeredLoaderUrlFormatMaybeSourceResult(normalizedResolved.url, finalFormat, source);
     }
@@ -6573,11 +6581,7 @@ Object.defineProperties(moduleExports, {
         configurable: false,
     },
     __wasm_rquickjs_load_commonjs_loader_source: {
-        value(filename, source) {
-            const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
-            const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
-            return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports;
-        },
+        value: loadCommonJsLoaderSourceExports,
         writable: false,
         configurable: false,
     },

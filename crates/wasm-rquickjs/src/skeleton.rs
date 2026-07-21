@@ -1433,10 +1433,12 @@ mod tests {
             + sync_start;
         let sync_runner = &module_js[sync_start..sync_end];
         assert!(
-            sync_runner.contains("source = loaderFileUrlSource(normalizedResolved.url);")
+            sync_runner
+                .contains("source = registeredLoaderFileSourceFallback(normalizedResolved.url);")
                 && !sync_runner.contains("tryReadFile(nodeUrl.fileURLToPath(")
+                && !sync_runner.contains("loaderFileUrlSource(normalizedResolved.url)")
                 && !sync_runner.contains("if (source === null) source = undefined;"),
-            "sync registered-loader CommonJS file fallback must share loaderFileUrlSource with the normalized URL"
+            "sync registered-loader CommonJS file fallback must use the shared file-source fallback helper"
         );
         assert!(
             module_js.contains("!registeredLoaderHasOwnSource(loaded)"),
@@ -1466,9 +1468,18 @@ mod tests {
         );
         assert!(
             module_js.contains(
-                "function registeredLoaderCommonJsReturn(loaded, url, missingSourceReturn) { const source = registeredLoaderHasSource(loaded) ? loaded.source : loaderFileUrlSource(url); return source !== null && source !== undefined ? loaderCommonJsSourceModule(source, url) : missingSourceReturn; }"
+                "function registeredLoaderFileSourceFallback(url) { url = String(url); return url.startsWith('file://') ? loaderFileUrlSource(url) : undefined; }"
+            ) && module_js.contains(
+                "function registeredLoaderCommonJsReturn(loaded, url, missingSourceReturn) { const source = registeredLoaderHasSource(loaded) ? loaded.source : registeredLoaderFileSourceFallback(url); return source !== null && source !== undefined ? loaderCommonJsSourceModule(source, url) : missingSourceReturn; }"
             ),
             "registered-loader CommonJS source/file return conversion must stay centralized"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderFileSourceFallback(")
+                .count(),
+            4,
+            "dynamic module, dynamic CommonJS, and sync CommonJS file source fallbacks must share one helper"
         );
         assert_eq!(
             module_js
@@ -3429,7 +3440,11 @@ mod tests {
             + module_exports_start;
         let module_exports = &module_js[module_exports_start..module_exports_end];
         assert!(
-            module_exports.contains("return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports;"),
+            module_js.contains(
+                "function loadCommonJsLoaderSourceExports(filename, source) { const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined; const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined; return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey).exports; }"
+            ) && module_js.contains(
+                "return loadCommonJsLoaderSourceExports(filename, loaded.source, loaded.url, loaderCommonJsCacheKey(loaded.url, filename));"
+            ) && module_exports.contains("value: loadCommonJsLoaderSourceExports,"),
             "private loader CommonJS source helper must return module.exports, not the internal Module record"
         );
     }
