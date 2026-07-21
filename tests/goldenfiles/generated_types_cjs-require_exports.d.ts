@@ -6,6 +6,7 @@ declare module 'cjs-require' {
   export function testRequireCache(): Promise<boolean>;
   export function testCreateRequire(): Promise<boolean>;
   export function testRequireJson(): Promise<boolean>;
+  export function testRequireExtensionsOrder(): Promise<boolean>;
   export function testRequireModuleExportsFunction(): Promise<boolean>;
   export function testRequireModuleNotFound(): Promise<boolean>;
   export function testRequirePackageExports(): Promise<boolean>;

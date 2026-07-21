@@ -5660,6 +5660,24 @@ fn cjs_resolve_package_fallback<'js>(
     }
 }
 
+fn cjs_resolve_file_candidate<'js>(
+    _ctx: Ctx<'js>,
+    candidate: String,
+    extensions: rquickjs::Array<'js>,
+    include_exact: bool,
+) -> rquickjs::Result<Option<String>> {
+    let extension_vec = package_extensions_from_js_array(&extensions);
+    let mut warnings = Vec::new();
+    let mut resolution = cjs_analysis_resolution_context(&[], &mut warnings);
+    Ok(NodeModulesResolver::first_existing_runtime_cjs_probe(
+        &std::path::PathBuf::from(candidate),
+        &extension_vec,
+        include_exact,
+        false,
+        &mut resolution,
+    ))
+}
+
 fn require_esm_graph_resolve_package<'js>(
     _ctx: Ctx<'js>,
     parent_filename: String,
@@ -9339,6 +9357,14 @@ impl JsState {
                     .expect("Failed to create CJS package fallback resolver"),
             )
             .expect("Failed to initialize CJS package fallback resolver");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_cjs_resolve_file_candidate",
+                Function::new(ctx.clone(), cjs_resolve_file_candidate)
+                    .expect("Failed to create CJS file candidate resolver"),
+            )
+            .expect("Failed to initialize CJS file candidate resolver");
 
             set_non_replaceable_global(
                 &global,

@@ -761,23 +761,19 @@ function isPathDirectory(filename) {
 }
 
 function loadAsFile(candidate, skipExact) {
-    let content = null;
-    if (!skipExact) {
-        content = tryReadFile(candidate);
-        if (content !== null) {
-            return { filename: candidate, content: content };
-        }
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_file_candidate !== 'function') {
+        throw new Error('Internal CJS file candidate resolver is not initialized');
     }
-
-    const exts = Object.keys(requireExtensions);
-    for (let i = 0; i < exts.length; i++) {
-        content = tryReadFile(candidate + exts[i]);
-        if (content !== null) {
-            return { filename: candidate + exts[i], content: content };
-        }
+    const filename = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_resolve_file_candidate(
+        candidate,
+        Object.keys(requireExtensions),
+        !skipExact,
+    );
+    if (filename === null || filename === undefined) {
+        return null;
     }
-
-    return null;
+    const content = tryReadFile(String(filename));
+    return content === null ? null : { filename: String(filename), content };
 }
 
 function loadAsDirectory(candidate, id, parentDir, seen) {
@@ -5762,6 +5758,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
+    function registeredLoaderResolvedState(baseContext, resolved) {
+        const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
+        if (!normalizedResolved) return undefined;
+        const resolvedFormat = normalizedResolved.format;
+        return {
+            normalizedResolved,
+            resolvedFormat,
+            loadContext: registeredLoaderLoadContext(baseContext, resolved, resolvedFormat),
+        };
+    }
+
     function registeredLoaderDefaultLoad(_nextUrl, context) {
         return { format: context && context.format };
     }
@@ -5944,9 +5951,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const resolved = await runResolve(entries.length - 1, specifier, baseContext);
-        const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
-        if (!normalizedResolved) return undefined;
-        const resolvedFormat = normalizedResolved.format;
+        const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
+        if (!resolvedState) return undefined;
+        const normalizedResolved = resolvedState.normalizedResolved;
+        const resolvedFormat = resolvedState.resolvedFormat;
 
         const runLoad = async (index, nextUrl, context) => {
             if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
@@ -5966,8 +5974,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runLoad(index - 1, nextUrl, context);
         };
 
-        const loadContext = registeredLoaderLoadContext(baseContext, resolved, resolvedFormat);
-        const loaded = await runLoad(entries.length - 1, normalizedResolved.url, loadContext);
+        const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const loadedHasSource = registeredLoaderHasSource(loaded);
         const loadedFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (mode === 'static-raw') {
@@ -5996,7 +6003,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (loadedHasSource && loadedFormat === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
         }
-        if (loadContext.importAttributes && loadContext.importAttributes.type === 'json') {
+        if (resolvedState.loadContext.importAttributes && resolvedState.loadContext.importAttributes.type === 'json') {
             return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
         }
         return undefined;
@@ -6083,9 +6090,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ? normalizeLoaderResolvedUrl(specifier)
             : specifier;
         const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
-        const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
-        if (!normalizedResolved) return undefined;
-        const resolvedFormat = normalizedResolved.format;
+        const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
+        if (!resolvedState) return undefined;
+        const normalizedResolved = resolvedState.normalizedResolved;
+        const resolvedFormat = resolvedState.resolvedFormat;
         if (resolveOnly) return registeredLoaderUrlFormatResult(normalizedResolved.url, resolvedFormat);
 
         const runLoad = (index, nextUrl, context) => {
@@ -6110,7 +6118,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runLoad(index - 1, nextUrl, context);
         };
 
-        const loaded = runLoad(entries.length - 1, normalizedResolved.url, registeredLoaderLoadContext(baseContext, resolved, resolvedFormat));
+        const loaded = runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const finalFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
         if (finalFormat === 'builtin') return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
         if (!loaded && resolved.source === undefined) return undefined;

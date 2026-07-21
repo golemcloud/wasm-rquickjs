@@ -113,6 +113,23 @@ async fn cjs_require_json(
 }
 
 #[test]
+async fn cjs_require_extensions_order(
+    #[tagged_as("cjs_require")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-require-extensions-order",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn cjs_require_module_exports_function(
     #[tagged_as("cjs_require")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

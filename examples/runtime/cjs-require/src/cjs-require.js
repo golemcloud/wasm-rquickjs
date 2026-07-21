@@ -191,6 +191,64 @@ export const testRequireJson = () => {
     }
 };
 
+export const testRequireExtensionsOrder = () => {
+    try {
+        const assert = require('assert');
+        const fs = require('fs');
+
+        fs.writeFileSync('/ordered.js', 'module.exports = { ext: "js" };');
+        fs.writeFileSync('/ordered.alpha', 'module.exports = { ext: "alpha" };');
+        fs.writeFileSync('/ordered.beta', 'module.exports = { ext: "beta" };');
+        fs.writeFileSync('/exact-preferred.js', 'module.exports = { exact: true };');
+        fs.writeFileSync('/exact-preferred.alpha', 'module.exports = { exact: false };');
+
+        const originalAlpha = require.extensions['.alpha'];
+        const originalBeta = require.extensions['.beta'];
+        let alphaHandlerCalls = 0;
+        let betaHandlerCalls = 0;
+        try {
+            require.extensions['.alpha'] = (mod, filename) => {
+                alphaHandlerCalls++;
+                mod.exports = { ext: 'alpha', filename };
+            };
+            require.extensions['.beta'] = (mod, filename) => {
+                betaHandlerCalls++;
+                mod.exports = { ext: 'beta', filename };
+            };
+
+            assert.deepStrictEqual(require('/ordered'), { ext: 'js' });
+            delete require.cache['/ordered.js'];
+            fs.unlinkSync('/ordered.js');
+            assert.deepStrictEqual(require('/ordered'), { ext: 'alpha', filename: '/ordered.alpha' });
+            assert.strictEqual(alphaHandlerCalls, 1);
+            assert.strictEqual(betaHandlerCalls, 0);
+
+            assert.deepStrictEqual(require('/exact-preferred.js'), { exact: true });
+        } finally {
+            delete require.cache['/ordered.js'];
+            delete require.cache['/ordered.alpha'];
+            delete require.cache['/ordered.beta'];
+            delete require.cache['/exact-preferred.js'];
+            delete require.cache['/exact-preferred.alpha'];
+            if (originalAlpha === undefined) {
+                delete require.extensions['.alpha'];
+            } else {
+                require.extensions['.alpha'] = originalAlpha;
+            }
+            if (originalBeta === undefined) {
+                delete require.extensions['.beta'];
+            } else {
+                require.extensions['.beta'] = originalBeta;
+            }
+        }
+
+        return true;
+    } catch (e) {
+        console.error(e);
+        return false;
+    }
+};
+
 export const testRequireModuleExportsFunction = () => {
     try {
         const assert = require('assert');

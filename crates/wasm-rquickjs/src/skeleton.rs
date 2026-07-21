@@ -156,6 +156,7 @@ mod tests {
             "__wasm_rquickjs_cjs_resolve_package_self_reference",
             "__wasm_rquickjs_cjs_package_scope_info",
             "__wasm_rquickjs_cjs_resolve_package_fallback",
+            "__wasm_rquickjs_cjs_resolve_file_candidate",
             "__wasm_rquickjs_package_global_conditions",
             "__wasm_rquickjs_require_esm_graph_resolve_package",
         ] {
@@ -430,6 +431,47 @@ mod tests {
                     "if (err.__wasmNoImportsField === true) { throw makeModuleNotFoundError(id); }"
                 ),
             "CJS package-import no-imports metadata is Rust-owned; JS may consume it for CJS fallback but must not recreate it in fallback error shaping"
+        );
+    }
+
+    #[test]
+    fn cjs_file_candidate_probing_is_rust_owned() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        let load_as_file_start = module_js
+            .find("function loadAsFile(candidate, skipExact)")
+            .expect("loadAsFile function must exist");
+        let load_as_file_end = module_js[load_as_file_start..]
+            .find("function loadAsDirectory(")
+            .expect("loadAsFile must precede loadAsDirectory")
+            + load_as_file_start;
+        let load_as_file = &module_js[load_as_file_start..load_as_file_end];
+
+        assert!(
+            load_as_file.contains("__wasm_rquickjs_cjs_resolve_file_candidate(")
+                && load_as_file.contains("Object.keys(requireExtensions)")
+                && load_as_file.contains("!skipExact")
+                && load_as_file.contains("const content = tryReadFile(String(filename));")
+                && load_as_file.contains(
+                    "return content === null ? null : { filename: String(filename), content };"
+                ),
+            "CJS loadAsFile must delegate candidate selection to Rust while keeping source reads in JS"
+        );
+        assert!(
+            !load_as_file.contains("candidate + exts")
+                && !load_as_file.contains("for (let i = 0; i < exts.length; i++)")
+                && !load_as_file.contains("tryReadFile(candidate +"),
+            "JS loadAsFile must not duplicate extension probing order after delegating candidate selection to Rust"
+        );
+        assert!(
+            internal_rs.contains("fn cjs_resolve_file_candidate<'js>(")
+                && internal_rs.contains("\"__wasm_rquickjs_cjs_resolve_file_candidate\"")
+                && internal_rs.contains("let extension_vec = package_extensions_from_js_array(&extensions);")
+                && internal_rs.contains(
+                    "NodeModulesResolver::first_existing_runtime_cjs_probe( &std::path::PathBuf::from(candidate), &extension_vec, include_exact, false,"
+                ),
+            "Rust CJS file candidate bridge must reuse the runtime CJS probe helper without taking over directory/index fallback"
         );
     }
 
@@ -3087,6 +3129,25 @@ mod tests {
                 .count(),
             1,
             "registered-loader final load format nullish check must only appear inside the shared helper"
+        );
+        assert!(
+            module_js.contains(
+                "function registeredLoaderResolvedState(baseContext, resolved) { const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved); if (!normalizedResolved) return undefined; const resolvedFormat = normalizedResolved.format; return { normalizedResolved, resolvedFormat, loadContext: registeredLoaderLoadContext(baseContext, resolved, resolvedFormat), }; }"
+            ),
+            "registered-loader post-resolve state construction must stay centralized"
+        );
+        assert_eq!(
+            module_js.matches("registeredLoaderResolvedState(").count(),
+            3,
+            "async and sync registered-loader runners must use the shared post-resolve state helper"
+        );
+        assert!(
+            !module_js.contains("const loadContext = registeredLoaderLoadContext(")
+                && module_js.contains("resolvedState.loadContext.importAttributes")
+                && module_js.matches("resolvedState.loadContext").count() == 4
+                && !module_js.contains("if (loadContext.")
+                && !module_js.contains(", loadContext);"),
+            "registered-loader paths must not retain stale local loadContext references after sharing post-resolve state"
         );
 
         let static_start = module_js
