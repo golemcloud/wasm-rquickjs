@@ -63,8 +63,13 @@ import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/bind
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
 
 const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+const objectDefineProperty = Object.defineProperty.bind(Object);
+const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor.bind(Object);
+const stringFromCodePoint = String.fromCodePoint.bind(String);
+const numberParseInt = Number.parseInt.bind(Number);
 const wasmRquickjsModuleGlobalThis = globalThis;
 const wasmRquickjsModulePromiseResolve = Promise.resolve.bind(Promise);
+const wasmRquickjsModuleEval = eval;
 
 function cjsFacadeHasOwnProperty(value, key) {
     return objectPrototypeHasOwnProperty(value, key);
@@ -527,6 +532,16 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_with_trace', {
 });
 Object.defineProperty(globalThis, '__wasm_rquickjs_dynamic_import_reaction', {
     value: dynamicImportReaction,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_prepare_cjs_eval_source', {
+    value: prepareCjsEvalSource,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_native_eval', {
+    value: wasmRquickjsModuleEval,
     writable: false,
     configurable: false,
 });
@@ -1128,12 +1143,13 @@ function stripV8OptimizationIntrinsics(source) {
         .replace(/eval\(\s*(['"])%OptimizeFunctionOnNextCall\([^'"\\\r\n]*\)\1\s*\)\s*;?/g, 'undefined;');
 }
 
-function stripImportAttributes(source, filename) {
+function stripImportAttributes(source, filename, inheritedDynamicImportBindings) {
     const len = source.length;
     let out = [];
     const filenameLiteral = JSON.stringify(filename);
     const baseUrlLiteral = JSON.stringify(nodeUrl.pathToFileURL(filename).href);
     let rewroteDynamicImport = false;
+    let rewroteDirectEval = false;
     function uniqueInternalName(base) {
         let name = base;
         let seq = 0;
@@ -1145,10 +1161,21 @@ function stripImportAttributes(source, filename) {
     }
     let dynamicImportReactionName;
     let dynamicImportWithTraceName;
+    let prepareCjsEvalSourceName;
+    let nativeEvalName;
     function ensureDynamicImportBindingNames() {
         if (dynamicImportReactionName === undefined) {
-            dynamicImportReactionName = uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction');
-            dynamicImportWithTraceName = uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace');
+            if (inheritedDynamicImportBindings) {
+                dynamicImportReactionName = inheritedDynamicImportBindings.reactionName;
+                dynamicImportWithTraceName = inheritedDynamicImportBindings.traceName;
+                prepareCjsEvalSourceName = inheritedDynamicImportBindings.prepareEvalName;
+                nativeEvalName = inheritedDynamicImportBindings.nativeEvalName;
+            } else {
+                dynamicImportReactionName = uniqueInternalName('__wasm_rquickjs_dynamic_import_reaction');
+                dynamicImportWithTraceName = uniqueInternalName('__wasm_rquickjs_dynamic_import_with_trace');
+                prepareCjsEvalSourceName = uniqueInternalName('__wasm_rquickjs_prepare_cjs_eval_source');
+                nativeEvalName = uniqueInternalName('__wasm_rquickjs_native_eval');
+            }
         }
     }
     function prevNonWs(pos) {
@@ -1362,6 +1389,70 @@ function stripImportAttributes(source, filename) {
                     continue;
                 }
             }
+            if (ch === 0x65 && i + 4 <= end && source.substring(i, i + 4) === 'eval' &&
+                (i === 0 || ((ch = source.charCodeAt(i - 1)) !== 46 && ch !== 35 && !isIdentifierContinueCode(ch))) &&
+                (i + 4 >= end || !isIdentifierContinueCode(source.charCodeAt(i + 4)))) {
+                const openParen = skipWsComments(i + 4, end);
+                if (openParen < end && source.charCodeAt(openParen) === 0x28) {
+                    const close = matchingParenEnd(openParen);
+                    const priorWord = prevWord(i);
+                    if (close > 0 && nextNonWs(close) !== 0x7B &&
+                        (!priorWord || priorWord.word !== 'function')) {
+                        let firstArgEnd = close - 1;
+                        let pos = openParen + 1;
+                        let depth = 0;
+                        while (pos < close - 1) {
+                            const skipped = skipNonCode(source, pos, true);
+                            if (skipped !== null) {
+                                pos = skipped;
+                                continue;
+                            }
+                            const code = source.charCodeAt(pos);
+                            if (code === 0x28 || code === 0x5B || code === 0x7B) depth++;
+                            else if (code === 0x29 || code === 0x5D || code === 0x7D) depth--;
+                            else if (code === 0x2C && depth === 0) {
+                                firstArgEnd = pos;
+                                break;
+                            }
+                            pos++;
+                        }
+                        const firstCode = skipWsComments(openParen + 1, firstArgEnd);
+                        if (firstCode >= firstArgEnd || source.substring(firstCode, firstCode + 3) === '...') {
+                            out.push(source[i]);
+                            i++;
+                            continue;
+                        }
+                        ensureDynamicImportBindingNames();
+                        rewroteDirectEval = true;
+                        const firstArg = processSubrange(openParen + 1, firstArgEnd);
+                        out.push(source.substring(i, openParen + 1));
+                        out.push('eval===');
+                        out.push(nativeEvalName);
+                        out.push('?');
+                        out.push(prepareCjsEvalSourceName);
+                        out.push('(');
+                        out.push(firstArg);
+                        out.push(',');
+                        out.push(filenameLiteral);
+                        out.push(',');
+                        out.push(JSON.stringify(dynamicImportReactionName));
+                        out.push(',');
+                        out.push(JSON.stringify(dynamicImportWithTraceName));
+                        out.push(',');
+                        out.push(JSON.stringify(prepareCjsEvalSourceName));
+                        out.push(',');
+                        out.push(JSON.stringify(nativeEvalName));
+                        out.push('):');
+                        out.push(firstArg);
+                        out.push(')');
+                        if (firstArgEnd < close - 1) {
+                            out.push(processSubrange(firstArgEnd, close - 1));
+                        }
+                        i = close;
+                        continue;
+                    }
+                }
+            }
             out.push(source[i]);
             i++;
         }
@@ -1377,14 +1468,58 @@ function stripImportAttributes(source, filename) {
     processRange(0, len);
     return {
         source: out.join(''),
-        dynamicImportBindings: rewroteDynamicImport
+        dynamicImportBindings: rewroteDynamicImport || rewroteDirectEval
             ? {
                 reactionName: dynamicImportReactionName,
                 traceName: dynamicImportWithTraceName,
+                prepareEvalName: prepareCjsEvalSourceName,
+                nativeEvalName,
             }
             : null,
     };
 }
+
+function prepareCjsEvalSource(value, filename, reactionName, traceName, prepareEvalName, nativeEvalName) {
+    if (typeof value !== 'string') return value;
+    const decodedIdentifierSource = value.replace(/\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))/g, (_, braced, fixed) => {
+        const codePoint = numberParseInt(braced === undefined ? fixed : braced, 16);
+        return codePoint <= 0x10FFFF ? stringFromCodePoint(codePoint) : '';
+    });
+    let bridgeName = '__wasm_rquickjs_cjs_eval_bridge';
+    let sequence = 0;
+    function isInstalledBridge(name) {
+        const descriptor = objectGetOwnPropertyDescriptor(wasmRquickjsModuleGlobalThis, name);
+        return descriptor !== undefined && descriptor.value === cjsEvalBridge &&
+            descriptor.writable === false && descriptor.enumerable === false && descriptor.configurable === false;
+    }
+    while (value.indexOf(bridgeName) !== -1 || decodedIdentifierSource.indexOf(bridgeName) !== -1 ||
+        (objectPrototypeHasOwnProperty(wasmRquickjsModuleGlobalThis, bridgeName) && !isInstalledBridge(bridgeName))) {
+        sequence++;
+        bridgeName = '__wasm_rquickjs_cjs_eval_bridge_' + sequence;
+    }
+    if (!isInstalledBridge(bridgeName)) {
+        objectDefineProperty(wasmRquickjsModuleGlobalThis, bridgeName, {
+            value: cjsEvalBridge,
+            writable: false,
+            enumerable: false,
+            configurable: false,
+        });
+    }
+    return stripImportAttributes(value, filename, {
+        reactionName: bridgeName + '.reaction',
+        traceName: bridgeName + '.trace',
+        prepareEvalName: bridgeName + '.prepareEval',
+        nativeEvalName: bridgeName + '.nativeEval',
+    }).source;
+}
+
+const cjsEvalBridge = {};
+Object.defineProperties(cjsEvalBridge, {
+    reaction: { value: dynamicImportReaction },
+    trace: { value: dynamicImportWithTrace },
+    prepareEval: { value: prepareCjsEvalSource },
+    nativeEval: { value: wasmRquickjsModuleEval },
+});
 function hasExecArgvFlag(flag) {
     const processObject = globalThis.process;
     if (!processObject || !Array.isArray(processObject.execArgv)) {
@@ -3477,9 +3612,9 @@ function wrap(script) {
 function wrapForCompile(script, dynamicImportBindings) {
     const activeWrapper = (typeof moduleExports !== 'undefined' && moduleExports.wrapper) || wrapper;
     if (dynamicImportBindings) {
-        return '(function(' + dynamicImportBindings.reactionName + ',' + dynamicImportBindings.traceName + '){return ' +
+        return '(function(' + dynamicImportBindings.reactionName + ',' + dynamicImportBindings.traceName + ',' + dynamicImportBindings.prepareEvalName + ',' + dynamicImportBindings.nativeEvalName + '){return ' +
             activeWrapper[0] + script + activeWrapper[1] +
-            '\n})(__wasm_rquickjs_dynamic_import_reaction,__wasm_rquickjs_dynamic_import_with_trace);';
+            '\n})(__wasm_rquickjs_dynamic_import_reaction,__wasm_rquickjs_dynamic_import_with_trace,__wasm_rquickjs_prepare_cjs_eval_source,__wasm_rquickjs_native_eval);';
     }
     return activeWrapper[0] + script + activeWrapper[1];
 }

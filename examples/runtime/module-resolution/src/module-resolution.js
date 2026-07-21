@@ -2230,6 +2230,21 @@ export const testCjsDynamicImportAttributeScanner = async () => {
     try {
         fs.mkdirSync('/cjs-dynamic-import-attr-scanner', { recursive: true });
         fs.writeFileSync('/cjs-dynamic-import-attr-scanner/data.json', '{"fromCjs":true}');
+        fs.mkdirSync('/cjs-dynamic-import-attr-scanner/eval-a', { recursive: true });
+        fs.mkdirSync('/cjs-dynamic-import-attr-scanner/eval-b', { recursive: true });
+        fs.writeFileSync('/cjs-dynamic-import-attr-scanner/eval-a/target.mjs', 'export default "eval-a";');
+        fs.writeFileSync('/cjs-dynamic-import-attr-scanner/eval-b/target.mjs', 'export default "eval-b";');
+        fs.writeFileSync('/cjs-dynamic-import-attr-scanner/eval-a/target.json', '{"value":"eval-json"}');
+        for (const name of ['a', 'b']) {
+            fs.writeFileSync(`/cjs-dynamic-import-attr-scanner/eval-${name}/caller.cjs`, [
+                'exports.load = () => eval(\'import("./target.mjs")\');',
+                'exports.loadAbsolute = () => eval(\'import("file:///cjs-dynamic-import-attr-scanner/eval-' + name + '/target.mjs")\');',
+                'exports.loadIndirect = () => Promise.resolve(\'import("node:fs")\').then(eval);',
+                'exports.loadNested = () => eval(\'eval(\\\'import("./target.mjs")\\\')\');',
+                'exports.loadCollision = () => { globalThis.__wasm_rquickjs_cjs_eval_bridge = {}; const source = "const __wasm_rquickjs_cjs_eval_br\\\\u0069dge_1 = 0; import(\\\'./target.mjs\\\')"; const result = eval(source); delete globalThis.__wasm_rquickjs_cjs_eval_bridge; return result; };',
+                'exports.loadJson = () => eval(\'import("./target.json", { with: { type: "json" } })\');',
+            ].join('\n'));
+        }
         fs.writeFileSync('/cjs-dynamic-import-attr-scanner/module.cjs', [
             'const assert = require("node:assert");',
             'const stringLiteral = "import(\\"./missing-string.json\\", { with: { type: \\"json\\" } })";',
@@ -2237,6 +2252,7 @@ export const testCjsDynamicImportAttributeScanner = async () => {
             'const regexLiteral = /import\\(\\"\\.\\/missing-regex\\.json\\", \\{ with: \\{ type: \\"json\\" \\} \\}\\)/;',
             'const commentedAssignmentRegexLiteral = /* scanner comment */ /import(".+")/.source;',
             'function returnedRegexLiteral() { return /* scanner comment */ /import(".+")/.source; }',
+            'function shadowedEval() { const eval = (value) => value; return eval(\'import("./not-loaded.mjs")\'); }',
             '// import("./missing-comment.json", { with: { type: "json" } });',
             'const objectMethod = { import(value, options) { return [value, options.with.type]; } };',
             'class ImportMethods {',
@@ -2251,7 +2267,7 @@ export const testCjsDynamicImportAttributeScanner = async () => {
             '  const commentedInside = await import( /* inside call */ "./data.json" /* before options */, { with: { type: "json" } });',
             '  const templateImported = await `${(await import("./data.json", { with: { type: "json" } })).default.fromCjs}`;',
             '  const nested = await import((await import("./name.json", { with: { type: "json" } })).default.name, { with: { type: "json" } });',
-            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), json: imported.default, spaced: spaced.default, commented: commented.default, commentedInside: commentedInside.default, templateImported, nested: nested.default };',
+            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), shadowedEval: shadowedEval(), json: imported.default, spaced: spaced.default, commented: commented.default, commentedInside: commentedInside.default, templateImported, nested: nested.default };',
             '};',
         ].join('\n'));
         fs.writeFileSync('/cjs-dynamic-import-attr-scanner/name.json', '{"name":"./data.json"}');
@@ -2269,12 +2285,23 @@ export const testCjsDynamicImportAttributeScanner = async () => {
         assert.match(value.regexLiteral, /missing-regex/);
         assert.strictEqual(value.commentedAssignmentRegexLiteral, 'import(".+")');
         assert.strictEqual(value.returnedRegexLiteral, 'import(".+")');
+        assert.strictEqual(value.shadowedEval, 'import("./not-loaded.mjs")');
         assert.deepStrictEqual(value.json, { fromCjs: true });
         assert.deepStrictEqual(value.spaced, { fromCjs: true });
         assert.deepStrictEqual(value.commented, { fromCjs: true });
         assert.deepStrictEqual(value.commentedInside, { fromCjs: true });
         assert.strictEqual(value.templateImported, 'true');
         assert.deepStrictEqual(value.nested, { fromCjs: true });
+        const evalA = (await import('/cjs-dynamic-import-attr-scanner/eval-a/caller.cjs')).default;
+        const evalB = (await import('/cjs-dynamic-import-attr-scanner/eval-b/caller.cjs')).default;
+        assert.strictEqual((await evalA.load()).default, 'eval-a');
+        assert.strictEqual((await evalA.load()).default, 'eval-a');
+        assert.strictEqual((await evalB.load()).default, 'eval-b');
+        assert.strictEqual((await evalA.loadAbsolute()).default, 'eval-a');
+        assert.strictEqual((await evalA.loadNested()).default, 'eval-a');
+        assert.strictEqual((await evalA.loadCollision()).default, 'eval-a');
+        assert.deepStrictEqual((await evalA.loadJson()).default, { value: 'eval-json' });
+        await assert.rejects(evalA.loadIndirect(), { code: 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING' });
         return true;
     } catch (error) {
         console.error(error);
