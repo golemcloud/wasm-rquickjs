@@ -3636,6 +3636,7 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
     }
 }
 
+#[derive(Clone, Copy)]
 enum CjsAnalysisPackageFallbackStep {
     RootFile,
     PackageMain,
@@ -3643,6 +3644,7 @@ enum CjsAnalysisPackageFallbackStep {
     RootDirectory,
 }
 
+#[derive(Clone, Copy)]
 enum CjsAnalysisDirectoryFallbackStep {
     RootFile,
     PackageMain,
@@ -3896,13 +3898,7 @@ impl NodeModulesResolver {
         package: Option<&PackageJson>,
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Option<String> {
-        let steps = [
-            CjsAnalysisPackageFallbackStep::RootFile,
-            CjsAnalysisPackageFallbackStep::PackageMain,
-            CjsAnalysisPackageFallbackStep::Subpath,
-            CjsAnalysisPackageFallbackStep::RootDirectory,
-        ];
-        for step in steps {
+        for step in Self::CJS_ANALYSIS_PACKAGE_FALLBACK_STEPS {
             if let Some(resolved) = Self::resolve_cjs_analysis_package_fallback_step(
                 step,
                 subpath,
@@ -4197,6 +4193,16 @@ impl NodeModulesResolver {
         CjsAnalysisProbe::Index("index.json"),
         CjsAnalysisProbe::Index("index.node"),
     ];
+    const CJS_ANALYSIS_PACKAGE_FALLBACK_STEPS: [CjsAnalysisPackageFallbackStep; 4] = [
+        CjsAnalysisPackageFallbackStep::RootFile,
+        CjsAnalysisPackageFallbackStep::PackageMain,
+        CjsAnalysisPackageFallbackStep::Subpath,
+        CjsAnalysisPackageFallbackStep::RootDirectory,
+    ];
+    const CJS_ANALYSIS_RELATIVE_DIRECTORY_FALLBACK_STEPS: [CjsAnalysisDirectoryFallbackStep; 2] = [
+        CjsAnalysisDirectoryFallbackStep::PackageMain,
+        CjsAnalysisDirectoryFallbackStep::RootDirectory,
+    ];
 
     fn first_existing_cjs_analysis_probe(
         target_path: &std::path::Path,
@@ -4395,6 +4401,26 @@ impl NodeModulesResolver {
         }
     }
 
+    fn first_existing_cjs_analysis_directory_fallback(
+        steps: &[CjsAnalysisDirectoryFallbackStep],
+        directory_path: &std::path::Path,
+        package: Option<&PackageJson>,
+        resolution: &mut NodePackageResolutionContext<'_, '_>,
+    ) -> Option<String> {
+        for step in steps {
+            if let Some(resolved) = Self::resolve_cjs_analysis_directory_fallback_step(
+                *step,
+                directory_path,
+                package,
+                resolution,
+            ) {
+                return Some(resolved);
+            }
+        }
+
+        None
+    }
+
     fn resolve_cjs_analysis_relative(
         target_path: &std::path::Path,
         resolution: &mut NodePackageResolutionContext<'_, '_>,
@@ -4417,24 +4443,12 @@ impl NodeModulesResolver {
             Ok(package) => package,
             Err(_) => return None,
         };
-        let steps = [
-            CjsAnalysisDirectoryFallbackStep::PackageMain,
-            CjsAnalysisDirectoryFallbackStep::RootDirectory,
-        ];
-        for step in steps {
-            if let Some(resolved) =
-                Self::resolve_cjs_analysis_directory_fallback_step(
-                    step,
-                    target_path,
-                    package.as_deref(),
-                    resolution,
-                )
-            {
-                return Some(resolved);
-            }
-        }
-
-        None
+        Self::first_existing_cjs_analysis_directory_fallback(
+            &Self::CJS_ANALYSIS_RELATIVE_DIRECTORY_FALLBACK_STEPS,
+            target_path,
+            package.as_deref(),
+            resolution,
+        )
     }
 
     fn resolve_package_exports(

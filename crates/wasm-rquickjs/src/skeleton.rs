@@ -960,6 +960,64 @@ mod tests {
     }
 
     #[test]
+    fn cjs_analysis_fallback_order_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "const CJS_ANALYSIS_PACKAGE_FALLBACK_STEPS: [CjsAnalysisPackageFallbackStep; 4] = [ CjsAnalysisPackageFallbackStep::RootFile, CjsAnalysisPackageFallbackStep::PackageMain, CjsAnalysisPackageFallbackStep::Subpath, CjsAnalysisPackageFallbackStep::RootDirectory, ];"
+            ) && internal_rs.contains(
+                "const CJS_ANALYSIS_RELATIVE_DIRECTORY_FALLBACK_STEPS: [CjsAnalysisDirectoryFallbackStep; 2] = [ CjsAnalysisDirectoryFallbackStep::PackageMain, CjsAnalysisDirectoryFallbackStep::RootDirectory, ];"
+            ),
+            "CJS-analysis fallback ordering must be explicit and shared instead of re-spelled at each call site"
+        );
+
+        let package_start = internal_rs
+            .find("fn try_resolve_package_directory_for_cjs_analysis(")
+            .expect("CJS-analysis package directory resolver must exist");
+        let package_end = internal_rs[package_start..]
+            .find("fn resolve_cjs_analysis_package_fallback_step(")
+            .expect("package directory resolver must precede package fallback step helper")
+            + package_start;
+        let package_resolver = &internal_rs[package_start..package_end];
+        assert!(
+            package_resolver.contains("for step in Self::CJS_ANALYSIS_PACKAGE_FALLBACK_STEPS")
+                && !package_resolver.contains("CjsAnalysisPackageFallbackStep::RootFile,"),
+            "CJS-analysis package fallback must consume the shared package fallback order"
+        );
+
+        let directory_start = internal_rs
+            .find("fn first_existing_cjs_analysis_directory_fallback(")
+            .expect("shared CJS-analysis directory fallback helper must exist");
+        let directory_end = internal_rs[directory_start..]
+            .find("fn resolve_cjs_analysis_relative(")
+            .expect("shared directory fallback helper must precede relative resolver")
+            + directory_start;
+        let directory_helper = &internal_rs[directory_start..directory_end];
+        assert!(
+            directory_helper.contains(
+                "Self::resolve_cjs_analysis_directory_fallback_step( *step, directory_path, package, resolution,"
+            ),
+            "CJS-analysis directory fallback loops must share one helper"
+        );
+
+        let relative_start = internal_rs
+            .find("fn resolve_cjs_analysis_relative(")
+            .expect("CJS-analysis relative resolver must exist");
+        let relative_end = internal_rs[relative_start..]
+            .find("fn resolve_package_exports(")
+            .expect("relative resolver must precede package exports resolver")
+            + relative_start;
+        let relative_resolver = &internal_rs[relative_start..relative_end];
+        assert!(
+            relative_resolver.contains(
+                "Self::first_existing_cjs_analysis_directory_fallback( &Self::CJS_ANALYSIS_RELATIVE_DIRECTORY_FALLBACK_STEPS, target_path, package.as_deref(), resolution,"
+            ) && !relative_resolver.contains("CjsAnalysisDirectoryFallbackStep::PackageMain,"),
+            "relative CJS-analysis directory fallback must consume the shared directory fallback order"
+        );
+    }
+
+    #[test]
     fn cjs_package_directory_results_preserve_owning_package_metadata() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
