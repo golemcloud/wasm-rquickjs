@@ -2616,6 +2616,96 @@ mod tests {
     }
 
     #[test]
+    fn cjs_path_cache_backs_ordinary_require_resolution() {
+        let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
+
+        assert!(
+            module_js.contains("function cjsPathCacheObject()")
+                && module_js.contains("const cache = moduleExports._pathCache;")
+                && module_js.contains("function cjsPathCacheValue(key)")
+                && module_js.contains("function cjsSetPathCacheValue(key, filename)")
+                && module_js.contains("function cjsSetPathCacheResolvedFilename(key, filename)")
+                && module_js.contains("function cjsCachedPathResolution(filename)")
+                && module_js.contains("function cjsResolvedContent(resolved)")
+                && module_js.contains("function cjsPathCacheKey(id, lookupPaths)"),
+            "CJS path cache helpers must remain centralized around the public Module._pathCache backing object"
+        );
+
+        let node_modules_start = module_js
+            .find("function resolveFromNodeModules(")
+            .expect("node_modules resolver must exist");
+        let node_modules_end = module_js[node_modules_start..]
+            .find("function resolveForRequire(")
+            .expect("node_modules resolver must precede require.resolve helper")
+            + node_modules_start;
+        let node_modules = &module_js[node_modules_start..node_modules_end];
+        assert!(
+            node_modules.contains("const cacheKey = cjsPathCacheKey(id, dirs);")
+                && node_modules.contains(
+                    "const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));"
+                )
+                && node_modules
+                    .matches("cjsSetPathCacheResolvedFilename(cacheKey,")
+                    .count()
+                    == 3,
+            "ordinary CJS node_modules resolution must consult and canonically fill Module._pathCache for self, exports, and fallback results"
+        );
+
+        let resolve_for_require_start = module_js
+            .find("function resolveForRequire(id, options, parentDir, parentFilename, parentLookupPaths)")
+            .expect("ordinary require.resolve helper must exist");
+        let resolve_for_require_end = module_js[resolve_for_require_start..]
+            .find("function currentRequireMain()")
+            .expect("ordinary require.resolve helper must precede currentRequireMain")
+            + resolve_for_require_start;
+        let resolve_for_require = &module_js[resolve_for_require_start..resolve_for_require_end];
+        assert!(
+            resolve_for_require.contains(
+                "const lookupPaths = cjsLookupPathsForResolveOptions(searchPaths);"
+            ) && resolve_for_require.contains(
+                "const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [searchDir]);"
+            ) && resolve_for_require.contains(
+                "const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);"
+            )
+                && resolve_for_require.contains("if (cached !== null) return cached.filename;")
+                && resolve_for_require.contains(
+                    "const canonical = toCjsCanonicalFilename(resolved.filename, false);"
+                )
+                && resolve_for_require.contains("cjsSetPathCacheValue(cacheKey, canonical);"),
+            "ordinary require.resolve must use Module._pathCache for relative and absolute paths"
+        );
+
+        let local_require_start = module_js
+            .find("function localRequire(id) {")
+            .expect("ordinary CJS require function must exist");
+        let local_require_end = module_js[local_require_start..]
+            .find("localRequire.cache = moduleCache;")
+            .expect("ordinary CJS require must precede require property setup")
+            + local_require_start;
+        let local_require = &module_js[local_require_start..local_require_end];
+        assert!(
+            local_require.contains(
+                "const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);"
+            )
+                && local_require
+                    .contains("const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));")
+                && local_require.contains(
+                    "const mod = loadModule(cached.filename, cjsResolvedContent(cached), parentModule || null);"
+                )
+                && local_require
+                    .contains("cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);"),
+            "ordinary CJS require must use Module._pathCache for relative and absolute paths"
+        );
+
+        assert!(
+            module_js.contains("_pathCache: Object.create(null),")
+                && !module_js.contains("let _pathCache = Object.create(null);")
+                && !module_js.contains("set(value) { _pathCache = value; }"),
+            "Module._pathCache must be the public mutable data property used by the loader"
+        );
+    }
+
+    #[test]
     fn cjs_module_record_initialization_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

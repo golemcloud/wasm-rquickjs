@@ -728,8 +728,38 @@ requireExtensions['.json'] = defaultJsonExtensionHandler;
 requireExtensions['.node'] = defaultNodeExtensionHandler;
 const _defaultExtHandlers = setFromArray([defaultJsExtensionHandler, defaultJsonExtensionHandler, defaultNodeExtensionHandler]);
 
-// Path cache (settable; used by tests to reset resolution state)
-let _pathCache = Object.create(null);
+function cjsPathCacheObject() {
+    const cache = moduleExports._pathCache;
+    return cache && typeof cache === 'object' ? cache : null;
+}
+
+function cjsPathCacheValue(key) {
+    const cache = cjsPathCacheObject();
+    return cache && Object.prototype.hasOwnProperty.call(cache, key) ? cache[key] : undefined;
+}
+
+function cjsSetPathCacheValue(key, filename) {
+    const cache = cjsPathCacheObject();
+    if (cache) cache[key] = filename;
+}
+
+function cjsSetPathCacheResolvedFilename(key, filename) {
+    cjsSetPathCacheValue(key, toCjsCanonicalFilename(filename, false));
+}
+
+function cjsCachedPathResolution(filename) {
+    if (typeof filename !== 'string') return null;
+    return { filename, content: null, __wasmPathCacheHit: true };
+}
+
+function cjsResolvedContent(resolved) {
+    if (resolved.content !== null && resolved.content !== undefined) return resolved.content;
+    return fsModule.readFileSync(resolved.filename, 'utf8');
+}
+
+function cjsPathCacheKey(id, lookupPaths) {
+    return id + '\x00' + lookupPaths.join('\x00');
+}
 
 function findLongestRegisteredExtension(filename) {
     const name = pathModule.basename(filename);
@@ -5232,12 +5262,16 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
     resolution = resolution || makeCjsResolutionState();
     conditions = conditions || cjsPackageConditions();
     const dirs = Array.isArray(lookupPaths) ? lookupPaths : _nodeModulePaths(parentDir);
+    const cacheKey = cjsPathCacheKey(id, dirs);
+    const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
+    if (cached !== null) return cached;
 
     // Split into package name and subpath for packages with subpath specifiers
     const parts = splitPackageName(id);
 
     const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions, resolution);
     if (selfResolved !== undefined) {
+        cjsSetPathCacheResolvedFilename(cacheKey, selfResolved.filename);
         return selfResolved;
     }
 
@@ -5245,14 +5279,40 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
         const pkgDir = pathModule.join(dirs[i], parts.name);
         const exportsResolved = resolvePackageExportsEntry(parts, pkgDir, conditions, resolution);
         if (exportsResolved !== undefined) {
+            cjsSetPathCacheResolvedFilename(cacheKey, exportsResolved.filename);
             return exportsResolved;
         }
 
         const fallbackResolved = resolveCjsPackageFallbacks(parts, pkgDir, id, parentFilename || parentDir);
-        if (fallbackResolved !== null) return fallbackResolved;
+        if (fallbackResolved !== null) {
+            cjsSetPathCacheResolvedFilename(cacheKey, fallbackResolved.filename);
+            return fallbackResolved;
+        }
 
     }
     return null;
+}
+
+function cjsLookupPathsForResolveOptions(searchPaths) {
+    const lookupPaths = [];
+    function pushUnique(path) {
+        if (!lookupPaths.includes(path)) lookupPaths.push(path);
+    }
+    for (let pi = 0; pi < searchPaths.length; pi++) {
+        if (typeof searchPaths[pi] !== 'string') {
+            const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
+            argErr.code = 'ERR_INVALID_ARG_VALUE';
+            throw argErr;
+        }
+        const nodeModulePaths = _nodeModulePaths(pathModule.resolve(searchPaths[pi]));
+        for (let i = 0; i < nodeModulePaths.length; i++) {
+            pushUnique(nodeModulePaths[i]);
+        }
+    }
+    for (let i = 0; i < globalPaths.length; i++) {
+        pushUnique(globalPaths[i]);
+    }
+    return lookupPaths;
 }
 
 function resolveForRequire(id, options, parentDir, parentFilename, parentLookupPaths) {
@@ -5274,7 +5334,19 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
             throw argErr;
         }
         const isRelative = isRelativeOrAbsoluteSpecifier(id);
-        const resolution = isRelative ? null : makeCjsResolutionState();
+        if (!isRelative) {
+            const lookupPaths = cjsLookupPathsForResolveOptions(searchPaths);
+            const resolution = makeCjsResolutionState();
+            const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, lookupPaths, resolution);
+            if (nmResolved) {
+                return nmResolved.__wasmPathCacheHit
+                    ? nmResolved.filename
+                    : toCjsCanonicalFilename(nmResolved.filename, false);
+            }
+            const err = new Error("Cannot find module '" + id + "'");
+            err.code = 'MODULE_NOT_FOUND';
+            throw addRequireStackToModuleNotFound(err, id, parentFilename);
+        }
         for (let pi = 0; pi < searchPaths.length; pi++) {
             if (typeof searchPaths[pi] !== 'string') {
                 const argErr = new TypeError("The argument 'paths[" + pi + "]' must be a string. Received " + typeof searchPaths[pi]);
@@ -5282,19 +5354,17 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
                 throw argErr;
             }
             const searchDir = pathModule.resolve(searchPaths[pi]);
-            if (isRelative) {
-                // Relative/absolute: resolve directly against the search path
-                try {
-                    const resolved = resolveFilename(id, searchDir);
-                    return toCjsCanonicalFilename(resolved.filename, false);
-                } catch (e) {
-                    addRequireStackToModuleNotFound(e, id, parentFilename);
-                    // Try next path
-                }
-            } else {
-                // Bare specifier: use node_modules resolution from search path
-                const nmResolved = resolveFromNodeModules(id, searchDir, parentFilename, undefined, undefined, resolution);
-                if (nmResolved) return toCjsCanonicalFilename(nmResolved.filename, false);
+            const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [searchDir]);
+            const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
+            if (cached !== null) return cached.filename;
+            try {
+                const resolved = resolveFilename(id, searchDir);
+                const canonical = toCjsCanonicalFilename(resolved.filename, false);
+                cjsSetPathCacheValue(cacheKey, canonical);
+                return canonical;
+            } catch (e) {
+                addRequireStackToModuleNotFound(e, id, parentFilename);
+                // Try next path
             }
         }
         const err = new Error("Cannot find module '" + id + "'");
@@ -5302,9 +5372,14 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
         throw addRequireStackToModuleNotFound(err, id, parentFilename);
     }
     if (isRelativeOrAbsoluteSpecifier(id)) {
+        const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
+        const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
+        if (cached !== null) return cached.filename;
         try {
             const resolved = resolveFilename(id, parentDir);
-            return toCjsCanonicalFilename(resolved.filename, false);
+            const canonical = toCjsCanonicalFilename(resolved.filename, false);
+            cjsSetPathCacheValue(cacheKey, canonical);
+            return canonical;
         } catch (err) {
             throw addRequireStackToModuleNotFound(err, id, parentFilename);
         }
@@ -5319,7 +5394,9 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
     const resolution = makeCjsResolutionState();
     const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
     if (nmResolved) {
-        return toCjsCanonicalFilename(nmResolved.filename, false);
+        return nmResolved.__wasmPathCacheHit
+            ? nmResolved.filename
+            : toCjsCanonicalFilename(nmResolved.filename, false);
     }
     const err = new Error("Cannot find module '" + id + "'");
     err.code = 'MODULE_NOT_FOUND';
@@ -5387,12 +5464,19 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
 
         // Relative or absolute file paths
         if (isRelativeOrAbsoluteSpecifier(id)) {
+            const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
+            const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
+            if (cached !== null) {
+                const mod = loadModule(cached.filename, cjsResolvedContent(cached), parentModule || null);
+                return mod.exports;
+            }
             let resolved;
             try {
                 resolved = resolveFilename(id, parentDir);
             } catch (err) {
                 throw addRequireStackToModuleNotFound(err, id, parentFilename);
             }
+            cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);
             const mod = loadModule(resolved.filename, resolved.content, parentModule || null);
             return mod.exports;
         }
@@ -5401,7 +5485,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
             const resolution = makeCjsResolutionState();
             const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
             if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
-            const mod = loadModule(importsResolved.filename, importsResolved.content, parentModule || null);
+            const mod = loadModule(importsResolved.filename, cjsResolvedContent(importsResolved), parentModule || null);
             return mod.exports;
         }
 
@@ -5409,7 +5493,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         const resolution = makeCjsResolutionState();
         const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
         if (nmResolved) {
-            const mod = loadModule(nmResolved.filename, nmResolved.content, parentModule || null);
+            const mod = loadModule(nmResolved.filename, cjsResolvedContent(nmResolved), parentModule || null);
             return mod.exports;
         }
 
@@ -6562,7 +6646,7 @@ const moduleExports = Object.assign(Module, {
     _resolveFilename: moduleResolveFilename,
     _load: moduleLoad,
     _initPaths: _initPaths,
-    _pathCache: _pathCache,
+    _pathCache: Object.create(null),
     _extensions: requireExtensions,
     _stat: _stat,
     globalPaths: globalPaths,

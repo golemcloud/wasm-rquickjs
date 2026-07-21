@@ -60,8 +60,7 @@ export const testRequireBuiltin = () => {
 
         return true;
     } catch (e) {
-        console.error(e);
-        return false;
+        throw e;
     }
 };
 
@@ -90,6 +89,67 @@ export const testRequireDirectory = () => {
         fs.writeFileSync('/mylib/index.js', 'module.exports = { name: "mylib" };');
         const mylib = require('/mylib');
         assert.strictEqual(mylib.name, 'mylib');
+
+        const Module = require('module');
+        const originalPathCache = Module._pathCache;
+        try {
+            fs.mkdirSync('/path-cache-app/node_modules/path-cache-pkg', { recursive: true });
+            fs.writeFileSync('/path-cache-app/a.js', 'module.exports = "a";');
+            fs.writeFileSync('/path-cache-app/b.js', 'module.exports = "b";');
+            fs.writeFileSync('/path-cache-app/node_modules/path-cache-pkg/index.js', 'module.exports = "index";');
+            const appRequire = Module.createRequire('/path-cache-app/app.js');
+
+            Module._pathCache = Object.create(null);
+            Module._pathCache['./a\x00/path-cache-app'] = '/path-cache-app/b.js';
+            assert.strictEqual(appRequire('./a'), 'b', 'manual Module._pathCache entry redirects relative require');
+
+            Object.defineProperty(Module, '_pathCache', {
+                value: Object.create(null),
+                writable: true,
+                enumerable: true,
+                configurable: true,
+            });
+            Module._pathCache['/path-cache-app/a.js\x00'] = '/path-cache-app/b.js';
+            assert.strictEqual(appRequire('/path-cache-app/a.js'), 'b', 'manual Module._pathCache entry redirects absolute require');
+
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(appRequire.resolve('./a'), '/path-cache-app/a.js');
+            assert.strictEqual(Module._pathCache['./a\x00/path-cache-app'], '/path-cache-app/a.js');
+            fs.unlinkSync('/path-cache-app/a.js');
+            assert.strictEqual(appRequire.resolve('./a'), '/path-cache-app/a.js', 'require.resolve returns stale cached filename');
+            assert.throws(() => appRequire('./a'), { code: 'ENOENT' }, 'require loads stale cached filename without re-resolving');
+
+            fs.writeFileSync('/path-cache-app/real-link-target.js', 'module.exports = { link: true };');
+            fs.symlinkSync('/path-cache-app/real-link-target.js', '/path-cache-app/link-target.js');
+            Module._pathCache = Object.create(null);
+            assert.deepStrictEqual(appRequire('./link-target.js'), { link: true });
+            const relativeSymlinkResolved = appRequire.resolve('./link-target.js');
+            assert.strictEqual(relativeSymlinkResolved, '/path-cache-app/real-link-target.js');
+            assert.strictEqual(require.cache[relativeSymlinkResolved].exports.link, true);
+
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(appRequire('path-cache-pkg'), 'index');
+            delete require.cache[appRequire.resolve('path-cache-pkg')];
+            fs.writeFileSync('/path-cache-app/node_modules/path-cache-pkg/package.json', JSON.stringify({ main: 'main.js' }));
+            fs.writeFileSync('/path-cache-app/node_modules/path-cache-pkg/main.js', 'module.exports = "main";');
+            assert.strictEqual(appRequire('path-cache-pkg'), 'index', 'node_modules path cache keeps previous package entry');
+            delete require.cache[appRequire.resolve('path-cache-pkg')];
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(appRequire('path-cache-pkg'), 'main', 'clearing Module._pathCache allows new package main');
+
+            fs.mkdirSync('/path-cache-app/packages/real-pkg', { recursive: true });
+            fs.writeFileSync('/path-cache-app/packages/real-pkg/index.js', 'module.exports = { symlink: true };');
+            fs.symlinkSync('/path-cache-app/packages/real-pkg', '/path-cache-app/node_modules/symlink-pkg', 'dir');
+            Module._pathCache = Object.create(null);
+            assert.deepStrictEqual(appRequire('symlink-pkg'), { symlink: true });
+            const symlinkResolved = appRequire.resolve('symlink-pkg');
+            assert.strictEqual(symlinkResolved, '/path-cache-app/packages/real-pkg/index.js');
+            assert.strictEqual(require.cache[symlinkResolved].exports.symlink, true);
+            delete require.cache[symlinkResolved];
+            assert.strictEqual(require.cache[symlinkResolved], undefined);
+        } finally {
+            Module._pathCache = originalPathCache;
+        }
 
         return true;
     } catch (e) {
@@ -202,6 +262,8 @@ export const testRequireExtensionsOrder = () => {
         fs.writeFileSync('/exact-preferred.js', 'module.exports = { exact: true };');
         fs.writeFileSync('/exact-preferred.alpha', 'module.exports = { exact: false };');
 
+        const Module = require('module');
+        const originalPathCache = Module._pathCache;
         const originalAlpha = require.extensions['.alpha'];
         const originalBeta = require.extensions['.beta'];
         let alphaHandlerCalls = 0;
@@ -219,6 +281,7 @@ export const testRequireExtensionsOrder = () => {
             assert.deepStrictEqual(require('/ordered'), { ext: 'js' });
             delete require.cache['/ordered.js'];
             fs.unlinkSync('/ordered.js');
+            Module._pathCache = Object.create(null);
             assert.deepStrictEqual(require('/ordered'), { ext: 'alpha', filename: '/ordered.alpha' });
             assert.strictEqual(alphaHandlerCalls, 1);
             assert.strictEqual(betaHandlerCalls, 0);
@@ -240,6 +303,7 @@ export const testRequireExtensionsOrder = () => {
             } else {
                 require.extensions['.beta'] = originalBeta;
             }
+            Module._pathCache = originalPathCache;
         }
 
         return true;
