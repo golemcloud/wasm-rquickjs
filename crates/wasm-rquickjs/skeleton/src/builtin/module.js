@@ -729,18 +729,15 @@ requireExtensions['.node'] = defaultNodeExtensionHandler;
 const _defaultExtHandlers = setFromArray([defaultJsExtensionHandler, defaultJsonExtensionHandler, defaultNodeExtensionHandler]);
 
 function cjsPathCacheObject() {
-    const cache = moduleExports._pathCache;
-    return cache && typeof cache === 'object' ? cache : null;
+    return moduleExports._pathCache;
 }
 
 function cjsPathCacheValue(key) {
-    const cache = cjsPathCacheObject();
-    return cache && Object.prototype.hasOwnProperty.call(cache, key) ? cache[key] : undefined;
+    return cjsPathCacheObject()[key];
 }
 
 function cjsSetPathCacheValue(key, filename) {
-    const cache = cjsPathCacheObject();
-    if (cache) cache[key] = filename;
+    cjsPathCacheObject()[key] = filename;
 }
 
 function cjsSetPathCacheResolvedFilename(key, filename) {
@@ -748,13 +745,8 @@ function cjsSetPathCacheResolvedFilename(key, filename) {
 }
 
 function cjsCachedPathResolution(filename) {
-    if (typeof filename !== 'string') return null;
-    return { filename, content: null, __wasmPathCacheHit: true };
-}
-
-function cjsResolvedContent(resolved) {
-    if (resolved.content !== null && resolved.content !== undefined) return resolved.content;
-    return fsModule.readFileSync(resolved.filename, 'utf8');
+    if (!filename) return null;
+    return { filename, __wasmPathCacheHit: true };
 }
 
 function cjsPathCacheKey(id, lookupPaths) {
@@ -802,8 +794,7 @@ function loadAsFile(candidate, skipExact) {
     if (filename === null || filename === undefined) {
         return null;
     }
-    const content = tryReadFile(String(filename));
-    return content === null ? null : { filename: String(filename), content };
+    return { filename: String(filename) };
 }
 
 function loadAsDirectory(candidate, id, parentDir, seen) {
@@ -928,11 +919,14 @@ function resolveExactPackageFile(filename, resolution) {
         if (cached !== null) return cached;
         throw makeModuleNotFoundError(filename);
     }
-    const content = tryReadFile(filename);
+    let exists = false;
+    try {
+        exists = fsModule.statSync(filename).isFile();
+    } catch (_) {}
     if (resolution) {
-        resolution.exactFileCache[filename] = content === null ? null : { filename, content };
+        resolution.exactFileCache[filename] = exists ? { filename } : null;
     }
-    if (content !== null) return { filename, content };
+    if (exists) return { filename };
     throw makeModuleNotFoundError(filename);
 }
 
@@ -992,8 +986,7 @@ function resolvePackageSelfReference(parts, parentDir, conditions, resolution) {
 }
 
 function readCjsPackageCandidate(filename, packageDir) {
-    const content = tryReadFile(filename);
-    return content === null ? null : { filename, content, packageDir };
+    return { filename, packageDir };
 }
 
 function cjsPackageExtensionKeys() {
@@ -4494,6 +4487,7 @@ function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, chi
 function compileModuleInto(mod, source, filename, requireOverride) {
     filename = filename === undefined || filename === null ? mod.filename : filename;
     source = String(source);
+    registerSourceMapForCjs(filename, source, mod);
     const requireParentFilename = filename === '' && mod && typeof mod.filename === 'string'
         ? mod.filename
         : filename;
@@ -4653,16 +4647,17 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function cjsLoaderFileResult(filename, source, format, url) {
-        return registeredLoaderUrlFormatMaybeSourceResult(
-            url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url),
-            cjsLoaderFileFormat(filename, format),
-            source,
-        );
+        const resultUrl = url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url);
+        const resultFormat = cjsLoaderFileFormat(filename, format);
+        return source === null || source === undefined
+            ? registeredLoaderUrlFormatResult(resultUrl, resultFormat)
+            : registeredLoaderUrlFormatSourceResult(resultUrl, resultFormat, source);
     }
 
     function cjsLoaderFileUrlResult(url, format, resultUrl) {
         const filename = nodeUrl.fileURLToPath(url);
-        return cjsLoaderFileResult(filename, loaderFileUrlSource(url), format, resultUrl);
+        if (_stat(filename) !== 0) return undefined;
+        return cjsLoaderFileResult(filename, undefined, format, resultUrl);
     }
 
     function cjsPackageResolutionForLoaderResult(resolved) {
@@ -4715,7 +4710,7 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
         }
         if (isRelativeOrAbsoluteSpecifier(specifier)) {
             const resolved = resolveFilename(specifier, parentDir);
-            return cjsLoaderFileResult(resolved.filename, resolved.content);
+            return cjsLoaderFileResult(resolved.filename, undefined);
         }
         if (specifier.startsWith('#') && parentFilename) {
             return resolveCjsPackageDefaultForLoader(specifier, parentURL, context);
@@ -5026,8 +5021,6 @@ function loadCommonJsTransaction(descriptor) {
 
     // Cache before executing (handles circular dependencies)
     moduleCache[cacheKey] = mod;
-    registerSourceMapForCjs(filename, source, mod);
-
     if (parentModule && parentModule.children) {
         parentModule.children.push(mod);
     }
@@ -5068,6 +5061,13 @@ function loadCommonJsTransaction(descriptor) {
         throw err;
     } else if (handler === defaultJsonExtensionHandler) {
         try {
+            source = fsModule.readFileSync(filename, 'utf8');
+            registerSourceMapForCjs(filename, source, mod);
+        } catch (err) {
+            discardCjsModuleLoad(cacheKey, parentModule, mod);
+            throw err;
+        }
+        try {
             if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
                 source = source.slice(1);
             }
@@ -5103,6 +5103,13 @@ function loadCommonJsTransaction(descriptor) {
                 throw err;
             }
         } else {
+            try {
+                source = fsModule.readFileSync(filename, 'utf8');
+                registerSourceMapForCjs(filename, source, mod);
+            } catch (err) {
+                discardCjsModuleLoad(cacheKey, parentModule, mod);
+                throw err;
+            }
             const dirname = pathModule.dirname(filename);
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
@@ -5173,13 +5180,13 @@ function loadCommonJsTransaction(descriptor) {
     return mod;
 }
 
-function loadModule(resolvedFilename, source, parentModule) {
+function loadFilesystemCommonJs(resolvedFilename, parentModule) {
     return loadCommonJsTransaction({
         cacheKey: undefined,
         filename: resolvedFilename,
         parentModule,
         sourceKind: 'filesystem',
-        source,
+        source: undefined,
         sourceUrl: undefined,
     });
 }
@@ -5488,7 +5495,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
             const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
             const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
             if (cached !== null) {
-                const mod = loadModule(cached.filename, cjsResolvedContent(cached), parentModule || null);
+                const mod = loadFilesystemCommonJs(cached.filename, parentModule || null);
                 return mod.exports;
             }
             let resolved;
@@ -5498,7 +5505,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
                 throw addRequireStackToModuleNotFound(err, id, parentFilename);
             }
             cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);
-            const mod = loadModule(resolved.filename, resolved.content, parentModule || null);
+            const mod = loadFilesystemCommonJs(resolved.filename, parentModule || null);
             return mod.exports;
         }
 
@@ -5506,7 +5513,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
             const resolution = makeCjsResolutionState();
             const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
             if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
-            const mod = loadModule(importsResolved.filename, cjsResolvedContent(importsResolved), parentModule || null);
+            const mod = loadFilesystemCommonJs(importsResolved.filename, parentModule || null);
             return mod.exports;
         }
 
@@ -5514,7 +5521,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         const resolution = makeCjsResolutionState();
         const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
         if (nmResolved) {
-            const mod = loadModule(nmResolved.filename, cjsResolvedContent(nmResolved), parentModule || null);
+            const mod = loadFilesystemCommonJs(nmResolved.filename, parentModule || null);
             return mod.exports;
         }
 

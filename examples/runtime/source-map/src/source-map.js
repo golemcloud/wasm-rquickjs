@@ -78,6 +78,31 @@ export function testSourceMapApi() {
         require(blockDirective);
         assert(module.findSourceMap(blockDirective).findEntry(0, 0).originalSource.endsWith('/right.js'), 'last block directive wins');
 
+        const customExtension = '/source-map-custom-extension.probe';
+        const customMap = '/custom-extension.map';
+        fs.writeFileSync(customExtension, 'not JavaScript');
+        writeJson(customMap, {
+            version: 3,
+            sources: ['custom-extension-source.js'],
+            names: [],
+            mappings: 'AAAA',
+        });
+        const previousProbe = require.extensions['.probe'];
+        try {
+            require.extensions['.probe'] = (mod, filename) => {
+                mod._compile('module.exports = 1;\n//# sourceMappingURL=custom-extension.map\n', filename);
+            };
+            require(customExtension);
+            assert(
+                module.findSourceMap(customExtension).findEntry(0, 0).originalSource.endsWith('/custom-extension-source.js'),
+                'custom extension _compile registers source map',
+            );
+        } finally {
+            if (previousProbe === undefined) delete require.extensions['.probe'];
+            else require.extensions['.probe'] = previousProbe;
+            delete require.cache[customExtension];
+        }
+
         return true;
     } catch (e) {
         console.log(e && e.stack ? e.stack : String(e));

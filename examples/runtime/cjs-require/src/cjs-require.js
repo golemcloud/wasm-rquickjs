@@ -119,6 +119,14 @@ export const testRequireDirectory = () => {
             assert.strictEqual(appRequire.resolve('./a'), '/path-cache-app/a.js', 'require.resolve returns stale cached filename');
             assert.throws(() => appRequire('./a'), { code: 'ENOENT' }, 'require loads stale cached filename without re-resolving');
 
+            Module._pathCache = Object.create(null);
+            Module._pathCache['./b\x00/path-cache-app'] = 42;
+            assert.strictEqual(appRequire.resolve('./b'), 42, 'truthy non-string path-cache entries are returned verbatim');
+            Module._pathCache = null;
+            assert.throws(() => appRequire.resolve('./b'), TypeError, 'null path cache is used as-is');
+            Module._pathCache = 3;
+            assert.throws(() => appRequire.resolve('./b'), TypeError, 'primitive path cache fails when resolution writes through it');
+
             fs.writeFileSync('/path-cache-app/real-link-target.js', 'module.exports = { link: true };');
             fs.symlinkSync('/path-cache-app/real-link-target.js', '/path-cache-app/link-target.js');
             Module._pathCache = Object.create(null);
@@ -266,6 +274,8 @@ export const testRequireExtensionsOrder = () => {
         const originalPathCache = Module._pathCache;
         const originalAlpha = require.extensions['.alpha'];
         const originalBeta = require.extensions['.beta'];
+        const originalProbe = require.extensions['.probe'];
+        const originalReadFileSync = fs.readFileSync;
         let alphaHandlerCalls = 0;
         let betaHandlerCalls = 0;
         try {
@@ -277,6 +287,29 @@ export const testRequireExtensionsOrder = () => {
                 betaHandlerCalls++;
                 mod.exports = { ext: 'beta', filename };
             };
+
+            fs.writeFileSync('/custom.probe', new Uint8Array([0, 255, 0, 255]));
+            let probeHandlerCalls = 0;
+            let sourceReadCalls = 0;
+            require.extensions['.probe'] = (mod, filename) => {
+                probeHandlerCalls++;
+                mod.exports = { handled: filename };
+            };
+            fs.readFileSync = function(filename) {
+                if (filename === '/custom.probe') {
+                    sourceReadCalls++;
+                    throw new Error('built-in reader must not run for custom extensions');
+                }
+                return originalReadFileSync.apply(this, arguments);
+            };
+
+            assert.strictEqual(require.resolve('/custom.probe'), '/custom.probe');
+            assert.strictEqual(probeHandlerCalls, 0, 'require.resolve does not invoke extension handlers');
+            assert.strictEqual(sourceReadCalls, 0, 'require.resolve does not read module source');
+            assert.strictEqual(require.cache['/custom.probe'], undefined, 'require.resolve does not create module records');
+            assert.deepStrictEqual(require('/custom.probe'), { handled: '/custom.probe' });
+            assert.strictEqual(probeHandlerCalls, 1);
+            assert.strictEqual(sourceReadCalls, 0, 'custom extension load bypasses built-in source reads');
 
             assert.deepStrictEqual(require('/ordered'), { ext: 'js' });
             delete require.cache['/ordered.js'];
@@ -293,6 +326,8 @@ export const testRequireExtensionsOrder = () => {
             delete require.cache['/ordered.beta'];
             delete require.cache['/exact-preferred.js'];
             delete require.cache['/exact-preferred.alpha'];
+            delete require.cache['/custom.probe'];
+            fs.readFileSync = originalReadFileSync;
             if (originalAlpha === undefined) {
                 delete require.extensions['.alpha'];
             } else {
@@ -302,6 +337,11 @@ export const testRequireExtensionsOrder = () => {
                 delete require.extensions['.beta'];
             } else {
                 require.extensions['.beta'] = originalBeta;
+            }
+            if (originalProbe === undefined) {
+                delete require.extensions['.probe'];
+            } else {
+                require.extensions['.probe'] = originalProbe;
             }
             Module._pathCache = originalPathCache;
         }
