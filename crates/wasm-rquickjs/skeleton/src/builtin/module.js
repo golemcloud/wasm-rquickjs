@@ -4578,6 +4578,12 @@ function registeredLoaderUrlFormatSourceResult(url, format, source) {
     return result;
 }
 
+function registeredLoaderUrlFormatMaybeSourceResult(url, format, source) {
+    return source !== null && source !== undefined
+        ? registeredLoaderUrlFormatSourceResult(url, format, source)
+        : undefined;
+}
+
 function resultForEsmFileUrl(url) {
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
@@ -4625,8 +4631,7 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function cjsLoaderFileResult(filename, source, format, url) {
-        if (source === null) return undefined;
-        return registeredLoaderUrlFormatSourceResult(
+        return registeredLoaderUrlFormatMaybeSourceResult(
             url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url),
             cjsLoaderFileFormat(filename, format),
             source,
@@ -6112,9 +6117,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (source === undefined && finalFormat === 'commonjs' && String(normalizedResolved.url).startsWith('file://')) {
             source = loaderFileUrlSource(normalizedResolved.url);
         }
-        if (source === null) source = undefined;
-        if (source === undefined) return undefined;
-        return registeredLoaderUrlFormatSourceResult(normalizedResolved.url, finalFormat, source);
+        return registeredLoaderUrlFormatMaybeSourceResult(normalizedResolved.url, finalFormat, source);
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_run_registered_loaders_sync', {
         value: runRegisteredLoadersSync,

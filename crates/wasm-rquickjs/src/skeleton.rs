@@ -1434,7 +1434,8 @@ mod tests {
         let sync_runner = &module_js[sync_start..sync_end];
         assert!(
             sync_runner.contains("source = loaderFileUrlSource(normalizedResolved.url);")
-                && !sync_runner.contains("tryReadFile(nodeUrl.fileURLToPath("),
+                && !sync_runner.contains("tryReadFile(nodeUrl.fileURLToPath(")
+                && !sync_runner.contains("if (source === null) source = undefined;"),
             "sync registered-loader CommonJS file fallback must share loaderFileUrlSource with the normalized URL"
         );
         assert!(
@@ -1699,6 +1700,8 @@ mod tests {
                 "function registeredLoaderUrlFormatResult(url, format) { return { url, format }; }"
             ) && module_js.contains(
                 "function registeredLoaderUrlFormatSourceResult(url, format, source) { const result = registeredLoaderUrlFormatResult(url, format); result.source = source; return result; }"
+            ) && module_js.contains(
+                "function registeredLoaderUrlFormatMaybeSourceResult(url, format, source) { return source !== null && source !== undefined ? registeredLoaderUrlFormatSourceResult(url, format, source) : undefined; }"
             ),
             "registered-loader raw URL result object construction must stay centralized"
         );
@@ -1718,8 +1721,15 @@ mod tests {
             module_js
                 .matches("registeredLoaderUrlFormatSourceResult(")
                 .count(),
-            4,
+            3,
             "registered-loader URL/format/source results must use the shared source result helper"
+        );
+        assert_eq!(
+            module_js
+                .matches("registeredLoaderUrlFormatMaybeSourceResult(")
+                .count(),
+            3,
+            "registered-loader nullable source-result paths must use the shared maybe-source helper"
         );
 
         let async_start = module_js
@@ -1751,7 +1761,7 @@ mod tests {
             ) && sync_runner.contains(
                 "return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);"
             ) && sync_runner.contains(
-                "return registeredLoaderUrlFormatSourceResult(normalizedResolved.url, finalFormat, source);"
+                "return registeredLoaderUrlFormatMaybeSourceResult(normalizedResolved.url, finalFormat, source);"
             ) && !sync_runner.contains("{ url: normalizedResolved.url, format:")
                 && !sync_runner.contains("format: finalFormat, source"),
             "sync registered-loader raw result paths must share URL/format/source object construction"
@@ -2258,7 +2268,7 @@ mod tests {
                     .contains("function cjsLoaderFileResult(filename, source, format, url) {")
                 && module_js.contains("function cjsLoaderFileUrlResult(url, format, resultUrl) {")
                 && module_js.contains(
-                    "return registeredLoaderUrlFormatSourceResult( url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url), cjsLoaderFileFormat(filename, format), source, );"
+                    "return registeredLoaderUrlFormatMaybeSourceResult( url === undefined ? nodeUrl.pathToFileURL(filename).href : String(url), cjsLoaderFileFormat(filename, format), source, );"
                 ),
             "registered-loader CJS file results must use one format/source adapter"
         );
