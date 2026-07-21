@@ -1462,7 +1462,9 @@ There are a few important things to keep in mind when working on the project:
   `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1`, or `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` to enable only one layer, and
   `WASM_RQUICKJS_TEST_DROP_CACHE=1` when generated wrapper or optimized component artifacts must be rebuilt; it forces
   artifact cache freshness checks to miss, removes the central wrapper cache stamps, clears the in-process prepared
-  component cache, and bypasses the Wasmtime compilation cache for that run. `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips
+  component cache, and bypasses the Wasmtime compilation cache for that run. With the artifact cache enabled,
+  node_modules app tests reuse a process-local installed app template but still copy it into a fresh temporary app
+  directory for each test. `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips
   Wizer pre-initialization for `CompiledTest::new*` fixtures when a very short compile/test loop is more useful than
   optimized-component startup behavior. The prepared component cache
   currently applies to the normal `TestInstance::new` path; node-compat tests that instantiate through

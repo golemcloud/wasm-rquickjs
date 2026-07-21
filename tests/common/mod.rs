@@ -105,7 +105,7 @@ fn test_cache_enabled_from(fast: bool, specific: bool) -> bool {
     fast || specific
 }
 
-fn test_artifact_cache_enabled() -> bool {
+pub(crate) fn test_artifact_cache_enabled() -> bool {
     test_cache_enabled(TEST_ARTIFACT_CACHE_ENV)
 }
 

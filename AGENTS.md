@@ -51,7 +51,7 @@ WASM_RQUICKJS_TEST_FAST=1 cargo test --test runtime --features use-golem-wasmtim
 
 - `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` — uses Wasmtime's filesystem compilation cache.
 - `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` — reuses process-local `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path while still creating a fresh `Store`, component instance, WASI context, temp dir, and QuickJS runtime state per test. Node-compat tests that use `GolemPreparedComponent` do not currently use this cache layer.
-- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` — reuses wrapper build and optimized component artifacts when their source inputs are unchanged.
+- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` — reuses wrapper build and optimized component artifacts when their source inputs are unchanged. Node modules app tests also reuse a process-local installed app template, then copy it into a fresh temp app directory for each test.
 
 Use `WASM_RQUICKJS_TEST_DROP_CACHE=1` with the artifact cache to force wrapper build and Wizer outputs to be refreshed. Do not use grouped tests to speed up module compatibility checks; these tests rely on clean runtime state per case.
 
