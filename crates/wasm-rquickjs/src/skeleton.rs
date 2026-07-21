@@ -2526,8 +2526,9 @@ mod tests {
         let resolve_paths = &module_js[resolve_paths_start..resolve_paths_end];
         assert!(
             resolve_paths.find("validateRequireRequest(request);")
-                < resolve_paths.find("if (isBuiltinResolveTarget(request))"),
-            "require.resolve.paths must validate request before builtin handling"
+                < resolve_paths.find("if (isBuiltin(request))")
+                && !module_js.contains("function isBuiltinResolveTarget("),
+            "require.resolve.paths must validate request before builtin handling and must use the shared builtin classifier directly"
         );
 
         let local_require_start = module_js

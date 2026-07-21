@@ -662,10 +662,6 @@ function isBuiltin(id) {
     return builtinResolveSpecifier(id) !== undefined;
 }
 
-function isBuiltinResolveTarget(id) {
-    return builtinResolveSpecifier(id) !== undefined;
-}
-
 function builtinModuleForSpecifier(id) {
     const resolved = builtinResolveSpecifier(id);
     if (resolved !== undefined) return builtinModuleMap[resolved];
@@ -5436,7 +5432,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
 
     localRequire.resolve.paths = function paths(request) {
         validateRequireRequest(request);
-        if (isBuiltinResolveTarget(request)) {
+        if (isBuiltin(request)) {
             return null;
         }
         return _resolveLookupPaths(request, parentModule);
