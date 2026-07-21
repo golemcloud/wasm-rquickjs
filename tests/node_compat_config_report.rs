@@ -187,7 +187,7 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
 
     assert!(
         unexpected.is_empty(),
-        "module-related known-gap entries need an accepted deferral or same-process coverage reason:\n{}",
+        "module-related known-gap entries need an accepted deferral reason:\n{}",
         unexpected.join("\n")
     );
 
@@ -234,14 +234,10 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
     let has_engine_boundary = reason.contains("v8-specific")
         || reason.contains("engine difference")
         || (reason.contains("quickjs") && reason.contains("cannot"));
-    let has_same_process_coverage = reason.contains("same-process")
-        && (reason.contains("covered") || reason.contains("coverage"));
-
     has_cli_or_spawn_deferral
         || has_typescript_deferral
         || has_wasm_or_platform_boundary
         || has_engine_boundary
-        || has_same_process_coverage
 }
 
 fn collect_module_related_entrypoints() -> anyhow::Result<BTreeSet<String>> {
@@ -310,6 +306,7 @@ fn is_module_adjacent_known_gap(item: &InventoryItem) -> bool {
             .as_deref()
             .is_some_and(|reason| reason.contains("--input-type=module")),
         "parallel/test-cli-syntax-piped-good.js" => true,
+        "parallel/test-no-addons-resolution-condition.js" => true,
         "parallel/test-runner-import-no-scheme.js" => true,
         "parallel/test-runner-module-mocking.js" => true,
         _ => false,
