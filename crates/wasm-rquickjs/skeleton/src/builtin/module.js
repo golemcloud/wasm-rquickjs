@@ -3987,7 +3987,7 @@ function loaderCommonJsSourceModule(source, url) {
         cacheKey,
         source,
     );
-    return 'data:text/javascript,' + encodeURIComponent(facade);
+    return facade;
 }
 
 function loaderFileUrlSource(url) {
@@ -4432,8 +4432,8 @@ function loadCommonJsLoaderSourceExports(filename, source) {
 if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function') {
     Object.defineProperty(globalThis, '__wasm_rquickjs_load_commonjs_loader_source', {
         value: loadCommonJsLoaderSourceExports,
-        writable: true,
-        configurable: true,
+        writable: false,
+        configurable: false,
     });
 }
 

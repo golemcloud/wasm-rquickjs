@@ -87,6 +87,9 @@ export const testModuleBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_import_attr_prepare_for_base_parsed',
         '__wasm_rquickjs_import_attr_dynamic_import',
         '__wasm_rquickjs_import_attr_dynamic_import_parsed',
+        '__wasm_rquickjs_cjs_facade_has_own',
+        '__wasm_rquickjs_load_cjs_esm_facade_default',
+        '__wasm_rquickjs_load_commonjs_loader_source',
     ]) {
         const original = globalThis[name];
         const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -4048,7 +4051,15 @@ export const testCjsDirectNamedExports = async () => {
             '};',
         ].join('\n'));
 
-        const result = (await import('/cjs-named-export-app/direct-entry.mjs')).default;
+        const realmGlobal = globalThis;
+        const savedGlobalThis = realmGlobal.globalThis;
+        let result;
+        try {
+            realmGlobal.globalThis = {};
+            result = (await import('/cjs-named-export-app/direct-entry.mjs')).default;
+        } finally {
+            realmGlobal.globalThis = savedGlobalThis;
+        }
         assert.strictEqual(result.foo, 'foo');
         assert.strictEqual(result.bar, 'bar');
         assert.strictEqual(result.baz, 'baz');

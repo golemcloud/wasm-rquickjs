@@ -16,6 +16,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::ops::ControlFlow;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7843,7 +7844,7 @@ fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
             .is_some_and(|name| name == "node_modules")
 }
 
-fn cjs_named_export_source(names: &[String]) -> String {
+fn cjs_named_export_source(names: &[String], host_global: &str) -> String {
     let mut out = String::new();
     for (index, name) in names.iter().enumerate() {
         if name == "default" {
@@ -7852,28 +7853,110 @@ fn cjs_named_export_source(names: &[String]) -> String {
         let local = format!("__cjs_export_{}", index);
         let escaped = escape_js_string(name);
         out.push_str(&format!(
-            "var {local} = __wasm_rquickjs_module.__wasm_rquickjs_cjs_facade_has_own(__cjs_default, \"{escaped}\") ? __cjs_default[\"{escaped}\"] : undefined;\nexport {{ {local} as \"{escaped}\" }};\n"
+            "var {local} = {host_global}.__wasm_rquickjs_cjs_facade_has_own(__cjs_default, \"{escaped}\") ? __cjs_default[\"{escaped}\"] : undefined;\nexport {{ {local} as \"{escaped}\" }};\n"
         ));
     }
     out
 }
 
-fn build_cjs_facade_source(prologue: &str, default_expression: &str, names: &[String]) -> String {
-    let named_exports = cjs_named_export_source(names);
+fn build_cjs_facade_source(
+    default_member_expression: &str,
+    names: &[String],
+) -> String {
+    let host_global = "__wasm_rquickjs_global";
+    let named_exports = cjs_named_export_source(names, host_global);
     format!(
-        r#"{}
-import __wasm_rquickjs_module from "node:module";
-var __cjs_default = {};
+        r#"const {host_global}=import.meta.__wasm_rquickjs_global;
+var __cjs_default = {host_global}.{default_member_expression};
 export default __cjs_default;
 {}
 "#,
-        prologue.trim(),
-        default_expression,
         named_exports,
     )
 }
 
+const LOADER_CJS_FACADE_PREFIX: &str = "__wasm_rquickjs_loader_cjs_facade__:";
+
+#[derive(Clone)]
+struct LoaderCjsFacadeRegistry {
+    inner: Rc<RefCell<(u64, std::collections::hash_map::RandomState, HashMap<String, String>)>>,
+}
+
+impl Default for LoaderCjsFacadeRegistry {
+    fn default() -> Self {
+        Self {
+            inner: Rc::new(RefCell::new((
+                0,
+                std::collections::hash_map::RandomState::new(),
+                HashMap::new(),
+            ))),
+        }
+    }
+}
+
+impl LoaderCjsFacadeRegistry {
+    fn register(&self, source: String) -> String {
+        let mut inner = self.inner.borrow_mut();
+        loop {
+            inner.0 = inner.0.wrapping_add(1);
+            let mut hasher = inner.1.build_hasher();
+            inner.0.hash(&mut hasher);
+            let id = format!("{LOADER_CJS_FACADE_PREFIX}{:016x}", hasher.finish());
+            if !inner.2.contains_key(&id) {
+                inner.2.insert(id.clone(), source);
+                return id;
+            }
+        }
+    }
+
+    fn contains(&self, id: &str) -> bool {
+        self.inner.borrow().2.contains_key(id)
+    }
+
+    fn take(&self, id: &str) -> Option<String> {
+        self.inner.borrow_mut().2.remove(id)
+    }
+}
+
+struct LoaderCjsFacadeLoader(LoaderCjsFacadeRegistry);
+
+struct LoaderCjsFacadeResolver(LoaderCjsFacadeRegistry);
+
+impl Resolver for LoaderCjsFacadeResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        _base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if name.starts_with(LOADER_CJS_FACADE_PREFIX) && self.0.contains(name) {
+            Ok(name.to_string())
+        } else {
+            Err(Error::new_resolving(_base, name))
+        }
+    }
+}
+
+impl Loader for LoaderCjsFacadeLoader {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        path: &str,
+    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+        if !path.starts_with(LOADER_CJS_FACADE_PREFIX) {
+            return Err(Error::new_loading(path));
+        }
+        let source = self.0.take(path);
+        let Some(source) = source else {
+            return Err(Error::new_loading(path));
+        };
+        let init = url_only_import_meta_init(path.to_string());
+        declare_module_with_import_meta(ctx, path, &source, &init)
+    }
+}
+
 fn build_loader_cjs_facade(
+    registry: &LoaderCjsFacadeRegistry,
     ctx: Ctx<'_>,
     filename: String,
     source_url: String,
@@ -7888,14 +7971,17 @@ fn build_loader_cjs_facade(
         &mut HashSet::new(),
         &cjs_conditions,
     );
-    let default_expression = format!(
-        "__wasm_rquickjs_module.__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
+    let default_member_expression = format!(
+        "__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
         escape_js_string(&filename),
         escape_js_string(&source),
         escape_js_string(&source_url),
         escape_js_string(&cache_key),
     );
-    build_cjs_facade_source("", &default_expression, &analysis.exports)
+    registry.register(build_cjs_facade_source(
+        &default_member_expression,
+        &analysis.exports,
+    ))
 }
 
 impl Loader for CjsCompatLoader {
@@ -7960,14 +8046,12 @@ impl Loader for CjsCompatLoader {
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
-        let prologue = inject_module_source_prologue(init.filename.as_deref(), "", None);
-        let default_expression = format!(
-            "__wasm_rquickjs_module.__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\")",
+        let default_member_expression = format!(
+            "__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\")",
             escape_js_string(&fs_abs_path),
         );
         let wrapped = build_cjs_facade_source(
-            &prologue,
-            &default_expression,
+            &default_member_expression,
             &detected_analysis.exports,
         );
 
@@ -9268,6 +9352,7 @@ impl JsState {
             .with_pattern("{}.js")
             .with_pattern("{}.mjs")
             .with_pattern("{}.json");
+        let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
 
         let resolver = (
             (
@@ -9276,6 +9361,7 @@ impl JsState {
                 DataUrlResolver,
                 FileUrlResolver,
                 PrivateBuiltinResolverGuard,
+                LoaderCjsFacadeResolver(loader_cjs_facades.clone()),
                 RegisteredLoaderResolver,
             ),
             (
@@ -9302,6 +9388,7 @@ impl JsState {
                 virtual_builtin_loader,
                 crate::modules::module_loader(),
                 crate::builtin::module_loader(),
+                LoaderCjsFacadeLoader(loader_cjs_facades.clone()),
                 DataUrlLoader,
                 StaticRegisteredFileUrlLoader,
             ),
@@ -9346,8 +9433,20 @@ impl JsState {
             set_non_replaceable_global(
                 &global,
                 "__wasm_rquickjs_build_loader_cjs_facade",
-                Function::new(ctx.clone(), build_loader_cjs_facade)
-                    .expect("Failed to create loader CJS facade builder"),
+                Function::new(ctx.clone(), {
+                    let loader_cjs_facades = loader_cjs_facades.clone();
+                    move |ctx, filename, source_url, cache_key, source| {
+                        build_loader_cjs_facade(
+                            &loader_cjs_facades,
+                            ctx,
+                            filename,
+                            source_url,
+                            cache_key,
+                            source,
+                        )
+                    }
+                })
+                .expect("Failed to create loader CJS facade builder"),
             )
             .expect("Failed to initialize loader CJS facade builder");
 
