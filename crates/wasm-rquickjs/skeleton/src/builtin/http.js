@@ -549,7 +549,15 @@ export class Response {
         if (this._isNative) {
             return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
         }
-        const cloned = new Response(this._body, {
+        // Tee a ReadableStream body so the clone and the original are independently
+        // readable; other body types are re-readable and can be shared by reference.
+        let clonedBody = this._body;
+        if (this._body instanceof ReadableStream) {
+            const [forSource, forClone] = this._body.tee();
+            this._body = forSource;
+            clonedBody = forClone;
+        }
+        const cloned = new Response(clonedBody, {
             status: this._status,
             statusText: this._statusText,
             headers: this._headers,
@@ -780,10 +788,17 @@ export class Request {
             this._url = input._url;
             this._headers = new Headers(input._headers);
             this._bodyUsed = false;
-            this._options = {
-                body: input.bytes().slice(),
-                ...input._options,
-            };
+            this._options = { ...input._options };
+            // Copy the raw body directly (the body getters read `this._body`). Tee a
+            // ReadableStream so both the source and the clone stay readable; other body
+            // types are re-readable, so a reference copy is enough.
+            if (input._body instanceof ReadableStream) {
+                const [forSource, forClone] = input._body.tee();
+                input._body = forSource;
+                this._body = forClone;
+            } else {
+                this._body = input._body;
+            }
         } else {
             this._url = typeof input === 'string' ? input : String(input);
             this._headers = new Headers(options.headers || {});
@@ -945,9 +960,9 @@ export class Request {
             return new Uint8Array(await streamToArrayBuffer(this._body));
         } else if (this._body instanceof FormData) {
             const blob = formDataToBlob(this._body);
-            return blob.bytes();
+            return new Uint8Array(await blob.arrayBuffer());
         } else if (this._body instanceof Blob) {
-            return this._body.bytes();
+            return new Uint8Array(await this._body.arrayBuffer());
         } else if (this._body instanceof URLSearchParams) {
             return new TextEncoder().encode(this._body.toString());
         } else if (this._body instanceof ArrayBuffer) {

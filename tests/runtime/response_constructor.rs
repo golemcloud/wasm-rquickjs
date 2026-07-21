@@ -133,3 +133,24 @@ async fn response_constructor_headers_iteration(
 ) -> anyhow::Result<()> {
     run_test(compiled, "test-headers-iteration").await
 }
+
+#[test]
+async fn response_constructor_request_clone(
+    #[tagged_as("response_constructor")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_test(compiled, "test-request-clone").await
+}
+
+#[test]
+async fn response_constructor_request_bytes_blob(
+    #[tagged_as("response_constructor")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_test(compiled, "test-request-bytes-blob").await
+}
+
+#[test]
+async fn response_constructor_response_clone_stream(
+    #[tagged_as("response_constructor")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_test(compiled, "test-response-clone-stream").await
+}

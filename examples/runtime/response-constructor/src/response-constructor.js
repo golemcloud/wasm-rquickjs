@@ -188,6 +188,52 @@ const responseConstructorExports = {
             return ok(name);
         } catch (e) { return fail(name, e); }
     },
+
+    async testRequestClone() {
+        const name = 'Request.clone() preserves body';
+        try {
+            const r = new Request('https://example.com/x', { method: 'POST', body: 'hello body' });
+            const c = r.clone();
+            const original = await r.text();
+            const cloned = await c.text();
+            if (original !== 'hello body') return fail(name, `original text "${original}"`);
+            if (cloned !== 'hello body') return fail(name, `cloned text "${cloned}"`);
+            if (c.url !== r.url) return fail(name, `cloned url "${c.url}"`);
+            if (c.method !== 'POST') return fail(name, `cloned method "${c.method}"`);
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testRequestBytesBlob() {
+        const name = 'Request.bytes() with Blob body';
+        try {
+            const r = new Request('https://example.com/x', { method: 'POST', body: new Blob(['abc']) });
+            const bytes = await r.bytes();
+            if (!(bytes instanceof Uint8Array)) return fail(name, `not a Uint8Array: ${bytes}`);
+            const text = new TextDecoder().decode(bytes);
+            if (text !== 'abc') return fail(name, `decoded "${text}"`);
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testResponseCloneStream() {
+        const name = 'Response.clone() tees stream body';
+        try {
+            const stream = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('stream body'));
+                    controller.close();
+                },
+            });
+            const r = new Response(stream);
+            const c = r.clone();
+            const original = await r.text();
+            const cloned = await c.text();
+            if (original !== 'stream body') return fail(name, `original "${original}"`);
+            if (cloned !== 'stream body') return fail(name, `cloned "${cloned}"`);
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
 };
 
 export { responseConstructorExports };
