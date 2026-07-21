@@ -7696,6 +7696,10 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
     !matches!(extension, Some("json" | "node"))
 }
 
+fn canonical_cjs_analysis_path(path: &str) -> String {
+    crate::builtin::realpath_for_module_resolution(path).unwrap_or_else(|| path.to_string())
+}
+
 fn analyze_cjs_reexport_specifier_names(
     filename: &str,
     reexport_specifiers: Vec<String>,
@@ -7704,7 +7708,8 @@ fn analyze_cjs_reexport_specifier_names(
 ) -> Vec<String> {
     let mut names = Vec::new();
     for reexport in reexport_specifiers {
-        if let Some(path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
+        if let Some(resolved_path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
+            && let path = canonical_cjs_analysis_path(&resolved_path)
             && !seen.contains(&path)
             && is_cjs_analysis_source_path(&path)
             && let Ok(source) = std::fs::read_to_string(&path)
@@ -7725,7 +7730,7 @@ fn analyze_cjs_exports_for_file(
     conditions: &[String],
 ) -> CjsExportAnalysis {
     let mut analysis = analyze_cjs_exports(source);
-    if !seen.insert(filename.to_string()) {
+    if !seen.insert(canonical_cjs_analysis_path(filename)) {
         return analysis;
     }
     let reexports = analysis.reexports.clone();

@@ -6041,6 +6041,14 @@ export const testCjsPackageReexportNamedExports = async () => {
             'exports.b = "b";',
         ].join('\n'));
 
+        fs.mkdirSync('/cjs-package-reexport-app/symlink-cycle', { recursive: true });
+        fs.symlinkSync('.', '/cjs-package-reexport-app/symlink-cycle/again');
+        fs.writeFileSync('/cjs-package-reexport-app/symlink-cycle-entry.cjs', 'module.exports = require("./symlink-cycle/subject.cjs");');
+        fs.writeFileSync('/cjs-package-reexport-app/symlink-cycle/subject.cjs', [
+            'exports.symlinkCycleValue = 42;',
+            'module.exports = require("./again/subject.cjs");',
+        ].join('\n'));
+
         fs.writeFileSync('/cjs-package-reexport-app/reexport-continuation.cjs', [
             'var ignored = require("pkg").nested;',
             'exports.own = "own";',
@@ -6094,11 +6102,14 @@ export const testCjsPackageReexportNamedExports = async () => {
             'import { gamma, delta } from "./reexport-transpiler.cjs";',
             'import * as continuation from "./reexport-continuation.cjs";',
             'import * as cycle from "./cycle-a.cjs";',
+            'import symlinkCycleDefault, { symlinkCycleValue } from "./symlink-cycle-entry.cjs";',
             'export default {',
             '  alpha, beta, defaultAlpha: packageDefault.alpha, sub, file, probeExact, probeJs, probeIndex, bareNonStringMain, bareNullMain, main, feature, condition, imported, importsCondition, importsPattern, importsBareExternal, relativeMain, relativeIndex, dotName, dotdotName, nonStringMainIndex, gamma, delta,',
             '  continuationKeys: Object.keys(continuation).filter((key) => key !== "default" && key !== "own"),',
             '  continuationOwn: continuation.own,',
             '  cycleKeys: Object.keys(cycle).filter((key) => key !== "default").sort(),',
+            '  symlinkCycleValue,',
+            '  symlinkCycleDefaultValue: symlinkCycleDefault.symlinkCycleValue,',
             '};',
         ].join('\n'));
 
@@ -6131,6 +6142,8 @@ export const testCjsPackageReexportNamedExports = async () => {
             continuationKeys: [],
             continuationOwn: 'own',
             cycleKeys: ['a', 'b'],
+            symlinkCycleValue: 42,
+            symlinkCycleDefaultValue: 42,
         });
         const packageRequire = createRequire('/cjs-package-reexport-app/entry.cjs');
         assert.strictEqual(packageRequire('#bare-external-exact').importsBareExternal, 'bare-external');
