@@ -4263,23 +4263,19 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
     return loaderRequire;
 }
 
-function loadCommonJsSourceModule(filename, source, sourceUrl, cacheKey) {
+function loadCommonJsLoaderSourceExports(filename, source) {
+    const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
+    const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
     const parentModule = arguments.length > 4 ? arguments[4] : null;
+    filename = String(filename);
     return loadCommonJsTransaction({
         cacheKey: cacheKey || filename,
         filename,
         parentModule,
         sourceKind: 'loader',
-        source,
+        source: loaderSourceToString(source),
         sourceUrl,
-    });
-}
-
-function loadCommonJsLoaderSourceExports(filename, source) {
-    const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
-    const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
-    const parentModule = arguments.length > 4 ? arguments[4] : null;
-    return loadCommonJsSourceModule(String(filename), loaderSourceToString(source), sourceUrl, cacheKey, parentModule).exports;
+    }).exports;
 }
 
 if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function') {
