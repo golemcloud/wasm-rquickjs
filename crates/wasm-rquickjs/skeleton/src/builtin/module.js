@@ -6161,6 +6161,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return String(baseUrl) + '\0' + parts.specifier + '\0' + parts.typeValue + '\0';
     }
 
+    function staticRegisteredLoaderPathReturn(url) {
+        return registeredLoaderPathOrUrlReturn(url, true);
+    }
+
     function staticRegisteredLoaderReturn(loaded) {
         if (!loaded || !loaded.url) return undefined;
         const url = String(loaded.url);
@@ -6170,15 +6174,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderModuleSourceReturn(loaded.source);
         }
         if (!hasSource && format === 'module') {
-            return registeredLoaderPathOrUrlReturn(url, true);
+            return staticRegisteredLoaderPathReturn(url);
         }
         if (format === 'commonjs') {
-            return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url, true));
+            return registeredLoaderCommonJsReturn(loaded, url, staticRegisteredLoaderPathReturn(url));
         }
         if (hasSource && format === 'json') {
             return registeredLoaderJsonSourceReturn(loaded.source);
         }
-        return registeredLoaderPathOrUrlReturn(url, true);
+        return staticRegisteredLoaderPathReturn(url);
     }
 
     function staticRegisteredLoaderReturnForEdge(loaded, attrs) {
@@ -6192,7 +6196,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
         ) {
             const url = String(loaded.url);
-            const target = registeredLoaderPathOrUrlReturn(url, true);
+            const target = staticRegisteredLoaderPathReturn(url);
             return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
         }
         return staticRegisteredLoaderReturn(loaded);

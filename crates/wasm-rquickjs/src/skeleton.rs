@@ -1493,7 +1493,7 @@ mod tests {
             module_js.contains(
                 "return registeredLoaderCommonJsReturn(loaded, normalizedResolved.url, undefined);"
             ) && module_js.contains(
-                "return registeredLoaderCommonJsReturn(loaded, url, registeredLoaderPathOrUrlReturn(url, true));"
+                "return registeredLoaderCommonJsReturn(loaded, url, staticRegisteredLoaderPathReturn(url));"
             ),
             "dynamic CommonJS loader returns must stay undefined on missing source while static returns preserve path/URL fallback"
         );
@@ -1976,8 +1976,8 @@ mod tests {
             module_js
                 .matches("registeredLoaderPathOrUrlReturn(")
                 .count(),
-            6,
-            "registered-loader require.resolve and static return paths must use the shared URL/path converter"
+            3,
+            "registered-loader require.resolve and static return helper must use the shared URL/path converter"
         );
         assert!(
             module_js.contains(
@@ -2003,8 +2003,8 @@ mod tests {
         );
 
         let static_start = module_js
-            .find("function staticRegisteredLoaderReturn(loaded)")
-            .expect("staticRegisteredLoaderReturn function must exist");
+            .find("function staticRegisteredLoaderPathReturn(url)")
+            .expect("staticRegisteredLoaderPathReturn function must exist");
         let edge_end = module_js[static_start..]
             .find("function staticRegisteredLoaderSourceForUrl(")
             .expect("staticRegisteredLoaderReturnForEdge must precede source helper")
@@ -2015,7 +2015,10 @@ mod tests {
             "static registered-loader return helpers must route file URL conversion through registeredLoaderPathOrUrlReturn"
         );
         assert!(
-            static_return_helpers.contains("registeredLoaderPathOrUrlReturn(url, true)")
+            static_return_helpers.contains(
+                "function staticRegisteredLoaderPathReturn(url) { return registeredLoaderPathOrUrlReturn(url, true); }"
+            ) && static_return_helpers.matches("staticRegisteredLoaderPathReturn(url)").count()
+                == 5
                 && module_js.contains("return registeredLoaderPathOrUrlReturn(loadedUrl);"),
             "static registered-loader returns must preserve file URL suffixes while require.resolve keeps path-shaped results"
         );
