@@ -2507,7 +2507,7 @@ function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
     let next = skipWhitespaceAndComments(source, requirePos + 7);
     if (source.charCodeAt(next) !== 0x3d) return false;
     next = skipWhitespaceAndComments(source, next + 1);
-    const createRequireEnd = readLoaderNamedIdentifier(source, next, 'createRequire');
+    const createRequireEnd = readNamedIdentifier(source, next, 'createRequire');
     if (createRequireEnd === null) {
         return false;
     }
@@ -2520,14 +2520,14 @@ function isCreateRequireImportMetaUrlDeclaration(source, requirePos) {
 function readImportMetaUrl(source, pos) {
     let i = readImportMeta(source, pos);
     if (i === null) return null;
-    return readLoaderDotMember(source, i, 'url');
+    return readDotMember(source, i, 'url');
 }
 
 function readImportMeta(source, pos) {
     if (previousSignificantChar(source, pos) === 0x2e) return null;
-    let i = readLoaderNamedIdentifier(source, pos, 'import');
+    let i = readNamedIdentifier(source, pos, 'import');
     if (i === null) return null;
-    return readLoaderDotMember(source, i, 'meta');
+    return readDotMember(source, i, 'meta');
 }
 
 const cjsWrapperGlobalNames = ['require', 'exports', 'module', '__filename', '__dirname'];
@@ -2632,7 +2632,7 @@ function collectCjsGlobalBindingNamesInVariableDeclaration(source, start, end) {
         if (inBinding) {
             for (let n = 0; n < cjsWrapperGlobalNames.length; n++) {
                 const name = cjsWrapperGlobalNames[n];
-                const nameEnd = readLoaderNamedIdentifier(source, i, name);
+                const nameEnd = readNamedIdentifier(source, i, name);
                 if (nameEnd !== null &&
                     cjsGlobalIdentifierIsBindingName(source, i, nameEnd) &&
                     !names.includes(name)) {
@@ -2693,7 +2693,7 @@ function parseClassDeclarationSpan(source, pos) {
     const classEnd = readKeywordAt(source, 'class', pos);
     if (classEnd === null) return null;
     const nameStart = skipWhitespaceAndComments(source, classEnd);
-    const nameEnd = readLoaderIdentifierEnd(source, nameStart);
+    const nameEnd = readIdentifierEnd(source, nameStart);
     const bindings = [];
     if (nameEnd !== null) {
         const name = source.slice(nameStart, nameEnd);
@@ -2812,1025 +2812,56 @@ function decodeStringLiteral(source, start, quote) {
     return i < source.length ? { value, end: i } : null;
 }
 
-function readLoaderCjsExportTarget(source, pos, allowBareExports) {
-    let i = pos;
-    const exportsEnd = readLoaderNamedIdentifier(source, i, 'exports');
-    if (allowBareExports !== false && exportsEnd !== null) {
-        const previous = previousSignificantChar(source, pos);
-        if (previous === 0x2e || previous === 0x23) return null;
-        i = exportsEnd;
-    } else {
-        const moduleEnd = readLoaderNamedIdentifier(source, i, 'module');
-        if (moduleEnd === null) return null;
-        const previous = previousSignificantChar(source, pos);
-        if (previous === 0x2e || previous === 0x23) return null;
-        i = skipWhitespaceAndComments(source, moduleEnd);
-        if (source.charCodeAt(i) !== 0x2e) return null;
-        i = skipWhitespaceAndComments(source, i + 1);
-        const moduleExportsEnd = readLoaderNamedIdentifier(source, i, 'exports');
-        if (moduleExportsEnd === null) return null;
-        i = moduleExportsEnd;
-    }
-    return i;
-}
-
-function readLoaderCjsExportName(source, pos) {
-    let i = readLoaderCjsExportTarget(source, pos);
-    if (i === null) return null;
-
-    i = skipWhitespaceAndComments(source, i);
-    let name;
-    if (source.charCodeAt(i) === 0x2e) {
-        i = skipWhitespaceAndComments(source, i + 1);
-        const ident = readLoaderIdentifier(source, i);
-        if (ident === null) return null;
-        name = ident.name;
-        i = ident.end;
-    } else if (source.charCodeAt(i) === 0x5b) {
-        i = skipWhitespaceAndComments(source, i + 1);
-        const quote = source.charCodeAt(i);
-        if (quote !== 0x27 && quote !== 0x22) return null;
-        const decoded = decodeStringLiteral(source, i + 1, quote);
-        if (decoded === null) return null;
-        name = decoded.value;
-        i = skipWhitespaceAndComments(source, decoded.end + 1);
-        if (source.charCodeAt(i) !== 0x5d) return null;
-        i++;
-    } else {
-        return null;
-    }
-
-    i = skipWhitespaceAndComments(source, i);
-    return readLoaderAssignmentOperator(source, i) === null ? null : name;
-}
-
-function loaderFindMatchingParen(source, open) {
-    let depth = 0;
-    let i = open;
-    while (i < source.length) {
-        const skipped = skipNonCode(source, i, true);
-        if (skipped !== null) {
-            i = skipped;
-            continue;
-        }
-        const ch = source.charCodeAt(i);
-        if (ch === 0x28) depth++;
-        else if (ch === 0x29) {
-            depth--;
-            if (depth === 0) return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-function loaderFindMatchingBrace(source, open) {
-    let depth = 0;
-    let i = open;
-    while (i < source.length) {
-        const skipped = skipNonCode(source, i, true);
-        if (skipped !== null) {
-            i = skipped;
-            continue;
-        }
-        const ch = source.charCodeAt(i);
-        if (ch === 0x7b) depth++;
-        else if (ch === 0x7d) {
-            depth--;
-            if (depth === 0) return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-function skipLoaderObjectLiteralValue(source, pos, objectEnd) {
-    let i = pos;
-    let braceDepth = 0;
-    let parenDepth = 0;
-    let bracketDepth = 0;
-    while (i < objectEnd) {
-        const skipped = skipNonCode(source, i, true);
-        if (skipped !== null) {
-            i = skipped;
-            continue;
-        }
-        const ch = source.charCodeAt(i);
-        if (ch === 0x7b) braceDepth++;
-        else if (ch === 0x7d) braceDepth = Math.max(0, braceDepth - 1);
-        else if (ch === 0x28) parenDepth++;
-        else if (ch === 0x29) parenDepth = Math.max(0, parenDepth - 1);
-        else if (ch === 0x5b) bracketDepth++;
-        else if (ch === 0x5d) bracketDepth = Math.max(0, bracketDepth - 1);
-        else if (ch === 0x2c && braceDepth === 0 && parenDepth === 0 && bracketDepth === 0) {
-            return i;
-        }
-        i++;
-    }
-    return objectEnd;
-}
-
-function readLoaderObjectLiteralKey(source, pos) {
-    const ch = source.charCodeAt(pos);
-    if (ch === 0x27 || ch === 0x22) {
-        const decoded = decodeStringLiteral(source, pos + 1, ch);
-        if (decoded === null) return null;
-        return { name: decoded.value, keyIsIdent: false, end: decoded.end + 1 };
-    }
-    const ident = readLoaderIdentifier(source, pos);
-    if (ident === null) return null;
-    return { name: ident.name, keyIsIdent: true, end: ident.end };
-}
-
-function loaderObjectLiteralValueExport(source, pos, objectEnd) {
-    const ident = readLoaderIdentifier(source, pos);
-    if (ident === null) return null;
-    let i = skipWhitespaceAndComments(source, ident.end);
-    if (i >= objectEnd || source.charCodeAt(i) === 0x2c) return { named: true, stop: false };
-    if (ident.name === 'true' || ident.name === 'false' || ident.name === 'null' || ident.name === 'undefined') {
-        return { named: true, stop: false };
-    }
-    return { named: true, stop: true };
-}
-
-function readLoaderModuleExportsObjectLiteralNames(source, pos) {
-    const targetEnd = readLoaderCjsExportTarget(source, pos, false);
-    if (targetEnd === null) return null;
-    let i = skipWhitespaceAndComments(source, targetEnd);
-    i = readLoaderAssignmentOperator(source, i);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) !== 0x7b) return null;
-    const objectEnd = loaderFindMatchingBrace(source, i);
-    if (objectEnd < 0) return null;
-
-    const names = [];
-    const reexports = [];
-    let cursor = skipWhitespaceAndComments(source, i + 1);
-    while (cursor < objectEnd) {
-        if (source.charCodeAt(cursor) === 0x2c) {
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-            continue;
-        }
-        if (isLoaderSpreadTokenAt(source, cursor)) {
-            const spreadStart = skipWhitespaceAndComments(source, cursor + 3);
-            const requireEnd = readLoaderNamedIdentifier(source, spreadStart, 'require');
-            if (requireEnd !== null) {
-                const afterRequire = skipWhitespaceAndComments(source, requireEnd);
-                if (source.charCodeAt(afterRequire) !== 0x28) break;
-                const requireCall = readLoaderRequireString(source, spreadStart, true);
-                if (requireCall !== null) {
-                    reexports.push(requireCall.specifier);
-                    const afterRequireCall = skipWhitespaceAndComments(source, requireCall.end);
-                    if (afterRequireCall < objectEnd && source.charCodeAt(afterRequireCall) !== 0x2c) break;
-                    cursor = afterRequireCall;
-                } else {
-                    cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, spreadStart, objectEnd));
-                }
-            } else {
-                const spreadKey = readLoaderObjectLiteralKey(source, spreadStart);
-                if (spreadKey === null || !spreadKey.keyIsIdent) break;
-                const afterIdent = skipWhitespaceAndComments(source, spreadKey.end);
-                if (afterIdent < objectEnd && source.charCodeAt(afterIdent) !== 0x2c) break;
-                cursor = afterIdent;
-            }
-        } else {
-            const key = readLoaderObjectLiteralKey(source, cursor);
-            if (key === null) break;
-            let next = skipWhitespaceAndComments(source, key.end);
-            if (source.charCodeAt(next) === 0x3a) {
-                next = skipWhitespaceAndComments(source, next + 1);
-                const valueExport = loaderObjectLiteralValueExport(source, next, objectEnd);
-                if (valueExport === null) break;
-                names.push(key.name);
-                if (valueExport.stop) break;
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, objectEnd));
-            } else if (key.keyIsIdent) {
-                names.push(key.name);
-                cursor = next;
-            } else {
-                break;
-            }
-        }
-        const nextEntry = nextLoaderObjectLiteralEntry(source, cursor, objectEnd);
-        if (nextEntry === null) break;
-        cursor = nextEntry;
-    }
-    return { names, reexports, end: objectEnd + 1 };
-}
-
-function loaderDescriptorPropertyName(source, pos) {
-    const ch = source.charCodeAt(pos);
-    if (ch === 0x27 || ch === 0x22) {
-        const decoded = decodeStringLiteral(source, pos + 1, ch);
-        if (decoded === null) return null;
-        return { name: decoded.value, quoted: true, end: decoded.end + 1 };
-    }
-    const ident = readLoaderObjectLiteralKey(source, pos);
-    if (ident === null || !ident.keyIsIdent) return null;
-    return { name: ident.name, quoted: false, end: ident.end };
-}
-
-function readLoaderDescriptorObject(source, start, end) {
-    const descriptorStart = skipWhitespaceAndComments(source, start);
-    if (source.charCodeAt(descriptorStart) !== 0x7b) return null;
-    const descriptorEnd = loaderFindMatchingBrace(source, descriptorStart);
-    if (descriptorEnd < 0 || descriptorEnd > end) return null;
-    return { cursor: skipWhitespaceAndComments(source, descriptorStart + 1), end: descriptorEnd };
-}
-
-function nextLoaderObjectLiteralEntry(source, cursor, objectEnd) {
-    if (cursor >= objectEnd) return objectEnd;
-    if (source.charCodeAt(cursor) !== 0x2c) return null;
-    return skipWhitespaceAndComments(source, cursor + 1);
-}
-
-function isLoaderSpreadTokenAt(source, pos) {
-    return source.charCodeAt(pos) === 0x2e && source.charCodeAt(pos + 1) === 0x2e && source.charCodeAt(pos + 2) === 0x2e;
-}
-
-function readLoaderFunctionParamsOpen(source, pos) {
-    const functionEnd = readLoaderNamedIdentifier(source, pos, 'function');
-    if (functionEnd === null) return null;
-    let next = skipWhitespaceAndComments(source, functionEnd);
-    const functionName = readLoaderIdentifier(source, next);
-    if (functionName !== null) {
-        next = skipWhitespaceAndComments(source, functionName.end);
-    }
-    if (source.charCodeAt(next) !== 0x28) return null;
-    return next;
-}
-
-function loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd) {
-    const paramsOpen = readLoaderFunctionParamsOpen(source, pos);
-    if (paramsOpen === null) return null;
-    const body = loaderGetterBodyEnd(source, paramsOpen, descriptorEnd);
-    if (body === null) return null;
-    return body;
-}
-
-function loaderDescriptorFunctionGetterEnd(source, pos, descriptorEnd) {
-    const body = loaderDescriptorFunctionGetterBody(source, pos, descriptorEnd);
-    if (body === null || !loaderSimpleGetterBody(source, body.start, body.end)) return null;
-    return body.end + 1;
-}
-
-function loaderDescriptorHasNamedProperty(source, start, end) {
-    const descriptor = readLoaderDescriptorObject(source, start, end);
-    if (descriptor === null) return false;
-    let foundKind = null;
-    let cursor = descriptor.cursor;
-    const descriptorEnd = descriptor.end;
-    while (cursor < descriptorEnd) {
-        if (source.charCodeAt(cursor) === 0x2c) {
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-            continue;
-        }
-        if (isLoaderSpreadTokenAt(source, cursor)) return false;
-        if (source.charCodeAt(cursor) === 0x5b) {
-            if (foundKind === 'value') {
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, cursor, descriptorEnd));
-                cursor = nextLoaderObjectLiteralEntry(source, cursor, descriptorEnd);
-                if (cursor === null) return false;
-                continue;
-            }
-            return false;
-        }
-        const key = loaderDescriptorPropertyName(source, cursor);
-        if (key === null) return false;
-        let next = skipWhitespaceAndComments(source, key.end);
-        if (key.quoted) {
-            if (foundKind === 'value') {
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
-            } else {
-                return false;
-            }
-        } else if (key.name === 'value') {
-            if (foundKind === 'get') return false;
-            if (foundKind === 'value') {
-                const valueStart = source.charCodeAt(next) === 0x3a ? next + 1 : next;
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, valueStart, descriptorEnd));
-            } else {
-                if (source.charCodeAt(next) !== 0x3a) return false;
-                foundKind = 'value';
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
-            }
-        } else if (key.name === 'get') {
-            if (foundKind !== null) return false;
-            if (source.charCodeAt(next) === 0x28) {
-                const body = loaderGetterBodyEnd(source, next, descriptorEnd);
-                if (body === null || !loaderSimpleGetterBody(source, body.start, body.end)) return false;
-                foundKind = 'get';
-                cursor = skipWhitespaceAndComments(source, body.end + 1);
-            } else if (source.charCodeAt(next) === 0x3a) {
-                const functionEnd = loaderDescriptorFunctionGetterEnd(source, skipWhitespaceAndComments(source, next + 1), descriptorEnd);
-                if (functionEnd === null) return false;
-                foundKind = 'get';
-                cursor = skipWhitespaceAndComments(source, functionEnd);
-            } else {
-                return false;
-            }
-        } else if (key.name === 'enumerable') {
-            if (source.charCodeAt(next) !== 0x3a) return false;
-            if (foundKind === 'value') {
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next + 1, descriptorEnd));
-            } else if (foundKind === 'get') {
-                return false;
-            } else {
-                const valueStart = skipWhitespaceAndComments(source, next + 1);
-                const trueEnd = readLoaderNamedIdentifier(source, valueStart, 'true');
-                if (trueEnd === null) {
-                    return false;
-                }
-                cursor = skipWhitespaceAndComments(source, trueEnd);
-            }
-        } else {
-            if (foundKind === 'value') {
-                cursor = skipWhitespaceAndComments(source, skipLoaderObjectLiteralValue(source, next, descriptorEnd));
-            } else {
-                return false;
-            }
-        }
-        cursor = nextLoaderObjectLiteralEntry(source, cursor, descriptorEnd);
-        if (cursor === null) return false;
-    }
-    return foundKind !== null;
-}
-
-const loaderGetterReturnInvalid = 0;
-const loaderGetterReturnBare = 1;
-const loaderGetterReturnDot = 2;
-const loaderGetterReturnBracketString = 3;
-const loaderGetterReturnBracketIdentifier = 4;
-
-function readLoaderIdentifierEnd(source, pos) {
+function readIdentifierEnd(source, pos) {
     if (!isIdentifierStartCode(source.charCodeAt(pos))) return null;
     let i = pos + 1;
     while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
     return i;
 }
 
-function readLoaderGetterReturnMemberKind(source, start, end) {
-    let i = skipWhitespaceAndComments(source, start);
-    const returnEnd = readLoaderNamedIdentifier(source, i, 'return');
-    if (returnEnd === null) return loaderGetterReturnInvalid;
-    i = skipWhitespaceAndComments(source, returnEnd);
-    const receiverEnd = readLoaderIdentifierEnd(source, i);
-    if (receiverEnd === null) return loaderGetterReturnInvalid;
-    i = skipWhitespaceAndComments(source, receiverEnd);
-    let kind = loaderGetterReturnBare;
-    if (source.charCodeAt(i) === 0x2e) {
-        i = skipWhitespaceAndComments(source, i + 1);
-        const propertyEnd = readLoaderIdentifierEnd(source, i);
-        if (propertyEnd === null) return loaderGetterReturnInvalid;
-        i = propertyEnd;
-        kind = loaderGetterReturnDot;
-    } else if (source.charCodeAt(i) === 0x5b) {
-        i = skipWhitespaceAndComments(source, i + 1);
-        const quote = source.charCodeAt(i);
-        if (quote === 0x27 || quote === 0x22) {
-            const decoded = decodeStringLiteral(source, i + 1, quote);
-            if (decoded === null) return loaderGetterReturnInvalid;
-            i = skipWhitespaceAndComments(source, decoded.end + 1);
-            kind = loaderGetterReturnBracketString;
-        } else {
-            const propertyEnd = readLoaderIdentifierEnd(source, i);
-            if (propertyEnd === null) return loaderGetterReturnInvalid;
-            i = skipWhitespaceAndComments(source, propertyEnd);
-            kind = loaderGetterReturnBracketIdentifier;
-        }
-        if (source.charCodeAt(i) !== 0x5d) return loaderGetterReturnInvalid;
-        i++;
-    }
-    i = skipWhitespaceAndComments(source, i);
-    i = skipLoaderOptionalSemicolon(source, i);
-    return i >= end ? kind : loaderGetterReturnInvalid;
-}
-
-function loaderSimpleGetterBody(source, start, end) {
-    const kind = readLoaderGetterReturnMemberKind(source, start, end);
-    return kind !== loaderGetterReturnInvalid && kind !== loaderGetterReturnBracketIdentifier;
-}
-
-function loaderGetterBodyEnd(source, paramsOpen, limit) {
-    const paramsEnd = loaderFindMatchingParen(source, paramsOpen);
-    if (paramsEnd < 0 || paramsEnd > limit) return null;
-    if (skipWhitespaceAndComments(source, paramsOpen + 1) !== paramsEnd) return null;
-    let i = skipWhitespaceAndComments(source, paramsEnd + 1);
-    if (source.charCodeAt(i) !== 0x7b) return null;
-    const bodyEnd = loaderFindMatchingBrace(source, i);
-    return bodyEnd >= 0 && bodyEnd <= limit ? { start: i + 1, end: bodyEnd } : null;
-}
-
-function readLoaderDefinePropertyCall(source, pos, rejectMemberAccess) {
-    const objectEnd = readLoaderNamedIdentifier(source, pos, 'Object');
-    if (objectEnd === null) return null;
-    if (rejectMemberAccess) {
-        const previous = previousSignificantChar(source, pos);
-        if (previous === 0x2e || previous === 0x23) return null;
-    }
-    let i = skipWhitespaceAndComments(source, objectEnd);
-    if (source.charCodeAt(i) !== 0x2e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const definePropertyEnd = readLoaderNamedIdentifier(source, i, 'defineProperty');
-    if (definePropertyEnd === null) return null;
-    i = skipWhitespaceAndComments(source, definePropertyEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    const open = i;
-    i = skipWhitespaceAndComments(source, i + 1);
-    return { open, next: i };
-}
-
-function readLoaderDefinePropertyExportName(source, pos) {
-    const call = readLoaderDefinePropertyCall(source, pos, true);
-    if (call === null) return null;
-    const open = call.open;
-    let i = call.next;
-    i = readLoaderCjsExportTarget(source, i);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) !== 0x2c) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const quote = source.charCodeAt(i);
-    if (quote !== 0x27 && quote !== 0x22) return null;
-    const decoded = decodeStringLiteral(source, i + 1, quote);
-    if (decoded === null) return null;
-    i = skipWhitespaceAndComments(source, decoded.end + 1);
-    if (source.charCodeAt(i) !== 0x2c) return null;
-    const close = loaderFindMatchingParen(source, open);
-    if (close < 0 || !loaderDescriptorHasNamedProperty(source, i + 1, close)) return null;
-    return decoded.value;
-}
-
-function readLoaderModuleExportsRequire(source, pos) {
-    if (readLoaderNamedIdentifier(source, pos, 'module') === null) return null;
-    const targetEnd = readLoaderCjsExportTarget(source, pos, false);
-    if (targetEnd === null) return null;
-    let i = skipWhitespaceAndComments(source, targetEnd);
-    i = readLoaderAssignmentOperator(source, i);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    const required = readLoaderRequireString(source, i);
-    return required === null ? null : required.specifier;
-}
-
-function readLoaderRequireString(source, pos, allowSpreadPrefix) {
-    const requireEnd = readLoaderNamedIdentifier(source, pos, 'require');
-    if (requireEnd === null) return null;
-    if (!allowSpreadPrefix && previousSignificantChar(source, pos) === 0x2e) return null;
-    let i = skipWhitespaceAndComments(source, requireEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const quote = source.charCodeAt(i);
-    if (quote !== 0x27 && quote !== 0x22) return null;
-    const decoded = decodeStringLiteral(source, i + 1, quote);
-    if (decoded === null) return null;
-    i = skipWhitespaceAndComments(source, decoded.end + 1);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    return { specifier: decoded.value, end: i + 1 };
-}
-
-function skipWhitespaceAndCommentsWithLineTerminator(source, start) {
-    return skipWhitespaceAndCommentsImpl(source, start, true);
-}
-
-function loaderIsStatementBoundary(source, pos) {
-    const skipped = skipWhitespaceAndCommentsWithLineTerminator(source, pos);
-    const i = skipped.pos;
-    if (i >= source.length) return true;
-    if (source.charCodeAt(i) === 0x3b || source.charCodeAt(i) === 0x7d) return true;
-    if (!skipped.hasLineTerminator) return false;
-    return !isLoaderAsiContinuationNext(source, i);
-}
-
-function isLoaderAsiContinuationNext(source, pos) {
-    if (pos + 1 < source.length) {
-        const code = source.charCodeAt(pos);
-        const next = source.charCodeAt(pos + 1);
-        if ((code === 0x2b && next === 0x2b) || (code === 0x2d && next === 0x2d)) return false;
-    }
-    return isLoaderAsiContinuationOperator(source.charCodeAt(pos));
-}
-
-function isLoaderAsiContinuationOperator(code) {
-    return code === 0x60 || code === 0x28 || code === 0x5b || code === 0x2e || code === 0x2c || code === 0x3a ||
-        code === 0x3f || code === 0x2b || code === 0x2d || code === 0x2a || code === 0x2f || code === 0x25 ||
-        code === 0x26 || code === 0x7c || code === 0x5e || code === 0x3c || code === 0x3e || code === 0x3d;
-}
-
-function readLoaderRequireBinding(source, pos) {
-    const declarationEnd = readVariableDeclarationKeyword(source, pos);
-    if (declarationEnd === null) return null;
-    let i = skipWhitespaceAndComments(source, declarationEnd);
-    const parsedBinding = readLoaderIdentifier(source, i);
-    if (parsedBinding === null) return null;
-    const binding = parsedBinding.name;
-    i = skipWhitespaceAndComments(source, parsedBinding.end);
-    i = readLoaderAssignmentOperator(source, i);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    let required = readLoaderRequireString(source, i);
-    if (required !== null) {
-        if (!loaderIsStatementBoundary(source, required.end)) return null;
-        return { binding, specifier: required.specifier, end: required.end };
-    }
-    const interopEnd = readLoaderNamedIdentifier(source, i, '_interopRequireWildcard');
-    if (interopEnd === null) return null;
-    i = skipWhitespaceAndComments(source, interopEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    required = readLoaderRequireString(source, skipWhitespaceAndComments(source, i + 1));
-    if (required === null) return null;
-    i = skipWhitespaceAndComments(source, required.end);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    if (!loaderIsStatementBoundary(source, i + 1)) return null;
-    return { binding, specifier: required.specifier, end: i + 1 };
-}
-
-function readLoaderBracketIdentifier(source, pos, ident) {
-    if (source.charCodeAt(pos) !== 0x5b) return null;
-    let i = skipWhitespaceAndComments(source, pos + 1);
-    const identEnd = readLoaderNamedIdentifier(source, i, ident);
-    if (identEnd === null) return null;
-    i = skipWhitespaceAndComments(source, identEnd);
-    if (source.charCodeAt(i) !== 0x5d) return null;
-    return i + 1;
-}
-
-function readLoaderKeyStringComparison(source, pos, key, operator) {
-    const keyEnd = readLoaderNamedIdentifier(source, pos, key);
-    if (keyEnd === null) return null;
-    let i = skipWhitespaceAndComments(source, keyEnd);
-    i = readLoaderOperator(source, i, operator);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    const quote = source.charCodeAt(i);
-    if (quote !== 0x27 && quote !== 0x22) return null;
-    const decoded = decodeStringLiteral(source, i + 1, quote);
-    if (decoded === null) return null;
-    return { value: decoded.value, end: decoded.end + 1 };
-}
-
-function readLoaderKeyEqualsString(source, pos, key) {
-    return readLoaderKeyStringComparison(source, pos, key, '===');
-}
-
-function readLoaderKeyNotEqualsString(source, pos, key) {
-    return readLoaderKeyStringComparison(source, pos, key, '!==');
-}
-
-function readLoaderDotMember(source, pos, name) {
-    let i = skipWhitespaceAndComments(source, pos);
-    if (source.charCodeAt(i) !== 0x2e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const end = readLoaderNamedIdentifier(source, i, name);
-    return end === null ? null : skipWhitespaceAndComments(source, end);
-}
-
-function readLoaderIdentifier(source, pos) {
-    const end = readLoaderIdentifierEnd(source, pos);
+function readIdentifier(source, pos) {
+    const end = readIdentifierEnd(source, pos);
     return end === null ? null : { name: source.substring(pos, end), end };
 }
 
-function readLoaderNamedIdentifier(source, pos, name) {
+function readNamedIdentifier(source, pos, name) {
     return readKeywordAt(source, name, pos);
 }
 
-function readLoaderOperator(source, pos, operator) {
-    for (let i = 0; i < operator.length; i++) {
-        if (source.charCodeAt(pos + i) !== operator.charCodeAt(i)) return null;
-    }
-    return pos + operator.length;
-}
-
-function readLoaderAssignmentOperator(source, pos) {
-    if (source.charCodeAt(pos) !== 0x3d) return null;
-    const next = source.charCodeAt(pos + 1);
-    return next === 0x3d || next === 0x3e ? null : pos + 1;
-}
-
-function readLoaderObjectHasOwnPropertyCall(source, pos, key, requirePrototype) {
-    let i = readLoaderNamedIdentifier(source, pos, 'Object');
-    if (i === null) return null;
-    const prototype = readLoaderDotMember(source, i, 'prototype');
-    if (prototype !== null) {
-        i = prototype;
-    } else if (requirePrototype) {
-        return null;
-    }
-    i = readLoaderDotMember(source, i, 'hasOwnProperty');
-    if (i === null) return null;
-    i = readLoaderDotMember(source, i, 'call');
-    if (i === null || source.charCodeAt(i) !== 0x28) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const target = readLoaderIdentifier(source, i);
-    if (target === null) return null;
-    i = skipWhitespaceAndComments(source, target.end);
-    if (source.charCodeAt(i) !== 0x2c) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const keyEnd = readLoaderNamedIdentifier(source, i, key);
-    if (keyEnd === null) return null;
-    i = skipWhitespaceAndComments(source, keyEnd);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    return { target: target.name, end: i + 1 };
-}
-
-function readLoaderIfCondition(source, pos) {
-    const ifEnd = readLoaderNamedIdentifier(source, pos, 'if');
-    if (ifEnd === null) return null;
-    let i = skipWhitespaceAndComments(source, ifEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    const conditionEnd = loaderFindMatchingParen(source, i);
-    if (conditionEnd < 0) return null;
-    return {
-        start: i + 1,
-        end: conditionEnd,
-        after: skipWhitespaceAndComments(source, conditionEnd + 1),
-    };
-}
-
-function readLoaderDefaultEsModuleReturnGuard(source, pos, key) {
-    const condition = readLoaderIfCondition(source, pos);
-    if (condition === null) return null;
-    let c = skipWhitespaceAndComments(source, condition.start);
-    const first = readLoaderKeyEqualsString(source, c, key);
-    if (first === null || first.value !== 'default') return null;
-    c = skipWhitespaceAndComments(source, first.end);
-    c = readLoaderOperator(source, c, '||');
-    if (c === null) return null;
-    c = skipWhitespaceAndComments(source, c);
-    const second = readLoaderKeyEqualsString(source, c, key);
-    if (second === null || second.value !== '__esModule') return null;
-    if (skipWhitespaceAndComments(source, second.end) !== condition.end) return null;
-    return readLoaderNamedIdentifier(source, condition.after, 'return');
-}
-
-function readLoaderHasOwnPropertyKey(source, pos, key) {
-    const receiver = readLoaderIdentifier(source, pos);
-    if (receiver === null) return null;
-    if (receiver.name === 'Object') {
-        const objectCall = readLoaderObjectHasOwnPropertyCall(source, pos, key, false);
-        if (objectCall !== null) return objectCall.end;
-    }
-
-    let i = readLoaderDotMember(source, receiver.end, 'hasOwnProperty');
-    if (i === null || source.charCodeAt(i) !== 0x28) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const keyEnd = readLoaderNamedIdentifier(source, i, key);
-    if (keyEnd === null) return null;
-    i = skipWhitespaceAndComments(source, keyEnd);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    return i + 1;
-}
-
-function readLoaderExportsHasOwnPropertyKey(source, pos, key) {
-    const objectCall = readLoaderObjectHasOwnPropertyCall(source, pos, key, true);
-    return objectCall !== null && objectCall.target === 'exports' ? objectCall.end : null;
-}
-
-function readLoaderDuplicateExportReturnGuard(source, pos, binding, key) {
-    const condition = readLoaderIfCondition(source, pos);
-    if (condition === null) return null;
-    let c = skipWhitespaceAndComments(source, condition.start);
-    const hasOwnEnd = readLoaderExportsHasOwnPropertyKey(source, c, key);
-    if (hasOwnEnd !== null && skipWhitespaceAndComments(source, hasOwnEnd) === condition.end) {
-        return readLoaderNamedIdentifier(source, condition.after, 'return');
-    }
-    const keyEnd = readLoaderNamedIdentifier(source, c, key);
-    if (keyEnd === null) return null;
-    c = skipWhitespaceAndComments(source, keyEnd);
-    const inEnd = readLoaderNamedIdentifier(source, c, 'in');
-    if (inEnd === null) return null;
-    c = skipWhitespaceAndComments(source, inEnd);
-    let targetEnd = readLoaderCjsExportTarget(source, c);
-    if (targetEnd === null) return null;
-    c = skipWhitespaceAndComments(source, targetEnd);
-    c = readLoaderOperator(source, c, '&&');
-    if (c === null) return null;
-    c = skipWhitespaceAndComments(source, c);
-    targetEnd = readLoaderCjsExportTarget(source, c);
-    if (targetEnd === null) return null;
-    c = skipWhitespaceAndComments(source, targetEnd);
-    c = readLoaderBracketIdentifier(source, c, key);
-    if (c === null) return null;
-    c = skipWhitespaceAndComments(source, c);
-    c = readLoaderOperator(source, c, '===');
-    if (c === null) return null;
-    c = skipWhitespaceAndComments(source, c);
-    const bindingEnd = readLoaderNamedIdentifier(source, c, binding);
-    if (bindingEnd === null) return null;
-    c = skipWhitespaceAndComments(source, bindingEnd);
-    c = readLoaderBracketIdentifier(source, c, key);
-    if (c === null || skipWhitespaceAndComments(source, c) !== condition.end) return null;
-    return readLoaderNamedIdentifier(source, condition.after, 'return');
-}
-
-function readLoaderHasOwnConditionalReexport(source, pos, binding, key) {
-    const condition = readLoaderIfCondition(source, pos);
-    if (condition === null) return null;
-    let c = skipWhitespaceAndComments(source, condition.start);
-    const keyCheck = readLoaderKeyNotEqualsString(source, c, key);
-    if (keyCheck === null || keyCheck.value !== 'default') return null;
-    c = skipWhitespaceAndComments(source, keyCheck.end);
-    c = readLoaderOperator(source, c, '&&');
-    if (c === null) return null;
-    c = skipWhitespaceAndComments(source, c);
-    if (source.charCodeAt(c) !== 0x21) return null;
-    c = skipWhitespaceAndComments(source, c + 1);
-    const hasOwnEnd = readLoaderHasOwnPropertyKey(source, c, key);
-    if (hasOwnEnd === null || skipWhitespaceAndComments(source, hasOwnEnd) !== condition.end) return null;
-    return readLoaderDirectReexportAssignment(source, condition.after, binding, key);
-}
-
-function readLoaderDirectReexportAssignment(source, pos, binding, key) {
-    let i = readLoaderCjsExportTarget(source, pos);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    i = readLoaderBracketIdentifier(source, i, key);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    i = readLoaderAssignmentOperator(source, i);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    const bindingEnd = readLoaderNamedIdentifier(source, i, binding);
-    if (bindingEnd === null) return null;
-    i = skipWhitespaceAndComments(source, bindingEnd);
-    i = readLoaderBracketIdentifier(source, i, key);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    return loaderIsStatementBoundary(source, i) ? i : null;
-}
-
-function loaderGetterReturnsBindingKey(source, start, end, binding, key) {
-    let i = skipWhitespaceAndComments(source, start);
-    const returnEnd = readLoaderNamedIdentifier(source, i, 'return');
-    if (returnEnd === null) return false;
-    i = skipWhitespaceAndComments(source, returnEnd);
-    const bindingEnd = readLoaderNamedIdentifier(source, i, binding);
-    if (bindingEnd === null) return false;
-    i = skipWhitespaceAndComments(source, bindingEnd);
-    i = readLoaderBracketIdentifier(source, i, key);
-    if (i === null) return false;
-    i = skipWhitespaceAndComments(source, i);
-    i = skipLoaderOptionalSemicolon(source, i);
-    return i >= end;
-}
-
-function loaderDynamicReexportGetterBody(source, paramsOpen, limit, binding, key) {
-    const paramsEnd = loaderFindMatchingParen(source, paramsOpen);
-    if (paramsEnd < 0 || paramsEnd > limit) return null;
-    if (skipWhitespaceAndComments(source, paramsOpen + 1) !== paramsEnd) return null;
-    let i = skipWhitespaceAndComments(source, paramsEnd + 1);
-    if (source.charCodeAt(i) !== 0x7b) return null;
-    const bodyEnd = loaderFindMatchingBrace(source, i);
-    if (bodyEnd < 0 || bodyEnd > limit) return null;
-    return loaderGetterReturnsBindingKey(source, i + 1, bodyEnd, binding, key) ? bodyEnd + 1 : null;
-}
-
-function loaderDescriptorHasDynamicReexportGetter(source, start, end, binding, key) {
-    const descriptor = readLoaderDescriptorObject(source, start, end);
-    if (descriptor === null) return false;
-    let seenEnumerable = false;
-    let found = false;
-    let cursor = descriptor.cursor;
-    const descriptorEnd = descriptor.end;
-    while (cursor < descriptorEnd) {
-        if (source.charCodeAt(cursor) === 0x2c) {
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-            continue;
-        }
-        if (isLoaderSpreadTokenAt(source, cursor) || source.charCodeAt(cursor) === 0x5b) return false;
-        const property = loaderDescriptorPropertyName(source, cursor);
-        if (property === null || property.quoted) return false;
-        let next = skipWhitespaceAndComments(source, property.end);
-        if (property.name === 'enumerable') {
-            if (seenEnumerable || found || source.charCodeAt(next) !== 0x3a) return false;
-            const valueStart = skipWhitespaceAndComments(source, next + 1);
-            const trueEnd = readLoaderNamedIdentifier(source, valueStart, 'true');
-            if (trueEnd === null) return false;
-            seenEnumerable = true;
-            cursor = skipWhitespaceAndComments(source, trueEnd);
-        } else if (property.name === 'get') {
-            if (found) return false;
-            if (source.charCodeAt(next) === 0x28) {
-                const getterEnd = loaderDynamicReexportGetterBody(source, next, descriptorEnd, binding, key);
-                if (getterEnd === null) return false;
-                found = true;
-                cursor = skipWhitespaceAndComments(source, getterEnd);
-            } else if (source.charCodeAt(next) === 0x3a) {
-                const body = loaderDescriptorFunctionGetterBody(source, skipWhitespaceAndComments(source, next + 1), descriptorEnd);
-                if (body === null || !loaderGetterReturnsBindingKey(source, body.start, body.end, binding, key)) return false;
-                found = true;
-                cursor = skipWhitespaceAndComments(source, body.end + 1);
-            } else {
-                return false;
-            }
-        } else {
-            return false;
-        }
-        cursor = nextLoaderObjectLiteralEntry(source, cursor, descriptorEnd);
-        if (cursor === null) return false;
-    }
-    return found && seenEnumerable;
-}
-
-function readLoaderDefinePropertyReexport(source, pos, binding, key) {
-    const call = readLoaderDefinePropertyCall(source, pos, false);
-    if (call === null) return null;
-    const open = call.open;
-    let i = call.next;
-    i = readLoaderCjsExportTarget(source, i);
-    if (i === null) return null;
-    i = skipWhitespaceAndComments(source, i);
-    if (source.charCodeAt(i) !== 0x2c) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const keyEnd = readLoaderNamedIdentifier(source, i, key);
-    if (keyEnd === null) return null;
-    i = skipWhitespaceAndComments(source, keyEnd);
-    if (source.charCodeAt(i) !== 0x2c) return null;
-    const close = loaderFindMatchingParen(source, open);
-    if (close < 0) return null;
-    if (!loaderDescriptorHasDynamicReexportGetter(source, i + 1, close, binding, key)) return null;
-    return close + 1;
-}
-
-function skipLoaderOptionalSemicolon(source, pos) {
-    return source.charCodeAt(pos) === 0x3b ? skipWhitespaceAndComments(source, pos + 1) : pos;
-}
-
-function loaderCallbackHasReexport(source, binding, key) {
-    let i = skipWhitespaceAndComments(source, 0);
-    const conditional = readLoaderHasOwnConditionalReexport(source, i, binding, key);
-    if (conditional !== null) return true;
-    const guarded = readLoaderDefaultEsModuleReturnGuard(source, i, key);
-    if (guarded === null) return false;
-    i = skipWhitespaceAndComments(source, guarded);
-    i = skipLoaderOptionalSemicolon(source, i);
-    for (;;) {
-        const nextGuard = readLoaderDuplicateExportReturnGuard(source, i, binding, key);
-        if (nextGuard === null) break;
-        i = skipWhitespaceAndComments(source, nextGuard);
-        i = skipLoaderOptionalSemicolon(source, i);
-    }
-    const direct = readLoaderDirectReexportAssignment(source, i, binding, key);
-    if (direct !== null) return true;
-    return readLoaderDefinePropertyReexport(source, i, binding, key) !== null;
-}
-
-function readLoaderObjectKeysReexport(source, pos, requireBindings) {
-    const objectEnd = readLoaderNamedIdentifier(source, pos, 'Object');
-    if (objectEnd === null) return null;
-    let i = skipWhitespaceAndComments(source, objectEnd);
+function readDotMember(source, pos, name) {
+    let i = skipWhitespaceAndComments(source, pos);
     if (source.charCodeAt(i) !== 0x2e) return null;
     i = skipWhitespaceAndComments(source, i + 1);
-    const keysEnd = readLoaderNamedIdentifier(source, i, 'keys');
-    if (keysEnd === null) return null;
-    i = skipWhitespaceAndComments(source, keysEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const parsedBinding = readLoaderIdentifier(source, i);
-    if (parsedBinding === null) return null;
-    const binding = parsedBinding.name;
-    const specifier = requireBindings[binding];
-    if (specifier === undefined) return null;
-    i = skipWhitespaceAndComments(source, parsedBinding.end);
-    if (source.charCodeAt(i) !== 0x29) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    if (source.charCodeAt(i) !== 0x2e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const forEachEnd = readLoaderNamedIdentifier(source, i, 'forEach');
-    if (forEachEnd === null) return null;
-    i = skipWhitespaceAndComments(source, forEachEnd);
-    if (source.charCodeAt(i) !== 0x28) return null;
-    const callEnd = loaderFindMatchingParen(source, i);
-    if (callEnd < 0) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    i = readLoaderFunctionParamsOpen(source, i);
-    if (i === null) return null;
-    const paramsEnd = loaderFindMatchingParen(source, i);
-    if (paramsEnd < 0 || paramsEnd > callEnd) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const parsedKey = readLoaderIdentifier(source, i);
-    if (parsedKey === null) return null;
-    const key = parsedKey.name;
-    if (skipWhitespaceAndComments(source, parsedKey.end) !== paramsEnd) return null;
-    i = skipWhitespaceAndComments(source, paramsEnd + 1);
-    if (source.charCodeAt(i) !== 0x7b) return null;
-    const bodyEnd = loaderFindMatchingBrace(source, i);
-    if (bodyEnd < 0 || bodyEnd > callEnd || skipWhitespaceAndComments(source, bodyEnd + 1) !== callEnd) return null;
-    if (!loaderCallbackHasReexport(source.substring(i + 1, bodyEnd), binding, key)) return null;
-    return { specifier, end: callEnd + 1 };
+    const end = readNamedIdentifier(source, i, name);
+    return end === null ? null : skipWhitespaceAndComments(source, end);
 }
 
-function scanLoaderCjsTopLevelPositions(source, visitor) {
-    let i = 0;
-    let braceDepth = 0;
-    let statementStart = true;
+function findMatchingDelimiter(source, open, openCode, closeCode) {
+    let depth = 0;
+    let i = open;
     while (i < source.length) {
         const skipped = skipNonCode(source, i, true);
         if (skipped !== null) {
             i = skipped;
             continue;
         }
-
         const ch = source.charCodeAt(i);
-        if (ch === 0x20 || ch === 0x09 || ch === 0x0a || ch === 0x0d) {
-            const whitespace = skipWhitespaceAndCommentsWithLineTerminator(source, i);
-            if (whitespace.hasLineTerminator) {
-                const nextCode = source.charCodeAt(whitespace.pos);
-                if ('`([.,:?+-*/%&|^<>=!~'.indexOf(source[whitespace.pos]) < 0 && nextCode !== 0x3b) {
-                    statementStart = true;
-                }
-            }
-            i = whitespace.pos;
-            continue;
-        }
-
-        const next = visitor(i, braceDepth, statementStart);
-        if (next === false) return false;
-        if (next && typeof next === 'object') {
-            i = next.pos;
-            statementStart = next.statementStart === true;
-            continue;
-        }
-        if (typeof next === 'number') {
-            i = next;
-            statementStart = false;
-            continue;
-        }
-
-        if (ch === 0x7b) {
-            braceDepth++;
-            statementStart = true;
-        } else if (ch === 0x7d) {
-            braceDepth = Math.max(0, braceDepth - 1);
-            statementStart = true;
-        } else if (ch === 0x3b) {
-            statementStart = true;
-        } else {
-            statementStart = false;
+        if (ch === openCode) depth++;
+        else if (ch === closeCode) {
+            depth--;
+            if (depth === 0) return i;
         }
         i++;
     }
-    return true;
+    return -1;
 }
 
-function addLoaderCjsNames(names, nameSet, source, filename, rootReexports) {
-    const requireBindings = Object.create(null);
-    scanLoaderCjsTopLevelPositions(source, (i, braceDepth, statementStart) => {
-        if (braceDepth === 0 && statementStart) {
-            const binding = readLoaderRequireBinding(source, i);
-            if (binding !== null) {
-                requireBindings[binding.binding] = binding.specifier;
-                return { pos: binding.end, statementStart: true };
-            }
-        }
-        const name = readLoaderCjsExportName(source, i) || readLoaderDefinePropertyExportName(source, i);
-        if (name !== null && name !== 'default' && !nameSet.has(name)) {
-            nameSet.add(name);
-            names.push(name);
-        }
-        const objectLiteral = readLoaderModuleExportsObjectLiteralNames(source, i);
-        if (objectLiteral !== null) {
-            for (let j = 0; j < objectLiteral.names.length; j++) {
-                const objectName = objectLiteral.names[j];
-                if (objectName !== 'default' && !nameSet.has(objectName)) {
-                    nameSet.add(objectName);
-                    names.push(objectName);
-                }
-            }
-            if (filename) {
-                for (let j = 0; j < objectLiteral.reexports.length; j++) {
-                    rootReexports.push(objectLiteral.reexports[j]);
-                }
-            }
-            return objectLiteral.end;
-        }
-        const keysReexport = braceDepth === 0 && statementStart ? readLoaderObjectKeysReexport(source, i, requireBindings) : null;
-        const reexport = keysReexport !== null ? keysReexport.specifier : readLoaderModuleExportsRequire(source, i);
-        if (reexport !== null && filename) {
-            rootReexports.push(reexport);
-        }
-        if (keysReexport !== null) return keysReexport.end;
-        return undefined;
-    });
+function findMatchingParen(source, open) {
+    return findMatchingDelimiter(source, open, 0x28, 0x29);
 }
 
-function loaderCjsNamedExports(source, filename) {
-    const names = [];
-    const nameSet = new Set();
-    const rootReexports = [];
-    addLoaderCjsNames(names, nameSet, source, filename, rootReexports);
-    if (filename !== undefined && typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names === 'function') {
-        const rustNames = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_loader_cjs_reexport_names(filename, source, rootReexports);
-        for (let i = 0; i < rustNames.length; i++) {
-            const name = rustNames[i];
-            if (!nameSet.has(name)) {
-                nameSet.add(name);
-                names.push(name);
-            }
-        }
-    }
-    return names;
+function findMatchingBrace(source, open) {
+    return findMatchingDelimiter(source, open, 0x7b, 0x7d);
 }
 
 function statementEndForStaticImport(source, start) {
@@ -3991,11 +3022,11 @@ function collectLiteralRequireSpecifiers(source, names) {
 function collectCreateRequireNamesFromImport(source, pos, end) {
     let i = skipWhitespaceAndComments(source, pos + 6);
     if (source.charCodeAt(i) !== 0x7b) return null;
-    const namedEnd = loaderFindMatchingBrace(source, i);
+    const namedEnd = findMatchingBrace(source, i);
     if (namedEnd < 0 || namedEnd > end) return null;
 
     let afterNamed = skipWhitespaceAndComments(source, namedEnd + 1);
-    const fromEnd = readLoaderNamedIdentifier(source, afterNamed, 'from');
+    const fromEnd = readNamedIdentifier(source, afterNamed, 'from');
     if (fromEnd === null) return null;
     afterNamed = skipWhitespaceAndComments(source, fromEnd);
     const spec = readStaticSpecifierString(source, afterNamed);
@@ -4016,17 +3047,17 @@ function collectCreateRequireNamesFromImport(source, pos, end) {
             importedName = decoded.value;
             cursor = skipWhitespaceAndComments(source, decoded.end + 1);
         } else {
-            const imported = readLoaderIdentifier(source, cursor);
+            const imported = readIdentifier(source, cursor);
             if (imported === null) return names;
             importedName = imported.name;
             cursor = skipWhitespaceAndComments(source, imported.end);
         }
 
         let local = importedName;
-        const asEnd = readLoaderNamedIdentifier(source, cursor, 'as');
+        const asEnd = readNamedIdentifier(source, cursor, 'as');
         if (asEnd !== null) {
             cursor = skipWhitespaceAndComments(source, asEnd);
-            const alias = readLoaderIdentifier(source, cursor);
+            const alias = readIdentifier(source, cursor);
             if (alias === null) return names;
             local = alias.name;
             cursor = skipWhitespaceAndComments(source, alias.end);
@@ -4064,7 +3095,7 @@ function collectCreateRequireAliases(source, factoryNames) {
         const declarationEnd = readVariableDeclarationKeyword(source, i);
         if (declarationEnd !== null) {
             let p = skipWhitespaceAndComments(source, declarationEnd);
-            const ident = readLoaderIdentifier(source, p);
+            const ident = readIdentifier(source, p);
             if (ident !== null) {
                 const name = ident.name;
                 p = skipWhitespaceAndComments(source, ident.end);
@@ -4097,7 +3128,7 @@ function collectCreateRequireCallSpecifiers(source, factoryNames) {
             if (startsWithKeywordAt(source, factory, i) && previousCode !== 0x2e) {
                 const firstOpen = skipWhitespaceAndComments(source, i + factory.length);
                 if (source.charCodeAt(firstOpen) === 0x28) {
-                    const firstClose = loaderFindMatchingParen(source, firstOpen);
+                    const firstClose = findMatchingParen(source, firstOpen);
                     if (firstClose >= 0) {
                         const secondOpen = skipWhitespaceAndComments(source, firstClose + 1);
                         if (source.charCodeAt(secondOpen) === 0x28) {
@@ -4803,20 +3834,17 @@ function loaderSourceToString(source) {
 function loaderCommonJsSourceModule(source, url) {
     source = loaderSourceToString(source);
     const filename = loaderCommonJsFilename(url);
-    const names = loaderCjsNamedExports(source, pathModule.isAbsolute(filename) ? filename : undefined);
     const cacheKey = loaderCommonJsCacheKey(url, filename);
-    const lines = [
-        'import __wasm_rquickjs_module from "node:module";',
-        'const __cjs_default = __wasm_rquickjs_module.__wasm_rquickjs_load_commonjs_loader_source(' + JSON.stringify(filename) + ',' + JSON.stringify(source) + ',' + JSON.stringify(String(url || '')) + ',' + JSON.stringify(cacheKey) + ');',
-        'export default __cjs_default;',
-    ];
-    for (let i = 0; i < names.length; i++) {
-        const local = '__wasm_rquickjs_loader_export_' + i;
-        const nameLiteral = JSON.stringify(names[i]);
-        lines.push('const ' + local + ' = __wasm_rquickjs_module.__wasm_rquickjs_cjs_facade_has_own(__cjs_default, ' + nameLiteral + ') ? __cjs_default[' + nameLiteral + '] : undefined;');
-        lines.push('export { ' + local + ' as ' + nameLiteral + ' };');
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_build_loader_cjs_facade !== 'function') {
+        throw new Error('Internal loader CommonJS facade builder is not initialized');
     }
-    return 'data:text/javascript,' + encodeURIComponent(lines.join('\n'));
+    const facade = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_build_loader_cjs_facade(
+        filename,
+        String(url || ''),
+        cacheKey,
+        source,
+    );
+    return 'data:text/javascript,' + encodeURIComponent(facade);
 }
 
 function loaderFileUrlSource(url) {

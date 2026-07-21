@@ -7619,20 +7619,6 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     analysis
 }
 
-fn collect_cjs_export_star_reexports(source: &str) -> Vec<String> {
-    let mut reexports = Vec::new();
-    let _ = scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
-        if brace_depth == 0
-            && let Some((specifier, next)) = parse_export_star_reexport(source, i)
-        {
-            add_unique(&mut reexports, specifier);
-            return ControlFlow::Continue(Some(next));
-        }
-        ControlFlow::Continue(None)
-    });
-    reexports
-}
-
 fn is_node_builtin_specifier(specifier: &str) -> bool {
     let bare = specifier.strip_prefix("node:").unwrap_or(specifier);
     matches!(
@@ -7845,29 +7831,44 @@ fn cjs_named_export_source(names: &[String]) -> String {
     out
 }
 
-fn analyze_loader_cjs_reexport_names(
+fn build_cjs_facade_source(prologue: &str, default_expression: &str, names: &[String]) -> String {
+    let named_exports = cjs_named_export_source(names);
+    format!(
+        r#"{}
+import __wasm_rquickjs_module from "node:module";
+var __cjs_default = {};
+export default __cjs_default;
+{}
+"#,
+        prologue.trim(),
+        default_expression,
+        named_exports,
+    )
+}
+
+fn build_loader_cjs_facade(
     ctx: Ctx<'_>,
     filename: String,
+    source_url: String,
+    cache_key: String,
     source: String,
-    reexports: rquickjs::Array<'_>,
-) -> Vec<String> {
+) -> String {
     let cjs_conditions =
         NodeModulesResolver::conditions_from_global(&ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
-    let mut reexport_specifiers = collect_cjs_export_star_reexports(&source);
-    for i in 0..reexports.len() {
-        if let Ok(reexport) = reexports.get::<String>(i) {
-            add_unique(&mut reexport_specifiers, reexport);
-        }
-    }
-    let mut seen = HashSet::new();
-    seen.insert(filename.clone());
-    let mut names = Vec::new();
-    for name in analyze_cjs_reexport_specifier_names(&filename, reexport_specifiers, &mut seen, &cjs_conditions) {
-        if name != "default" {
-            add_unique(&mut names, name);
-        }
-    }
-    names
+    let analysis = analyze_cjs_exports_for_file(
+        &filename,
+        &source,
+        &mut HashSet::new(),
+        &cjs_conditions,
+    );
+    let default_expression = format!(
+        "__wasm_rquickjs_module.__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
+        escape_js_string(&filename),
+        escape_js_string(&source),
+        escape_js_string(&source_url),
+        escape_js_string(&cache_key),
+    );
+    build_cjs_facade_source("", &default_expression, &analysis.exports)
 }
 
 impl Loader for CjsCompatLoader {
@@ -7929,22 +7930,18 @@ impl Loader for CjsCompatLoader {
             NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
         let detected_analysis =
             analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
-        let named_exports = cjs_named_export_source(&detected_analysis.exports);
-
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
         let prologue = inject_module_source_prologue(init.filename.as_deref(), "");
-	let wrapped = format!(
-	    r#"{}
-	import __wasm_rquickjs_module from "node:module";
-	var __cjs_default = __wasm_rquickjs_module.__wasm_rquickjs_load_cjs_esm_facade_default("{}");
-	export default __cjs_default;
-	{}
-	"#,
-            prologue.trim(),
+        let default_expression = format!(
+            "__wasm_rquickjs_module.__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\")",
             escape_js_string(&fs_abs_path),
-            named_exports
+        );
+        let wrapped = build_cjs_facade_source(
+            &prologue,
+            &default_expression,
+            &detected_analysis.exports,
         );
 
         declare_module_with_import_meta(ctx, path, &wrapped, &init)
@@ -9296,11 +9293,11 @@ impl JsState {
 
             set_non_replaceable_global(
                 &global,
-                "__wasm_rquickjs_analyze_loader_cjs_reexport_names",
-                Function::new(ctx.clone(), analyze_loader_cjs_reexport_names)
-                    .expect("Failed to create loader CJS reexport analyzer"),
+                "__wasm_rquickjs_build_loader_cjs_facade",
+                Function::new(ctx.clone(), build_loader_cjs_facade)
+                    .expect("Failed to create loader CJS facade builder"),
             )
-            .expect("Failed to initialize loader CJS reexport analyzer");
+            .expect("Failed to initialize loader CJS facade builder");
 
             set_non_replaceable_global(
                 &global,

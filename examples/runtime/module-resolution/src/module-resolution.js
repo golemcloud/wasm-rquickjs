@@ -50,7 +50,7 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
     for (const name of [
         '__wasm_rquickjs_register_import_attr_rewrite',
         '__wasm_rquickjs_discard_import_attr_rewrite',
-        '__wasm_rquickjs_analyze_loader_cjs_reexport_names',
+        '__wasm_rquickjs_build_loader_cjs_facade',
         '__wasm_rquickjs_import_meta_resolve_package',
         '__wasm_rquickjs_import_meta_resolve_path',
         '__wasm_rquickjs_loader_default_resolve_package',
@@ -3540,7 +3540,7 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'const keysTaggedTemplate = await import("virtual:loader-cjs-keys-tagged-template");',
             'assert.strictEqual(keysTaggedTemplate.default.reexported, 1);',
             'assert.strictEqual(keysTaggedTemplate.own, "own-value");',
-            'assert.strictEqual(Object.prototype.hasOwnProperty.call(keysTaggedTemplate, "reexported"), false);',
+            'assert.strictEqual(keysTaggedTemplate.reexported, 1);',
             'assert.strictEqual(Object.prototype.hasOwnProperty.call(await import("virtual:loader-cjs-exports-reassign"), "reexported"), false);',
             'const fileNs = await import("virtual:loader-cjs-file");',
             'assert.strictEqual(fileNs.default.fromThis, true);',

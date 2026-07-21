@@ -576,7 +576,7 @@ fn module_loader_architecture() {
         "__wasm_rquickjs_cjs_resolve_package_self_reference",
         "__wasm_rquickjs_cjs_resolve_package_fallback",
         "__wasm_rquickjs_package_global_conditions",
-        "__wasm_rquickjs_analyze_loader_cjs_reexport_names",
+        "__wasm_rquickjs_build_loader_cjs_facade",
     ] {
         assert!(
             js_identifiers.contains(bridge),
