@@ -2954,14 +2954,29 @@ mod tests {
     }
 
     #[test]
-    fn cjs_export_star_return_guard_parser_is_shared() {
+    fn cjs_reexport_if_guard_parser_is_shared() {
         let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
 
         assert!(
             internal_rs.contains(
-                "fn parse_if_return_guard( source: &str, pos: usize, condition_matches: impl FnOnce(&str) -> bool, ) -> Option<usize> { let (condition, i) = parse_if_condition(source, pos)?; if !condition_matches(condition) { return None; } parse_free_ident_name(source, i, \"return\") }"
+                "fn parse_if_guarded_body( source: &str, pos: usize, condition_matches: impl FnOnce(&str) -> bool, body_parser: impl FnOnce(&str, usize) -> Option<usize>, ) -> Option<usize> { let (condition, i) = parse_if_condition(source, pos)?; if !condition_matches(condition) { return None; } body_parser(source, i) }"
             ),
-            "CJS reexport return guards must share the if/return parser skeleton"
+            "CJS reexport guards must share the if/condition/body parser skeleton"
+        );
+
+        let conditional_start = internal_rs
+            .find("fn parse_export_star_conditional_reexport(")
+            .expect("conditional export-star reexport parser must exist");
+        let conditional_end = internal_rs[conditional_start..]
+            .find("fn parse_export_star_return_guard(")
+            .expect("conditional reexport parser must precede export-star return guard parser")
+            + conditional_start;
+        let conditional = &internal_rs[conditional_start..conditional_end];
+        assert!(
+            conditional.contains(
+                "parse_if_guarded_body( source, pos, |condition| is_export_star_has_own_guard_condition(condition, key), |source, body_start| parse_direct_exports_reexport_assignment(source, body_start, binding, key), )"
+            ) && !conditional.contains("parse_if_condition("),
+            "conditional export-star reexports must share parser flow while preserving has-own guard and assignment body predicates"
         );
 
         let export_star_start = internal_rs
@@ -2990,6 +3005,21 @@ mod tests {
                 "parse_if_return_guard(source, pos, |condition| { is_duplicate_export_guard_condition(condition, binding, key) })"
             ) && !duplicate.contains("parse_if_condition("),
             "duplicate-export return guards must share parser flow while preserving their stricter predicate"
+        );
+
+        let return_guard_start = internal_rs
+            .find("fn parse_if_return_guard(")
+            .expect("shared return guard parser must exist");
+        let return_guard_end = internal_rs[return_guard_start..]
+            .find("fn parse_if_guarded_body(")
+            .expect("return guard parser must precede shared guarded-body parser")
+            + return_guard_start;
+        let return_guard = &internal_rs[return_guard_start..return_guard_end];
+        assert!(
+            return_guard.contains(
+                "parse_if_guarded_body(source, pos, condition_matches, |source, body_start| { parse_free_ident_name(source, body_start, \"return\") })"
+            ) && !return_guard.contains("parse_if_condition("),
+            "return guards must share guarded-body parsing and keep the bare-return body parser"
         );
     }
 
