@@ -749,36 +749,11 @@ function findLongestRegisteredExtension(filename) {
 }
 
 function getPackageScopeInfo(filename) {
-    let dir = pathModule.dirname(filename);
-    while (true) {
-        if (pathModule.basename(dir) === 'node_modules') return null;
-        const pkgPath = pathModule.join(dir, 'package.json');
-        try {
-            const entry = readPackageJson(pkgPath);
-            if (entry !== null) {
-                return {
-                    packageType: entry.pkg.type || null,
-                    isNodeModulesPackage: isNodeModulesPackageScope(dir),
-                };
-            }
-        } catch (e) {
-            return null;
-        }
-        const parent = pathModule.dirname(dir);
-        if (parent === dir) break;
-        dir = parent;
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_package_scope_info !== 'function') {
+        throw new Error('Internal CJS package scope classifier is not initialized');
     }
-    return null;
-}
-
-function isNodeModulesPackageScope(dir) {
-    const parent = pathModule.dirname(dir);
-    if (parent === dir) return false;
-    if (pathModule.basename(parent) === 'node_modules') return true;
-    const grandparent = pathModule.dirname(parent);
-    return pathModule.basename(parent).startsWith('@') &&
-        grandparent !== parent &&
-        pathModule.basename(grandparent) === 'node_modules';
+    const scope = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_package_scope_info(filename);
+    return scope == null ? null : scope;
 }
 
 function isPathDirectory(filename) {

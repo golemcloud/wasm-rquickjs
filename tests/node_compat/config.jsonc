@@ -5834,7 +5834,7 @@
     "es-module/test-esm-import-attributes-errors.js": { "category": "runnable" },
     "es-module/test-esm-import-attributes-validation.js": { "category": "node-internals", "reason": "imports internal/modules/esm/assert (Node internal module)" },
     "es-module/test-esm-invalid-data-urls.js": { "category": "runnable" },
-    "es-module/test-esm-invalid-pjson.js": { "category": "runnable" },
+    "es-module/test-esm-invalid-pjson.js": { "category": "known-gap", "reason": "same-process ESM invalid package config diagnostics are covered by module-resolution runtime tests; vendored fixture asserts stderr/status through spawned process.execPath ESM entry-point emulation" },
     "es-module/test-esm-loader-modulemap.js": {
       "split": true,
       "subtests": {

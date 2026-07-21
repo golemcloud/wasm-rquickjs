@@ -5571,7 +5571,7 @@ fn cjs_resolve_package_self_reference<'js>(
     }
 }
 
-fn throw_cjs_invalid_package_config_while_importing<'js, T>(
+fn throw_invalid_package_config_while_importing<'js, T>(
     ctx: &Ctx<'js>,
     path: String,
     id: &str,
@@ -5589,6 +5589,20 @@ fn throw_cjs_invalid_package_config_while_importing<'js, T>(
         message.push_str(&reason);
     }
     throw_native_coded_error(ctx, &message, "ERR_INVALID_PACKAGE_CONFIG", false)
+}
+
+fn throw_esm_package_resolve_error<'js>(
+    ctx: &Ctx<'js>,
+    err: NodePackageResolveError,
+    specifier: &str,
+    base: &str,
+) -> rquickjs::Result<String> {
+    match err {
+        NodePackageResolveError::InvalidPackageConfig { path, reason } => {
+            throw_invalid_package_config_while_importing(ctx, path, specifier, base, reason)
+        }
+        err => throw_node_package_resolve_error(ctx, err),
+    }
 }
 
 fn cjs_resolve_package_fallback<'js>(
@@ -5617,7 +5631,7 @@ fn cjs_resolve_package_fallback<'js>(
         }
         Ok(None) => Ok(None),
         Err(NodePackageResolveError::InvalidPackageConfig { path, reason }) => {
-            throw_cjs_invalid_package_config_while_importing(
+            throw_invalid_package_config_while_importing(
                 &ctx,
                 path,
                 &id,
@@ -5748,7 +5762,11 @@ impl Resolver for NodeModulesResolver {
             }
             Err(err) => {
                 discard_import_type_rewrite_token(name);
-                throw_node_package_resolve_error(ctx, err)
+                if package_like {
+                    throw_esm_package_resolve_error(ctx, err, resolution_name, base)
+                } else {
+                    throw_node_package_resolve_error(ctx, err)
+                }
             }
         }
     }
@@ -7685,28 +7703,62 @@ struct PackageScopeInfo {
 }
 
 fn package_scope_type(filename: &str) -> Option<String> {
-    package_scope_info(filename).and_then(|scope| scope.package_type)
+    package_scope_info(filename)
+        .ok()
+        .flatten()
+        .and_then(|scope| scope.package_type)
 }
 
-fn package_scope_info(filename: &str) -> Option<PackageScopeInfo> {
-    let mut dir = std::path::Path::new(filename).parent()?.to_path_buf();
+fn package_scope_info(filename: &str) -> Result<Option<PackageScopeInfo>, NodePackageResolveError> {
+    let Some(parent) = std::path::Path::new(filename).parent() else {
+        return Ok(None);
+    };
+    let mut dir = parent.to_path_buf();
     loop {
         if dir.file_name().is_some_and(|name| name == "node_modules") {
-            return None;
+            return Ok(None);
         }
         let pkg_path = dir.join("package.json");
-        if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional(&pkg_path)
-        {
-            return Some(PackageScopeInfo {
+        if let Some(package) = NodeModulesResolver::read_package_json_optional(&pkg_path)? {
+            return Ok(Some(PackageScopeInfo {
                 package_type: package.package_type.clone(),
                 is_node_modules_package: is_node_modules_package_scope(&dir),
-            });
+            }));
         }
         if !dir.pop() {
             break;
         }
     }
-    None
+    Ok(None)
+}
+
+fn package_scope_info_or_throw<'js>(
+    ctx: &Ctx<'js>,
+    filename: &str,
+) -> rquickjs::Result<Option<PackageScopeInfo>> {
+    match package_scope_info(filename) {
+        Ok(scope) => Ok(scope),
+        Err(err) => {
+            let _: String = throw_node_package_resolve_error(ctx, err)?;
+            unreachable!()
+        }
+    }
+}
+
+fn cjs_package_scope_info<'js>(
+    ctx: Ctx<'js>,
+    filename: String,
+) -> rquickjs::Result<Option<Object<'js>>> {
+    let Some(scope) = package_scope_info_or_throw(&ctx, &filename)? else {
+        return Ok(None);
+    };
+    let result = Object::new(ctx.clone())?;
+    match scope.package_type {
+        Some(package_type) => result.set("packageType", package_type)?,
+        None => result.set("packageType", Value::new_null(ctx.clone()))?,
+    }
+    result.set("isNodeModulesPackage", scope.is_node_modules_package)?;
+    Ok(Some(result))
 }
 
 fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
@@ -7790,7 +7842,7 @@ impl Loader for CjsCompatLoader {
         let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
 
         let package_scope = if fs_abs_path.ends_with(".js") || is_extensionless {
-            package_scope_info(&fs_abs_path)
+            package_scope_info_or_throw(ctx, &fs_abs_path)?
         } else {
             None
         };
@@ -9237,6 +9289,14 @@ impl JsState {
                     .expect("Failed to create CJS package self-reference resolver"),
             )
             .expect("Failed to initialize CJS package self-reference resolver");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_cjs_package_scope_info",
+                Function::new(ctx.clone(), cjs_package_scope_info)
+                    .expect("Failed to create CJS package scope classifier"),
+            )
+            .expect("Failed to initialize CJS package scope classifier");
 
             set_non_replaceable_global(
                 &global,

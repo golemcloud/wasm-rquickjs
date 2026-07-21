@@ -154,6 +154,7 @@ mod tests {
             "__wasm_rquickjs_loader_default_resolve_package",
             "__wasm_rquickjs_cjs_resolve_package_exports",
             "__wasm_rquickjs_cjs_resolve_package_self_reference",
+            "__wasm_rquickjs_cjs_package_scope_info",
             "__wasm_rquickjs_cjs_resolve_package_fallback",
             "__wasm_rquickjs_package_global_conditions",
             "__wasm_rquickjs_require_esm_graph_resolve_package",
@@ -3187,8 +3188,13 @@ mod tests {
         assert!(
             !internal_rs.contains("fn is_js_in_module_package_scope(")
                 && !module_js.contains("function getPackageScopeType(")
-                && !module_js.contains("function getPackageScopeExplicitType("),
-            "module-kind package-scope checks must not keep unused parallel wrappers"
+                && !module_js.contains("function getPackageScopeExplicitType(")
+                && module_js.contains("__wasm_rquickjs_cjs_package_scope_info(filename)")
+                && module_js.contains("return scope == null ? null : scope;")
+                && !module_js.contains("function isNodeModulesPackageScope(")
+                && internal_rs.contains("fn cjs_package_scope_info<'js>(")
+                && internal_rs.contains("fn package_scope_info_or_throw<'js>("),
+            "module-kind package-scope checks must use the Rust-owned classifier without JS scope-walk duplication"
         );
         let cjs_loader_start = internal_rs
             .find("impl Loader for CjsCompatLoader")
@@ -3205,6 +3211,7 @@ mod tests {
                 && cjs_loader.contains("EsmFilePreflightMode::PackageTypeModuleJs")
                 && cjs_loader.contains("EsmFilePreflightMode::RequireOnly")
                 && cjs_loader.contains("let source = read_module_source_or_throw(ctx, path, &source_path)?;")
+                && cjs_loader.contains("package_scope_info_or_throw(ctx, &fs_abs_path)?")
                 && cjs_loader.contains(
                     "return declare_esm_file_module_from_source(ctx, path, fs_path, source, url, preflight_mode);"
                 )

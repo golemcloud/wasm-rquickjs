@@ -678,6 +678,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.throws(() => requireNoExportsSubpath('exported-pkg/encoded-slash-target'), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/invalid-json-pkg', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/invalid-json-pkg/package.json', '{ invalid json');
+        fs.writeFileSync('/esm-package-map-edge-app/import-invalid-json-pkg.mjs', 'import "invalid-json-pkg";');
         assert.throws(
             () => requireNoExportsSubpath('invalid-json-pkg'),
             (error) => {
@@ -693,6 +694,14 @@ export const testEsmPackageMapEdgeCases = async () => {
                 assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
                 assert.match(error.message, /Invalid package config \/esm-package-map-edge-app\/node_modules\/invalid-json-pkg\/package\.json\./);
                 assert.doesNotMatch(error.message, /while importing/);
+                return true;
+            },
+        );
+        await assert.rejects(
+            () => import('/esm-package-map-edge-app/import-invalid-json-pkg.mjs'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/esm-package-map-edge-app\/node_modules\/invalid-json-pkg\/package\.json while importing "invalid-json-pkg" from \/esm-package-map-edge-app\/import-invalid-json-pkg\.mjs\./);
                 return true;
             },
         );
@@ -5122,6 +5131,10 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         fs.mkdirSync('/module-syntax-app/type-commonjs', { recursive: true });
         fs.writeFileSync('/module-syntax-app/type-commonjs/package.json', JSON.stringify({ type: 'commonjs' }));
         fs.writeFileSync('/module-syntax-app/type-commonjs/export-syntax.js', 'export default "not-forced";');
+        fs.mkdirSync('/module-syntax-app/invalid-package', { recursive: true });
+        fs.writeFileSync('/module-syntax-app/invalid-package/package.json', '{ invalid json');
+        fs.writeFileSync('/module-syntax-app/invalid-package/cjs.js', 'module.exports = { ok: true };');
+        fs.writeFileSync('/module-syntax-app/invalid-package/esm-syntax.js', 'export default 1;');
         fs.writeFileSync('/module-syntax-app/query.mjs', [
             'globalThis.__queryModuleCount = (globalThis.__queryModuleCount || 0) + 1;',
             'export const count = globalThis.__queryModuleCount;',
@@ -5311,6 +5324,22 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         require('/module-syntax-app/create-require-ambiguous-commented-binding.js');
         assert.throws(() => require('/module-syntax-app/create-require-ambiguous-url-prefix-negative.js'), /urlx|undefined/i);
         assert.throws(() => require('/module-syntax-app/type-commonjs/export-syntax.js'), /export|Unexpected/i);
+        assert.throws(
+            () => require('/module-syntax-app/invalid-package/cjs.js'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/module-syntax-app\/invalid-package\/package\.json\./);
+                return true;
+            },
+        );
+        assert.throws(
+            () => require('/module-syntax-app/invalid-package/esm-syntax.js'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/module-syntax-app\/invalid-package\/package\.json\./);
+                return true;
+            },
+        );
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousSpaced, '/module-syntax-app/false-positive.cjs');
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommented, '/module-syntax-app/false-positive.cjs');
         assert.strictEqual(globalThis.__moduleSyntaxAmbiguousCommentedBinding, '/module-syntax-app/false-positive.cjs');
@@ -5396,6 +5425,22 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
         assert.strictEqual((await import('/module-syntax-app/type-module/local-require.js')).default, 1);
         assert.strictEqual((await import('/module-syntax-app/type-module/import-module.js')).default, 2);
         assert.deepStrictEqual((await import('/module-syntax-app/type-module/object-exports.js')).default, { exports: 3 });
+        await assert.rejects(
+            () => import('/module-syntax-app/invalid-package/cjs.js'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/module-syntax-app\/invalid-package\/package\.json\./);
+                return true;
+            },
+        );
+        await assert.rejects(
+            () => import('/module-syntax-app/invalid-package/esm-syntax.js'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_INVALID_PACKAGE_CONFIG');
+                assert.match(error.message, /Invalid package config \/module-syntax-app\/invalid-package\/package\.json\./);
+                return true;
+            },
+        );
         await expectImportRejectsMessage('data:text/javascript,require;', /require.*not defined/i);
         await expectImportRejectsMessage('data:text/javascript,exports={};', /exports.*not defined/i);
         await expectImportRejectsMessage('data:text/javascript,require_custom;', /^(?!.*in ES module scope)(?!.*use import instead).*$/);
