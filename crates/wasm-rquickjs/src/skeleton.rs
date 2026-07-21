@@ -2953,6 +2953,46 @@ mod tests {
     }
 
     #[test]
+    fn cjs_export_star_return_guard_parser_is_shared() {
+        let internal_rs = compact_whitespace(include_str!("../skeleton/src/internal.rs"));
+
+        assert!(
+            internal_rs.contains(
+                "fn parse_if_return_guard( source: &str, pos: usize, condition_matches: impl FnOnce(&str) -> bool, ) -> Option<usize> { let (condition, i) = parse_if_condition(source, pos)?; if !condition_matches(condition) { return None; } parse_free_ident_name(source, i, \"return\") }"
+            ),
+            "CJS reexport return guards must share the if/return parser skeleton"
+        );
+
+        let export_star_start = internal_rs
+            .find("fn parse_export_star_return_guard(")
+            .expect("export-star return guard parser must exist");
+        let export_star_end = internal_rs[export_star_start..]
+            .find("fn parse_duplicate_export_return_guard(")
+            .expect("export-star return guard parser must precede duplicate guard parser")
+            + export_star_start;
+        let export_star = &internal_rs[export_star_start..export_star_end];
+        assert!(
+            export_star.contains(
+                "parse_if_return_guard(source, pos, |condition| { is_export_star_guard_condition(condition, key) })"
+            ) && !export_star.contains("parse_if_condition("),
+            "export-star default/__esModule return guards must share parser flow while preserving their predicate"
+        );
+
+        let duplicate_start = export_star_end;
+        let duplicate_end = internal_rs[duplicate_start..]
+            .find("fn parse_if_return_guard(")
+            .expect("duplicate return guard parser must precede shared parser")
+            + duplicate_start;
+        let duplicate = &internal_rs[duplicate_start..duplicate_end];
+        assert!(
+            duplicate.contains(
+                "parse_if_return_guard(source, pos, |condition| { is_duplicate_export_guard_condition(condition, binding, key) })"
+            ) && !duplicate.contains("parse_if_condition("),
+            "duplicate-export return guards must share parser flow while preserving their stricter predicate"
+        );
+    }
+
+    #[test]
     fn registered_loader_format_normalization_is_shared() {
         let module_js = compact_whitespace(include_str!("../skeleton/src/builtin/module.js"));
 

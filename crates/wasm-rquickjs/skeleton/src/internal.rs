@@ -6934,16 +6934,24 @@ fn parse_export_star_conditional_reexport(source: &str, pos: usize, binding: &st
 }
 
 fn parse_export_star_return_guard(source: &str, pos: usize, key: &str) -> Option<usize> {
-    let (condition, i) = parse_if_condition(source, pos)?;
-    if !is_export_star_guard_condition(condition, key) {
-        return None;
-    }
-    parse_free_ident_name(source, i, "return")
+    parse_if_return_guard(source, pos, |condition| {
+        is_export_star_guard_condition(condition, key)
+    })
 }
 
 fn parse_duplicate_export_return_guard(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+    parse_if_return_guard(source, pos, |condition| {
+        is_duplicate_export_guard_condition(condition, binding, key)
+    })
+}
+
+fn parse_if_return_guard(
+    source: &str,
+    pos: usize,
+    condition_matches: impl FnOnce(&str) -> bool,
+) -> Option<usize> {
     let (condition, i) = parse_if_condition(source, pos)?;
-    if !is_duplicate_export_guard_condition(condition, binding, key) {
+    if !condition_matches(condition) {
         return None;
     }
     parse_free_ident_name(source, i, "return")
