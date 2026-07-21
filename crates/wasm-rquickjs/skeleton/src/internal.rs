@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use rquickjs::convert::Coerced;
 use rquickjs::function::{Args, Constructor, This};
 use rquickjs::loader::{BuiltinResolver, FileResolver, Loader, Resolver};
-use rquickjs::object::Property;
+use rquickjs::object::{Accessor, Property};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Persistent, Promise, String as JsString, Value, async_with, Exception,
@@ -435,16 +435,24 @@ impl Loader for DataUrlLoader {
             // - If `with { ... }` is found and attributes are invalid, generate an error module
             // - If valid, strip the `with { ... }` clause
             // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
-            let source = process_static_import_attrs(&source, path);
-            if let Some(error_source) = esm_preflight_error_module_source(&source, false, false) {
+            let processed = process_static_import_attrs(&source, path);
+            if let Some(error_source) =
+                esm_preflight_error_module_source(&processed.source, false, false)
+            {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
-            if let Some(error_source) = data_url_simple_identifier_error_module_source(&source) {
+            if let Some(error_source) =
+                data_url_simple_identifier_error_module_source(&processed.source)
+            {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
 
             let init = url_only_import_meta_init(path.to_string());
-            let injected = inject_module_source_prologue(init.filename.as_deref(), &source);
+            let injected = inject_module_source_prologue(
+                init.filename.as_deref(),
+                &processed.source,
+                processed.dynamic_import_binding_names.as_ref(),
+            );
             declare_module_with_import_meta(ctx, path, &injected, &init)
         } else {
             let escaped_mime = Self::js_string_escape(base_mime);
@@ -646,7 +654,21 @@ fn read_closed_import_specifier_literal(
 /// - If `with { ... }` is found and attributes are invalid, returns an error module source.
 /// - If valid, strips the `with { ... }` clause so QuickJS can parse it.
 /// - `assert { ... }` is left unchanged (QuickJS will throw SyntaxError).
-fn process_static_import_attrs(source: &str, module_path: &str) -> String {
+struct ProcessedStaticImportAttrs {
+    source: String,
+    dynamic_import_binding_names: Option<(String, String)>,
+}
+
+impl ProcessedStaticImportAttrs {
+    fn plain(source: String) -> Self {
+        Self {
+            source,
+            dynamic_import_binding_names: None,
+        }
+    }
+}
+
+fn process_static_import_attrs(source: &str, module_path: &str) -> ProcessedStaticImportAttrs {
     let bytes = source.as_bytes();
     let len = bytes.len();
     let mut result = String::with_capacity(len);
@@ -750,8 +772,10 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                     && &source[i..i + 6] == "assert"
                     && (i + 6 >= len || !is_id_char(bytes[i + 6]))
                 {
-                    return "await Promise.reject(new SyntaxError('Unexpected identifier'));\n"
-                        .to_string();
+                    return ProcessedStaticImportAttrs::plain(
+                        "await Promise.reject(new SyntaxError('Unexpected identifier'));\n"
+                            .to_string(),
+                    );
                 }
 
                 // Check for 'with' keyword (not 'with(' which is a with-statement)
@@ -787,7 +811,9 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
 
                         let attr_info = extract_import_attr_info(attrs_content);
                         if attr_info.type_non_string {
-                            return syntax_error_module_source("Import attribute value must be a string");
+                            return ProcessedStaticImportAttrs::plain(syntax_error_module_source(
+                                "Import attribute value must be a string",
+                            ));
                         }
                         let format = determine_data_url_format(specifier);
 
@@ -799,7 +825,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                             specifier,
                             module_path,
                         ) {
-                            return error_module;
+                            return ProcessedStaticImportAttrs::plain(error_module);
                         }
 
                         // Valid: strip the with clause, keep everything else
@@ -823,7 +849,7 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
                 if let Some(error_module) =
                     validate_static_import_attrs(None, None, format, specifier, module_path)
                 {
-                    return error_module;
+                    return ProcessedStaticImportAttrs::plain(error_module);
                 }
 
                 result.push_str(&source[import_start..i]);
@@ -845,16 +871,12 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> String {
         }
     }
 
-    if rewrote_dynamic_import {
-        let (dynamic_import_reaction_name, dynamic_import_with_trace_name) =
+    ProcessedStaticImportAttrs {
+        source: result,
+        dynamic_import_binding_names: rewrote_dynamic_import.then(|| {
             dynamic_import_binding_names
-                .expect("dynamic import bindings must be initialized when a dynamic import was rewritten");
-        let prelude = format!(
-            "const {dynamic_import_reaction_name}=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;\n"
-        );
-        insert_after_shebang(&result, &prelude)
-    } else {
-        result
+                .expect("dynamic import bindings must be initialized when a dynamic import was rewritten")
+        }),
     }
 }
 
@@ -7938,7 +7960,7 @@ impl Loader for CjsCompatLoader {
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
-        let prologue = inject_module_source_prologue(init.filename.as_deref(), "");
+        let prologue = inject_module_source_prologue(init.filename.as_deref(), "", None);
         let default_expression = format!(
             "__wasm_rquickjs_module.__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\")",
             escape_js_string(&fs_abs_path),
@@ -7978,27 +8000,29 @@ fn initialize_module_import_meta<'js>(
 ) -> rquickjs::Result<()> {
     let meta = module.meta()?;
     let globals = ctx.globals();
-    meta.prop("__wasm_rquickjs_global", globals.clone())?;
+    let internal_meta = meta.clone();
+    let internal_globals = globals.clone();
     meta.prop(
-        "url",
-        Property::from(init.url.clone())
-            .writable()
-            .enumerable()
-            .configurable(),
+        "__wasm_rquickjs_global",
+        Accessor::from(move || -> rquickjs::Result<Object<'js>> {
+            internal_meta.remove("__wasm_rquickjs_global")?;
+            Ok(internal_globals.clone())
+        })
+        .configurable(),
     )?;
-    if let Some(ref filename) = init.filename {
+    if let Some(ref dirname) = init.dirname {
         meta.prop(
-            "filename",
-            Property::from(filename.clone())
+            "dirname",
+            Property::from(dirname.clone())
                 .writable()
                 .enumerable()
                 .configurable(),
         )?;
     }
-    if let Some(ref dirname) = init.dirname {
+    if let Some(ref filename) = init.filename {
         meta.prop(
-            "dirname",
-            Property::from(dirname.clone())
+            "filename",
+            Property::from(filename.clone())
                 .writable()
                 .enumerable()
                 .configurable(),
@@ -8040,9 +8064,16 @@ fn initialize_module_import_meta<'js>(
             Property::from(resolve)
                 .writable()
                 .enumerable()
-                .configurable(),
+            .configurable(),
         )?;
     }
+    meta.prop(
+        "url",
+        Property::from(init.url.clone())
+            .writable()
+            .enumerable()
+            .configurable(),
+    )?;
     Ok(())
 }
 
@@ -8858,9 +8889,20 @@ fn is_js_identifier_continue(byte: u8) -> bool {
     is_js_identifier_start(byte) || byte.is_ascii_digit()
 }
 
-fn inject_module_source_prologue(main_filename: Option<&str>, source: &str) -> String {
+fn inject_module_source_prologue(
+    main_filename: Option<&str>,
+    source: &str,
+    dynamic_import_binding_names: Option<&(String, String)>,
+) -> String {
     let global_name = unique_internal_name(source, "__wasm_rquickjs_global");
     let mut prologue = format!("const {global_name}=import.meta.__wasm_rquickjs_global;");
+    if let Some((dynamic_import_reaction_name, dynamic_import_with_trace_name)) =
+        dynamic_import_binding_names
+    {
+        prologue.push_str(&format!(
+            "const {dynamic_import_reaction_name}={global_name}.__wasm_rquickjs_dynamic_import_reaction;const {dynamic_import_with_trace_name}={global_name}.__wasm_rquickjs_dynamic_import_with_trace;"
+        ));
+    }
     let declared_cjs_globals = collect_declared_cjs_globals_in_esm(source);
     let shadowed_cjs_globals: Vec<&str> = ["require"]
         .iter()
@@ -8897,7 +8939,7 @@ fn inject_module_source_prologue(main_filename: Option<&str>, source: &str) -> S
 }
 
 fn virtual_builtin_module_source(source: &str) -> String {
-    inject_module_source_prologue(None, source)
+    inject_module_source_prologue(None, source, None)
 }
 
 #[derive(Default)]
@@ -9013,7 +9055,8 @@ fn declare_esm_file_module_from_source<'js>(
 ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
     let fs_abs_path = ensure_absolute_path(fs_path);
     let module_abs_path = ensure_absolute_path(module_id);
-    let source = process_static_import_attrs(&raw_source, module_id);
+    let processed = process_static_import_attrs(&raw_source, module_id);
+    let source = &processed.source;
     let init = file_import_meta_init(url, fs_abs_path.clone());
     let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &init.url);
 
@@ -9035,7 +9078,11 @@ fn declare_esm_file_module_from_source<'js>(
     }
 
     let has_top_level_await = source_has_top_level_await(&source);
-    let injected = inject_module_source_prologue(init.filename.as_deref(), &source);
+    let injected = inject_module_source_prologue(
+        init.filename.as_deref(),
+        source,
+        processed.dynamic_import_binding_names.as_ref(),
+    );
     match declare_module_with_import_meta(ctx, module_id, &injected, &init) {
         Ok(module) => {
             if has_top_level_await {
@@ -10401,9 +10448,9 @@ mod cjs_export_analyzer_tests {
         "#;
         let rewritten = process_static_import_attrs(source, "/app/main.mjs");
 
-        assert!(rewritten.contains("__wasm_rquickjs_import_attr_dynamic_import"));
-        assert!(rewritten.contains(r#"./typed.json", { with: { type: "json" } }"#));
-        assert!(!rewritten.contains(r#"import("./typed.json","#));
+        assert!(rewritten.source.contains("__wasm_rquickjs_import_attr_dynamic_import"));
+        assert!(rewritten.source.contains(r#"./typed.json", { with: { type: "json" } }"#));
+        assert!(!rewritten.source.contains(r#"import("./typed.json","#));
     }
 
     #[test]
@@ -10414,13 +10461,19 @@ mod cjs_export_analyzer_tests {
             await import("./plain.mjs");
         "#;
         let rewritten = process_static_import_attrs(source, "/app/main.mjs");
+        let injected = inject_module_source_prologue(
+            None,
+            &rewritten.source,
+            rewritten.dynamic_import_binding_names.as_ref(),
+        );
 
-        assert!(rewritten.contains(
-            "const __wasm_rquickjs_dynamic_import_reaction_1=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const __wasm_rquickjs_dynamic_import_with_trace_1=import.meta.__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;"
+        assert!(injected.contains(
+            "const __wasm_rquickjs_dynamic_import_reaction_1=__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const __wasm_rquickjs_dynamic_import_with_trace_1=__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;"
         ));
-        assert!(!rewritten.contains("globalThis.__wasm_rquickjs_dynamic_import_reaction"));
-        assert!(!rewritten.contains("globalThis.__wasm_rquickjs_dynamic_import_with_trace"));
-        assert!(rewritten.contains("__wasm_rquickjs_dynamic_import_reaction_1(()=>__wasm_rquickjs_dynamic_import_with_trace_1("));
+        assert_eq!(injected.matches("import.meta.__wasm_rquickjs_global").count(), 1);
+        assert!(!injected.contains("globalThis.__wasm_rquickjs_dynamic_import_reaction"));
+        assert!(!injected.contains("globalThis.__wasm_rquickjs_dynamic_import_with_trace"));
+        assert!(injected.contains("__wasm_rquickjs_dynamic_import_reaction_1(()=>__wasm_rquickjs_dynamic_import_with_trace_1("));
     }
 
     #[test]
@@ -10458,7 +10511,9 @@ mod cjs_export_analyzer_tests {
             obj.import("value");
         "#;
 
-        assert_eq!(process_static_import_attrs(source, "/app/main.mjs"), source);
+        let processed = process_static_import_attrs(source, "/app/main.mjs");
+        assert_eq!(processed.source, source);
+        assert!(processed.dynamic_import_binding_names.is_none());
     }
 
     fn assert_analysis(

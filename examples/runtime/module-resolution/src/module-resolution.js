@@ -1652,6 +1652,13 @@ export const testEsmInjectedHelpersIgnoreLexicalGlobalThis = async () => {
         ].join('\n')))).default;
         assert.deepStrictEqual(importMetaResult, ['function', 'node:fs']);
 
+        const dynamicImportMetaResult = (await import('data:text/javascript,' + encodeURIComponent([
+            'const keys = Reflect.ownKeys(import.meta);',
+            'const dependency = await import("data:text/javascript,export default 3");',
+            'export default [keys, dependency.default];',
+        ].join('\n')))).default;
+        assert.deepStrictEqual(dynamicImportMetaResult, [['resolve', 'url'], 3]);
+
         fs.mkdirSync('/esm-injected-helper-app', { recursive: true });
         fs.writeFileSync('/esm-injected-helper-app/main.mjs', [
             'const globalThis = 1;',
