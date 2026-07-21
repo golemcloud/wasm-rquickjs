@@ -1254,19 +1254,30 @@ export const testEsmDataUrlImportAttributes = async () => {
         fs.mkdirSync('/loader-cache-invalidation-app', { recursive: true });
         fs.writeFileSync('/loader-cache-invalidation-app/data.json', '{"cached":true}');
         fs.writeFileSync('/loader-cache-invalidation-app/first.mjs', 'import value from "./data.json" with { type: "json" }; export default value;');
+        fs.writeFileSync('/loader-cache-invalidation-app/error.mjs', 'import "virtual:cached-loader-error";');
         await import('data:text/javascript,' + encodeURIComponent([
             'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
             'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             'async function firstResolve(specifier, context, next) {',
+            '  if (specifier === "virtual:cached-loader-error") throw new Error("cached loader error");',
             '  if (String(context.parentURL).endsWith("/loader-cache-invalidation-app/first.mjs")) {',
             '    return { shortCircuit: true, url: "data:application/json,{%22cached%22:%22first%22}", format: "json", importAttributes: context.importAttributes };',
             '  }',
             '  return next(specifier, context);',
             '}',
+            'const generationBeforeRegister = globalThis.__wasm_rquickjs_registered_loader_generation || 0;',
             'register("data:text/javascript," + encodeURIComponent("export { firstResolve as resolve }; " + firstResolve));',
+            'assert.strictEqual(globalThis.__wasm_rquickjs_registered_loader_generation, generationBeforeRegister + 1);',
             `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL('/loader-cache-invalidation-app/first.mjs').href)})).default, { cached: "first" });`,
+            `await assert.rejects(import(${JSON.stringify(pathToFileURL('/loader-cache-invalidation-app/error.mjs').href)}), /cached loader error/);`,
             'assert.notStrictEqual(Object.keys(globalThis.__wasm_rquickjs_static_registered_loader_cache || {}).length, 0);',
+            'assert(Object.keys(globalThis.__wasm_rquickjs_static_registered_loader_cache).every((key) => key.startsWith(String(generationBeforeRegister + 1) + "\\0")));',
+            'const cachedError = Object.values(globalThis.__wasm_rquickjs_static_registered_loader_cache).find((entry) => entry.error && entry.error.message === "cached loader error");',
+            'assert(cachedError);',
+            'assert.strictEqual(Object.isFrozen(cachedError), true);',
+            'assert.deepStrictEqual(Object.keys(cachedError).sort(), ["error", "format", "shortCircuit", "url", "value"]);',
             'register("data:text/javascript,export function resolve(specifier, context, next) { return next(specifier, context); }");',
+            'assert.strictEqual(globalThis.__wasm_rquickjs_registered_loader_generation, generationBeforeRegister + 2);',
             'assert.strictEqual(Object.keys(globalThis.__wasm_rquickjs_static_registered_loader_cache || {}).length, 0);',
         ].join('\n')));
         resetRegisteredLoaders();
@@ -2265,6 +2276,9 @@ export const testCjsDynamicImportAttributeScanner = async () => {
 };
 
 export const testLoaderCommonjsSourceNamedExports = async () => {
+    let moduleBuiltin;
+    let originalLoaderExtension;
+    let loaderExtensionCalls = 0;
     try {
         fs.mkdirSync('/loader-cjs-source-app', { recursive: true });
         fs.writeFileSync('/loader-cjs-source-app/package.json', JSON.stringify({
@@ -2310,6 +2324,18 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
         fs.writeFileSync('/loader-cjs-source-app/nested-dep.cjs', 'exports.nested = { nestedValue: 92 };');
         fs.writeFileSync('/loader-cjs-source-app/tag-dep.cjs', 'module.exports = function tag() { return { reexported: 1 }; }; module.exports.reexported = 91;');
         fs.writeFileSync('/loader-cjs-source-app/aliased-dep.cjs', 'exports.aliasValue = 77;');
+        fs.writeFileSync('/loader-cjs-source-app/source-less.loader', 'this is intentionally not JavaScript');
+        fs.writeFileSync('/loader-cjs-source-app/source-less.json', '{"sourceLessJson":true}');
+        moduleBuiltin = await import('node:module');
+        originalLoaderExtension = moduleBuiltin.default._extensions['.loader'];
+        moduleBuiltin.default._extensions['.loader'] = (mod, filename) => {
+            loaderExtensionCalls++;
+            mod.exports = {
+                filename,
+                parentFilename: mod.parent && mod.parent.filename,
+                sourceLessExtension: true,
+            };
+        };
         fs.mkdirSync('/loader-cjs-source-app/node_modules/loader-bare-dep', { recursive: true });
         fs.writeFileSync('/loader-cjs-source-app/node_modules/loader-bare-dep/package.json', JSON.stringify({ main: 'index.cjs' }));
         fs.writeFileSync('/loader-cjs-source-app/node_modules/loader-bare-dep/index.cjs', 'exports.bareReexported = 101;');
@@ -2532,6 +2558,12 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '    if (Object.prototype.hasOwnProperty.call(result, "source")) throw new Error("file URL nextResolve eagerly read CJS source");',
             '    return result;',
             '  }',
+            '  if (specifier === "alias-source-less-extension") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/source-less.loader", format: "commonjs" };',
+            '  }',
+            '  if (specifier === "alias-source-less-json") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/source-less.json", format: "json" };',
+            '  }',
             '  if (specifier === "alias-missing-file-url-from-next") {',
             '    const result = next("file:///loader-cjs-source-app/missing.cjs", context);',
             '    if (result !== undefined) throw new Error("missing file URL nextResolve returned metadata");',
@@ -2629,6 +2661,14 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '        "module.exports.aliasResolved = require.resolve(\\"alias-from-next\\");",',
             '        "module.exports.aliasFileUrlValue = require(\\"alias-file-url-from-next\\").aliasValue;",',
             '        "module.exports.aliasFileUrlResolved = require.resolve(\\"alias-file-url-from-next\\");",',
+            '        "const sourceLessExtension = require(\\"alias-source-less-extension\\");",',
+            '        "module.exports.sourceLessExtension = sourceLessExtension.sourceLessExtension;",',
+            '        "module.exports.sourceLessExtensionFilename = sourceLessExtension.filename;",',
+            '        "module.exports.sourceLessExtensionParent = sourceLessExtension.parentFilename;",',
+            '        "module.exports.sourceLessExtensionSame = sourceLessExtension === require(\\"alias-source-less-extension\\");",',
+            '        "module.exports.sourceLessExtensionResolved = require.resolve(\\"alias-source-less-extension\\");",',
+            '        "module.exports.sourceLessJson = require(\\"alias-source-less-json\\").sourceLessJson;",',
+            '        "module.exports.sourceLessJsonResolved = require.resolve(\\"alias-source-less-json\\");",',
             '        "module.exports.aliasMissingFileUrlResolved = require.resolve(\\"alias-missing-file-url-from-next\\");",',
             '        "module.exports.aliasImportValue = require(\\"alias-imports-from-next\\").syncLoaderImportValue;",',
             '        "module.exports.aliasImportResolved = require.resolve(\\"alias-imports-from-next\\");",',
@@ -3277,6 +3317,13 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'assert.strictEqual(ns.aliasResolved, "/loader-cjs-source-app/aliased-dep.cjs");',
             'assert.strictEqual(ns.aliasFileUrlValue, 77);',
             'assert.strictEqual(ns.aliasFileUrlResolved, "/loader-cjs-source-app/aliased-dep.cjs");',
+            'assert.strictEqual(ns.sourceLessExtension, true);',
+            'assert.strictEqual(ns.sourceLessExtensionFilename, "/loader-cjs-source-app/source-less.loader");',
+            'assert.strictEqual(ns.sourceLessExtensionParent, "virtual:loader-cjs");',
+            'assert.strictEqual(ns.sourceLessExtensionSame, true);',
+            'assert.strictEqual(ns.sourceLessExtensionResolved, "/loader-cjs-source-app/source-less.loader");',
+            'assert.strictEqual(ns.sourceLessJson, true);',
+            'assert.strictEqual(ns.sourceLessJsonResolved, "/loader-cjs-source-app/source-less.json");',
             'assert.strictEqual(ns.aliasMissingFileUrlResolved, "virtual:missing-file-url-fallback");',
             'assert.strictEqual(ns.aliasImportValue, "custom-import");',
             'assert.strictEqual(ns.aliasImportResolved, "/loader-cjs-source-app/sync-loader-import-custom.cjs");',
@@ -3550,10 +3597,19 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'assert.strictEqual(fileNs.beforeReturn, true);',
             'assert.strictEqual(fileNs.afterReturn, undefined);',
         ].join('\n')));
+        assert.strictEqual(loaderExtensionCalls, 1);
         return true;
     } catch (error) {
         console.error(error);
         throw error;
+    } finally {
+        if (moduleBuiltin) {
+            if (originalLoaderExtension === undefined) {
+                delete moduleBuiltin.default._extensions['.loader'];
+            } else {
+                moduleBuiltin.default._extensions['.loader'] = originalLoaderExtension;
+            }
+        }
     }
 };
 
@@ -3564,6 +3620,7 @@ export const testLoaderModuleSourceValidation = async () => {
         fs.writeFileSync('/loader-module-source-app/null-source.cjs', 'exports.marker = "null-source";');
         fs.writeFileSync('/loader-module-source-app/inherited-null-source.cjs', 'exports.marker = "inherited-null-source";');
         fs.writeFileSync('/loader-module-source-app/undefined-source.cjs', 'exports.marker = "undefined-source";');
+        fs.writeFileSync('/loader-module-source-app/resolve-source-null.cjs', 'exports.marker = "filesystem-source";');
 
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
@@ -3601,6 +3658,7 @@ export const testLoaderModuleSourceValidation = async () => {
             '  if (specifier === "virtual:cjs-null-source") return { shortCircuit: true, url: "file:///loader-module-source-app/null-source.cjs", format: "commonjs" };',
             '  if (specifier === "virtual:cjs-inherited-null-source") return { shortCircuit: true, url: "file:///loader-module-source-app/inherited-null-source.cjs", format: "commonjs" };',
             '  if (specifier === "virtual:cjs-undefined-source") return { shortCircuit: true, url: "file:///loader-module-source-app/undefined-source.cjs", format: "commonjs" };',
+            '  if (specifier === "virtual:cjs-resolve-source-null") return { shortCircuit: true, url: "file:///loader-module-source-app/resolve-source-null.cjs", format: "commonjs", source: "exports.marker = \\"resolve-source\\";" };',
             '  if (specifier === "virtual:bad-cjs-source") return { shortCircuit: true, url: "virtual:bad-cjs-source", format: "commonjs" };',
             '  return next(specifier, context);',
             '}',
@@ -3617,6 +3675,7 @@ export const testLoaderModuleSourceValidation = async () => {
             '  if (url.endsWith("/null-source.cjs")) return { shortCircuit: true, format: "commonjs", source: null };',
             '  if (url.endsWith("/inherited-null-source.cjs")) return { shortCircuit: true, source: null };',
             '  if (url.endsWith("/undefined-source.cjs")) return { shortCircuit: true, format: "commonjs", source: undefined };',
+            '  if (url.endsWith("/resolve-source-null.cjs")) return { shortCircuit: true, format: "commonjs", source: null };',
             '  if (url === "virtual:bad-cjs-source") return { shortCircuit: true, format: "commonjs", source: 1n };',
             '  if (url.endsWith("/as-module.ext")) return next(url, { ...context, format: "module" });',
             '  return next(url, context);',
@@ -3639,6 +3698,7 @@ export const testLoaderModuleSourceValidation = async () => {
             'assert.strictEqual((await import("virtual:cjs-null-source")).marker, "null-source");',
             'assert.strictEqual((await import("virtual:cjs-inherited-null-source")).marker, "inherited-null-source");',
             'assert.strictEqual((await import("virtual:cjs-undefined-source")).marker, "undefined-source");',
+            'assert.strictEqual((await import("virtual:cjs-resolve-source-null")).marker, "filesystem-source");',
             'await expectReject("load hook must return object", import("virtual:invalid-result"), "ERR_INVALID_RETURN_VALUE");',
             'await expectReject("resolve format type", import("virtual:bad-resolve-format"), "ERR_INVALID_RETURN_PROPERTY_VALUE");',
             'await expectReject("resolve url must be absolute", import("virtual:bad-url"), "ERR_INVALID_RETURN_PROPERTY_VALUE", /url.*resolve/);',

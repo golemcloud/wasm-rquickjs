@@ -3625,12 +3625,6 @@ function registeredLoaderUrlFormatSourceResult(url, format, source) {
     return result;
 }
 
-function registeredLoaderUrlFormatMaybeSourceResult(url, format, source) {
-    return source !== null && source !== undefined
-        ? registeredLoaderUrlFormatSourceResult(url, format, source)
-        : undefined;
-}
-
 function resultForEsmFileUrl(url) {
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
@@ -3764,6 +3758,10 @@ function isLoaderSourceValue(value) {
 
 function registeredLoaderHasOwnSource(result) {
     return result && Object.prototype.hasOwnProperty.call(result, 'source');
+}
+
+function registeredLoaderHasSource(result) {
+    return registeredLoaderHasOwnSource(result) && result.source !== null && result.source !== undefined;
 }
 
 function validateRegisteredLoaderResult(result, hookName, context) {
@@ -4231,12 +4229,19 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
                     const builtin = builtinModuleForSpecifier(id);
                     if (builtin !== undefined) return builtin;
                 }
-                if (loaded.format === 'commonjs' && loaded.source !== undefined) {
+                if (loaded.format === 'commonjs' && registeredLoaderHasSource(loaded)) {
                     const filename = loaderCommonJsFilename(loaded.url);
                     return loadCommonJsLoaderSourceExports(filename, loaded.source, loaded.url, loaderCommonJsCacheKey(loaded.url, filename), parentModule);
                 }
-                if (loaded.format === 'json' && loaded.source !== undefined) {
+                if (loaded.format === 'json' && registeredLoaderHasSource(loaded)) {
                     return JSON.parse(loaderSourceToString(loaded.source));
+                }
+                if (
+                    (loaded.format === 'commonjs' || loaded.format === 'json') &&
+                    loaded.url &&
+                    String(loaded.url).startsWith('file://')
+                ) {
+                    return loadFilesystemCommonJs(loaderCommonJsFilename(loaded.url), parentModule).exports;
                 }
             }
         }
@@ -4810,6 +4815,8 @@ export let register = function register(specifier, parentURL, options) {
         (globalThis.__wasm_rquickjs_registered_loader_realm_counter || 0) + 1;
     const loader = { url, parent, data, realm, module: undefined, initialized: false, initializing: undefined };
     loaders.push(loader);
+    globalThis.__wasm_rquickjs_registered_loader_generation =
+        (globalThis.__wasm_rquickjs_registered_loader_generation || 0) + 1;
     globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
     if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader === 'function') {
         wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader(loader);
@@ -4976,12 +4983,30 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
     }
 
-    function registeredLoaderHasSource(result) {
-        return registeredLoaderHasOwnSource(result) && result.source !== null && result.source !== undefined;
+    function normalizedRegisteredLoaderResult(resolvedState, resolved, loaded) {
+        if (!resolvedState) return undefined;
+        const result = {
+            url: resolvedState.normalizedResolved.url,
+            format: registeredLoaderFinalLoadFormat(loaded, resolvedState.resolvedFormat),
+            shortCircuit: !!(
+                (resolved && resolved.shortCircuit === true) ||
+                (loaded && loaded.shortCircuit === true)
+            ),
+        };
+        if (registeredLoaderHasSource(loaded)) result.source = loaded.source;
+        return Object.freeze(result);
     }
 
-    function registeredLoaderPreferredSource(result, fallbackSource) {
-        return registeredLoaderHasSource(result) ? result.source : fallbackSource;
+    function normalizedRegisteredLoaderCacheResult(result, value, error) {
+        const cached = {
+            url: result && result.url,
+            format: result && result.format,
+            shortCircuit: !!(result && result.shortCircuit),
+            value,
+        };
+        if (registeredLoaderHasSource(result)) cached.source = result.source;
+        if (error !== undefined) cached.error = error;
+        return Object.freeze(cached);
     }
 
     function registeredLoaderFileSourceFallback(url) {
@@ -5001,11 +5026,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function registeredLoaderCommonJsReturn(loaded, url, missingSourceReturn) {
-        const source = registeredLoaderHasSource(loaded)
-            ? loaded.source
-            : registeredLoaderFileSourceFallback(url);
-        return source !== null && source !== undefined
-            ? loaderCommonJsSourceModule(source, url)
+        if (registeredLoaderHasSource(loaded)) {
+            return loaderCommonJsSourceModule(loaded.source, url);
+        }
+        return String(url).startsWith('file://')
+            ? registeredLoaderPathOrUrlReturn(url, true)
             : missingSourceReturn;
     }
 
@@ -5094,7 +5119,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
         if (!resolvedState) return undefined;
         const normalizedResolved = resolvedState.normalizedResolved;
-        const resolvedFormat = resolvedState.resolvedFormat;
 
         const runLoad = async (index, nextUrl, context) => {
             if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
@@ -5115,16 +5139,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
-        const loadedHasSource = registeredLoaderHasSource(loaded);
-        const loadedFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
+        const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
+        const loadedHasSource = registeredLoaderHasSource(result);
+        const loadedFormat = result.format;
         if (mode === 'static-raw') {
-            return loadedHasSource
-                ? registeredLoaderUrlFormatSourceResult(normalizedResolved.url, loadedFormat, loaded.source)
-                : registeredLoaderUrlFormatResult(normalizedResolved.url, loadedFormat);
+            return result;
         }
 
         if (loadedHasSource && loadedFormat === 'module') {
-            return registeredLoaderModuleSourceReturn(loaded.source);
+            return registeredLoaderModuleSourceReturn(result.source);
         }
         if (!loadedHasSource && loadedFormat === 'module') {
             if (String(normalizedResolved.url).startsWith('file://')) {
@@ -5138,10 +5161,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
         }
         if (loadedFormat === 'commonjs') {
-            return registeredLoaderCommonJsReturn(loaded, normalizedResolved.url, undefined);
+            return registeredLoaderCommonJsReturn(result, normalizedResolved.url, undefined);
         }
         if (loadedHasSource && loadedFormat === 'json') {
-            return registeredLoaderJsonSourceReturn(loaded.source);
+            return registeredLoaderJsonSourceReturn(result.source);
         }
         if (resolvedState.loadContext.importAttributes && resolvedState.loadContext.importAttributes.type === 'json') {
             return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
@@ -5259,17 +5282,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const loaded = runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
-        const finalFormat = registeredLoaderFinalLoadFormat(loaded, resolvedFormat);
-        if (finalFormat === 'builtin') return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
-        if (!loaded && resolved.source === undefined) return undefined;
-        let source = registeredLoaderPreferredSource(loaded, resolved.source);
-        if (source === undefined && isImportMode) {
-            return registeredLoaderUrlFormatResult(normalizedResolved.url, finalFormat);
-        }
-        if (source === undefined && finalFormat === 'commonjs') {
-            source = registeredLoaderFileSourceFallback(normalizedResolved.url);
-        }
-        return registeredLoaderUrlFormatMaybeSourceResult(normalizedResolved.url, finalFormat, source);
+        return normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_run_registered_loaders_sync', {
         value: runRegisteredLoadersSync,
@@ -5310,7 +5323,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function staticRegisteredLoaderCacheKey(baseUrl, specifier, attrs) {
         const parts = staticRegisteredLoaderCacheParts(specifier, attrs);
-        return String(baseUrl) + '\0' + parts.specifier + '\0' + parts.typeValue + '\0';
+        const generation = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_registered_loader_generation || 0;
+        const importAttributes = parts.typeValue === ''
+            ? '{}'
+            : JSON.stringify({ type: parts.typeValue });
+        return String(generation) + '\0' + String(baseUrl) + '\0' + parts.specifier + '\0' + importAttributes + '\0';
     }
 
     function staticRegisteredLoaderPathReturn(url) {
@@ -5407,9 +5424,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 const value = edgeReturn
                     ? staticRegisteredLoaderReturnForEdge(loaded, attrs)
                     : staticRegisteredLoaderReturn(loaded);
-                cache[key] = { value, loaded };
+                cache[key] = normalizedRegisteredLoaderCacheResult(loaded, value, undefined);
             } catch (error) {
-                cache[key] = { error };
+                cache[key] = normalizedRegisteredLoaderCacheResult(undefined, undefined, error);
             }
             return { cached: cache[key], created: true };
         })();
@@ -5433,7 +5450,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (cached && cached.error) continue;
             if (cached && !cached.error && cached.value !== undefined) {
                 await prepareStaticRegisteredLoaderGraph(
-                    staticRegisteredLoaderChildUrl(cached.loaded, cached.value),
+                    staticRegisteredLoaderChildUrl(cached, cached.value),
                     seen,
                 );
             }
