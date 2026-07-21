@@ -1453,23 +1453,24 @@ There are a few important things to keep in mind when working on the project:
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
 
-- Runtime and node compatibility tests that use the shared `CompiledTest` harness support opt-in local caches for faster
-  iteration:
-  `WASM_RQUICKJS_TEST_FAST=1 cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time --test-threads 1`.
-  The caches are off by default and preserve a fresh Wasmtime `Store`, component instance, WASI context, temporary
-  directory, and QuickJS runtime state for each test. `WASM_RQUICKJS_TEST_FAST=1` enables the wrapper/optimized artifact
-  cache, prepared component cache, and Wasmtime compilation cache together. Use `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1`,
-  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1`, or `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` to enable only one layer, and
-  `WASM_RQUICKJS_TEST_DROP_CACHE=1` when generated wrapper or optimized component artifacts must be rebuilt; it forces
-  artifact cache freshness checks to miss, removes the central wrapper cache stamps, clears the in-process prepared
-  component cache, and bypasses the Wasmtime compilation cache for that run. With the artifact cache enabled,
-  node_modules app tests reuse a process-local installed app template but still copy it into a fresh temporary app
-  directory for each test. `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips
-  Wizer pre-initialization for `CompiledTest::new*` fixtures when a very short compile/test loop is more useful than
-  optimized-component startup behavior. The prepared component cache
-  currently applies to the normal `TestInstance::new` path; node-compat tests that instantiate through
-  `GolemPreparedComponent` still benefit from artifact and Wasmtime compilation caches, but do not use that prepared
-  component cache layer.
+- Runtime and node compatibility tests support opt-in caches for faster local iteration. Select Node with
+  `nvm use 22.14.0`, then use the artifact and Wasmtime caches explicitly:
+
+  ```sh
+  WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1 \
+  WASM_RQUICKJS_TEST_WASMTIME_CACHE=1 \
+  cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time
+  ```
+
+  These caches may reuse generated wrapper, optimized component, and compiled Wasmtime artifacts. Every test still
+  creates fresh wasm memory, a fresh Wasmtime `Store` and component instance, a fresh WASI context and temporary
+  directory, and fresh QuickJS runtime state. Do not group compatibility cases into one wasm instance.
+
+  `WASM_RQUICKJS_TEST_DROP_CACHE=1` forces generated artifacts to be rebuilt and bypasses Wasmtime's filesystem cache.
+  `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop. The separate
+  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` switch is experimental and manual-only: it reuses immutable prepared
+  `Engine`/`Linker`/`Component` state on the normal `TestInstance::new` path, did not improve the measured node-compat
+  hot path, and must not be part of the recommended cache setup.
 
 ## Acknowledgements
 

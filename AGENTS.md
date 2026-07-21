@@ -39,21 +39,25 @@ cargo build --release
 cargo test
 ```
 
-### Optional fast test caches
+### Optional test caches
 
 The runtime and node compatibility test harness keeps all cache behavior off by default. For local iteration, enable the clean-state-preserving caches explicitly:
 
 ```bash
-WASM_RQUICKJS_TEST_FAST=1 cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time --test-threads 1
+WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1 \
+WASM_RQUICKJS_TEST_WASMTIME_CACHE=1 \
+cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time
 ```
 
-`WASM_RQUICKJS_TEST_FAST=1` enables:
+- `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` uses Wasmtime's filesystem compilation cache.
+- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` reuses wrapper build and optimized component artifacts when their source inputs are unchanged. Node modules app tests also reuse a process-local installed app template, then copy it into a fresh temp app directory for each test.
+- `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for short rebuild loops.
+- `WASM_RQUICKJS_TEST_DROP_CACHE=1` refreshes generated artifacts and bypasses the Wasmtime cache.
+- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` is experimental/manual-only. It reuses process-local immutable `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path, but did not improve the measured node-compat hot path.
 
-- `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` — uses Wasmtime's filesystem compilation cache.
-- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` — reuses process-local `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path while still creating a fresh `Store`, component instance, WASI context, temp dir, and QuickJS runtime state per test. Node-compat tests that use `GolemPreparedComponent` do not currently use this cache layer.
-- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` — reuses wrapper build and optimized component artifacts when their source inputs are unchanged. Node modules app tests also reuse a process-local installed app template, then copy it into a fresh temp app directory for each test.
+Artifact caches never reuse wasm memory, QuickJS runtime state, a Wasmtime `Store`, a component instance, a WASI context, or a temp directory across cases.
 
-Use `WASM_RQUICKJS_TEST_DROP_CACHE=1` with the artifact cache to force wrapper build and Wizer outputs to be refreshed. Do not use grouped tests to speed up module compatibility checks; these tests rely on clean runtime state per case.
+Do not use grouped tests to speed up module compatibility checks; these tests rely on clean runtime state per case.
 
 ### ⚠️ CRITICAL TEST RULES
 

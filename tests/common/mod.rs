@@ -32,7 +32,6 @@ use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
 
-const TEST_FAST_ENV: &str = "WASM_RQUICKJS_TEST_FAST";
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
 const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
 const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
@@ -97,16 +96,8 @@ fn truthy_env(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn test_cache_enabled(name: &str) -> bool {
-    test_cache_enabled_from(truthy_env(TEST_FAST_ENV), truthy_env(name))
-}
-
-fn test_cache_enabled_from(fast: bool, specific: bool) -> bool {
-    fast || specific
-}
-
 pub(crate) fn test_artifact_cache_enabled() -> bool {
-    test_cache_enabled(TEST_ARTIFACT_CACHE_ENV)
+    truthy_env(TEST_ARTIFACT_CACHE_ENV)
 }
 
 fn test_drop_cache_enabled() -> bool {
@@ -114,7 +105,7 @@ fn test_drop_cache_enabled() -> bool {
 }
 
 fn test_prepared_component_cache_enabled() -> bool {
-    test_cache_enabled(TEST_PREPARED_COMPONENT_CACHE_ENV)
+    truthy_env(TEST_PREPARED_COMPONENT_CACHE_ENV)
 }
 
 fn test_unoptimized_enabled() -> bool {
@@ -123,14 +114,13 @@ fn test_unoptimized_enabled() -> bool {
 
 fn test_wasmtime_cache_enabled() -> bool {
     test_wasmtime_cache_enabled_from(
-        truthy_env(TEST_FAST_ENV),
         truthy_env(TEST_WASMTIME_CACHE_ENV),
         test_drop_cache_enabled(),
     )
 }
 
-fn test_wasmtime_cache_enabled_from(fast: bool, specific: bool, drop_cache: bool) -> bool {
-    test_cache_enabled_from(fast, specific) && !drop_cache
+fn test_wasmtime_cache_enabled_from(enabled: bool, drop_cache: bool) -> bool {
+    enabled && !drop_cache
 }
 
 fn test_cache_stamp_dir() -> Utf8PathBuf {
@@ -404,16 +394,11 @@ mod tests {
     }
 
     #[test]
-    fn fast_cache_env_enables_layers_but_drop_cache_bypasses_wasmtime() {
-        assert!(test_cache_enabled_from(true, false));
-        assert!(test_cache_enabled_from(false, true));
-        assert!(!test_cache_enabled_from(false, false));
-
-        assert!(test_wasmtime_cache_enabled_from(true, false, false));
-        assert!(test_wasmtime_cache_enabled_from(false, true, false));
-        assert!(!test_wasmtime_cache_enabled_from(false, false, false));
-        assert!(!test_wasmtime_cache_enabled_from(true, false, true));
-        assert!(!test_wasmtime_cache_enabled_from(false, true, true));
+    fn drop_cache_bypasses_explicit_wasmtime_cache() {
+        assert!(test_wasmtime_cache_enabled_from(true, false));
+        assert!(!test_wasmtime_cache_enabled_from(false, false));
+        assert!(!test_wasmtime_cache_enabled_from(true, true));
+        assert!(!test_wasmtime_cache_enabled_from(false, true));
     }
 }
 
