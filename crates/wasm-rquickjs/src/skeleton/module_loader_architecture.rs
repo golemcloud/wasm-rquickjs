@@ -580,6 +580,10 @@ fn module_loader_architecture() {
         "staticImportEdgeAt",
         "staticImportAttrsAfter",
         "statementEndForStaticImport",
+        "stripImportAttributes",
+        "skipNonCode",
+        "skipTemplateExpression",
+        "scanSourceCodePositions",
     ] {
         assert!(
             !js_declarations.contains_key(forbidden),
@@ -609,6 +613,7 @@ fn module_loader_architecture() {
         "__wasm_rquickjs_package_global_conditions",
         "__wasm_rquickjs_build_loader_cjs_facade",
         "__wasm_rquickjs_analyze_module_source",
+        "__wasm_rquickjs_prepare_cjs_source",
         "__wasm_rquickjs_module_has_exec_argv_flag",
         "__wasm_rquickjs_classify_module_specifier",
         "__wasm_rquickjs_split_module_package_name",

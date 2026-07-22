@@ -670,11 +670,27 @@ impl ProcessedStaticImportAttrs {
 }
 
 fn process_static_import_attrs(source: &str, module_path: &str) -> ProcessedStaticImportAttrs {
+    process_import_attrs(
+        source,
+        module_path,
+        None,
+        "undefined",
+        "import.meta.url",
+    )
+}
+
+fn process_import_attrs(
+    source: &str,
+    module_path: &str,
+    inherited_dynamic_import_binding_names: Option<(String, String)>,
+    parent_filename_expression: &str,
+    parent_url_expression: &str,
+) -> ProcessedStaticImportAttrs {
     let bytes = source.as_bytes();
     let len = bytes.len();
     let mut result = String::with_capacity(len);
     let mut i = 0;
-    let mut dynamic_import_binding_names: Option<(String, String)> = None;
+    let mut dynamic_import_binding_names = inherited_dynamic_import_binding_names;
     let mut rewrote_dynamic_import = false;
 
     while i < len {
@@ -726,6 +742,9 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> ProcessedStat
                     i,
                     &dynamic_import_reaction_name,
                     &dynamic_import_with_trace_name,
+                    module_path,
+                    parent_filename_expression,
+                    parent_url_expression,
                 ) {
                     rewrote_dynamic_import = true;
                     result.push_str(&rewritten);
@@ -915,6 +934,9 @@ fn rewrite_dynamic_import_call(
     open_paren: usize,
     dynamic_import_reaction_name: &str,
     dynamic_import_with_trace_name: &str,
+    module_path: &str,
+    parent_filename_expression: &str,
+    parent_url_expression: &str,
 ) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let len = bytes.len();
@@ -926,6 +948,9 @@ fn rewrite_dynamic_import_call(
             open_paren,
             dynamic_import_reaction_name,
             dynamic_import_with_trace_name,
+            module_path,
+            parent_filename_expression,
+            parent_url_expression,
         );
     }
 
@@ -938,9 +963,11 @@ fn rewrite_dynamic_import_call(
     if i < len && bytes[i] == b')' {
         return Some((
             format!(
-                "((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
+                "((__wasm_rquickjs_specifier)=>{}(()=>{}({},{},__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
                 dynamic_import_reaction_name,
                 dynamic_import_with_trace_name,
+                parent_filename_expression,
+                parent_url_expression,
                 &source[spec_literal_start..spec_literal_end]
             ),
             i + 1,
@@ -954,21 +981,33 @@ fn rewrite_dynamic_import_call(
     let mut paren_depth = 1usize;
     let mut brace_depth = 0usize;
     while i < len {
+        if let Some(next) = skip_non_code(source, i, true) {
+            i = next;
+            continue;
+        }
         match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
             b'(' => paren_depth += 1,
             b')' => {
                 paren_depth = paren_depth.saturating_sub(1);
                 if paren_depth == 0 {
-                    let options = &source[options_start..i];
+                    let options = process_import_attrs(
+                        &source[options_start..i],
+                        module_path,
+                        Some((
+                            dynamic_import_reaction_name.to_string(),
+                            dynamic_import_with_trace_name.to_string(),
+                        )),
+                        parent_filename_expression,
+                        parent_url_expression,
+                    )
+                    .source;
                     return Some((
                         format!(
-                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
+                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}({},{},__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
                             dynamic_import_reaction_name,
                             dynamic_import_with_trace_name,
+                            parent_filename_expression,
+                            parent_url_expression,
                             &source[spec_literal_start..spec_literal_end],
                             options
                         ),
@@ -1092,6 +1131,9 @@ fn rewrite_dynamic_import_expression_call(
     open_paren: usize,
     dynamic_import_reaction_name: &str,
     dynamic_import_with_trace_name: &str,
+    module_path: &str,
+    parent_filename_expression: &str,
+    parent_url_expression: &str,
 ) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let len = bytes.len();
@@ -1101,19 +1143,31 @@ fn rewrite_dynamic_import_expression_call(
     let mut bracket_depth = 0usize;
     let mut brace_depth = 0usize;
     while i < len {
+        if let Some(next) = skip_non_code(source, i, true) {
+            i = next;
+            continue;
+        }
         match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
             b'(' => paren_depth += 1,
             b')' if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 => {
-                let expr = source[expr_start..i].trim();
+                let expr = process_import_attrs(
+                    source[expr_start..i].trim(),
+                    module_path,
+                    Some((
+                        dynamic_import_reaction_name.to_string(),
+                        dynamic_import_with_trace_name.to_string(),
+                    )),
+                    parent_filename_expression,
+                    parent_url_expression,
+                )
+                .source;
                 return Some((
                     format!(
-                        "((__wasm_rquickjs_specifier)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
+                        "((__wasm_rquickjs_specifier)=>{}(()=>{}({},{},__wasm_rquickjs_specifier,undefined,false,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({})",
                         dynamic_import_reaction_name,
                         dynamic_import_with_trace_name,
+                        parent_filename_expression,
+                        parent_url_expression,
                         expr
                     ),
                     i + 1,
@@ -1132,26 +1186,48 @@ fn rewrite_dynamic_import_expression_call(
     if i >= len || bytes[i] != b',' {
         return None;
     }
-    let expr = source[expr_start..i].trim();
+    let expr = process_import_attrs(
+        source[expr_start..i].trim(),
+        module_path,
+        Some((
+            dynamic_import_reaction_name.to_string(),
+            dynamic_import_with_trace_name.to_string(),
+        )),
+        parent_filename_expression,
+        parent_url_expression,
+    )
+    .source;
     i += 1;
     let options_start = i;
     let mut call_paren_depth = 1usize;
     while i < len {
+        if let Some(next) = skip_non_code(source, i, true) {
+            i = next;
+            continue;
+        }
         match bytes[i] {
-            b'\'' | b'"' | b'`' => {
-                i = skip_string_or_template(source, i);
-                continue;
-            }
             b'(' => call_paren_depth += 1,
             b')' => {
                 call_paren_depth = call_paren_depth.saturating_sub(1);
                 if call_paren_depth == 0 {
-                    let options = &source[options_start..i];
+                    let options = process_import_attrs(
+                        &source[options_start..i],
+                        module_path,
+                        Some((
+                            dynamic_import_reaction_name.to_string(),
+                            dynamic_import_with_trace_name.to_string(),
+                        )),
+                        parent_filename_expression,
+                        parent_url_expression,
+                    )
+                    .source;
                     return Some((
                         format!(
-                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}(undefined,import.meta.url,__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
+                            "((__wasm_rquickjs_specifier,__wasm_rquickjs_options)=>{}(()=>{}({},{},__wasm_rquickjs_specifier,__wasm_rquickjs_options,true,(__wasm_rquickjs_prepared)=>import(__wasm_rquickjs_prepared))))({},{})",
                             dynamic_import_reaction_name,
                             dynamic_import_with_trace_name,
+                            parent_filename_expression,
+                            parent_url_expression,
                             expr,
                             options
                         ),
@@ -7407,23 +7483,49 @@ fn previous_identifier_before(source: &str, pos: usize) -> Option<(usize, &str)>
 }
 
 fn is_regex_literal_start(source: &str, pos: usize) -> bool {
-    if matches!(
-        previous_significant_byte(source, pos),
-        None | Some(b'(' | b'{' | b'[' | b'=' | b':' | b',' | b';' | b'!' | b'?' | b'&' | b'|' | b'+' | b'-' | b'*' | b'~' | b'^' | b'%' | b'>')
-    ) {
-        return true;
-    }
-
     let bytes = source.as_bytes();
-    let mut end = pos;
-    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
-        end -= 1;
+    let mut start = 0usize;
+    for i in (0..pos).rev() {
+        if matches!(bytes[i], b'\n' | b'\r' | b';' | b'{' | b'}') {
+            start = i + 1;
+            break;
+        }
     }
-    let mut start = end;
-    while start > 0 && is_ident_continue(bytes[start - 1]) {
-        start -= 1;
+    let mut token_start = None;
+    let mut token_end = 0usize;
+    let mut token_byte = None;
+    let mut i = start;
+    while i < pos {
+        if let Some(next) = skip_non_code(source, i, false) {
+            i = next;
+            continue;
+        }
+        let byte = bytes[i];
+        if byte.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if is_js_identifier_continue(byte) {
+            let begin = i;
+            i += 1;
+            while i < pos && is_js_identifier_continue(bytes[i]) {
+                i += 1;
+            }
+            token_start = Some(begin);
+            token_end = i;
+            token_byte = None;
+            continue;
+        }
+        token_start = None;
+        token_byte = Some(byte);
+        i = next_char_boundary(source, i);
     }
-    matches!(&source[start..end], "return" | "throw" | "case" | "yield")
+    if let Some(byte) = token_byte {
+        return b"({[=,:;!?&|+-*~^%>".contains(&byte);
+    }
+    token_start
+        .map(|start| matches!(&source[start..token_end], "return" | "throw" | "case" | "yield"))
+        .unwrap_or(true)
 }
 
 fn skip_regex_literal(source: &str, pos: usize) -> usize {
@@ -8917,6 +9019,251 @@ fn collect_create_require_specifiers(source: &str) -> Vec<String> {
     specifiers
 }
 
+#[derive(Clone)]
+struct CjsSourceBindingNames {
+    reaction: String,
+    trace: String,
+    prepare_eval: String,
+    native_eval: String,
+}
+
+fn cjs_source_binding_names(source: &str, inherited: Option<[String; 4]>) -> CjsSourceBindingNames {
+    if let Some([reaction, trace, prepare_eval, native_eval]) = inherited {
+        return CjsSourceBindingNames {
+            reaction,
+            trace,
+            prepare_eval,
+            native_eval,
+        };
+    }
+    CjsSourceBindingNames {
+        reaction: unique_internal_name(source, "__wasm_rquickjs_dynamic_import_reaction"),
+        trace: unique_internal_name(source, "__wasm_rquickjs_dynamic_import_with_trace"),
+        prepare_eval: unique_internal_name(source, "__wasm_rquickjs_prepare_cjs_eval_source"),
+        native_eval: unique_internal_name(source, "__wasm_rquickjs_native_eval"),
+    }
+}
+
+fn rewrite_cjs_direct_eval(
+    source: &str,
+    filename: &str,
+    names: &CjsSourceBindingNames,
+) -> (String, bool) {
+    let bytes = source.as_bytes();
+    let mut result = String::with_capacity(source.len());
+    let mut i = 0usize;
+    let mut copied = 0usize;
+    let mut rewrote = false;
+    while i < bytes.len() {
+        if let Some(next) = skip_non_code(source, i, true) {
+            i = next;
+            continue;
+        }
+        let Some(eval_end) = parse_ident_name(source, i, "eval") else {
+            i = next_char_boundary(source, i);
+            continue;
+        };
+        if matches!(previous_significant_code_byte(source, i), Some(b'.' | b'#')) {
+            i = eval_end;
+            continue;
+        }
+        let open = skip_ws_comments(source, eval_end);
+        if bytes.get(open) != Some(&b'(') {
+            i = eval_end;
+            continue;
+        }
+        let Some(close) = find_matching_paren(source, open) else {
+            i = eval_end;
+            continue;
+        };
+        if next_non_whitespace_byte(source, close + 1) == Some(b'{')
+            || previous_word(source, i).is_some_and(|(word, _)| word == "function")
+        {
+            i = eval_end;
+            continue;
+        }
+        let mut first_arg_end = close;
+        let mut pos = open + 1;
+        let (mut paren, mut bracket, mut brace) = (0usize, 0usize, 0usize);
+        while pos < close {
+            if let Some(next) = skip_non_code(source, pos, true) {
+                pos = next;
+                continue;
+            }
+            match bytes[pos] {
+                b'(' => paren += 1,
+                b')' => paren = paren.saturating_sub(1),
+                b'[' => bracket += 1,
+                b']' => bracket = bracket.saturating_sub(1),
+                b'{' => brace += 1,
+                b'}' => brace = brace.saturating_sub(1),
+                b',' if paren == 0 && bracket == 0 && brace == 0 => {
+                    first_arg_end = pos;
+                    break;
+                }
+                _ => {}
+            }
+            pos = next_char_boundary(source, pos);
+        }
+        let first_code = skip_ws_comments(source, open + 1);
+        if first_code >= first_arg_end || source[first_code..first_arg_end].starts_with("...") {
+            i = eval_end;
+            continue;
+        }
+
+        let first_arg = &source[open + 1..first_arg_end];
+        result.push_str(&source[copied..open + 1]);
+        result.push_str(&names.prepare_eval);
+        result.push('(');
+        result.push_str(first_arg);
+        result.push(',');
+        result.push_str(&format!("\"{}\"", escape_js_string(filename)));
+        for name in [
+            &names.reaction,
+            &names.trace,
+            &names.prepare_eval,
+            &names.native_eval,
+        ] {
+            result.push(',');
+            result.push_str(&format!("\"{}\"", escape_js_string(name)));
+        }
+        result.push_str(",eval)");
+        result.push_str(&source[first_arg_end..close]);
+        copied = close;
+        i = close + 1;
+        rewrote = true;
+    }
+    if !rewrote {
+        return (source.to_string(), false);
+    }
+    result.push_str(&source[copied..]);
+    (result, true)
+}
+
+fn rewrite_cjs_template_expressions(
+    source: &str,
+    filename: &str,
+    names: &CjsSourceBindingNames,
+    filename_expression: &str,
+    parent_url_expression: &str,
+) -> (String, bool) {
+    let bytes = source.as_bytes();
+    let mut result = String::with_capacity(source.len());
+    let mut i = 0usize;
+    let mut copied = 0usize;
+    let mut rewrote = false;
+    while i < bytes.len() {
+        if bytes[i] != b'`' {
+            if let Some(next) = skip_non_code(source, i, true) {
+                i = next;
+                continue;
+            }
+            i = next_char_boundary(source, i);
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() {
+            if bytes[i] == b'\\' {
+                i = (i + 2).min(bytes.len());
+                continue;
+            }
+            if bytes[i] == b'`' {
+                i += 1;
+                break;
+            }
+            if bytes[i] == b'$' && bytes.get(i + 1) == Some(&b'{') {
+                let expression_start = i + 2;
+                let expression_after = skip_template_expression(source, expression_start);
+                if expression_after == 0 || bytes.get(expression_after - 1) != Some(&b'}') {
+                    i = expression_after;
+                    continue;
+                }
+                let expression_end = expression_after.saturating_sub(1);
+                let expression = &source[expression_start..expression_end];
+                let (nested_templates, nested_rewrote) = rewrite_cjs_template_expressions(
+                    expression,
+                    filename,
+                    names,
+                    filename_expression,
+                    parent_url_expression,
+                );
+                let processed = process_import_attrs(
+                    &nested_templates,
+                    filename,
+                    Some((names.reaction.clone(), names.trace.clone())),
+                    filename_expression,
+                    parent_url_expression,
+                );
+                let (prepared, eval_rewrote) =
+                    rewrite_cjs_direct_eval(&processed.source, filename, names);
+                if nested_rewrote
+                    || processed.dynamic_import_binding_names.is_some()
+                    || eval_rewrote
+                {
+                    result.push_str(&source[copied..expression_start]);
+                    result.push_str(&prepared);
+                    copied = expression_end;
+                    rewrote = true;
+                }
+                i = expression_after;
+                continue;
+            }
+            i = next_char_boundary(source, i);
+        }
+    }
+    if !rewrote {
+        return (source.to_string(), false);
+    }
+    result.push_str(&source[copied..]);
+    (result, true)
+}
+
+fn prepare_cjs_source<'js>(
+    ctx: Ctx<'js>,
+    source: String,
+    filename: String,
+    reaction: Option<String>,
+    trace: Option<String>,
+    prepare_eval: Option<String>,
+    native_eval: Option<String>,
+) -> rquickjs::Result<Object<'js>> {
+    let inherited = match (reaction, trace, prepare_eval, native_eval) {
+        (Some(reaction), Some(trace), Some(prepare_eval), Some(native_eval)) => {
+            Some([reaction, trace, prepare_eval, native_eval])
+        }
+        _ => None,
+    };
+    let names = cjs_source_binding_names(&source, inherited);
+    let filename_expression = format!("\"{}\"", escape_js_string(&filename));
+    let parent_url_expression = format!("\"{}\"", escape_js_string(&path_to_file_url(&filename)));
+    let (template_prepared, rewrote_template) = rewrite_cjs_template_expressions(
+        &source,
+        &filename,
+        &names,
+        &filename_expression,
+        &parent_url_expression,
+    );
+    let processed = process_import_attrs(
+        &template_prepared,
+        &filename,
+        Some((names.reaction.clone(), names.trace.clone())),
+        &filename_expression,
+        &parent_url_expression,
+    );
+    let (prepared, rewrote_eval) = rewrite_cjs_direct_eval(&processed.source, &filename, &names);
+    let result = Object::new(ctx.clone())?;
+    result.set("source", prepared)?;
+    if processed.dynamic_import_binding_names.is_some() || rewrote_eval || rewrote_template {
+        let bindings = Object::new(ctx)?;
+        bindings.set("reactionName", names.reaction)?;
+        bindings.set("traceName", names.trace)?;
+        bindings.set("prepareEvalName", names.prepare_eval)?;
+        bindings.set("nativeEvalName", names.native_eval)?;
+        result.set("dynamicImportBindings", bindings)?;
+    }
+    Ok(result)
+}
+
 fn analyze_module_source<'js>(ctx: Ctx<'js>, source: String) -> rquickjs::Result<Object<'js>> {
     let analysis = Object::new(ctx.clone())?;
     analysis.set("looksLikeEsm", source_looks_like_esm(&source))?;
@@ -9749,6 +10096,14 @@ impl JsState {
                     .expect("Failed to create module source analyzer"),
             )
             .expect("Failed to initialize module source analyzer");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_prepare_cjs_source",
+                Function::new(ctx.clone(), prepare_cjs_source)
+                    .expect("Failed to create CJS source preparer"),
+            )
+            .expect("Failed to initialize CJS source preparer");
 
             set_non_replaceable_global(
                 &global,

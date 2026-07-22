@@ -52,6 +52,7 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_discard_import_attr_rewrite',
         '__wasm_rquickjs_build_loader_cjs_facade',
         '__wasm_rquickjs_analyze_module_source',
+        '__wasm_rquickjs_prepare_cjs_source',
         '__wasm_rquickjs_module_has_exec_argv_flag',
         '__wasm_rquickjs_classify_module_specifier',
         '__wasm_rquickjs_split_module_package_name',
@@ -2310,9 +2311,12 @@ export const testCjsDynamicImportAttributeScanner = async () => {
             '  const spaced = await import ("./data.json", { with: { type: "json" } });',
             '  const commented = await import /* scanner comment */ ("./data.json", { with: { type: "json" } });',
             '  const commentedInside = await import( /* inside call */ "./data.json" /* before options */, { with: { type: "json" } });',
+            '  const regexSpecifier = await import(/\\)/.test(")") ? "./data.json" : "./missing-regex-delimiter.json", { with: { type: "json" } });',
+            '  const commentedSpecifier = await import((true /* ) */ ? "./data.json" : "./missing-comment-delimiter.json"), { with: { type: "json" } });',
+            '  const commentedOptions = await import("./data.json", { with: /* ) */ { type: "json" } });',
             '  const templateImported = await `${(await import("./data.json", { with: { type: "json" } })).default.fromCjs}`;',
             '  const nested = await import((await import("./name.json", { with: { type: "json" } })).default.name, { with: { type: "json" } });',
-            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), shadowedEval: shadowedEval(), json: imported.default, spaced: spaced.default, commented: commented.default, commentedInside: commentedInside.default, templateImported, nested: nested.default };',
+            '  return { stringLiteral, templateLiteral, regexLiteral: regexLiteral.source, commentedAssignmentRegexLiteral, returnedRegexLiteral: returnedRegexLiteral(), shadowedEval: shadowedEval(), json: imported.default, spaced: spaced.default, commented: commented.default, commentedInside: commentedInside.default, regexSpecifier: regexSpecifier.default, commentedSpecifier: commentedSpecifier.default, commentedOptions: commentedOptions.default, templateImported, nested: nested.default };',
             '};',
         ].join('\n'));
         fs.writeFileSync('/cjs-dynamic-import-attr-scanner/name.json', '{"name":"./data.json"}');
@@ -2335,6 +2339,9 @@ export const testCjsDynamicImportAttributeScanner = async () => {
         assert.deepStrictEqual(value.spaced, { fromCjs: true });
         assert.deepStrictEqual(value.commented, { fromCjs: true });
         assert.deepStrictEqual(value.commentedInside, { fromCjs: true });
+        assert.deepStrictEqual(value.regexSpecifier, { fromCjs: true });
+        assert.deepStrictEqual(value.commentedSpecifier, { fromCjs: true });
+        assert.deepStrictEqual(value.commentedOptions, { fromCjs: true });
         assert.strictEqual(value.templateImported, 'true');
         assert.deepStrictEqual(value.nested, { fromCjs: true });
         const evalA = (await import('/cjs-dynamic-import-attr-scanner/eval-a/caller.cjs')).default;
