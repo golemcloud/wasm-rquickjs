@@ -17,9 +17,9 @@ async fn compiled_websocket() -> CompiledTest {
         .expect("Failed to compile websocket")
 }
 
-/// GOL-223: a JS WebSocket can send binary data (ArrayBuffer / typed array / Blob)
-/// as well as text. The functional host mock records every frame; we assert the
-/// binary frames arrived intact.
+/// A JS WebSocket can send binary data (ArrayBuffer / typed array / Blob) as well
+/// as text. The functional host mock records every frame; we assert the binary
+/// frames arrived intact.
 #[test]
 async fn websocket_binary_send(
     #[tagged_as("websocket")] compiled: &CompiledTest,

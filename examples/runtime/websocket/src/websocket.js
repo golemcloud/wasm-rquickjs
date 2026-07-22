@@ -1,6 +1,6 @@
-// Regression coverage for GOL-223: a WebSocket must be able to send BINARY data
-// (ArrayBuffer, typed array, and Blob) in addition to text. The host mock records
-// every frame it receives; the real assertions live on the Rust side.
+// A WebSocket must be able to send binary data (ArrayBuffer, typed array, and
+// Blob) as well as text. The host mock records every frame it receives; the
+// assertions live on the Rust side.
 
 export const testBinarySend = async () => {
     const ws = new WebSocket('ws://localhost:9999/echo');
