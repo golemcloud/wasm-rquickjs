@@ -1045,3 +1045,40 @@ export async function fetchFunctionShape() {
         console.log("fetch function shape: FAILED");
     }
 }
+
+// Aborting an in-flight fetch must release the underlying WASI HTTP request, not
+// just reject the JS promise. The endpoint records the arrival and then stalls
+// for 10s, so an invocation still holding the request cannot finish promptly.
+export async function abortReleasesRequest(port) {
+    console.log("fetch test 35 (abort releases the in-flight request)");
+
+    const controller = new AbortController();
+    const started = Date.now();
+
+    const fetchPromise = fetch(`http://localhost:${port}/slow-response`, {
+        signal: controller.signal,
+    });
+
+    setTimeout(() => controller.abort('cancelled by test'), 100);
+
+    let outcome;
+    try {
+        await fetchPromise;
+        outcome = 'completed';
+    } catch (e) {
+        outcome = 'aborted';
+        console.log(`Caught abort error: ${e.message || e}`);
+    }
+
+    const elapsed = Date.now() - started;
+    console.log(`Abort outcome: ${outcome}`);
+    // This only shows the promise rejected quickly. It stays true even when the
+    // native request leaks, because the leak stalls the invocation *after* this
+    // promise settles — so whether the request was really released can only be
+    // asserted host-side, by timing the whole invocation.
+    if (outcome === 'aborted' && elapsed < 5000) {
+        console.log("abort rejected the promise promptly: PASSED");
+    } else {
+        console.log(`abort rejected the promise promptly: FAILED (${outcome}, ${elapsed}ms)`);
+    }
+}

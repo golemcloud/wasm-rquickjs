@@ -116,7 +116,7 @@ export function fetch(resource, options = {}) {
 
             fetchPromise = streamingRequest(
                 url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
-                bodyCreator
+                bodyCreator, signal
             );
         } else {
             // Simple request
@@ -148,36 +148,16 @@ export function fetch(resource, options = {}) {
             }
 
             fetchPromise = (async () => {
-                const nativeResponse = await request.simpleSend();
+                // The signal goes into the native call rather than racing this
+                // promise: only the native side can drop the in-flight request
+                // and let the host cancel it.
+                const nativeResponse = await request.simpleSend(signal);
                 return new Response(nativeResponse, request.url, credentials);
             })();
         }
 
-        // If signal is provided, wrap the promise to support abort
-        if (signal) {
-            fetchPromise = abortableFetch(fetchPromise, signal);
-        }
-
         return fetchPromise;
     })();
-}
-
-function abortableFetch(fetchPromise, signal) {
-    // Create a race between the fetch and the abort signal
-    return Promise.race([
-        fetchPromise,
-        new Promise((_, reject) => {
-            // If signal is already aborted, this won't execute
-            if (signal.aborted) {
-                reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
-            } else {
-                // Listen for abort event
-                signal.addEventListener('abort', () => {
-                    reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
-                });
-            }
-        })
-    ]);
 }
 
 // Marker tag for body source (ReadableStream/Blob/FormData) errors so the
@@ -233,7 +213,7 @@ async function sendBody(bodyWriter, body, abortRef) {
 
 async function streamingRequest(
     url, method, headers, version, mode, referer, referrerPolicy, credentials, redirect,
-    bodyCreator
+    bodyCreator, signal
 ) {
     let currentUrl = url;
     let currentMethod = method;
@@ -244,6 +224,12 @@ async function streamingRequest(
     let currentRedirects = 0;
 
     while (true) {
+        // Don't start another request if the signal fired while we were
+        // processing the previous redirect.
+        if (signal && signal.aborted) {
+            throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+        }
+
         const request = new httpNative.HttpRequest(
             currentUrl,
             currentMethod,
@@ -286,7 +272,16 @@ async function streamingRequest(
             bodyPromise = Promise.resolve();
         }
 
-        const nativeResponse = await request.receiveResponse();
+        let nativeResponse;
+        try {
+            nativeResponse = await request.receiveResponse(signal);
+        } catch (e) {
+            // Stop the detached upload: nothing is waiting for this request any
+            // more (an abort has already dropped it on the native side).
+            abortRef.aborted = true;
+            bodyPromise.catch(() => {});
+            throw e;
+        }
 
         const status = nativeResponse.status;
         const isRedirectStatus = status >= 300 && status < 400 && // is redirect

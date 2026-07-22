@@ -210,6 +210,92 @@ impl<'js> IntoJs<'js> for RedirectPolicy {
     }
 }
 
+/// Runs `fut`, cancelling it if the JS `AbortSignal` fires, and rejecting with
+/// the signal's reason.
+///
+/// The cancellation has to happen *inside* the future: rquickjs spawns the
+/// future backing an async method detached from the promise it returns, so a
+/// JS-side `Promise.race` only drops a promise reference while the request
+/// keeps running. Aborting here drops `fut` instead, which releases the request
+/// execution and with it the WASI `future-incoming-response` — dropping that
+/// handle is what tells the host to cancel the in-flight request.
+///
+/// Mirrors the `pollable.abortablePromise(signal)` helper generated in
+/// `crates/wasm-rquickjs/src/imports.rs`.
+async fn with_abort_signal<'js, F, T>(
+    ctx: &Ctx<'js>,
+    signal: Option<Value<'js>>,
+    fut: F,
+) -> rquickjs::Result<T>
+where
+    F: std::future::Future<Output = rquickjs::Result<T>>,
+{
+    use futures::future::{AbortHandle, Abortable};
+    use rquickjs::function::This;
+
+    let signal = match signal {
+        Some(signal) if !signal.is_undefined() && !signal.is_null() => signal,
+        _ => return fut.await,
+    };
+
+    let signal_obj = rquickjs::Object::from_value(signal)?;
+
+    // Already aborted: never start the request at all.
+    if signal_obj.get::<_, bool>("aborted")? {
+        let reason: Value<'js> = signal_obj.get("reason")?;
+        return Err(ctx.throw(reason));
+    }
+
+    let add_event_listener: rquickjs::Function<'js> = signal_obj.get("addEventListener")?;
+    let remove_event_listener: rquickjs::Function<'js> = signal_obj.get("removeEventListener")?;
+
+    let (abort_handle, abort_reg) = AbortHandle::new_pair();
+    let abort_fn = rquickjs::Function::new(ctx.clone(), move || {
+        abort_handle.abort();
+    })?;
+
+    let opts = rquickjs::Object::new(ctx.clone())?;
+    opts.set("once", true)?;
+    add_event_listener.call::<_, ()>((
+        This(signal_obj.clone()),
+        "abort",
+        abort_fn.clone(),
+        opts,
+    ))?;
+
+    // Close the race: the signal may have aborted between the check above and
+    // the listener being registered.
+    if signal_obj.get::<_, bool>("aborted")? {
+        let _ = remove_event_listener.call::<_, ()>((
+            This(signal_obj.clone()),
+            "abort",
+            abort_fn,
+        ));
+        let reason: Value<'js> = signal_obj.get("reason")?;
+        return Err(ctx.throw(reason));
+    }
+
+    // Keep the JS values alive across the await point.
+    let signal_persistent = rquickjs::Persistent::save(ctx, signal_obj);
+    let abort_fn_persistent = rquickjs::Persistent::save(ctx, abort_fn);
+    let remove_listener_persistent = rquickjs::Persistent::save(ctx, remove_event_listener);
+
+    let result = Abortable::new(fut, abort_reg).await;
+
+    let signal_obj = signal_persistent.restore(ctx)?;
+    let abort_fn = abort_fn_persistent.restore(ctx)?;
+    let remove_event_listener = remove_listener_persistent.restore(ctx)?;
+    let _ = remove_event_listener.call::<_, ()>((This(signal_obj.clone()), "abort", abort_fn));
+
+    match result {
+        Ok(inner) => inner,
+        Err(_aborted) => {
+            let reason: Value<'js> = signal_obj.get("reason")?;
+            Err(ctx.throw(reason))
+        }
+    }
+}
+
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct HttpRequest {
@@ -458,23 +544,47 @@ impl HttpRequest {
         }
     }
 
-    pub async fn receive_response<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
-        if let Some(execution) = self.execution.take() {
-            let response = execution
-                .receive_response()
-                .await
-                .map_err(|_| Exception::throw_message(&ctx, "Failed to receive HTTP response"))?;
-
-            Ok(HttpResponse::from_response(response))
-        } else {
-            Err(Exception::throw_message(
+    pub async fn receive_response<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<HttpResponse> {
+        let Some(execution) = self.execution.take() else {
+            return Err(Exception::throw_message(
                 &ctx,
                 "HTTP request has not been initialized for sending",
-            ))
-        }
+            ));
+        };
+
+        // `execution` is moved into the future, so an abort drops it here and
+        // releases the underlying WASI future-incoming-response.
+        let inner_ctx = ctx.clone();
+        let receive = async move {
+            let response = execution.receive_response().await.map_err(|_| {
+                Exception::throw_message(&inner_ctx, "Failed to receive HTTP response")
+            })?;
+            Ok(HttpResponse::from_response(response))
+        };
+
+        with_abort_signal(&ctx, signal, receive).await
     }
 
-    pub async fn simple_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
+    pub async fn simple_send<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<HttpResponse> {
+        // The whole redirect loop runs inside the abortable future. The client,
+        // request and response future are locals of `simple_send_inner`, so an
+        // abort drops them all and cancels the in-flight request.
+        let send = self.simple_send_inner(ctx.clone());
+        with_abort_signal(&ctx, signal, send).await
+    }
+
+    async fn simple_send_inner<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+    ) -> rquickjs::Result<HttpResponse> {
         // Validate mode constraints
         if self.mode == RequestMode::NoCors {
             let method_str = self.method.to_string().to_uppercase();

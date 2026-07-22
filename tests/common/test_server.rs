@@ -11,12 +11,27 @@ use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
 pub async fn start_test_server() -> (u16, JoinHandle<()>) {
+    let (port, handle, _arrivals) = start_test_server_with_arrivals().await;
+    (port, handle)
+}
+
+/// Same as [`start_test_server`], but also returns a receiver that yields once
+/// for every request that reaches `/slow-response`.
+///
+/// `/slow-response` records the arrival and only then sleeps, so a test can tell
+/// "the request actually reached the server and was later cancelled" apart from
+/// "the request never got out" — which a bare connection failure looks like.
+pub async fn start_test_server_with_arrivals()
+-> (u16, JoinHandle<()>, UnboundedReceiver<()>) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
     let host_http_port = listener.local_addr().unwrap().port();
+
+    let (arrived_tx, arrived_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let handle = tokio::spawn(async move {
         let state_mutex = Arc::new(Mutex::new(State::default()));
@@ -209,12 +224,23 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
                     )
                         .into_response()
                 }),
+            )
+            .route(
+                "/slow-response",
+                get(async move || {
+                    // Signal arrival first, then stall. The delay is long enough
+                    // that a test asserting prompt completion cannot pass unless
+                    // the client really released the request.
+                    let _ = arrived_tx.send(());
+                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    "slow body"
+                }),
             );
 
         axum::serve(listener, router).await.unwrap();
     });
 
-    (host_http_port, handle)
+    (host_http_port, handle, arrived_rx)
 }
 
 #[derive(Debug, Clone, Serialize)]

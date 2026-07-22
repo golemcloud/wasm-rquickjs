@@ -1,6 +1,7 @@
-use crate::common::test_server::start_test_server;
+use crate::common::test_server::{start_test_server, start_test_server_with_arrivals};
 use crate::common::{CompiledTest, invoke_and_capture_output};
 use camino::Utf8Path;
+use std::time::{Duration, Instant};
 
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
@@ -883,6 +884,61 @@ async fn fetch_function_shape(#[tagged_as("fetch")] compiled: &CompiledTest) -> 
     assert!(output.contains("new fetch threw: false"));
     assert!(output.contains("new fetch returned Promise: true"));
     assert!(output.contains("fetch function shape matches Node: PASSED"));
+
+    Ok(())
+}
+
+/// Aborting an in-flight fetch must drop the underlying WASI HTTP request so the
+/// invocation finishes promptly, instead of staying busy until the server
+/// finally answers.
+///
+/// Rejecting the JS promise is not evidence of that on its own: a promise-level
+/// abort rejects just as fast while the request keeps running, so only the
+/// elapsed time discriminates. The arrival check makes sure we are measuring a
+/// cancelled request rather than one that never left the guest.
+#[test]
+async fn fetch_abort_releases_request(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _handle, mut arrivals) = start_test_server_with_arrivals().await;
+
+    let wasm_path = compiled.wasm_path().to_path_buf();
+    let invocation = tokio::spawn(async move {
+        invoke_and_capture_output(&wasm_path, None, "abort-releases-request", &[Val::U16(port)])
+            .await
+    });
+
+    // The server records the request before it starts stalling.
+    arrivals
+        .recv()
+        .await
+        .expect("the guest never reached /slow-response");
+    let arrived_at = Instant::now();
+
+    let (result, output) = invocation.await?;
+    let _ = result?;
+    let elapsed = arrived_at.elapsed();
+
+    println!("Output:\n{output}");
+
+    // Required behavior #1: the promise rejects with the abort reason. Note this
+    // part passes even with the bug, so it is not the discriminator.
+    assert!(
+        output.contains("Abort outcome: aborted"),
+        "fetch should have rejected with the abort reason. Output:\n{output}"
+    );
+    assert!(
+        output.contains("abort rejected the promise promptly: PASSED"),
+        "guest-side abort check failed. Output:\n{output}"
+    );
+    // The only assertion that proves the request was released: a promise-level
+    // abort also rejects in ~100ms, but leaves the native request alive and the
+    // invocation runs for the server's full 10s.
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "invocation took {elapsed:?} after the request reached the server; \
+         the aborted request was not released (server delay is 10s)"
+    );
 
     Ok(())
 }
