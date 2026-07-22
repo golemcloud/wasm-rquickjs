@@ -489,8 +489,19 @@ function parseStackFrames(stack) {
     return frames;
 }
 
+function isEvalStackFrame(frame) {
+    if (!frame || typeof frame.functionName !== 'string') {
+        return false;
+    }
+    return frame.functionName === 'eval' || frame.functionName === '<eval>';
+}
+
 function resolveSourceForFrame(frame, currentModuleSource) {
     if (!frame || typeof frame.fileName !== 'string') {
+        return undefined;
+    }
+
+    if (isEvalStackFrame(frame)) {
         return undefined;
     }
 
@@ -918,6 +929,9 @@ function getErrMessage(stackStartFn) {
             continue;
         }
         if (typeof frame.fileName === 'string' && frame.fileName.startsWith('node:')) {
+            return undefined;
+        }
+        if (isEvalStackFrame(frame)) {
             return undefined;
         }
         break;

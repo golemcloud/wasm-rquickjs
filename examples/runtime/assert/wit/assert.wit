@@ -14,4 +14,5 @@ world assert {
   export test-rejects: func() -> bool;
   export test-strict-mode: func() -> bool;
   export test-assertion-error: func() -> bool;
+  export test-eval-generated-message: func() -> bool;
 }

@@ -1,5 +1,9 @@
 import assert from 'node:assert';
 import { AssertionError } from 'node:assert';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 export const testOk = () => {
     try {
@@ -449,4 +453,24 @@ export const testAssertionError = () => {
         console.error(e);
         return false;
     }
+};
+
+export const testEvalGeneratedMessage = () => {
+    let evalError;
+    try {
+        eval('console.log("FOO");\nassert.ok(1 === 2);');
+    } catch (err) {
+        evalError = err;
+    }
+    if (!evalError || evalError.code !== 'ERR_ASSERTION' || evalError.message !== 'false == true') return false;
+
+    const filename = '/assert-eval-named-function.cjs';
+    fs.writeFileSync(filename, [
+        "const assert = require('assert');",
+        "const namedFunction = { ['eval helper']() { assert.ok(false); } };",
+        "try { namedFunction['eval helper'](); } catch (err) { module.exports = err.message; }",
+    ].join('\n'));
+    const message = require(filename);
+    return message !== 'false == true' &&
+        message.startsWith('The expression evaluated to a falsy value:');
 };
