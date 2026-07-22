@@ -304,7 +304,7 @@ fn discovered_names(discovery: &SubtestDiscovery) -> BTreeSet<String> {
 }
 
 /// Discover all `.js` test files from vendored suite directories.
-/// Matches the approach used by the report generator in node_compat_report.rs.
+/// Matches the approach used by the config report generator.
 fn discover_suite_files() -> BTreeSet<String> {
     let suites = ["parallel", "sequential", "es-module"];
     let mut files = BTreeSet::new();

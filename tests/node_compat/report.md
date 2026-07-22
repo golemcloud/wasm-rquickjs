@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-21 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-07-22 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3239/4422 (73.2%)
+**Primary compatibility (CI-enforced):** 3241/4429 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3239 | 73.2% | 56.4% | 47.2% |
-| 🧩 known gap | 1183 | 26.8% | 20.6% | 17.2% |
+| ✅ passing (runnable) | 3241 | 73.2% | 56.4% | 47.2% |
+| 🧩 known gap | 1188 | 26.8% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 165 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1123 | — | — | 16.4% |
-| **Total** | **6866** |  |  | **100.0%** |
+| 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
+| **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5743 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3241/5750 (56.4%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 89 | 8 | 0 | 0 | 0 | 77 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 121 | 74 | 34 | 3 | 10 | 0 | 0 | 68.5% | 61.2% |
+| vm | 128 | 76 | 39 | 3 | 10 | 0 | 0 | 66.1% | 59.4% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -592,11 +592,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-v8-query-objects.js` | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | `test-v8-serdes.js` | 14 | 0 | 0 | 0 | 14 | 0 | 0 |
 | `test-validators.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `test-vm-basic.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
+| `test-vm-basic.js` | 10 | 8 | 2 | 0 | 0 | 0 | 0 |
 | `test-vm-codegen.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-vm-context-dont-contextify.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-vm-measure-memory-lazy.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
-| `test-vm-module-basic.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
+| `test-vm-module-basic.js` | 13 | 10 | 3 | 0 | 0 | 0 | 0 |
 | `test-vm-new-script-new-context.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-constructors.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-derivebits.js` | 4 | 0 | 2 | 0 | 0 | 0 | 2 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1183)
+### known gap (1188)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -951,6 +951,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | ServerResponse.write() after end does not follow Node-compatible ERR_STREAM_WRITE_AFTER_END behavior | 1 | `parallel/test-http-res-write-after-end.js` |
 | ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws) | 1 | `parallel/test-http-early-hints-invalid-argument.js` |
 | ServerResponse.writeHead() does not throw ERR_HTTP_TRAILER_INVALID when Trailer is set with Content-Length | 1 | `parallel/test-http-server-de-chunked-trailer.js` |
+| SourceTextModule evaluation does not yet match Node context global assignment semantics | 1 | `parallel/test-vm-module-basic.js#block_00_statement_00` |
+| SourceTextModule evaluation timeout does not interrupt an infinite loop | 1 | `parallel/test-vm-module-basic.js#block_02_statement_02` |
+| SourceTextModule identifiers are not incremented per VM context like Node | 1 | `parallel/test-vm-module-basic.js#block_03_check_the_generated_identifier_for_each_module` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
@@ -1313,6 +1316,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm prototype method lookup requires contextified global proxy behavior without exposing the sandbox prototype | 1 | `parallel/test-vm-symbols.js` |
 | vm runInContext filename stack formatting with lineOffset/columnOffset is incomplete | 1 | `parallel/test-vm-context.js` |
 | vm runInNewContext filename stack formatting is incomplete | 1 | `parallel/test-vm-run-in-new-context.js` |
+| vm.createContext does not validate null name/origin options like Node | 1 | `parallel/test-vm-basic.js#block_07_statement_07` |
+| vm.runInNewContext does not validate null contextName/contextOrigin options like Node | 1 | `parallel/test-vm-basic.js#block_08_statement_08` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
 | wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-cr-no-lf.js` |

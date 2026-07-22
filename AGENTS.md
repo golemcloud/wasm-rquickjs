@@ -182,10 +182,6 @@ Important rules:
 - CI runs node modules app tests as runtime `group9`; regular runtime tests use `group1` through `group8`.
 - Before running node modules app runtime tests after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- ':tag:group9'` for the CI-like group, `cargo test --test runtime --features use-golem-wasmtime -- node_modules_app --nocapture` for the full node modules app suite, or a narrower node modules app filter.
 
-### ⚠️ Keeping `node_compat` and `node_compat_report` in sync
-
-The `tests/node_compat.rs` test harness and the `tests/node_compat_report.rs` report generator are **two separate runners** with independent Host types, linker setups, and WASI context configurations. **Whenever you change the WASI context, linker setup, or Host configuration in `tests/common/mod.rs` (used by `node_compat`), you MUST apply the same change to `tests/node_compat_report.rs`** — otherwise the two runners will produce different results.
-
 ## Built-in Module Architecture
 
 ### Hybrid Native + JS Pattern

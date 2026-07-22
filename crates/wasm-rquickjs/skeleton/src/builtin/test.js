@@ -8,11 +8,6 @@ import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_bui
 import { validateNumber, validateInteger } from '__wasm_rquickjs_builtin/internal/validators';
 
 let currentSuite = null;
-// Check for globalThis-based filter (set by test harness before file execution)
-let _subtestFilter = (typeof globalThis.__wasm_rquickjs_node_test_filter === 'number')
-    ? globalThis.__wasm_rquickjs_node_test_filter
-    : null;
-let _subtestRegistrationIndex = 0;
 
 function activeTestEntryFile(moduleContext) {
     if (typeof globalThis.__wasm_rquickjs_node_test_entry_file === 'string') {
@@ -712,25 +707,12 @@ let _pendingTestPromises = [];
 
 // --- Public API ---
 
-function shouldSkipByFilter() {
-    if (_subtestFilter === null && typeof globalThis.__wasm_rquickjs_node_test_filter === 'number') {
-        _subtestFilter = globalThis.__wasm_rquickjs_node_test_filter;
-    }
-    const currentIndex = _subtestRegistrationIndex++;
-    return _subtestFilter !== null && currentIndex !== _subtestFilter;
-}
-
 function test(nameOrOpts, optionsOrFn, maybeFn) {
     const parsed = parseTestArgs(nameOrOpts, optionsOrFn, maybeFn);
 
     if (currentSuite) {
         // Inside a describe/suite — register for later execution
         currentSuite.tests.push(parsed);
-        return Promise.resolve(undefined);
-    }
-
-    if (shouldSkipByFilter()) {
-        // Silently skip — filtered out
         return Promise.resolve(undefined);
     }
 
@@ -794,11 +776,6 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
             fn: parsed.fn,
             moduleContext: parsed.moduleContext
         });
-        return;
-    }
-
-    if (shouldSkipByFilter()) {
-        // Silently skip — filtered out
         return;
     }
 
@@ -1298,16 +1275,6 @@ function run() {
     return { on: function () { return this; }, once: function () { return this; } };
 }
 
-function __setFilterIndex(idx) {
-    _subtestFilter = idx;
-    _subtestRegistrationIndex = 0;
-}
-
-function __clearFilter() {
-    _subtestFilter = null;
-    _subtestRegistrationIndex = 0;
-}
-
 async function _awaitPendingTests() {
     while (_pendingTestPromises.length > 0) {
         const promises = _pendingTestPromises;
@@ -1328,9 +1295,7 @@ export {
     mock,
     run,
     testAssertionsModule as assert,
-    _awaitPendingTests,
-    __setFilterIndex,
-    __clearFilter
+    _awaitPendingTests
 };
 
 export default test;

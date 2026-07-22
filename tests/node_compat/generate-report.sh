@@ -6,7 +6,6 @@
 #
 # Prerequisites:
 #   - The vendored test suite must be present (run vendor.sh first)
-#   - wasm32-wasip2 target must be installed (rustup target add wasm32-wasip2)
 #
 # The report is written to tests/node_compat/report.md
 
@@ -24,10 +23,7 @@ fi
 
 cd "${REPO_ROOT}"
 
-# Clean the cached runner WASM so it gets rebuilt with latest changes
-rm -rf tmp/node-compat-runner tmp/rt-target
-
-echo "==> Running node_compat_report test (this takes ~80 minutes)..."
+echo "==> Generating report from config.jsonc..."
 cargo test --release --test node_compat_report -- --nocapture
 
 echo "==> Report written to tests/node_compat/report.md"
