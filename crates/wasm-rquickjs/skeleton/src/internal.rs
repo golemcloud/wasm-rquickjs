@@ -8701,13 +8701,251 @@ fn source_looks_like_esm(source: &str) -> bool {
     source_has_static_import_or_export(source) || source_has_import_meta(source) || source_has_top_level_await(source)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StaticModuleEdge {
+    specifier: String,
+    import_type: Option<String>,
+}
+
+fn module_statement_end(source: &str, start: usize) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = start;
+    let (mut braces, mut parens) = (0usize, 0usize);
+    while i < bytes.len() {
+        if let Some(next) = skip_non_code(source, i, true) {
+            i = next;
+            continue;
+        }
+        match bytes[i] {
+            b'{' => braces += 1,
+            b'}' => braces = braces.saturating_sub(1),
+            b'(' => parens += 1,
+            b')' => parens = parens.saturating_sub(1),
+            b';' | b'\n' | b'\r' if braces == 0 && parens == 0 => return i,
+            _ => {}
+        }
+        i = next_char_boundary(source, i);
+    }
+    source.len()
+}
+
+fn static_import_type_after(source: &str, start: usize, end: usize) -> Option<String> {
+    let mut i = skip_ws_comments(source, start);
+    i = parse_ident_name(source, i, "with")?;
+    i = skip_ws_comments(source, i);
+    if i >= end || source.as_bytes().get(i) != Some(&b'{') {
+        return None;
+    }
+    let close = find_matching_brace(source, i)?;
+    if close > end {
+        return None;
+    }
+    i += 1;
+    while i < close {
+        i = skip_ws_comments(source, i);
+        if source.as_bytes().get(i) == Some(&b',') {
+            i += 1;
+            continue;
+        }
+        let (key, next) = if matches!(source.as_bytes().get(i), Some(b'\'' | b'"')) {
+            read_js_string(source, i)?
+        } else {
+            read_ident(source, i)?
+        };
+        i = skip_ws_comments(source, next);
+        if source.as_bytes().get(i) != Some(&b':') {
+            return None;
+        }
+        i = skip_ws_comments(source, i + 1);
+        if key == "type" {
+            return read_js_string(source, i).map(|(value, _)| value);
+        }
+        i = match source.as_bytes().get(i) {
+            Some(b'\'' | b'"') => read_js_string(source, i)?.1,
+            _ => {
+                while i < close && source.as_bytes()[i] != b',' {
+                    i = next_char_boundary(source, i);
+                }
+                i
+            }
+        };
+    }
+    None
+}
+
+fn static_module_edge_at(source: &str, pos: usize) -> Option<StaticModuleEdge> {
+    let keyword_end = if let Some(end) = parse_ident_name(source, pos, "import") {
+        end
+    } else {
+        parse_ident_name(source, pos, "export")?
+    };
+    let mut i = skip_ws_comments(source, keyword_end);
+    if source.as_bytes().get(i) == Some(&b'(') {
+        return None;
+    }
+    let statement_end = module_statement_end(source, i);
+    if let Some((specifier, next)) = read_js_string(source, i) {
+        return Some(StaticModuleEdge {
+            specifier,
+            import_type: static_import_type_after(source, next, statement_end),
+        });
+    }
+    while i < statement_end {
+        if let Some(next) = skip_non_code(source, i, true) {
+            i = next;
+            continue;
+        }
+        if let Some(from_end) = parse_ident_name(source, i, "from") {
+            let specifier_start = skip_ws_comments(source, from_end);
+            if let Some((specifier, next)) = read_js_string(source, specifier_start) {
+                return Some(StaticModuleEdge {
+                    specifier,
+                    import_type: static_import_type_after(source, next, statement_end),
+                });
+            }
+        }
+        i = next_char_boundary(source, i);
+    }
+    None
+}
+
+fn collect_static_module_edges(source: &str) -> Vec<StaticModuleEdge> {
+    let mut edges = Vec::new();
+    let _ = scan_code_positions(source, true, |i, _| {
+        if let Some(edge) = static_module_edge_at(source, i) {
+            edges.push(edge);
+        }
+        ControlFlow::Continue(None)
+    });
+    edges
+}
+
+fn collect_literal_call_specifiers(source: &str, names: &[String]) -> Vec<String> {
+    let mut specifiers = Vec::new();
+    let _ = scan_code_positions(source, true, |i, _| {
+        if previous_significant_code_byte(source, i) == Some(b'.') {
+            return ControlFlow::Continue(None);
+        }
+        for name in names {
+            let Some(name_end) = parse_ident_name(source, i, name) else {
+                continue;
+            };
+            let open = skip_ws_comments(source, name_end);
+            if source.as_bytes().get(open) == Some(&b'(')
+                && let Some((specifier, _)) = read_js_string(source, skip_ws_comments(source, open + 1))
+            {
+                specifiers.push(specifier);
+            }
+        }
+        ControlFlow::Continue(None)
+    });
+    specifiers
+}
+
+fn collect_create_require_factory_names(source: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let _ = scan_code_positions(source, false, |i, _| {
+        let Some((specifier, imports, end)) = parse_static_named_import(source, i) else {
+            return ControlFlow::Continue(None);
+        };
+        if specifier == "module" || specifier == "node:module" {
+            for import in imports {
+                if import.imported == "createRequire" {
+                    names.push(import.local);
+                }
+            }
+        }
+        ControlFlow::Continue(Some(end))
+    });
+    names
+}
+
+fn collect_create_require_specifiers(source: &str) -> Vec<String> {
+    let factories = collect_create_require_factory_names(source);
+    if factories.is_empty() {
+        return Vec::new();
+    }
+    let mut aliases = Vec::new();
+    let _ = scan_code_positions(source, false, |i, _| {
+        let Some(declaration_end) = parse_variable_declaration_keyword(source, i) else {
+            return ControlFlow::Continue(None);
+        };
+        let Some((alias, next)) = read_ident(source, skip_ws_comments(source, declaration_end)) else {
+            return ControlFlow::Continue(None);
+        };
+        let mut next = skip_ws_comments(source, next);
+        if source.as_bytes().get(next) != Some(&b'=') {
+            return ControlFlow::Continue(None);
+        }
+        next = skip_ws_comments(source, next + 1);
+        if factories.iter().any(|name| {
+            parse_ident_name(source, next, name)
+                .map(|end| source.as_bytes().get(skip_ws_comments(source, end)) == Some(&b'('))
+                .unwrap_or(false)
+        }) {
+            aliases.push(alias);
+        }
+        ControlFlow::Continue(None)
+    });
+
+    let mut specifiers = Vec::new();
+    let _ = scan_code_positions(source, true, |i, _| {
+        if previous_significant_code_byte(source, i) == Some(b'.') {
+            return ControlFlow::Continue(None);
+        }
+        for factory in &factories {
+            let Some(factory_end) = parse_ident_name(source, i, factory) else {
+                continue;
+            };
+            let first_open = skip_ws_comments(source, factory_end);
+            if source.as_bytes().get(first_open) != Some(&b'(') {
+                continue;
+            }
+            let Some(first_close) = find_matching_paren(source, first_open) else {
+                continue;
+            };
+            let second_open = skip_ws_comments(source, first_close + 1);
+            if source.as_bytes().get(second_open) == Some(&b'(')
+                && let Some((specifier, _)) = read_js_string(source, skip_ws_comments(source, second_open + 1))
+            {
+                specifiers.push(specifier);
+            }
+        }
+        ControlFlow::Continue(None)
+    });
+    specifiers.extend(collect_literal_call_specifiers(source, &aliases));
+    specifiers
+}
+
 fn analyze_module_source<'js>(ctx: Ctx<'js>, source: String) -> rquickjs::Result<Object<'js>> {
-    let analysis = Object::new(ctx)?;
+    let analysis = Object::new(ctx.clone())?;
     analysis.set("looksLikeEsm", source_looks_like_esm(&source))?;
     analysis.set(
         "hasCjsWrapperLexicalRedeclaration",
         has_cjs_wrapper_lexical_redeclaration(&source),
     )?;
+    let static_edges = rquickjs::Array::new(ctx.clone())?;
+    for (index, edge) in collect_static_module_edges(&source).into_iter().enumerate() {
+        let value = Object::new(ctx.clone())?;
+        value.set("specifier", edge.specifier)?;
+        if let Some(import_type) = edge.import_type {
+            let attrs = Object::new(ctx.clone())?;
+            attrs.set("typeValue", import_type)?;
+            value.set("attrs", attrs)?;
+        }
+        static_edges.set(index, value)?;
+    }
+    analysis.set("staticEdges", static_edges)?;
+    let require_specifiers = rquickjs::Array::new(ctx.clone())?;
+    for (index, specifier) in collect_literal_call_specifiers(&source, &["require".to_string()]).into_iter().enumerate() {
+        require_specifiers.set(index, specifier)?;
+    }
+    analysis.set("requireSpecifiers", require_specifiers)?;
+    let create_require_specifiers = rquickjs::Array::new(ctx)?;
+    for (index, specifier) in collect_create_require_specifiers(&source).into_iter().enumerate() {
+        create_require_specifiers.set(index, specifier)?;
+    }
+    analysis.set("createRequireSpecifiers", create_require_specifiers)?;
     Ok(analysis)
 }
 
@@ -11361,6 +11599,62 @@ mod cjs_export_analyzer_tests {
         assert!(!source_looks_like_esm("const obj = { import: { meta: 1 } };"));
         assert!(!source_looks_like_esm("globalThis.meta = obj.import.meta;"));
         assert!(!source_looks_like_esm("const text = 'import.meta.url';"));
+    }
+
+    #[test]
+    fn module_graph_analysis_collects_dependency_facts() {
+        let source = r#"
+            import value from './dep.mjs' with { type: 'json' };
+            export { value as other } from "pkg";
+            import { from as importedFrom } from './contextual-import.mjs';
+            export { from } from './contextual-export.mjs';
+            export { value as from } from './contextual-alias.mjs';
+            const ignored = "require('not-code')";
+            require('./plain.cjs');
+            object.require('./member.cjs');
+            import { createRequire as makeRequire } from 'node:module';
+            const localRequire = makeRequire(import.meta.url);
+            makeRequire(import.meta.url)('./direct.cjs');
+            localRequire('./aliased.cjs');
+        "#;
+
+        assert_eq!(
+            collect_static_module_edges(source),
+            vec![
+                StaticModuleEdge {
+                    specifier: "./dep.mjs".to_string(),
+                    import_type: Some("json".to_string()),
+                },
+                StaticModuleEdge {
+                    specifier: "pkg".to_string(),
+                    import_type: None,
+                },
+                StaticModuleEdge {
+                    specifier: "./contextual-import.mjs".to_string(),
+                    import_type: None,
+                },
+                StaticModuleEdge {
+                    specifier: "./contextual-export.mjs".to_string(),
+                    import_type: None,
+                },
+                StaticModuleEdge {
+                    specifier: "./contextual-alias.mjs".to_string(),
+                    import_type: None,
+                },
+                StaticModuleEdge {
+                    specifier: "node:module".to_string(),
+                    import_type: None,
+                },
+            ]
+        );
+        assert_eq!(
+            collect_literal_call_specifiers(source, &["require".to_string()]),
+            vec!["./plain.cjs"]
+        );
+        assert_eq!(
+            collect_create_require_specifiers(source),
+            vec!["./direct.cjs", "./aliased.cjs"]
+        );
     }
 
     #[test]

@@ -8214,6 +8214,21 @@ export const testRequireEsmCycleGuards = async () => {
             '}',
             'export { cycleCode };',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/contextual-from-edge-a.mjs', [
+            'import { from as cycleCode } from "./contextual-from-edge-b.mjs";',
+            'export { cycleCode };',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-cycle-app/contextual-from-edge-b.mjs', [
+            'import { createRequire } from "node:module";',
+            'const require = createRequire(import.meta.url);',
+            'let cycleCode;',
+            'try {',
+            '  require("./contextual-from-edge-b.mjs");',
+            '} catch (error) {',
+            '  cycleCode = error && error.code;',
+            '}',
+            'export { cycleCode as from };',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-cycle-app/main.cjs');
@@ -8236,6 +8251,8 @@ export const testRequireEsmCycleGuards = async () => {
             const commentedStaticEdge = require('/require-esm-cycle-app/commented-static-edge-a.mjs');
             assert.strictEqual(commentedStaticEdge.value, 5);
             assert.strictEqual(commentedStaticEdge.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
+            const contextualFromEdge = require('/require-esm-cycle-app/contextual-from-edge-a.mjs');
+            assert.strictEqual(contextualFromEdge.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');
             const packageCycle = require('/require-esm-cycle-app/package-cycle-entry.mjs');
             assert.strictEqual(packageCycle.value, 6);
             assert.strictEqual(packageCycle.cycleCode, 'ERR_REQUIRE_CYCLE_MODULE');

@@ -2135,13 +2135,6 @@ function isIdentifierContinueCode(code) {
         code >= 0x80;
 }
 
-function isIdentifierStartCode(code) {
-    return code === 0x5f || code === 0x24 || // _ $
-        (code >= 0x41 && code <= 0x5a) ||
-        (code >= 0x61 && code <= 0x7a) ||
-        code >= 0x80;
-}
-
 function hasIdentifierBoundary(source, start, end) {
     return (start === 0 || !isIdentifierContinueCode(source.charCodeAt(start - 1))) &&
         (end >= source.length || !isIdentifierContinueCode(source.charCodeAt(end)));
@@ -2187,44 +2180,6 @@ function skipTemplateExpression(source, start) {
         }
     }
     return i;
-}
-
-function previousSignificantChar(source, pos) {
-    for (let i = pos - 1; i >= 0; i--) {
-        const ch = source.charCodeAt(i);
-        if (ch !== 0x20 && ch !== 0x09 && ch !== 0x0a && ch !== 0x0d) return ch;
-    }
-    return -1;
-}
-
-function previousSignificantCodeChar(source, pos) {
-    let previous = -1;
-    scanSourceCodePositions(source.substring(0, pos), { skipRegex: true }, (_i, code) => {
-        if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) previous = code;
-        return undefined;
-    });
-    return previous;
-}
-
-function previousIdentifierBefore(source, pos) {
-    let previous = null;
-    scanSourceCodePositions(source.substring(0, pos), { skipRegex: true }, (i, code) => {
-        if (!isIdentifierStartCode(code)) return undefined;
-        let end = i + 1;
-        while (end < pos && isIdentifierContinueCode(source.charCodeAt(end))) end++;
-        previous = { start: i, name: source.substring(i, end) };
-        return end;
-    });
-    return previous;
-}
-
-function previousSignificantCharOnSameLine(source, pos) {
-    for (let i = pos - 1; i >= 0; i--) {
-        const ch = source.charCodeAt(i);
-        if (ch === 0x0a || ch === 0x0d) return -1;
-        if (ch !== 0x20 && ch !== 0x09) return ch;
-    }
-    return -1;
 }
 
 function previousRegexContextToken(source, pos) {
@@ -2343,28 +2298,6 @@ function skipWhitespaceAndComments(source, start) {
     return skipWhitespaceAndCommentsImpl(source, start, false);
 }
 
-function startsWithKeywordAt(source, keyword, pos) {
-    return source.startsWith(keyword, pos) && hasIdentifierBoundary(source, pos, pos + keyword.length);
-}
-
-function readKeywordAt(source, keyword, pos) {
-    return startsWithKeywordAt(source, keyword, pos) ? pos + keyword.length : null;
-}
-
-function readVariableDeclarationKeyword(source, pos) {
-    let end = readKeywordAt(source, 'const', pos);
-    if (end !== null) return end;
-    end = readKeywordAt(source, 'let', pos);
-    if (end !== null) return end;
-    return readKeywordAt(source, 'var', pos);
-}
-
-function readLexicalVariableDeclarationKeyword(source, pos) {
-    let end = readKeywordAt(source, 'const', pos);
-    if (end !== null) return end;
-    return readKeywordAt(source, 'let', pos);
-}
-
 function skipNonCode(source, pos, skipRegex) {
     const code = source.charCodeAt(pos);
     if (code === 0x27 || code === 0x22 || code === 0x60) { // ' " `
@@ -2414,412 +2347,7 @@ function rustModuleSourceAnalysis(source) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_module_source(source);
 }
 
-function readStaticSpecifierString(source, start) {
-    const i = skipWhitespaceAndComments(source, start);
-    const quote = source.charCodeAt(i);
-    if (quote !== 0x27 && quote !== 0x22) return null;
-    let value = '';
-    let p = i + 1;
-    while (p < source.length) {
-        const code = source.charCodeAt(p);
-        if (code === 0x5c && p + 1 < source.length) {
-            value += source[p + 1];
-            p += 2;
-        } else if (code === quote) {
-            return { value, end: p + 1 };
-        } else {
-            value += source[p];
-            p++;
-        }
-    }
-    return null;
-}
-
-function decodeStringLiteral(source, start, quote) {
-    let value = '';
-    let i = start;
-    while (i < source.length && source.charCodeAt(i) !== quote) {
-        let ch = source.charCodeAt(i);
-        if (ch !== 0x5c) {
-            value += source[i++];
-            continue;
-        }
-        i++;
-        if (i >= source.length) return null;
-        ch = source.charCodeAt(i++);
-        if (ch === 0x6e) value += '\n';
-        else if (ch === 0x72) value += '\r';
-        else if (ch === 0x74) value += '\t';
-        else if (ch === 0x62) value += '\b';
-        else if (ch === 0x66) value += '\f';
-        else if (ch === 0x76) value += '\v';
-        else if (ch === 0x78 && i + 2 <= source.length) {
-            const hex = source.substring(i, i + 2);
-            if (!/^[0-9a-fA-F]{2}$/.test(hex)) return null;
-            value += String.fromCharCode(parseInt(hex, 16));
-            i += 2;
-        } else if (ch === 0x75 && source.charCodeAt(i) === 0x7b) {
-            const end = source.indexOf('}', i + 1);
-            if (end < 0) return null;
-            const hex = source.substring(i + 1, end);
-            if (!/^[0-9a-fA-F]+$/.test(hex)) return null;
-            const codePoint = parseInt(hex, 16);
-            if (codePoint > 0x10ffff) return null;
-            value += String.fromCodePoint(codePoint);
-            i = end + 1;
-        } else if (ch === 0x75 && i + 4 <= source.length) {
-            const hex = source.substring(i, i + 4);
-            if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null;
-            value += String.fromCharCode(parseInt(hex, 16));
-            i += 4;
-        } else if (ch >= 0x30 && ch <= 0x37) {
-            let octal = String.fromCharCode(ch);
-            while (octal.length < 3 && i < source.length) {
-                const next = source.charCodeAt(i);
-                if (next < 0x30 || next > 0x37) break;
-                octal += source[i++];
-            }
-            value += String.fromCharCode(parseInt(octal, 8));
-        } else {
-            value += String.fromCharCode(ch);
-        }
-    }
-    return i < source.length ? { value, end: i } : null;
-}
-
-function readIdentifierEnd(source, pos) {
-    if (!isIdentifierStartCode(source.charCodeAt(pos))) return null;
-    let i = pos + 1;
-    while (i < source.length && isIdentifierContinueCode(source.charCodeAt(i))) i++;
-    return i;
-}
-
-function readIdentifier(source, pos) {
-    const end = readIdentifierEnd(source, pos);
-    return end === null ? null : { name: source.substring(pos, end), end };
-}
-
-function readNamedIdentifier(source, pos, name) {
-    return readKeywordAt(source, name, pos);
-}
-
-function readDotMember(source, pos, name) {
-    let i = skipWhitespaceAndComments(source, pos);
-    if (source.charCodeAt(i) !== 0x2e) return null;
-    i = skipWhitespaceAndComments(source, i + 1);
-    const end = readNamedIdentifier(source, i, name);
-    return end === null ? null : skipWhitespaceAndComments(source, end);
-}
-
-function findMatchingDelimiter(source, open, openCode, closeCode) {
-    let depth = 0;
-    let i = open;
-    while (i < source.length) {
-        const skipped = skipNonCode(source, i, true);
-        if (skipped !== null) {
-            i = skipped;
-            continue;
-        }
-        const ch = source.charCodeAt(i);
-        if (ch === openCode) depth++;
-        else if (ch === closeCode) {
-            depth--;
-            if (depth === 0) return i;
-        }
-        i++;
-    }
-    return -1;
-}
-
-function findMatchingParen(source, open) {
-    return findMatchingDelimiter(source, open, 0x28, 0x29);
-}
-
-function findMatchingBrace(source, open) {
-    return findMatchingDelimiter(source, open, 0x7b, 0x7d);
-}
-
-function statementEndForStaticImport(source, start) {
-    let i = start;
-    let brace = 0;
-    let paren = 0;
-    while (i < source.length) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < source.length && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < source.length && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < source.length && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, source.length);
-            continue;
-        }
-        if (code === 0x7b) brace++;
-        else if (code === 0x7d) brace = Math.max(0, brace - 1);
-        else if (code === 0x28) paren++;
-        else if (code === 0x29) paren = Math.max(0, paren - 1);
-        else if ((code === 0x3b || code === 0x0a || code === 0x0d) && brace === 0 && paren === 0) return i;
-        i++;
-    }
-    return source.length;
-}
-
-function staticImportAttrsAfter(source, start, end) {
-    let i = skipWhitespaceAndComments(source, start);
-    if (
-        i + 4 > end ||
-        source.substring(i, i + 4) !== 'with' ||
-        (i + 4 < end && isIdentifierContinueCode(source.charCodeAt(i + 4)))
-    ) {
-        return undefined;
-    }
-    i = skipWhitespaceAndComments(source, i + 4);
-    if (source.charCodeAt(i) !== 0x7b) return undefined;
-    const attrsStart = i + 1;
-    let depth = 1;
-    i++;
-    while (i < end && depth > 0) {
-        const code = source.charCodeAt(i);
-        if (code === 0x27 || code === 0x22 || code === 0x60) {
-            i = skipQuotedOrTemplate(source, i);
-            continue;
-        }
-        if (code === 0x2f && i + 1 < end && source.charCodeAt(i + 1) === 0x2f) {
-            i += 2;
-            while (i < end && source.charCodeAt(i) !== 0x0a && source.charCodeAt(i) !== 0x0d) i++;
-            continue;
-        }
-        if (code === 0x2f && i + 1 < end && source.charCodeAt(i + 1) === 0x2a) {
-            i += 2;
-            while (i + 1 < end && !(source.charCodeAt(i) === 0x2a && source.charCodeAt(i + 1) === 0x2f)) i++;
-            i = Math.min(i + 2, end);
-            continue;
-        }
-        if (code === 0x7b) depth++;
-        else if (code === 0x7d) depth--;
-        i++;
-    }
-    if (depth !== 0) return undefined;
-
-    const attrs = source.substring(attrsStart, i - 1);
-    const match = /(?:^|[,{])\s*(?:(["'])type\1|type)\s*:\s*(["'])((?:\\.|(?!\2)[^\\])*)\2/.exec(attrs);
-    return match ? { typeValue: match[3].replace(/\\(['"\\])/g, '$1') } : undefined;
-}
-
-function staticImportEdgeAt(source, pos) {
-    if (startsWithKeywordAt(source, 'import', pos)) {
-        const afterImport = skipWhitespaceAndComments(source, pos + 6);
-        const bare = readStaticSpecifierString(source, afterImport);
-        if (bare) {
-            const end = statementEndForStaticImport(source, bare.end);
-            return { specifier: bare.value, attrs: staticImportAttrsAfter(source, bare.end, end) };
-        }
-
-        const end = statementEndForStaticImport(source, afterImport);
-        let i = afterImport;
-        while (i < end) {
-            const code = source.charCodeAt(i);
-            if (code === 0x27 || code === 0x22 || code === 0x60) {
-                i = skipQuotedOrTemplate(source, i);
-                continue;
-            }
-            if (startsWithKeywordAt(source, 'from', i)) {
-                const spec = readStaticSpecifierString(source, i + 4);
-                if (spec && spec.end <= end + 1) {
-                    return { specifier: spec.value, attrs: staticImportAttrsAfter(source, spec.end, end) };
-                }
-            }
-            i++;
-        }
-    }
-
-    if (startsWithKeywordAt(source, 'export', pos)) {
-        const end = statementEndForStaticImport(source, pos + 6);
-        let i = pos + 6;
-        while (i < end) {
-            const code = source.charCodeAt(i);
-            if (code === 0x27 || code === 0x22 || code === 0x60) {
-                i = skipQuotedOrTemplate(source, i);
-                continue;
-            }
-            if (startsWithKeywordAt(source, 'from', i)) {
-                const spec = readStaticSpecifierString(source, i + 4);
-                if (spec && spec.end <= end + 1) {
-                    return { specifier: spec.value, attrs: staticImportAttrsAfter(source, spec.end, end) };
-                }
-            }
-            i++;
-        }
-    }
-
-    return null;
-}
-
-function collectStaticEsmEdges(source) {
-    const edges = [];
-    scanSourceCodePositions(source, { skipRegex: true }, (i) => {
-        const edge = staticImportEdgeAt(source, i);
-        if (edge !== null) edges.push(edge);
-        return undefined;
-    });
-    return edges;
-}
-
-function collectStaticEsmSpecifiers(source) {
-    return collectStaticEsmEdges(source).map((edge) => edge.specifier);
-}
-
-function collectLiteralRequireSpecifiers(source, names) {
-    names = names || ['require'];
-    const specifiers = [];
-    scanSourceCodePositions(source, { skipRegex: true }, (i, _, previousCode) => {
-        for (let n = 0; n < names.length; n++) {
-            const name = names[n];
-            if (startsWithKeywordAt(source, name, i) && previousCode !== 0x2e) {
-                const open = skipWhitespaceAndComments(source, i + name.length);
-                if (source.charCodeAt(open) === 0x28) {
-                    const spec = readStaticSpecifierString(source, open + 1);
-                    if (spec) specifiers.push(spec.value);
-                }
-            }
-        }
-        return undefined;
-    });
-    return specifiers;
-}
-
-function collectCreateRequireNamesFromImport(source, pos, end) {
-    let i = skipWhitespaceAndComments(source, pos + 6);
-    if (source.charCodeAt(i) !== 0x7b) return null;
-    const namedEnd = findMatchingBrace(source, i);
-    if (namedEnd < 0 || namedEnd > end) return null;
-
-    let afterNamed = skipWhitespaceAndComments(source, namedEnd + 1);
-    const fromEnd = readNamedIdentifier(source, afterNamed, 'from');
-    if (fromEnd === null) return null;
-    afterNamed = skipWhitespaceAndComments(source, fromEnd);
-    const spec = readStaticSpecifierString(source, afterNamed);
-    if (spec === null || spec.end > end || (spec.value !== 'module' && spec.value !== 'node:module')) return null;
-
-    const names = [];
-    let cursor = skipWhitespaceAndComments(source, i + 1);
-    while (cursor < namedEnd) {
-        if (source.charCodeAt(cursor) === 0x2c) {
-            cursor = skipWhitespaceAndComments(source, cursor + 1);
-            continue;
-        }
-        let importedName;
-        const quote = source.charCodeAt(cursor);
-        if (quote === 0x27 || quote === 0x22) {
-            const decoded = decodeStringLiteral(source, cursor + 1, quote);
-            if (decoded === null) return names;
-            importedName = decoded.value;
-            cursor = skipWhitespaceAndComments(source, decoded.end + 1);
-        } else {
-            const imported = readIdentifier(source, cursor);
-            if (imported === null) return names;
-            importedName = imported.name;
-            cursor = skipWhitespaceAndComments(source, imported.end);
-        }
-
-        let local = importedName;
-        const asEnd = readNamedIdentifier(source, cursor, 'as');
-        if (asEnd !== null) {
-            cursor = skipWhitespaceAndComments(source, asEnd);
-            const alias = readIdentifier(source, cursor);
-            if (alias === null) return names;
-            local = alias.name;
-            cursor = skipWhitespaceAndComments(source, alias.end);
-        } else if (quote === 0x27 || quote === 0x22) {
-            return names;
-        }
-
-        if (importedName === 'createRequire') names.push(local);
-        if (cursor < namedEnd && source.charCodeAt(cursor) !== 0x2c) return names;
-    }
-    return names;
-}
-
-function collectCreateRequireFactoryNames(source) {
-    const names = [];
-    scanSourceCodePositions(source, { skipRegex: false }, (i) => {
-        if (startsWithKeywordAt(source, 'import', i)) {
-            const end = statementEndForStaticImport(source, i + 6);
-            const parsed = collectCreateRequireNamesFromImport(source, i, end);
-            if (parsed !== null) {
-                for (let p = 0; p < parsed.length; p++) names.push(parsed[p]);
-            }
-            return end;
-        }
-        return undefined;
-    });
-    return names;
-}
-
-function collectCreateRequireAliases(source, factoryNames) {
-    factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
-    const aliases = [];
-    if (factoryNames.length === 0) return aliases;
-    scanSourceCodePositions(source, { skipRegex: false }, (i) => {
-        const declarationEnd = readVariableDeclarationKeyword(source, i);
-        if (declarationEnd !== null) {
-            let p = skipWhitespaceAndComments(source, declarationEnd);
-            const ident = readIdentifier(source, p);
-            if (ident !== null) {
-                const name = ident.name;
-                p = skipWhitespaceAndComments(source, ident.end);
-                if (source.charCodeAt(p) === 0x3d) {
-                    p = skipWhitespaceAndComments(source, p + 1);
-                    for (let f = 0; f < factoryNames.length; f++) {
-                        const factory = factoryNames[f];
-                        if (startsWithKeywordAt(source, factory, p)) {
-                            const open = skipWhitespaceAndComments(source, p + factory.length);
-                            if (source.charCodeAt(open) === 0x28) {
-                                aliases.push(name);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return undefined;
-    });
-    return aliases;
-}
-
-function collectCreateRequireCallSpecifiers(source, factoryNames) {
-    factoryNames = factoryNames || collectCreateRequireFactoryNames(source);
-    const specifiers = [];
-    if (factoryNames.length === 0) return specifiers;
-    scanSourceCodePositions(source, { skipRegex: true }, (i, _, previousCode) => {
-        for (let f = 0; f < factoryNames.length; f++) {
-            const factory = factoryNames[f];
-            if (startsWithKeywordAt(source, factory, i) && previousCode !== 0x2e) {
-                const firstOpen = skipWhitespaceAndComments(source, i + factory.length);
-                if (source.charCodeAt(firstOpen) === 0x28) {
-                    const firstClose = findMatchingParen(source, firstOpen);
-                    if (firstClose >= 0) {
-                        const secondOpen = skipWhitespaceAndComments(source, firstClose + 1);
-                        if (source.charCodeAt(secondOpen) === 0x28) {
-                            const spec = readStaticSpecifierString(source, secondOpen + 1);
-                            if (spec) specifiers.push(spec.value);
-                        }
-                    }
-                }
-            }
-        }
-        return undefined;
-    });
-    return specifiers;
-}
-
-function isEsmGraphFile(filename, source) {
+function isEsmGraphFile(filename, source, analysis) {
     const packageScope = filename.endsWith('.js') ? getPackageScopeInfo(filename) : null;
     const explicitPackageType = packageScope ? packageScope.packageType : null;
     const isCommonJsPackage = explicitPackageType === 'commonjs' ||
@@ -2827,7 +2355,7 @@ function isEsmGraphFile(filename, source) {
     if (filename.endsWith('.mjs') ||
         (filename.endsWith('.js') && explicitPackageType === 'module')) return true;
     if (filename.endsWith('.cjs') || isCommonJsPackage) return false;
-    const analysis = rustModuleSourceAnalysis(source);
+    analysis = analysis || rustModuleSourceAnalysis(source);
     return analysis.looksLikeEsm || analysis.hasCjsWrapperLexicalRedeclaration;
 }
 
@@ -2839,38 +2367,26 @@ function readEsmGraphFileInfo(filename, cache) {
     if (source === null) {
         return { source: null, isEsm: false };
     }
+    const analysis = rustModuleSourceAnalysis(source);
     const info = {
         source,
-        isEsm: isEsmGraphFile(filename, source),
+        analysis,
+        isEsm: isEsmGraphFile(filename, source, analysis),
     };
     cache[filename] = info;
     return info;
 }
 
 function esmGraphStaticSpecifiers(fileInfo) {
-    if (!Object.prototype.hasOwnProperty.call(fileInfo, 'staticSpecifiers')) {
-        fileInfo.staticSpecifiers = collectStaticEsmSpecifiers(fileInfo.source);
-    }
-    return fileInfo.staticSpecifiers;
+    return fileInfo.analysis.staticEdges.map((edge) => edge.specifier);
 }
 
 function esmGraphRequireSpecifiers(fileInfo) {
-    if (!Object.prototype.hasOwnProperty.call(fileInfo, 'requireSpecifiers')) {
-        fileInfo.requireSpecifiers = collectLiteralRequireSpecifiers(fileInfo.source);
-    }
-    return fileInfo.requireSpecifiers;
+    return fileInfo.analysis.requireSpecifiers;
 }
 
 function esmGraphCreateRequireSpecifiers(fileInfo) {
-    if (!Object.prototype.hasOwnProperty.call(fileInfo, 'createRequireSpecifiers')) {
-        const source = fileInfo.source;
-        const factoryNames = collectCreateRequireFactoryNames(source);
-        const aliases = collectCreateRequireAliases(source, factoryNames);
-        fileInfo.createRequireSpecifiers = collectCreateRequireCallSpecifiers(source, factoryNames).concat(
-            aliases.length === 0 ? [] : collectLiteralRequireSpecifiers(source, aliases),
-        );
-    }
-    return fileInfo.createRequireSpecifiers;
+    return fileInfo.analysis.createRequireSpecifiers;
 }
 
 function fileUrlForPath(filename) {
@@ -5107,7 +4623,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const source = staticRegisteredLoaderSourceForUrl(parentUrl);
         if (source === null) return;
-        const edges = collectStaticEsmEdges(source);
+        const edges = rustModuleSourceAnalysis(source).staticEdges;
         for (let i = 0; i < edges.length; i++) {
             const specifier = edges[i].specifier;
             const attrs = edges[i].attrs;

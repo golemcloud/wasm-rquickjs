@@ -570,6 +570,16 @@ fn module_loader_architecture() {
         "hasExecArgvFlag",
         "isRelativeOrAbsoluteSpecifier",
         "splitPackageName",
+        "collectStaticEsmEdges",
+        "collectStaticEsmSpecifiers",
+        "collectLiteralRequireSpecifiers",
+        "collectCreateRequireNamesFromImport",
+        "collectCreateRequireFactoryNames",
+        "collectCreateRequireAliases",
+        "collectCreateRequireCallSpecifiers",
+        "staticImportEdgeAt",
+        "staticImportAttrsAfter",
+        "statementEndForStaticImport",
     ] {
         assert!(
             !js_declarations.contains_key(forbidden),
