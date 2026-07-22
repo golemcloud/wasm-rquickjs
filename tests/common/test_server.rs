@@ -26,8 +26,7 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
 /// `/slow-response` records the arrival and only then sleeps, so a test can tell
 /// "the request actually reached the server and was later cancelled" apart from
 /// "the request never got out" — which a bare connection failure looks like.
-pub async fn start_test_server_with_arrivals()
--> (u16, JoinHandle<()>, UnboundedReceiver<()>) {
+pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, UnboundedReceiver<()>) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
     let host_http_port = listener.local_addr().unwrap().port();
 

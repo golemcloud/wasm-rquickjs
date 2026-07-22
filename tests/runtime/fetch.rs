@@ -904,8 +904,13 @@ async fn fetch_abort_releases_request(
 
     let wasm_path = compiled.wasm_path().to_path_buf();
     let invocation = tokio::spawn(async move {
-        invoke_and_capture_output(&wasm_path, None, "abort-releases-request", &[Val::U16(port)])
-            .await
+        invoke_and_capture_output(
+            &wasm_path,
+            None,
+            "abort-releases-request",
+            &[Val::U16(port)],
+        )
+        .await
     });
 
     // The server records the request before it starts stalling.

@@ -85,8 +85,9 @@ impl ws_mock::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
-    ) -> wasmtime::Result<Result<Resource<WsMockConnection>, ws_mock::golem::websocket::client::Error>>
-    {
+    ) -> wasmtime::Result<
+        Result<Resource<WsMockConnection>, ws_mock::golem::websocket::client::Error>,
+    > {
         let mut table = self.table.lock().unwrap();
         let res = table.push(WsMockConnection)?;
         Ok(Ok(res))
@@ -109,7 +110,10 @@ impl ws_mock::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _self_: Resource<WsMockConnection>,
     ) -> wasmtime::Result<
-        Result<ws_mock::golem::websocket::client::Message, ws_mock::golem::websocket::client::Error>,
+        Result<
+            ws_mock::golem::websocket::client::Message,
+            ws_mock::golem::websocket::client::Error,
+        >,
     > {
         // Report a clean close so the JS receive loop exits after one iteration
         // instead of parking forever (which would hang the guest invocation).
