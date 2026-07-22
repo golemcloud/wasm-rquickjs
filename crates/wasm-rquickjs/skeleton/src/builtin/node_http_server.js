@@ -876,6 +876,13 @@ ServerResponse.prototype.uncork = function uncork() {
 
 // ===== HTTP Parser =====
 
+function closeServerResponse(res) {
+    if (res && !res._closed) {
+        res._closed = true;
+        res.emit('close');
+    }
+}
+
 function createConnectionParser(server, socket) {
     const state = {
         buffer: Buffer.alloc(0),
@@ -987,10 +994,7 @@ function createConnectionParser(server, socket) {
                 state.req.emit('aborted');
             }
         }
-        if (state.res) {
-            state.res._closed = true;
-            state.res.emit('close');
-        }
+        closeServerResponse(state.res);
     });
 
     function maybeFinalizeResponse() {
@@ -1014,8 +1018,7 @@ function createConnectionParser(server, socket) {
         // OutgoingMessage behavior where 'close' fires after 'finish'.
         if (finishedRes) {
             process.nextTick(function() {
-                finishedRes._closed = true;
-                finishedRes.emit('close');
+                closeServerResponse(finishedRes);
             });
         }
 
@@ -1560,6 +1563,7 @@ export function _signalClientAbort(port) {
                 conn.req.emit('error', abortError);
             }
         }
+        closeServerResponse(conn.res);
         if (conn.socket && !conn.socket.destroyed) {
             conn.socket.destroy();
         }

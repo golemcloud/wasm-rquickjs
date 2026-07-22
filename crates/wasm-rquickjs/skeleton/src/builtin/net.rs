@@ -12,7 +12,7 @@ use wstd::runtime::AsyncPollable;
 
 use super::socket_helpers::{
     error_code_to_errno, ip_address_to_string, ip_socket_address, ip_socket_address_family,
-    ip_socket_address_port, parse_ip_address, throw_socket_error,
+    ip_socket_address_port, parse_ip_address, stream_error_to_errno, throw_socket_error,
 };
 
 #[rquickjs::module]
@@ -387,11 +387,12 @@ impl TcpSocket {
                 // Err(Closed) = EOF / peer sent FIN
                 Err(StreamError::Closed) => return Ok(None),
                 Err(StreamError::LastOperationFailed(e)) => {
+                    let debug_message = e.to_debug_string();
                     return Err(throw_socket_error(
                         &ctx,
-                        "EIO",
+                        stream_error_to_errno(&debug_message),
                         "read",
-                        &format!("read failed: {e:?}"),
+                        &format!("read failed: {debug_message}"),
                     ));
                 }
             }

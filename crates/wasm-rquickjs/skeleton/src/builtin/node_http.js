@@ -1142,6 +1142,9 @@ IncomingMessage.prototype._destroy = function _destroy(err, cb) {
     if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
         this._nativeRes.discardBody();
     }
+    if (!this.complete && this.req && !this.req.destroyed) {
+        this.req.destroy();
+    }
     cb(err);
 };
 
@@ -2411,6 +2414,7 @@ export class ClientRequest extends OutgoingMessage {
                     onClientResponseFinish.publish({ request: this, response: res });
                 }
                 this._response = res;
+                res.req = this;
                 this.emit('response', res);
 
                 const hasDataListeners = res.listenerCount('data') > 0;
@@ -2489,6 +2493,8 @@ export class ClientRequest extends OutgoingMessage {
             }
 
             const res = new IncomingMessage(null);
+            this._response = res;
+            res.req = this;
             res.statusCode = parsed.statusCode;
             res.statusMessage = parsed.statusMessage;
             applyHttpVersion(res, parsed.httpVersion);
@@ -2570,6 +2576,7 @@ export class ClientRequest extends OutgoingMessage {
         this.destroyed = true;
 
         this._abortNativeRequest();
+        const targetPort = this.port;
 
         if (!error && !this._response) {
             // Request destroyed before receiving a response — emit ECONNRESET
@@ -2589,6 +2596,9 @@ export class ClientRequest extends OutgoingMessage {
             process.nextTick(() => {
                 this._emitCloseOnce();
             });
+        }
+        if (targetPort) {
+            process.nextTick(_signalClientAbort, +targetPort);
         }
 
         return this;
