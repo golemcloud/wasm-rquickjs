@@ -3,6 +3,15 @@ import {formDataToBlob} from '__wasm_rquickjs_builtin/http_form_data';
 import {DOMException} from '__wasm_rquickjs_builtin/abort_controller';
 import * as base64 from 'base64-js';
 
+// Normalize any ArrayBuffer view (typed array or DataView) to a Uint8Array over
+// exactly its own bytes. `BodyInit` accepts every BufferSource, so body handling
+// branches on `ArrayBuffer.isView` and funnels through this instead of
+// special-casing Uint8Array — which dropped or stringified Int8Array/Uint16Array/
+// DataView bodies.
+function viewToBytes(view) {
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+}
+
 // Partially based on the implementation in wasmedge-quickjs
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
@@ -127,10 +136,8 @@ export function fetch(resource, options = {}) {
                 // no body
             } else if (body instanceof ArrayBuffer) {
                 request.arrayBufferBody(body);
-            } else if (body instanceof DataView) {
-                request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
-            } else if (body instanceof Uint8Array) {
-                request.uint8ArrayBody(body);
+            } else if (ArrayBuffer.isView(body)) {
+                request.uint8ArrayBody(viewToBytes(body));
             } else if (body instanceof URLSearchParams) {
                 request.addHeader('Content-Type', 'application/x-www-form-urlencoded');
                 request.stringBody(body.toString());
@@ -451,8 +458,8 @@ export class Response {
             bytes = new TextEncoder().encode(body);
         } else if (body instanceof ArrayBuffer) {
             bytes = new Uint8Array(body);
-        } else if (body instanceof Uint8Array) {
-            bytes = body;
+        } else if (ArrayBuffer.isView(body)) {
+            bytes = viewToBytes(body);
         } else if (body instanceof Blob) {
             return body.stream();
         } else {
@@ -597,7 +604,7 @@ export class Response {
         if (this._body instanceof ArrayBuffer) {
             return this._body;
         }
-        if (this._body instanceof Uint8Array) {
+        if (ArrayBuffer.isView(this._body)) {
             return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
         }
         if (this._body instanceof Blob) {
@@ -825,11 +832,8 @@ export class Request {
         } else if (this._body instanceof ArrayBuffer) {
             const blob = new Blob([this._body]);
             return blob.stream();
-        } else if (this._body instanceof DataView) {
-            const blob = new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
-            return blob.stream();
-        } else if (this._body instanceof Uint8Array) {
-            const blob = new Blob([this._body]);
+        } else if (ArrayBuffer.isView(this._body)) {
+            const blob = new Blob([viewToBytes(this._body)]);
             return blob.stream();
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             const blob = new Blob([this._body]);
@@ -917,9 +921,7 @@ export class Request {
             return new TextEncoder().encode(this._body.toString()).buffer;
         } else if (this._body instanceof ArrayBuffer) {
             return this._body;
-        } else if (this._body instanceof DataView) {
-            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
-        } else if (this._body instanceof Uint8Array) {
+        } else if (ArrayBuffer.isView(this._body)) {
             // Honor the view's offset/length so a subview (e.g. a pooled Node
             // Buffer with byteOffset > 0) returns only its own bytes.
             return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
@@ -944,10 +946,8 @@ export class Request {
             return new Blob([this._body.toString()]);
         } else if (this._body instanceof ArrayBuffer) {
             return new Blob([this._body]);
-        } else if (this._body instanceof DataView) {
-            return new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
-        } else if (this._body instanceof Uint8Array) {
-            return new Blob([this._body]);
+        } else if (ArrayBuffer.isView(this._body)) {
+            return new Blob([viewToBytes(this._body)]);
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new Blob([this._body]);
         } else {
@@ -969,10 +969,8 @@ export class Request {
             return new TextEncoder().encode(this._body.toString());
         } else if (this._body instanceof ArrayBuffer) {
             return new Uint8Array(this._body);
-        } else if (this._body instanceof DataView) {
-            return new Uint8Array(this._body.buffer, this._body.byteOffset, this._body.byteLength);
-        } else if (this._body instanceof Uint8Array) {
-            return this._body;
+        } else if (ArrayBuffer.isView(this._body)) {
+            return viewToBytes(this._body);
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new TextEncoder().encode(this._body);
         } else {
@@ -1266,7 +1264,7 @@ export class XMLHttpRequest {
                      fetchOptions.body = this._requestBody;
                  } else if (this._requestBody instanceof ArrayBuffer) {
                      fetchOptions.body = this._requestBody;
-                 } else if (this._requestBody instanceof Uint8Array) {
+                 } else if (ArrayBuffer.isView(this._requestBody)) {
                      fetchOptions.body = this._requestBody;
                  } else if (this._requestBody instanceof URLSearchParams) {
                      fetchOptions.body = this._requestBody;

@@ -189,6 +189,41 @@ const responseConstructorExports = {
         } catch (e) { return fail(name, e); }
     },
 
+    // Every BufferSource is a valid body, not just Uint8Array: Int8Array,
+    // Uint16Array, DataView and friends must round-trip their exact bytes
+    // instead of being dropped or stringified.
+    async testTypedArrayBodies() {
+        const name = 'non-Uint8Array view bodies';
+        const eq = (actual, expected, what) => {
+            const a = Array.from(actual);
+            if (a.length !== expected.length || a.some((v, i) => v !== expected[i])) {
+                throw new Error(`${what}: expected [${expected}], got [${a}]`);
+            }
+        };
+        try {
+            eq(new Uint8Array(await new Response(new Int8Array([1, 2, 3])).arrayBuffer()),
+                [1, 2, 3], 'Int8Array arrayBuffer()');
+
+            // Compare against the underlying bytes so the check is endianness-agnostic.
+            const u16 = new Uint16Array(new Uint8Array([1, 2, 3, 4]).buffer);
+            eq(new Uint8Array(await new Response(u16).arrayBuffer()),
+                [1, 2, 3, 4], 'Uint16Array arrayBuffer()');
+
+            const dvBuf = new Uint8Array([9, 8, 7, 6]).buffer;
+            eq(new Uint8Array(await new Response(new DataView(dvBuf, 1, 2)).arrayBuffer()),
+                [8, 7], 'DataView arrayBuffer()');
+
+            // bytes() must honor a subview's offset/length.
+            eq(await new Response(new Uint8Array([10, 20, 30, 40, 50]).subarray(1, 4)).bytes(),
+                [20, 30, 40], 'subarray bytes()');
+
+            const blob = await new Response(new Int8Array([5, 6])).blob();
+            eq(new Uint8Array(await blob.arrayBuffer()), [5, 6], 'Int8Array blob()');
+
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
     async testRequestClone() {
         const name = 'Request.clone() preserves body';
         try {
