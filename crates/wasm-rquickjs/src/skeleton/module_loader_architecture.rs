@@ -549,6 +549,23 @@ fn module_loader_architecture() {
         "packagePatternKeyMatch",
         "analyzeCommonJsExportNames",
         "generateCommonJsFacadeSource",
+        "looksLikeEsmSource",
+        "sourceHasTopLevelAwait",
+        "sourceHasImportMeta",
+        "scanImportMetaPositions",
+        "templateContainsImportMeta",
+        "isStaticExportSyntax",
+        "isStaticImportSyntax",
+        "hasCjsWrapperLexicalRedeclaration",
+        "parseVariableDeclarationSpan",
+        "parseClassDeclarationSpan",
+        "collectCjsGlobalBindingNamesInVariableDeclaration",
+        "cjsGlobalIdentifierIsBindingName",
+        "objectPatternPropertyKeyWithoutBinding",
+        "isCreateRequireImportMetaUrlDeclaration",
+        "isLikelyObjectLiteralOpen",
+        "isTopLevelAwaitExpression",
+        "isObjectAwaitKey",
     ] {
         assert!(
             !js_declarations.contains_key(forbidden),
@@ -577,6 +594,7 @@ fn module_loader_architecture() {
         "__wasm_rquickjs_cjs_resolve_package_fallback",
         "__wasm_rquickjs_package_global_conditions",
         "__wasm_rquickjs_build_loader_cjs_facade",
+        "__wasm_rquickjs_analyze_module_source",
     ] {
         assert!(
             js_identifiers.contains(bridge),

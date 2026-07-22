@@ -8701,6 +8701,16 @@ fn source_looks_like_esm(source: &str) -> bool {
     source_has_static_import_or_export(source) || source_has_import_meta(source) || source_has_top_level_await(source)
 }
 
+fn analyze_module_source<'js>(ctx: Ctx<'js>, source: String) -> rquickjs::Result<Object<'js>> {
+    let analysis = Object::new(ctx)?;
+    analysis.set("looksLikeEsm", source_looks_like_esm(&source))?;
+    analysis.set(
+        "hasCjsWrapperLexicalRedeclaration",
+        has_cjs_wrapper_lexical_redeclaration(&source),
+    )?;
+    Ok(analysis)
+}
+
 fn source_has_static_import_or_export(source: &str) -> bool {
     scan_code_positions(source, true, |i, _| {
         if parse_ident_name(source, i, "export").is_some() && is_static_export_syntax(source, i) {
@@ -9449,6 +9459,14 @@ impl JsState {
                 .expect("Failed to create loader CJS facade builder"),
             )
             .expect("Failed to initialize loader CJS facade builder");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_analyze_module_source",
+                Function::new(ctx.clone(), analyze_module_source)
+                    .expect("Failed to create module source analyzer"),
+            )
+            .expect("Failed to initialize module source analyzer");
 
             set_non_replaceable_global(
                 &global,

@@ -51,6 +51,7 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_register_import_attr_rewrite',
         '__wasm_rquickjs_discard_import_attr_rewrite',
         '__wasm_rquickjs_build_loader_cjs_facade',
+        '__wasm_rquickjs_analyze_module_source',
         '__wasm_rquickjs_import_meta_resolve_package',
         '__wasm_rquickjs_import_meta_resolve_path',
         '__wasm_rquickjs_loader_default_resolve_package',
