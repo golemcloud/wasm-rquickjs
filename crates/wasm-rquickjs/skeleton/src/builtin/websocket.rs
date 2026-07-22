@@ -69,12 +69,21 @@ impl WsConnection {
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 
-    pub fn send_binary(&self, ctx: Ctx<'_>, data: Vec<u8>) -> rquickjs::Result<()> {
+    pub fn send_binary(&self, ctx: Ctx<'_>, data: rquickjs::TypedArray<'_, u8>) -> rquickjs::Result<()> {
+        // Accept a typed array (the JS side passes a Uint8Array). rquickjs cannot
+        // convert a Uint8Array to `Vec<u8>` — that expects a plain JS Array — so a
+        // `Vec<u8>` parameter rejects every binary send with
+        // "Error converting from js 'object' into type 'array'". Copy the bytes out
+        // of the typed array instead, mirroring `HttpRequest::uint8_array_body`.
+        // The `to_vec` is the single minimal copy needed to build the owned
+        // `list<u8>` message the host expects (which copies the bytes across the
+        // guest boundary regardless); it is a bulk memcpy, not a per-element clone.
+        let bytes = data.as_bytes().map(|b| b.to_vec()).unwrap_or_default();
         let inner = self.inner.borrow();
         let conn = inner
             .as_ref()
             .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
-        conn.send(&Message::Binary(data))
+        conn.send(&Message::Binary(bytes))
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 

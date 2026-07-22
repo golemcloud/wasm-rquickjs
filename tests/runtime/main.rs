@@ -44,6 +44,7 @@ mod toplevel_timer;
 mod url;
 mod v8_stack_trace;
 mod variant_list_roundtrip;
+mod websocket;
 mod xhr;
 
 // Tag suites into 8 groups for parallel CI matrix execution
@@ -91,6 +92,7 @@ tag_suite!(node_http, group8);
 tag_suite!(intl, group8);
 tag_suite!(example1, group8);
 tag_suite!(example2, group8);
+tag_suite!(websocket, group8);
 
 #[test_dep(tagged_as = "example3", scope = Cloneable)]
 async fn compiled_example3() -> CompiledTest {

@@ -292,24 +292,21 @@ class WebSocket {
                 this._connection.send_binary(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
                 this._bufferedAmount = 0;
             } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
-                // Blob support: read as ArrayBuffer and send as binary
-                const reader = new FileReader();
-                reader.onload = () => {
+                // Blob support: read the blob's bytes and send them as binary.
+                // Uses Blob.arrayBuffer() directly (the runtime has no FileReader).
+                data.arrayBuffer().then((result) => {
                     if (this._readyState === OPEN && this._connection) {
-                        try {
-                            const buf = new Uint8Array(reader.result);
-                            this._bufferedAmount += buf.byteLength;
-                            this._connection.send_binary(buf);
-                            this._bufferedAmount = 0;
-                        } catch (e2) {
-                            this._bufferedAmount = 0;
-                            this._readyState = CLOSED;
-                            this._dispatch('error', new ErrorEvent(e2.message || String(e2)));
-                            this._dispatch('close', new CloseEvent(1006, '', false));
-                        }
+                        const buf = new Uint8Array(result);
+                        this._bufferedAmount += buf.byteLength;
+                        this._connection.send_binary(buf);
+                        this._bufferedAmount = 0;
                     }
-                };
-                reader.readAsArrayBuffer(data);
+                }).catch((e2) => {
+                    this._bufferedAmount = 0;
+                    this._readyState = CLOSED;
+                    this._dispatch('error', new ErrorEvent(e2.message || String(e2)));
+                    this._dispatch('close', new CloseEvent(1006, '', false));
+                });
             } else {
                 // Fallback: coerce to string per spec
                 const str = String(data);
