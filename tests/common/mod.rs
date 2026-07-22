@@ -148,6 +148,11 @@ impl ws_mock::golem::websocket::client::HostWebsocketConnection for Host {
     ) -> wasmtime::Result<Resource<wasmtime_wasi::p2::DynPollable>> {
         let mut table = self.table.lock().unwrap();
         let ready = table.push(ReadyPollable)?;
+        // The Golem wasmtime fork takes an extra deadline argument; `None` keeps
+        // the upstream behaviour of waiting indefinitely.
+        #[cfg(feature = "use-golem-wasmtime")]
+        let pollable = wasmtime_wasi::p2::subscribe(&mut table, ready, None)?;
+        #[cfg(not(feature = "use-golem-wasmtime"))]
         let pollable = wasmtime_wasi::p2::subscribe(&mut table, ready)?;
         Ok(pollable)
     }
