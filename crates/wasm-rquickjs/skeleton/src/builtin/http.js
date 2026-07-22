@@ -920,7 +920,9 @@ export class Request {
         } else if (this._body instanceof DataView) {
             return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
         } else if (this._body instanceof Uint8Array) {
-            return this._body.buffer;
+            // Honor the view's offset/length so a subview (e.g. a pooled Node
+            // Buffer with byteOffset > 0) returns only its own bytes.
+            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new TextEncoder().encode(this._body).buffer;
         } else {

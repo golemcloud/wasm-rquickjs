@@ -354,10 +354,17 @@ impl DgramSocket {
     pub async fn send(
         &self,
         ctx: Ctx<'_>,
-        data: Vec<u8>,
+        data: rquickjs::TypedArray<'_, u8>,
         addr: Option<String>,
         port: Option<u32>,
     ) -> rquickjs::Result<u32> {
+        // Accept a typed array (the JS side passes a Uint8Array). rquickjs cannot
+        // convert a Uint8Array to `Vec<u8>` — that expects a plain JS Array — so a
+        // `Vec<u8>` parameter rejects every datagram with "Error converting from js
+        // 'object' into type 'array'". Copy the bytes out, mirroring the WebSocket
+        // and http shims.
+        let data = data.as_bytes().map(|b| b.to_vec()).unwrap_or_default();
+
         // Build the remote address if provided
         let remote_address = match (addr, port) {
             (Some(a), Some(p)) => {

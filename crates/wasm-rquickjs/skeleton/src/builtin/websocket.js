@@ -478,7 +478,7 @@ class WebSocketStream {
             });
 
             const writable = new WritableStream({
-                write(chunk) {
+                async write(chunk) {
                     if (!conn) {
                         throw new Error('WebSocketStream is closed');
                     }
@@ -488,6 +488,8 @@ class WebSocketStream {
                         conn.send_binary(new Uint8Array(chunk));
                     } else if (ArrayBuffer.isView(chunk)) {
                         conn.send_binary(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+                    } else if (typeof Blob !== 'undefined' && chunk instanceof Blob) {
+                        conn.send_binary(new Uint8Array(await chunk.arrayBuffer()));
                     } else {
                         conn.send_text(String(chunk));
                     }
