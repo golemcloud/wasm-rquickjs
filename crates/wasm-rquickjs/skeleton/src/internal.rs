@@ -703,11 +703,11 @@ fn process_import_attrs(
         // Look for 'import' keyword
         if bytes[i] == b'i'
             && i + 6 <= len
-            && &source[i..i + 6] == "import"
-            && (i == 0 || !is_id_char(bytes[i - 1]))
+            && &bytes[i..i + 6] == b"import"
+            && (i == 0 || !is_ident_continue(bytes[i - 1]))
             && (i == 0 || (bytes[i - 1] != b'.' && bytes[i - 1] != b'#'))
             && (i + 6 >= len
-                || !is_id_char(bytes[i + 6])
+                || !is_ident_continue(bytes[i + 6])
                 || bytes[i + 6] == b'"'
                 || bytes[i + 6] == b'\'')
         {
@@ -762,9 +762,9 @@ fn process_import_attrs(
                 while i < len {
                     if bytes[i] == b'f'
                         && i + 4 <= len
-                        && &source[i..i + 4] == "from"
-                        && (i == 0 || !is_id_char(bytes[i - 1]))
-                        && (i + 4 >= len || !is_id_char(bytes[i + 4]))
+                        && &bytes[i..i + 4] == b"from"
+                        && (i == 0 || !is_ident_continue(bytes[i - 1]))
+                        && (i + 4 >= len || !is_ident_continue(bytes[i + 4]))
                     {
                         let mut j = i + 4;
                         j = skip_ws_comments(source, j);
@@ -789,8 +789,8 @@ fn process_import_attrs(
                 i = skip_ws_comments(source, i);
 
                 if i + 6 <= len
-                    && &source[i..i + 6] == "assert"
-                    && (i + 6 >= len || !is_id_char(bytes[i + 6]))
+                    && &bytes[i..i + 6] == b"assert"
+                    && (i + 6 >= len || !is_ident_continue(bytes[i + 6]))
                 {
                     return ProcessedStaticImportAttrs::plain(
                         "await Promise.reject(new SyntaxError('Unexpected identifier'));\n"
@@ -800,8 +800,10 @@ fn process_import_attrs(
 
                 // Check for 'with' keyword (not 'with(' which is a with-statement)
                 if i + 4 <= len
-                    && &source[i..i + 4] == "with"
-                    && (i + 4 >= len || !is_id_char(bytes[i + 4]) || bytes[i + 4] == b'{')
+                    && &bytes[i..i + 4] == b"with"
+                    && (i + 4 >= len
+                        || !is_ident_continue(bytes[i + 4])
+                        || bytes[i + 4] == b'{')
                 {
                     let with_start = i;
                     i += 4;
@@ -11290,6 +11292,22 @@ mod cjs_export_analyzer_tests {
         "#;
 
         let processed = process_static_import_attrs(source, "/app/main.mjs");
+        assert_eq!(processed.source, source);
+        assert!(processed.dynamic_import_binding_names.is_none());
+    }
+
+    #[test]
+    fn import_attribute_scanner_handles_non_ascii_keyword_prefixes() {
+        let source = r#"const imporあ = 1;
+const あimport = () => "identifier";
+const importあ = "identifier";
+import { あfrom as fromあ, value as froあ } from "./dep.js";
+import "./dep.js" assertあ;
+import "./dep.js" withあ;
+"#;
+
+        let processed = process_static_import_attrs(source, "/app/main.mjs");
+
         assert_eq!(processed.source, source);
         assert!(processed.dynamic_import_binding_names.is_none());
     }

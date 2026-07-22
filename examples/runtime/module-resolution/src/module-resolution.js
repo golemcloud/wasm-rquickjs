@@ -2293,6 +2293,12 @@ export const testCjsDynamicImportAttributeScanner = async () => {
         }
         fs.writeFileSync('/cjs-dynamic-import-attr-scanner/module.cjs', [
             'const assert = require("node:assert");',
+            'const imporあ = "non-ascii keyword prefix";',
+            'const あimport = () => "non-ascii identifier prefix";',
+            'const importあ = "non-ascii identifier suffix";',
+            'assert.strictEqual(imporあ, "non-ascii keyword prefix");',
+            'assert.strictEqual(あimport(), "non-ascii identifier prefix");',
+            'assert.strictEqual(importあ, "non-ascii identifier suffix");',
             'const stringLiteral = "import(\\"./missing-string.json\\", { with: { type: \\"json\\" } })";',
             'const templateLiteral = `before ${"import(\\"./missing-template.json\\", { with: { type: \\"json\\" } })"} after`;',
             'const regexLiteral = /import\\(\\"\\.\\/missing-regex\\.json\\", \\{ with: \\{ type: \\"json\\" \\} \\}\\)/;',
