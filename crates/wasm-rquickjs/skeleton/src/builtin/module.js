@@ -714,7 +714,7 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin',
 const moduleCache = Object.create(null);
 
 function shouldPreserveSymlinks(isMainModuleLoad) {
-    return hasExecArgvFlag(isMainModuleLoad ? '--preserve-symlinks-main' : '--preserve-symlinks');
+    return rustHasExecArgvFlag(isMainModuleLoad ? '--preserve-symlinks-main' : '--preserve-symlinks');
 }
 
 function toCjsCanonicalFilename(filename, isMainModuleLoad) {
@@ -1520,33 +1520,20 @@ Object.defineProperties(cjsEvalBridge, {
     prepareEval: { value: prepareCjsEvalSource },
     nativeEval: { value: wasmRquickjsModuleEval },
 });
-function hasExecArgvFlag(flag) {
-    const processObject = globalThis.process;
-    if (!processObject || !Array.isArray(processObject.execArgv)) {
-        return false;
-    }
-
-    const prefixed = flag + '=';
-    for (let i = 0; i < processObject.execArgv.length; i++) {
-        const arg = String(processObject.execArgv[i]);
-        if (arg === flag || arg.indexOf(prefixed) === 0) {
-            return true;
-        }
-    }
-
-    return false;
+function rustHasExecArgvFlag(flag) {
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_module_has_exec_argv_flag(flag);
 }
 
 function isExperimentalTransformTypesEnabled() {
-    return hasExecArgvFlag('--experimental-transform-types');
+    return rustHasExecArgvFlag('--experimental-transform-types');
 }
 
 function isSourceMapsEnabled() {
-    if (hasExecArgvFlag('--no-enable-source-maps')) {
+    if (rustHasExecArgvFlag('--no-enable-source-maps')) {
         return false;
     }
 
-    return hasExecArgvFlag('--enable-source-maps') || isExperimentalTransformTypesEnabled();
+    return rustHasExecArgvFlag('--enable-source-maps') || isExperimentalTransformTypesEnabled();
 }
 
 function getSimpleSourceMapRegistry() {
@@ -2423,7 +2410,7 @@ function scanSourceCodePositions(source, options, visitor) {
     return true;
 }
 
-function analyzeModuleSource(source) {
+function rustModuleSourceAnalysis(source) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_module_source(source);
 }
 
@@ -2840,7 +2827,7 @@ function isEsmGraphFile(filename, source) {
     if (filename.endsWith('.mjs') ||
         (filename.endsWith('.js') && explicitPackageType === 'module')) return true;
     if (filename.endsWith('.cjs') || isCommonJsPackage) return false;
-    const analysis = analyzeModuleSource(source);
+    const analysis = rustModuleSourceAnalysis(source);
     return analysis.looksLikeEsm || analysis.hasCjsWrapperLexicalRedeclaration;
 }
 
@@ -2972,7 +2959,7 @@ function resolveEsmGraphSpecifier(specifier, parentFilename, conditions, mode) {
     mode = mode || 'import';
     if (specifier.startsWith('node:') || specifier.startsWith('data:')) return null;
     const parentDir = pathModule.dirname(parentFilename);
-    if (isRelativeOrAbsoluteSpecifier(specifier)) {
+    if (rustClassifiesPathSpecifier(specifier)) {
         try {
             return resolveFilename(specifier, parentDir);
         } catch (_) {
@@ -3284,9 +3271,8 @@ function makeEsmUnsupportedDirImportError(filename) {
     return err;
 }
 
-function isRelativeOrAbsoluteSpecifier(specifier) {
-    return specifier === '.' || specifier === '..' ||
-        specifier.startsWith('./') || specifier.startsWith('../') || specifier.startsWith('/');
+function rustClassifiesPathSpecifier(specifier) {
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_classify_module_specifier(specifier);
 }
 
 function defaultLoaderFormatForFilename(filename) {
@@ -3422,7 +3408,7 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
         if (specifier.startsWith('file://')) {
             return cjsLoaderFileUrlResult(specifier);
         }
-        if (isRelativeOrAbsoluteSpecifier(specifier)) {
+        if (rustClassifiesPathSpecifier(specifier)) {
             const resolved = resolveFilename(specifier, parentDir);
             return cjsLoaderFileResult(resolved.filename, undefined);
         }
@@ -3800,7 +3786,7 @@ function loadCommonJsTransaction(descriptor) {
             (explicitPackageType === null && packageScope !== null && packageScope.isNodeModulesPackage);
         const isEsm = filename.endsWith('.mjs') ||
             (filename.endsWith('.js') && explicitPackageType === 'module');
-        if (isEsm && hasExecArgvFlag('--no-experimental-require-module')) {
+        if (isEsm && rustHasExecArgvFlag('--no-experimental-require-module')) {
             discardCjsModuleLoad(cacheKey, parentModule, mod);
             const esmErr = new Error(
                 "require() of ES Module " + filename + " not supported. " +
@@ -3843,7 +3829,7 @@ function loadCommonJsTransaction(descriptor) {
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
                 if (shouldFallbackToEsm && err && err.name === 'SyntaxError') {
-                    const analysis = analyzeModuleSource(source);
+                    const analysis = rustModuleSourceAnalysis(source);
                     cjsSourceLooksEsm = analysis.looksLikeEsm;
                     cjsWrapperLexicalRedeclaration = analysis.hasCjsWrapperLexicalRedeclaration;
                 }
@@ -3856,7 +3842,7 @@ function loadCommonJsTransaction(descriptor) {
                 }
             }
             if (cjsSyntaxError || cjsWrapperLexicalRedeclaration) {
-                if (hasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
+                if (rustHasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
                     discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
@@ -3996,19 +3982,8 @@ mainModule._compile = makeModuleCompile(mainModule);
 mainModule.require = makeModuleRequire(mainModule);
 installCjsEsmDefaultSnapshotSlot(mainModule);
 
-function splitPackageName(id) {
-    // Scoped packages: @scope/pkg or @scope/pkg/subpath
-    if (id.charAt(0) === '@') {
-        const slashIdx = id.indexOf('/');
-        if (slashIdx === -1) return { name: id, subpath: '' };
-        const secondSlash = id.indexOf('/', slashIdx + 1);
-        if (secondSlash === -1) return { name: id, subpath: '' };
-        return { name: id.substring(0, secondSlash), subpath: id.substring(secondSlash + 1) };
-    }
-    // Regular packages: pkg or pkg/subpath
-    const idx = id.indexOf('/');
-    if (idx === -1) return { name: id, subpath: '' };
-    return { name: id.substring(0, idx), subpath: id.substring(idx + 1) };
+function rustSplitPackageName(id) {
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_split_module_package_name(id);
 }
 
 function resolveFromNodeModules(id, parentDir, parentFilename, conditions, lookupPaths, resolution) {
@@ -4020,7 +3995,7 @@ function resolveFromNodeModules(id, parentDir, parentFilename, conditions, looku
     if (cached !== null) return cached;
 
     // Split into package name and subpath for packages with subpath specifiers
-    const parts = splitPackageName(id);
+    const parts = rustSplitPackageName(id);
 
     const selfResolved = resolvePackageSelfReference(parts, parentDir, conditions, resolution);
     if (selfResolved !== undefined) {
@@ -4086,7 +4061,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
             argErr.code = 'ERR_INVALID_ARG_VALUE';
             throw argErr;
         }
-        const isRelative = isRelativeOrAbsoluteSpecifier(id);
+        const isRelative = rustClassifiesPathSpecifier(id);
         if (!isRelative) {
             const lookupPaths = cjsLookupPathsForResolveOptions(searchPaths);
             const resolution = makeCjsResolutionState();
@@ -4124,7 +4099,7 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
         err.code = 'MODULE_NOT_FOUND';
         throw addRequireStackToModuleNotFound(err, id, parentFilename);
     }
-    if (isRelativeOrAbsoluteSpecifier(id)) {
+    if (rustClassifiesPathSpecifier(id)) {
         const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
         const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
         if (cached !== null) return cached.filename;
@@ -4216,7 +4191,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         }
 
         // Relative or absolute file paths
-        if (isRelativeOrAbsoluteSpecifier(id)) {
+        if (rustClassifiesPathSpecifier(id)) {
             const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
             const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
             if (cached !== null) {
@@ -4744,7 +4719,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return resultForEsmFileUrl(new URL(normalizeLoaderResolvedUrl(specifier)));
         }
 
-        if (parentFilename !== null && isRelativeOrAbsoluteSpecifier(specifier)) {
+        if (parentFilename !== null && rustClassifiesPathSpecifier(specifier)) {
             return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
         }
 

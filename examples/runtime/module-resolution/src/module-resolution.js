@@ -52,6 +52,9 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_discard_import_attr_rewrite',
         '__wasm_rquickjs_build_loader_cjs_facade',
         '__wasm_rquickjs_analyze_module_source',
+        '__wasm_rquickjs_module_has_exec_argv_flag',
+        '__wasm_rquickjs_classify_module_specifier',
+        '__wasm_rquickjs_split_module_package_name',
         '__wasm_rquickjs_import_meta_resolve_package',
         '__wasm_rquickjs_import_meta_resolve_path',
         '__wasm_rquickjs_loader_default_resolve_package',
@@ -74,6 +77,44 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
             Object.defineProperty(globalThis, name, { value: () => 'redefined' });
         }, TypeError, name);
         assert.strictEqual(globalThis[name], original, name);
+    }
+    const originalExecArgv = process.execArgv;
+    try {
+        process.execArgv = [Symbol('ignored'), { toString: () => '--bridge-flag=value' }];
+        assert.strictEqual(globalThis.__wasm_rquickjs_module_has_exec_argv_flag('--bridge-flag'), true);
+        const growingExecArgv = [{
+            toString: () => {
+                growingExecArgv.push('--bridge-flag=late');
+                return '--other-flag';
+            },
+        }];
+        process.execArgv = growingExecArgv;
+        assert.strictEqual(globalThis.__wasm_rquickjs_module_has_exec_argv_flag('--bridge-flag'), true);
+        const replacingExecArgv = [{
+            toString: () => {
+                process.execArgv = { 1: '--bridge-flag=array-like', length: 2 };
+                return '--other-flag';
+            },
+        }];
+        process.execArgv = replacingExecArgv;
+        assert.strictEqual(globalThis.__wasm_rquickjs_module_has_exec_argv_flag('--bridge-flag'), true);
+        const coercionError = new Error('execArgv coercion');
+        process.execArgv = [{ toString: () => { throw coercionError; } }];
+        assert.throws(
+            () => globalThis.__wasm_rquickjs_module_has_exec_argv_flag('--bridge-flag'),
+            (error) => error === coercionError,
+        );
+        const getterError = new Error('execArgv getter');
+        const throwingArray = [];
+        Object.defineProperty(throwingArray, 0, { get: () => { throw getterError; } });
+        throwingArray.length = 1;
+        process.execArgv = throwingArray;
+        assert.throws(
+            () => globalThis.__wasm_rquickjs_module_has_exec_argv_flag('--bridge-flag'),
+            (error) => error === getterError,
+        );
+    } finally {
+        process.execArgv = originalExecArgv;
     }
     return true;
 };

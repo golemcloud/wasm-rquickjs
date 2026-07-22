@@ -8711,6 +8711,50 @@ fn analyze_module_source<'js>(ctx: Ctx<'js>, source: String) -> rquickjs::Result
     Ok(analysis)
 }
 
+fn module_has_exec_argv_flag(ctx: Ctx<'_>, flag: String) -> rquickjs::Result<bool> {
+    let process_value: Value = ctx.globals().get("process")?;
+    let Some(process) = process_value.into_object() else {
+        return Ok(false);
+    };
+    let exec_argv_value: Value = process.get("execArgv")?;
+    if rquickjs::Array::from_value(exec_argv_value).is_err() {
+        return Ok(false);
+    }
+    let prefixed = format!("{flag}=");
+    let mut i = 0;
+    loop {
+        let current_exec_argv: Value = process.get("execArgv")?;
+        let Some(exec_argv) = current_exec_argv.into_object() else {
+            return Ok(false);
+        };
+        let length: usize = exec_argv.get("length")?;
+        if i >= length {
+            break;
+        }
+        let value: Value = exec_argv.get(i as u32)?;
+        let string_constructor: Function = ctx.globals().get("String")?;
+        let arg: String = string_constructor.call((value,))?;
+        if arg == flag || arg.starts_with(&prefixed) {
+            return Ok(true);
+        }
+        i += 1;
+    }
+    Ok(false)
+}
+
+fn classify_module_specifier(specifier: String) -> bool {
+    is_relative_or_absolute_specifier(&specifier)
+}
+
+fn split_module_package_name<'js>(ctx: Ctx<'js>, specifier: String) -> rquickjs::Result<Object<'js>> {
+    let (name, subpath) = NodeModulesResolver::split_package_name(&specifier)
+        .unwrap_or((specifier.as_str(), ""));
+    let result = Object::new(ctx)?;
+    result.set("name", name)?;
+    result.set("subpath", subpath)?;
+    Ok(result)
+}
+
 fn source_has_static_import_or_export(source: &str) -> bool {
     scan_code_positions(source, true, |i, _| {
         if parse_ident_name(source, i, "export").is_some() && is_static_export_syntax(source, i) {
@@ -9467,6 +9511,30 @@ impl JsState {
                     .expect("Failed to create module source analyzer"),
             )
             .expect("Failed to initialize module source analyzer");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_module_has_exec_argv_flag",
+                Function::new(ctx.clone(), module_has_exec_argv_flag)
+                    .expect("Failed to create module runtime flag analyzer"),
+            )
+            .expect("Failed to initialize module runtime flag analyzer");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_classify_module_specifier",
+                Function::new(ctx.clone(), classify_module_specifier)
+                    .expect("Failed to create module specifier classifier"),
+            )
+            .expect("Failed to initialize module specifier classifier");
+
+            set_non_replaceable_global(
+                &global,
+                "__wasm_rquickjs_split_module_package_name",
+                Function::new(ctx.clone(), split_module_package_name)
+                    .expect("Failed to create module package-name splitter"),
+            )
+            .expect("Failed to initialize module package-name splitter");
 
             set_non_replaceable_global(
                 &global,
