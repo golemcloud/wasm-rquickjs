@@ -228,8 +228,12 @@ async fn run_case(
         setup_node_compat_test_files(instance.temp_dir_path(), &case.path)?;
 
         if let Some(index) = case.subtest_index {
-            let (source, discovery) =
-                load_split_source(&case.path, case.nested_node_test, source_cache)?;
+            let (source, discovery) = load_split_source(
+                &case.path,
+                case.nested_node_test,
+                case.isolate_block_subtests,
+                source_cache,
+            )?;
             let rewritten = match discovery {
                 SubtestDiscovery::Block(blocks) => rewrite_for_block_with_options(
                     source,
@@ -284,12 +288,14 @@ async fn run_case(
 fn load_split_source<'a>(
     path: &str,
     nested_node_test: bool,
+    isolate_block_subtests: bool,
     source_cache: &'a mut BTreeMap<String, (String, SubtestDiscovery)>,
 ) -> anyhow::Result<(&'a str, &'a SubtestDiscovery)> {
-    let cache_key = format!("{path}#{nested_node_test}");
+    let cache_key = format!("{path}#{nested_node_test}#{isolate_block_subtests}");
     if !source_cache.contains_key(&cache_key) {
         let source = fs::read_to_string(format!("tests/node_compat/suite/{path}"))?;
-        let discovery = discover_subtests_with_options(path, &source, nested_node_test);
+        let discovery =
+            discover_subtests_with_options(path, &source, nested_node_test, isolate_block_subtests);
         source_cache.insert(cache_key.clone(), (source, discovery));
     }
     let (source, discovery) = source_cache

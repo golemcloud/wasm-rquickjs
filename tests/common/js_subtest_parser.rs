@@ -3,13 +3,20 @@ use oxc_ast::ast::*;
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType};
 
-/// Info about a top-level `{ }` block.
+/// Info about a top-level block or executable statement.
 #[derive(Debug, Clone)]
 pub struct BlockInfo {
     pub index: usize,
-    /// Byte span: (start, end) - inclusive of the braces
+    /// End-exclusive byte span: (start, end).
     pub span: (u32, u32),
     pub name: String,
+    pub kind: BlockKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockKind {
+    Block,
+    Statement,
 }
 
 /// Info about a top-level `test('name', fn)` call.
@@ -256,13 +263,14 @@ fn extract_test_name(call: &CallExpression) -> Option<String> {
 /// - `path`: file path (used to determine SourceType: .js → CJS, .mjs → ESM)
 /// - `source`: the JS source code
 pub fn discover_subtests(path: &str, source: &str) -> SubtestDiscovery {
-    discover_subtests_with_options(path, source, false)
+    discover_subtests_with_options(path, source, false, false)
 }
 
 pub fn discover_subtests_with_options(
     path: &str,
     source: &str,
     nested_node_test: bool,
+    isolate_top_level_expressions: bool,
 ) -> SubtestDiscovery {
     let source_type = if path.ends_with(".mjs") {
         SourceType::mjs()
@@ -320,20 +328,26 @@ pub fn discover_subtests_with_options(
         let mut index = 0;
 
         for stmt in &program.body {
-            if let Statement::BlockStatement(block) = stmt {
-                let comment = extract_preceding_comment(source, block.span.start);
-                let name = comment
-                    .map(|c| sanitize_name(&c))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| format!("block_{index:02}"));
-                let full_name = format!("block_{index:02}_{name}");
-                blocks.push(BlockInfo {
-                    index,
-                    span: (block.span.start, block.span.end),
-                    name: full_name,
-                });
-                index += 1;
-            }
+            let (span, kind, fallback_name) = if let Statement::BlockStatement(block) = stmt {
+                (block.span, BlockKind::Block, "block")
+            } else if isolate_top_level_expressions && !preserve_top_level_statement(stmt) {
+                (stmt.span(), BlockKind::Statement, "statement")
+            } else {
+                continue;
+            };
+            let comment = extract_preceding_comment(source, span.start);
+            let name = comment
+                .map(|c| sanitize_name(&c))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| format!("{fallback_name}_{index:02}"));
+            let full_name = format!("block_{index:02}_{name}");
+            blocks.push(BlockInfo {
+                index,
+                span: (span.start, span.end),
+                name: full_name,
+                kind,
+            });
+            index += 1;
         }
 
         if blocks.len() < 2 {
@@ -365,30 +379,36 @@ pub fn rewrite_for_block_with_options(
     let bytes = source.as_bytes();
     let mut edits: Vec<(usize, usize)> = Vec::new();
 
-    if isolate_top_level_expressions {
-        edits.extend(top_level_executable_statement_spans(
-            source,
-            blocks,
-            target_index,
-        ));
-    }
-
     for block in blocks {
         if block.index != target_index {
             let start = block.span.0 as usize;
             let end = block.span.1 as usize;
-            // Validate span points at actual braces
-            if start >= bytes.len() || end > bytes.len() || bytes[start] != b'{' {
+            if start >= bytes.len() || end > bytes.len() {
                 eprintln!(
-                    "WARNING: Block {} span ({},{}) does not point at braces, skipping rewrite",
+                    "WARNING: Block {} span ({},{}) is invalid, skipping rewrite",
                     block.index, start, end
                 );
                 continue;
             }
-            let inner_start = start + 1; // after '{'
-            let inner_end = end - 1; // before '}'
-            if inner_start < inner_end {
-                edits.push((inner_start, inner_end));
+            match block.kind {
+                BlockKind::Block => {
+                    if bytes[start] != b'{' || end == 0 || bytes[end - 1] != b'}' {
+                        eprintln!(
+                            "WARNING: Block {} span ({},{}) does not point at braces, skipping rewrite",
+                            block.index, start, end
+                        );
+                        continue;
+                    }
+                    let inner_start = start + 1;
+                    let inner_end = end - 1;
+                    if inner_start < inner_end {
+                        edits.push((inner_start, inner_end));
+                    }
+                }
+                BlockKind::Statement if isolate_top_level_expressions => {
+                    edits.push((start, end));
+                }
+                BlockKind::Statement => {}
             }
         }
     }
@@ -401,38 +421,6 @@ pub fn rewrite_for_block_with_options(
         }
     }
     String::from_utf8(result).expect("UTF-8 source remained valid after block rewrite")
-}
-
-fn top_level_executable_statement_spans(
-    source: &str,
-    blocks: &[BlockInfo],
-    target_index: usize,
-) -> Vec<(usize, usize)> {
-    let source_type = SourceType::cjs();
-    let allocator = Allocator::default();
-    let ret = Parser::new(&allocator, source, source_type).parse();
-    let program = &ret.program;
-    let target_span = blocks
-        .iter()
-        .find(|block| block.index == target_index)
-        .map(|block| block.span);
-    let mut spans = Vec::new();
-
-    for stmt in &program.body {
-        if let Statement::BlockStatement(block) = stmt {
-            if Some((block.span.start, block.span.end)) == target_span {
-                continue;
-            }
-            continue;
-        }
-        if preserve_top_level_statement(stmt) {
-            continue;
-        }
-        let span = stmt.span();
-        spans.push((span.start as usize, span.end as usize));
-    }
-
-    spans
 }
 
 fn preserve_top_level_statement(stmt: &Statement) -> bool {

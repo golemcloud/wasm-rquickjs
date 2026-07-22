@@ -9180,7 +9180,10 @@
         "block_03_vm_runinnewcontext": { "category": "runnable" },
         "block_04_vm_createcontext": { "category": "runnable" },
         "block_05_run_script_with_filename": { "category": "runnable" },
-        "block_06_vm_compilefunction": { "category": "runnable" }
+        "block_06_invalid_arguments": { "category": "runnable" },
+        "block_07_statement_07": { "category": "known-gap", "reason": "vm.createContext does not validate null name/origin options like Node" },
+        "block_08_statement_08": { "category": "known-gap", "reason": "vm.runInNewContext does not validate null contextName/contextOrigin options like Node" },
+        "block_09_vm_compilefunction": { "category": "runnable" }
       }
     },
     "parallel/test-vm-cached-data.js": { "category": "engine-difference", "reason": "vm.Script cachedData/produceCachedData relies on V8 code cache format unavailable in QuickJS" },
@@ -9245,15 +9248,19 @@
       "split": true,
       "isolateBlockSubtests": true,
       "subtests": {
-        "block_00_check_inspection_of_the_instance": { "category": "runnable" },
-        "block_01_block_01": { "category": "runnable" },
-        "block_02_check_dependencies_getter_returns_same_object_every_time": { "category": "runnable" },
-        "block_03_check_the_impossibility_of_creating_an_abstract_instance_of_": { "category": "runnable" },
-        "block_04_check_to_throws_invalid_exportnames": { "category": "runnable" },
-        "block_05_https_github_com_nodejs_node_issues_32806": { "category": "runnable" },
-        "block_06_check_to_throws_invalid_evaluatecallback": { "category": "runnable" },
-        "block_07_check_to_throws_invalid_options": { "category": "runnable" },
-        "block_08_test_compilefunction_importmoduledynamically": { "category": "runnable" }
+        "block_00_statement_00": { "category": "known-gap", "reason": "SourceTextModule evaluation does not yet match Node context global assignment semantics" },
+        "block_01_statement_01": { "category": "runnable" },
+        "block_02_statement_02": { "category": "known-gap", "reason": "SourceTextModule evaluation timeout does not interrupt an infinite loop" },
+        "block_03_check_the_generated_identifier_for_each_module": { "category": "known-gap", "reason": "SourceTextModule identifiers are not incremented per VM context like Node" },
+        "block_04_check_inspection_of_the_instance": { "category": "runnable" },
+        "block_05_block_05": { "category": "runnable" },
+        "block_06_check_dependencies_getter_returns_same_object_every_time": { "category": "runnable" },
+        "block_07_check_the_impossibility_of_creating_an_abstract_instance_of_": { "category": "runnable" },
+        "block_08_check_to_throws_invalid_exportnames": { "category": "runnable" },
+        "block_09_https_github_com_nodejs_node_issues_32806": { "category": "runnable" },
+        "block_10_check_to_throws_invalid_evaluatecallback": { "category": "runnable" },
+        "block_11_check_to_throws_invalid_options": { "category": "runnable" },
+        "block_12_test_compilefunction_importmoduledynamically": { "category": "runnable" }
       }
     },
     "parallel/test-vm-module-cached-data.js": { "category": "engine-difference", "reason": "SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS" },

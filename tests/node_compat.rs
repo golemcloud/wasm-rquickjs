@@ -600,7 +600,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 }
             };
 
-            let discovery = discover_subtests_with_options(&path, &source, entry.nested_node_test);
+            let discovery = discover_subtests_with_options(
+                &path,
+                &source,
+                entry.nested_node_test,
+                entry.isolate_block_subtests,
+            );
 
             // Staleness check: compare discovered subtest count vs config count
             let discovered_count = match &discovery {
