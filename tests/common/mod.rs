@@ -758,7 +758,7 @@ impl PreparedComponent {
         add_wasi_logging_mock(&mut linker)?;
 
         // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        add_websocket_client_mock(&mut linker)?;
+        add_websocket_client_mock(&mut linker, TestTarget::P2)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -868,7 +868,7 @@ impl GolemPreparedComponent {
         add_wasi_logging_mock(&mut linker)?;
 
         // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        add_websocket_client_mock(&mut linker)?;
+        add_websocket_client_mock(&mut linker, TestTarget::P2)?;
 
         // Mock golem:api/context@1.5.0
         let spans = add_golem_context_mock(&mut linker)?;
@@ -1477,7 +1477,7 @@ fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     add_wasi_logging_mock(&mut linker)?;
-    add_websocket_client_mock(&mut linker)?;
+    add_websocket_client_mock(&mut linker, TestTarget::P3)?;
     Ok(linker)
 }
 
@@ -1601,7 +1601,7 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex
 /// every method to fail. This satisfies the host import required when the `websocket` module is
 /// compiled in; tests only exercise the JS-side API surface (globals, brand checks), not live
 /// connections.
-fn add_websocket_client_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
+fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> anyhow::Result<()> {
     struct WsConn;
     let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
     ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
@@ -1626,23 +1626,48 @@ fn add_websocket_client_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
         },
     )?;
 
-    ws.func_new(
-        "[method]websocket-connection.receive",
-        |_store, _ty, _params, _results| {
-            Err(wasmtime::Error::msg(
-                "WebSocket receive not available in tests",
-            ))
-        },
-    )?;
-
-    ws.func_new(
-        "[method]websocket-connection.receive-with-timeout",
-        |_store, _ty, _params, _results| {
-            Err(wasmtime::Error::msg(
-                "WebSocket receive-with-timeout not available in tests",
-            ))
-        },
-    )?;
+    match target {
+        TestTarget::P2 => {
+            ws.func_new(
+                "[method]websocket-connection.receive",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive not available in tests",
+                    ))
+                },
+            )?;
+            ws.func_new(
+                "[method]websocket-connection.receive-with-timeout",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive-with-timeout not available in tests",
+                    ))
+                },
+            )?;
+        }
+        TestTarget::P3 => {
+            ws.func_new_concurrent(
+                "[method]websocket-connection.receive",
+                |_accessor, _ty, _params, _results| {
+                    Box::pin(async {
+                        Err(wasmtime::Error::msg(
+                            "WebSocket receive not available in tests",
+                        ))
+                    })
+                },
+            )?;
+            ws.func_new_concurrent(
+                "[method]websocket-connection.receive-with-timeout",
+                |_accessor, _ty, _params, _results| {
+                    Box::pin(async {
+                        Err(wasmtime::Error::msg(
+                            "WebSocket receive-with-timeout not available in tests",
+                        ))
+                    })
+                },
+            )?;
+        }
+    }
 
     ws.func_new(
         "[method]websocket-connection.close",

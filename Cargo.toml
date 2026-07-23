@@ -58,6 +58,7 @@ wac-graph = { workspace = true }
 wasmtime = { workspace = true, features = ["async", "component-model", "component-model-async", "cache"] }
 wasmtime-wasi = { workspace = true, features = ["p3"] }
 wasmtime-wasi-http = { workspace = true, features = ["p3"] }
+wasmparser_encoder = { workspace = true }
 
 [[test]]
 name = "compilation"
