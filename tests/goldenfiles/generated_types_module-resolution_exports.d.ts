@@ -41,4 +41,5 @@ declare module 'module-resolution' {
   export function testCjsNodeModuleLoadingCompat(): Promise<boolean>;
   export function testCjsNestedDependencyCacheShape(): Promise<boolean>;
   export function testCjsModuleChildrenGraph(): Promise<boolean>;
+  export function testEsmTemplateTopLevelAwaitDetection(): Promise<boolean>;
 }
