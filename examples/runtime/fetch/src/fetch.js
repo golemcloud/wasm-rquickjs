@@ -1062,23 +1062,29 @@ export async function abortReleasesRequest(port) {
     setTimeout(() => controller.abort('cancelled by test'), 100);
 
     let outcome;
+    let reason;
     try {
         await fetchPromise;
         outcome = 'completed';
     } catch (e) {
+        // Distinguish a real abort from any other fast failure: the rejection has
+        // to carry the signal's reason, otherwise a broken request would look
+        // identical to a cancelled one.
         outcome = 'aborted';
-        console.log(`Caught abort error: ${e.message || e}`);
+        reason = e;
+        console.log(`Caught abort error: ${e && e.message ? e.message : e}`);
     }
 
     const elapsed = Date.now() - started;
     console.log(`Abort outcome: ${outcome}`);
-    // This only shows the promise rejected quickly. It stays true even when the
-    // native request leaks, because the leak stalls the invocation *after* this
-    // promise settles — so whether the request was really released can only be
-    // asserted host-side, by timing the whole invocation.
-    if (outcome === 'aborted' && elapsed < 5000) {
+    console.log(`Abort reason matches: ${reason === 'cancelled by test'}`);
+    // This only shows the promise rejected quickly with the right reason. It stays
+    // true even when the native request leaks, because the leak stalls the
+    // invocation *after* this promise settles — so whether the request was really
+    // released can only be asserted host-side, by timing the whole invocation.
+    if (outcome === 'aborted' && reason === 'cancelled by test' && elapsed < 5000) {
         console.log("abort rejected the promise promptly: PASSED");
     } else {
-        console.log(`abort rejected the promise promptly: FAILED (${outcome}, ${elapsed}ms)`);
+        console.log(`abort rejected the promise promptly: FAILED (${outcome}, ${reason}, ${elapsed}ms)`);
     }
 }

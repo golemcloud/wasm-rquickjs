@@ -120,7 +120,7 @@ export const test2 = () => {
 
 // Strict (fatal) decoding: constructing a fatal decoder must succeed and invalid
 // input must be rejected by decode() rather than replaced with U+FFFD.
-export const test3 = () => {
+export const test3 = async () => {
     const check = (cond, msg) => { if (!cond) throw new Error(msg); };
     try {
         const dec = new TextDecoder('utf-8', { fatal: true });
@@ -164,9 +164,33 @@ export const test3 = () => {
         const part2 = streamDec.decode(new Uint8Array([0xAC]), { stream: true });
         check((part1 + part2) === '€', `streaming split decode: "${part1}${part2}"`);
 
+        // a sequence left incomplete at the final (non-streaming) decode must be
+        // reported, not silently replaced
+        const flushDec = new TextDecoder('utf-8', { fatal: true });
+        flushDec.decode(new Uint8Array([0xE2, 0x82]), { stream: true });
+        let flushThrew = false, flushCode = '';
+        try { flushDec.decode(); } catch (e) { flushThrew = true; flushCode = e && e.code; }
+        check(flushThrew, 'truncated trailing sequence should throw on final decode');
+        check(flushCode === 'ERR_ENCODING_INVALID_ENCODED_DATA', `wrong flush code: ${flushCode}`);
+
         // TextDecoderStream must also construct with fatal
         const tds = new TextDecoderStream('utf-8', { fatal: true });
         check(tds.fatal === true, 'TextDecoderStream fatal getter should be true');
+
+        // and it must actually reject invalid input pushed through the stream
+        let streamThrew = false;
+        try {
+            const bad = new TextDecoderStream('utf-8', { fatal: true });
+            const writer = bad.writable.getWriter();
+            const reader = bad.readable.getReader();
+            const readAll = (async () => { while (true) { const { done } = await reader.read(); if (done) break; } })();
+            await writer.write(new Uint8Array([0xFF]));
+            await writer.close();
+            await readAll;
+        } catch (e) {
+            streamThrew = true;
+        }
+        check(streamThrew, 'TextDecoderStream with fatal should reject invalid input');
 
         return true;
     } catch (e) {

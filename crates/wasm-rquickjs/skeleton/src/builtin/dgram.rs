@@ -362,8 +362,14 @@ impl DgramSocket {
         // convert a Uint8Array to `Vec<u8>` — that expects a plain JS Array — so a
         // `Vec<u8>` parameter rejects every datagram with "Error converting from js
         // 'object' into type 'array'". Copy the bytes out, mirroring the WebSocket
-        // and http shims.
-        let data = data.as_bytes().map(|b| b.to_vec()).unwrap_or_default();
+        // and http shims. A detached buffer has no bytes to send, so report it
+        // rather than silently transmitting an empty datagram.
+        let data = data
+            .as_bytes()
+            .ok_or_else(|| {
+                Exception::throw_message(&ctx, "the UInt8Array passed to send is detached")
+            })?
+            .to_vec();
 
         // Build the remote address if provided
         let remote_address = match (addr, port) {

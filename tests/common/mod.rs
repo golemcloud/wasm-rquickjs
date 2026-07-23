@@ -62,15 +62,17 @@ pub struct WsMockConnection;
 /// run exactly once and terminate cleanly, so the exported function can return
 /// (a never-ready pollable instead parks the loop forever and hangs the call).
 ///
-/// This does NOT race the async Blob send. `Blob.arrayBuffer()` for an in-memory
-/// blob iterates an async generator over in-memory parts (no host I/O), so the
-/// whole `data.arrayBuffer().then(buf => send_binary(buf))` chain resolves through
-/// the JS job queue. The wstd reactor only takes a `poll::poll` turn once that
-/// queue is drained, and this pollable can only resolve on such a turn — so every
-/// frame (including the Blob's) is recorded before the receive loop's first poll
-/// resolves and closes the socket. (A pollable that instead stays un-ready until
-/// the guest calls `close()` deadlocks the wstd reactor into a busy-spin that
-/// runs until the epoch deadline interrupts the guest.)
+/// This does NOT race the async Blob send, though not for the reason one might
+/// assume: `wstd`'s reactor calls `Pollable::ready()` synchronously, so an
+/// always-ready pollable does not need a `poll::poll` turn to resolve. What
+/// orders them is `rquickjs::AsyncRuntime::idle()`, which drains pending JS jobs
+/// to completion *before* polling the schedular that owns the native `receive()`
+/// future. `Blob.arrayBuffer()` over an in-memory blob is pure JS-job work (no
+/// host I/O), so the whole `arrayBuffer().then(buf => send_binary(buf))` chain
+/// lands inside that drain — every frame, the Blob's included, is recorded before
+/// the receive loop can close the socket. (A pollable that instead stays un-ready
+/// until the guest calls `close()` busy-spins the reactor until the epoch
+/// deadline interrupts the guest.)
 struct ReadyPollable;
 
 #[wasmtime_wasi::async_trait]
@@ -633,8 +635,9 @@ impl PreparedComponent {
 
         // Functional mock for golem:websocket/client@1.5.0 (required when the
         // websocket module is included). Sent frames are recorded into
-        // Host.ws_sent; connect succeeds and subscribe returns a never-ready
-        // pollable so the JS receive loop parks harmlessly.
+        // Host.ws_sent; connect succeeds, and subscribe returns an always-ready
+        // pollable paired with a `receive()` that reports closed, so the JS
+        // receive loop runs once and terminates (see `ReadyPollable`).
         // Link only the golem client interface; `wasi:io/poll` (used by
         // `subscribe`) is already linked above by `add_to_linker_with_options_async`.
         ws_mock::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(

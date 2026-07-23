@@ -275,16 +275,15 @@ where
         return Err(ctx.throw(reason));
     }
 
-    // Keep the JS values alive across the await point.
-    let signal_persistent = rquickjs::Persistent::save(ctx, signal_obj);
-    let abort_fn_persistent = rquickjs::Persistent::save(ctx, abort_fn);
-    let remove_listener_persistent = rquickjs::Persistent::save(ctx, remove_event_listener);
-
+    // The JS handles are held directly across the await. They are reference
+    // counted and this is a single `'js`-scoped future, so nothing can collect
+    // them; round-tripping through `Persistent` would only add a fallible step
+    // between the await and the listener removal below.
     let result = Abortable::new(fut, abort_reg).await;
 
-    let signal_obj = signal_persistent.restore(ctx)?;
-    let abort_fn = abort_fn_persistent.restore(ctx)?;
-    let remove_event_listener = remove_listener_persistent.restore(ctx)?;
+    // Always detach the listener: a long-lived signal (a reused controller, or an
+    // `AbortSignal.timeout` held elsewhere) would otherwise accumulate one per
+    // request.
     let _ = remove_event_listener.call::<_, ()>((This(signal_obj.clone()), "abort", abort_fn));
 
     match result {

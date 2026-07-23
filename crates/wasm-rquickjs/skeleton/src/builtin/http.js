@@ -618,7 +618,9 @@ export class Response {
             const result = new Uint8Array(totalLength);
             let offset = 0;
             for (const chunk of chunks) {
-                result.set(new Uint8Array(chunk.buffer || chunk), offset);
+                // Chunks are views over a shared buffer, so copy only the view's
+                // own bytes — `chunk.buffer` would be the whole backing store.
+                result.set(ArrayBuffer.isView(chunk) ? viewToBytes(chunk) : new Uint8Array(chunk), offset);
                 offset += chunk.byteLength;
             }
             return result.buffer;

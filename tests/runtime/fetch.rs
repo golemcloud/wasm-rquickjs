@@ -913,11 +913,14 @@ async fn fetch_abort_releases_request(
         .await
     });
 
-    // The server records the request before it starts stalling.
-    arrivals
-        .recv()
+    // The server records the request before it starts stalling. The sender lives
+    // in the server task, which never exits, so `recv()` would wait forever if the
+    // guest aborted before the request went out — bound it rather than hanging the
+    // whole CI job.
+    tokio::time::timeout(Duration::from_secs(30), arrivals.recv())
         .await
-        .expect("the guest never reached /slow-response");
+        .expect("timed out waiting for the guest to reach /slow-response")
+        .expect("the arrivals channel closed before the request arrived");
     let arrived_at = Instant::now();
 
     let (result, output) = invocation.await?;
@@ -926,11 +929,17 @@ async fn fetch_abort_releases_request(
 
     println!("Output:\n{output}");
 
-    // Required behavior #1: the promise rejects with the abort reason. Note this
-    // part passes even with the bug, so it is not the discriminator.
+    // The promise must reject *with the signal's reason* — without this, any fast
+    // failure (a broken native send, a bad error path) would look like a success.
+    // Both of these still pass with the leak present, so neither is the
+    // discriminator for release.
     assert!(
         output.contains("Abort outcome: aborted"),
-        "fetch should have rejected with the abort reason. Output:\n{output}"
+        "fetch should have rejected. Output:\n{output}"
+    );
+    assert!(
+        output.contains("Abort reason matches: true"),
+        "rejection did not carry the signal's reason. Output:\n{output}"
     );
     assert!(
         output.contains("abort rejected the promise promptly: PASSED"),

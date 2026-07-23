@@ -213,9 +213,14 @@ const responseConstructorExports = {
             eq(new Uint8Array(await new Response(new DataView(dvBuf, 1, 2)).arrayBuffer()),
                 [8, 7], 'DataView arrayBuffer()');
 
-            // bytes() must honor a subview's offset/length.
-            eq(await new Response(new Uint8Array([10, 20, 30, 40, 50]).subarray(1, 4)).bytes(),
-                [20, 30, 40], 'subarray bytes()');
+            // A subview must contribute only its own bytes. This has to go through
+            // Request: Response.arrayBuffer() already sliced correctly, so asserting
+            // it there would hold whether or not the offset is honored.
+            const sub = new Uint8Array([10, 20, 30, 40, 50]).subarray(1, 4);
+            const subReq = new Request('https://example.com/x', { method: 'POST', body: sub });
+            eq(new Uint8Array(await subReq.arrayBuffer()), [20, 30, 40], 'subarray Request.arrayBuffer()');
+            eq(await new Request('https://example.com/x', { method: 'POST', body: sub }).bytes(),
+                [20, 30, 40], 'subarray Request.bytes()');
 
             const blob = await new Response(new Int8Array([5, 6])).blob();
             eq(new Uint8Array(await blob.arrayBuffer()), [5, 6], 'Int8Array blob()');

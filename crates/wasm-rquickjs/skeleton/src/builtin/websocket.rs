@@ -78,7 +78,14 @@ impl WsConnection {
         // The `to_vec` is the single minimal copy needed to build the owned
         // `list<u8>` message the host expects (which copies the bytes across the
         // guest boundary regardless); it is a bulk memcpy, not a per-element clone.
-        let bytes = data.as_bytes().map(|b| b.to_vec()).unwrap_or_default();
+        // A detached buffer has no bytes to send, so report it rather than
+        // silently transmitting an empty frame.
+        let bytes = data
+            .as_bytes()
+            .ok_or_else(|| {
+                Exception::throw_message(&ctx, "the UInt8Array passed to send is detached")
+            })?
+            .to_vec();
         let inner = self.inner.borrow();
         let conn = inner
             .as_ref()
