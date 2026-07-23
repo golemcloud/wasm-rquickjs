@@ -271,22 +271,22 @@
       "subtests": {
         "test_00_should_format": {},
         "test_01_handle_invalid_arguments": {},
-        "test_02_any_falsy_value_other_than_undefined_will_be_treated_as_fals": { "category": "known-gap", "reason": "IDNA/punycode domain conversion is not implemented, unicode hostnames are not decoded" },
-        "test_03_should_format_with_unicode_true": { "category": "known-gap", "reason": "IDNA/punycode domain conversion is not implemented, unicode hostnames are not decoded" },
+        "test_02_any_falsy_value_other_than_undefined_will_be_treated_as_fals": { "category": "known-gap", "reason": "IDNA/punycode domain conversion (UTS-46) is not implemented" },
+        "test_03_should_format_with_unicode_true": { "category": "known-gap", "reason": "IDNA/punycode domain conversion (UTS-46) is not implemented" },
         "test_04_should_format_tel_prefix": {}
       }
     },
     "parallel/test-url-format-invalid-input.js": {},
-    "parallel/test-url-domain-ascii-unicode.js": { "category": "known-gap", "reason": "IDNA/punycode domain conversion is not implemented, domainToASCII/domainToUnicode are identity functions" },
-    "parallel/test-url-format.js": { "category": "known-gap", "reason": "IDNA/punycode domain conversion is not implemented, unicode hostnames fail validation" },
+    "parallel/test-url-domain-ascii-unicode.js": { "category": "known-gap", "reason": "IDNA/punycode domain conversion (UTS-46) is not implemented" },
+    "parallel/test-url-format.js": { "category": "known-gap", "reason": "IDNA/punycode domain conversion (UTS-46) is not implemented" },
     "parallel/test-url-parse-format.js": {
       "split": true,
       "subtests": {
-        "test_00_should_parse_and_format": { "category": "known-gap", "reason": "IDNA/punycode domain conversion is not implemented, unicode hostnames are not decoded" },
+        "test_00_should_parse_and_format": { "category": "known-gap", "reason": "IDNA/punycode domain conversion (UTS-46) is not implemented" },
         "test_01_parse_result_should_equal_new_url_url": {}
       }
     },
-    "parallel/test-url-parse-invalid-input.js": { "category": "known-gap", "reason": "IDNA/punycode domain conversion is not implemented, invalid unicode hostnames are not rejected" },
+    "parallel/test-url-parse-invalid-input.js": { "category": "known-gap", "reason": "IDNA/punycode domain conversion (UTS-46) is not implemented" },
     "parallel/test-url-parse-query.js": {},
     "parallel/test-url-relative.js": {},
 
