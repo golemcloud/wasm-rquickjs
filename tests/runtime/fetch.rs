@@ -902,37 +902,38 @@ async fn fetch_abort_releases_request(
 ) -> anyhow::Result<()> {
     let (port, _handle, mut arrivals) = start_test_server_with_arrivals().await;
 
-    let wasm_path = compiled.wasm_path().to_path_buf();
-    let invocation = tokio::spawn(async move {
-        invoke_and_capture_output(
-            &wasm_path,
-            None,
-            "abort-releases-request",
-            &[Val::U16(port)],
-        )
-        .await
-    });
+    // Stamp the arrival off to the side so the invocation is never blocked on it —
+    // otherwise a guest that fails to reach the server takes the assertions down
+    // with it before its output is ever printed.
+    let arrival = tokio::spawn(async move { arrivals.recv().await.map(|_| Instant::now()) });
 
-    // The server records the request before it starts stalling. The sender lives
-    // in the server task, which never exits, so `recv()` would wait forever if the
-    // guest aborted before the request went out — bound it rather than hanging the
-    // whole CI job.
-    tokio::time::timeout(Duration::from_secs(30), arrivals.recv())
-        .await
-        .expect("timed out waiting for the guest to reach /slow-response")
-        .expect("the arrivals channel closed before the request arrived");
-    let arrived_at = Instant::now();
-
-    let (result, output) = invocation.await?;
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "abort-releases-request",
+        &[Val::U16(port)],
+    )
+    .await;
+    let finished_at = Instant::now();
     let _ = result?;
-    let elapsed = arrived_at.elapsed();
 
     println!("Output:\n{output}");
+
+    let arrived_at = tokio::time::timeout(Duration::from_secs(5), arrival)
+        .await
+        .expect("the request never reached /slow-response (see guest output above)")?
+        .expect("the arrivals channel closed before the request arrived");
+    let elapsed = finished_at.duration_since(arrived_at);
 
     // The promise must reject *with the signal's reason* — without this, any fast
     // failure (a broken native send, a bad error path) would look like a success.
     // Both of these still pass with the leak present, so neither is the
     // discriminator for release.
+    assert!(
+        output.contains("Request reached the server: true"),
+        "the guest aborted before the request went out, so nothing was cancelled \
+         in flight. Output:\n{output}"
+    );
     assert!(
         output.contains("Abort outcome: aborted"),
         "fetch should have rejected. Output:\n{output}"
@@ -949,9 +950,9 @@ async fn fetch_abort_releases_request(
     // abort also rejects in ~100ms, but leaves the native request alive and the
     // invocation runs for the server's full 10s.
     assert!(
-        elapsed < Duration::from_secs(5),
+        elapsed < Duration::from_secs(10),
         "invocation took {elapsed:?} after the request reached the server; \
-         the aborted request was not released (server delay is 10s)"
+         the aborted request was not released (server delay is 30s)"
     );
 
     Ok(())

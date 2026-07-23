@@ -1059,7 +1059,18 @@ export async function abortReleasesRequest(port) {
         signal: controller.signal,
     });
 
-    setTimeout(() => controller.abort('cancelled by test'), 100);
+    // Abort only once the server confirms the request arrived. `fetch()` merely
+    // spawns the native request, so a timer here would race it going out — on a
+    // loaded machine the abort can win and nothing ever reaches the server, which
+    // tests cancellation of a request that was never in flight.
+    let arrived = false;
+    for (let i = 0; i < 100 && !arrived; i++) {
+        const hits = await fetch(`http://localhost:${port}/slow-response-hits`).then(r => r.text());
+        arrived = Number(hits) > 0;
+        if (!arrived) await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    console.log(`Request reached the server: ${arrived}`);
+    controller.abort('cancelled by test');
 
     let outcome;
     let reason;

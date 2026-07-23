@@ -10,6 +10,7 @@ use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::JoinHandle;
@@ -33,6 +34,12 @@ pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, Unbounde
     let (arrived_tx, arrived_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let handle = tokio::spawn(async move {
+        // Lets the guest confirm its slow request arrived before it aborts, so the
+        // abort cannot race the request going out.
+        let slow_hits = Arc::new(AtomicUsize::new(0));
+        let slow_hits_1 = slow_hits.clone();
+        let slow_hits_2 = slow_hits.clone();
+
         let state_mutex = Arc::new(Mutex::new(State::default()));
 
         let state_mutex_1 = state_mutex.clone();
@@ -227,13 +234,20 @@ pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, Unbounde
             .route(
                 "/slow-response",
                 get(async move || {
-                    // Signal arrival first, then stall. The delay is long enough
-                    // that a test asserting prompt completion cannot pass unless
-                    // the client really released the request.
+                    // Record the arrival before stalling, so both the guest (by
+                    // polling /slow-response-hits) and the test (via the arrivals
+                    // channel) can tell that the request really reached the server.
+                    // The stall then has to outlast anything a "released promptly"
+                    // assertion would accept.
+                    slow_hits_1.fetch_add(1, Ordering::SeqCst);
                     let _ = arrived_tx.send(());
-                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                     "slow body"
                 }),
+            )
+            .route(
+                "/slow-response-hits",
+                get(async move || slow_hits_2.load(Ordering::SeqCst).to_string()),
             );
 
         axum::serve(listener, router).await.unwrap();
