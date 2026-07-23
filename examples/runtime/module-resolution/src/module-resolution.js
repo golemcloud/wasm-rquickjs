@@ -8864,3 +8864,32 @@ export const testCjsModuleChildrenGraph = async () => {
         throw error;
     }
 };
+
+export const testEsmTemplateTopLevelAwaitDetection = async () => {
+    const root = '/esm-template-top-level-await';
+    const require = createRequire(`${root}/entry.cjs`);
+
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(`${root}/after-template.js`, [
+        "const banner = `${`don't`}`;",
+        'await Promise.resolve();',
+        'globalThis.__templateAfterAwait = banner;',
+    ].join('\n'));
+    fs.writeFileSync(`${root}/inside-template.mjs`, [
+        'const value = `${await Promise.resolve(42)}`;',
+        'globalThis.__templateInsideAwait = value;',
+    ].join('\n'));
+
+    assert.throws(() => require(`${root}/after-template.js`), {
+        code: 'ERR_REQUIRE_ASYNC_MODULE',
+    });
+    assert.throws(() => require(`${root}/inside-template.mjs`), {
+        code: 'ERR_REQUIRE_ASYNC_MODULE',
+    });
+
+    await import(`${root}/after-template.js`);
+    await import(`${root}/inside-template.mjs`);
+    assert.strictEqual(globalThis.__templateAfterAwait, "don't");
+    assert.strictEqual(globalThis.__templateInsideAwait, '42');
+    return true;
+};

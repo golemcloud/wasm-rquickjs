@@ -8607,9 +8607,31 @@ enum JsBraceContext {
     Normal { object_like: bool },
     Function,
     Class,
+    TemplateExpression,
 }
 
-fn source_has_top_level_await(source: &str) -> bool {
+enum JsTemplateBoundary {
+    End(usize),
+    Expression(usize),
+}
+
+fn scan_template_characters(source: &str, start: usize) -> JsTemplateBoundary {
+    let bytes = source.as_bytes();
+    let mut i = start;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => i = (i + 2).min(bytes.len()),
+            b'`' => return JsTemplateBoundary::End(i + 1),
+            b'$' if i + 1 < bytes.len() && bytes[i + 1] == b'{' => {
+                return JsTemplateBoundary::Expression(i + 2);
+            }
+            _ => i += 1,
+        }
+    }
+    JsTemplateBoundary::End(i)
+}
+
+fn source_has_top_level_await(source: &str, scan_template_expressions: bool) -> bool {
     let bytes = source.as_bytes();
     let mut i = 0;
     let mut paren_depth = 0usize;
@@ -8652,19 +8674,22 @@ fn source_has_top_level_await(source: &str) -> bool {
             }
         }
 
-        if b == b'\'' || b == b'"' || b == b'`' {
-            let quote = b;
-            i += 1;
-            while i < bytes.len() {
-                if bytes[i] == b'\\' {
-                    i = (i + 2).min(bytes.len());
-                    continue;
+        if b == b'\'' || b == b'"' {
+            i = skip_string_or_template(source, i);
+            continue;
+        }
+
+        if b == b'`' {
+            if !scan_template_expressions {
+                i = skip_string_or_template(source, i);
+                continue;
+            }
+            match scan_template_characters(source, i + 1) {
+                JsTemplateBoundary::End(next) => i = next,
+                JsTemplateBoundary::Expression(next) => {
+                    braces.push(JsBraceContext::TemplateExpression);
+                    i = next;
                 }
-                if bytes[i] == quote {
-                    i += 1;
-                    break;
-                }
-                i += 1;
             }
             continue;
         }
@@ -8750,6 +8775,16 @@ fn source_has_top_level_await(source: &str) -> bool {
                         JsBraceContext::Function => function_depth = function_depth.saturating_sub(1),
                         JsBraceContext::Class => class_depth = class_depth.saturating_sub(1),
                         JsBraceContext::Normal { .. } => {}
+                        JsBraceContext::TemplateExpression => {
+                            match scan_template_characters(source, i + 1) {
+                                JsTemplateBoundary::End(next) => i = next,
+                                JsTemplateBoundary::Expression(next) => {
+                                    braces.push(JsBraceContext::TemplateExpression);
+                                    i = next;
+                                }
+                            }
+                            continue;
+                        }
                     }
                 }
             }
@@ -8802,7 +8837,9 @@ fn is_object_await_key(source: &str, start: usize, next: usize) -> bool {
 }
 
 fn source_looks_like_esm(source: &str) -> bool {
-    source_has_static_import_or_export(source) || source_has_import_meta(source) || source_has_top_level_await(source)
+    source_has_static_import_or_export(source)
+        || source_has_import_meta(source)
+        || source_has_top_level_await(source, false)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -9802,7 +9839,7 @@ fn declare_esm_file_module_from_source<'js>(
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
 
-    let has_top_level_await = source_has_top_level_await(&source);
+    let has_top_level_await = source_has_top_level_await(&source, true);
     let injected = inject_module_source_prologue(
         init.filename.as_deref(),
         source,
@@ -11972,6 +12009,51 @@ import "./dep.js" withあ;
         assert!(!source_looks_like_esm("const obj = { import: { meta: 1 } };"));
         assert!(!source_looks_like_esm("globalThis.meta = obj.import.meta;"));
         assert!(!source_looks_like_esm("const text = 'import.meta.url';"));
+    }
+
+    #[test]
+    fn esm_syntax_detection_handles_top_level_await_around_templates() {
+        assert!(source_looks_like_esm(
+            "const banner = `${`don't`}`;\nawait Promise.resolve();"
+        ));
+        assert!(!source_looks_like_esm(
+            "const value = `${await Promise.resolve(42)}`;"
+        ));
+        assert!(!source_looks_like_esm(
+            "const value = `${`${await Promise.resolve(42)}`}`;"
+        ));
+        assert!(source_has_top_level_await(
+            "const value = `${await Promise.resolve(42)}`;",
+            true
+        ));
+        assert!(source_has_top_level_await(
+            "const value = `${`${await Promise.resolve(42)}`}`;",
+            true
+        ));
+        assert!(source_has_top_level_await(
+            "const value = `${1}-${await Promise.resolve(42)}`;",
+            true
+        ));
+        assert!(source_has_top_level_await(
+            "const value = `${{ nested: { value: await Promise.resolve(42) } }}`;",
+            true
+        ));
+        assert!(!source_has_top_level_await(
+            "const text = `await value`;",
+            true
+        ));
+        assert!(!source_has_top_level_await(
+            "const text = `${async () => await value}`;",
+            true
+        ));
+        assert!(!source_has_top_level_await(
+            "const text = `${async function value() { await other; }}`;",
+            true
+        ));
+        assert!(!source_has_top_level_await(
+            "const text = `${class Value { async method() { await other; } }}`;",
+            true
+        ));
     }
 
     #[test]

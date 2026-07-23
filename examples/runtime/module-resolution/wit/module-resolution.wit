@@ -43,4 +43,5 @@ world module-resolution {
   export test-cjs-node-module-loading-compat: func() -> bool;
   export test-cjs-nested-dependency-cache-shape: func() -> bool;
   export test-cjs-module-children-graph: func() -> bool;
+  export test-esm-template-top-level-await-detection: func() -> bool;
 }
