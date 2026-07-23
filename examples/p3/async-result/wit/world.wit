@@ -1,0 +1,8 @@
+package test:async-result;
+
+world async-result {
+  // Exercises an async export returning a `result<T, E>`. Per the documented contract a
+  // result-returning JS function returns the bare `ok` value or `throw`s for the `err` arm
+  // (the `{ tag, val }` shape is only used for results received as inputs/data).
+  export run: async func(flag: bool) -> result<u32, string>;
+}

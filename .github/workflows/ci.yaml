@@ -142,8 +142,117 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  test-p3:
+    needs: [build]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+      # The WASI Preview 3 path does not use the Preview 2 `wasi:io/poll` pollable
+      # behavior that the Golem wasmtime fork patches, so these tests run against
+      # the stock crates.io wasmtime (no `enable-wasmtime-fork.sh`, no
+      # `use-golem-wasmtime`). This also proves P3 works on unforked wasmtime.
+      - name: Install wasmtime CLI
+        # `p3_generation` shells out to the `wasmtime` CLI to run generated P3
+        # components. Pin it to the workspace wasmtime version (46.x) used by the
+        # embedded-host P3 tests so both paths agree on the Component Model async ABI.
+        run: |
+          curl -sSf https://wasmtime.dev/install.sh | bash -s -- --version v46.0.1
+          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+      - name: WASI Preview 3 tests
+        # These are ordinary libtest tests (default harness), so they do not take
+        # the test-r `--format ctrf` reporter flags used by the other jobs.
+        run: cargo test --test p3_generation --test p3_exported_resource --test p3_async_values
+
+  # The full runtime suite, run against the WASI Preview 3 generation path (async component
+  # exports, Component Model async host) instead of Preview 2. Runs *every* runtime test — there is
+  # no P3 allow-/deny-list — so P3 gaps and regressions show up directly in CI. Expected to have
+  # failures until the remaining P3 gaps are closed; it therefore does not gate releases.
+  test-runtime-p3:
+    needs: [build]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      # Selects the Preview 3 generation target in the test harness (tests/common/mod.rs).
+      WASM_RQUICKJS_TEST_TARGET: p3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+      # Preview 3 runs on the stock crates.io wasmtime: the Golem wasmtime fork is Preview 2 only,
+      # and the P3 host support in tests/common/mod.rs is gated to non-fork builds. So this lane
+      # deliberately does NOT run enable-wasmtime-fork.sh or pass --features use-golem-wasmtime.
+      - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/8)
+        run: cargo test --test runtime -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+      - name: Publish Test Report
+        uses: ctrf-io/github-test-reporter@v1
+        if: always()
+        with:
+          report-path: "**/target/ctrf-*.json"
+          upload-artifact: "true"
+          artifact-name: test-runtime-p3-group-${{ matrix.group }}-report
+          summary: true
+          summary-report: true
+          failed-report: true
+          slowest-report: true
+          github-report: true
+          flaky-report: true
+          collapse-large-reports: true
+          # A P3 generation gap can abort the whole test binary before any ctrf file is written;
+          # do not turn that into an extra reporter error on top of the failing test step.
+          exit-on-no-files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The full node_compat suite, run against the WASI Preview 3 generation path. Runs *every*
+  # node_compat test the Preview 2 lane runs (same shard tags, same config.jsonc allow-list of
+  # runnable Node.js tests) — there is no additional P3 filter. Expected to have failures until the
+  # remaining P3 gaps are closed; it therefore does not gate releases.
+  test-node-compat-p3:
+    needs: [build]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      WASM_RQUICKJS_TEST_TARGET: p3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+      # Stock crates.io wasmtime — see the note in `test-runtime-p3`.
+      - name: Vendor Node.js test suite
+        run: bash tests/node_compat/vendor.sh
+      - name: Node compat tests on WASI Preview 3 (shard ${{ matrix.shard }}/8)
+        run: cargo test --test node_compat -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
+      - name: Publish Test Report
+        uses: ctrf-io/github-test-reporter@v1
+        if: always()
+        with:
+          report-path: "**/target/ctrf-*.json"
+          upload-artifact: "true"
+          artifact-name: test-node-compat-p3-shard-${{ matrix.shard }}-report
+          summary: true
+          summary-report: true
+          failed-report: true
+          slowest-report: true
+          github-report: true
+          flaky-report: true
+          collapse-large-reports: true
+          exit-on-no-files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release-binaries:
-    needs: [test-other, test-runtime, test-node-compat]
+    needs: [test-other, test-runtime, test-node-compat, test-p3]
     if: "startsWith(github.ref, 'refs/tags/v')"
     strategy:
       matrix:
@@ -218,7 +327,7 @@ jobs:
           files: ${{ env.ARCHIVE }}
 
   publish:
-    needs: [test-other, test-runtime, test-node-compat]
+    needs: [test-other, test-runtime, test-node-compat, test-p3]
     if: "startsWith(github.ref, 'refs/tags/v')"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:

@@ -188,7 +188,7 @@ declare module 'golem:api/host@1.5.0' {
   /**
    * Configurable persistence level for agents
    */
-  export type PersistenceLevel = 
+  export type PersistenceLevel =
   {
     tag: 'persist-nothing'
   } |
@@ -261,7 +261,7 @@ declare module 'golem:api/host@1.5.0' {
   /**
    * Describes one filter condition for enumerating agents
    */
-  export type AgentPropertyFilter = 
+  export type AgentPropertyFilter =
   {
     tag: 'name'
     val: AgentNameFilter
@@ -322,7 +322,7 @@ declare module 'golem:api/host@1.5.0' {
   /**
    * Target parameter for the `revert-agent` operation
    */
-  export type RevertAgentTarget = 
+  export type RevertAgentTarget =
   /** Revert to a specific oplog index. The given index will be the last one to be kept. */
   {
     tag: 'revert-to-oplog-index'
@@ -344,7 +344,7 @@ declare module 'golem:api/host@1.5.0' {
    * The parameter contains details about the fork result, such as the phantom-ID of the newly
    * created agent.
    */
-  export type ForkResult = 
+  export type ForkResult =
   /** The original agent that called `fork` */
   {
     tag: 'original'

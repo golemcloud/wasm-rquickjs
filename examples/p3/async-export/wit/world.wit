@@ -1,0 +1,6 @@
+package test:async-export;
+
+world async-export {
+  export run: async func() -> string;
+  export add: async func(a: u32, b: u32) -> u32;
+}

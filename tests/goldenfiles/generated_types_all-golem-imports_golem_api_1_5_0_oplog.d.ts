@@ -41,7 +41,7 @@ declare module 'golem:api/oplog@1.5.0' {
   export type EnvironmentPluginGrantId = {
     uuid: Uuid;
   };
-  export type WrappedFunctionType = 
+  export type WrappedFunctionType =
   /**
    * The side-effect reads from the agent's local state (for example local file system,
    * random generator, etc.)
@@ -124,7 +124,7 @@ declare module 'golem:api/oplog@1.5.0' {
   export type ExternalSpanData = {
     spanId: SpanId;
   };
-  export type SpanData = 
+  export type SpanData =
   {
     tag: 'local-span'
     val: LocalSpanData
@@ -186,7 +186,7 @@ declare module 'golem:api/oplog@1.5.0' {
   export type ManualUpdateParameters = {
     targetRevision: ComponentRevision;
   };
-  export type AgentInvocation = 
+  export type AgentInvocation =
   {
     tag: 'agent-initialization'
     val: AgentInitializationParameters
@@ -223,7 +223,7 @@ declare module 'golem:api/oplog@1.5.0' {
   export type SaveSnapshotResultParameters = {
     snapshot: Snapshot;
   };
-  export type AgentInvocationResult = 
+  export type AgentInvocationResult =
   {
     tag: 'agent-initialization'
     val: AgentInvocationOutputParameters
@@ -257,7 +257,7 @@ declare module 'golem:api/oplog@1.5.0' {
     timestamp: Datetime;
     invocation: AgentInvocation;
   };
-  export type UpdateDescription = 
+  export type UpdateDescription =
   /** Automatic update by replaying the oplog on the new version */
   {
     tag: 'auto-update'
@@ -379,7 +379,7 @@ declare module 'golem:api/oplog@1.5.0' {
   /**
    * Opaque oplog payload, which can either be serialized inline or stored externally
    */
-  export type OplogPayload = 
+  export type OplogPayload =
   {
     tag: 'inline'
     val: Uint8Array
@@ -391,7 +391,7 @@ declare module 'golem:api/oplog@1.5.0' {
   /**
    * Describes the error that occurred in the agent
    */
-  export type WorkerError = 
+  export type WorkerError =
   {
     tag: 'unknown'
     val: string
@@ -479,7 +479,7 @@ declare module 'golem:api/oplog@1.5.0' {
   /**
    * Raw update description used in oplog entries
    */
-  export type RawUpdateDescription = 
+  export type RawUpdateDescription =
   /** Automatic update by replaying the oplog on the new version */
   {
     tag: 'automatic'
@@ -540,7 +540,7 @@ declare module 'golem:api/oplog@1.5.0' {
     sendingUpTo: OplogIndex;
     lastBatchStart: OplogIndex;
   };
-  export type OplogEntry = 
+  export type OplogEntry =
   /** The initial agent oplog entry */
   {
     tag: 'create'
@@ -763,7 +763,7 @@ declare module 'golem:api/oplog@1.5.0' {
     tag: 'oplog-processor-checkpoint'
     val: RawOplogProcessorCheckpointParameters
   };
-  export type PublicOplogEntry = 
+  export type PublicOplogEntry =
   /** The initial agent oplog entry */
   {
     tag: 'create'

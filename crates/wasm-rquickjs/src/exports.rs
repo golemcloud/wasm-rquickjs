@@ -12,7 +12,9 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeMap;
 use syn::{Lit, LitStr};
-use wit_parser::{Function, FunctionKind, Interface, InterfaceId, TypeId, WorldItem, WorldKey};
+use wit_parser::{
+    Function, FunctionKind, Interface, InterfaceId, TypeDefKind, TypeId, WorldItem, WorldKey,
+};
 
 /// Generates the `<output>/src/lib.rs` file for the wrapper crate, implementing the component exports
 /// and providing the general Rust module declarations.
@@ -26,18 +28,62 @@ pub fn generate_export_impls(
     let world_name_lit = LitStr::new(&context.world_name, Span::call_site());
     let with_block = generate_wasi_remaps(context);
 
-    let lib_tokens = quote! {
-        #[allow(unsafe_op_in_unsafe_fn)]
-        pub(crate) mod bindings {
-            wit_bindgen::generate!({
-                path: "wit",
-                world: #world_name_lit,
-                ownership: Owning,
-                generate_all,
-                #with_block
-            });
+    // The Preview 3 path enables the component-model async ABI. It uses a renamed
+    // `wit-bindgen` dependency (`wit-bindgen-p3`, compiled with the
+    // `async`/`macros`/`inter-task-wakeup` features) so that it can coexist with the Preview 2
+    // `wit-bindgen` in the single shared skeleton; `runtime_path` points the generated bindings
+    // at that renamed crate's runtime module.
+    //
+    // `ownership: Owning` and `generate_all` match the Preview 2 invocation below.
+    // `ownership: Owning` keeps generated ADTs owned (no lifetime-parameterized borrowed
+    // variants), which is what the import/export codegen in this crate models. `generate_all`
+    // is required so that interfaces without a `with:` remap entry — user-defined imports and
+    // WASI interfaces whose version does not match the `wasip3` crate (e.g.
+    // `wasi:io/poll@0.2.3`) — get bindings generated instead of making the macro fail.
+    let bindings_module = if context.target.is_p3() {
+        quote! {
+            #[allow(unsafe_op_in_unsafe_fn)]
+            pub(crate) mod bindings {
+                wit_bindgen_p3::generate!({
+                    path: "wit",
+                    world: #world_name_lit,
+                    runtime_path: "wit_bindgen_p3::rt",
+                    ownership: Owning,
+                    generate_all,
+                    #with_block
+                });
+            }
         }
-        mod builtin;
+    } else {
+        quote! {
+            #[allow(unsafe_op_in_unsafe_fn)]
+            pub(crate) mod bindings {
+                wit_bindgen::generate!({
+                    path: "wit",
+                    world: #world_name_lit,
+                    ownership: Owning,
+                    generate_all,
+                    #with_block
+                });
+            }
+        }
+    };
+
+    // In the Preview 3 path the Node.js builtin tree (`builtin/`) is not compiled at all;
+    // `mod builtin` is bound to the minimal `builtin_p3.rs` stub instead, so none of the
+    // P2-only builtin dependencies are pulled in. See `builtin_p3.rs`.
+    let builtin_module = if context.target.is_p3() {
+        quote! {
+            #[path = "builtin_p3.rs"]
+            mod builtin;
+        }
+    } else {
+        quote! { mod builtin; }
+    };
+
+    let lib_tokens = quote! {
+        #bindings_module
+        #builtin_module
         mod conversions;
         #[allow(unused)]
         mod internal;
@@ -133,6 +179,29 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
     Ok(result)
 }
 
+/// Returns whether `type_id` ultimately denotes a `resource`, following `use` re-exports and
+/// type aliases (`TypeDefKind::Type(Type::Id(..))`) to their target. A direct resource has its
+/// kind set to `Resource`, but an interface that re-exports a resource via `use other.{r};`
+/// stores it as an alias, so a naive `kind == Resource` check would miss it.
+fn type_resolves_to_resource(
+    context: &GeneratorContext<'_>,
+    type_id: TypeId,
+) -> anyhow::Result<bool> {
+    let mut current = type_id;
+    loop {
+        let typ = context
+            .resolve
+            .types
+            .get(current)
+            .ok_or_else(|| anyhow!("Unknown type id {current:?}"))?;
+        match &typ.kind {
+            TypeDefKind::Resource => return Ok(true),
+            TypeDefKind::Type(wit_parser::Type::Id(next)) => current = *next,
+            _ => return Ok(false),
+        }
+    }
+}
+
 /// Generates the implementation of a `Guest` trait for the component, implementing the exported functions.
 ///
 /// The `guest_trait` parameter is a Rust snippet containing the fully-qualified path to the `Guest` trait to
@@ -149,6 +218,45 @@ fn generate_guest_impl(
     let mut func_impls = Vec::new();
     let mut resource_impls = Vec::new();
     let mut resource_functions = BTreeMap::new();
+
+    let is_p3 = context.target.is_p3();
+
+    // The Preview 3 path supports exported resources that have at least one
+    // constructor/method/static function. A resource with no functions produces no entries in
+    // `exports` (so no `GuestX` impl would be generated — the same limitation exists on the P2
+    // path), which would surface as an obscure compile error. Reject such methodless exported
+    // resources at the type level here with an actionable message.
+    if is_p3 && let Some((_, iface, _)) = interface {
+        let mut resource_ids_with_functions = std::collections::HashSet::new();
+        for (_, function) in exports {
+            match &function.kind {
+                FunctionKind::Method(type_id)
+                | FunctionKind::Static(type_id)
+                | FunctionKind::Constructor(type_id)
+                | FunctionKind::AsyncMethod(type_id)
+                | FunctionKind::AsyncStatic(type_id) => {
+                    resource_ids_with_functions.insert(*type_id);
+                }
+                _ => {}
+            }
+        }
+
+        for (_, type_id) in &iface.types {
+            if type_resolves_to_resource(context, *type_id)?
+                && !resource_ids_with_functions.contains(type_id)
+            {
+                let typ = context
+                    .resolve
+                    .types
+                    .get(*type_id)
+                    .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
+                let resource_name = typ.name.as_deref().unwrap_or("<anonymous>");
+                return Err(anyhow!(
+                    "Exported resources without any constructor, method, or static function are not supported by the WASI Preview 3 generation path (resource '{resource_name}')"
+                ));
+            }
+        }
+    }
 
     for (name, function) in exports {
         match &function.kind {
@@ -167,10 +275,30 @@ fn generate_guest_impl(
                     func_impls.push(func_impl);
                 }
             }
-            FunctionKind::AsyncFreestanding
-            | FunctionKind::AsyncMethod(_)
-            | FunctionKind::AsyncStatic(_) => {
-                Err(anyhow!("Async exported functions are not supported yet"))?
+            FunctionKind::AsyncFreestanding => {
+                if is_p3 && name == "wizer-initialize" {
+                    func_impls.push(quote! {
+                        async fn wizer_initialize() {
+                            crate::internal::wizer_initialize().await;
+                        }
+                    });
+                } else if is_p3 {
+                    let func_impl =
+                        generate_exported_function_impl(context, interface, name, function)?;
+                    func_impls.push(func_impl);
+                } else {
+                    return Err(anyhow!("Async exported functions are not supported yet"));
+                }
+            }
+            FunctionKind::AsyncMethod(type_id) | FunctionKind::AsyncStatic(type_id) => {
+                if is_p3 {
+                    resource_functions
+                        .entry(type_id)
+                        .or_insert_with(Vec::new)
+                        .push((name, function));
+                } else {
+                    return Err(anyhow!("Async exported functions are not supported yet"));
+                }
             }
             FunctionKind::Method(type_id)
             | FunctionKind::Static(type_id)
@@ -326,26 +454,66 @@ fn generate_exported_function_impl(
     let rust_fn = RustWitFunction::new(context, name, function);
     let func_name = rust_fn.function_name_ident();
 
-    let param_ident_type: Vec<_> = function
+    if context.target.is_p3()
+        && matches!(function.kind, FunctionKind::Freestanding)
+        && function
+            .result
+            .as_ref()
+            .map(|result| crate::async_values::contains(context, result))
+            .transpose()?
+            .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in exported function results require an `async func` on the WASI Preview 3 generation path"
+        ));
+    }
+    if function
+        .result
+        .as_ref()
+        .map(|result| crate::async_values::top_level_result_error_contains(context, result))
+        .transpose()?
+        .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in the error arm of an exported function result are not supported"
+        ));
+    }
+
+    // Build the guest-trait argument list and the arguments forwarded to the JS export. A
+    // `future<T>` / `stream<T>` parameter is special-cased: the guest receives a component reader
+    // and the JS export is handed a lazily-created `Promise` / async-iterable
+    // (`reader_to_js_expr`). All other parameters flow through the normal `WrappedType` pipeline.
+    let mut func_arg_list: Vec<TokenStream> = Vec::new();
+    let mut param_refs: Vec<TokenStream> = Vec::new();
+    for ((param, export_parameter), import_parameter) in function
         .params
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(|((param, export_parameter), import_parameter)| {
-            process_parameter(
+    {
+        if let Some(async_value) = crate::async_values::detect(context, &param.ty)? {
+            let ident = Ident::new(&export_parameter.name, Span::call_site());
+            let reader_type = crate::async_values::reader_type(context, &async_value)?;
+            func_arg_list.push(quote! { #ident: #reader_type });
+            param_refs.push(crate::async_values::reader_to_js_expr(
+                context,
+                &async_value,
+                quote! { #ident },
+            )?);
+        } else {
+            let processed = process_parameter(
                 context,
                 &param.name,
                 &param.ty,
                 &export_parameter,
                 &import_parameter,
-            )
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+            )?;
+            let slice = std::slice::from_ref(&processed);
+            func_arg_list.extend(to_original_func_arg_list(slice));
+            param_refs.extend(to_wrapped_param_refs(slice));
+        }
+    }
 
-    let func_arg_list = to_original_func_arg_list(&param_ident_type);
-    let return_types = get_return_type(context, function, name, &rust_fn)?;
-
-    let param_refs = to_wrapped_param_refs(&param_ident_type);
     let param_refs_tuple = param_refs_as_tuple(&param_refs);
 
     let js_func_name_str = Lit::Str(LitStr::new(
@@ -379,26 +547,88 @@ fn generate_exported_function_impl(
         ),
     };
 
+    // A `future<T>` / `stream<T>` return type is special-cased: the JS export's raw return value
+    // (a `Promise` / async-iterable) is captured without awaiting it, a component future/stream
+    // is created, and a background writer task resolves the JS value and writes it into the
+    // component reader that is handed back to the host immediately (`js_to_reader_expr`).
+    if let Some(async_value) = function
+        .result
+        .as_ref()
+        .map(|typ| crate::async_values::detect(context, typ))
+        .transpose()?
+        .flatten()
+    {
+        let reader_type = crate::async_values::reader_type(context, &async_value)?;
+        let build_reader =
+            crate::async_values::js_to_reader_expr(context, &async_value, quote! { __js_result })?;
+        let body = quote! {
+                let __js_result = crate::internal::call_js_export_raw(
+                    #wit_package_lit,
+                    #js_func_path,
+                    #param_refs_tuple
+                ).await;
+                #build_reader
+        };
+        return if context.target.is_p3() && matches!(function.kind, FunctionKind::Freestanding) {
+            Ok(quote! {
+                fn #func_name(#(#func_arg_list),*) -> #reader_type {
+                    crate::internal::run_sync(async move { #body })
+                }
+            })
+        } else {
+            Ok(quote! {
+                async fn #func_name(#(#func_arg_list),*) -> #reader_type {
+                    #body
+                }
+            })
+        };
+    }
+
+    let return_types = get_return_type(context, function, name, &rust_fn)?;
+
     let original_result = &return_types.wit_level_ret.original_type_ref;
     let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
     let unwrap = &return_types.wit_level_ret.unwrap;
     let unwrap_result = unwrap.run(quote! { result });
-    let call = if return_types.expected_exception.is_some() {
-        quote! { call_js_export_returning_result }
-    } else {
-        quote! { call_js_export }
+    let has_exception = return_types.expected_exception.is_some();
+    let is_p3 = context.target.is_p3();
+    let is_async = matches!(function.kind, FunctionKind::AsyncFreestanding);
+    let call = match (is_p3, is_async, has_exception) {
+        (true, true, true) => quote! { call_js_export_returning_result },
+        (true, true, false) => quote! { call_js_export },
+        (true, false, true) => quote! { call_js_export_sync_returning_result },
+        (true, false, false) => quote! { call_js_export_sync },
+        (false, _, true) => quote! { call_js_export_returning_result },
+        (false, _, false) => quote! { call_js_export },
     };
-    let func_impl = quote! {
-       fn #func_name(#(#func_arg_list),*) -> #original_result {
-           crate::internal::async_exported_function(async move {
-               let result: #wrapped_result = crate::internal::#call(
-                   #wit_package_lit,
-                   #js_func_path,
-                   #param_refs_tuple
-               ).await;
-               #unwrap_result
-           })
-       }
+    let body = quote! {
+        let result: #wrapped_result = crate::internal::#call(
+            #wit_package_lit,
+            #js_func_path,
+            #param_refs_tuple
+        ).await;
+        #unwrap_result
+    };
+    let func_impl = if is_p3 && is_async {
+        quote! {
+           async fn #func_name(#(#func_arg_list),*) -> #original_result {
+               #body
+            }
+        }
+    } else if is_p3 {
+        quote! {
+           fn #func_name(#(#func_arg_list),*) -> #original_result {
+               crate::internal::run_sync(async move { #body })
+           }
+        }
+    } else {
+        quote! {
+           fn #func_name(#(#func_arg_list),*) -> #original_result {
+               crate::internal::async_exported_function(async move {
+                   #body
+               })
+           }
+        }
     };
     Ok(func_impl)
 }
@@ -415,6 +645,34 @@ fn generate_exported_resource_function_impl(
 
     let rust_fn = RustWitFunction::new(context, &func_name, function);
     let func_name_ident = rust_fn.function_name_ident();
+
+    if context.target.is_p3()
+        && !matches!(
+            function.kind,
+            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_)
+        )
+        && function
+            .result
+            .as_ref()
+            .map(|result| crate::async_values::contains(context, result))
+            .transpose()?
+            .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in exported resource function results require an `async func` on the WASI Preview 3 generation path"
+        ));
+    }
+    if function
+        .result
+        .as_ref()
+        .map(|result| crate::async_values::top_level_result_error_contains(context, result))
+        .transpose()?
+        .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in the error arm of an exported resource function result are not supported"
+        ));
+    }
 
     let param_ident_type: Vec<_> = function
         .params
@@ -515,79 +773,144 @@ fn generate_exported_resource_function_impl(
         None => quote! { &[#js_func_name_str] },
     };
 
+    // On the Preview 3 path the generated Guest trait methods mirror the shape wit-bindgen-p3
+    // emits: constructors and *synchronous* methods/statics are plain `fn`s (their component-model
+    // exports are not `start_task`-wrapped), so they drive the async JS helpers to completion with
+    // `crate::internal::run_sync` (a self-contained `block_on`); `async` methods/statics are
+    // `async fn`s that `.await` the helpers directly. On the Preview 2 path everything is a
+    // synchronous `fn` driven by `async_exported_function`, and `async` resource functions are
+    // rejected.
+    let is_p3 = context.target.is_p3();
+
     let func_impl = match &function.kind {
         FunctionKind::Constructor(_) => {
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
-
+            let body = quote! {
+                let resource_id = crate::internal::call_js_resource_constructor(
+                     #wit_package_lit,
+                     #js_resource_path,
+                     #param_refs_tuple,
+                ).await;
+                Self {
+                    resource_id
+                }
+            };
+            let driver = if is_p3 {
+                quote! { crate::internal::run_sync }
+            } else {
+                quote! { crate::internal::async_exported_function }
+            };
             quote! {
               fn #func_name_ident(#(#func_arg_list),*) -> Self {
-                  crate::internal::async_exported_function(async move {
-                    let resource_id = crate::internal::call_js_resource_constructor(
-                         #wit_package_lit,
-                         #js_resource_path,
-                         #param_refs_tuple,
-                    ).await;
-                    Self {
-                        resource_id
-                    }
-                  })
+                  #driver(async move { #body })
               }
             }
         }
-        FunctionKind::Method(_) => {
+        FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
+            let is_async = matches!(function.kind, FunctionKind::AsyncMethod(_));
+            if is_async && !is_p3 {
+                return Err(anyhow::anyhow!(
+                    "Async exported functions are not supported yet"
+                ));
+            }
             let param_refs = param_refs[1..].to_vec();
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
             let original_result = &return_types.func_ret.original_type_ref;
             let wrapped_result = &return_types.func_ret.wrapped_type_ref;
             let unwrap = &return_types.func_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
-            let call = if return_types.expected_exception.is_some() {
-                quote! { call_js_resource_method_returning_result }
-            } else {
-                quote! { call_js_resource_method }
+            let has_exception = return_types.expected_exception.is_some();
+            let call = match (is_p3, is_async, has_exception) {
+                // Preview 3, async method: await the async helper directly.
+                (true, true, true) => quote! { call_js_resource_method_returning_result },
+                (true, true, false) => quote! { call_js_resource_method },
+                // Preview 3, sync method: driven by `block_on`, traps on a returned Promise.
+                (true, false, true) => quote! { call_js_resource_method_sync_returning_result },
+                (true, false, false) => quote! { call_js_resource_method_sync },
+                // Preview 2: only synchronous methods, driven by `async_exported_function`.
+                (false, _, true) => quote! { call_js_resource_method_returning_result },
+                (false, _, false) => quote! { call_js_resource_method },
             };
-            quote! {
-               fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                   crate::internal::async_exported_function(async move {
-                       let result: #wrapped_result = crate::internal::#call(
-                            #wit_package_lit,
-                            #js_resource_path,
-                            self.resource_id,
-                            #js_func_name_str,
-                            #param_refs_tuple,
-                       ).await;
-                       #unwrap_result
-                   })
-               }
+            let body = quote! {
+                let result: #wrapped_result = crate::internal::#call(
+                     #wit_package_lit,
+                     #js_resource_path,
+                     self.resource_id,
+                     #js_func_name_str,
+                     #param_refs_tuple,
+                ).await;
+                #unwrap_result
+            };
+            if is_p3 && is_async {
+                quote! {
+                   async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #body
+                   }
+                }
+            } else {
+                let driver = if is_p3 {
+                    quote! { crate::internal::run_sync }
+                } else {
+                    quote! { crate::internal::async_exported_function }
+                };
+                quote! {
+                   fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #driver(async move { #body })
+                   }
+                }
             }
         }
-        FunctionKind::Static(_) => {
+        FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
+            let is_async = matches!(function.kind, FunctionKind::AsyncStatic(_));
+            if is_async && !is_p3 {
+                return Err(anyhow::anyhow!(
+                    "Async exported functions are not supported yet"
+                ));
+            }
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
             let original_result = &return_types.wit_level_ret.original_type_ref;
             let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
             let unwrap = &return_types.wit_level_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
-            let call = if return_types.expected_exception.is_some() {
-                quote! { call_js_export_returning_result }
-            } else {
-                quote! { call_js_export }
+            let has_exception = return_types.expected_exception.is_some();
+            let call = match (is_p3, is_async, has_exception) {
+                // Preview 3, async static: await the async helper directly.
+                (true, true, true) => quote! { call_js_export_returning_result },
+                (true, true, false) => quote! { call_js_export },
+                // Preview 3, sync static: driven by `block_on`, traps on a returned Promise.
+                (true, false, true) => quote! { call_js_export_sync_returning_result },
+                (true, false, false) => quote! { call_js_export_sync },
+                // Preview 2: only synchronous statics, driven by `async_exported_function`.
+                (false, _, true) => quote! { call_js_export_returning_result },
+                (false, _, false) => quote! { call_js_export },
             };
-            quote! {
-               fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                   crate::internal::async_exported_function(async move {
-                       let result: #wrapped_result = crate::internal::#call(
-                           #wit_package_lit,
-                           #js_static_func_path,
-                           #param_refs_tuple,
-                       ).await;
-                       #unwrap_result
-                   })
-               }
+            let body = quote! {
+                let result: #wrapped_result = crate::internal::#call(
+                    #wit_package_lit,
+                    #js_static_func_path,
+                    #param_refs_tuple,
+                ).await;
+                #unwrap_result
+            };
+            if is_p3 && is_async {
+                quote! {
+                   async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #body
+                   }
+                }
+            } else {
+                let driver = if is_p3 {
+                    quote! { crate::internal::run_sync }
+                } else {
+                    quote! { crate::internal::async_exported_function }
+                };
+                quote! {
+                   fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
+                       #driver(async move { #body })
+                   }
+                }
             }
         }
-        FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => Err(anyhow::anyhow!(
-            "Async exported functions are not supported yet",
-        ))?,
         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => Err(anyhow::anyhow!(
             "Freestanding functions are not expected in resource methods",
         ))?,
@@ -774,6 +1097,23 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
 /// Only interfaces that are actually used by the resolved world are included,
 /// because unused `with:` entries cause compilation errors.
 fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
+    // Preview 3 remaps: only the clock interfaces are remapped to the `wasip3` crate for now
+    // (Phase 1). Any other WASI interface present in the world keeps the bindings generated by
+    // `wit_bindgen::generate!`. The actual `with:` entries use the fully-versioned names from the
+    // resolved world, so the exact `@0.3.0-rc-...` snapshot is picked up automatically.
+    // The WASI Preview 3 `clocks` package (`wasi:clocks@0.3.x`) exposes `types`,
+    // `monotonic-clock` and `system-clock` (there is no `wall-clock`; that was the Preview 2
+    // name). Each maps to the corresponding `wasip3::clocks::*` module. Only interfaces that
+    // are actually used by the world get a `with:` entry, so listing all of them is safe.
+    static WASI_REMAPS_P3: &[(&str, &str)] = &[
+        ("wasi:clocks/types", "wasip3::clocks::types"),
+        (
+            "wasi:clocks/monotonic-clock",
+            "wasip3::clocks::monotonic_clock",
+        ),
+        ("wasi:clocks/system-clock", "wasip3::clocks::system_clock"),
+    ];
+
     // Static mapping from unversioned WIT interface names to wasip2 Rust module paths.
     // The actual `with:` entries use the fully-versioned names from the resolved world.
     static WASI_REMAPS: &[(&str, &str)] = &[
@@ -836,6 +1176,13 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
             if let Some(ref name) = interface.name
                 && let Some(package_id) = interface.package
             {
+                // Only packages accepted by `is_wasi_remapped_package` may get a `with:`
+                // entry; the check is version-aware, so e.g. `wasi:clocks/...@0.2.3` in a
+                // Preview 3 world is not remapped to the (API-incompatible) `wasip3` crate
+                // and keeps its generated bindings instead.
+                if !context.is_wasi_remapped_package(package_id) {
+                    continue;
+                }
                 let package = &context.resolve.packages[package_id];
                 let unversioned =
                     format!("{}:{}/{}", package.name.namespace, package.name.name, name);
@@ -845,10 +1192,16 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
         }
     }
 
+    let remaps: &[(&str, &str)] = if context.target.is_p3() {
+        WASI_REMAPS_P3
+    } else {
+        WASI_REMAPS
+    };
+
     // Build with: entries only for WASI interfaces that are actually used,
     // using the fully-versioned WIT name as the key
     let mut entries = Vec::new();
-    for (wit_name, rust_path) in WASI_REMAPS {
+    for (wit_name, rust_path) in remaps {
         if let Some(versioned_name) = used_interfaces.get(*wit_name) {
             let wit_lit = LitStr::new(versioned_name, Span::call_site());
             let rust_path: syn::Path = syn::parse_str(rust_path)

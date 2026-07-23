@@ -238,8 +238,13 @@ fn require_esm_impl<'js>(
     }
 }
 
-fn cached_async_esm_module<'js>(globals: &rquickjs::Object<'js>, filename: &str, file_url: &str) -> bool {
-    let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_async_esm_modules") else {
+fn cached_async_esm_module<'js>(
+    globals: &rquickjs::Object<'js>,
+    filename: &str,
+    file_url: &str,
+) -> bool {
+    let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_async_esm_modules")
+    else {
         return false;
     };
 

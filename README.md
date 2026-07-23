@@ -70,6 +70,22 @@ the user's WIT world:
 
 By default `logging` and `http` are enabled. The `sqlite` feature must be explicitly enabled.
 
+#### Choosing the WASI target
+
+The `--target` option selects which WASI generation mode is used:
+
+- `--target wasi-p2` (**default**): the historical WASI Preview 2 mode. Component exports are
+  synchronous WIT functions and the full Node.js-compatible builtin set is available. This is the
+  stable, production path.
+- `--target wasi-p3`: the opt-in WASI Preview 3 mode. WIT `async func` exports and imports use the
+  Component Model async ABI, while plain functions remain synchronous. WIT `future<T>` /
+  `stream<T>` values are supported at function boundaries, including inside composite types. See
+  [WASI Preview 3 target](#wasi-preview-3-target) below for the current status and limitations.
+
+Both targets generate a crate that is still compiled with `cargo build --target wasm32-wasip2`
+(a dedicated `wasm32-wasip3` rustc target does not exist yet; the Preview 3 crate uses the
+[`wasip3`](https://crates.io/crates/wasip3) bindings on top of the Preview 2 target).
+
 ### Generating TypeScript module definitions
 
 The `generate-dts` command generates TypeScript module definitions for all the exported and imported interfaces:
@@ -87,6 +103,56 @@ Usage: wasm-rquickjs generate-dts --wit <WIT> --output <OUTPUT>
 
 `wasm-rquickjs` is integrated into [Golem](https://golem.cloud)'s command line interface, so it can be directly used
 using Golem app templates.
+
+> **Note:** Golem's Preview 3 SDK/template builds pin the `wasi-p3` generator branch and pass
+> `--target wasi-p3` when building their JavaScript guest images. Preview 2 remains the default for
+> callers that do not select a target explicitly.
+
+### WASI Preview 3 target
+
+Passing `--target wasi-p3` to `generate-wrapper-crate` selects the **opt-in, asynchronous** WASI
+Preview 3 generation mode. It is intended for hosts that support the Component Model async ABI.
+
+**How it differs from Preview 2:**
+
+- WIT `async func` exports and imports use the Component Model async ABI (`task.return`); plain
+  functions remain synchronous.
+- The JavaScript event loop is driven by the Component Model async executor instead of Preview 2
+  `wasi:io/poll` pollables — there are no `wstd`/`wasip2`/pollable dependencies in the Preview 3
+  code path.
+- WIT `future<T>` and `stream<T>` are mapped to JavaScript `Promise<T>` and `AsyncIterable<T>`
+  respectively, both directly and when nested in composite parameter/result types.
+- `fetch` / HTTP uses the `wasi:http` Preview 3 (`wasi:http/handler`) async client.
+
+**Building and running:**
+
+The generated crate is still built with `cargo build --target wasm32-wasip2`. Running the resulting
+component requires a host with Preview 3 and Component Model async support. For example, with the
+`wasmtime` CLI (version 46.x):
+
+```
+wasmtime run -S p3=y -S http=y --wasm component-model=y --wasm component-model-async=y \
+  --invoke 'my-export()' path/to/component.wasm
+```
+
+The Node.js-compatible builtin set is available on Preview 3 as well. Working end-to-end examples
+live under [`examples/p3`](examples/p3), covering async exports/imports, `future<T>`/`stream<T>`
+values, exported resources, and HTTP `fetch`.
+
+**Current limitations (Preview 3):**
+
+- **Composition** (`--js-modules name=@composition`) is not supported yet.
+- An exported result containing `future<T>` or `stream<T>` must come from an `async func`; a
+  synchronous export cannot return its reader before a backpressured writer starts.
+- The error arm of an exported top-level `result<T, E>` cannot contain `future<T>` or `stream<T>`.
+
+Wizer pre-initialization (`optimize`) supports Preview 3 components. As with Preview 2, module
+initialization must become quiescent before the snapshot and cannot leave timers or tasks pending.
+Runtime arguments and environment variables are restored before the first export runs; modules
+must not capture their values or immutable aliases during top-level initialization.
+
+Preview 3 is opt-in and evolving; Preview 2 (`--target wasi-p2`) remains the default and stable
+path.
 
 ## Mappings
 
@@ -244,12 +310,17 @@ sync or async.
 | Flags                   | `flags { a, b, c }` | `{ a: boolean, b: boolean, c: boolean }`          | The object keys are camelCase                                                 |
 | Record                  | `record { .. }`     | Object                                            | Field names are camelCase                                                     |
 | Variant                 | `variant { .. }`    | `{ tag: "x", val: X }`                            | Tag names match the WIT variant case names; `val` is undefined for unit cases |
+| Future                  | `future<T>`         | `Promise<T>`                                      | WASI Preview 3 (`--target wasi-p3`) only                                   |
+| Stream                  | `stream<T>`         | `AsyncIterable<T>`                                | WASI Preview 3 (`--target wasi-p3`) only                                   |
 
 ### Limitations
 
 - Maximum number of function parameters is 26
 - Anonymous interface exports/imports are not supported
 - Imported individual functions into the world are not supported (only whole interfaces)
+- Preview 3 synchronous exports cannot return `future<T>` or `stream<T>`, directly or nested; use
+  `async func`
+- Preview 3 exported top-level `result<T, E>` error arms cannot contain `future<T>` or `stream<T>`
 
 ## Available JavaScript APIs
 

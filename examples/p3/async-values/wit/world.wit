@@ -1,0 +1,27 @@
+package test:async-values;
+
+// Exercises WASI Preview 3 `future<T>` / `stream<T>` values at both *export* boundaries:
+//
+//   * `run-future` / `run-stream` return a future/stream to the host: the JS function returns a
+//     `Promise` / async-iterable, which is lowered into a component future/stream.
+//   * `take-future` / `take-stream` receive a future/stream from the host: the component reader is
+//     lifted into a JS `Promise` / async-iterable that the JS function awaits / iterates.
+interface nested-types {
+  record nested-values {
+    label: string,
+    future-value: future<u32>,
+    stdout: option<stream<u8>>,
+    stderr: option<stream<u8>>,
+  }
+}
+
+world async-values {
+  use nested-types.{nested-values};
+
+  export run-future: async func() -> future<u32>;
+  export run-stream: async func() -> stream<u8>;
+  export run-nested: async func() -> result<nested-values, string>;
+  export run-nested-error: async func() -> result<nested-values, string>;
+  export take-future: async func(f: future<u32>) -> u32;
+  export take-stream: async func(s: stream<u8>) -> u32;
+}

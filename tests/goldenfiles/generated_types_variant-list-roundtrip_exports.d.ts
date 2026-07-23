@@ -7,7 +7,7 @@ declare module 'variant-list-roundtrip' {
     export function roundtripResults(items: Result<number, string>[]): Promise<Result<number, string>[]>;
     export function roundtripOptions(items: number | undefined[]): Promise<number | undefined[]>;
     export function roundtripColors(items: Color[]): Promise<Color[]>;
-    export type Item = 
+    export type Item =
     {
       tag: 'empty'
     } |
@@ -22,7 +22,7 @@ declare module 'variant-list-roundtrip' {
     export type Payload = {
       items: Item[];
     };
-    export type Envelope = 
+    export type Envelope =
     {
       tag: 'none'
     } |

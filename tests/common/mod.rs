@@ -11,12 +11,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
-use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
+use wasm_rquickjs::{
+    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
+};
 use wasmtime::component::{
     Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
 };
@@ -29,6 +31,74 @@ use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
+
+/// In-memory buffer holding host-side tracing output so it can be attached to test failure
+/// messages. On CI only the failure message itself is visible (in the ctrf report and the
+/// GitHub annotations); anything the test runner captures — including output written via
+/// `with_test_writer` — never appears in the logs. So the tracing output must travel inside
+/// the error itself, like the guest stdout/stderr already does.
+///
+/// The buffer is shared by all tests in the process and capped, keeping the most recent output.
+static HOST_TRACE: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+const HOST_TRACE_CAP: usize = 256 * 1024;
+
+#[derive(Clone, Copy)]
+struct HostTraceWriter;
+
+impl std::io::Write for HostTraceWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut trace = HOST_TRACE.lock().unwrap();
+        trace.extend_from_slice(buf);
+        let len = trace.len();
+        if len > HOST_TRACE_CAP {
+            trace.drain(..len - HOST_TRACE_CAP);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl tracing_subscriber::fmt::MakeWriter<'_> for HostTraceWriter {
+    type Writer = HostTraceWriter;
+
+    fn make_writer(&self) -> Self::Writer {
+        *self
+    }
+}
+
+/// Returns the host-side tracing output captured so far (see [`init_tracing`]).
+pub fn host_trace() -> String {
+    String::from_utf8_lossy(&HOST_TRACE.lock().unwrap()).into_owned()
+}
+
+/// Installs a global tracing subscriber (once per process) so host-side `tracing` diagnostics
+/// are visible in test output. Most importantly, `wasmtime-wasi-http` flattens the underlying
+/// hyper error of a failed outgoing request into `ErrorCode::HttpProtocolError` and only reports
+/// the real error via `tracing::warn!` — without a subscriber that information is lost, which
+/// makes intermittent CI-only fetch failures undiagnosable.
+///
+/// The output is collected into [`HOST_TRACE`] (not the test runner's capture buffer) so that
+/// failing tests can attach it to their error message, which is the only output channel visible
+/// in the CI failure reports.
+///
+/// The filter can be overridden with `RUST_LOG`; by default only `wasmtime-wasi-http` warnings
+/// are shown to keep output noise low.
+pub fn init_tracing() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("wasmtime_wasi_http=warn"));
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(HostTraceWriter)
+            .with_ansi(false)
+            .try_init();
+    });
+}
 
 /// Strip JSONC comments (// and /* */) while respecting string literals.
 pub fn strip_jsonc_comments(input: &str) -> String {
@@ -386,6 +456,163 @@ pub fn collect_example_paths(dirs: &[&str]) -> anyhow::Result<Vec<Utf8PathBuf>> 
     Ok(result)
 }
 
+/// The WASI generation target a runtime/node_compat test is exercised against.
+///
+/// Selected once per process via the `WASM_RQUICKJS_TEST_TARGET` environment variable
+/// (`p2` — the default — or `p3`). Preview 2 reproduces the historical behavior; Preview 3
+/// generates async component exports and runs them on a Component Model async host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestTarget {
+    P2,
+    P3,
+}
+
+impl TestTarget {
+    /// Suffix appended to generated crate / shared-target directories so that P2 and P3 builds of
+    /// the same example never share an output tree (the P3 generator writes a different Cargo.toml
+    /// and skeleton set).
+    pub fn dir_suffix(self) -> &'static str {
+        match self {
+            TestTarget::P2 => "",
+            TestTarget::P3 => "-p3",
+        }
+    }
+
+    pub fn generation_target(self) -> GenerationTarget {
+        match self {
+            TestTarget::P2 => GenerationTarget::WasiP2,
+            TestTarget::P3 => GenerationTarget::WasiP3,
+        }
+    }
+}
+
+/// Reads the active test target once from `WASM_RQUICKJS_TEST_TARGET` (default: `p2`).
+pub fn test_target() -> TestTarget {
+    static TARGET: OnceLock<TestTarget> = OnceLock::new();
+    *TARGET.get_or_init(
+        || match std::env::var("WASM_RQUICKJS_TEST_TARGET").ok().as_deref() {
+            Some("p3") | Some("P3") => TestTarget::P3,
+            Some("p2") | Some("P2") | None => TestTarget::P2,
+            Some(other) => {
+                panic!("Unknown WASM_RQUICKJS_TEST_TARGET '{other}'; expected 'p2' or 'p3'")
+            }
+        },
+    )
+}
+
+/// Copies a WIT directory to `dst`, turning every synchronous freestanding exported function into
+/// an `async func`.
+///
+/// The Preview 3 generation path rejects *synchronous freestanding exports* — both world-level
+/// `export …: func(…)` and plain `name: func(…)` declarations inside an exported `interface`. A
+/// synchronous *resource instance method* additionally traps at runtime if its JS implementation
+/// returns a Promise. Because the JS in these examples freely uses `async` methods, the rewrite
+/// async-ifies every `name: func(` declaration — freestanding functions and resource instance
+/// methods alike (see [`rewrite_wit_source_exports_async`]). Resource `constructor`s and `static
+/// func`s are left synchronous: WIT has no async spelling for them, and their JS returns values
+/// directly.
+///
+/// Only the package's own `.wit` files (those directly in `src_wit_dir`) are rewritten; the
+/// `deps/` subtree is copied verbatim. Dependency interfaces are *imported* (e.g. `wasi:random`),
+/// and their function signatures must keep matching the host imports, so they must never be
+/// async-ified. Examples that *export* an interface defined in a dependency package may therefore
+/// still fail to build or run under the P3 lane; every test is run in P3 mode on CI so such gaps
+/// surface directly.
+pub fn rewrite_wit_exports_async(
+    src_wit_dir: &Utf8Path,
+    dst_wit_dir: &Utf8Path,
+) -> anyhow::Result<()> {
+    if dst_wit_dir.exists() {
+        fs::remove_dir_all(dst_wit_dir)?;
+    }
+    fs::create_dir_all(dst_wit_dir)?;
+
+    for entry in fs::read_dir(src_wit_dir)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path =
+            Utf8PathBuf::from_path_buf(entry.path()).map_err(|_| anyhow!("Non UTF-8 WIT path"))?;
+        let file_name = src_path
+            .file_name()
+            .ok_or_else(|| anyhow!("WIT entry without file name"))?;
+        let dst_path = dst_wit_dir.join(file_name);
+
+        if file_type.is_dir() {
+            // A `deps/` subtree holds *imported* interfaces. Imports satisfied by the *host*
+            // (`wasi:*`, `golem:*` packages — the host registers synchronous implementations)
+            // must keep their sync signatures, so those files are copied verbatim. Imports
+            // satisfied by *another example component* via composition (`plug_into`) must be
+            // rewritten to async, because the providing component is itself built in P3 mode
+            // with its exports rewritten to `async func` — otherwise the plug's async exports
+            // would not type-match the socket's sync imports.
+            copy_deps_rewriting_non_host_packages(src_path.as_std_path(), dst_path.as_std_path())?;
+        } else if src_path.extension() == Some("wit") {
+            let rewritten = rewrite_wit_source_exports_async(&fs::read_to_string(&src_path)?);
+            fs::write(&dst_path, rewritten)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Recursively copies a `deps/` subtree, rewriting `: func(` to `: async func(` in every WIT
+/// file whose package is *not* host-provided. Host-provided packages (`wasi:*`, `golem:*`)
+/// are copied verbatim because the test host registers synchronous implementations for them;
+/// everything else (e.g. `quickjs:*` interfaces exported by sibling example components) is
+/// rewritten so composed components type-match. See [`rewrite_wit_exports_async`].
+fn copy_deps_rewriting_non_host_packages(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+) -> anyhow::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_deps_rewriting_non_host_packages(&src_path, &dst_path)?;
+        } else if src_path.extension().and_then(|e| e.to_str()) == Some("wit") {
+            let source = fs::read_to_string(&src_path)?;
+            let is_host_package = source.lines().any(|line| {
+                let line = line.trim_start();
+                line.starts_with("package wasi:") || line.starts_with("package golem:")
+            });
+            if is_host_package {
+                fs::write(&dst_path, source)?;
+            } else {
+                fs::write(&dst_path, rewrite_wit_source_exports_async(&source))?;
+            }
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Line-oriented rewrite backing [`rewrite_wit_exports_async`]. Kept separate so it is trivially
+/// unit-testable and free of any filesystem access.
+///
+/// Every line declaring a function type as `name: func(` is turned into `name: async func(`. This
+/// covers world-level `export foo: func(…)`, freestanding `foo: func(…)` inside an exported
+/// interface, and resource *instance* methods `bar: func(…)`. It deliberately does **not** match
+/// `constructor(…)` (no `: func(`) or `baz: static func(…)` (spelled `: static func(`, not
+/// `: func(`): WIT has no async spelling for those, and their JS returns values directly.
+fn rewrite_wit_source_exports_async(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| {
+            if line.contains(": func(") && !line.contains(": async func(") {
+                line.replacen(": func(", ": async func(", 1)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if source.ends_with('\n') { "\n" } else { "" }
+}
+
 #[derive(Copy, Clone)]
 pub enum FeatureCombination {
     None,
@@ -418,7 +645,9 @@ impl FeatureCombination {
 
     pub fn cargo_args(&self) -> Vec<&'static str> {
         match self {
-            FeatureCombination::None => vec!["--no-default-features"],
+            // The skeleton now requires exactly one WASI target feature (`p2` or `p3`), so the
+            // minimal Preview 2 build must still enable `p2` even with no other features.
+            FeatureCombination::None => vec!["--no-default-features", "--features", "p2"],
             FeatureCombination::Lite => {
                 vec!["--no-default-features", "--features", "lite"]
             }
@@ -442,6 +671,34 @@ impl FeatureCombination {
             }
         }
     }
+
+    /// Cargo `--features` args for a given [`TestTarget`].
+    ///
+    /// For Preview 2 this is the historical [`cargo_args`](Self::cargo_args). For Preview 3 each
+    /// combination enables exactly the same capabilities as its Preview 2 counterpart: the P3
+    /// tiers (`normal-p3`, `full-p3`, `full-no-logging-p3`) mirror the P2 tiers, and `golem` /
+    /// `websocket` / `logging` are target-agnostic. The only difference is `fetch`/`node-http`,
+    /// which are the Preview 2 HTTP implementations — the `p3` path ships its own `wasi:http@0.3`
+    /// based fetch and node:http unconditionally, so `None`/`Lite` collapse onto bare `p3`. The
+    /// features are always spelled out explicitly so the P3 build never silently falls back to
+    /// the P2 default feature set.
+    pub fn cargo_args_for_target(&self, target: TestTarget) -> Vec<&'static str> {
+        match target {
+            TestTarget::P2 => self.cargo_args(),
+            TestTarget::P3 => {
+                let features = match self {
+                    FeatureCombination::None | FeatureCombination::Lite => "p3",
+                    FeatureCombination::Normal => "normal-p3",
+                    FeatureCombination::Full => "full-p3",
+                    FeatureCombination::FullNoLogging => "full-no-logging-p3",
+                    FeatureCombination::Golem => "normal-p3,golem",
+                    FeatureCombination::FullWithGolem => "full-p3,golem",
+                    FeatureCombination::FullNoLoggingWithGolem => "full-no-logging-p3,golem",
+                };
+                vec!["--no-default-features", "--features", features]
+            }
+        }
+    }
 }
 
 pub struct PreparedComponent {
@@ -452,6 +709,27 @@ pub struct PreparedComponent {
 
 impl PreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        init_tracing();
+        match test_target() {
+            TestTarget::P2 => Self::new_p2(wasm_path),
+            TestTarget::P3 => Self::new_p3(wasm_path),
+        }
+    }
+
+    /// Preview 3 host: a Component Model async engine, a P2+P3 WASI/HTTP linker, and the same
+    /// component. Works on both stock wasmtime and the Golem fork — see [`p3_engine`].
+    fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let engine = p3_engine()?;
+        let linker = p3_linker(&engine)?;
+        let component = Component::from_file(&engine, wasm_path)?;
+        Ok(Self {
+            engine,
+            linker,
+            component,
+        })
+    }
+
+    fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
@@ -477,85 +755,10 @@ impl PreparedComponent {
         wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
         // Mock wasi:logging/logging (required by the full feature)
-        {
-            let mut logging = linker.instance("wasi:logging/logging")?;
-            logging.func_wrap(
-                "log",
-                |mut ctx: StoreContextMut<'_, Host>,
-                 (level, context, message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> {
-                    ctx.data_mut()
-                        .log_messages
-                        .lock()
-                        .unwrap()
-                        .push((level, context, message));
-                    Ok(())
-                },
-            )?;
-        }
+        add_wasi_logging_mock(&mut linker)?;
 
         // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-
-            ws.func_new(
-                "[static]websocket-connection.connect",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket connect not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.send",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket send not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.close",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket close not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.subscribe",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket subscribe not available in tests",
-                    ))
-                },
-            )?;
-        }
+        add_websocket_client_mock(&mut linker, TestTarget::P2)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -612,6 +815,31 @@ pub struct GolemPreparedComponent {
 
 impl GolemPreparedComponent {
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        init_tracing();
+        match test_target() {
+            TestTarget::P2 => Self::new_p2(wasm_path),
+            TestTarget::P3 => Self::new_p3(wasm_path),
+        }
+    }
+
+    /// Preview 3 host: the P2+P3 WASI/HTTP surface plus the `wasi:logging` and `golem:websocket`
+    /// mocks (see [`p3_linker`]) and the same `golem:api/context` span-recording mock as the
+    /// Preview 2 host, so Golem-flavored feature combinations behave identically on both targets.
+    /// Works on both stock wasmtime and the Golem fork.
+    fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let engine = p3_engine()?;
+        let mut linker = p3_linker(&engine)?;
+        let spans = add_golem_context_mock(&mut linker)?;
+        let component = Component::from_file(&engine, wasm_path)?;
+        Ok(Self {
+            engine,
+            linker,
+            component,
+            spans,
+        })
+    }
+
+    fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let mut config = wasmtime::Config::default();
         config.wasm_component_model(true);
         config.epoch_interruption(true);
@@ -637,182 +865,13 @@ impl GolemPreparedComponent {
         wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
         // Mock wasi:logging/logging (required by the golem feature)
-        {
-            let mut logging = linker.instance("wasi:logging/logging")?;
-            logging.func_wrap(
-                "log",
-                |mut ctx: StoreContextMut<'_, Host>,
-                 (level, context, message): (LogLevel, String, String)|
-                 -> Result<(), wasmtime::Error> {
-                    ctx.data_mut()
-                        .log_messages
-                        .lock()
-                        .unwrap()
-                        .push((level, context, message));
-                    Ok(())
-                },
-            )?;
-        }
+        add_wasi_logging_mock(&mut linker)?;
 
         // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        {
-            struct WsConn;
-            let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-            ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-                move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-            })?;
-
-            ws.func_new(
-                "[static]websocket-connection.connect",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket connect not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.send",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket send not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.close",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket close not available in tests",
-                    ))
-                },
-            )?;
-
-            ws.func_new(
-                "[method]websocket-connection.subscribe",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket subscribe not available in tests",
-                    ))
-                },
-            )?;
-        }
+        add_websocket_client_mock(&mut linker, TestTarget::P2)?;
 
         // Mock golem:api/context@1.5.0
-        let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
-        let spans_clone = spans.clone();
-
-        let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
-
-        // Register the span resource type
-        let span_resource_type = ResourceType::host::<GolemSpan>();
-        golem_ctx.resource("span", span_resource_type, {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
-                // Destructor: mark span as finished if not already
-                let table = ctx.data_mut().table.lock().unwrap();
-                // Resource already dropped by wasmtime
-                let _ = (spans.as_ref(), rep, table);
-                Ok(())
-            }
-        })?;
-
-        // start-span: func(name: string) -> span
-        golem_ctx.func_wrap("start-span", {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>,
-                  (name,): (String,)|
-                  -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
-                let span = GolemSpan {
-                    name,
-                    attributes: Vec::new(),
-                    finished: false,
-                };
-                let mut table = ctx.data_mut().table.lock().unwrap();
-                let resource = table.push(span)?;
-                spans.lock().unwrap().push(GolemSpan {
-                    name: String::new(), // placeholder, real data is in table
-                    attributes: Vec::new(),
-                    finished: false,
-                });
-                Ok((resource,))
-            }
-        })?;
-
-        // [method]span.set-attribute: func(name: string, value: attribute-value)
-        // attribute-value is a variant with one case: string(string)
-        // In the component model, a single-case variant is lifted as a tuple (u32, string) or similar.
-        // But since it has only one case, wasmtime may simplify it.
-        // Let's check what the actual signature is - it's (resource<span>, string, attribute-value)
-        // where attribute-value = variant { string(string) }
-        // A variant with one case lifts as (discriminant: u32, payload: string) but wasmtime component
-        // may represent it as an enum. Let's use a tuple.
-        golem_ctx.func_wrap("[method]span.set-attribute", {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>,
-                  (span_res, attr_name, attr_value): (
-                wasmtime::component::Resource<GolemSpan>,
-                String,
-                AttributeValue,
-            )|
-                  -> Result<(), wasmtime::Error> {
-                let value_str = match &attr_value {
-                    AttributeValue::String(s) => s.clone(),
-                };
-                let mut table = ctx.data_mut().table.lock().unwrap();
-                if let Ok(span) = table.get_mut(&span_res) {
-                    span.attributes.push((attr_name.clone(), value_str.clone()));
-                }
-                // Also record in the shared spans list
-                let mut shared = spans.lock().unwrap();
-                if let Some(last) = shared.last_mut() {
-                    last.attributes.push((attr_name, value_str));
-                }
-                Ok(())
-            }
-        })?;
-
-        // [method]span.finish: func()
-        golem_ctx.func_wrap("[method]span.finish", {
-            let spans = spans_clone.clone();
-            move |mut ctx: StoreContextMut<'_, Host>,
-                  (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
-                  -> Result<(), wasmtime::Error> {
-                let mut table = ctx.data_mut().table.lock().unwrap();
-                if let Ok(span) = table.get_mut(&span_res) {
-                    span.finished = true;
-                    // Copy final state to shared spans
-                    let name = span.name.clone();
-                    let attributes = span.attributes.clone();
-                    let mut shared = spans.lock().unwrap();
-                    if let Some(last) = shared.last_mut() {
-                        last.name = name;
-                        last.finished = true;
-                        last.attributes = attributes;
-                    }
-                }
-                Ok(())
-            }
-        })?;
+        let spans = add_golem_context_mock(&mut linker)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -964,6 +1023,17 @@ impl TestInstance {
             println!("[stderr] {line}");
         }
 
+        // Attach the captured guest output and the host-side tracing output to the error
+        // itself so they show up in the test failure report (the `println!`s above are
+        // captured by the test runner and are not part of the reported failure message
+        // on CI).
+        let results = results.map_err(|err| {
+            let host_trace = host_trace();
+            err.context(format!(
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nhost trace:\n{host_trace}"
+            ))
+        });
+
         (
             results.map(|results| results.first().cloned()),
             stdout,
@@ -1040,20 +1110,30 @@ impl TestInstance {
     }
 }
 
+/// Maximum attempts for guest invocations that fail with the intermittent
+/// wasmtime-wasi-http p3 scheduling race (see [`is_p3_http_flake`]).
+const P3_HTTP_FLAKE_MAX_ATTEMPTS: u32 = 3;
+
+/// wasmtime-wasi-http 46's p3 outgoing request path has a scheduling-sensitive
+/// race in its manual connection-driving loop: under load, hyper intermittently
+/// fails with `IncompleteMessage` or `Canceled(UnexpectedMessage)`, both of
+/// which are flattened into `ErrorCode::HttpProtocolError` before reaching the
+/// guest. The p3 rework in wasmtime 47 replaces this code, but until that is
+/// released (and supported by the Golem fork) we retry invocations that fail
+/// with this signature. Each retry uses a fresh `TestInstance`.
+fn is_p3_http_flake(err: &anyhow::Error) -> bool {
+    test_target() == TestTarget::P3 && format!("{err:#}").contains("ErrorCode::HttpProtocolError")
+}
+
 pub async fn invoke_and_capture_output(
     wasm_path: &Utf8Path,
     interface_name: Option<&str>,
     function_name: &str,
     args: &[Val],
 ) -> (anyhow::Result<Option<Val>>, String) {
-    match TestInstance::new(wasm_path).await {
-        Ok(mut test_instance) => {
-            test_instance
-                .invoke_and_capture_output(interface_name, function_name, args)
-                .await
-        }
-        Err(e) => (Err(e), String::new()),
-    }
+    let (results, stdout, _stderr) =
+        invoke_and_capture_output_with_stderr(wasm_path, interface_name, function_name, args).await;
+    (results, stdout)
 }
 
 pub async fn invoke_and_capture_output_with_stderr(
@@ -1062,14 +1142,28 @@ pub async fn invoke_and_capture_output_with_stderr(
     function_name: &str,
     args: &[Val],
 ) -> (anyhow::Result<Option<Val>>, String, String) {
-    match TestInstance::new(wasm_path).await {
-        Ok(mut test_instance) => {
-            test_instance
-                .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
-                .await
+    let mut last = None;
+    for attempt in 1..=P3_HTTP_FLAKE_MAX_ATTEMPTS {
+        let result = match TestInstance::new(wasm_path).await {
+            Ok(mut test_instance) => {
+                test_instance
+                    .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
+                    .await
+            }
+            Err(e) => (Err(e), String::new(), String::new()),
+        };
+        match &result.0 {
+            Err(e) if attempt < P3_HTTP_FLAKE_MAX_ATTEMPTS && is_p3_http_flake(e) => {
+                eprintln!(
+                    "Invocation of {function_name} failed with the intermittent p3 \
+                     HttpProtocolError (attempt {attempt}/{P3_HTTP_FLAKE_MAX_ATTEMPTS}), retrying"
+                );
+                last = Some(result);
+            }
+            _ => return result,
         }
-        Err(e) => (Err(e), String::new(), String::new()),
     }
+    last.expect("at least one invocation attempt must have run")
 }
 
 enum WasmSource {
@@ -1109,25 +1203,45 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
+        let target = test_target();
         let name = path.file_name().unwrap();
-        let wrapper_crate_root = Utf8Path::new("tmp")
-            .join(name)
-            .join(feature_combination.label());
+        // P2 and P3 builds of the same example never share an output tree.
+        let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
+        let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
 
         // shared_target is relative to wrapper_crate_root.
         // this is a _different_ shared target than the one used in the compilation tests to make
-        // sure different feature combinations do not interfere with these tests.
-        let shared_target = Utf8Path::new("..").join("..").join("rt-target");
+        // sure different feature combinations do not interfere with these tests. P3 uses its own
+        // shared target so P2 and P3 artifacts never collide.
+        let shared_target_name = format!("rt-target{}", target.dir_suffix());
+        let shared_target = Utf8Path::new("..").join("..").join(&shared_target_name);
 
-        println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
-        generate_wrapper_crate(
-            &path.join("wit"),
+        // The Preview 3 generation path rejects synchronous freestanding exports, so for P3 we
+        // rewrite the example's WIT so its world-level exported functions become `async func`
+        // before generation. The rewritten WIT lives inside the wrapper crate dir so it never
+        // touches the committed example sources.
+        let wit_dir = match target {
+            TestTarget::P2 => path.join("wit"),
+            TestTarget::P3 => {
+                let rewritten = wrapper_crate_root.join("wit-async");
+                rewrite_wit_exports_async(&path.join("wit"), &rewritten)?;
+                rewritten
+            }
+        };
+
+        println!(
+            "Generating wrapper create for example '{name}' ({:?}) to {wrapper_crate_root}",
+            target
+        );
+        generate_wrapper_crate_with_target(
+            &wit_dir,
             &[JsModuleSpec {
                 name: name.to_string(),
                 mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
             }],
             &wrapper_crate_root,
             None,
+            target.generation_target(),
         )?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
@@ -1138,7 +1252,7 @@ impl CompiledTest {
             command.arg(shared_target);
         }
         command
-            .args(feature_combination.cargo_args())
+            .args(feature_combination.cargo_args_for_target(target))
             .current_dir(&wrapper_crate_root)
             .status()
             .and_then(|status| {
@@ -1155,7 +1269,7 @@ impl CompiledTest {
             CompiledTest {
                 wasm: Precompiled(
                     Utf8Path::new("tmp")
-                        .join("rt-target")
+                        .join(&shared_target_name)
                         .join("wasm32-wasip2")
                         .join("debug")
                         .join(format!("{}.wasm", name.to_snake_case())),
@@ -1317,6 +1431,277 @@ impl WasiHttpView for Host {
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
             hooks: default_hooks(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// WASI Preview 3 (Component Model async) host support.
+//
+// Works on both stock wasmtime and the Golem wasmtime fork (`use-golem-wasmtime`): the fork
+// supports Preview 3 just like upstream, and the only fork-specific difference (the extra `IoCtx`
+// returned by `WasiCtxBuilder::build()` / required by `WasiCtxView`) is handled on the shared
+// `Host` type above.
+// ---------------------------------------------------------------------------------------------
+
+/// Preview 3 engine: same stack/epoch configuration as the P2 host, plus Component Model async
+/// support so that async-lifted exports can be driven by the concurrent executor that
+/// `Func::call_async` uses internally.
+fn p3_engine() -> anyhow::Result<Engine> {
+    let mut config = wasmtime::Config::default();
+    config.wasm_component_model(true);
+    config.wasm_component_model_async(true);
+    config.epoch_interruption(true);
+    config.async_stack_size(32 * 1024 * 1024);
+    config.max_wasm_stack(16 * 1024 * 1024);
+    let engine = Engine::new(&config)?;
+
+    let epoch_engine = engine.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            epoch_engine.increment_epoch();
+        }
+    });
+    Ok(engine)
+}
+
+/// Preview 3 linker: the P2 WASI surface (P3 components still import residual `wasi:io`/0.2 std
+/// interfaces), the P3 WASI surface, and the P3 async HTTP surface used by `fetch`. Also mocks
+/// `wasi:logging/logging` and `golem:websocket/client@1.5.0` so P3 builds with the (target-
+/// agnostic) `logging` / `websocket` features can instantiate; the definitions are ignored by
+/// components that don't import them.
+fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
+    let mut linker: Linker<Host> = Linker::new(engine);
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+    wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    add_wasi_logging_mock(&mut linker)?;
+    add_websocket_client_mock(&mut linker, TestTarget::P3)?;
+    Ok(linker)
+}
+
+/// Mock `wasi:logging/logging`: records every `log` call in the Host's `log_messages` list.
+fn add_wasi_logging_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
+    let mut logging = linker.instance("wasi:logging/logging")?;
+    logging.func_wrap(
+        "log",
+        |mut ctx: StoreContextMut<'_, Host>,
+         (level, context, message): (LogLevel, String, String)|
+         -> Result<(), wasmtime::Error> {
+            ctx.data_mut()
+                .log_messages
+                .lock()
+                .unwrap()
+                .push((level, context, message));
+            Ok(())
+        },
+    )?;
+    Ok(())
+}
+
+/// Mock `golem:api/context@1.5.0`: implements `start-span`, `span.set-attribute`, and
+/// `span.finish`, recording every span in the returned shared list so tests can assert on the
+/// emitted tracing spans.
+fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex<Vec<GolemSpan>>>> {
+    let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
+    let spans_clone = spans.clone();
+
+    let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
+
+    // Register the span resource type
+    let span_resource_type = ResourceType::host::<GolemSpan>();
+    golem_ctx.resource("span", span_resource_type, {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
+            // Destructor: mark span as finished if not already
+            let table = ctx.data_mut().table.lock().unwrap();
+            // Resource already dropped by wasmtime
+            let _ = (spans.as_ref(), rep, table);
+            Ok(())
+        }
+    })?;
+
+    // start-span: func(name: string) -> span
+    golem_ctx.func_wrap("start-span", {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>,
+              (name,): (String,)|
+              -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
+            let span = GolemSpan {
+                name,
+                attributes: Vec::new(),
+                finished: false,
+            };
+            let mut table = ctx.data_mut().table.lock().unwrap();
+            let resource = table.push(span)?;
+            spans.lock().unwrap().push(GolemSpan {
+                name: String::new(), // placeholder, real data is in table
+                attributes: Vec::new(),
+                finished: false,
+            });
+            Ok((resource,))
+        }
+    })?;
+
+    // [method]span.set-attribute: func(name: string, value: attribute-value)
+    // attribute-value is a variant with one case: string(string)
+    golem_ctx.func_wrap("[method]span.set-attribute", {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>,
+              (span_res, attr_name, attr_value): (
+            wasmtime::component::Resource<GolemSpan>,
+            String,
+            AttributeValue,
+        )|
+              -> Result<(), wasmtime::Error> {
+            let value_str = match &attr_value {
+                AttributeValue::String(s) => s.clone(),
+            };
+            let mut table = ctx.data_mut().table.lock().unwrap();
+            if let Ok(span) = table.get_mut(&span_res) {
+                span.attributes.push((attr_name.clone(), value_str.clone()));
+            }
+            // Also record in the shared spans list
+            let mut shared = spans.lock().unwrap();
+            if let Some(last) = shared.last_mut() {
+                last.attributes.push((attr_name, value_str));
+            }
+            Ok(())
+        }
+    })?;
+
+    // [method]span.finish: func()
+    golem_ctx.func_wrap("[method]span.finish", {
+        let spans = spans_clone.clone();
+        move |mut ctx: StoreContextMut<'_, Host>,
+              (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
+              -> Result<(), wasmtime::Error> {
+            let mut table = ctx.data_mut().table.lock().unwrap();
+            if let Ok(span) = table.get_mut(&span_res) {
+                span.finished = true;
+                // Copy final state to shared spans
+                let name = span.name.clone();
+                let attributes = span.attributes.clone();
+                let mut shared = spans.lock().unwrap();
+                if let Some(last) = shared.last_mut() {
+                    last.name = name;
+                    last.finished = true;
+                    last.attributes = attributes;
+                }
+            }
+            Ok(())
+        }
+    })?;
+
+    Ok(spans)
+}
+
+/// Mock `golem:websocket/client@1.5.0`: registers the `websocket-connection` resource and stubs
+/// every method to fail. This satisfies the host import required when the `websocket` module is
+/// compiled in; tests only exercise the JS-side API surface (globals, brand checks), not live
+/// connections.
+fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> anyhow::Result<()> {
+    struct WsConn;
+    let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+    ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+        move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+    })?;
+
+    ws.func_new(
+        "[static]websocket-connection.connect",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket connect not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.send",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket send not available in tests",
+            ))
+        },
+    )?;
+
+    match target {
+        TestTarget::P2 => {
+            ws.func_new(
+                "[method]websocket-connection.receive",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive not available in tests",
+                    ))
+                },
+            )?;
+            ws.func_new(
+                "[method]websocket-connection.receive-with-timeout",
+                |_store, _ty, _params, _results| {
+                    Err(wasmtime::Error::msg(
+                        "WebSocket receive-with-timeout not available in tests",
+                    ))
+                },
+            )?;
+        }
+        TestTarget::P3 => {
+            ws.func_new_concurrent(
+                "[method]websocket-connection.receive",
+                |_accessor, _ty, _params, _results| {
+                    Box::pin(async {
+                        Err(wasmtime::Error::msg(
+                            "WebSocket receive not available in tests",
+                        ))
+                    })
+                },
+            )?;
+            ws.func_new_concurrent(
+                "[method]websocket-connection.receive-with-timeout",
+                |_accessor, _ty, _params, _results| {
+                    Box::pin(async {
+                        Err(wasmtime::Error::msg(
+                            "WebSocket receive-with-timeout not available in tests",
+                        ))
+                    })
+                },
+            )?;
+        }
+    }
+
+    ws.func_new(
+        "[method]websocket-connection.close",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket close not available in tests",
+            ))
+        },
+    )?;
+
+    ws.func_new(
+        "[method]websocket-connection.subscribe",
+        |_store, _ty, _params, _results| {
+            Err(wasmtime::Error::msg(
+                "WebSocket subscribe not available in tests",
+            ))
+        },
+    )?;
+
+    Ok(())
+}
+
+impl wasmtime_wasi_http::p3::WasiHttpView for Host {
+    fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
+        wasmtime_wasi_http::p3::WasiHttpCtxView {
+            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            table: Arc::get_mut(&mut self.table)
+                .expect("ResourceTable is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("ResourceTable mutex must never fail"),
+            ctx: Arc::get_mut(&mut self.wasi_http)
+                .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
+                .get_mut()
+                .expect("WasiHttpCtx mutex must never fail"),
         }
     }
 }

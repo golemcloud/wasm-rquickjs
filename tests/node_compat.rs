@@ -157,33 +157,42 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         for attempt in 1..=max_attempts {
                             let prepared = prepared.clone();
                             let path = path.clone();
-                            let test_future = async {
+                            let attempt_result = async {
                                 let mut instance =
                                     TestInstance::from_golem_prepared(&prepared).await?;
                                 instance.set_epoch_deadline(test_timeout_secs);
                                 setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
                                 let guest_path = format!("/home/node/test/{}", path);
-                                let (result, stdout, stderr) = instance
-                                    .invoke_and_capture_output_with_stderr(
-                                        None,
-                                        "run-test",
-                                        &[Val::String(guest_path)],
-                                    )
-                                    .await;
+                                let test_future = async {
+                                    let (result, stdout, stderr) = instance
+                                        .invoke_and_capture_output_with_stderr(
+                                            None,
+                                            "run-test",
+                                            &[Val::String(guest_path)],
+                                        )
+                                        .await;
 
-                                handle_test_result(result, &stdout, &stderr)
-                            };
-                            let attempt_result =
+                                    handle_test_result(result, &stdout, &stderr)
+                                };
                                 match timeout(Duration::from_secs(test_timeout_secs), test_future)
                                     .await
                                 {
                                     Ok(result) => result,
-                                    Err(_) => Err(anyhow::anyhow!(
-                                        "Test timed out after {}s",
-                                        test_timeout_secs
-                                    )),
-                                };
+                                    Err(_) => {
+                                        let stdout = instance.read_stdout().unwrap_or_default();
+                                        let stderr = instance.read_stderr().unwrap_or_default();
+                                        anyhow::bail!(
+                                            "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
+                                            test_timeout_secs,
+                                            stdout.trim(),
+                                            stderr.trim(),
+                                            common::host_trace().trim()
+                                        )
+                                    }
+                                }
+                            }
+                            .await;
                             match attempt_result {
                                 Ok(()) => return Ok(()),
                                 Err(e) => {
@@ -325,10 +334,11 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                                             let stdout = instance.read_stdout().unwrap_or_default();
                                             let stderr = instance.read_stderr().unwrap_or_default();
                                             anyhow::bail!(
-                                                "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}",
+                                                "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
                                                 test_timeout_secs,
                                                 stdout.trim(),
-                                                stderr.trim()
+                                                stderr.trim(),
+                                                common::host_trace().trim()
                                             )
                                         }
                                     }

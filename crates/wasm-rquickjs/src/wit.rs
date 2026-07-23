@@ -65,7 +65,11 @@ pub fn add_get_script_import(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
     Ok(())
 }
 
-pub fn add_wizer_init_export(wit_root: &Utf8Path, world: Option<&str>) -> anyhow::Result<()> {
+pub fn add_wizer_init_export(
+    wit_root: &Utf8Path,
+    world: Option<&str>,
+    is_async: bool,
+) -> anyhow::Result<()> {
     let mut resolve = Resolve::new();
     let (root_package_id, source_map) = resolve
         .push_path(wit_root)
@@ -114,7 +118,7 @@ pub fn add_wizer_init_export(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
             )
         })?;
 
-    let wizer_init_func = StandaloneFunc::new("wizer-initialize", false);
+    let wizer_init_func = StandaloneFunc::new("wizer-initialize", is_async);
     world.function_export(wizer_init_func);
 
     crate::write_if_changed(root_package_path[0], root_package.to_string()).context(format!(

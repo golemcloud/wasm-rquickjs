@@ -281,9 +281,12 @@ fn generate_conversion_instances_for_type(
                    obj.set(#field_name_lit, #self_ref & #type_path::#rust_field_ident == #type_path::#rust_field_ident)?;
                 });
 
+                // `result = result | ...` instead of `|=`: the Preview 3 path uses
+                // `wit-bindgen` 0.58 with default features off, whose built-in `bitflags`
+                // shim only implements `BitOr`/`BitAnd`/`BitXor` (no `BitOrAssign`).
                 get_fields.push(quote! {
                     if obj.get(#field_name_lit)? {
-                        result |= #type_path::#rust_field_ident;
+                        result = result | #type_path::#rust_field_ident;
                     }
                 });
             }
@@ -538,6 +541,87 @@ fn generate_conversion_instances_for_type(
         }
         TypeDefKind::Type(Type::Id(type_id)) => {
             generate_conversion_instances_for_type(context, *type_id, visited_types)
+        }
+        TypeDefKind::Future(payload) | TypeDefKind::Stream(payload) => {
+            let kind = if matches!(&typ.kind, TypeDefKind::Future(_)) {
+                crate::async_values::AsyncValueKind::Future
+            } else {
+                crate::async_values::AsyncValueKind::Stream
+            };
+            let async_value = crate::async_values::AsyncValue {
+                kind,
+                payload: *payload,
+            };
+            let bridge = crate::async_values::payload_bridge(context, &async_value)?;
+            let bridge_ident = crate::async_values::payload_bridge_ident(type_id);
+            let component_type = bridge.original_ref;
+            let js_type = bridge.wrapped_ref;
+            let wrap = bridge.wrap.run(quote! { value });
+            let unwrap = bridge.unwrap.run(quote! { value });
+
+            let nested = match payload {
+                Some(Type::Id(payload_id)) => {
+                    generate_conversion_instances_for_type(context, *payload_id, visited_types)?
+                        .unwrap_or_default()
+                }
+                _ => TokenStream::new(),
+            };
+
+            let bridge_impl = match kind {
+                crate::async_values::AsyncValueKind::Future => quote! {
+                    pub struct #bridge_ident;
+
+                    impl crate::internal::FuturePayloadBridge for #bridge_ident {
+                        type Component = #component_type;
+                        type Js = #js_type;
+
+                        fn wrap(value: Self::Component) -> Self::Js {
+                            #wrap
+                        }
+
+                        fn unwrap(value: Self::Js) -> Self::Component {
+                            #unwrap
+                        }
+
+                        fn channel() -> (
+                            wit_bindgen_p3::rt::async_support::FutureWriter<Self::Component>,
+                            wit_bindgen_p3::rt::async_support::FutureReader<Self::Component>,
+                        ) {
+                            crate::bindings::wit_future::new(
+                                crate::internal::async_value_default::<Self::Component>,
+                            )
+                        }
+                    }
+                },
+                crate::async_values::AsyncValueKind::Stream => quote! {
+                    pub struct #bridge_ident;
+
+                    impl crate::internal::StreamPayloadBridge for #bridge_ident {
+                        type Component = #component_type;
+                        type Js = #js_type;
+
+                        fn wrap(value: Self::Component) -> Self::Js {
+                            #wrap
+                        }
+
+                        fn unwrap(value: Self::Js) -> Self::Component {
+                            #unwrap
+                        }
+
+                        fn channel() -> (
+                            wit_bindgen_p3::rt::async_support::StreamWriter<Self::Component>,
+                            wit_bindgen_p3::rt::async_support::StreamReader<Self::Component>,
+                        ) {
+                            crate::bindings::wit_stream::new()
+                        }
+                    }
+                },
+            };
+
+            Ok(Some(quote! {
+                #nested
+                #bridge_impl
+            }))
         }
         _ => Ok(None),
     }

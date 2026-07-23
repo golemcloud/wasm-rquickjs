@@ -1,0 +1,24 @@
+package test:async-values-import;
+
+// Exercises WASI Preview 3 `future<T>` / `stream<T>` values at both *import* boundaries:
+//
+//   * `make-future` / `make-stream` return a future/stream from the host: the host reader is
+//     lifted into a JS `Promise` / async-iterable the JS code awaits / iterates.
+//   * `consume-future` / `consume-stream` receive a future/stream from JS: a JS `Promise` /
+//     async-iterable is lowered into a component future/stream the host reads.
+interface host {
+  make-future: func(x: u32) -> future<u32>;
+  make-stream: func(n: u32) -> stream<u8>;
+  consume-future: async func(f: future<u32>) -> u32;
+  consume-stream: async func(s: stream<u8>) -> u32;
+  store-future: async func(f: future<u32>);
+  read-stored-future: async func() -> u32;
+}
+
+world async-values-import {
+  import host;
+
+  export run: async func() -> string;
+  export run-promise-stream-items: async func() -> string;
+  export run-stored-future: async func() -> string;
+}
