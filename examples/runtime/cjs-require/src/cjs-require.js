@@ -455,6 +455,7 @@ export const testRequirePackageImports = () => {
     try {
         const assert = require('assert');
         const fs = require('fs');
+        const Module = require('module');
 
         fs.mkdirSync('/imports-app', { recursive: true });
         fs.writeFileSync('/imports-app/package.json', JSON.stringify({
@@ -469,6 +470,7 @@ export const testRequirePackageImports = () => {
                 '#import-only': {
                     import: './import-only.mjs',
                 },
+                '#null-target': null,
                 '#false-target': false,
                 '#array-false-fallback': [
                     false,
@@ -487,6 +489,7 @@ export const testRequirePackageImports = () => {
             'exports.invalidBare = function() { return require("#"); };',
             'exports.initialSlash = function() { return require("#/initialslash"); };',
             'exports.importOnly = function() { return require("#import-only"); };',
+            'exports.nullTarget = function() { return require("#null-target"); };',
             'exports.falseTarget = function() { return require("#false-target"); };',
             'exports.arrayFalseFallback = require("#array-false-fallback");',
         ].join('\n'));
@@ -495,13 +498,48 @@ export const testRequirePackageImports = () => {
         const mod = appRequire('./main.cjs');
         assert.deepStrictEqual(mod.dep, { mode: 'require' });
         assert.deepStrictEqual(mod.defaultOnly, { mode: 'default-only' });
-        assert.throws(() => mod.missing(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
+        assert.throws(
+            () => mod.missing(),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+                assert.strictEqual(
+                    error.message,
+                    'Package import specifier "#missing" is not defined in package /imports-app/package.json imported from /imports-app/main.cjs',
+                );
+                return true;
+            },
+        );
         assert.throws(() => mod.invalidBare(), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         assert.throws(() => mod.initialSlash(), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
         assert.throws(() => mod.importOnly(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
+        assert.throws(
+            () => mod.nullTarget(),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+                assert.strictEqual(
+                    error.message,
+                    'Package import specifier "#null-target" is not defined in package /imports-app/package.json imported from /imports-app/main.cjs',
+                );
+                return true;
+            },
+        );
         assert.throws(() => mod.falseTarget(), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         assert.deepStrictEqual(mod.arrayFalseFallback, { mode: 'require' });
         assert.strictEqual(appRequire.resolve('#dep'), '/imports-app/dep.cjs');
+        assert.throws(
+            () => Module._resolveFilename('#missing', null),
+            {
+                code: 'MODULE_NOT_FOUND',
+                message: "Cannot find module '#missing'",
+            },
+        );
+        assert.throws(
+            () => Module._load('#missing', null),
+            {
+                code: 'MODULE_NOT_FOUND',
+                message: "Cannot find module '#missing'",
+            },
+        );
 
         return true;
     } catch (e) {

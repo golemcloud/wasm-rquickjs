@@ -912,12 +912,6 @@ function resolvePackageWithRustBridge(parentURL, specifier, conditions, mode, mi
     );
 }
 
-function makePackageImportNotDefinedError(specifier) {
-    const err = new Error('Package import specifier ' + JSON.stringify(specifier) + ' is not defined');
-    err.code = 'ERR_PACKAGE_IMPORT_NOT_DEFINED';
-    return err;
-}
-
 function makeModuleNotFoundError(id) {
     const err = new Error("Cannot find module '" + id + "'");
     err.code = 'MODULE_NOT_FOUND';
@@ -1033,11 +1027,11 @@ function resolveCjsPackageFallbacks(parts, pkgDir, id, fromPart) {
     return readCjsPackageCandidate(String(resolved.filename), String(resolved.packageDir || pkgDir));
 }
 
-function resolvePackageImports(id, parentDir, conditions, resolution) {
+function resolvePackageImports(id, parentFilename, conditions, resolution) {
     let resolved;
     try {
         resolved = resolvePackageWithRustBridge(
-            nodeUrl.pathToFileURL(pathModule.join(parentDir, 'package.json')).href,
+            nodeUrl.pathToFileURL(parentFilename).href,
             id,
             conditions || cjsPackageConditions(),
             'cjs-analysis',
@@ -1051,15 +1045,18 @@ function resolvePackageImports(id, parentDir, conditions, resolution) {
     }
     const resolvedFile = resolvePackageFileFromRustResult(resolved, resolution);
     if (!resolvedFile) {
-        throw makePackageImportNotDefinedError(id);
+        throw new Error('Internal package resolver did not resolve package import ' + JSON.stringify(id));
     }
     return resolvedFile;
 }
 
 function resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution) {
+    if (typeof parentFilename !== 'string') {
+        throw makeModuleNotFoundError(id);
+    }
     resolution = resolution || makeCjsResolutionState();
     try {
-        return resolvePackageImports(id, parentDir, cjsPackageConditions(), resolution);
+        return resolvePackageImports(id, parentFilename, cjsPackageConditions(), resolution);
     } catch (err) {
         if (!err || err.code !== 'ERR_PACKAGE_IMPORT_NOT_DEFINED') {
             throw err;

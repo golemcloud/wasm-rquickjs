@@ -772,10 +772,36 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/package-import-validation-no-map/imports-trailing-slash-entry.mjs', 'export default await import("#foo/");');
         fs.writeFileSync('/package-import-validation-no-map/imports-missing-entry.mjs', 'export default await import("#foo");');
         await expectImportError('/package-import-validation-no-map/imports-trailing-slash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
-        await expectImportError('/package-import-validation-no-map/imports-missing-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+        await assert.rejects(
+            () => import('/package-import-validation-no-map/imports-missing-entry.mjs'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+                assert.strictEqual(
+                    error.message,
+                    'Package import specifier "#foo" is not defined in package /package-import-validation-no-map/package.json imported from /package-import-validation-no-map/imports-missing-entry.mjs',
+                );
+                return true;
+            },
+        );
         const requireNoImportsMap = createRequire('/package-import-validation-no-map/entry.cjs');
         assert.throws(() => requireNoImportsMap('#foo'), { code: 'MODULE_NOT_FOUND' });
         assert.throws(() => requireNoImportsMap('#foo/'), { code: 'MODULE_NOT_FOUND' });
+        fs.mkdirSync('/package-import-validation-no-scope', { recursive: true });
+        fs.writeFileSync(
+            '/package-import-validation-no-scope/imports-missing-entry.mjs',
+            'export default await import("#foo");',
+        );
+        await assert.rejects(
+            () => import('/package-import-validation-no-scope/imports-missing-entry.mjs'),
+            (error) => {
+                assert.strictEqual(error.code, 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+                assert.strictEqual(
+                    error.message,
+                    'Package import specifier "#foo" is not defined imported from /package-import-validation-no-scope/imports-missing-entry.mjs',
+                );
+                return true;
+            },
+        );
         fs.mkdirSync('/package-import-validation-with-map', { recursive: true });
         fs.writeFileSync('/package-import-validation-with-map/package.json', JSON.stringify({ type: 'module', imports: {} }));
         const requireWithImportsMap = createRequire('/package-import-validation-with-map/entry.cjs');

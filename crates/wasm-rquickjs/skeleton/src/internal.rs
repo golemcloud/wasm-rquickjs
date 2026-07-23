@@ -3493,6 +3493,8 @@ enum NodePackageResolveError {
     },
     PackageImportNotDefined {
         specifier: String,
+        package_json_path: Option<String>,
+        importer: Option<String>,
         no_imports_field: bool,
     },
     InvalidPackageTarget { kind: &'static str, target: String },
@@ -4083,6 +4085,8 @@ impl NodeModulesResolver {
             if dir.file_name().is_some_and(|name| name == "node_modules") {
                 return Err(NodePackageResolveError::PackageImportNotDefined {
                     specifier: name.to_string(),
+                    package_json_path: None,
+                    importer: Some(base.to_string()),
                     no_imports_field: true,
                 });
             }
@@ -4092,6 +4096,8 @@ impl NodeModulesResolver {
                 let Some(imports) = package.imports.as_ref() else {
                     return Err(NodePackageResolveError::PackageImportNotDefined {
                         specifier: name.to_string(),
+                        package_json_path: Some(pkg_path.to_string_lossy().into_owned()),
+                        importer: Some(base.to_string()),
                         no_imports_field: true,
                     });
                 };
@@ -4113,6 +4119,8 @@ impl NodeModulesResolver {
 
         Err(NodePackageResolveError::PackageImportNotDefined {
             specifier: name.to_string(),
+            package_json_path: None,
+            importer: Some(base.to_string()),
             no_imports_field: true,
         })
     }
@@ -4657,13 +4665,25 @@ impl NodeModulesResolver {
                     warning_importer: importer,
                 };
                 return Self::resolve_package_target_with_context(target, ctx, resolution)
-                .and_then(
-                    |resolution| Self::target_resolution_to_import_result(resolution, specifier),
-                );
+                    .and_then(|resolution| {
+                        Self::target_resolution_to_import_result(
+                            resolution,
+                            specifier,
+                            package_dir,
+                            importer,
+                        )
+                    });
             }
         }
         Err(NodePackageResolveError::PackageImportNotDefined {
             specifier: specifier.to_string(),
+            package_json_path: Some(
+                package_dir
+                    .join("package.json")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            importer: importer.map(str::to_string),
             no_imports_field: false,
         })
     }
@@ -5000,12 +5020,21 @@ impl NodeModulesResolver {
     fn target_resolution_to_import_result(
         resolution: PackageTargetResolution,
         specifier: &str,
+        package_dir: &std::path::Path,
+        importer: Option<&str>,
     ) -> Result<String, NodePackageResolveError> {
         match resolution {
             PackageTargetResolution::Resolved(path) => Ok(path),
             PackageTargetResolution::NoMatch | PackageTargetResolution::Blocked => {
                 Err(NodePackageResolveError::PackageImportNotDefined {
                     specifier: specifier.to_string(),
+                    package_json_path: Some(
+                        package_dir
+                            .join("package.json")
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                    importer: importer.map(str::to_string),
                     no_imports_field: false,
                 })
             }
@@ -5252,9 +5281,19 @@ fn throw_node_package_resolve_error<'js>(
     let err = match err {
         NodePackageResolveError::PackageImportNotDefined {
             specifier,
+            package_json_path,
+            importer,
             no_imports_field,
         } => {
-            let message = format!("Package import specifier '{}' is not defined", specifier);
+            let mut message = format!("Package import specifier \"{}\" is not defined", specifier);
+            if let Some(package_json_path) = package_json_path {
+                message.push_str(" in package ");
+                message.push_str(&package_json_path);
+            }
+            if let Some(importer) = importer {
+                message.push_str(" imported from ");
+                message.push_str(&importer);
+            }
             let error_value = Exception::from_message(ctx.clone(), &message)?.into_value();
             let Some(error_obj) = error_value.clone().into_object() else {
                 return Err(ctx.throw(error_value));
