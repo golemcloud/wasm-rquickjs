@@ -20,51 +20,6 @@ use wit_parser::{Function, FunctionKind, TypeDefKind, WorldItem, WorldKey};
 pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
     let (global, interfaces) = collect_imported_interfaces(context)?;
 
-    // Functions and resources declared directly in the world (rather than inside an interface)
-    // are a documented limitation ("only whole interfaces" are supported for imports). Such
-    // functions - including the constructor/methods/statics of a world-level resource - end up in
-    // the synthetic global import module, which is never registered with the QuickJS module
-    // resolver/loader (only imported interfaces are), so they could never be imported from
-    // JavaScript: under Preview 3 a freestanding async import would build but trap at runtime, and
-    // a world-level resource would fail to compile. A resource declared in the world is also
-    // unusable any other way (interfaces cannot reference world-level types, and exported
-    // resources are rejected separately), so reject both explicitly on the Preview 3 path with a
-    // clear, actionable message instead of silently emitting a broken or dead crate.
-    if context.target.is_p3() {
-        let mut offending = global
-            .functions
-            .iter()
-            .map(|(name, _)| (*name).to_string())
-            .collect::<Vec<_>>();
-
-        let world = &context.resolve.worlds[context.world];
-        for (key, item) in &world.imports {
-            if let WorldItem::Type { id, .. } = item {
-                let typ = context
-                    .resolve
-                    .types
-                    .get(*id)
-                    .ok_or_else(|| anyhow!("Unknown world-level type id {id:?}"))?;
-                if typ.kind == TypeDefKind::Resource {
-                    let name = typ.name.clone().unwrap_or_else(|| match key {
-                        WorldKey::Name(name) => name.clone(),
-                        WorldKey::Interface(_) => "<resource>".to_string(),
-                    });
-                    offending.push(name);
-                }
-            }
-        }
-
-        if !offending.is_empty() {
-            let offending = offending.join(", ");
-            return Err(anyhow!(
-                "Functions or resources declared directly in the world are not supported by the \
-                 WASI Preview 3 generation path ({offending}); declare them inside an imported \
-                 interface instead"
-            ));
-        }
-    }
-
     for interface in &interfaces {
         let module_name = interface.module_name()?;
         let file_name = format!("{module_name}.rs");

@@ -375,11 +375,23 @@ fn define_return_type(
 ) -> anyhow::Result<()> {
     if let Some(result_type) = &function.result {
         if is_export
-            && crate::async_values::detect(context, result_type)?.is_none()
+            && context.target.is_p3()
+            && !matches!(
+                function.kind,
+                FunctionKind::AsyncFreestanding
+                    | FunctionKind::AsyncMethod(_)
+                    | FunctionKind::AsyncStatic(_)
+            )
             && crate::async_values::contains(context, result_type)?
         {
             return Err(anyhow!(
-                "future<T> and stream<T> nested inside an exported function result are not supported"
+                "future<T> and stream<T> in exported function results require an `async func` on the WASI Preview 3 generation path"
+            ));
+        }
+        if is_export && crate::async_values::top_level_result_error_contains(context, result_type)?
+        {
+            return Err(anyhow!(
+                "future<T> and stream<T> in the error arm of an exported function result are not supported"
             ));
         }
 
@@ -571,8 +583,7 @@ fn export_type_definition(
 ///
 /// A `future<T>` at a direct parameter/return position maps to `Promise<T>` and a `stream<T>` to
 /// `AsyncIterable<T>` (following type aliases via [`crate::async_values::detect`]). Any other type
-/// is delegated to [`ts_type_reference`], which rejects future/stream nested inside another type,
-/// mirroring the runtime restriction enforced by [`crate::types::get_wrapped_type`].
+/// is delegated to [`ts_type_reference`], which recursively maps nested future/stream values.
 fn ts_boundary_type_reference(
     context: &GeneratorContext,
     typ: &Type,
@@ -1061,7 +1072,12 @@ impl DtsWriter {
     }
 
     pub fn export_type(&mut self, name: &str, definition: &str) {
-        self.indented_write_line(format!("export type {name} = {definition};"));
+        let separator = if definition.starts_with('\n') {
+            ""
+        } else {
+            " "
+        };
+        self.indented_write_line(format!("export type {name} ={separator}{definition};"));
     }
 
     pub fn import_module(&mut self, name: &str, from: &str) {

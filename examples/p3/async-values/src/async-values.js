@@ -18,6 +18,36 @@ export async function runStream() {
   return gen();
 }
 
+// Returns future/stream readers nested in a record. The wrapper must return the record to the host
+// before its writer tasks encounter backpressure on those readers.
+export async function runNested() {
+  async function* stdout() {
+    for (const byte of [6, 7, 8]) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      yield byte;
+    }
+  }
+
+  async function* stderr() {
+    for (const byte of [9, 10]) {
+      await Promise.resolve();
+      yield byte;
+    }
+  }
+
+  await Promise.resolve();
+  return {
+    label: 'nested-ok',
+    futureValue: Promise.resolve(99),
+    stdout: stdout(),
+    stderr: stderr(),
+  };
+}
+
+export async function runNestedError() {
+  throw 'nested-error';
+}
+
 // Receives a component `future<u32>` from the host, exposed to JS as a `Promise<u32>`.
 export async function takeFuture(f) {
   const v = await f;

@@ -357,7 +357,7 @@ declare module 'wasi:filesystem/types@0.2.3' {
   /**
    * When setting a timestamp, this gives the value to set it to.
    */
-  export type NewTimestamp = 
+  export type NewTimestamp =
   /** Leave the timestamp set to its previous value. */
   {
     tag: 'no-change'

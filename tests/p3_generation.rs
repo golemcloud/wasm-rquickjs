@@ -2745,37 +2745,32 @@ fn p3_streaming_fetch_truncated_final_body_rejects_like_buffered_path() -> anyho
 }
 
 #[test]
-fn p3_rejects_nested_future_in_record() -> anyhow::Result<()> {
-    // Nested async values returned from an export need the export-side writer runtime, which the
-    // generic nested-value bridge cannot select from its FromJs implementation.
+fn p3_generated_crate_builds_with_nested_future_in_export_record() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
         indoc! {r#"
             package bug:nested-future;
 
-            world nested-future {
+            interface types {
               record wrap { f: future<u32> }
+            }
+
+            world nested-future {
+              use types.{wrap};
               export run: async func() -> wrap;
             }
         "#},
         "export async function run() { return { f: Promise.resolve(1) }; }\n",
     )?;
 
-    let err = generate_p3(temp.path())
-        .expect_err("P3 generation must reject a future<T> nested inside a record");
-    let message = format!("{err:#}");
-    assert!(
-        message.contains("nested inside an exported function result are not supported"),
-        "unexpected error message: {message}"
-    );
+    generate_p3(temp.path())?;
+    build_p3(temp.path(), "nested_future")?;
     Ok(())
 }
 
 #[test]
-fn p3_rejects_nested_stream_in_list() -> anyhow::Result<()> {
-    // The same restriction applies to `stream<T>`: a `list<stream<u8>>` return type is a nested
-    // occurrence and must be rejected.
+fn p3_generated_crate_builds_with_nested_stream_in_export_list() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -2789,12 +2784,55 @@ fn p3_rejects_nested_stream_in_list() -> anyhow::Result<()> {
         "export async function run() { return []; }\n",
     )?;
 
+    generate_p3(temp.path())?;
+    build_p3(temp.path(), "nested_stream")?;
+    Ok(())
+}
+
+#[test]
+fn p3_rejects_async_value_results_from_sync_exports() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:sync-stream;
+
+            world sync-stream {
+              export run: func() -> stream<u8>;
+            }
+        "#},
+        "export function run() { return (async function* () {})(); }\n",
+    )?;
+
     let err = generate_p3(temp.path())
-        .expect_err("P3 generation must reject a stream<T> nested inside a list");
-    let message = format!("{err:#}");
+        .expect_err("a sync export must not return an async value directly or recursively");
     assert!(
-        message.contains("nested inside an exported function result are not supported"),
-        "unexpected error message: {message}"
+        format!("{err:#}").contains("require an `async func`"),
+        "unexpected error: {err:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn p3_rejects_async_values_in_export_result_errors() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:async-error-stream;
+
+            world async-error-stream {
+              export run: async func() -> result<u32, stream<u8>>;
+            }
+        "#},
+        "export async function run() { return 1; }\n",
+    )?;
+
+    let err = generate_p3(temp.path())
+        .expect_err("an export result error must not contain an async value");
+    assert!(
+        format!("{err:#}").contains("error arm of an exported function result"),
+        "unexpected error: {err:#}"
     );
     Ok(())
 }
@@ -2879,7 +2917,7 @@ fn p3_dts_maps_nested_async_import_values() -> anyhow::Result<()> {
 }
 
 #[test]
-fn p3_dts_rejects_nested_future_in_record() -> anyhow::Result<()> {
+fn p3_dts_maps_nested_future_in_export_record() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -2888,27 +2926,27 @@ fn p3_dts_rejects_nested_future_in_record() -> anyhow::Result<()> {
 
             world dts-nested-future {
               record wrap { f: future<u32> }
-              export run: func() -> wrap;
+              export run: async func() -> wrap;
             }
         "#},
         "export function run() { return { f: Promise.resolve(1) }; }\n",
     )?;
 
-    let err = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))
-        .expect_err("DTS generation must reject a future<T> nested inside a record");
-    let message = format!("{err:#}");
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
     assert!(
-        message.contains("nested inside an exported function result are not supported"),
-        "unexpected error message: {message}"
+        exports.contains("f: Promise<number>;"),
+        "nested future should map to Promise<number>; generated:\n{exports}"
     );
     Ok(())
 }
 
 #[test]
-fn p3_dts_rejects_nested_future_alias_in_record() -> anyhow::Result<()> {
-    // The nested-use restriction must also hold when the `future<T>` is named through a WIT alias:
-    // a record field of an alias-to-future type is still a nested async value and has no TypeScript
-    // representation, so DTS generation must reject it just like the anonymous nested case.
+fn p3_dts_maps_nested_future_alias_in_export_record() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -2918,26 +2956,28 @@ fn p3_dts_rejects_nested_future_alias_in_record() -> anyhow::Result<()> {
             world dts-nested-future-alias {
               type aliased-future = future<u32>;
               record wrap { f: aliased-future }
-              export run: func() -> wrap;
+              export run: async func() -> wrap;
             }
         "#},
         "export function run() { return { f: Promise.resolve(1) }; }\n",
     )?;
 
-    let err = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))
-        .expect_err("DTS generation must reject a future<T> alias nested inside a record");
-    let message = format!("{err:#}");
+    let generated = generate_p3_dts(&temp.path().join("wit"), &temp.path().join("dts"))?;
+    let exports_path = generated
+        .iter()
+        .find(|path| path.file_name() == Some("exports.d.ts"))
+        .expect("exports.d.ts should be generated");
+    let exports = std::fs::read_to_string(exports_path)?;
     assert!(
-        message.contains("nested inside an exported function result are not supported"),
-        "unexpected error message: {message}"
+        exports.contains("f: Promise<number>;"),
+        "nested aliased future should map to Promise<number>; generated:\n{exports}"
     );
     Ok(())
 }
 
 #[test]
 fn p3_dts_maps_direct_future_and_stream_boundaries() -> anyhow::Result<()> {
-    // The counterpart to the nested-rejection tests: a `future<T>` / `stream<T>` used *directly*
-    // as a function parameter or return type is a supported async-value boundary and must be
+    // A `future<T>` / `stream<T>` used directly as a function parameter or return type must be
     // reflected in the generated `.d.ts` as `Promise<T>` / `AsyncIterable<T>`. This is checked for
     // all four boundaries — export param/return and import param/return.
     let temp = Utf8TempDir::new()?;
@@ -2953,8 +2993,8 @@ fn p3_dts_maps_direct_future_and_stream_boundaries() -> anyhow::Result<()> {
 
             world dts-async-values {
               import host;
-              export run-future: func() -> future<u32>;
-              export take-stream: func(s: stream<u8>) -> u32;
+              export run-future: async func() -> future<u32>;
+              export take-stream: async func(s: stream<u8>) -> u32;
             }
         "#},
         "export function runFuture() { return Promise.resolve(1); }\n\
@@ -2994,7 +3034,7 @@ fn p3_dts_exported_future_return_is_not_double_wrapped() -> anyhow::Result<()> {
             package bug:dts-export-future-return;
 
             world dts-export-future-return {
-              export run-future: func() -> future<u32>;
+              export run-future: async func() -> future<u32>;
             }
         "#},
         "export function runFuture() { return Promise.resolve(1); }\n",
@@ -3039,8 +3079,8 @@ fn p3_dts_maps_direct_future_and_stream_alias_boundaries() -> anyhow::Result<()>
               type exported-future = future<u32>;
               type exported-stream = stream<u8>;
 
-              export run-future: func() -> exported-future;
-              export take-stream: func(s: exported-stream) -> u32;
+              export run-future: async func() -> exported-future;
+              export take-stream: async func(s: exported-stream) -> u32;
             }
         "#},
         "export function runFuture() { return Promise.resolve(1); }\n\
@@ -3094,10 +3134,10 @@ fn p3_dts_emits_payload_type_definitions_for_async_value_boundaries() -> anyhow:
 
               record rec { n: u32 }
 
-              export run-future: func() -> future<rec>;
-              export take-stream: func(s: stream<rec>);
-              export run-result: func() -> future<result<u32, string>>;
-              export take-result: func(s: stream<result<u32, string>>);
+              export run-future: async func() -> future<rec>;
+              export take-stream: async func(s: stream<rec>);
+              export run-result: async func() -> future<result<u32, string>>;
+              export take-result: async func(s: stream<result<u32, string>>);
             }
         "#},
         "export function runFuture() { return Promise.resolve({ n: 1 }); }\n\
@@ -3288,9 +3328,10 @@ fn p3_dts_preserves_sync_and_async_export_kinds() -> anyhow::Result<()> {
 
 #[test]
 fn p3_dts_collects_dependencies_through_imported_async_value_aliases() -> anyhow::Result<()> {
-    // A direct function boundary remains direct when the boundary type is a world-local `use` alias
-    // of an imported interface's alias-to-future. The generated signature references the imported
-    // payload type and Result helper, so dependency collection must not stop at the async alias.
+    // An async function boundary remains direct when the boundary type is a world-local `use`
+    // alias of an imported interface's alias-to-future. The generated signature references the
+    // imported payload type and Result helper, so dependency collection must not stop at the
+    // async alias.
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -3307,8 +3348,8 @@ fn p3_dts_collects_dependencies_through_imported_async_value_aliases() -> anyhow
               import host;
               use host.{fut-rec, fut-result};
 
-              export get-rec: func() -> fut-rec;
-              export get-result: func() -> fut-result;
+              export get-rec: async func() -> fut-rec;
+              export get-result: async func() -> fut-result;
             }
         "#},
         "export function getRec() { return Promise.resolve({ n: 1 }); }\n\

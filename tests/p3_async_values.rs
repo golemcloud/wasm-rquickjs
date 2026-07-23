@@ -37,10 +37,16 @@ use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
 
-bindgen!({
-    world: "async-values",
-    path: "examples/p3/async-values/wit",
-});
+mod export_bindings {
+    use wasmtime::component::bindgen;
+
+    bindgen!({
+        world: "async-values",
+        path: "examples/p3/async-values/wit",
+    });
+}
+
+use export_bindings::AsyncValues;
 
 bindgen!({
     world: "async-values-import",
@@ -216,7 +222,19 @@ fn add_wasi_logging_stub(linker: &mut Linker<Host>) -> Result<()> {
 // Export-boundary world (`test:async-values`)
 // ---------------------------------------------------------------------------------------------
 
-async fn run_export_world(component_path: &Utf8Path) -> Result<(u32, Vec<u8>, u32, u32)> {
+async fn run_export_world(
+    component_path: &Utf8Path,
+) -> Result<(
+    u32,
+    Vec<u8>,
+    String,
+    u32,
+    Vec<u8>,
+    Vec<u8>,
+    String,
+    u32,
+    u32,
+)> {
     let engine = engine()?;
     let component = Component::from_file(&engine, component_path)?;
     let linker = base_linker(&engine)?;
@@ -249,6 +267,59 @@ async fn run_export_world(component_path: &Utf8Path) -> Result<(u32, Vec<u8>, u3
             .await??
     };
 
+    // `run-nested` returns a record containing both a future and optional streams. The record must
+    // be returned before the host can attach consumers, so waiting for either writer in the guest
+    // export path would deadlock this call.
+    let (nested_label, nested_future, nested_stdout, nested_stderr) = {
+        let mut store = new_store(&engine);
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(
+                async move |accessor| -> Result<(String, u32, Vec<u8>, Vec<u8>)> {
+                    let nested = bindings
+                        .call_run_nested(accessor)
+                        .await?
+                        .expect("run-nested should return the success arm");
+
+                    let (future_tx, future_rx) = oneshot::channel();
+                    accessor.with(|access| {
+                        nested
+                            .future_value
+                            .pipe(access, OneshotConsumer::new(future_tx))
+                    })?;
+
+                    let stdout = nested.stdout.expect("nested stdout should be present");
+                    let (stdout_tx, stdout_rx) = mpsc::channel::<u8>(16);
+                    accessor.with(|access| stdout.pipe(access, PipeConsumer::new(stdout_tx)))?;
+
+                    let stderr = nested.stderr.expect("nested stderr should be present");
+                    let (stderr_tx, stderr_rx) = mpsc::channel::<u8>(16);
+                    accessor.with(|access| stderr.pipe(access, PipeConsumer::new(stderr_tx)))?;
+
+                    let (future_value, stdout, stderr) = futures::join!(
+                        future_rx,
+                        stdout_rx.collect::<Vec<_>>(),
+                        stderr_rx.collect::<Vec<_>>(),
+                    );
+                    Ok((nested.label, future_value?, stdout, stderr))
+                },
+            )
+            .await??
+    };
+
+    let nested_error = {
+        let mut store = new_store(&engine);
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| -> Result<String> {
+                match bindings.call_run_nested_error(accessor).await? {
+                    Ok(_) => panic!("run-nested-error should return the error arm"),
+                    Err(error) => Ok(error),
+                }
+            })
+            .await??
+    };
+
     // `take-future(f)` awaits a host-provided `future<u32>` and returns `value + 1`.
     let take_future = {
         let mut store = new_store(&engine);
@@ -274,7 +345,17 @@ async fn run_export_world(component_path: &Utf8Path) -> Result<(u32, Vec<u8>, u3
             .await??
     };
 
-    Ok((run_future, run_stream, take_future, take_stream))
+    Ok((
+        run_future,
+        run_stream,
+        nested_label,
+        nested_future,
+        nested_stdout,
+        nested_stderr,
+        nested_error,
+        take_future,
+        take_stream,
+    ))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -428,8 +509,17 @@ fn p3_async_values_export_boundaries_roundtrip() {
     let temp = Utf8TempDir::new().expect("temp dir");
     let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
 
-    let (run_future, run_stream, take_future, take_stream) =
-        block_on_with_timeout(120, run_export_world(&wasm));
+    let (
+        run_future,
+        run_stream,
+        nested_label,
+        nested_future,
+        nested_stdout,
+        nested_stderr,
+        nested_error,
+        take_future,
+        take_stream,
+    ) = block_on_with_timeout(120, run_export_world(&wasm));
 
     assert_eq!(run_future, 42, "run-future should return 42");
     assert_eq!(
@@ -437,6 +527,11 @@ fn p3_async_values_export_boundaries_roundtrip() {
         vec![1, 2, 3, 4, 5],
         "run-stream should yield 1..=5"
     );
+    assert_eq!(nested_label, "nested-ok");
+    assert_eq!(nested_future, 99);
+    assert_eq!(nested_stdout, vec![6, 7, 8]);
+    assert_eq!(nested_stderr, vec![9, 10]);
+    assert_eq!(nested_error, "nested-error");
     assert_eq!(take_future, 42, "take-future(41) should return 42");
     assert_eq!(take_stream, 60, "take-stream([10,20,30]) should return 60");
 }

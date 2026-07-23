@@ -38,7 +38,7 @@ declare module 'golem:websocket/client@1.5.0' {
     code: number;
     reason: string;
   };
-  export type Error = 
+  export type Error =
   {
     tag: 'connection-failure'
     val: string
@@ -66,7 +66,7 @@ declare module 'golem:websocket/client@1.5.0' {
   /**
    * A WebSocket message — text or binary
    */
-  export type Message = 
+  export type Message =
   {
     tag: 'text'
     val: string

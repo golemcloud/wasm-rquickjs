@@ -16,8 +16,9 @@
 //! the *payload* type still flows through [`crate::types::get_wrapped_type`] for its normal
 //! JS ⇄ wit-bindgen conversion.
 //!
-//! Only a **direct** function parameter or return type may be a future/stream. Nested occurrences
-//! (inside a record/option/result/tuple/…) are rejected by [`crate::types::get_wrapped_type`].
+//! Nested occurrences use generated payload bridge wrappers. When lowering an exported result,
+//! those wrappers persist the JavaScript value and start an export-lifetime writer so the
+//! component reader can be returned before the writer encounters backpressure.
 
 use crate::GeneratorContext;
 use crate::rust_bindgen::{RustType, TypeOwnershipStyle, type_mode_for};
@@ -150,6 +151,35 @@ pub fn contains(context: &GeneratorContext<'_>, typ: &Type) -> anyhow::Result<bo
     }
 
     visit(context, typ, &mut BTreeSet::new())
+}
+
+/// Whether a top-level `result<_, E>` has an error arm containing an async value. Exported WIT
+/// results map JavaScript exceptions into `E`; future/stream wrappers defer validation to writer
+/// tasks, so such an error arm could misclassify an arbitrary exception and trap later. Keep this
+/// unsupported while allowing async values recursively in the success arm.
+pub fn top_level_result_error_contains(
+    context: &GeneratorContext<'_>,
+    typ: &Type,
+) -> anyhow::Result<bool> {
+    let mut current = *typ;
+    loop {
+        let Type::Id(type_id) = current else {
+            return Ok(false);
+        };
+        let typ = context.typ(type_id)?;
+        match &typ.kind {
+            TypeDefKind::Type(inner) => current = *inner,
+            TypeDefKind::Result(result) => {
+                return result
+                    .err
+                    .as_ref()
+                    .map(|err| contains(context, err))
+                    .transpose()
+                    .map(|contains| contains.unwrap_or(false));
+            }
+            _ => return Ok(false),
+        }
+    }
 }
 
 /// Ensures future/stream values are only used on the Preview 3 target, which is the only target

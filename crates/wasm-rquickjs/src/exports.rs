@@ -454,6 +454,31 @@ fn generate_exported_function_impl(
     let rust_fn = RustWitFunction::new(context, name, function);
     let func_name = rust_fn.function_name_ident();
 
+    if context.target.is_p3()
+        && matches!(function.kind, FunctionKind::Freestanding)
+        && function
+            .result
+            .as_ref()
+            .map(|result| crate::async_values::contains(context, result))
+            .transpose()?
+            .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in exported function results require an `async func` on the WASI Preview 3 generation path"
+        ));
+    }
+    if function
+        .result
+        .as_ref()
+        .map(|result| crate::async_values::top_level_result_error_contains(context, result))
+        .transpose()?
+        .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in the error arm of an exported function result are not supported"
+        ));
+    }
+
     // Build the guest-trait argument list and the arguments forwarded to the JS export. A
     // `future<T>` / `stream<T>` parameter is special-cased: the guest receives a component reader
     // and the JS export is handed a lazily-created `Promise` / async-iterable
@@ -559,14 +584,6 @@ fn generate_exported_function_impl(
         };
     }
 
-    if let Some(result) = &function.result
-        && crate::async_values::contains(context, result)?
-    {
-        return Err(anyhow!(
-            "future<T> and stream<T> nested inside an exported function result are not supported"
-        ));
-    }
-
     let return_types = get_return_type(context, function, name, &rust_fn)?;
 
     let original_result = &return_types.wit_level_ret.original_type_ref;
@@ -629,6 +646,34 @@ fn generate_exported_resource_function_impl(
     let rust_fn = RustWitFunction::new(context, &func_name, function);
     let func_name_ident = rust_fn.function_name_ident();
 
+    if context.target.is_p3()
+        && !matches!(
+            function.kind,
+            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_)
+        )
+        && function
+            .result
+            .as_ref()
+            .map(|result| crate::async_values::contains(context, result))
+            .transpose()?
+            .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in exported resource function results require an `async func` on the WASI Preview 3 generation path"
+        ));
+    }
+    if function
+        .result
+        .as_ref()
+        .map(|result| crate::async_values::top_level_result_error_contains(context, result))
+        .transpose()?
+        .unwrap_or(false)
+    {
+        return Err(anyhow!(
+            "future<T> and stream<T> in the error arm of an exported resource function result are not supported"
+        ));
+    }
+
     let param_ident_type: Vec<_> = function
         .params
         .iter()
@@ -661,14 +706,6 @@ fn generate_exported_resource_function_impl(
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     let func_arg_list = to_original_func_arg_list(&param_ident_type);
-    if let Some(result) = &function.result
-        && crate::async_values::contains(context, result)?
-    {
-        return Err(anyhow!(
-            "future<T> and stream<T> in exported resource function results are not supported"
-        ));
-    }
-
     let return_types = if matches!(function.kind, FunctionKind::Constructor(_)) {
         ReturnTypeInformation {
             wit_level_ret: WrappedType::no_wrapping(quote! { Self }),

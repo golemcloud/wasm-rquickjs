@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use wit_parser::{
     Function, Interface, InterfaceId, PackageId, PackageName, PackageSourceMap, Resolve, TypeDef,
-    TypeId, TypeOwner, WorldId, WorldItem, WorldKey,
+    TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem, WorldKey,
 };
 
 /// WASI package namespaces whose interfaces are remapped to `wasip2::` in the generated code.
@@ -311,6 +311,31 @@ impl<'a> GeneratorContext<'a> {
         let world = resolve
             .select_world(std::slice::from_ref(&root_package), world)
             .context("Failed to select WIT world")?;
+
+        if target.is_p3() {
+            let mut unsupported = Vec::new();
+            for (key, item) in &resolve.worlds[world].imports {
+                let is_unsupported = match item {
+                    WorldItem::Function(_) => true,
+                    WorldItem::Type { id, .. } => resolve.types[*id].kind == TypeDefKind::Resource,
+                    WorldItem::Interface { .. } => false,
+                };
+                if is_unsupported {
+                    unsupported.push(match key {
+                        WorldKey::Name(name) => name.clone(),
+                        WorldKey::Interface(_) => "<resource>".to_string(),
+                    });
+                }
+            }
+            if !unsupported.is_empty() {
+                return Err(anyhow!(
+                    "Functions or resources declared directly in the world are not supported by \
+                     the WASI Preview 3 generation path ({}); declare them inside an imported \
+                     interface instead",
+                    unsupported.join(", ")
+                ));
+            }
+        }
 
         let world_name = resolve.worlds[world].name.clone();
 
