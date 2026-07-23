@@ -48,15 +48,17 @@ serde_json = { workspace = true }
 test-r = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.18.1", features = ["v4"] }
 oxc_parser = { workspace = true }
 oxc_allocator = { workspace = true }
 oxc_ast = { workspace = true }
 oxc_span = { workspace = true }
 wac-graph = { workspace = true }
-wasmtime = { workspace = true, features = ["async", "component-model", "cache"] }
-wasmtime-wasi = { workspace = true }
-wasmtime-wasi-http = { workspace = true }
+wasmtime = { workspace = true, features = ["async", "component-model", "component-model-async", "cache"] }
+wasmtime-wasi = { workspace = true, features = ["p3"] }
+wasmtime-wasi-http = { workspace = true, features = ["p3"] }
+wasmparser_encoder = { workspace = true }
 
 [[test]]
 name = "compilation"
@@ -107,6 +109,19 @@ harness = false
 name = "js_subtest_parser"
 harness = false
 
+# WASI Preview 3 (`--target wasi-p3`) integration tests. These are ordinary
+# libtest tests (default harness), unlike the test-r harnesses above. They are
+# registered explicitly so the P3 surface is a first-class, reviewable test
+# target and is picked up by the dedicated `test-p3` CI job.
+[[test]]
+name = "p3_generation"
+
+[[test]]
+name = "p3_exported_resource"
+
+[[test]]
+name = "p3_async_values"
+
 [features]
 default = []
 # Use Golem's forked wasmtime (see [patch.crates-io] at bottom of file)
@@ -156,10 +171,10 @@ tokio = "1.47.1"
 tokio-util = "0.7.16"
 toml_edit = "0.22.27"
 wac-graph = "0.10.0"
-wasmtime = "=45.0.0"
-wasmtime-wasi = "=45.0.0"
-wasmtime-wasi-http = "=45.0.0"
-wasmtime-wizer = "=45.0.0"
+wasmtime = "=46.0.1"
+wasmtime-wasi = "=46.0.1"
+wasmtime-wasi-http = "=46.0.1"
+wasmtime-wizer = "=46.0.1"
 wit-bindgen-core = "0.57.1"
 wasm-encoder = "0.247.0"
 wasmparser_encoder = { package = "wasmparser", version = "0.247.0" }
@@ -173,7 +188,7 @@ oxc_span = "0.115"
 # Golem's forked wasmtime — uncomment these patches together with enabling the
 # `use-golem-wasmtime` feature.
 #[patch.crates-io]
-#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
-#wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v45.0.0" }
+#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+#wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }

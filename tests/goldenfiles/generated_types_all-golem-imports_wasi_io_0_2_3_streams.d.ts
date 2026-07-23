@@ -206,7 +206,7 @@ declare module 'wasi:io/streams@0.2.3' {
   /**
    * An error for input-stream and output-stream operations.
    */
-  export type StreamError = 
+  export type StreamError =
   /**
    * The last operation (a write or flush) failed before completion.
    * More information is available in the `error` payload.

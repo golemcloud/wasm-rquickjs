@@ -81,7 +81,7 @@ mod web_crypto {
     pub use super::web_crypto_lite::*;
 }
 
-#[cfg(feature = "golem")]
+#[cfg(feature = "websocket")]
 mod websocket;
 mod webstreams;
 mod worker_threads;
@@ -267,7 +267,10 @@ pub fn add_module_resolvers(
     #[cfg(feature = "golem")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
-        .with_module("__wasm_rquickjs_builtin/diagnostics_channel_golem")
+        .with_module("__wasm_rquickjs_builtin/diagnostics_channel_golem");
+
+    #[cfg(feature = "websocket")]
+    let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/websocket_native")
         .with_module("__wasm_rquickjs_builtin/websocket");
 
@@ -345,15 +348,16 @@ pub fn module_loader() -> (
         );
 
     #[cfg(feature = "golem")]
-    let native_loader = native_loader
-        .with_module(
-            "__wasm_rquickjs_builtin/diagnostics_channel_native",
-            diagnostics_channel::js_native_module,
-        )
-        .with_module(
-            "__wasm_rquickjs_builtin/websocket_native",
-            websocket::js_native_module,
-        );
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/diagnostics_channel_native",
+        diagnostics_channel::js_native_module,
+    );
+
+    #[cfg(feature = "websocket")]
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/websocket_native",
+        websocket::js_native_module,
+    );
 
     let builtin_loader = rquickjs::loader::BuiltinLoader::default()
         .with_module(
@@ -504,12 +508,14 @@ pub fn module_loader() -> (
         .with_module("node:sqlite", sqlite::SQLITE_JS);
 
     #[cfg(feature = "golem")]
-    let builtin_loader = builtin_loader
-        .with_module(
-            "__wasm_rquickjs_builtin/diagnostics_channel_golem",
-            diagnostics_channel::DIAGNOSTICS_CHANNEL_GOLEM_JS,
-        )
-        .with_module("__wasm_rquickjs_builtin/websocket", websocket::WEBSOCKET_JS);
+    let builtin_loader = builtin_loader.with_module(
+        "__wasm_rquickjs_builtin/diagnostics_channel_golem",
+        diagnostics_channel::DIAGNOSTICS_CHANNEL_GOLEM_JS,
+    );
+
+    #[cfg(feature = "websocket")]
+    let builtin_loader =
+        builtin_loader.with_module("__wasm_rquickjs_builtin/websocket", websocket::WEBSOCKET_JS);
 
     (native_loader, builtin_loader, internal::module_loader())
 }
@@ -535,366 +541,24 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();
     writeln!(result, "globalThis.global = globalThis;").unwrap();
     writeln!(result, "globalThis.self = globalThis;").unwrap();
-    writeln!(result, "{}", IMPORT_META_RESOLVE_JS).unwrap();
-    writeln!(result, "{}", IMPORT_ATTRS_VALIDATE_JS).unwrap();
+    writeln!(
+        result,
+        "{}",
+        crate::internal::module_loading::IMPORT_META_RESOLVE_JS
+    )
+    .unwrap();
+    writeln!(
+        result,
+        "{}",
+        crate::internal::module_loading::IMPORT_ATTRS_VALIDATE_JS
+    )
+    .unwrap();
 
     #[cfg(feature = "golem")]
     writeln!(result, "{}", diagnostics_channel::GOLEM_WIRE_JS).unwrap();
 
-    #[cfg(feature = "golem")]
+    #[cfg(feature = "websocket")]
     writeln!(result, "{}", websocket::WIRE_JS).unwrap();
 
     result
 }
-
-const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_meta_resolve_global = globalThis;
-function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
-  baseUrl = String(baseUrl);
-  specifier = String(specifier);
-  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(specifier)) return specifier;
-  var builtinResolved = typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
-    ? __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin(specifier)
-    : undefined;
-  if (builtinResolved !== undefined) return builtinResolved;
-  function codedError(message, code, typeError) {
-    var err = typeError ? new TypeError(message) : new Error(message);
-    err.code = code;
-    return err;
-  }
-  function ensureSupportedBase() {
-    if (baseUrl.startsWith('data:')) {
-      throw codedError('Failed to resolve module specifier "' + specifier + '" from "' + baseUrl + '": Invalid relative URL or base scheme is not hierarchical.', 'ERR_UNSUPPORTED_RESOLVE_REQUEST', false);
-    }
-  }
-  function normalizePath(p) {
-    var parts = p.split('/'); var out = [];
-    for (var i = 0; i < parts.length; i++) {
-      if (!parts[i] || parts[i] === '.') continue;
-      if (parts[i] === '..') { if (out.length > 0) out.pop(); }
-      else out.push(parts[i]);
-    }
-    return '/' + out.join('/');
-  }
-  function splitSuffix(value) {
-    var query = value.indexOf('?');
-    var hash = value.indexOf('#');
-    var end = query < 0 ? hash : (hash < 0 ? query : Math.min(query, hash));
-    return end < 0 ? [value, ''] : [value.substring(0, end), value.substring(end)];
-  }
-  function preserveTrailingSlash(path, original) {
-    return original.endsWith('/') && !path.endsWith('/') ? path + '/' : path;
-  }
-  if (specifier.startsWith('/')) {
-    ensureSupportedBase();
-    if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path === 'function') {
-      var pathResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
-      if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
-    }
-    var parts = splitSuffix(specifier);
-    var path = preserveTrailingSlash(normalizePath(parts[0]), parts[0]);
-    return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
-  }
-  if (specifier.startsWith('.')) {
-    ensureSupportedBase();
-    if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path === 'function') {
-      var pathResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
-      if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
-    }
-    var base = baseUrl;
-    if (base.startsWith('file://')) base = base.slice(7);
-    base = splitSuffix(base)[0];
-    var dir = base.substring(0, base.lastIndexOf('/') + 1);
-    var parts = splitSuffix(specifier);
-    var path = preserveTrailingSlash(normalizePath(dir + parts[0]), parts[0]);
-    return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
-  }
-  ensureSupportedBase();
-  if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package === 'function') {
-    var packageResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package(baseUrl, specifier);
-    if (packageResolved !== undefined && packageResolved !== null) return packageResolved;
-  }
-  if (specifier.endsWith('/') && baseUrl.startsWith('file://')) {
-    var base = splitSuffix(baseUrl.slice(7))[0];
-    var dir = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
-    var resolved = normalizePath(dir + 'node_modules/' + specifier);
-    return 'file://' + (resolved.endsWith('/') ? resolved : resolved + '/');
-  }
-  throw codedError('Cannot find package "' + specifier + '" imported from ' + baseUrl, 'ERR_MODULE_NOT_FOUND', false);
-}
-Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve', {
-  value: __wasm_rquickjs_import_meta_resolve_impl,
-  writable: false,
-  configurable: false,
-});"#;
-
-const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
-const __wasm_rquickjs_import_attr_global = globalThis;
-
-function __wasm_rquickjs_import_attr_read_options(options) {
-  var typeValue;
-  var unsupportedKey;
-  var unsupportedValue;
-
-  if (options !== undefined) {
-    if (options === null || typeof options !== 'object') {
-      throw new TypeError('The second argument to import() must be an object');
-    }
-    var w = options['with'];
-    if (w !== undefined) {
-      if (w === null || typeof w !== 'object') {
-        throw new TypeError("The 'with' option must be an object");
-      }
-      var attrs = w;
-      var keys = Object.keys(attrs);
-      for (var k = 0; k < keys.length; k++) {
-        if (keys[k] === 'type') {
-          typeValue = attrs.type;
-          if (typeof typeValue !== 'string') {
-            throw new TypeError('Import attribute value must be a string');
-          }
-        } else if (unsupportedKey === undefined) {
-          unsupportedKey = keys[k];
-          unsupportedValue = attrs[keys[k]];
-        }
-      }
-    }
-  }
-  return { typeValue: typeValue, unsupportedKey: unsupportedKey, unsupportedValue: unsupportedValue };
-}
-
-function __wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors) {
-  value = String(value);
-  parsedOptions = parsedOptions || {};
-  var typeValue = parsedOptions.typeValue;
-  var unsupportedKey = parsedOptions.unsupportedKey;
-  var unsupportedValue = parsedOptions.unsupportedValue;
-
-  function semanticError(error) {
-    if (!asyncSemanticErrors) throw error;
-    return 'data:text/javascript,' + encodeURIComponent(
-      'await Promise.reject(Object.assign(new TypeError(' +
-      JSON.stringify(error.message) + '), { code: ' + JSON.stringify(error.code) + ' }));'
-    );
-  }
-
-  var format = null;
-  if (value.startsWith('data:')) {
-    var rest = value.substring(5);
-    var ci = rest.indexOf(',');
-    if (ci >= 0) {
-      var meta = rest.substring(0, ci).split(';')[0].trim();
-      if (meta === 'application/json') format = 'json';
-      else if (meta === 'text/javascript' || meta === 'application/javascript') format = 'module';
-      else if (meta === 'text/css') format = 'css';
-    }
-  } else if (value.startsWith('node:')) {
-    format = 'module';
-  } else if (value.endsWith('.json')) {
-    format = 'json';
-  } else if (value.endsWith('.js') || value.endsWith('.mjs') || value.endsWith('.cjs')) {
-    format = 'module';
-  }
-
-  if (typeValue !== undefined && typeValue !== 'json' && !(typeValue === 'css' && format === 'css')) {
-    return semanticError(Object.assign(
-      new TypeError('Import attribute type "' + typeValue + '" is not supported'),
-      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-    ));
-  }
-
-  var moduleTypeErrorCache;
-  var moduleTypeErrorCacheKey;
-  if (asyncSemanticErrors) {
-    moduleTypeErrorCache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache;
-    if (moduleTypeErrorCache === undefined) {
-      moduleTypeErrorCache = Object.create(null);
-      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache = moduleTypeErrorCache;
-    }
-    moduleTypeErrorCacheKey = value + '\x00type=' + (typeValue === undefined ? '' : typeValue);
-    if (moduleTypeErrorCache[moduleTypeErrorCacheKey] !== undefined) {
-      return moduleTypeErrorCache[moduleTypeErrorCacheKey];
-    }
-  }
-
-  function moduleTypeSemanticError(error) {
-    var prepared = semanticError(error);
-    if (asyncSemanticErrors) moduleTypeErrorCache[moduleTypeErrorCacheKey] = prepared;
-    return prepared;
-  }
-
-  if (unsupportedKey !== undefined) {
-    var unsupportedValueText = typeof unsupportedValue === 'string'
-      ? '"' + unsupportedValue + '"'
-      : String(unsupportedValue);
-    return semanticError(Object.assign(
-      new TypeError('Import attribute "' + unsupportedKey + '" with value ' + unsupportedValueText + ' is not supported'),
-      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-    ));
-  }
-
-  if (typeValue !== undefined) {
-    if (typeValue === 'json') {
-      if (format === 'module') {
-        return moduleTypeSemanticError(Object.assign(
-          new TypeError('Cannot use import attributes to change the type of a JavaScript module'),
-          { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' }
-        ));
-      }
-    } else if (typeValue === 'css' && format === 'css') {
-      // Let the loader report unsupported CSS modules as an unknown format.
-    }
-  }
-
-  if (format === 'json') {
-    if (typeValue !== 'json') {
-      return moduleTypeSemanticError(Object.assign(
-        new TypeError('Module "' + value + '" needs an import attribute of "type: json"'),
-        { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' }
-      ));
-    }
-  }
-
-  if (typeValue !== 'json') return value;
-  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
-}
-
-function __wasm_rquickjs_import_attr_prepare(specifier, options, asyncSemanticErrors) {
-  var value = String(specifier);
-  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
-  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
-}
-
-async function __wasm_rquickjs_import_attr_prepare_for_base(baseUrl, specifier, options, asyncSemanticErrors) {
-  var originalValue = String(specifier);
-  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
-  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors);
-}
-
-async function __wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors) {
-  originalValue = String(originalValue);
-  parsedOptions = parsedOptions || {};
-  if (
-    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
-    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0
-  ) {
-    var hooked = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_run_registered_loaders(String(baseUrl), originalValue, parsedOptions);
-    if (hooked !== undefined) return hooked;
-  }
-  var value = originalValue;
-  if (
-    value.startsWith('./') ||
-    value.startsWith('../') ||
-    value.startsWith('/') ||
-    value.startsWith('file://')
-  ) {
-    value = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
-  }
-  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
-}
-
-async function __wasm_rquickjs_import_attr_dynamic_import(baseUrl, specifier, options, asyncSemanticErrors, importer) {
-  var originalSpecifier = String(specifier);
-  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
-  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer);
-}
-
-async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer) {
-  originalSpecifier = String(originalSpecifier);
-  parsedOptions = parsedOptions || {};
-  var prepared = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors);
-  var key = String(prepared);
-  var completedKey = key;
-  var originalHasRewriteToken = originalSpecifier.indexOf('__wasm_rquickjs_import_type=') >= 0;
-  var tokenMatch = originalHasRewriteToken ? null : /^data:([^,]*);__wasm_rquickjs_import_type=([^;,]+)(,.*)$/.exec(key);
-  if (tokenMatch) {
-    completedKey = 'import-attr:' + tokenMatch[2].split('-')[0] + ':data:' + tokenMatch[1] + tokenMatch[3];
-  } else {
-    tokenMatch = originalHasRewriteToken ? null : /([?#&])__wasm_rquickjs_import_type=([^&#]+)(&?)/.exec(key);
-    if (tokenMatch) {
-      var tokenStart = tokenMatch.index;
-      var tokenEnd = tokenStart + tokenMatch[0].length;
-      var prefix = key.slice(0, tokenStart);
-      var suffix = key.slice(tokenEnd);
-      var separator = tokenMatch[1];
-      if (separator === '&') {
-        completedKey = prefix + (suffix ? '&' + suffix : '');
-      } else if (tokenMatch[3] === '&') {
-        completedKey = prefix + separator + suffix;
-      } else {
-        completedKey = prefix + suffix;
-      }
-      if (completedKey.endsWith('?') || completedKey.endsWith('#')) completedKey = completedKey.slice(0, -1);
-      completedKey = 'import-attr:' + tokenMatch[2].split('-')[0] + ':' + completedKey;
-    }
-  }
-  var generatedRewriteToken = completedKey !== key && !originalHasRewriteToken;
-  function discardGeneratedRewriteToken() {
-    if (generatedRewriteToken && typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_discard_import_attr_rewrite === 'function') {
-      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_discard_import_attr_rewrite(key);
-    }
-  }
-  var importFn = typeof importer === 'function' ? importer : function(value) { return import(value); };
-  if (
-    typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_has_import_mock === 'function' &&
-    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_has_import_mock(prepared, baseUrl)
-  ) {
-    try {
-      return await importFn(prepared);
-    } finally {
-      discardGeneratedRewriteToken();
-    }
-  }
-  var cache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight;
-  if (!cache) {
-    cache = Object.create(null);
-    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
-  }
-  if (cache[completedKey] !== undefined) {
-    var cached = cache[completedKey];
-    if (cached.preparedKey !== key) {
-      discardGeneratedRewriteToken();
-    }
-    return cached.promise;
-  }
-  if (
-    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
-    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0 &&
-    typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph === 'function' &&
-    !String(prepared).startsWith('data:application/json') &&
-    !/[.]json(?:[?#]|$)/.test(String(prepared))
-  ) {
-    await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared, originalSpecifier, baseUrl, parsedOptions);
-  }
-  var promise = importFn(prepared);
-  var entry = { promise: promise, preparedKey: key };
-  cache[completedKey] = entry;
-  try {
-    var result = await promise;
-    discardGeneratedRewriteToken();
-    return result;
-  } catch (error) {
-    if (cache[completedKey] === entry) delete cache[completedKey];
-    discardGeneratedRewriteToken();
-    throw error;
-  } finally {
-  }
-}
-
-[
-  ['__wasm_rquickjs_import_attr_read_options', __wasm_rquickjs_import_attr_read_options],
-  ['__wasm_rquickjs_import_attr_prepare_from_options', __wasm_rquickjs_import_attr_prepare_from_options],
-  ['__wasm_rquickjs_import_attr_prepare', __wasm_rquickjs_import_attr_prepare],
-  ['__wasm_rquickjs_import_attr_prepare_for_base', __wasm_rquickjs_import_attr_prepare_for_base],
-  ['__wasm_rquickjs_import_attr_prepare_for_base_parsed', __wasm_rquickjs_import_attr_prepare_for_base_parsed],
-  ['__wasm_rquickjs_import_attr_dynamic_import', __wasm_rquickjs_import_attr_dynamic_import],
-  ['__wasm_rquickjs_import_attr_dynamic_import_parsed', __wasm_rquickjs_import_attr_dynamic_import_parsed],
-].forEach(function(entry) {
-  var name = entry[0];
-  var fn = entry[1];
-  Object.defineProperty(__wasm_rquickjs_import_attr_global, name, {
-    value: fn,
-    writable: false,
-    configurable: false,
-  });
-});
-"#;

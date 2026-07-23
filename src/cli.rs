@@ -1,7 +1,28 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::str::FromStr;
-use wasm_rquickjs::{EmbeddingMode, JsModuleSpec};
+use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+
+/// The WASI generation target selectable on the command line.
+#[derive(ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum WasiTarget {
+    /// WASI Preview 2 (default): synchronous exports, full Node.js builtins.
+    #[default]
+    #[value(name = "wasi-p2")]
+    WasiP2,
+    /// WASI Preview 3 (opt-in): component-model async support and the Preview 3 runtime spine.
+    #[value(name = "wasi-p3")]
+    WasiP3,
+}
+
+impl From<WasiTarget> for GenerationTarget {
+    fn from(value: WasiTarget) -> Self {
+        match value {
+            WasiTarget::WasiP2 => GenerationTarget::WasiP2,
+            WasiTarget::WasiP3 => GenerationTarget::WasiP3,
+        }
+    }
+}
 
 /// Wraps a JavaScript module as a WASM Component using Rust and the rquickjs crate
 #[derive(Parser, Debug)]
@@ -36,6 +57,11 @@ pub enum Command {
         /// The WIT world to use
         #[arg(long)]
         world: Option<String>,
+
+        /// The WASI generation target. `wasi-p2` (default) generates the historical
+        /// synchronous Preview 2 wrapper; `wasi-p3` generates the opt-in Preview 3 wrapper.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        target: WasiTarget,
     },
     /// Generate TypeScript module definitions
     GenerateDTS {
@@ -50,6 +76,10 @@ pub enum Command {
         /// The WIT world to use
         #[arg(long)]
         world: Option<String>,
+
+        /// The WASI generation target whose JavaScript export contract is described.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        target: WasiTarget,
     },
     /// Pre-initialize a WebAssembly component using Wizer to speed up startup
     Optimize {

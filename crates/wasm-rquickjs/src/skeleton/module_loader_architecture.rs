@@ -4,7 +4,9 @@ use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use quote::ToTokens;
 
 const MODULE_JS: &str = include_str!("../../skeleton/src/builtin/module.js");
-const INTERNAL_RS: &str = include_str!("../../skeleton/src/internal.rs");
+const MODULE_LOADING_RS: &str = include_str!("../../skeleton/src/internal/module_loading.rs");
+const P2_RS: &str = include_str!("../../skeleton/src/internal/p2.rs");
+const P3_RS: &str = include_str!("../../skeleton/src/internal/p3.rs");
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum JsTokenKind {
@@ -334,7 +336,7 @@ fn top_level_declarations(source: &str) -> BTreeMap<String, usize> {
 
 fn rust_declarations(source: &str) -> BTreeSet<String> {
     syn::parse_file(source)
-        .expect("internal.rs must parse as Rust")
+        .expect("module loader source must parse as Rust")
         .items
         .into_iter()
         .filter_map(|item| match item {
@@ -382,11 +384,34 @@ fn registered_rust_bridges(source: &str) -> BTreeSet<String> {
     let mut bridges = BTreeSet::new();
     visit(
         syn::parse_file(source)
-            .expect("internal.rs must parse as Rust")
+            .expect("module loader source must parse as Rust")
             .into_token_stream(),
         &mut bridges,
     );
     bridges
+}
+
+fn rust_identifiers(source: &str) -> BTreeSet<String> {
+    fn visit(stream: TokenStream, identifiers: &mut BTreeSet<String>) {
+        for token in stream {
+            match token {
+                TokenTree::Ident(ident) => {
+                    identifiers.insert(ident.to_string());
+                }
+                TokenTree::Group(group) => visit(group.stream(), identifiers),
+                _ => {}
+            }
+        }
+    }
+
+    let mut identifiers = BTreeSet::new();
+    visit(
+        syn::parse_file(source)
+            .expect("runtime source must parse as Rust")
+            .into_token_stream(),
+        &mut identifiers,
+    );
+    identifiers
 }
 
 fn assert_no_import_meta_mutation(tokens: &[JsToken]) {
@@ -528,8 +553,8 @@ fn module_loader_architecture() {
     let js_tokens = tokenize_js(MODULE_JS);
     let js_declarations = top_level_declarations(MODULE_JS);
     let js_identifiers = referenced_identifiers(&js_tokens);
-    let rust_declarations = rust_declarations(INTERNAL_RS);
-    let rust_bridges = registered_rust_bridges(INTERNAL_RS);
+    let rust_declarations = rust_declarations(MODULE_LOADING_RS);
+    let rust_bridges = registered_rust_bridges(MODULE_LOADING_RS);
 
     for owner in [
         "NodeModulesResolver",
@@ -538,7 +563,7 @@ fn module_loader_architecture() {
     ] {
         assert!(
             rust_declarations.contains(owner),
-            "Rust-owned capability {owner} must be declared in internal.rs"
+            "Rust-owned capability {owner} must be declared in module_loading.rs"
         );
     }
     for forbidden in [
@@ -624,7 +649,23 @@ fn module_loader_architecture() {
         );
         assert!(
             rust_bridges.contains(bridge),
-            "internal.rs must register Rust bridge {bridge}"
+            "module_loading.rs must register Rust bridge {bridge}"
+        );
+    }
+    for (target, source) in [("p2", P2_RS), ("p3", P3_RS)] {
+        assert!(
+            rust_identifiers(source).contains("initialize_module_loading"),
+            "{target} must use the shared module loader initialization"
+        );
+    }
+    for forbidden in ["wasip2", "wstd"] {
+        assert!(
+            !rust_identifiers(P3_RS).contains(forbidden),
+            "p3 must not reference Preview 2 runtime dependency {forbidden}"
+        );
+        assert!(
+            !rust_identifiers(MODULE_LOADING_RS).contains(forbidden),
+            "shared module loading must not reference Preview 2 runtime dependency {forbidden}"
         );
     }
     assert_no_import_meta_mutation(&js_tokens);

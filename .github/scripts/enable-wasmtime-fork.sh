@@ -2,7 +2,7 @@
 # Enable Golem's wasmtime fork for the duration of a CI job.
 #
 # Why:
-#   Upstream wasmtime 45.0.0 ships a "fix" for issue #13040 that calls
+#   Upstream wasmtime ships a "fix" for issue #13040 that calls
 #   `tokio::task::yield_now()` inside `Deadline::Past::ready()` and re-polls
 #   completed futures inside `wasi:io/poll#poll`. That breaks
 #   `pollable.ready()` as a synchronous "is ready now?" probe (it always
@@ -10,7 +10,7 @@
 #   that rely on it (e.g. dynamic `import('data:...')`), causing tests
 #   such as `es_module__test_esm_invalid_data_urls_js` to hang.
 #
-#   Golem's fork (`golem-wasmtime-v45.0.0`) carries the alternative fix
+#   Golem's fork (`golem-wasmtime-v46.0.1-p3`) carries the alternative fix
 #   (commit `6d349ad9` "Yield fix"), preserving the `pollable.ready()`
 #   contract while still yielding once per `poll`/`block` call.
 #
@@ -41,7 +41,7 @@ tmp=$(mktemp)
 # commented block without needing portability-fragile regex alternation.
 sed \
     -e 's|^#\[patch\.crates-io\]$|[patch.crates-io]|' \
-    -e 's|^#\(wasmtime[a-z-]* = { git = "https://github.com/golemcloud/wasmtime\.git", branch = "golem-wasmtime-v45\.0\.0" }\)$|\1|' \
+    -e 's|^#\(wasmtime[a-z-]* = { git = "https://github.com/golemcloud/wasmtime\.git", branch = "golem-wasmtime-v46\.0\.1-p3" }\)$|\1|' \
     Cargo.toml > "$tmp"
 mv "$tmp" Cargo.toml
 

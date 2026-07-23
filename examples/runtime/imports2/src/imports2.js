@@ -1,6 +1,6 @@
 import * as iface from 'quickjs:example3/iface';
 
-export const test = (input) => {
+export const test = async (input) => {
     let hello = new iface.Hello(input);
     let world = new iface.Hello('World');
 
@@ -10,17 +10,17 @@ export const test = (input) => {
     console.log(`Comparison 1: ${comparison1}`);
     console.log(`Comparison 2: ${comparison2}`);
 
-    const dump1 = iface.dump(hello);
+    const dump1 = await iface.dump(hello);
     console.log(`Dump 1: ${dump1}`);
-    const dump2 = iface.dump(undefined);
+    const dump2 = await iface.dump(undefined);
     console.log(`Dump 2: ${dump2}`);
 
     let merged = iface.Hello.merge(hello, world);
 
-    const dump3 = iface.dumpAll([merged]);
+    const dump3 = await iface.dumpAll([merged]);
     console.log(`Dump 3: ${dump3}`);
 
-    const result = merged.getName();
+    const result = await merged.getName();
 
     merged[Symbol.dispose]();
 

@@ -1,27 +1,380 @@
-use futures::future::AbortHandle;
-use futures_concurrency::future::Join;
+//! Module resolution and loading machinery shared by both WASI generation targets.
+//!
+//! Rust owns package resolution, module classification, static CommonJS analysis, and
+//! facade declaration here. JavaScript owns mutable CommonJS state and lifecycle.
+
 use indexmap::IndexMap;
 use rquickjs::convert::Coerced;
-use rquickjs::function::{Args, Constructor, This};
+use rquickjs::function::This;
 use rquickjs::loader::{BuiltinResolver, FileResolver, Loader, Resolver};
 use rquickjs::object::{Accessor, Property};
+use rquickjs::prelude::Opt;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
-    Object, Persistent, Promise, String as JsString, Value, async_with, Exception,
+    AsyncContext, AsyncRuntime, Ctx, Error, Exception, Function, IntoJs, Module, Object, Value,
+    async_with,
 };
-use rquickjs::{CaughtError, prelude::*};
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::future::Future;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::ops::ControlFlow;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use wstd::runtime::block_on;
+
+pub(crate) const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_meta_resolve_global = globalThis;
+function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
+  baseUrl = String(baseUrl);
+  specifier = String(specifier);
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(specifier)) return specifier;
+  var builtinResolved = typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
+    ? __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin(specifier)
+    : undefined;
+  if (builtinResolved !== undefined) return builtinResolved;
+  function codedError(message, code, typeError) {
+    var err = typeError ? new TypeError(message) : new Error(message);
+    err.code = code;
+    return err;
+  }
+  function ensureSupportedBase() {
+    if (baseUrl.startsWith('data:')) {
+      throw codedError('Failed to resolve module specifier "' + specifier + '" from "' + baseUrl + '": Invalid relative URL or base scheme is not hierarchical.', 'ERR_UNSUPPORTED_RESOLVE_REQUEST', false);
+    }
+  }
+  function normalizePath(p) {
+    var parts = p.split('/'); var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i] || parts[i] === '.') continue;
+      if (parts[i] === '..') { if (out.length > 0) out.pop(); }
+      else out.push(parts[i]);
+    }
+    return '/' + out.join('/');
+  }
+  function splitSuffix(value) {
+    var query = value.indexOf('?');
+    var hash = value.indexOf('#');
+    var end = query < 0 ? hash : (hash < 0 ? query : Math.min(query, hash));
+    return end < 0 ? [value, ''] : [value.substring(0, end), value.substring(end)];
+  }
+  function preserveTrailingSlash(path, original) {
+    return original.endsWith('/') && !path.endsWith('/') ? path + '/' : path;
+  }
+  if (specifier.startsWith('/')) {
+    ensureSupportedBase();
+    if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path === 'function') {
+      var pathResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
+      if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
+    }
+    var parts = splitSuffix(specifier);
+    var path = preserveTrailingSlash(normalizePath(parts[0]), parts[0]);
+    return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
+  }
+  if (specifier.startsWith('.')) {
+    ensureSupportedBase();
+    if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path === 'function') {
+      var pathResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_path(baseUrl, specifier);
+      if (pathResolved !== undefined && pathResolved !== null) return pathResolved;
+    }
+    var base = baseUrl;
+    if (base.startsWith('file://')) base = base.slice(7);
+    base = splitSuffix(base)[0];
+    var dir = base.substring(0, base.lastIndexOf('/') + 1);
+    var parts = splitSuffix(specifier);
+    var path = preserveTrailingSlash(normalizePath(dir + parts[0]), parts[0]);
+    return (baseUrl.startsWith('file://') ? 'file://' + path : path) + parts[1];
+  }
+  ensureSupportedBase();
+  if (typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package === 'function') {
+    var packageResolved = __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_package(baseUrl, specifier);
+    if (packageResolved !== undefined && packageResolved !== null) return packageResolved;
+  }
+  if (specifier.endsWith('/') && baseUrl.startsWith('file://')) {
+    var base = splitSuffix(baseUrl.slice(7))[0];
+    var dir = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
+    var resolved = normalizePath(dir + 'node_modules/' + specifier);
+    return 'file://' + (resolved.endsWith('/') ? resolved : resolved + '/');
+  }
+  throw codedError('Cannot find package "' + specifier + '" imported from ' + baseUrl, 'ERR_MODULE_NOT_FOUND', false);
+}
+Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve', {
+  value: __wasm_rquickjs_import_meta_resolve_impl,
+  writable: false,
+  configurable: false,
+});"#;
+
+pub(crate) const IMPORT_ATTRS_VALIDATE_JS: &str = r#"
+const __wasm_rquickjs_import_attr_global = globalThis;
+
+function __wasm_rquickjs_import_attr_read_options(options) {
+  var typeValue;
+  var unsupportedKey;
+  var unsupportedValue;
+
+  if (options !== undefined) {
+    if (options === null || typeof options !== 'object') {
+      throw new TypeError('The second argument to import() must be an object');
+    }
+    var w = options['with'];
+    if (w !== undefined) {
+      if (w === null || typeof w !== 'object') {
+        throw new TypeError("The 'with' option must be an object");
+      }
+      var attrs = w;
+      var keys = Object.keys(attrs);
+      for (var k = 0; k < keys.length; k++) {
+        if (keys[k] === 'type') {
+          typeValue = attrs.type;
+          if (typeof typeValue !== 'string') {
+            throw new TypeError('Import attribute value must be a string');
+          }
+        } else if (unsupportedKey === undefined) {
+          unsupportedKey = keys[k];
+          unsupportedValue = attrs[keys[k]];
+        }
+      }
+    }
+  }
+  return { typeValue: typeValue, unsupportedKey: unsupportedKey, unsupportedValue: unsupportedValue };
+}
+
+function __wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors) {
+  value = String(value);
+  parsedOptions = parsedOptions || {};
+  var typeValue = parsedOptions.typeValue;
+  var unsupportedKey = parsedOptions.unsupportedKey;
+  var unsupportedValue = parsedOptions.unsupportedValue;
+
+  function semanticError(error) {
+    if (!asyncSemanticErrors) throw error;
+    return 'data:text/javascript,' + encodeURIComponent(
+      'await Promise.reject(Object.assign(new TypeError(' +
+      JSON.stringify(error.message) + '), { code: ' + JSON.stringify(error.code) + ' }));'
+    );
+  }
+
+  var format = null;
+  if (value.startsWith('data:')) {
+    var rest = value.substring(5);
+    var ci = rest.indexOf(',');
+    if (ci >= 0) {
+      var meta = rest.substring(0, ci).split(';')[0].trim();
+      if (meta === 'application/json') format = 'json';
+      else if (meta === 'text/javascript' || meta === 'application/javascript') format = 'module';
+      else if (meta === 'text/css') format = 'css';
+    }
+  } else if (value.startsWith('node:')) {
+    format = 'module';
+  } else if (value.endsWith('.json')) {
+    format = 'json';
+  } else if (value.endsWith('.js') || value.endsWith('.mjs') || value.endsWith('.cjs')) {
+    format = 'module';
+  }
+
+  if (typeValue !== undefined && typeValue !== 'json' && !(typeValue === 'css' && format === 'css')) {
+    return semanticError(Object.assign(
+      new TypeError('Import attribute type "' + typeValue + '" is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
+  }
+
+  var moduleTypeErrorCache;
+  var moduleTypeErrorCacheKey;
+  if (asyncSemanticErrors) {
+    moduleTypeErrorCache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache;
+    if (moduleTypeErrorCache === undefined) {
+      moduleTypeErrorCache = Object.create(null);
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_module_type_error_cache = moduleTypeErrorCache;
+    }
+    moduleTypeErrorCacheKey = value + '\x00type=' + (typeValue === undefined ? '' : typeValue);
+    if (moduleTypeErrorCache[moduleTypeErrorCacheKey] !== undefined) {
+      return moduleTypeErrorCache[moduleTypeErrorCacheKey];
+    }
+  }
+
+  function moduleTypeSemanticError(error) {
+    var prepared = semanticError(error);
+    if (asyncSemanticErrors) moduleTypeErrorCache[moduleTypeErrorCacheKey] = prepared;
+    return prepared;
+  }
+
+  if (unsupportedKey !== undefined) {
+    var unsupportedValueText = typeof unsupportedValue === 'string'
+      ? '"' + unsupportedValue + '"'
+      : String(unsupportedValue);
+    return semanticError(Object.assign(
+      new TypeError('Import attribute "' + unsupportedKey + '" with value ' + unsupportedValueText + ' is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
+  }
+
+  if (typeValue !== undefined) {
+    if (typeValue === 'json') {
+      if (format === 'module') {
+        return moduleTypeSemanticError(Object.assign(
+          new TypeError('Cannot use import attributes to change the type of a JavaScript module'),
+          { code: 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE' }
+        ));
+      }
+    } else if (typeValue === 'css' && format === 'css') {
+      // Let the loader report unsupported CSS modules as an unknown format.
+    }
+  }
+
+  if (format === 'json') {
+    if (typeValue !== 'json') {
+      return moduleTypeSemanticError(Object.assign(
+        new TypeError('Module "' + value + '" needs an import attribute of "type: json"'),
+        { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' }
+      ));
+    }
+  }
+
+  if (typeValue !== 'json') return value;
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_register_import_attr_rewrite(value, 'json');
+}
+
+function __wasm_rquickjs_import_attr_prepare(specifier, options, asyncSemanticErrors) {
+  var value = String(specifier);
+  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
+}
+
+async function __wasm_rquickjs_import_attr_prepare_for_base(baseUrl, specifier, options, asyncSemanticErrors) {
+  var originalValue = String(specifier);
+  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors);
+}
+
+async function __wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalValue, parsedOptions, asyncSemanticErrors) {
+  originalValue = String(originalValue);
+  parsedOptions = parsedOptions || {};
+  if (
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0
+  ) {
+    var hooked = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_run_registered_loaders(String(baseUrl), originalValue, parsedOptions);
+    if (hooked !== undefined) return hooked;
+  }
+  var value = originalValue;
+  if (
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('/') ||
+    value.startsWith('file://')
+  ) {
+    value = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
+  }
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
+}
+
+async function __wasm_rquickjs_import_attr_dynamic_import(baseUrl, specifier, options, asyncSemanticErrors, importer) {
+  var originalSpecifier = String(specifier);
+  var parsedOptions = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_read_options(options);
+  return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer);
+}
+
+async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors, importer) {
+  originalSpecifier = String(originalSpecifier);
+  parsedOptions = parsedOptions || {};
+  var prepared = await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, originalSpecifier, parsedOptions, asyncSemanticErrors);
+  var key = String(prepared);
+  var completedKey = key;
+  var originalHasRewriteToken = originalSpecifier.indexOf('__wasm_rquickjs_import_type=') >= 0;
+  var tokenMatch = originalHasRewriteToken ? null : /^data:([^,]*);__wasm_rquickjs_import_type=([^;,]+)(,.*)$/.exec(key);
+  if (tokenMatch) {
+    completedKey = 'import-attr:' + tokenMatch[2].split('-')[0] + ':data:' + tokenMatch[1] + tokenMatch[3];
+  } else {
+    tokenMatch = originalHasRewriteToken ? null : /([?#&])__wasm_rquickjs_import_type=([^&#]+)(&?)/.exec(key);
+    if (tokenMatch) {
+      var tokenStart = tokenMatch.index;
+      var tokenEnd = tokenStart + tokenMatch[0].length;
+      var prefix = key.slice(0, tokenStart);
+      var suffix = key.slice(tokenEnd);
+      var separator = tokenMatch[1];
+      if (separator === '&') {
+        completedKey = prefix + (suffix ? '&' + suffix : '');
+      } else if (tokenMatch[3] === '&') {
+        completedKey = prefix + separator + suffix;
+      } else {
+        completedKey = prefix + suffix;
+      }
+      if (completedKey.endsWith('?') || completedKey.endsWith('#')) completedKey = completedKey.slice(0, -1);
+      completedKey = 'import-attr:' + tokenMatch[2].split('-')[0] + ':' + completedKey;
+    }
+  }
+  var generatedRewriteToken = completedKey !== key && !originalHasRewriteToken;
+  function discardGeneratedRewriteToken() {
+    if (generatedRewriteToken && typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_discard_import_attr_rewrite === 'function') {
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_discard_import_attr_rewrite(key);
+    }
+  }
+  var importFn = typeof importer === 'function' ? importer : function(value) { return import(value); };
+  if (
+    typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_has_import_mock === 'function' &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_has_import_mock(prepared, baseUrl)
+  ) {
+    try {
+      return await importFn(prepared);
+    } finally {
+      discardGeneratedRewriteToken();
+    }
+  }
+  var cache = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight;
+  if (!cache) {
+    cache = Object.create(null);
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
+  }
+  if (cache[completedKey] !== undefined) {
+    var cached = cache[completedKey];
+    if (cached.preparedKey !== key) {
+      discardGeneratedRewriteToken();
+    }
+    return cached.promise;
+  }
+  if (
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
+    __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0 &&
+    typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph === 'function' &&
+    !String(prepared).startsWith('data:application/json') &&
+    !/[.]json(?:[?#]|$)/.test(String(prepared))
+  ) {
+    await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared, originalSpecifier, baseUrl, parsedOptions);
+  }
+  var promise = importFn(prepared);
+  var entry = { promise: promise, preparedKey: key };
+  cache[completedKey] = entry;
+  try {
+    var result = await promise;
+    discardGeneratedRewriteToken();
+    return result;
+  } catch (error) {
+    if (cache[completedKey] === entry) delete cache[completedKey];
+    discardGeneratedRewriteToken();
+    throw error;
+  } finally {
+  }
+}
+
+[
+  ['__wasm_rquickjs_import_attr_read_options', __wasm_rquickjs_import_attr_read_options],
+  ['__wasm_rquickjs_import_attr_prepare_from_options', __wasm_rquickjs_import_attr_prepare_from_options],
+  ['__wasm_rquickjs_import_attr_prepare', __wasm_rquickjs_import_attr_prepare],
+  ['__wasm_rquickjs_import_attr_prepare_for_base', __wasm_rquickjs_import_attr_prepare_for_base],
+  ['__wasm_rquickjs_import_attr_prepare_for_base_parsed', __wasm_rquickjs_import_attr_prepare_for_base_parsed],
+  ['__wasm_rquickjs_import_attr_dynamic_import', __wasm_rquickjs_import_attr_dynamic_import],
+  ['__wasm_rquickjs_import_attr_dynamic_import_parsed', __wasm_rquickjs_import_attr_dynamic_import_parsed],
+].forEach(function(entry) {
+  var name = entry[0];
+  var fn = entry[1];
+  Object.defineProperty(__wasm_rquickjs_import_attr_global, name, {
+    value: fn,
+    writable: false,
+    configurable: false,
+  });
+});
+"#;
 
 fn throw_native_coded_error<'js, T>(
     ctx: &Ctx<'js>,
@@ -347,7 +700,9 @@ impl DataUrlLoader {
             }
         };
         let escaped_msg = Self::js_string_escape(&msg);
-        format!("export default undefined;\nawait Promise.reject(new SyntaxError('{escaped_msg}'));\n")
+        format!(
+            "export default undefined;\nawait Promise.reject(new SyntaxError('{escaped_msg}'));\n"
+        )
     }
 }
 
@@ -393,7 +748,8 @@ impl Loader for DataUrlLoader {
             .ok_or_else(|| Error::new_loading(path))?;
 
         // Find the comma separating metadata from content
-        let comma_pos = Self::content_separator_pos(rest).ok_or_else(|| Error::new_loading(path))?;
+        let comma_pos =
+            Self::content_separator_pos(rest).ok_or_else(|| Error::new_loading(path))?;
         let metadata = &rest[..comma_pos];
         let raw_content = rest[comma_pos + 1..]
             .split_once('#')
@@ -520,7 +876,9 @@ fn existing_import_attr_rewrite(specifier: &str, import_type: &str) -> Option<St
     IMPORT_ATTR_REWRITE_TOKENS.with(|tokens| {
         tokens.borrow().iter().find_map(|(token, rewritten)| {
             let (token_import_type, _) = token.split_once('-')?;
-            if token_import_type == import_type && strip_import_type_rewrite_token(rewritten) == specifier {
+            if token_import_type == import_type
+                && strip_import_type_rewrite_token(rewritten) == specifier
+            {
                 Some(rewritten.clone())
             } else {
                 None
@@ -534,7 +892,9 @@ fn consume_import_type_rewrite_token(token: &str, path: &str) -> Option<String> 
         let mut tokens = tokens.borrow_mut();
         if tokens.get(token).is_some_and(|specifier| specifier == path) {
             tokens.remove(token);
-            token.split_once('-').map(|(import_type, _)| import_type.to_string())
+            token
+                .split_once('-')
+                .map(|(import_type, _)| import_type.to_string())
         } else {
             None
         }
@@ -611,10 +971,7 @@ fn has_import_type_rewrite_token(path: &str) -> bool {
     })
 }
 
-fn read_import_specifier_literal(
-    source: &str,
-    pos: usize,
-) -> Option<(usize, usize, usize, usize)> {
+fn read_import_specifier_literal(source: &str, pos: usize) -> Option<(usize, usize, usize, usize)> {
     let bytes = source.as_bytes();
     if !matches!(bytes.get(pos), Some(b'"' | b'\'')) {
         return None;
@@ -643,7 +1000,8 @@ fn read_closed_import_specifier_literal(
 ) -> Option<(usize, usize, usize, usize)> {
     let literal = read_import_specifier_literal(source, pos)?;
     let bytes = source.as_bytes();
-    if literal.1 <= pos + 1 || literal.1 > bytes.len() || bytes.get(literal.1 - 1) != bytes.get(pos) {
+    if literal.1 <= pos + 1 || literal.1 > bytes.len() || bytes.get(literal.1 - 1) != bytes.get(pos)
+    {
         return None;
     }
     Some(literal)
@@ -670,13 +1028,7 @@ impl ProcessedStaticImportAttrs {
 }
 
 fn process_static_import_attrs(source: &str, module_path: &str) -> ProcessedStaticImportAttrs {
-    process_import_attrs(
-        source,
-        module_path,
-        None,
-        "undefined",
-        "import.meta.url",
-    )
+    process_import_attrs(source, module_path, None, "undefined", "import.meta.url")
 }
 
 fn process_import_attrs(
@@ -726,10 +1078,7 @@ fn process_import_attrs(
                 let (dynamic_import_reaction_name, dynamic_import_with_trace_name) =
                     dynamic_import_binding_names.get_or_insert_with(|| {
                         (
-                            unique_internal_name(
-                                source,
-                                "__wasm_rquickjs_dynamic_import_reaction",
-                            ),
+                            unique_internal_name(source, "__wasm_rquickjs_dynamic_import_reaction"),
                             unique_internal_name(
                                 source,
                                 "__wasm_rquickjs_dynamic_import_with_trace",
@@ -801,9 +1150,7 @@ fn process_import_attrs(
                 // Check for 'with' keyword (not 'with(' which is a with-statement)
                 if i + 4 <= len
                     && &bytes[i..i + 4] == b"with"
-                    && (i + 4 >= len
-                        || !is_ident_continue(bytes[i + 4])
-                        || bytes[i + 4] == b'{')
+                    && (i + 4 >= len || !is_ident_continue(bytes[i + 4]) || bytes[i + 4] == b'{')
                 {
                     let with_start = i;
                     i += 4;
@@ -896,13 +1243,18 @@ fn process_import_attrs(
     ProcessedStaticImportAttrs {
         source: result,
         dynamic_import_binding_names: rewrote_dynamic_import.then(|| {
-            dynamic_import_binding_names
-                .expect("dynamic import bindings must be initialized when a dynamic import was rewritten")
+            dynamic_import_binding_names.expect(
+                "dynamic import bindings must be initialized when a dynamic import was rewritten",
+            )
         }),
     }
 }
 
-fn rewrite_import_specifier_literal(literal: &str, specifier: &str, type_value: Option<&str>) -> String {
+fn rewrite_import_specifier_literal(
+    literal: &str,
+    specifier: &str,
+    type_value: Option<&str>,
+) -> String {
     if type_value != Some("json") {
         return literal.to_string();
     }
@@ -918,16 +1270,6 @@ fn unique_internal_name(source: &str, base: &str) -> String {
         name = format!("{base}_{seq}");
     }
     name
-}
-
-fn insert_after_shebang(source: &str, insertion: &str) -> String {
-    if let Some(rest) = source.strip_prefix("#!") {
-        if let Some(newline_pos) = rest.find('\n') {
-            let split = 2 + newline_pos + 1;
-            return format!("{}{}{}", &source[..split], insertion, &source[split..]);
-        }
-    }
-    format!("{insertion}{source}")
 }
 
 fn rewrite_dynamic_import_call(
@@ -1097,8 +1439,7 @@ fn is_object_method_shorthand_import(source: &str, import_start: usize, open_par
     {
         return false;
     }
-    if previous_word(source, import_start).is_some_and(|(word, _)| word == "static")
-    {
+    if previous_word(source, import_start).is_some_and(|(word, _)| word == "static") {
         return true;
     }
 
@@ -1258,7 +1599,10 @@ fn append_import_type_query(specifier: &str, import_type: &str) -> String {
 
     let token = next_import_attr_rewrite_token(import_type);
     if specifier.starts_with("data:") {
-        if let Some(comma_pos) = specifier.strip_prefix("data:").and_then(DataUrlLoader::content_separator_pos) {
+        if let Some(comma_pos) = specifier
+            .strip_prefix("data:")
+            .and_then(DataUrlLoader::content_separator_pos)
+        {
             let insert_pos = "data:".len() + comma_pos;
             let rewritten = format!(
                 "{};{IMPORT_TYPE_QUERY_PREFIX}{token}{}",
@@ -1278,8 +1622,7 @@ fn append_import_type_query(specifier: &str, import_type: &str) -> String {
 }
 
 fn import_attr_type_from_path(path: &str) -> Option<String> {
-    import_type_rewrite_token(path)
-        .and_then(|token| consume_import_type_rewrite_token(token, path))
+    import_type_rewrite_token(path).and_then(|token| consume_import_type_rewrite_token(token, path))
 }
 
 fn strip_import_type_rewrite_token(path: &str) -> String {
@@ -1298,7 +1641,11 @@ fn strip_import_type_rewrite_token(path: &str) -> String {
                 .checked_sub(1)
                 .filter(|idx| path.as_bytes().get(*idx) == Some(&b';'))
                 .unwrap_or(marker_start);
-            return format!("{}{}", &path[..remove_start], &path[marker_start + marker.len()..]);
+            return format!(
+                "{}{}",
+                &path[..remove_start],
+                &path[marker_start + marker.len()..]
+            );
         }
     }
 
@@ -1443,7 +1790,8 @@ fn validate_static_import_attrs(
     specifier: &str,
     _module_path: &str,
 ) -> Option<String> {
-    let (code, message) = validate_import_attrs_error(type_value, unsupported_key, format, specifier)?;
+    let (code, message) =
+        validate_import_attrs_error(type_value, unsupported_key, format, specifier)?;
     Some(import_attr_error_module_source(&code, &message))
 }
 
@@ -1519,8 +1867,8 @@ fn import_attr_error_expression(code: &str, message: &str) -> String {
 fn throw_import_attr_type_incompatible<'js, T>(ctx: &Ctx<'js>) -> rquickjs::Result<T> {
     let globals = ctx.globals();
     let type_error_ctor: Function = globals.get("TypeError")?;
-    let error_obj: Object =
-        type_error_ctor.call(("Cannot use import attributes to change the type of a JavaScript module",))?;
+    let error_obj: Object = type_error_ctor
+        .call(("Cannot use import attributes to change the type of a JavaScript module",))?;
     error_obj.set("code", "ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE")?;
     Err(ctx.throw(error_obj.into_value()))
 }
@@ -1595,11 +1943,19 @@ struct StaticNamedImport {
     local: String,
 }
 
-fn cjs_named_import_error_module_source(ctx: &Ctx<'_>, filename: &str, source: &str) -> Option<String> {
-    let esm_conditions =
-        NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::EsmImport.condition_mode());
-    let cjs_conditions =
-        NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
+fn cjs_named_import_error_module_source(
+    ctx: &Ctx<'_>,
+    filename: &str,
+    source: &str,
+) -> Option<String> {
+    let esm_conditions = NodeModulesResolver::conditions_from_global(
+        ctx,
+        NodePackageResolveMode::EsmImport.condition_mode(),
+    );
+    let cjs_conditions = NodeModulesResolver::conditions_from_global(
+        ctx,
+        NodePackageResolveMode::CjsAnalysis.condition_mode(),
+    );
     find_cjs_named_import_error(filename, source, &esm_conditions, &cjs_conditions).map(|message| {
         let escaped = DataUrlLoader::js_string_escape(&message);
         format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
@@ -1615,9 +1971,13 @@ fn find_cjs_named_import_error(
     let mut result = None;
     let _ = scan_code_positions(source, true, |i, _| {
         if let Some((specifier, named_imports, next)) = parse_static_named_import(source, i) {
-            if let Some(message) =
-                cjs_named_import_error_message(filename, &specifier, &named_imports, esm_conditions, cjs_conditions)
-            {
+            if let Some(message) = cjs_named_import_error_message(
+                filename,
+                &specifier,
+                &named_imports,
+                esm_conditions,
+                cjs_conditions,
+            ) {
                 result = Some(message);
                 return ControlFlow::Break(());
             }
@@ -1644,7 +2004,8 @@ fn cjs_named_import_error_message(
         return None;
     }
     let source = std::fs::read_to_string(&resolved).ok()?;
-    let analysis = analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new(), cjs_conditions);
+    let analysis =
+        analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new(), cjs_conditions);
     if !analysis.is_cjs && analysis.exports.is_empty() && analysis.reexports.is_empty() {
         return None;
     }
@@ -1653,7 +2014,11 @@ fn cjs_named_import_error_message(
         if named_import.imported == "default" {
             continue;
         }
-        if !analysis.exports.iter().any(|name| name == &named_import.imported) {
+        if !analysis
+            .exports
+            .iter()
+            .any(|name| name == &named_import.imported)
+        {
             let mut message = format!(
                 "Named export '{}' not found. The requested module '{}' is a CommonJS module, which may not support all module.exports as named exports.\nCommonJS modules can always be imported via the default export, for example using:\n\nimport pkg from '{}';\n",
                 named_import.imported, specifier, specifier
@@ -1688,12 +2053,16 @@ fn resolve_esm_named_import_candidate_path(
 }
 
 fn could_resolve_to_cjs_for_named_import_error(specifier: &str) -> bool {
-    if specifier.starts_with("node:") || specifier.starts_with("data:") || specifier.contains("://") {
+    if specifier.starts_with("node:") || specifier.starts_with("data:") || specifier.contains("://")
+    {
         return false;
     }
     if is_relative_or_absolute_specifier(specifier) {
         let (path, _) = split_module_path_suffix(specifier);
-        return match std::path::Path::new(path).extension().and_then(|ext| ext.to_str()) {
+        return match std::path::Path::new(path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+        {
             Some("cjs" | "js") | None => true,
             Some(_) => false,
         };
@@ -1762,7 +2131,11 @@ fn skip_esm_cjs_global_scanner_span(source: &str, pos: usize) -> Option<usize> {
     }
 }
 
-fn add_declared_cjs_global_bindings(bindings: Vec<String>, names: &[&str], declared: &mut Vec<String>) {
+fn add_declared_cjs_global_bindings(
+    bindings: Vec<String>,
+    names: &[&str],
+    declared: &mut Vec<String>,
+) {
     for name in bindings {
         if names.contains(&name.as_str()) && !declared.iter().any(|existing| existing == &name) {
             declared.push(name);
@@ -1811,7 +2184,10 @@ struct CjsGlobalScannerScope {
     end: Option<usize>,
 }
 
-fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str]) -> Option<&'static str> {
+fn find_bare_cjs_global_in_esm_among(
+    source: &str,
+    names: &'static [&'static str],
+) -> Option<&'static str> {
     let bytes = source.as_bytes();
     let mut i = 0usize;
     let mut scopes = vec![CjsGlobalScannerScope {
@@ -1820,7 +2196,12 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
     }];
     let mut pending_block_scope_bindings = None;
     while i < bytes.len() {
-        while scopes.len() > 1 && scopes.last().and_then(|scope| scope.end).is_some_and(|end| i >= end) {
+        while scopes.len() > 1
+            && scopes
+                .last()
+                .and_then(|scope| scope.end)
+                .is_some_and(|end| i >= end)
+        {
             scopes.pop();
         }
 
@@ -1837,7 +2218,8 @@ fn find_bare_cjs_global_in_esm_among(source: &str, names: &'static [&'static str
             continue;
         }
 
-        if let Some((bindings, body_start, body_end)) = parse_for_lexical_header_bindings(source, i) {
+        if let Some((bindings, body_start, body_end)) = parse_for_lexical_header_bindings(source, i)
+        {
             let mut body_scope = Vec::new();
             add_declared_cjs_global_bindings(bindings, names, &mut body_scope);
             if bytes.get(body_start) == Some(&b'{') {
@@ -2023,7 +2405,10 @@ fn parse_import_declaration_bindings(source: &str, pos: usize) -> Option<(Vec<St
     Some((bindings, find_statement_end(source, i)))
 }
 
-fn parse_static_named_import(source: &str, pos: usize) -> Option<(String, Vec<StaticNamedImport>, usize)> {
+fn parse_static_named_import(
+    source: &str,
+    pos: usize,
+) -> Option<(String, Vec<StaticNamedImport>, usize)> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "import")?);
     if i < bytes.len() && matches!(bytes[i], b'(' | b'\'' | b'"') {
@@ -2097,7 +2482,11 @@ fn collect_named_import_specifiers(
     Some(())
 }
 
-fn collect_named_import_bindings(source: &str, start: usize, bindings: &mut Vec<String>) -> Option<()> {
+fn collect_named_import_bindings(
+    source: &str,
+    start: usize,
+    bindings: &mut Vec<String>,
+) -> Option<()> {
     let bytes = source.as_bytes();
     let end = find_matching_brace(source, start)?;
     let mut i = start + 1;
@@ -2138,7 +2527,10 @@ fn parse_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usiz
     None
 }
 
-fn parse_for_lexical_header_bindings(source: &str, pos: usize) -> Option<(Vec<String>, usize, usize)> {
+fn parse_for_lexical_header_bindings(
+    source: &str,
+    pos: usize,
+) -> Option<(Vec<String>, usize, usize)> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_ident_name(source, pos, "for")?);
     if let Some(await_end) = parse_ident_name(source, i, "await") {
@@ -2170,7 +2562,8 @@ fn parse_catch_parameter_bindings(source: &str, pos: usize) -> Option<(Vec<Strin
     }
     let params_end = find_matching_paren(source, i)?;
     let params_start = skip_ws_comments(source, i + 1);
-    let bindings = collect_cjs_global_binding_names_in_variable_declaration(source, params_start, params_end);
+    let bindings =
+        collect_cjs_global_binding_names_in_variable_declaration(source, params_start, params_end);
     i = skip_ws_comments(source, params_end + 1);
     if bytes.get(i) != Some(&b'{') {
         return None;
@@ -2179,22 +2572,42 @@ fn parse_catch_parameter_bindings(source: &str, pos: usize) -> Option<(Vec<Strin
 }
 
 fn parse_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
-    let start = parse_variable_declaration_binding_start(source, parse_variable_declaration_keyword(source, pos)?)?;
+    let start = parse_variable_declaration_binding_start(
+        source,
+        parse_variable_declaration_keyword(source, pos)?,
+    )?;
     let end = find_variable_declaration_end(source, start);
-    Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+    Some((
+        collect_cjs_global_binding_names_in_variable_declaration(source, start, end),
+        end,
+    ))
 }
 
-fn parse_lexical_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
-    let start =
-        parse_variable_declaration_binding_start(source, parse_lexical_variable_declaration_keyword(source, pos)?)?;
+fn parse_lexical_variable_declaration_span(
+    source: &str,
+    pos: usize,
+) -> Option<(Vec<String>, usize)> {
+    let start = parse_variable_declaration_binding_start(
+        source,
+        parse_lexical_variable_declaration_keyword(source, pos)?,
+    )?;
     let end = find_variable_declaration_end(source, start);
-    Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+    Some((
+        collect_cjs_global_binding_names_in_variable_declaration(source, start, end),
+        end,
+    ))
 }
 
 fn parse_var_variable_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>, usize)> {
-    let start = parse_variable_declaration_binding_start(source, parse_free_ident_name(source, pos, "var")?)?;
+    let start = parse_variable_declaration_binding_start(
+        source,
+        parse_free_ident_name(source, pos, "var")?,
+    )?;
     let end = find_variable_declaration_end(source, start);
-    Some((collect_cjs_global_binding_names_in_variable_declaration(source, start, end), end))
+    Some((
+        collect_cjs_global_binding_names_in_variable_declaration(source, start, end),
+        end,
+    ))
 }
 
 fn parse_variable_declaration_binding_start(source: &str, keyword_end: usize) -> Option<usize> {
@@ -2207,7 +2620,8 @@ fn parse_variable_declaration_binding_start(source: &str, keyword_end: usize) ->
 }
 
 fn parse_lexical_variable_declaration_keyword(source: &str, pos: usize) -> Option<usize> {
-    parse_free_ident_name(source, pos, "const").or_else(|| parse_free_ident_name(source, pos, "let"))
+    parse_free_ident_name(source, pos, "const")
+        .or_else(|| parse_free_ident_name(source, pos, "let"))
 }
 
 fn parse_variable_declaration_keyword(source: &str, pos: usize) -> Option<usize> {
@@ -2309,7 +2723,10 @@ fn parse_arrow_function_span(source: &str, pos: usize) -> Option<usize> {
 }
 
 fn parse_object_method_span(source: &str, pos: usize) -> Option<usize> {
-    if !matches!(previous_significant_byte_before_method(source, pos), Some(b'{') | Some(b',')) {
+    if !matches!(
+        previous_significant_byte_before_method(source, pos),
+        Some(b'{') | Some(b',')
+    ) {
         return None;
     }
     let bytes = source.as_bytes();
@@ -2323,7 +2740,9 @@ fn parse_object_method_span(source: &str, pos: usize) -> Option<usize> {
     if i < bytes.len() && bytes[i] == b'*' {
         i = skip_ws_comments(source, i + 1);
     }
-    if let Some(accessor_end) = parse_ident_name(source, i, "get").or_else(|| parse_ident_name(source, i, "set")) {
+    if let Some(accessor_end) =
+        parse_ident_name(source, i, "get").or_else(|| parse_ident_name(source, i, "set"))
+    {
         let next = skip_ws_comments(source, accessor_end);
         if next < bytes.len() && bytes[next] != b':' {
             i = next;
@@ -2390,7 +2809,11 @@ fn parse_class_declaration_span(source: &str, pos: usize) -> Option<(Vec<String>
     Some((bindings, i))
 }
 
-fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start: usize, end: usize) -> Vec<String> {
+fn collect_cjs_global_binding_names_in_variable_declaration(
+    source: &str,
+    start: usize,
+    end: usize,
+) -> Vec<String> {
     let bytes = source.as_bytes();
     let mut names = Vec::new();
     let mut i = start;
@@ -2422,7 +2845,10 @@ fn collect_cjs_global_binding_names_in_variable_declaration(source: &str, start:
             }
             b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
                 i += 2;
-                while i + 1 < end && i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                while i + 1 < end
+                    && i + 1 < bytes.len()
+                    && !(bytes[i] == b'*' && bytes[i + 1] == b'/')
+                {
                     i += 1;
                 }
                 i = (i + 2).min(end).min(bytes.len());
@@ -2526,7 +2952,11 @@ fn object_pattern_property_key_without_binding(source: &str, pos: usize) -> bool
 }
 
 fn data_url_simple_identifier_error_module_source(source: &str) -> Option<String> {
-    let ident = source.trim().strip_suffix(';').unwrap_or(source.trim()).trim();
+    let ident = source
+        .trim()
+        .strip_suffix(';')
+        .unwrap_or(source.trim())
+        .trim();
     if ident.is_empty()
         || ["require", "exports", "module", "__filename", "__dirname"].contains(&ident)
         || !is_ascii_js_identifier(ident)
@@ -2559,7 +2989,8 @@ fn has_cjs_wrapper_lexical_redeclaration(source: &str) -> bool {
             if let Some((bindings, _)) = parse_lexical_variable_declaration_span(source, i) {
                 for binding in bindings {
                     if binding == "require" {
-                        let keyword_end = parse_lexical_variable_declaration_keyword(source, i).unwrap_or(i);
+                        let keyword_end =
+                            parse_lexical_variable_declaration_keyword(source, i).unwrap_or(i);
                         let next = skip_ws_comments(source, keyword_end);
                         if is_create_require_import_meta_url_declaration(source, next) {
                             continue;
@@ -2617,7 +3048,8 @@ fn parse_import_meta(source: &str, pos: usize) -> Option<usize> {
 
 fn is_ascii_js_identifier(value: &str) -> bool {
     let bytes = value.as_bytes();
-    if bytes.is_empty() || !(bytes[0] == b'_' || bytes[0] == b'$' || bytes[0].is_ascii_alphabetic()) {
+    if bytes.is_empty() || !(bytes[0] == b'_' || bytes[0] == b'$' || bytes[0].is_ascii_alphabetic())
+    {
         return false;
     }
     bytes[1..]
@@ -2701,7 +3133,8 @@ impl FileUrlResolver {
         let Some(target_parent) = std::path::Path::new(normalized).parent() else {
             return false;
         };
-        CjsEvalResolver::normalize_path(base_parent) == CjsEvalResolver::normalize_path(target_parent)
+        CjsEvalResolver::normalize_path(base_parent)
+            == CjsEvalResolver::normalize_path(target_parent)
     }
 
     fn file_url_resolution_base_path(base_path: &str) -> Option<std::path::PathBuf> {
@@ -2732,12 +3165,7 @@ impl FileUrlResolver {
 }
 
 impl Resolver for FileUrlResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         if let Some(encoded) = name.strip_prefix("file://") {
             let end = encoded
                 .find(|ch| ch == '?' || ch == '#')
@@ -2778,12 +3206,17 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
+            let preserve_symlinks =
+                NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
             let identity = NodeFileResolver::module_identity_path_for_existing_file(
                 &normalized,
                 preserve_symlinks,
             );
-            let resolved = format!("{}{}", identity, Self::with_loader_realm_suffix(base, suffix));
+            let resolved = format!(
+                "{}{}",
+                identity,
+                Self::with_loader_realm_suffix(base, suffix)
+            );
             transfer_import_type_rewrite_token(name, &resolved);
             Ok(resolved)
         } else {
@@ -2797,7 +3230,8 @@ struct RegisteredLoaderResolver;
 const STATIC_REGISTERED_FILE_URL_PREFIX: &str = "__wasm_rquickjs_static_file_url__:";
 
 fn static_registered_file_url_id(url: &str) -> String {
-    let mut encoded = String::with_capacity(STATIC_REGISTERED_FILE_URL_PREFIX.len() + url.len() * 2);
+    let mut encoded =
+        String::with_capacity(STATIC_REGISTERED_FILE_URL_PREFIX.len() + url.len() * 2);
     encoded.push_str(STATIC_REGISTERED_FILE_URL_PREFIX);
     for byte in url.as_bytes() {
         encoded.push_str(&format!("{byte:02X}"));
@@ -2824,12 +3258,7 @@ fn static_registered_file_url_from_id(id: &str) -> Option<String> {
 }
 
 impl Resolver for RegisteredLoaderResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         let globals = ctx.globals();
         let Ok(resolve_fn) =
             globals.get::<_, Function>("__wasm_rquickjs_resolve_static_registered_loader")
@@ -2872,8 +3301,8 @@ impl Loader for StaticRegisteredFileUrlLoader {
             return Err(Error::new_loading(path));
         };
         let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
-        let source_path =
-            crate::builtin::realpath_for_module_resolution(&fs_path).unwrap_or_else(|| fs_path.clone());
+        let source_path = crate::builtin::realpath_for_module_resolution(&fs_path)
+            .unwrap_or_else(|| fs_path.clone());
         declare_esm_file_module(
             ctx,
             path,
@@ -3150,10 +3579,7 @@ impl NodeFileResolver {
         Err(ctx.throw(error_obj.into_value()))
     }
 
-    fn throw_invalid_file_url_host<'js, T>(
-        ctx: &Ctx<'js>,
-        message: String,
-    ) -> rquickjs::Result<T> {
+    fn throw_invalid_file_url_host<'js, T>(ctx: &Ctx<'js>, message: String) -> rquickjs::Result<T> {
         let _ = Exception::throw_type(ctx, &message);
         let error_value = ctx.catch();
         let Some(error_obj) = error_value.clone().into_object() else {
@@ -3182,10 +3608,7 @@ impl NodeFileResolver {
         false
     }
 
-    fn module_identity_path_for_existing_file(
-        normalized: &str,
-        preserve_symlinks: bool,
-    ) -> String {
+    fn module_identity_path_for_existing_file(normalized: &str, preserve_symlinks: bool) -> String {
         if preserve_symlinks {
             return normalized.to_string();
         }
@@ -3240,7 +3663,8 @@ impl NodeFileResolver {
             for ext in extensions {
                 let with_ext = format!("{}.{}", normalized, ext);
                 if Self::candidate_is_file(&with_ext, semantics) {
-                    let identity = Self::candidate_identity(&with_ext, preserve_symlinks, semantics);
+                    let identity =
+                        Self::candidate_identity(&with_ext, preserve_symlinks, semantics);
                     return Some(format!("{identity}{suffix}"));
                 }
             }
@@ -3316,7 +3740,11 @@ impl NodeFileResolver {
         Err(ctx.throw(error_obj.into_value()))
     }
 
-    fn directory_import_message(normalized_dir: &str, importer: &str, include_suggestion: bool) -> String {
+    fn directory_import_message(
+        normalized_dir: &str,
+        importer: &str,
+        include_suggestion: bool,
+    ) -> String {
         let mut message = format!(
             "Directory import '{}' is not supported resolving ES modules imported from {}",
             normalized_dir,
@@ -3324,7 +3752,8 @@ impl NodeFileResolver {
         );
         if include_suggestion {
             let package_json_path = std::path::Path::new(normalized_dir).join("package.json");
-            if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional(&package_json_path)
+            if let Ok(Some(package)) =
+                NodeModulesResolver::read_package_json_optional(&package_json_path)
                 && let Some(main) = package.main.as_deref()
             {
                 let conditions = Vec::new();
@@ -3353,21 +3782,13 @@ impl NodeFileResolver {
     ) -> rquickjs::Result<()> {
         error_obj.prop(
             name,
-            Property::from(value)
-                .writable()
-                .enumerable()
-                .configurable(),
+            Property::from(value).writable().enumerable().configurable(),
         )
     }
 }
 
 impl Resolver for NodeFileResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         if name.contains("://") || name.starts_with("node:") {
             return Err(Error::new_resolving(base, name));
         }
@@ -3474,7 +3895,12 @@ impl Resolver for NodeModuleErrorResolver {
                     "Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol '{}:'",
                     scheme
                 );
-                return throw_native_coded_error(ctx, &msg, "ERR_UNSUPPORTED_ESM_URL_SCHEME", false);
+                return throw_native_coded_error(
+                    ctx,
+                    &msg,
+                    "ERR_UNSUPPORTED_ESM_URL_SCHEME",
+                    false,
+                );
             }
         }
 
@@ -3484,8 +3910,14 @@ impl Resolver for NodeModuleErrorResolver {
 }
 
 enum NodePackageResolveError {
-    InvalidModuleSpecifier { specifier: String, base: String },
-    InvalidPackagePatternMatch { specifier: String, message: String },
+    InvalidModuleSpecifier {
+        specifier: String,
+        base: String,
+    },
+    InvalidPackagePatternMatch {
+        specifier: String,
+        message: String,
+    },
     PackagePathNotExported {
         package_name: String,
         subpath: String,
@@ -3497,13 +3929,20 @@ enum NodePackageResolveError {
         importer: Option<String>,
         no_imports_field: bool,
     },
-    InvalidPackageTarget { kind: &'static str, target: String },
+    InvalidPackageTarget {
+        kind: &'static str,
+        target: String,
+    },
     InvalidPackageConfig {
         path: String,
         reason: Option<String>,
     },
-    UnsupportedDirectoryImport { request: String },
-    ModuleNotFound { request: String },
+    UnsupportedDirectoryImport {
+        request: String,
+    },
+    ModuleNotFound {
+        request: String,
+    },
 }
 
 enum PackageTargetResolution {
@@ -3581,14 +4020,14 @@ struct NodePackageWarning {
 }
 
 pub(crate) fn node_package_deprecation_warning_seen(key: &str) -> bool {
-    get_js_state()
+    super::get_js_state()
         .node_package_deprecation_warnings
         .borrow()
         .contains(key)
 }
 
 pub(crate) fn mark_node_package_deprecation_warning_seen(key: String) {
-    get_js_state()
+    super::get_js_state()
         .node_package_deprecation_warnings
         .borrow_mut()
         .insert(key);
@@ -3660,7 +4099,10 @@ impl NodePackageResolveMode {
     }
 }
 
-fn package_global_conditions<'js>(ctx: Ctx<'js>, mode: String) -> rquickjs::Result<rquickjs::Array<'js>> {
+fn package_global_conditions<'js>(
+    ctx: Ctx<'js>,
+    mode: String,
+) -> rquickjs::Result<rquickjs::Array<'js>> {
     let Some(mode) = NodePackageConditionMode::from_js_mode(&mode) else {
         return throw_native_coded_error(
             &ctx,
@@ -3865,17 +4307,15 @@ impl NodeModulesResolver {
         }
 
         match resolution.mode {
-            NodePackageResolveMode::EsmImport => {
-                Self::try_resolve_package_directory_esm(
-                    base,
-                    specifier,
-                    subpath,
-                    package_root_trailing_slash,
-                    package_path,
-                    package.as_deref(),
-                    resolution,
-                )
-            }
+            NodePackageResolveMode::EsmImport => Self::try_resolve_package_directory_esm(
+                base,
+                specifier,
+                subpath,
+                package_root_trailing_slash,
+                package_path,
+                package.as_deref(),
+                resolution,
+            ),
             NodePackageResolveMode::CjsAnalysis => {
                 Ok(Self::try_resolve_package_directory_for_cjs_analysis(
                     subpath,
@@ -3898,18 +4338,19 @@ impl NodeModulesResolver {
         pkg_path: &std::path::Path,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
-        if let Some(cached) = PACKAGE_JSON_CACHE.with_borrow(|cache| cache.get(&cache_key).cloned()) {
+        if let Some(cached) = PACKAGE_JSON_CACHE.with_borrow(|cache| cache.get(&cache_key).cloned())
+        {
             return Ok(Some(cached));
         }
         let read_path = Self::module_resolution_path(pkg_path);
         match std::fs::read_to_string(&read_path) {
             Ok(pkg_content) => {
-                let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(|_| {
-                    NodePackageResolveError::InvalidPackageConfig {
+                let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(
+                    |_| NodePackageResolveError::InvalidPackageConfig {
                         path: pkg_path.to_string_lossy().into_owned(),
                         reason: None,
-                    }
-                })?);
+                    },
+                )?);
                 PACKAGE_JSON_CACHE.with_borrow_mut(|cache| {
                     cache.insert(cache_key, package.clone());
                 });
@@ -3966,7 +4407,8 @@ impl NodeModulesResolver {
         }
 
         if subpath.is_empty() {
-            let is_module_package = package_type.is_some_and(|package_type| package_type == "module");
+            let is_module_package =
+                package_type.is_some_and(|package_type| package_type == "module");
             let fallbacks = [
                 package_path.join("index.js"),
                 package_path.join("index.json"),
@@ -4024,16 +4466,17 @@ impl NodeModulesResolver {
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Option<String> {
         match step {
-            CjsAnalysisPackageFallbackStep::RootFile => {
-                subpath.is_empty().then(|| {
+            CjsAnalysisPackageFallbackStep::RootFile => subpath
+                .is_empty()
+                .then(|| {
                     Self::resolve_cjs_analysis_directory_fallback_step(
                         CjsAnalysisDirectoryFallbackStep::RootFile,
                         package_path,
                         package,
                         resolution,
                     )
-                }).flatten()
-            }
+                })
+                .flatten(),
             CjsAnalysisPackageFallbackStep::PackageMain => {
                 if !subpath.is_empty() {
                     return None;
@@ -4052,16 +4495,17 @@ impl NodeModulesResolver {
                     Self::resolve_cjs_analysis_file_or_directory(package_path, subpath, resolution)
                 }
             }
-            CjsAnalysisPackageFallbackStep::RootDirectory => {
-                subpath.is_empty().then(|| {
+            CjsAnalysisPackageFallbackStep::RootDirectory => subpath
+                .is_empty()
+                .then(|| {
                     Self::resolve_cjs_analysis_directory_fallback_step(
                         CjsAnalysisDirectoryFallbackStep::RootDirectory,
                         package_path,
                         package,
                         resolution,
                     )
-                }).flatten()
-            }
+                })
+                .flatten(),
         }
     }
 
@@ -4102,14 +4546,8 @@ impl NodeModulesResolver {
                     });
                 };
                 Self::validate_package_import_specifier(name)?;
-                return Self::resolve_package_import(
-                    &dir,
-                    imports,
-                    name,
-                    resolution,
-                    Some(base),
-                )
-                .map(Some);
+                return Self::resolve_package_import(&dir, imports, name, resolution, Some(base))
+                    .map(Some);
             }
 
             if !dir.pop() {
@@ -4155,10 +4593,7 @@ impl NodeModulesResolver {
                         resolution,
                         importer,
                     )?;
-                    return Ok(Some((
-                        resolved,
-                        CjsEvalResolver::normalize_path(&dir),
-                    )));
+                    return Ok(Some((resolved, CjsEvalResolver::normalize_path(&dir))));
                 }
                 return Ok(None);
             }
@@ -4402,10 +4837,15 @@ impl NodeModulesResolver {
             )));
         }
 
-        Ok(Self::first_existing_runtime_cjs_probe(
-            candidate, extensions, false, true, resolution,
+        Ok(
+            Self::first_existing_runtime_cjs_probe(candidate, extensions, false, true, resolution)
+                .map(|resolved| {
+                    (
+                        resolved,
+                        CjsEvalResolver::normalize_path(fallback_package_dir),
+                    )
+                }),
         )
-        .map(|resolved| (resolved, CjsEvalResolver::normalize_path(fallback_package_dir))))
     }
 
     fn resolve_runtime_cjs_package_fallback(
@@ -4417,9 +4857,13 @@ impl NodeModulesResolver {
         let package_dir_key = CjsEvalResolver::normalize_path(package_dir);
         if !subpath.is_empty() {
             let sub_candidate = Self::join_package_subpath(package_dir, subpath);
-            if let Some(resolved) =
-                Self::first_existing_runtime_cjs_probe(&sub_candidate, extensions, true, false, resolution)
-            {
+            if let Some(resolved) = Self::first_existing_runtime_cjs_probe(
+                &sub_candidate,
+                extensions,
+                true,
+                false,
+                resolution,
+            ) {
                 return Ok(Some((resolved, package_dir_key)));
             }
             return Self::resolve_runtime_cjs_package_directory(
@@ -4445,10 +4889,16 @@ impl NodeModulesResolver {
             return Ok(Some((resolved, package_dir_key)));
         }
 
-        Ok(Self::first_existing_runtime_cjs_probe(
-            package_dir, extensions, false, true, resolution,
+        Ok(
+            Self::first_existing_runtime_cjs_probe(
+                package_dir,
+                extensions,
+                false,
+                true,
+                resolution,
+            )
+            .map(|resolved| (resolved, package_dir_key)),
         )
-        .map(|resolved| (resolved, package_dir_key)))
     }
 
     fn join_package_subpath(package_dir: &std::path::Path, subpath: &str) -> std::path::PathBuf {
@@ -4595,15 +5045,16 @@ impl NodeModulesResolver {
                 warning_pattern_key: None,
                 warning_importer: importer,
             };
-            return Self::resolve_package_target_with_context(exports, ctx, resolution)
-            .and_then(|resolution| {
-                Self::target_resolution_to_export_result(
-                    resolution,
-                    package_name,
-                    subpath,
-                    key == "." && Self::is_conditions_object(exports),
-                )
-            });
+            return Self::resolve_package_target_with_context(exports, ctx, resolution).and_then(
+                |resolution| {
+                    Self::target_resolution_to_export_result(
+                        resolution,
+                        package_name,
+                        subpath,
+                        key == "." && Self::is_conditions_object(exports),
+                    )
+                },
+            );
         }
 
         if let PackageTarget::Object(map) = exports {
@@ -4622,9 +5073,14 @@ impl NodeModulesResolver {
                     warning_importer: importer,
                 };
                 return Self::resolve_package_target_with_context(target, ctx, resolution)
-                .and_then(|resolution| {
-                    Self::target_resolution_to_export_result(resolution, package_name, subpath, false)
-                });
+                    .and_then(|resolution| {
+                        Self::target_resolution_to_export_result(
+                            resolution,
+                            package_name,
+                            subpath,
+                            false,
+                        )
+                    });
             }
         }
 
@@ -4642,8 +5098,7 @@ impl NodeModulesResolver {
         resolution: &mut NodePackageResolutionContext<'_, '_>,
         importer: Option<&str>,
     ) -> Result<String, NodePackageResolveError> {
-        if let PackageTarget::Object(map) = imports
-        {
+        if let PackageTarget::Object(map) = imports {
             if let Some((target, pattern_substitution, pattern_key)) =
                 Self::find_package_map_target(
                     map,
@@ -4704,10 +5159,9 @@ impl NodeModulesResolver {
         };
         if map.keys().any(|key| {
             !key.is_empty()
-                && key
-                    .chars()
-                    .enumerate()
-                    .all(|(idx, ch)| ch.is_ascii_digit() && (idx > 0 || ch != '0' || key.len() == 1))
+                && key.chars().enumerate().all(|(idx, ch)| {
+                    ch.is_ascii_digit() && (idx > 0 || ch != '0' || key.len() == 1)
+                })
         }) {
             return Err(NodePackageResolveError::InvalidPackageConfig {
                 path: pkg_path.to_string_lossy().into_owned(),
@@ -4792,7 +5246,9 @@ impl NodeModulesResolver {
                     let resolver = NodeModulesResolver;
                     if let Some(resolved) = resolution.with_mode(
                         ctx.nested_bare_target_resolution_mode,
-                        |resolution| resolver.try_resolve_with_context(&base_str, &target_str, resolution),
+                        |resolution| {
+                            resolver.try_resolve_with_context(&base_str, &target_str, resolution)
+                        },
                     )? {
                         return Ok(PackageTargetResolution::Resolved(resolved));
                     }
@@ -4944,10 +5400,9 @@ impl NodeModulesResolver {
             let Some(substitution) = Self::package_pattern_key_match(pattern_key, key) else {
                 continue;
             };
-            if best
-                .as_ref()
-                .is_none_or(|(best_key, _)| Self::package_pattern_compare(pattern_key, best_key).is_lt())
-            {
+            if best.as_ref().is_none_or(|(best_key, _)| {
+                Self::package_pattern_compare(pattern_key, best_key).is_lt()
+            }) {
                 best = Some((pattern_key.as_str(), substitution));
             }
         }
@@ -4958,12 +5413,15 @@ impl NodeModulesResolver {
         map: &'a IndexMap<String, PackageTarget>,
         specifier: &str,
         invalid_pattern_message: &str,
-    ) -> Result<Option<(&'a PackageTarget, Option<String>, Option<&'a str>)>, NodePackageResolveError> {
+    ) -> Result<Option<(&'a PackageTarget, Option<String>, Option<&'a str>)>, NodePackageResolveError>
+    {
         if let Some(target) = map.get(specifier) {
             return Ok(Some((target, None, None)));
         }
 
-        let Some((pattern_key, pattern_substitution)) = Self::find_best_package_pattern(map, specifier) else {
+        let Some((pattern_key, pattern_substitution)) =
+            Self::find_best_package_pattern(map, specifier)
+        else {
             return Ok(None);
         };
         if Self::is_invalid_package_pattern_substitution(&pattern_substitution) {
@@ -5008,7 +5466,7 @@ impl NodeModulesResolver {
         match resolution {
             PackageTargetResolution::Resolved(path) => Ok(path),
             PackageTargetResolution::NoMatch | PackageTargetResolution::Blocked => {
-        Err(NodePackageResolveError::PackagePathNotExported {
+                Err(NodePackageResolveError::PackagePathNotExported {
                     package_name: package_name.to_string(),
                     subpath: subpath.to_string(),
                     no_exports_main,
@@ -5050,16 +5508,16 @@ impl NodeModulesResolver {
     }
 
     fn is_valid_package_target_path(target: &str) -> bool {
-        target
-            .strip_prefix("./")
-            .is_some_and(|rest| {
-                rest.split('/').all(|part| {
-                    part.is_empty() || !Self::is_invalid_package_target_segment(part)
-                })
-            })
+        target.strip_prefix("./").is_some_and(|rest| {
+            rest.split('/')
+                .all(|part| part.is_empty() || !Self::is_invalid_package_target_segment(part))
+        })
     }
 
-    fn resolve_package_target_path(package_dir: &std::path::Path, target: &str) -> std::path::PathBuf {
+    fn resolve_package_target_path(
+        package_dir: &std::path::Path,
+        target: &str,
+    ) -> std::path::PathBuf {
         let mut relative_parts = Vec::<&str>::new();
         if let Some(rest) = target.strip_prefix("./") {
             for part in rest.split('/') {
@@ -5080,7 +5538,10 @@ impl NodeModulesResolver {
             return true;
         }
         let decoded = percent_decode(segment).unwrap_or_else(|| segment.to_string());
-        matches!(decoded.to_ascii_lowercase().as_str(), "." | ".." | "node_modules")
+        matches!(
+            decoded.to_ascii_lowercase().as_str(),
+            "." | ".." | "node_modules"
+        )
     }
 
     fn has_deprecated_double_slash(value: &str) -> bool {
@@ -5186,7 +5647,10 @@ impl NodeModulesResolver {
             .iter()
             .map(|condition| (*condition).to_string())
             .collect();
-        let Ok(user_conditions) = ctx.globals().get::<_, rquickjs::Array>("__wasm_rquickjs_package_conditions") else {
+        let Ok(user_conditions) = ctx
+            .globals()
+            .get::<_, rquickjs::Array>("__wasm_rquickjs_package_conditions")
+        else {
             return conditions;
         };
 
@@ -5240,12 +5704,16 @@ fn emit_node_package_deprecation_warnings<'js>(
         Ok(process_object) => process_object,
         Err(_) => {
             let error_ctor: Function = ctx.globals().get("Error")?;
-            let error_obj: Object = error_ctor.call(("Internal process object is not initialized",))?;
+            let error_obj: Object =
+                error_ctor.call(("Internal process object is not initialized",))?;
             return Err(ctx.throw(error_obj.into_value()));
         }
     };
     for warning in warnings {
-        let key = warning.dedupe_key.as_deref().unwrap_or(warning.message.as_str());
+        let key = warning
+            .dedupe_key
+            .as_deref()
+            .unwrap_or(warning.message.as_str());
         let warning_key = if warning.code == "DEP0155" {
             Some(format!("{}:{}", warning.code, key))
         } else {
@@ -5349,7 +5817,10 @@ fn throw_node_package_resolve_error<'js>(
                 };
                 (
                     "ERR_PACKAGE_PATH_NOT_EXPORTED",
-                    format!("Package subpath '{}' is not defined by \"exports\" in package {}", subpath, package_name),
+                    format!(
+                        "Package subpath '{}' is not defined by \"exports\" in package {}",
+                        subpath, package_name
+                    ),
                     false,
                 )
             }
@@ -5424,7 +5895,11 @@ fn esm_package_identity_path(ctx: &Ctx<'_>, resolved: &str) -> String {
     NodeFileResolver::module_identity_path_for_existing_file(resolved, preserve_symlinks)
 }
 
-fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String) -> rquickjs::Result<Option<String>> {
+fn import_meta_resolve_package(
+    ctx: Ctx<'_>,
+    base_url: String,
+    specifier: String,
+) -> rquickjs::Result<Option<String>> {
     let base = if let Some(path) = FileUrlResolver::file_url_to_path(&base_url) {
         path
     } else {
@@ -5437,7 +5912,9 @@ fn import_meta_resolve_package(ctx: Ctx<'_>, base_url: String, specifier: String
         && let Some((package_name, subpath)) = NodeModulesResolver::split_package_name(&specifier)
         && subpath.is_empty()
     {
-        if let Err(err) = NodeModulesResolver::validate_package_name(&base, &specifier, package_name) {
+        if let Err(err) =
+            NodeModulesResolver::validate_package_name(&base, &specifier, package_name)
+        {
             return throw_node_package_resolve_error(&ctx, err).map(Some);
         }
         let trailing_slash_package_has_exports =
@@ -5550,7 +6027,10 @@ fn esm_import_resolution_context<'a, 'w>(
     NodePackageResolutionContext::new(NodePackageResolveMode::EsmImport, conditions, warnings)
 }
 
-fn loader_package_result_format(resolved: &str, mode: NodePackageResolveMode) -> Option<&'static str> {
+fn loader_package_result_format(
+    resolved: &str,
+    mode: NodePackageResolveMode,
+) -> Option<&'static str> {
     match std::path::Path::new(resolved)
         .extension()
         .and_then(|ext| ext.to_str())
@@ -5616,14 +6096,8 @@ fn loader_default_resolve_package<'js>(
     let Some((base, _)) = FileUrlResolver::file_url_to_path_parts(&base_url) else {
         return Ok(None);
     };
-    let result = try_resolve_package_with_js_conditions(
-        &ctx,
-        &base,
-        &specifier,
-        &conditions,
-        mode,
-        true,
-    )?;
+    let result =
+        try_resolve_package_with_js_conditions(&ctx, &base, &specifier, &conditions, mode, true)?;
     match result {
         Ok(Some(resolved)) => {
             let resolved = if mode == NodePackageResolveMode::EsmImport {
@@ -5683,9 +6157,7 @@ fn cjs_resolve_package_exports<'js>(
     );
     emit_node_package_deprecation_warnings(&ctx, &warnings)?;
     match result {
-        Ok(resolved) => {
-            package_resolved_url_object(&ctx, &resolved).map(Some)
-        }
+        Ok(resolved) => package_resolved_url_object(&ctx, &resolved).map(Some),
         Err(err) => {
             let _: String = throw_node_package_resolve_error(&ctx, err)?;
             unreachable!()
@@ -5785,13 +6257,7 @@ fn cjs_resolve_package_fallback<'js>(
         }
         Ok(None) => Ok(None),
         Err(NodePackageResolveError::InvalidPackageConfig { path, reason }) => {
-            throw_invalid_package_config_while_importing(
-                &ctx,
-                path,
-                &id,
-                &from_part,
-                reason,
-            )
+            throw_invalid_package_config_while_importing(&ctx, path, &id, &from_part, reason)
         }
         Err(err) => {
             let _: String = throw_node_package_resolve_error(&ctx, err)?;
@@ -5855,10 +6321,9 @@ fn import_meta_trailing_slash_package_has_exports(
         let pkg_path = dir.join("package.json");
         if let Some(package) = NodeModulesResolver::read_package_json_optional(&pkg_path)? {
             if package.name.as_deref() == Some(package_name) {
-                return Ok(package
-                    .exports
-                    .as_ref()
-                    .is_some_and(|exports| NodeModulesResolver::is_active_package_exports(exports)));
+                return Ok(package.exports.as_ref().is_some_and(|exports| {
+                    NodeModulesResolver::is_active_package_exports(exports)
+                }));
             }
             break;
         }
@@ -5875,10 +6340,9 @@ fn import_meta_trailing_slash_package_has_exports(
             let pkg_path = package_path.join("package.json");
             return NodeModulesResolver::read_package_json_optional(&pkg_path).map(|package| {
                 package.is_some_and(|package| {
-                    package
-                        .exports
-                        .as_ref()
-                        .is_some_and(|exports| NodeModulesResolver::is_active_package_exports(exports))
+                    package.exports.as_ref().is_some_and(|exports| {
+                        NodeModulesResolver::is_active_package_exports(exports)
+                    })
                 })
             });
         }
@@ -5892,12 +6356,7 @@ fn import_meta_trailing_slash_package_has_exports(
 }
 
 impl Resolver for NodeModulesResolver {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         let (resolution_name, suffix) = if has_import_type_rewrite_token(name) {
             split_module_path_suffix(name)
         } else {
@@ -6260,7 +6719,11 @@ fn parse_require_string_loose(source: &str, pos: usize) -> Option<(String, usize
     parse_require_call_string(source, pos, false)
 }
 
-fn parse_require_call_string(source: &str, pos: usize, require_free_start: bool) -> Option<(String, usize)> {
+fn parse_require_call_string(
+    source: &str,
+    pos: usize,
+    require_free_start: bool,
+) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let require_end = if require_free_start {
         parse_free_ident_name(source, pos, "require")?
@@ -6342,7 +6805,11 @@ fn descriptor_function_getter_body(
     Some((body.0, body.1, body.1 + 1))
 }
 
-fn descriptor_function_getter_end(source: &str, pos: usize, descriptor_end: usize) -> Option<usize> {
+fn descriptor_function_getter_end(
+    source: &str,
+    pos: usize,
+    descriptor_end: usize,
+) -> Option<usize> {
     let body = descriptor_function_getter_body(source, pos, descriptor_end)?;
     if !is_simple_getter_body(&source[body.0..body.1]) {
         return None;
@@ -6350,7 +6817,11 @@ fn descriptor_function_getter_end(source: &str, pos: usize, descriptor_end: usiz
     Some(body.2)
 }
 
-fn getter_body_after_empty_params(source: &str, params_open: usize, limit: usize) -> Option<(usize, usize)> {
+fn getter_body_after_empty_params(
+    source: &str,
+    params_open: usize,
+    limit: usize,
+) -> Option<(usize, usize)> {
     let params_end = find_matching_paren(source, params_open)?;
     if params_end > limit || skip_ws_comments(source, params_open + 1) != params_end {
         return None;
@@ -6373,7 +6844,10 @@ fn descriptor_object_span(descriptor: &str) -> Option<(usize, usize)> {
         return None;
     }
     let descriptor_end = find_matching_brace(descriptor, descriptor_start)?;
-    Some((skip_ws_comments(descriptor, descriptor_start + 1), descriptor_end))
+    Some((
+        skip_ws_comments(descriptor, descriptor_start + 1),
+        descriptor_end,
+    ))
 }
 
 fn next_object_literal_entry(source: &str, cursor: usize, object_end: usize) -> Option<usize> {
@@ -6409,8 +6883,13 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
         }
         if bytes[cursor] == b'[' {
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
-                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, cursor, descriptor_end));
-                let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
+                cursor = skip_ws_comments(
+                    descriptor,
+                    skip_object_literal_value(descriptor, cursor, descriptor_end),
+                );
+                let Some(next_cursor) =
+                    next_object_literal_entry(descriptor, cursor, descriptor_end)
+                else {
                     return false;
                 };
                 cursor = next_cursor;
@@ -6419,7 +6898,8 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             return false;
         }
 
-        let Some((name, key_is_ident, key_end)) = parse_exports_literal_key(descriptor, cursor) else {
+        let Some((name, key_is_ident, key_end)) = parse_exports_literal_key(descriptor, cursor)
+        else {
             return false;
         };
         let next = skip_ws_comments(descriptor, key_end);
@@ -6427,7 +6907,10 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             if !matches!(found, Some(DescriptorNamedProperty::Value)) {
                 return false;
             }
-            cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+            cursor = skip_ws_comments(
+                descriptor,
+                skip_object_literal_value(descriptor, next, descriptor_end),
+            );
         } else if name == "value" {
             if matches!(found, Some(DescriptorNamedProperty::Getter)) {
                 return false;
@@ -6438,20 +6921,28 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
                 } else {
                     next
                 };
-                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, value_start, descriptor_end));
+                cursor = skip_ws_comments(
+                    descriptor,
+                    skip_object_literal_value(descriptor, value_start, descriptor_end),
+                );
             } else {
                 if next >= descriptor_end || bytes[next] != b':' {
                     return false;
                 }
                 found = Some(DescriptorNamedProperty::Value);
-                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
+                cursor = skip_ws_comments(
+                    descriptor,
+                    skip_object_literal_value(descriptor, next + 1, descriptor_end),
+                );
             }
         } else if name == "get" {
             if found.is_some() {
                 return false;
             }
             if next < descriptor_end && bytes[next] == b'(' {
-                let Some((body_start, body_end)) = getter_body_after_empty_params(descriptor, next, descriptor_end) else {
+                let Some((body_start, body_end)) =
+                    getter_body_after_empty_params(descriptor, next, descriptor_end)
+                else {
                     return false;
                 };
                 if !is_simple_getter_body(&descriptor[body_start..body_end]) {
@@ -6460,7 +6951,11 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
                 found = Some(DescriptorNamedProperty::Getter);
                 cursor = skip_ws_comments(descriptor, body_end + 1);
             } else if next < descriptor_end && bytes[next] == b':' {
-                let function_end = descriptor_function_getter_end(descriptor, skip_ws_comments(descriptor, next + 1), descriptor_end);
+                let function_end = descriptor_function_getter_end(
+                    descriptor,
+                    skip_ws_comments(descriptor, next + 1),
+                    descriptor_end,
+                );
                 let Some(function_end) = function_end else {
                     return false;
                 };
@@ -6474,8 +6969,13 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
                 return false;
             }
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
-                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next + 1, descriptor_end));
-                let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
+                cursor = skip_ws_comments(
+                    descriptor,
+                    skip_object_literal_value(descriptor, next + 1, descriptor_end),
+                );
+                let Some(next_cursor) =
+                    next_object_literal_entry(descriptor, cursor, descriptor_end)
+                else {
                     return false;
                 };
                 cursor = next_cursor;
@@ -6491,13 +6991,17 @@ fn descriptor_has_named_property(descriptor: &str) -> bool {
             cursor = skip_ws_comments(descriptor, true_end);
         } else {
             if matches!(found, Some(DescriptorNamedProperty::Value)) {
-                cursor = skip_ws_comments(descriptor, skip_object_literal_value(descriptor, next, descriptor_end));
+                cursor = skip_ws_comments(
+                    descriptor,
+                    skip_object_literal_value(descriptor, next, descriptor_end),
+                );
             } else {
                 return false;
             }
         }
 
-        let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
+        let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end)
+        else {
             return false;
         };
         cursor = next_cursor;
@@ -6586,7 +7090,6 @@ fn find_matching_brace(source: &str, start: usize) -> Option<usize> {
     None
 }
 
-
 enum GetterReturnMember<'a> {
     Bare,
     Dot,
@@ -6632,20 +7135,17 @@ fn parse_getter_return_member_body(body: &str) -> Option<GetterReturnMember<'_>>
     if i < body.len() && bytes[i] == b';' {
         i = skip_ws_comments(body, i + 1);
     }
-    if i >= body.len() {
-        Some(member)
-    } else {
-        None
-    }
+    if i >= body.len() { Some(member) } else { None }
 }
 
 fn is_simple_getter_body(body: &str) -> bool {
     matches!(
         parse_getter_return_member_body(body),
-        Some(GetterReturnMember::Bare | GetterReturnMember::Dot | GetterReturnMember::BracketString)
+        Some(
+            GetterReturnMember::Bare | GetterReturnMember::Dot | GetterReturnMember::BracketString
+        )
     )
 }
-
 
 fn parse_exports_assign_require_value(source: &str, pos: usize) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
@@ -6653,7 +7153,10 @@ fn parse_exports_assign_require_value(source: &str, pos: usize) -> Option<(Strin
         return Some((specifier, next));
     }
 
-    let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "_interopRequireWildcard")?);
+    let mut i = skip_ws_comments(
+        source,
+        parse_free_ident_name(source, pos, "_interopRequireWildcard")?,
+    );
     if i >= bytes.len() || bytes[i] != b'(' {
         return None;
     }
@@ -6712,7 +7215,21 @@ fn is_asi_continuation_next(source: &str, pos: usize) -> bool {
 fn is_asi_continuation_operator(byte: u8) -> bool {
     matches!(
         byte,
-        b'(' | b'[' | b'.' | b',' | b':' | b'?' | b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^' | b'<' | b'>'
+        b'(' | b'['
+            | b'.'
+            | b','
+            | b':'
+            | b'?'
+            | b'+'
+            | b'-'
+            | b'*'
+            | b'/'
+            | b'%'
+            | b'&'
+            | b'|'
+            | b'^'
+            | b'<'
+            | b'>'
             | b'='
     )
 }
@@ -6860,7 +7377,11 @@ enum ObjectLiteralValueExport {
     NamedStop,
 }
 
-fn named_export_object_literal_value(source: &str, pos: usize, object_end: usize) -> Option<ObjectLiteralValueExport> {
+fn named_export_object_literal_value(
+    source: &str,
+    pos: usize,
+    object_end: usize,
+) -> Option<ObjectLiteralValueExport> {
     let Some((ident, mut next)) = read_ident(source, pos) else {
         return None;
     };
@@ -6874,7 +7395,10 @@ fn named_export_object_literal_value(source: &str, pos: usize, object_end: usize
     }
 }
 
-fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<String>, Vec<String>, usize)> {
+fn parse_module_exports_object_literal(
+    source: &str,
+    pos: usize,
+) -> Option<(Vec<String>, Vec<String>, usize)> {
     let bytes = source.as_bytes();
     let (target, mut i) = parse_exports_target(source, pos)?;
     if target != CjsExportTarget::ModuleExports {
@@ -6932,7 +7456,10 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
             match named_export_object_literal_value(source, next, object_end) {
                 Some(ObjectLiteralValueExport::NamedContinue) => {
                     add_unique(&mut exports, name);
-                    cursor = skip_ws_comments(source, skip_object_literal_value(source, next, object_end));
+                    cursor = skip_ws_comments(
+                        source,
+                        skip_object_literal_value(source, next, object_end),
+                    );
                 }
                 Some(ObjectLiteralValueExport::NamedStop) => {
                     add_unique(&mut exports, name);
@@ -6961,7 +7488,11 @@ fn parse_module_exports_object_literal(source: &str, pos: usize) -> Option<(Vec<
     }
 }
 
-fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<String, String>) -> Option<(String, usize)> {
+fn parse_object_keys_reexport(
+    source: &str,
+    pos: usize,
+    bindings: &HashMap<String, String>,
+) -> Option<(String, usize)> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, "Object")?);
     if i >= bytes.len() || bytes[i] != b'.' {
@@ -6997,7 +7528,11 @@ fn parse_object_keys_reexport(source: &str, pos: usize, bindings: &HashMap<Strin
     }
 }
 
-fn extract_for_each_callback_body(source: &str, call_open: usize, end: usize) -> Option<(String, &str)> {
+fn extract_for_each_callback_body(
+    source: &str,
+    call_open: usize,
+    end: usize,
+) -> Option<(String, &str)> {
     let bytes = source.as_bytes();
     let mut i = skip_ws_comments(source, call_open + 1);
     i = skip_ws_comments(source, parse_free_ident_name(source, i, "function")?);
@@ -7045,12 +7580,15 @@ fn callback_has_transpiler_reexport(callback: &str, binding: &str, key: &str) ->
         }
         if let Some(next) = parse_export_star_return_guard(callback, i, key) {
             let mut write_pos = skip_statement_separator(callback, next);
-            while let Some(next_guard) = parse_duplicate_export_return_guard(callback, write_pos, binding, key) {
+            while let Some(next_guard) =
+                parse_duplicate_export_return_guard(callback, write_pos, binding, key)
+            {
                 write_pos = skip_statement_separator(callback, next_guard);
             }
             if statement_starts.get(write_pos).copied().unwrap_or(false)
                 && (parse_define_property_reexport(callback, write_pos, binding, key).is_some()
-                    || parse_direct_exports_reexport_assignment(callback, write_pos, binding, key).is_some())
+                    || parse_direct_exports_reexport_assignment(callback, write_pos, binding, key)
+                        .is_some())
             {
                 found = true;
                 return ControlFlow::Break(());
@@ -7083,12 +7621,19 @@ fn parse_if_condition(source: &str, pos: usize) -> Option<(&str, usize)> {
     ))
 }
 
-fn parse_export_star_conditional_reexport(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+fn parse_export_star_conditional_reexport(
+    source: &str,
+    pos: usize,
+    binding: &str,
+    key: &str,
+) -> Option<usize> {
     parse_if_guarded_body(
         source,
         pos,
         |condition| is_export_star_has_own_guard_condition(condition, key),
-        |source, body_start| parse_direct_exports_reexport_assignment(source, body_start, binding, key),
+        |source, body_start| {
+            parse_direct_exports_reexport_assignment(source, body_start, binding, key)
+        },
     )
 }
 
@@ -7098,7 +7643,12 @@ fn parse_export_star_return_guard(source: &str, pos: usize, key: &str) -> Option
     })
 }
 
-fn parse_duplicate_export_return_guard(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+fn parse_duplicate_export_return_guard(
+    source: &str,
+    pos: usize,
+    binding: &str,
+    key: &str,
+) -> Option<usize> {
     parse_if_return_guard(source, pos, |condition| {
         is_duplicate_export_guard_condition(condition, binding, key)
     })
@@ -7206,7 +7756,12 @@ fn parse_key_not_equals_string(source: &str, pos: usize, key: &str) -> Option<(S
     parse_key_string_comparison(source, pos, key, "!==")
 }
 
-fn parse_key_string_comparison(source: &str, pos: usize, key: &str, operator: &str) -> Option<(String, usize)> {
+fn parse_key_string_comparison(
+    source: &str,
+    pos: usize,
+    key: &str,
+    operator: &str,
+) -> Option<(String, usize)> {
     let mut i = skip_ws_comments(source, parse_free_ident_name(source, pos, key)?);
     i = skip_ws_comments(source, parse_operator(source, i, operator)?);
     let (value, next) = read_js_string(source, i)?;
@@ -7346,7 +7901,12 @@ fn parse_dot_member_name(source: &str, pos: usize, name: &str) -> Option<usize> 
     Some(skip_ws_comments(source, parse_ident_name(source, i, name)?))
 }
 
-fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+fn parse_direct_exports_reexport_assignment(
+    source: &str,
+    pos: usize,
+    binding: &str,
+    key: &str,
+) -> Option<usize> {
     let mut i = skip_ws_comments(source, parse_export_target_bracket_key(source, pos, key)?);
     i = skip_ws_comments(source, parse_assignment_operator(source, i)?);
     let after_rhs = skip_ws_comments(source, parse_binding_bracket_key(source, i, binding, key)?);
@@ -7357,7 +7917,12 @@ fn parse_direct_exports_reexport_assignment(source: &str, pos: usize, binding: &
     }
 }
 
-fn parse_define_property_reexport(source: &str, pos: usize, binding: &str, key: &str) -> Option<usize> {
+fn parse_define_property_reexport(
+    source: &str,
+    pos: usize,
+    binding: &str,
+    key: &str,
+) -> Option<usize> {
     let bytes = source.as_bytes();
     let mut i = parse_object_define_property_call(source, pos)?;
     let (target, next) = parse_exports_target(source, i)?;
@@ -7455,7 +8020,8 @@ fn descriptor_getter_returns_binding_key(descriptor: &str, binding: &str, key: &
             return false;
         }
 
-        let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end) else {
+        let Some(next_cursor) = next_object_literal_entry(descriptor, cursor, descriptor_end)
+        else {
             return false;
         };
         cursor = next_cursor;
@@ -7565,7 +8131,12 @@ fn is_regex_literal_start(source: &str, pos: usize) -> bool {
         return b"({[=,:;!?&|+-*~^%>".contains(&byte);
     }
     token_start
-        .map(|start| matches!(&source[start..token_end], "return" | "throw" | "case" | "yield"))
+        .map(|start| {
+            matches!(
+                &source[start..token_end],
+                "return" | "throw" | "case" | "yield"
+            )
+        })
         .unwrap_or(true)
 }
 
@@ -7693,7 +8264,10 @@ fn statement_starts(source: &str) -> Vec<bool> {
             continue;
         }
         if let Some(next) = skip_non_code(source, i, true) {
-            if source[i..next].bytes().any(|byte| matches!(byte, b'\n' | b'\r')) {
+            if source[i..next]
+                .bytes()
+                .any(|byte| matches!(byte, b'\n' | b'\r'))
+            {
                 line_terminator_since_code = true;
             }
             i = next;
@@ -7774,7 +8348,8 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
         }
         if brace_depth == 0
             && statement_starts.get(i).copied().unwrap_or(false)
-            && let Some((specifier, next)) = parse_object_keys_reexport(source, i, &require_bindings)
+            && let Some((specifier, next)) =
+                parse_object_keys_reexport(source, i, &require_bindings)
         {
             analysis.is_cjs = true;
             add_unique(&mut analysis.reexports, specifier);
@@ -7789,8 +8364,7 @@ fn is_node_builtin_specifier(specifier: &str) -> bool {
     let bare = specifier.strip_prefix("node:").unwrap_or(specifier);
     matches!(
         bare,
-        "fs"
-            | "path"
+        "fs" | "path"
             | "os"
             | "crypto"
             | "http"
@@ -7834,7 +8408,11 @@ fn is_node_builtin_specifier(specifier: &str) -> bool {
     )
 }
 
-fn resolve_cjs_reexport_path(filename: &str, specifier: &str, conditions: &[String]) -> Option<String> {
+fn resolve_cjs_reexport_path(
+    filename: &str,
+    specifier: &str,
+    conditions: &[String],
+) -> Option<String> {
     if is_node_builtin_specifier(specifier) || specifier.contains(':') {
         return None;
     }
@@ -7974,7 +8552,10 @@ fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
     let Some(parent) = dir.parent() else {
         return false;
     };
-    if parent.file_name().is_some_and(|name| name == "node_modules") {
+    if parent
+        .file_name()
+        .is_some_and(|name| name == "node_modules")
+    {
         return true;
     }
     parent
@@ -8002,10 +8583,7 @@ fn cjs_named_export_source(names: &[String], host_global: &str) -> String {
     out
 }
 
-fn build_cjs_facade_source(
-    default_member_expression: &str,
-    names: &[String],
-) -> String {
+fn build_cjs_facade_source(default_member_expression: &str, names: &[String]) -> String {
     let host_global = "__wasm_rquickjs_global";
     let named_exports = cjs_named_export_source(names, host_global);
     format!(
@@ -8022,7 +8600,13 @@ const LOADER_CJS_FACADE_PREFIX: &str = "__wasm_rquickjs_loader_cjs_facade__:";
 
 #[derive(Clone)]
 struct LoaderCjsFacadeRegistry {
-    inner: Rc<RefCell<(u64, std::collections::hash_map::RandomState, HashMap<String, String>)>>,
+    inner: Rc<
+        RefCell<(
+            u64,
+            std::collections::hash_map::RandomState,
+            HashMap<String, String>,
+        )>,
+    >,
 }
 
 impl Default for LoaderCjsFacadeRegistry {
@@ -8106,14 +8690,12 @@ fn build_loader_cjs_facade(
     cache_key: String,
     source: String,
 ) -> String {
-    let cjs_conditions =
-        NodeModulesResolver::conditions_from_global(&ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
-    let analysis = analyze_cjs_exports_for_file(
-        &filename,
-        &source,
-        &mut HashSet::new(),
-        &cjs_conditions,
+    let cjs_conditions = NodeModulesResolver::conditions_from_global(
+        &ctx,
+        NodePackageResolveMode::CjsAnalysis.condition_mode(),
     );
+    let analysis =
+        analyze_cjs_exports_for_file(&filename, &source, &mut HashSet::new(), &cjs_conditions);
     let default_member_expression = format!(
         "__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
         escape_js_string(&filename),
@@ -8170,22 +8752,34 @@ impl Loader for CjsCompatLoader {
             || has_cjs_wrapper_lexical_redeclaration(&source);
         // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
-        let is_cjs = is_cjs_ext
-            || is_commonjs_package_js
-            || (!is_module_package_js && !has_esm_syntax);
+        let is_cjs =
+            is_cjs_ext || is_commonjs_package_js || (!is_module_package_js && !has_esm_syntax);
         if !is_cjs {
             let preflight_mode = if fs_path.ends_with(".js") && is_module_package_js {
                 EsmFilePreflightMode::PackageTypeModuleJs
             } else {
                 EsmFilePreflightMode::RequireOnly
             };
-            return declare_esm_file_module_from_source(ctx, path, fs_path, source, url, preflight_mode);
+            return declare_esm_file_module_from_source(
+                ctx,
+                path,
+                fs_path,
+                source,
+                url,
+                preflight_mode,
+            );
         }
 
-        let cjs_conditions =
-            NodeModulesResolver::conditions_from_global(ctx, NodePackageResolveMode::CjsAnalysis.condition_mode());
-        let detected_analysis =
-            analyze_cjs_exports_for_file(&fs_abs_path, &source, &mut HashSet::new(), &cjs_conditions);
+        let cjs_conditions = NodeModulesResolver::conditions_from_global(
+            ctx,
+            NodePackageResolveMode::CjsAnalysis.condition_mode(),
+        );
+        let detected_analysis = analyze_cjs_exports_for_file(
+            &fs_abs_path,
+            &source,
+            &mut HashSet::new(),
+            &cjs_conditions,
+        );
         // Let the existing CommonJS loader execute and cache the module. The
         // facade only exposes the shared module.exports object to ESM.
         let init = file_import_meta_init(cjs_url, fs_abs_path.clone());
@@ -8193,10 +8787,8 @@ impl Loader for CjsCompatLoader {
             "__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\")",
             escape_js_string(&fs_abs_path),
         );
-        let wrapped = build_cjs_facade_source(
-            &default_member_expression,
-            &detected_analysis.exports,
-        );
+        let wrapped =
+            build_cjs_facade_source(&default_member_expression, &detected_analysis.exports);
 
         declare_module_with_import_meta(ctx, path, &wrapped, &init)
     }
@@ -8259,7 +8851,10 @@ fn initialize_module_import_meta<'js>(
         let base_url = init.url.clone();
         let resolve = Function::new(
             ctx.clone(),
-            move |ctx: Ctx<'js>, specifier: String, parent_url: Opt<Value<'js>>| -> rquickjs::Result<String> {
+            move |ctx: Ctx<'js>,
+                  specifier: String,
+                  parent_url: Opt<Value<'js>>|
+                  -> rquickjs::Result<String> {
                 let globals = ctx.globals();
                 let resolver: Function = globals.get("__wasm_rquickjs_import_meta_resolve")?;
                 if let Some(parent_url) = parent_url.0
@@ -8291,7 +8886,7 @@ fn initialize_module_import_meta<'js>(
             Property::from(resolve)
                 .writable()
                 .enumerable()
-            .configurable(),
+                .configurable(),
         )?;
     }
     meta.prop(
@@ -8420,15 +9015,9 @@ fn path_with_preserved_escapes_to_file_url(path: &str) -> String {
             b' ' => url.push_str("%20"),
             b'#' => url.push_str("%23"),
             b'?' => url.push_str("%3F"),
-            b'A'..=b'Z'
-            | b'a'..=b'z'
-            | b'0'..=b'9'
-            | b'-'
-            | b'_'
-            | b'.'
-            | b'~'
-            | b'/'
-            | b':' => url.push(bytes[i] as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' | b':' => {
+                url.push(bytes[i] as char)
+            }
             _ => {
                 url.push_str(&format!("%{:02X}", bytes[i]));
             }
@@ -8538,7 +9127,8 @@ fn require_esm_in_progress(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> boo
     let Ok(registry) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_in_progress") else {
         return false;
     };
-    registry.get::<_, bool>(filename).unwrap_or(false) || registry.get::<_, bool>(file_url).unwrap_or(false)
+    registry.get::<_, bool>(filename).unwrap_or(false)
+        || registry.get::<_, bool>(file_url).unwrap_or(false)
 }
 
 fn require_esm_forced_module(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
@@ -8546,7 +9136,8 @@ fn require_esm_forced_module(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> b
     let Ok(registry) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_forced_module") else {
         return false;
     };
-    registry.get::<_, bool>(filename).unwrap_or(false) || registry.get::<_, bool>(file_url).unwrap_or(false)
+    registry.get::<_, bool>(filename).unwrap_or(false)
+        || registry.get::<_, bool>(file_url).unwrap_or(false)
 }
 
 const LOADER_REALM_QUERY_PARAM: &str = "__wasm_rquickjs_loader_realm";
@@ -8758,9 +9349,14 @@ fn source_has_top_level_await(source: &str, scan_template_expressions: bool) -> 
                     "await"
                         if function_depth == 0
                             && class_depth == 0
-                            && is_top_level_await_expression(source, start, i, in_object_like_brace) =>
+                            && is_top_level_await_expression(
+                                source,
+                                start,
+                                i,
+                                in_object_like_brace,
+                            ) =>
                     {
-                        return true
+                        return true;
                     }
                     "function" => pending_function_body = true,
                     "class" => pending_class_body = true,
@@ -8811,7 +9407,9 @@ fn source_has_top_level_await(source: &str, scan_template_expressions: bool) -> 
             b'}' => {
                 if let Some(context) = braces.pop() {
                     match context {
-                        JsBraceContext::Function => function_depth = function_depth.saturating_sub(1),
+                        JsBraceContext::Function => {
+                            function_depth = function_depth.saturating_sub(1)
+                        }
                         JsBraceContext::Class => class_depth = class_depth.saturating_sub(1),
                         JsBraceContext::Normal { .. } => {}
                         JsBraceContext::TemplateExpression => {
@@ -8842,7 +9440,12 @@ fn is_likely_object_literal_open(source: &str, pos: usize, in_object_like_brace:
     ) || (in_object_like_brace && previous_significant_code_byte(source, pos) == Some(b':'))
 }
 
-fn is_top_level_await_expression(source: &str, start: usize, end: usize, in_object_like_brace: bool) -> bool {
+fn is_top_level_await_expression(
+    source: &str,
+    start: usize,
+    end: usize,
+    in_object_like_brace: bool,
+) -> bool {
     if previous_significant_code_byte(source, start) == Some(b'.') {
         return false;
     }
@@ -9012,7 +9615,8 @@ fn collect_literal_call_specifiers(source: &str, names: &[String]) -> Vec<String
             };
             let open = skip_ws_comments(source, name_end);
             if source.as_bytes().get(open) == Some(&b'(')
-                && let Some((specifier, _)) = read_js_string(source, skip_ws_comments(source, open + 1))
+                && let Some((specifier, _)) =
+                    read_js_string(source, skip_ws_comments(source, open + 1))
             {
                 specifiers.push(specifier);
             }
@@ -9050,7 +9654,8 @@ fn collect_create_require_specifiers(source: &str) -> Vec<String> {
         let Some(declaration_end) = parse_variable_declaration_keyword(source, i) else {
             return ControlFlow::Continue(None);
         };
-        let Some((alias, next)) = read_ident(source, skip_ws_comments(source, declaration_end)) else {
+        let Some((alias, next)) = read_ident(source, skip_ws_comments(source, declaration_end))
+        else {
             return ControlFlow::Continue(None);
         };
         let mut next = skip_ws_comments(source, next);
@@ -9086,7 +9691,8 @@ fn collect_create_require_specifiers(source: &str) -> Vec<String> {
             };
             let second_open = skip_ws_comments(source, first_close + 1);
             if source.as_bytes().get(second_open) == Some(&b'(')
-                && let Some((specifier, _)) = read_js_string(source, skip_ws_comments(source, second_open + 1))
+                && let Some((specifier, _)) =
+                    read_js_string(source, skip_ws_comments(source, second_open + 1))
             {
                 specifiers.push(specifier);
             }
@@ -9362,12 +9968,18 @@ fn analyze_module_source<'js>(ctx: Ctx<'js>, source: String) -> rquickjs::Result
     }
     analysis.set("staticEdges", static_edges)?;
     let require_specifiers = rquickjs::Array::new(ctx.clone())?;
-    for (index, specifier) in collect_literal_call_specifiers(&source, &["require".to_string()]).into_iter().enumerate() {
+    for (index, specifier) in collect_literal_call_specifiers(&source, &["require".to_string()])
+        .into_iter()
+        .enumerate()
+    {
         require_specifiers.set(index, specifier)?;
     }
     analysis.set("requireSpecifiers", require_specifiers)?;
     let create_require_specifiers = rquickjs::Array::new(ctx)?;
-    for (index, specifier) in collect_create_require_specifiers(&source).into_iter().enumerate() {
+    for (index, specifier) in collect_create_require_specifiers(&source)
+        .into_iter()
+        .enumerate()
+    {
         create_require_specifiers.set(index, specifier)?;
     }
     analysis.set("createRequireSpecifiers", create_require_specifiers)?;
@@ -9409,9 +10021,12 @@ fn classify_module_specifier(specifier: String) -> bool {
     is_relative_or_absolute_specifier(&specifier)
 }
 
-fn split_module_package_name<'js>(ctx: Ctx<'js>, specifier: String) -> rquickjs::Result<Object<'js>> {
-    let (name, subpath) = NodeModulesResolver::split_package_name(&specifier)
-        .unwrap_or((specifier.as_str(), ""));
+fn split_module_package_name<'js>(
+    ctx: Ctx<'js>,
+    specifier: String,
+) -> rquickjs::Result<Object<'js>> {
+    let (name, subpath) =
+        NodeModulesResolver::split_package_name(&specifier).unwrap_or((specifier.as_str(), ""));
     let result = Object::new(ctx)?;
     result.set("name", name)?;
     result.set("subpath", subpath)?;
@@ -9528,7 +10143,11 @@ fn line_starts_with_static_export(line: &str) -> bool {
     let Some(rest) = line.strip_prefix("export") else {
         return false;
     };
-    if rest.chars().next().is_some_and(|ch| is_ident_continue(ch as u8)) {
+    if rest
+        .chars()
+        .next()
+        .is_some_and(|ch| is_ident_continue(ch as u8))
+    {
         return false;
     }
     let rest = rest.trim_start();
@@ -9549,14 +10168,25 @@ fn line_starts_with_static_import(line: &str) -> bool {
     let Some(rest) = line.strip_prefix("import") else {
         return false;
     };
-    if rest.chars().next().is_some_and(|ch| is_ident_continue(ch as u8)) {
+    if rest
+        .chars()
+        .next()
+        .is_some_and(|ch| is_ident_continue(ch as u8))
+    {
         return false;
     }
     let rest = rest.trim_start();
     if rest.starts_with('(') || rest.starts_with(':') {
         return false;
     }
-    rest.starts_with('"') || rest.starts_with('\'') || rest.starts_with('{') || rest.starts_with('*') || rest.chars().next().is_some_and(|ch| is_js_identifier_start(ch as u8))
+    rest.starts_with('"')
+        || rest.starts_with('\'')
+        || rest.starts_with('{')
+        || rest.starts_with('*')
+        || rest
+            .chars()
+            .next()
+            .is_some_and(|ch| is_js_identifier_start(ch as u8))
 }
 
 fn source_has_import_meta(source: &str) -> bool {
@@ -9764,9 +10394,238 @@ impl Loader for VirtualBuiltinModuleLoader {
         let Some(source) = self.modules.get(path) else {
             return Err(Error::new_loading(path));
         };
-        let init = url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", path));
+        let init =
+            url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", path));
         declare_module_with_import_meta(ctx, path, source, &init)
     }
+}
+
+pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncContext) {
+    let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
+    for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+        builtin_resolver = builtin_resolver.with_module(name.to_string());
+    }
+    let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
+    let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
+
+    let file_resolver = FileResolver::default()
+        .with_path("/")
+        .with_pattern("{}.js")
+        .with_pattern("{}.mjs")
+        .with_pattern("{}.json");
+    let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
+
+    let resolver = (
+        (
+            RealmGuardResolver,
+            MockModuleResolver,
+            DataUrlResolver,
+            FileUrlResolver,
+            PrivateBuiltinResolverGuard,
+            LoaderCjsFacadeResolver(loader_cjs_facades.clone()),
+            RegisteredLoaderResolver,
+        ),
+        (builtin_resolver, NodeModulesResolver, NodeFileResolver),
+        (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
+    );
+
+    let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
+        crate::JS_EXPORT_MODULE_NAME,
+        virtual_builtin_module_source(crate::js_export_module()),
+    );
+    for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
+        virtual_builtin_loader = virtual_builtin_loader.with_module(
+            name.to_string(),
+            virtual_builtin_module_source(&(get_module)()),
+        );
+    }
+
+    let loader = (
+        (
+            MockModuleLoader,
+            virtual_builtin_loader,
+            crate::modules::module_loader(),
+            crate::builtin::module_loader(),
+            LoaderCjsFacadeLoader(loader_cjs_facades.clone()),
+            DataUrlLoader,
+            StaticRegisteredFileUrlLoader,
+        ),
+        (JsonFileLoader, CjsCompatLoader, ImportMetaLoader),
+    );
+
+    rt.set_loader(resolver, loader).await;
+
+    async_with!(ctx => |ctx| {
+        let global = ctx.globals();
+
+        global.set("__wasm_rquickjs_mock_seq", 0i64)
+            .expect("Failed to initialize mock sequence counter");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_register_import_attr_rewrite",
+            Function::new(ctx.clone(), |specifier: String, import_type: String| {
+                if import_type == "json" {
+                    append_import_type_query(&specifier, &import_type)
+                } else {
+                    specifier
+                }
+            })
+            .expect("Failed to create import attribute rewrite registrar"),
+        )
+        .expect("Failed to initialize import attribute rewrite registrar");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_discard_import_attr_rewrite",
+            Function::new(ctx.clone(), |specifier: String| {
+                discard_generated_import_type_rewrite_token(&specifier);
+            })
+            .expect("Failed to create import attribute rewrite discard"),
+        )
+        .expect("Failed to initialize import attribute rewrite discard");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_build_loader_cjs_facade",
+            Function::new(ctx.clone(), {
+                let loader_cjs_facades = loader_cjs_facades.clone();
+                move |ctx, filename, source_url, cache_key, source| {
+                    build_loader_cjs_facade(
+                        &loader_cjs_facades,
+                        ctx,
+                        filename,
+                        source_url,
+                        cache_key,
+                        source,
+                    )
+                }
+            })
+            .expect("Failed to create loader CJS facade builder"),
+        )
+        .expect("Failed to initialize loader CJS facade builder");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_analyze_module_source",
+            Function::new(ctx.clone(), analyze_module_source)
+                .expect("Failed to create module source analyzer"),
+        )
+        .expect("Failed to initialize module source analyzer");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_prepare_cjs_source",
+            Function::new(ctx.clone(), prepare_cjs_source)
+                .expect("Failed to create CJS source preparer"),
+        )
+        .expect("Failed to initialize CJS source preparer");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_module_has_exec_argv_flag",
+            Function::new(ctx.clone(), module_has_exec_argv_flag)
+                .expect("Failed to create module runtime flag analyzer"),
+        )
+        .expect("Failed to initialize module runtime flag analyzer");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_classify_module_specifier",
+            Function::new(ctx.clone(), classify_module_specifier)
+                .expect("Failed to create module specifier classifier"),
+        )
+        .expect("Failed to initialize module specifier classifier");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_split_module_package_name",
+            Function::new(ctx.clone(), split_module_package_name)
+                .expect("Failed to create module package-name splitter"),
+        )
+        .expect("Failed to initialize module package-name splitter");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_import_meta_resolve_package",
+            Function::new(ctx.clone(), import_meta_resolve_package)
+                .expect("Failed to create import.meta package resolver"),
+        )
+        .expect("Failed to initialize import.meta package resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_import_meta_resolve_path",
+            Function::new(ctx.clone(), import_meta_resolve_path)
+                .expect("Failed to create import.meta path resolver"),
+        )
+        .expect("Failed to initialize import.meta path resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_loader_default_resolve_package",
+            Function::new(ctx.clone(), loader_default_resolve_package)
+                .expect("Failed to create loader default package resolver"),
+        )
+        .expect("Failed to initialize loader default package resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_cjs_resolve_package_exports",
+            Function::new(ctx.clone(), cjs_resolve_package_exports)
+                .expect("Failed to create CJS package exports resolver"),
+        )
+        .expect("Failed to initialize CJS package exports resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_cjs_resolve_package_self_reference",
+            Function::new(ctx.clone(), cjs_resolve_package_self_reference)
+                .expect("Failed to create CJS package self-reference resolver"),
+        )
+        .expect("Failed to initialize CJS package self-reference resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_cjs_package_scope_info",
+            Function::new(ctx.clone(), cjs_package_scope_info)
+                .expect("Failed to create CJS package scope classifier"),
+        )
+        .expect("Failed to initialize CJS package scope classifier");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_cjs_resolve_package_fallback",
+            Function::new(ctx.clone(), cjs_resolve_package_fallback)
+                .expect("Failed to create CJS package fallback resolver"),
+        )
+        .expect("Failed to initialize CJS package fallback resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_cjs_resolve_file_candidate",
+            Function::new(ctx.clone(), cjs_resolve_file_candidate)
+                .expect("Failed to create CJS file candidate resolver"),
+        )
+        .expect("Failed to initialize CJS file candidate resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_package_global_conditions",
+            Function::new(ctx.clone(), package_global_conditions)
+                .expect("Failed to create package global condition provider"),
+        )
+        .expect("Failed to initialize package global condition provider");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_require_esm_graph_resolve_package",
+            Function::new(ctx.clone(), require_esm_graph_resolve_package)
+                .expect("Failed to create require(esm) graph package resolver"),
+        )
+        .expect("Failed to initialize require(esm) graph package resolver");
+    })
+    .await;
 }
 
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
@@ -9897,7 +10756,8 @@ fn declare_esm_file_module_from_source<'js>(
             let cache: Object = match globals.get::<_, Value>("__esm_error_cache") {
                 Ok(v) if v.is_object() => v.into_object().unwrap(),
                 _ => {
-                    let obj = Object::new(ctx.clone()).map_err(|_| Error::new_loading(module_id))?;
+                    let obj =
+                        Object::new(ctx.clone()).map_err(|_| Error::new_loading(module_id))?;
                     globals
                         .set("__esm_error_cache", obj.clone())
                         .map_err(|_| Error::new_loading(module_id))?;
@@ -9932,10 +10792,8 @@ impl Loader for ImportMetaLoader {
                 .unwrap_or_default();
             let globals = ctx.globals();
             let type_error_ctor: Function = globals.get("TypeError")?;
-            let error_obj: Object = type_error_ctor.call((format!(
-                "Unknown file extension {:?} for {}",
-                ext, fs_path
-            ),))?;
+            let error_obj: Object = type_error_ctor
+                .call((format!("Unknown file extension {:?} for {}", ext, fs_path),))?;
             error_obj.set("code", "ERR_UNKNOWN_FILE_EXTENSION")?;
             return Err(ctx.throw(error_obj.into_value()));
         }
@@ -9995,1252 +10853,6 @@ impl Loader for JsonFileLoader {
     }
 }
 
-pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
-pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
-pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
-
-pub struct JsState {
-    pub rt: AsyncRuntime,
-    pub ctx: AsyncContext,
-    pub exported_function_cache:
-        RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
-    pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
-    pub last_resource_id: AtomicUsize,
-    pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
-    pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
-    pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
-    pub last_abort_id: AtomicUsize,
-    pub unrefed_timers: RefCell<HashSet<usize>>,
-    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
-    pub gc_pending: std::sync::atomic::AtomicBool,
-}
-
-pub struct CachedExportedFunction {
-    function: Persistent<Function<'static>>,
-    parent: Persistent<Object<'static>>,
-    parameter_count: usize,
-}
-
-/// Tracks which initialization phase the runtime is in.
-/// Used to support Wizer pre-initialization and guard against re-entrant
-/// `get_js_state()` calls during module evaluation (e.g. from `setTimeout`
-/// callbacks that fire during init).
-#[repr(u8)]
-#[derive(Clone, Copy)]
-enum InitPhase {
-    /// No initialization has been performed yet.
-    Uninitialized = 0,
-    /// `STATE` is published but JS evaluation is still in progress.
-    /// Re-entrant `get_js_state()` calls return the existing state without
-    /// re-running initialization.
-    Initializing = 1,
-    /// Fully initialized including user module evaluation.
-    FullyInitialized = 2,
-    /// Wizer pre-initialized: JS state is snapshotted but runtime env (argv, env vars)
-    /// needs to be refreshed from the actual host environment on first access.
-    WizerPreInitialized = 3,
-}
-
-impl JsState {
-    /// Phase 1: Create the runtime, context, resolvers, loaders, and all Rust-side
-    /// state. Does NOT evaluate any JavaScript — safe to publish to `STATE` before
-    /// JS module initialization runs.
-    async fn new_base() -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
-        // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
-        // shape refcount bug during heavy async/promise workloads. The default
-        // threshold (0xFF) causes GC to run too frequently, which can trigger
-        // a use-after-free in the shape reference counting code path.
-        rt.set_gc_threshold(256 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
-
-        let mut builtin_resolver =
-            BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-        for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-            builtin_resolver = builtin_resolver.with_module(name.to_string());
-        }
-        let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
-        let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
-
-        let file_resolver = FileResolver::default()
-            .with_path("/")
-            .with_pattern("{}.js")
-            .with_pattern("{}.mjs")
-            .with_pattern("{}.json");
-        let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
-
-        let resolver = (
-            (
-                RealmGuardResolver,
-                MockModuleResolver,
-                DataUrlResolver,
-                FileUrlResolver,
-                PrivateBuiltinResolverGuard,
-                LoaderCjsFacadeResolver(loader_cjs_facades.clone()),
-                RegisteredLoaderResolver,
-            ),
-            (
-                builtin_resolver,
-                NodeModulesResolver,
-                NodeFileResolver,
-            ),
-            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
-        );
-
-        let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
-            crate::JS_EXPORT_MODULE_NAME,
-            virtual_builtin_module_source(crate::js_export_module()),
-        );
-        for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
-            let source = (get_module)();
-            let injected = virtual_builtin_module_source(&source);
-            virtual_builtin_loader = virtual_builtin_loader.with_module(name.to_string(), injected);
-        }
-
-        let loader = (
-            (
-                MockModuleLoader,
-                virtual_builtin_loader,
-                crate::modules::module_loader(),
-                crate::builtin::module_loader(),
-                LoaderCjsFacadeLoader(loader_cjs_facades.clone()),
-                DataUrlLoader,
-                StaticRegisteredFileUrlLoader,
-            ),
-            (JsonFileLoader, CjsCompatLoader, ImportMetaLoader),
-        );
-
-        rt.set_loader(resolver, loader).await;
-
-        async_with!(ctx => |ctx| {
-            let global = ctx.globals();
-
-            global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
-                .expect("Failed to initialize resource table");
-
-            global.set("__wasm_rquickjs_mock_seq", 0i64)
-                .expect("Failed to initialize mock sequence counter");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_register_import_attr_rewrite",
-                Function::new(ctx.clone(), |specifier: String, import_type: String| {
-                    if import_type == "json" {
-                        append_import_type_query(&specifier, &import_type)
-                    } else {
-                        specifier
-                    }
-                })
-                .expect("Failed to create import attribute rewrite registrar"),
-            )
-            .expect("Failed to initialize import attribute rewrite registrar");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_discard_import_attr_rewrite",
-                Function::new(ctx.clone(), |specifier: String| {
-                    discard_generated_import_type_rewrite_token(&specifier);
-                })
-                .expect("Failed to create import attribute rewrite discard"),
-            )
-            .expect("Failed to initialize import attribute rewrite discard");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_build_loader_cjs_facade",
-                Function::new(ctx.clone(), {
-                    let loader_cjs_facades = loader_cjs_facades.clone();
-                    move |ctx, filename, source_url, cache_key, source| {
-                        build_loader_cjs_facade(
-                            &loader_cjs_facades,
-                            ctx,
-                            filename,
-                            source_url,
-                            cache_key,
-                            source,
-                        )
-                    }
-                })
-                .expect("Failed to create loader CJS facade builder"),
-            )
-            .expect("Failed to initialize loader CJS facade builder");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_analyze_module_source",
-                Function::new(ctx.clone(), analyze_module_source)
-                    .expect("Failed to create module source analyzer"),
-            )
-            .expect("Failed to initialize module source analyzer");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_prepare_cjs_source",
-                Function::new(ctx.clone(), prepare_cjs_source)
-                    .expect("Failed to create CJS source preparer"),
-            )
-            .expect("Failed to initialize CJS source preparer");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_module_has_exec_argv_flag",
-                Function::new(ctx.clone(), module_has_exec_argv_flag)
-                    .expect("Failed to create module runtime flag analyzer"),
-            )
-            .expect("Failed to initialize module runtime flag analyzer");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_classify_module_specifier",
-                Function::new(ctx.clone(), classify_module_specifier)
-                    .expect("Failed to create module specifier classifier"),
-            )
-            .expect("Failed to initialize module specifier classifier");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_split_module_package_name",
-                Function::new(ctx.clone(), split_module_package_name)
-                    .expect("Failed to create module package-name splitter"),
-            )
-            .expect("Failed to initialize module package-name splitter");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_import_meta_resolve_package",
-                Function::new(ctx.clone(), import_meta_resolve_package)
-                    .expect("Failed to create import.meta package resolver"),
-            )
-            .expect("Failed to initialize import.meta package resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_import_meta_resolve_path",
-                Function::new(ctx.clone(), import_meta_resolve_path)
-                    .expect("Failed to create import.meta path resolver"),
-            )
-            .expect("Failed to initialize import.meta path resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_loader_default_resolve_package",
-                Function::new(ctx.clone(), loader_default_resolve_package)
-                    .expect("Failed to create loader default package resolver"),
-            )
-            .expect("Failed to initialize loader default package resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_cjs_resolve_package_exports",
-                Function::new(ctx.clone(), cjs_resolve_package_exports)
-                    .expect("Failed to create CJS package exports resolver"),
-            )
-            .expect("Failed to initialize CJS package exports resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_cjs_resolve_package_self_reference",
-                Function::new(ctx.clone(), cjs_resolve_package_self_reference)
-                    .expect("Failed to create CJS package self-reference resolver"),
-            )
-            .expect("Failed to initialize CJS package self-reference resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_cjs_package_scope_info",
-                Function::new(ctx.clone(), cjs_package_scope_info)
-                    .expect("Failed to create CJS package scope classifier"),
-            )
-            .expect("Failed to initialize CJS package scope classifier");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_cjs_resolve_package_fallback",
-                Function::new(ctx.clone(), cjs_resolve_package_fallback)
-                    .expect("Failed to create CJS package fallback resolver"),
-            )
-            .expect("Failed to initialize CJS package fallback resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_cjs_resolve_file_candidate",
-                Function::new(ctx.clone(), cjs_resolve_file_candidate)
-                    .expect("Failed to create CJS file candidate resolver"),
-            )
-            .expect("Failed to initialize CJS file candidate resolver");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_package_global_conditions",
-                Function::new(ctx.clone(), package_global_conditions)
-                    .expect("Failed to create package global condition provider"),
-            )
-            .expect("Failed to initialize package global condition provider");
-
-            set_non_replaceable_global(
-                &global,
-                "__wasm_rquickjs_require_esm_graph_resolve_package",
-                Function::new(ctx.clone(), require_esm_graph_resolve_package)
-                    .expect("Failed to create require(esm) graph package resolver"),
-            )
-            .expect("Failed to initialize require(esm) graph package resolver");
-        })
-        .await;
-
-        rt.set_host_promise_rejection_tracker(Some(Box::new(
-            |ctx, promise, reason, is_handled| {
-                if let Ok(handler) = ctx
-                    .globals()
-                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
-                {
-                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
-                }
-            },
-        )))
-        .await;
-
-        let (resource_drop_queue_tx, resource_drop_queue_rx) = futures::channel::mpsc::unbounded();
-
-        let last_resource_id = AtomicUsize::new(1);
-        Self {
-            rt,
-            ctx,
-            exported_function_cache: RefCell::new(HashMap::new()),
-            variant_case_tag_cache: RefCell::new(HashMap::new()),
-            last_resource_id,
-            resource_drop_queue_tx,
-            resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-            abort_handles: RefCell::new(HashMap::new()),
-            last_abort_id: AtomicUsize::new(0),
-            unrefed_timers: RefCell::new(HashSet::new()),
-            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
-            gc_pending: std::sync::atomic::AtomicBool::new(false),
-        }
-    }
-
-    /// Phase 2a: Initialize engine builtins — dispose symbols and builtin wiring.
-    /// This can be pre-initialized by Wizer without user module code.
-    async fn init_engine(&self) {
-        // Dispose symbols must be initialized before builtins, since builtin
-        // modules use [Symbol.dispose] in their class definitions.
-        async_with!(self.ctx => |ctx| {
-            Module::evaluate(
-                ctx.clone(),
-                "dispose",
-                format!(r#"
-                const dispose = Symbol.for("dispose");
-                globalThis.{DISPOSE_SYMBOL} = dispose;
-                Symbol.dispose = dispose;
-                const asyncDispose = Symbol.for("asyncDispose");
-                Symbol.asyncDispose = asyncDispose;
-                "#)
-            ).catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
-        })
-            .await;
-        self.rt.idle().await;
-
-        async_with!(self.ctx => |ctx| {
-            // Wire built-in globals (globalThis.require, Buffer, process, etc.)
-            // This must complete before user code runs, because bundled CJS-in-ESM code
-            // (e.g. esbuild's __require shim) checks `typeof require` at the top level
-            // during module evaluation. ES module semantics hoist all imports and evaluate
-            // them before the module body, so wiring and user import cannot share a single
-            // Module::evaluate call.
-            let wiring = crate::builtin::wire_builtins();
-            Module::evaluate(
-                ctx.clone(),
-                "__wasm_rquickjs_init_wiring",
-                wiring,
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
-        })
-            .await;
-        drain_and_idle(self).await;
-    }
-
-    /// Phase 2b: Import and evaluate the user module.
-    /// Must be called after init_engine().
-    async fn init_user_module(&self) {
-        async_with!(self.ctx => |ctx| {
-            // Import the user module (now globalThis.require is available)
-            Module::evaluate(
-                ctx.clone(),
-                "__wasm_rquickjs_init_entry",
-                format!(r#"
-                import * as userModule from '{}';
-                globalThis.userModule = userModule;
-                "#, crate::JS_EXPORT_MODULE_NAME),
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
-
-            for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-              Module::import(&ctx, name.to_string())
-                 .catch(&ctx)
-                 .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
-                 .finish::<()>()
-                 .catch(&ctx)
-                 .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
-            }
-        })
-            .await;
-        drain_and_idle(self).await;
-    }
-
-    /// Phase 2: Evaluate all JavaScript — dispose symbols, builtin wiring, user
-    /// module import. Must be called after `STATE` is published so that any
-    /// re-entrant `get_js_state()` calls (e.g. from `setTimeout` during module
-    /// init) find the already-published state instead of recursing.
-    async fn finish_init(&self) {
-        self.init_engine().await;
-        self.init_user_module().await;
-    }
-
-    /// Refresh `process.argv` and `process.env` from the actual WASI host
-    /// environment. Called after a Wizer snapshot is restored so that
-    /// snapshotted (empty) values are replaced with the real runtime values.
-    /// Mutates objects in-place so ESM bindings remain valid.
-    async fn refresh_process_env(state: &JsState) {
-        let argv = wasip2::cli::environment::get_arguments();
-        let env_vars: std::collections::HashMap<String, String> =
-            wasip2::cli::environment::get_environment()
-                .into_iter()
-                .collect();
-
-        async_with!(state.ctx => |ctx| {
-            let globals = ctx.globals();
-            if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
-                // Refresh argv in-place so existing references stay valid
-                if let Ok(existing_argv) = process.get::<_, rquickjs::Array>("argv") {
-                    let _ = existing_argv.as_object().set("length", 0u32);
-                    for (i, arg) in argv.iter().enumerate() {
-                        let _ = existing_argv.set(i, arg.as_str());
-                    }
-                }
-                let _ = process.set(
-                    "argv0",
-                    argv.first().map(|s| s.as_str()).unwrap_or(""),
-                );
-
-                // Refresh env via JS eval to trigger Proxy traps
-                if let Ok(new_env) = rquickjs::Object::new(ctx.clone()) {
-                    for (key, value) in &env_vars {
-                        let _ = new_env.set(key.as_str(), value.as_str());
-                    }
-                    let _ = globals.set("__wasm_rquickjs_new_env", new_env);
-                    let _ = ctx.eval::<(), &str>(
-                        "(() => { \
-                            const e = globalThis.__wasm_rquickjs_new_env; \
-                            for (const k of Object.keys(process.env)) delete process.env[k]; \
-                            for (const [k,v] of Object.entries(e)) process.env[k] = v; \
-                            delete globalThis.__wasm_rquickjs_new_env; \
-                        })()",
-                    );
-                }
-            }
-        })
-        .await;
-    }
-}
-
-fn abort_unrefed_timers(js_state: &JsState) {
-    let unrefed = js_state.unrefed_timers.borrow().clone();
-    let mut abort_handles = js_state.abort_handles.borrow_mut();
-    let mut unrefed_mut = js_state.unrefed_timers.borrow_mut();
-    for id in unrefed.iter() {
-        if let Some(handle) = abort_handles.remove(id) {
-            handle.abort();
-        }
-        unrefed_mut.remove(id);
-    }
-}
-
-/// Runs GC if it was requested from JS (deferred to avoid re-entrancy issues).
-async fn run_pending_gc(js_state: &JsState) {
-    if js_state
-        .gc_pending
-        .swap(false, std::sync::atomic::Ordering::Relaxed)
-    {
-        async_with!(js_state.ctx => |ctx| {
-            ctx.run_gc();
-        })
-        .await;
-    }
-}
-
-/// Spawns a sentinel task that waits for all ref'd timers to complete,
-/// then aborts remaining unref'd timers so that `idle()` can return.
-async fn drain_and_idle(js_state: &JsState) {
-    run_pending_gc(js_state).await;
-    if js_state.unrefed_timers.borrow().is_empty() {
-        js_state.rt.idle().await;
-        return;
-    }
-    // Spawn a sentinel that polls until only unref'd timers remain, then aborts them.
-    async_with!(js_state.ctx => |ctx| {
-        ctx.spawn(async {
-            loop {
-                wstd::task::sleep(wstd::time::Duration::from_millis(1)).await;
-                let state = get_js_state();
-                let abort_count = state.abort_handles.borrow().len();
-                let unref_count = state.unrefed_timers.borrow().len();
-                // When the only remaining abort handles are for unref'd timers,
-                // abort them all (the sentinel itself is not tracked in abort_handles).
-                if abort_count > 0 && abort_count == unref_count {
-                    abort_unrefed_timers(state);
-                    break;
-                }
-                if unref_count == 0 {
-                    break;
-                }
-            }
-        });
-    })
-    .await;
-    js_state.rt.idle().await;
-}
-
-static mut STATE: Option<JsState> = None;
-static mut INIT_PHASE: InitPhase = InitPhase::Uninitialized;
-
-/// True while `wizer_initialize` is running. Used by built-in modules to avoid
-/// std::fs / std::env operations during Wizer pre-init: those would trigger
-/// wasi-libc's lazy preopen-cache population with the empty wizer environment,
-/// and the broken cache would then be snapshotted into the pre-initialized
-/// component, breaking filesystem access at runtime. See issue #91.
-static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-#[inline]
-pub fn is_wizer_active() -> bool {
-    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-#[allow(static_mut_refs)]
-pub fn get_js_state() -> &'static JsState {
-    unsafe {
-        match INIT_PHASE {
-            InitPhase::Uninitialized => {
-                // Phase 1: Create the runtime and all Rust-side state (no JS evaluation).
-                STATE = Some(block_on(JsState::new_base()));
-                // Mark as Initializing so re-entrant get_js_state() calls (e.g.
-                // from setTimeout callbacks during module init) return the existing
-                // state instead of re-running initialization.
-                INIT_PHASE = InitPhase::Initializing;
-                // Phase 2: Evaluate JS modules.
-                block_on(STATE.as_ref().unwrap().finish_init());
-                INIT_PHASE = InitPhase::FullyInitialized;
-            }
-            InitPhase::WizerPreInitialized => {
-                // Wizer snapshot restored — refresh argv/env from the real host.
-                let state = STATE.as_ref().unwrap();
-                block_on(JsState::refresh_process_env(state));
-                INIT_PHASE = InitPhase::FullyInitialized;
-            }
-            InitPhase::Initializing | InitPhase::FullyInitialized => {
-                // Already initialized or in progress — return existing state.
-            }
-        }
-        STATE.as_ref().unwrap()
-    }
-}
-
-pub fn async_exported_function<F: Future>(future: F) -> F::Output {
-    let js_state = get_js_state();
-
-    block_on(async move {
-        use futures::StreamExt;
-
-        if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
-            let resource_dropper = async move {
-                while let Some(resource_id) = resource_drop_queue_rx.next().await {
-                    if resource_id > 0 {
-                        drop_js_resource(resource_id).await;
-                    } else {
-                        break;
-                    }
-                }
-                resource_drop_queue_rx
-            };
-
-            // Finish resource dropper
-            js_state
-                .resource_drop_queue_tx
-                .unbounded_send(0)
-                .expect("Failed to enqueue resource dropper stop signal");
-            let (result, resource_drop_queue_rx) = (future, resource_dropper).join().await;
-            js_state
-                .resource_drop_queue_rx
-                .replace(Some(resource_drop_queue_rx));
-
-            result
-        } else {
-            // This case will never happen because block_on does not allow reentry
-            unreachable!()
-        }
-    })
-}
-
-pub async fn call_js_export<A, R>(
-    wit_package: &'static str,
-    function_path: &'static [&'static str],
-    args: A,
-) -> R
-where
-    A: for<'js> IntoArgs<'js>,
-    R: for<'js> FromJs<'js> + 'static,
-{
-    call_js_export_internal(wit_package, function_path, args, |a| a, |_, _| None).await
-}
-
-pub async fn call_js_export_returning_result<A, R, E>(
-    wit_package: &'static str,
-    function_path: &'static [&'static str],
-    args: A,
-) -> crate::wrappers::JsResult<R, E>
-where
-    A: for<'js> IntoArgs<'js>,
-    R: for<'js> FromJs<'js> + 'static,
-    E: for<'js> FromJs<'js> + 'static,
-{
-    call_js_export_internal(
-        wit_package,
-        function_path,
-        args,
-        |a| crate::wrappers::JsResult(Ok(a)),
-        |ctx, value| {
-            FromJs::from_js(ctx, value.clone())
-                .ok()
-                .map(|e| crate::wrappers::JsResult(Err(e)))
-        },
-    )
-    .await
-}
-
-async fn call_js_export_internal<A, R, FR, TME>(
-    wit_package: &'static str,
-    function_path: &'static [&'static str],
-    args: A,
-    map_result: impl Fn(R) -> FR,
-    try_map_exception: TME,
-) -> FR
-where
-    A: for<'js> IntoArgs<'js>,
-    R: for<'js> FromJs<'js> + 'static,
-    FR: 'static,
-    TME: for<'js> Fn(&Ctx<'js>, &Value<'js>) -> Option<FR>,
-{
-    let js_state = get_js_state();
-
-    let result: FR = async_with!(js_state.ctx => |ctx| {
-        let (user_function, parent) =
-            get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
-
-        let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
-
-        match result {
-            Err(Error::Exception) => {
-                let exception = ctx.catch();
-                if let Some(result) = try_map_exception(&ctx, &exception) {
-                    result
-                } else {
-                    panic! ("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&exception));
-                }
-            }
-            Err(e) => {
-                panic! ("Error during call of {fun}:\n{e:?}", fun = function_path.join("."));
-            }
-            Ok(value) => {
-                if value.is_promise() {
-                    let promise: Promise = value.into_promise().unwrap();
-                    let promise_future = promise.into_future::<R> ();
-
-                    match promise_future.await {
-                        Ok(result) => {
-                            map_result(result)
-                        }
-                        Err(e) => {
-                            match e {
-                                Error::Exception => {
-                                    let exception = ctx.catch();
-                                    if let Some(result) = try_map_exception(&ctx, &exception) {
-                                        result
-                                    } else {
-                                        panic! ("Exception during awaiting call result for {function_path}:\n{exception}", function_path=function_path.join("."), exception = format_js_exception(&exception))
-                                    }
-                                }
-                                _ => {
-                                    panic ! ("Error during awaiting call result for {function_path}:\n{e:?}", function_path=function_path.join("."))
-                                }
-                            }
-                        }
-                    }
-                }
-                else {
-                    (map_result)(
-                        R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for exported function {path}: {err}", path=function_path.join(".")))
-                    )
-                }
-            }
-        }
-    }).await;
-    drain_and_idle(js_state).await;
-    result
-}
-
-fn get_cached_js_export<'js>(
-    js_state: &JsState,
-    ctx: &Ctx<'js>,
-    wit_package: &'static str,
-    function_path: &'static [&'static str],
-    expected_parameter_count: usize,
-) -> (Function<'js>, Object<'js>) {
-    if let Some((function, parent, parameter_count)) = js_state
-        .exported_function_cache
-        .borrow()
-        .get(function_path)
-        .map(|cached| {
-            (
-                cached.function.clone(),
-                cached.parent.clone(),
-                cached.parameter_count,
-            )
-        })
-    {
-        if parameter_count != expected_parameter_count {
-            panic!(
-                "The WIT specification defines {} parameters,\nbut the exported JavaScript function got {} parameters (exported function {} in WIT package {})",
-                expected_parameter_count,
-                parameter_count,
-                function_path.join("."),
-                wit_package
-            );
-        }
-
-        let function = function
-            .restore(ctx)
-            .expect("Failed to restore cached exported JS function");
-        let parent = parent
-            .restore(ctx)
-            .expect("Failed to restore cached exported JS function parent");
-        return (function, parent);
-    }
-
-    let module: Object = ctx
-        .globals()
-        .get("userModule")
-        .expect("Failed to get userModule");
-    let (user_function_obj, parent): (Object, Object) =
-        get_path(&module, function_path).unwrap_or_else(|| {
-            panic!(
-                "{}",
-                dump_cannot_find_export("exported JS function", function_path, &module, wit_package)
-            )
-        });
-    let user_function = user_function_obj
-        .as_function()
-        .unwrap_or_else(|| {
-            panic!(
-                "Expected export {} to be a function",
-                function_path.join(".")
-            )
-        })
-        .clone();
-
-    let parameter_count = user_function_obj
-        .get::<&str, usize>("length")
-        .unwrap_or_else(|_| {
-            panic!(
-                "Failed to get parameter count of exported function {}",
-                function_path.join(".")
-            )
-        });
-    if parameter_count != expected_parameter_count {
-        panic!(
-            "The WIT specification defines {} parameters,\nbut the exported JavaScript function got {} parameters (exported function {} in WIT package {})",
-            expected_parameter_count,
-            parameter_count,
-            function_path.join("."),
-            wit_package
-        );
-    }
-
-    js_state.exported_function_cache.borrow_mut().insert(
-        function_path,
-        CachedExportedFunction {
-            function: Persistent::save(ctx, user_function.clone()),
-            parent: Persistent::save(ctx, parent.clone()),
-            parameter_count,
-        },
-    );
-
-    (user_function, parent)
-}
-
-pub fn variant_case_tag<'js>(
-    ctx: &Ctx<'js>,
-    name: &'static str,
-) -> rquickjs::Result<JsString<'js>> {
-    let js_state = get_js_state();
-    if let Some(tag) = js_state.variant_case_tag_cache.borrow().get(name).cloned() {
-        return tag.restore(ctx);
-    }
-
-    let tag = JsString::from_str(ctx.clone(), name)?;
-    js_state
-        .variant_case_tag_cache
-        .borrow_mut()
-        .insert(name, Persistent::save(ctx, tag.clone()));
-    Ok(tag)
-}
-
-pub async fn call_js_resource_constructor<A>(
-    wit_package: &'static str,
-    resource_path: &'static [&'static str],
-    args: A,
-) -> usize
-where
-    A: for<'js> IntoArgs<'js>,
-{
-    let js_state = get_js_state();
-
-    let result = async_with!(js_state.ctx => |ctx| {
-        let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
-        let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
-        let constructor = constructor_obj.as_constructor().unwrap_or_else(|| panic!("Expected export {path} to be a class with a constructor", path = resource_path.join("."))).clone();
-
-        let parameter_count = constructor_obj.get::<&str, usize>("length").unwrap_or_else(|_| panic!("Failed to get parameter count of exported constructor {}", resource_path.join(".")));
-        if parameter_count != args.num_args() {
-            panic!(
-                "The WIT specification defines {} parameters,\nbut the exported JavaScript constructor got {} parameters (exported constructor {} in WIT package {})",
-                args.num_args(),
-                parameter_count,
-                resource_path.join("."),
-                wit_package
-            );
-        }
-
-        let result: Result<Object, Error> = constructor.construct(args);
-
-        match result {
-            Err(Error::Exception) => {
-                let exception = ctx.catch();
-                panic! ("Exception during call of constructor {path}:\n{exception}", path= resource_path.join("."), exception = format_js_exception(&exception));
-            }
-            Err(e) => {
-                panic! ("Error during call of constructor {path}: {e:?}", path= resource_path.join("."));
-            }
-            Ok(resource) => {
-                let resource_id = get_free_resource_id();
-                resource.set(RESOURCE_ID_KEY, resource_id)
-                    .expect("Failed to set resource ID");
-                let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
-                    .expect("Failed to get the resource table");
-                resource_table
-                    .set(resource_id.to_string(), resource)
-                    .expect("Failed to store resource instance");
-
-                resource_id
-            }
-        }
-    }).await;
-    drain_and_idle(js_state).await;
-    result
-}
-
-pub fn get_free_resource_id() -> usize {
-    get_js_state()
-        .last_resource_id
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-}
-
-pub async fn call_js_resource_method<A, R>(
-    wit_package: &str,
-    resource_path: &[&str],
-    resource_id: usize,
-    name: &str,
-    args: A,
-) -> R
-where
-    A: for<'js> IntoArgs<'js>,
-    R: for<'js> FromJs<'js> + 'static,
-{
-    call_js_resource_method_internal(
-        wit_package,
-        resource_path,
-        resource_id,
-        name,
-        args,
-        |a| a,
-        |_, _| None,
-    )
-    .await
-}
-
-pub async fn call_js_resource_method_returning_result<A, R, E>(
-    wit_package: &str,
-    resource_path: &[&str],
-    resource_id: usize,
-    name: &str,
-    args: A,
-) -> crate::wrappers::JsResult<R, E>
-where
-    A: for<'js> IntoArgs<'js>,
-    R: for<'js> FromJs<'js> + 'static,
-    E: for<'js> FromJs<'js> + 'static,
-{
-    call_js_resource_method_internal(
-        wit_package,
-        resource_path,
-        resource_id,
-        name,
-        args,
-        |a| crate::wrappers::JsResult(Ok(a)),
-        |ctx, value| {
-            FromJs::from_js(ctx, value.clone())
-                .ok()
-                .map(|e| crate::wrappers::JsResult(Err(e)))
-        },
-    )
-    .await
-}
-
-async fn call_js_resource_method_internal<A, R, FR, TME>(
-    wit_package: &str,
-    resource_path: &[&str],
-    resource_id: usize,
-    name: &str,
-    args: A,
-    map_result: impl Fn(R) -> FR,
-    try_map_exception: TME,
-) -> FR
-where
-    A: for<'js> IntoArgs<'js>,
-    R: for<'js> FromJs<'js> + 'static,
-    FR: 'static,
-    TME: for<'js> Fn(&Ctx<'js>, &Value<'js>) -> Option<FR>,
-{
-    let js_state = get_js_state();
-
-    let result: FR = async_with!(js_state.ctx => |ctx| {
-        let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
-            .expect("Failed to get the resource table");
-        let resource_instance: Object = resource_table.get(resource_id.to_string())
-            .unwrap_or_else(|_| panic!("Failed to get resource instance with id #{resource_id} of class {}", resource_path.join(".")));
-
-        let method_obj: Object = resource_instance.get(name)
-            .unwrap_or_else(|_| panic!("{}", dump_cannot_find_method(
-                name,
-                resource_path,
-                &resource_instance,
-                wit_package,
-            )));
-
-        let method = method_obj.as_function().unwrap_or_else(|| panic!("Expected method {name} to be a function in class {}", resource_path.join("."))).clone();
-
-        let parameter_count = method.get::<&str, usize>("length").unwrap_or_else(|_| panic!("Failed to get parameter count of exported method {name} in class {}", resource_path.join(".")));
-        if parameter_count != args.num_args() {
-            panic!(
-                "The WIT specification defines {} parameters,\nbut the exported JavaScript method got {} parameters (exported method {} of class {} representing a resource defined in WIT package {})",
-                args.num_args(),
-                parameter_count,
-                name,
-                resource_path.join("."),
-                wit_package
-            );
-        }
-
-        let result: Result<Value, Error> = call_with_this(ctx.clone(), method, resource_instance, args);
-
-        match result {
-            Err(Error::Exception) => {
-                let exception = ctx.catch();
-                if let Some(result) = try_map_exception(&ctx, &exception) {
-                    result
-                } else {
-                    panic!("Exception during call of method {name} in {path}:\n{exception}", path=resource_path.join("."), exception = format_js_exception(&exception));
-                }
-            }
-            Err(e) => {
-                panic!("Error during call of method {name} in {path}:\n{e:?}", path=resource_path.join("."));
-            }
-            Ok(value) => {
-                if value.is_promise() {
-                    let promise: Promise = value.into_promise().unwrap();
-                    let promise_future = promise.into_future::<R> ();
-                    match promise_future.await {
-                        Ok(result) => {
-                            map_result(result)
-                        }
-                        Err(e) => {
-                            match e {
-                                Error::Exception => {
-                                    let exception = ctx.catch();
-                                    if let Some(result) = try_map_exception(&ctx, &exception) {
-                                        result
-                                    } else {
-                                        panic!("Exception during awaiting call result of method {name} in {path}:\n{exception:?}", path=resource_path.join("."), exception = format_js_exception(&exception));
-                                    }
-                                }
-                                _ => {
-                                    panic!("Error during awaiting call result of method {name} in {path}:\n{e:?}", path=resource_path.join("."));
-                                }
-                            }
-                        }
-                    }
-                }
-                else {
-                    map_result(R::from_js(&ctx, value).unwrap_or_else(|err| panic!("Unexpected result value for method {name} in exported class {path}: {err}",
-                                path=resource_path.join("."))))
-                }
-            }
-        }
-    }).await;
-    drain_and_idle(js_state).await;
-    result
-}
-
-pub fn enqueue_drop_js_resource(resource_id: usize) {
-    let js_state = get_js_state();
-    js_state
-        .resource_drop_queue_tx
-        .unbounded_send(resource_id)
-        .expect("Failed to enqueue resource drop");
-}
-
-async fn drop_js_resource(resource_id: usize) {
-    let js_state = get_js_state();
-
-    async_with!(js_state.ctx => |ctx| {
-        let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
-            .expect("Failed to get the resource table");
-        if let Err(e) = resource_table.remove(resource_id.to_string()) {
-            panic!("Failed to delete resource {resource_id}: {e:?}");
-        }
-    })
-    .await;
-    js_state.rt.idle().await;
-}
-
-fn call_with_this<'js, A, R>(
-    ctx: Ctx<'js>,
-    function: Function<'js>,
-    this: Object<'js>,
-    args: A,
-) -> rquickjs::Result<R>
-where
-    A: IntoArgs<'js>,
-    R: FromJs<'js>,
-{
-    let num = args.num_args();
-    let mut accum_args = Args::new(ctx.clone(), num + 1);
-    accum_args.this(this)?;
-    args.into_args(&mut accum_args)?;
-    function.call_arg(accum_args)
-}
-
-fn get_path<'js, V: FromJs<'js>>(root: &Object<'js>, path: &[&str]) -> Option<(V, Object<'js>)> {
-    let (head, tail) = path.split_first()?;
-    if tail.is_empty() {
-        root.get(*head).ok().map(|v| (v, root.clone()))
-    } else {
-        let next: Object<'js> = root.get(*head).ok()?;
-        get_path(&next, tail)
-    }
-}
-
-fn dump_cannot_find_export(
-    what: &str,
-    path: &[&str],
-    module: &Object,
-    wit_package: &str,
-) -> String {
-    let mut panic_message = String::new();
-    panic_message.push_str(&format!(
-        "Cannot find {what} {} of WIT package {wit_package}",
-        path.join(".")
-    ));
-    panic_message.push_str("\nProvided exports:\n");
-    let mut keys: Vec<String> = vec![];
-    for key in module.keys().flatten() {
-        keys.push(key);
-    }
-    keys.sort();
-    panic_message.push_str(&format!("  {}\n", keys.join(", ")));
-
-    if path.len() == 1 {
-        panic_message.push_str(&format!(
-            "\nTry adding an export `export const {} = ...`\n",
-            path[0]
-        ));
-    } else if path.len() > 1 {
-        let mut current_object = module.clone();
-        for i in 0..path.len() {
-            match current_object.get::<&str, Object>(path[i]) {
-                Ok(child) => {
-                    current_object = child;
-                }
-                Err(_) => {
-                    if i == 0 {
-                        panic_message.push_str(&format!(
-                            "\nTry adding an export `export const {} = {{ ... }}`\n",
-                            path[i]
-                        ));
-                    } else {
-                        panic_message.push_str(&format!("\nKeys in {}:\n", path[..i].join(".")));
-                        let mut keys: Vec<String> = vec![];
-                        for key in current_object.keys().flatten() {
-                            keys.push(key);
-                        }
-                        keys.sort();
-                        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
-
-                        panic_message.push_str(&format!(
-                            "\nTry adding a field `{}` to {}\n",
-                            path[i],
-                            path[..i].join(".")
-                        ));
-                    }
-                    break;
-                }
-            }
-        }
-    }
-    panic_message
-}
-
-fn dump_cannot_find_method(
-    name: &str,
-    resource_path: &[&str],
-    class_instance: &Object,
-    wit_package: &str,
-) -> String {
-    let mut panic_message = String::new();
-    panic_message.push_str(&format!(
-        "Cannot find method {name} in an instance of class {path} of WIT package {wit_package}",
-        path = resource_path.join(".")
-    ));
-    if let Some(prototype) = class_instance.get_prototype() {
-        panic_message.push_str("\nKeys in the instance's prototype:\n");
-        let mut keys: Vec<String> = vec![];
-        for key in prototype
-            .own_keys(Filter::new().symbol().string().private())
-            .flatten()
-        {
-            keys.push(key);
-        }
-        keys.sort();
-        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
-    }
-
-    panic_message.push_str(&format!(
-        "\nTry adding a method `{}() {{ ... }}` to class {path}\n",
-        name,
-        path = resource_path.join(".")
-    ));
-
-    panic_message
-}
-
-pub fn format_js_exception(exc: &Value) -> String {
-    try_format_js_error(exc)
-        .or_else(|| try_format_tagged_error(exc))
-        .unwrap_or_else(|| {
-            let formatted_exc = pretty_stringify_or_debug_print(exc);
-            if formatted_exc.contains("\n") {
-                format!("JavaScript exception:\n{formatted_exc}",)
-            } else {
-                format!("JavaScript exception: {formatted_exc}",)
-            }
-        })
-}
-
-pub fn try_format_js_error(err: &Value) -> Option<String> {
-    let error_ctor: Object = err.ctx().globals().get("Error").ok()?;
-    let obj = err.as_object()?;
-
-    if !obj.is_instance_of(error_ctor) {
-        return None;
-    }
-
-    let message: Option<String> = obj.get("message").ok();
-    let stack: Option<String> = obj.get("stack").ok();
-
-    match (message, stack) {
-        (Some(msg), Some(st)) => Some(format!("JavaScript error: {msg}\nStack:\n{st}")),
-        (Some(msg), None) => Some(format!("JavaScript error: {msg}")),
-        (None, Some(st)) => Some(format!("JavaScript error: <no message>\nStack:\n{st}")),
-        _ => None,
-    }
-}
-
-pub fn try_format_tagged_error(err: &Value) -> Option<String> {
-    let obj = err.as_object()?;
-    let tag: Option<String> = obj.get("tag").ok();
-    let val: Option<Value> = obj.get("val").ok();
-    let val = val.and_then(|v| (!v.is_undefined()).then_some(v));
-
-    match (tag, val) {
-        (Some(tag), Some(val)) => {
-            let formatted_val = pretty_stringify_or_debug_print(&val);
-            if formatted_val.contains("\n") {
-                Some(format!("Error: {tag}:\n{formatted_val}"))
-            } else {
-                Some(format!("Error: {tag}: {formatted_val}"))
-            }
-        }
-        (Some(tag), None) => Some(format!("Error: {tag}")),
-        _ => None,
-    }
-}
-
-fn pretty_stringify_or_debug_print(val: &Value) -> String {
-    if let Some(formatted) = try_pretty_stringify(val) {
-        formatted
-    } else {
-        format!("{val:#?}")
-    }
-}
-
-fn try_pretty_stringify(val: &Value) -> Option<String> {
-    if val.is_undefined() {
-        return Some("undefined".to_string());
-    }
-
-    // Return strings as they are
-    if let Some(str) = val.as_string() {
-        return str.to_string().ok();
-    }
-
-    // For other values try to use JSON.stringify()
-    let json: Object = val.ctx().globals().get("JSON").ok()?;
-    let stringify: Function = json.get("stringify").ok()?;
-    let res: Result<String, Error> = stringify.call((val, rquickjs::Undefined, 2));
-    res.ok()
-}
-
-pub fn format_caught_error(caught: CaughtError) -> String {
-    match caught {
-        CaughtError::Error(e) => {
-            format!("Host error: {e:?}")
-        }
-        CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
-        CaughtError::Value(val) => format_js_exception(&val),
-    }
-}
-
 #[cfg(test)]
 mod cjs_export_analyzer_tests {
     use super::*;
@@ -11259,16 +10871,28 @@ mod cjs_export_analyzer_tests {
             DataUrlLoader::content_separator_pos("application/json;foo=test%2C,0"),
             Some("application/json;foo=test%2C".len())
         );
-        let rewritten = append_import_type_query(r#"data:application/json;foo="test,""this""#, "json");
-        assert!(rewritten.starts_with(r#"data:application/json;foo="test;__wasm_rquickjs_import_type=json-"#));
+        let rewritten =
+            append_import_type_query(r#"data:application/json;foo="test,""this""#, "json");
+        assert!(
+            rewritten.starts_with(
+                r#"data:application/json;foo="test;__wasm_rquickjs_import_type=json-"#
+            )
+        );
         assert!(rewritten.ends_with(r#",""this""#));
         assert_eq!(
-            import_attr_type_from_path(r#"data:application/json;__wasm_rquickjs_import_type=json,0"#),
+            import_attr_type_from_path(
+                r#"data:application/json;__wasm_rquickjs_import_type=json,0"#
+            ),
             None
         );
-        assert_eq!(import_attr_type_from_path(&rewritten), Some("json".to_string()));
         assert_eq!(
-            split_module_path_suffix(r#"data:application/json,"?__wasm_rquickjs_import_type=json""#),
+            import_attr_type_from_path(&rewritten),
+            Some("json".to_string())
+        );
+        assert_eq!(
+            split_module_path_suffix(
+                r#"data:application/json,"?__wasm_rquickjs_import_type=json""#
+            ),
             (
                 r#"data:application/json,"?__wasm_rquickjs_import_type=json""#,
                 ""
@@ -11304,8 +10928,16 @@ mod cjs_export_analyzer_tests {
         "#;
         let rewritten = process_static_import_attrs(source, "/app/main.mjs");
 
-        assert!(rewritten.source.contains("__wasm_rquickjs_import_attr_dynamic_import"));
-        assert!(rewritten.source.contains(r#"./typed.json", { with: { type: "json" } }"#));
+        assert!(
+            rewritten
+                .source
+                .contains("__wasm_rquickjs_import_attr_dynamic_import")
+        );
+        assert!(
+            rewritten
+                .source
+                .contains(r#"./typed.json", { with: { type: "json" } }"#)
+        );
         assert!(!rewritten.source.contains(r#"import("./typed.json","#));
     }
 
@@ -11326,7 +10958,12 @@ mod cjs_export_analyzer_tests {
         assert!(injected.contains(
             "const __wasm_rquickjs_dynamic_import_reaction_1=__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_reaction;const __wasm_rquickjs_dynamic_import_with_trace_1=__wasm_rquickjs_global.__wasm_rquickjs_dynamic_import_with_trace;"
         ));
-        assert_eq!(injected.matches("import.meta.__wasm_rquickjs_global").count(), 1);
+        assert_eq!(
+            injected
+                .matches("import.meta.__wasm_rquickjs_global")
+                .count(),
+            1
+        );
         assert!(!injected.contains("globalThis.__wasm_rquickjs_dynamic_import_reaction"));
         assert!(!injected.contains("globalThis.__wasm_rquickjs_dynamic_import_with_trace"));
         assert!(injected.contains("__wasm_rquickjs_dynamic_import_reaction_1(()=>__wasm_rquickjs_dynamic_import_with_trace_1("));
@@ -11388,12 +11025,7 @@ import "./dep.js" withあ;
         assert!(processed.dynamic_import_binding_names.is_none());
     }
 
-    fn assert_analysis(
-        source: &str,
-        is_cjs: bool,
-        exports: &[&str],
-        reexports: &[&str],
-    ) {
+    fn assert_analysis(source: &str, is_cjs: bool, exports: &[&str], reexports: &[&str]) {
         let analysis = analyze_cjs_exports(source);
         assert_eq!(analysis.is_cjs, is_cjs, "is_cjs mismatch for {source}");
         assert_eq!(analysis.exports, exports, "exports mismatch for {source}");
@@ -11798,10 +11430,22 @@ import "./dep.js" withあ;
             "const { require: localRequire } = { require: 1 };\nexport default localRequire;",
             None,
         );
-        assert_cjs_global("const x = 0,\n  require = 1;\nexport default require;", None);
-        assert_cjs_global("class C { #require = 1; get() { return this.#require; } } export default C;", None);
-        assert_cjs_global("class C { #exports = 1; get() { return this.#exports; } } export default C;", None);
-        assert_cjs_global("class C { #module = 1; get() { return this.#module; } } export default C;", None);
+        assert_cjs_global(
+            "const x = 0,\n  require = 1;\nexport default require;",
+            None,
+        );
+        assert_cjs_global(
+            "class C { #require = 1; get() { return this.#require; } } export default C;",
+            None,
+        );
+        assert_cjs_global(
+            "class C { #exports = 1; get() { return this.#exports; } } export default C;",
+            None,
+        );
+        assert_cjs_global(
+            "class C { #module = 1; get() { return this.#module; } } export default C;",
+            None,
+        );
         assert_cjs_global("export default import.meta . require;", None);
         assert_cjs_global("export default globalThis . require;", None);
         assert_cjs_global("export default obj\n.\nmodule;", None);
@@ -11810,27 +11454,44 @@ import "./dep.js" withあ;
             None,
         );
         assert_cjs_global("export default { async require() { return 1; } };", None);
-        assert_cjs_global("export default { *module() { yield 1; } }.module().next().value;", None);
-        assert_cjs_global("export default { get exports() { return 1; } }.exports;", None);
-        assert_cjs_global("export default { \"x\"(require) { return require; } }.x(1);", None);
-        assert_cjs_global("export default { /* comment */ require() { return 1; } }.require();", None);
-        assert_cjs_global("function* module() { yield 1; } export default module;", None);
+        assert_cjs_global(
+            "export default { *module() { yield 1; } }.module().next().value;",
+            None,
+        );
+        assert_cjs_global(
+            "export default { get exports() { return 1; } }.exports;",
+            None,
+        );
+        assert_cjs_global(
+            "export default { \"x\"(require) { return require; } }.x(1);",
+            None,
+        );
+        assert_cjs_global(
+            "export default { /* comment */ require() { return 1; } }.require();",
+            None,
+        );
+        assert_cjs_global(
+            "function* module() { yield 1; } export default module;",
+            None,
+        );
     }
 
     #[test]
     fn package_type_diagnostics_ignore_local_exports_binding() {
-        assert!(esm_preflight_error_module_source(
-            r#"
+        assert!(
+            esm_preflight_error_module_source(
+                r#"
                 const exports = {};
                 Object.defineProperty(exports, "__esModule", { value: true });
                 exports.default = "value";
                 export default exports;
                 export { exports as "module.exports" };
             "#,
-            true,
-            false,
-        )
-        .is_none());
+                true,
+                false,
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -11917,19 +11578,35 @@ import "./dep.js" withあ;
         assert!(require_diag.contains("require is not defined"));
         assert!(require_diag.contains(".cjs"));
 
-        let filename_diag = esm_preflight_error_module_source("console.log(__filename);", true, false).unwrap();
+        let filename_diag =
+            esm_preflight_error_module_source("console.log(__filename);", true, false).unwrap();
         assert!(filename_diag.contains("__filename is not defined"));
         assert!(filename_diag.contains(".cjs"));
 
-        assert!(esm_preflight_error_module_source("const require = 1; export default require;", true, false).is_none());
-        assert!(esm_preflight_error_module_source("export default typeof require;", false, false).is_none());
-        assert!(esm_preflight_error_module_source("export default typeof (exports);", false, false).is_none());
-        assert!(esm_preflight_error_module_source(
-            "if (true) { const exports = 1; Object.keys(exports); }",
-            false,
-            false
-        )
-        .is_none());
+        assert!(
+            esm_preflight_error_module_source(
+                "const require = 1; export default require;",
+                true,
+                false
+            )
+            .is_none()
+        );
+        assert!(
+            esm_preflight_error_module_source("export default typeof require;", false, false)
+                .is_none()
+        );
+        assert!(
+            esm_preflight_error_module_source("export default typeof (exports);", false, false)
+                .is_none()
+        );
+        assert!(
+            esm_preflight_error_module_source(
+                "if (true) { const exports = 1; Object.keys(exports); }",
+                false,
+                false
+            )
+            .is_none()
+        );
         let block_scoped_exports_diag = esm_preflight_error_module_source(
             "if (false) { const exports = 1; } Object.keys(exports);",
             false,
@@ -11950,33 +11627,44 @@ import "./dep.js" withあ;
             false,
         )
         .unwrap();
-        assert!(unbraced_for_scoped_exports_diag.contains("exports is not defined in ES module scope"));
+        assert!(
+            unbraced_for_scoped_exports_diag.contains("exports is not defined in ES module scope")
+        );
         let for_await_scoped_exports_diag = esm_preflight_error_module_source(
             "for await (let exports of []) {} Object.keys(exports);",
             false,
             false,
         )
         .unwrap();
-        assert!(for_await_scoped_exports_diag.contains("exports is not defined in ES module scope"));
+        assert!(
+            for_await_scoped_exports_diag.contains("exports is not defined in ES module scope")
+        );
         assert!(esm_preflight_error_module_source(
             "try { throw { a: 1 }; } catch (exports) { Object.keys(exports); } export default 1;",
             false,
             false,
         )
         .is_none());
-        assert!(esm_preflight_error_module_source(
-            "if (false) { var exports = 1; } Object.keys(exports);",
-            false,
-            false,
-        )
-        .is_none());
+        assert!(
+            esm_preflight_error_module_source(
+                "if (false) { var exports = 1; } Object.keys(exports);",
+                false,
+                false,
+            )
+            .is_none()
+        );
         let object_key_exports_diag =
-            esm_preflight_error_module_source("export default ({ var: exports });", false, false).unwrap();
+            esm_preflight_error_module_source("export default ({ var: exports });", false, false)
+                .unwrap();
         assert!(object_key_exports_diag.contains("exports is not defined in ES module scope"));
         let lexical_object_key_exports_diag =
-            esm_preflight_error_module_source("export default ({ const: exports });", false, false).unwrap();
-        assert!(lexical_object_key_exports_diag.contains("exports is not defined in ES module scope"));
-        let raw_exports_diag = esm_preflight_error_module_source("Object.keys(exports);", false, true).unwrap();
+            esm_preflight_error_module_source("export default ({ const: exports });", false, false)
+                .unwrap();
+        assert!(
+            lexical_object_key_exports_diag.contains("exports is not defined in ES module scope")
+        );
+        let raw_exports_diag =
+            esm_preflight_error_module_source("Object.keys(exports);", false, true).unwrap();
         assert!(raw_exports_diag.contains("exports is not defined"));
         assert!(!raw_exports_diag.contains("ES module scope"));
     }
@@ -11984,12 +11672,18 @@ import "./dep.js" withあ;
     #[test]
     fn cjs_wrapper_lexical_redeclaration_scanner_skips_non_code() {
         assert!(has_cjs_wrapper_lexical_redeclaration("const require = 1;"));
-        assert!(has_cjs_wrapper_lexical_redeclaration("let /*x*/ require = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration(
+            "let /*x*/ require = 1;"
+        ));
         assert!(has_cjs_wrapper_lexical_redeclaration("const exports = 1;"));
         assert!(has_cjs_wrapper_lexical_redeclaration("let module = 1;"));
-        assert!(has_cjs_wrapper_lexical_redeclaration("const __filename = 1;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration(
+            "const __filename = 1;"
+        ));
         assert!(has_cjs_wrapper_lexical_redeclaration("class __dirname {}"));
-        assert!(has_cjs_wrapper_lexical_redeclaration("const { exports } = ns;"));
+        assert!(has_cjs_wrapper_lexical_redeclaration(
+            "const { exports } = ns;"
+        ));
         assert!(has_cjs_wrapper_lexical_redeclaration(
             "const x = 1, module = 2;"
         ));
@@ -12045,7 +11739,9 @@ import "./dep.js" withあ;
         ));
         assert!(source_looks_like_esm("globalThis.url = import.meta.url;"));
         assert!(source_looks_like_esm("globalThis.meta = import . meta;"));
-        assert!(!source_looks_like_esm("const obj = { import: { meta: 1 } };"));
+        assert!(!source_looks_like_esm(
+            "const obj = { import: { meta: 1 } };"
+        ));
         assert!(!source_looks_like_esm("globalThis.meta = obj.import.meta;"));
         assert!(!source_looks_like_esm("const text = 'import.meta.url';"));
     }
@@ -12795,55 +12491,4 @@ import "./dep.js" withあ;
             &[],
         );
     }
-}
-
-/// Wizer pre-initialization entry point: full initialization including user module.
-/// After Wizer snapshots this state, the runtime is ready to handle exports immediately.
-#[allow(static_mut_refs)]
-pub fn wizer_initialize() {
-    // Mark Wizer pre-init as active so built-in modules avoid touching
-    // std::fs / std::env: those would trigger wasi-libc's lazy preopen-cache
-    // population with the empty wizer environment, and the broken cache would
-    // then be snapshotted into the pre-initialized component (issue #91).
-    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
-
-    unsafe {
-        // Phase 1: Create runtime
-        STATE = Some(block_on(JsState::new_base()));
-
-        // Mark as Initializing so re-entrant get_js_state() calls (e.g.
-        // from setTimeout callbacks during module init) return the existing
-        // state instead of re-running initialization.
-        INIT_PHASE = InitPhase::Initializing;
-
-        // Phase 2: Full initialization
-        block_on(STATE.as_ref().unwrap().finish_init());
-
-        // Run GC to compact the heap before snapshot
-        block_on(async {
-            let state = STATE.as_ref().unwrap();
-            drain_and_idle(state).await;
-            async_with!(state.ctx => |ctx| {
-                ctx.run_gc();
-                ctx.run_gc();
-            })
-            .await;
-            drain_and_idle(state).await;
-
-            // Verify clean state
-            assert!(
-                state.abort_handles.borrow().is_empty(),
-                "pending timers/tasks at snapshot time"
-            );
-            assert!(
-                state.unrefed_timers.borrow().is_empty(),
-                "unrefed timers still tracked at snapshot time"
-            );
-        });
-
-        PACKAGE_JSON_CACHE.with_borrow_mut(|cache| cache.clear());
-        INIT_PHASE = InitPhase::WizerPreInitialized;
-    }
-
-    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
 }

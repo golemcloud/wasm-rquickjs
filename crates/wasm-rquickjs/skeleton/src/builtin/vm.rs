@@ -1,9 +1,9 @@
-use rquickjs::qjs;
 use rquickjs::promise::PromiseState;
+use rquickjs::qjs;
 use rquickjs::{CaughtError, FromJs, Persistent, Promise, Value};
 use std::ptr::NonNull;
 
-use crate::internal::path_to_file_url;
+use crate::internal::module_loading::path_to_file_url;
 
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
@@ -266,14 +266,15 @@ fn enter_require_esm<'js>(
     filename: &str,
     file_url: &str,
 ) -> rquickjs::Result<()> {
-    let registry = match globals.get::<_, rquickjs::Value>("__wasm_rquickjs_require_esm_in_progress") {
-        Ok(value) if value.is_object() => value.into_object().unwrap(),
-        _ => {
-            let object = rquickjs::Object::new(ctx.clone())?;
-            globals.set("__wasm_rquickjs_require_esm_in_progress", object.clone())?;
-            object
-        }
-    };
+    let registry =
+        match globals.get::<_, rquickjs::Value>("__wasm_rquickjs_require_esm_in_progress") {
+            Ok(value) if value.is_object() => value.into_object().unwrap(),
+            _ => {
+                let object = rquickjs::Object::new(ctx.clone())?;
+                globals.set("__wasm_rquickjs_require_esm_in_progress", object.clone())?;
+                object
+            }
+        };
 
     if registry.get::<_, bool>(filename).unwrap_or(false)
         || registry.get::<_, bool>(file_url).unwrap_or(false)
@@ -295,15 +296,22 @@ fn leave_require_esm<'js>(
     filename: &str,
     file_url: &str,
 ) -> rquickjs::Result<()> {
-    if let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_require_esm_in_progress") {
+    if let Ok(registry) =
+        globals.get::<_, rquickjs::Object>("__wasm_rquickjs_require_esm_in_progress")
+    {
         let _ = registry.remove(filename);
         let _ = registry.remove(file_url);
     }
     Ok(())
 }
 
-fn cached_async_esm_module<'js>(globals: &rquickjs::Object<'js>, filename: &str, file_url: &str) -> bool {
-    let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_async_esm_modules") else {
+fn cached_async_esm_module<'js>(
+    globals: &rquickjs::Object<'js>,
+    filename: &str,
+    file_url: &str,
+) -> bool {
+    let Ok(registry) = globals.get::<_, rquickjs::Object>("__wasm_rquickjs_async_esm_modules")
+    else {
         return false;
     };
 

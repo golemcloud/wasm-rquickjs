@@ -64,7 +64,7 @@ declare module 'golem:core/types@1.5.0' {
    * Represents a type within a `wit-type` definition. `node-index` values are indices into the
    * parent `wit-type`'s `nodes` list.
    */
-  export type WitTypeNode = 
+  export type WitTypeNode =
   /** Record type, defined by a list of name-type pairs. */
   {
     tag: 'record-type'
@@ -198,7 +198,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * One node of a `wit-value`
    */
-  export type WitNode = 
+  export type WitNode =
   /** A record value defined by a list of its field values */
   {
     tag: 'record-value'
@@ -352,7 +352,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * Reference to a text value
    */
-  export type TextReference = 
+  export type TextReference =
   {
     tag: 'url'
     val: string
@@ -377,7 +377,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * Reference to a binary value
    */
-  export type BinaryReference = 
+  export type BinaryReference =
   {
     tag: 'url'
     val: Url
@@ -401,7 +401,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * Schema for a single element within a data-schema
    */
-  export type ElementSchema = 
+  export type ElementSchema =
   {
     tag: 'component-model'
     val: WitType
@@ -417,7 +417,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * Value of a single element within a data-value
    */
-  export type ElementValue = 
+  export type ElementValue =
   {
     tag: 'component-model'
     val: WitValue
@@ -433,7 +433,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * Schema describing the structure of a data-value
    */
-  export type DataSchema = 
+  export type DataSchema =
   /** List of named elements */
   {
     tag: 'tuple'
@@ -447,7 +447,7 @@ declare module 'golem:core/types@1.5.0' {
   /**
    * A structured value consisting of typed elements
    */
-  export type DataValue = 
+  export type DataValue =
   /** List of element values, each corresponding to an element of the tuple data-schema */
   {
     tag: 'tuple'
