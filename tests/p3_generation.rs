@@ -12,8 +12,6 @@ use wasm_rquickjs::{
     generate_wrapper_crate_with_target,
 };
 
-mod common;
-
 /// Starts a minimal single-threaded HTTP/1.1 test server on an ephemeral loopback port and
 /// returns the bound port. The server runs on a detached background thread for the lifetime of
 /// the test process and serves:
@@ -1542,20 +1540,11 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
     // Build only: enabling `websocket` adds an unsatisfiable `golem:websocket` import under the
     // wasmtime CLI, so we assert compilation/linking succeeds rather than invoking the component.
     // Use the no-logging feature set for consistency with the P3 CLI-invoked tests.
-    let wasm_path = build_p3_with_features(
+    let _wasm_path = build_p3_with_features(
         temp.path(),
         "p3_websocket",
         Some(P3_NORMAL_NO_LOGGING_WITH_WEBSOCKET_FEATURES),
     )?;
-
-    // PROVISIONAL bug_finder hypothesis test — remove unless this exposes a bug.
-    // The shared P3 linker promises to satisfy the websocket imports, including
-    // the two async receive methods, so the generated component must instantiate.
-    unsafe { std::env::set_var("WASM_RQUICKJS_TEST_TARGET", "p3") };
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
-        .block_on(common::TestInstance::new(&wasm_path))?;
     Ok(())
 }
 
