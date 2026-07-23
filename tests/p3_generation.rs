@@ -5,8 +5,9 @@ use indoc::indoc;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::process::Command;
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use wasm_rquickjs::{
     EmbeddingMode, GenerationTarget, JsModuleSpec, generate_dts_with_target,
     generate_wrapper_crate_with_target,
@@ -207,20 +208,31 @@ fn decode_chunked(raw: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-/// Starts a test server whose `POST /slow-redirect` responds with a `302` to `/hello` but then
-/// stalls the (discarded) redirect response body for `delay` before closing the connection.
+#[derive(Default)]
+struct SlowStreamingRedirectState {
+    redirect_body_open: bool,
+    followup_received: bool,
+}
+
+/// Starts a test server whose `POST /slow-redirect` responds with a `302` to `/hello` but keeps
+/// the (discarded) redirect response body open until the follow-up request arrives or `delay`
+/// elapses.
 ///
 /// Each accepted connection is handled on its own thread so the `GET /hello` follow-up can be
-/// served immediately while the slow redirect connection is still lingering. This is what lets the
-/// test distinguish "followed the redirect promptly" (correct: does not read the discarded body)
-/// from "waited for the discarded redirect body" (bug).
+/// served while the redirect connection is still open. Its response body reports whether that
+/// ordering occurred, avoiding a wall-clock assertion that can fail when the CI runner is busy.
 fn spawn_slow_streaming_redirect_server(delay: Duration) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind test HTTP server");
     let port = listener.local_addr().unwrap().port();
+    let redirect_state = Arc::new((
+        Mutex::new(SlowStreamingRedirectState::default()),
+        Condvar::new(),
+    ));
 
     thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
+            let redirect_state = Arc::clone(&redirect_state);
 
             thread::spawn(move || {
                 let mut buf = Vec::new();
@@ -245,19 +257,36 @@ fn spawn_slow_streaming_redirect_server(delay: Duration) -> u16 {
 
                 match (method, target) {
                     ("POST", "/slow-redirect") => {
+                        {
+                            let (state, _) = &*redirect_state;
+                            state.lock().unwrap().redirect_body_open = true;
+                        }
                         let _ = stream.write_all(
                             b"HTTP/1.1 302 Found\r\nLocation: /hello\r\nContent-Type: text/plain\r\nContent-Length: 100000000\r\n\r\npartial",
                         );
                         let _ = stream.flush();
-                        thread::sleep(delay);
+                        let (state, followup) = &*redirect_state;
+                        let guard = state.lock().unwrap();
+                        let (mut guard, _) = followup
+                            .wait_timeout_while(guard, delay, |state| !state.followup_received)
+                            .unwrap();
+                        guard.redirect_body_open = false;
                     }
                     ("GET", "/hello") => {
-                        let _ = stream.write_all(&http_response(
-                            200,
-                            "OK",
-                            "text/plain",
-                            b"hello-after-slow-redirect",
-                        ));
+                        let followed_while_redirect_body_open = {
+                            let (state, followup) = &*redirect_state;
+                            let mut state = state.lock().unwrap();
+                            let redirect_body_open = state.redirect_body_open;
+                            state.followup_received = true;
+                            followup.notify_one();
+                            redirect_body_open
+                        };
+                        let body: &[u8] = if followed_while_redirect_body_open {
+                            b"hello-after-slow-redirect"
+                        } else {
+                            b"followed-after-redirect-body-closed"
+                        };
+                        let _ = stream.write_all(&http_response(200, "OK", "text/plain", body));
                         let _ = stream.flush();
                     }
                     _ => {
@@ -2586,7 +2615,7 @@ fn p3_streaming_redirect_does_not_wait_for_redirect_response_body() -> anyhow::R
     // The shared streaming redirect loop must be able to inspect a 302 response head and follow it
     // without waiting for the discarded redirect response body. A slow or never-ending redirect
     // body is not observable to JS and must not delay redirect handling.
-    let port = spawn_slow_streaming_redirect_server(Duration::from_secs(5));
+    let port = spawn_slow_streaming_redirect_server(Duration::from_secs(10));
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -2619,15 +2648,9 @@ fn p3_streaming_redirect_does_not_wait_for_redirect_response_body() -> anyhow::R
     generate_p3(temp.path())?;
     let wasm_path = build_p3(temp.path(), "p3_fetch_stream_slow_redirect_body")?;
 
-    let started = Instant::now();
     let result = run_p3_string_export(&wasm_path, "run")?;
-    let elapsed = started.elapsed();
 
     assert_eq!(result, "200:true:hello-after-slow-redirect");
-    assert!(
-        elapsed < Duration::from_secs(2),
-        "streaming fetch followed the redirect only after waiting {elapsed:?} for the discarded redirect body"
-    );
     Ok(())
 }
 
