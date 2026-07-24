@@ -2701,14 +2701,27 @@ function loadCommonJsTransaction(descriptor) {
 
     if (isLoaderSource) {
         try {
-            const loaderRequire = makeLoaderCommonJsRequire(
-                descriptor.sourceUrl || (pathModule.isAbsolute(filename) ? fileUrlForPath(filename) : filename),
-                pathModule.isAbsolute(filename) ? dirname : '/',
-                mod,
-                filename,
-            );
-            mod.require = loaderRequire;
-            compileModuleInto(mod, source, filename, loaderRequire);
+            if (descriptor.sourceFormat === 'json') {
+                if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
+                    source = source.slice(1);
+                }
+                try {
+                    mod.exports = JSON.parse(source);
+                } catch (error) {
+                    const invalidJson = new SyntaxError(filename + ': ' + error.message);
+                    invalidJson.code = 'ERR_INVALID_JSON';
+                    throw invalidJson;
+                }
+            } else {
+                const loaderRequire = makeLoaderCommonJsRequire(
+                    descriptor.sourceUrl || (pathModule.isAbsolute(filename) ? fileUrlForPath(filename) : filename),
+                    pathModule.isAbsolute(filename) ? dirname : '/',
+                    mod,
+                    filename,
+                );
+                mod.require = loaderRequire;
+                compileModuleInto(mod, source, filename, loaderRequire);
+            }
             cjsEsmDefaultSnapshotEligible = true;
         } catch (err) {
             discardCjsModuleLoad(cacheKey, parentModule, mod);
@@ -2885,7 +2898,14 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
                     return loadCommonJsLoaderSourceExports(filename, loaded.source, loaded.url, loaderCommonJsCacheKey(loaded.url, filename), parentModule);
                 }
                 if (loaded.format === 'json' && registeredLoaderHasSource(loaded)) {
-                    return JSON.parse(loaderSourceToString(loaded.source));
+                    const filename = loaderCommonJsFilename(loaded.url);
+                    return loadJsonLoaderSourceExports(
+                        filename,
+                        loaded.source,
+                        loaded.url,
+                        loaderCommonJsCacheKey(loaded.url, filename),
+                        parentModule,
+                    );
                 }
                 if (
                     (loaded.format === 'commonjs' || loaded.format === 'json') &&
@@ -2924,6 +2944,25 @@ function loadCommonJsLoaderSourceExports(filename, source) {
         filename,
         parentModule,
         sourceKind: 'loader',
+        sourceFormat: 'commonjs',
+        source: loaderSourceToString(source),
+        sourceUrl,
+        isMainModule: false,
+        allowEsmFallback: false,
+    }).exports;
+}
+
+function loadJsonLoaderSourceExports(filename, source) {
+    const sourceUrl = arguments.length > 2 ? String(arguments[2]) : undefined;
+    const cacheKey = arguments.length > 3 ? String(arguments[3]) : undefined;
+    const parentModule = arguments.length > 4 ? arguments[4] : null;
+    filename = String(filename);
+    return loadCommonJsTransaction({
+        cacheKey: cacheKey || filename,
+        filename,
+        parentModule,
+        sourceKind: 'loader',
+        sourceFormat: 'json',
         source: loaderSourceToString(source),
         sourceUrl,
         isMainModule: false,

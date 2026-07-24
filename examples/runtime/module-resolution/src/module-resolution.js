@@ -3731,6 +3731,54 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
     }
 };
 
+export const testLoaderCommonjsJsonCache = async () => {
+    const hookSource = [
+        'let jsonLoads = 0;',
+        'export function resolve(specifier, context, nextResolve) {',
+        '  if (specifier === "virtual:json-parent" || specifier === "virtual:json-child") {',
+        '    return { shortCircuit: true, url: specifier, format: specifier.endsWith("child") ? "json" : "commonjs" };',
+        '  }',
+        '  return nextResolve(specifier, context);',
+        '}',
+        'export function load(url, context, nextLoad) {',
+        '  if (url === "virtual:json-parent") {',
+        '    return { shortCircuit: true, format: "commonjs", source: [',
+        '      "const first = require(\\"virtual:json-child\\");",',
+        '      "first.mutated = true;",',
+        '      "const second = require(\\"virtual:json-child\\");",',
+        '      "const child = module.children.find((entry) => entry.id === \\"virtual:json-child\\");",',
+        '      "module.exports = {",',
+        '      "  same: first === second,",',
+        '      "  mutationVisible: second.mutated === true,",',
+        '      "  loadCount: second.loadCount,",',
+        '      "  cached: !!child && child.exports === first,",',
+        '      "  parentLinked: !!child && child.parent === module && module.children.includes(child)",',
+        '      "};"',
+        '    ].join("\\n") };',
+        '  }',
+        '  if (url === "virtual:json-child") {',
+        '    jsonLoads++;',
+        '    return { shortCircuit: true, format: "json", source: JSON.stringify({ loadCount: jsonLoads }) };',
+        '  }',
+        '  return nextLoad(url, context);',
+        '}',
+    ].join('\n');
+    const hookUrl = 'data:text/javascript,' + encodeURIComponent(hookSource);
+    await import('data:text/javascript,' + encodeURIComponent(
+        'import { register } from "node:module"; register(' + JSON.stringify(hookUrl) + ');'
+    ));
+
+    const result = (await import('virtual:json-parent')).default;
+    assert.deepStrictEqual(result, {
+        same: true,
+        mutationVisible: true,
+        loadCount: 1,
+        cached: true,
+        parentLinked: true,
+    });
+    return true;
+};
+
 export const testLoaderModuleSourceValidation = async () => {
     try {
         fs.mkdirSync('/loader-module-source-app', { recursive: true });
