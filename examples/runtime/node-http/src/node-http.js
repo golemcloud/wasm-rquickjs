@@ -250,7 +250,10 @@ export async function httpAbortIsolation() {
     return new Promise((resolve) => {
         let settled = false;
         let localRequestAborted = false;
+        let userHeaderPreserved = false;
         const server = http.createServer((req, res) => {
+            userHeaderPreserved =
+                req.headers['x-wasm-rquickjs-internal-request-id'] === 'user-value';
             req.on('aborted', () => {
                 localRequestAborted = true;
             });
@@ -279,9 +282,12 @@ export async function httpAbortIsolation() {
                 hostname: 'localhost',
                 port: server.address().port,
                 path: '/local',
+                headers: {
+                    'x-wasm-rquickjs-internal-request-id': 'user-value',
+                },
             }, (res) => {
                 res.resume();
-                res.on('end', () => finish(!localRequestAborted));
+                res.on('end', () => finish(!localRequestAborted && userHeaderPreserved));
             });
             req.on('error', () => finish(false));
         });

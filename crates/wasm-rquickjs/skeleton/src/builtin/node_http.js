@@ -24,7 +24,6 @@ const onClientRequestStart = channel('http.client.request.start');
 const onClientRequestError = channel('http.client.request.error');
 const onClientResponseFinish = channel('http.client.response.finish');
 const IN_PROCESS_REQUEST_ID_HEADER = 'x-wasm-rquickjs-internal-request-id';
-let nextInProcessRequestId = 0;
 
 function isLoopbackHostname(hostname) {
     const normalized = String(hostname).toLowerCase();
@@ -1779,8 +1778,15 @@ export class ClientRequest extends OutgoingMessage {
                 this._nativeReq.setHeader(entry[0], headerValueForNative(entry[0], entry[1]));
             }
         }
-        if (isLoopbackHostname(this.hostname)) {
-            this._inProcessRequestId = String(++nextInProcessRequestId);
+        const hasUserRequestIdHeader = this._rawHeaderPairs
+            ? this._rawHeaderPairs.some(([name]) =>
+                String(name).toLowerCase() === IN_PROCESS_REQUEST_ID_HEADER)
+            : !!(this[kOutHeaders] &&
+                Object.prototype.hasOwnProperty.call(this[kOutHeaders], IN_PROCESS_REQUEST_ID_HEADER));
+        if (isLoopbackHostname(this.hostname) && !hasUserRequestIdHeader) {
+            this._inProcessRequestId = _prepareClientRequest(+this.port);
+        }
+        if (this._inProcessRequestId !== null) {
             this._nativeReq.setHeader(IN_PROCESS_REQUEST_ID_HEADER, this._inProcessRequestId);
         }
 
@@ -2628,6 +2634,7 @@ import {
     Server as _Server,
     ServerResponse as _ServerResponse,
     createServer as _createServer,
+    _prepareClientRequest,
     _signalClientAbort,
 } from '__wasm_rquickjs_builtin/node_http_server';
 

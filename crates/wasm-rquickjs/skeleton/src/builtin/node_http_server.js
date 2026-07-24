@@ -5,6 +5,7 @@ import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 const IN_PROCESS_REQUEST_ID_HEADER = 'x-wasm-rquickjs-internal-request-id';
+let nextInProcessRequestId = 0;
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -1095,10 +1096,10 @@ function createConnectionParser(server, socket) {
                     server._joinDuplicateHeaders,
                 );
                 const clientRequestId = req.headers[IN_PROCESS_REQUEST_ID_HEADER];
-                state.clientRequestId = typeof clientRequestId === 'string'
-                    ? clientRequestId
-                    : null;
-                if (clientRequestId !== undefined) {
+                const isInProcessRequest = typeof clientRequestId === 'string' &&
+                    server._pendingInProcessRequestIds.delete(clientRequestId);
+                state.clientRequestId = isInProcessRequest ? clientRequestId : null;
+                if (isInProcessRequest) {
                     delete req.headers[IN_PROCESS_REQUEST_ID_HEADER];
                     delete req.headersDistinct[IN_PROCESS_REQUEST_ID_HEADER];
                     const visibleRawHeaders = [];
@@ -1576,6 +1577,7 @@ const _activeServersByPort = new Map();
 function _registerServer(server) {
     const addr = server.address();
     if (addr && typeof addr.port === 'number') {
+        server._pendingInProcessRequestIds = new Set();
         _activeServersByPort.set(addr.port, server);
     }
 }
@@ -1589,10 +1591,19 @@ function _unregisterServer(server) {
     }
 }
 
+export function _prepareClientRequest(port) {
+    const server = _activeServersByPort.get(port);
+    if (!server) return null;
+    const requestId = String(++nextInProcessRequestId);
+    server._pendingInProcessRequestIds.add(requestId);
+    return requestId;
+}
+
 export function _signalClientAbort(port, requestId) {
     if (requestId === undefined || requestId === null) return;
     const server = _activeServersByPort.get(port);
     if (!server) return;
+    server._pendingInProcessRequestIds.delete(String(requestId));
     for (const conn of server._httpConnections) {
         if (conn.clientRequestId !== String(requestId)) continue;
         if (conn.req && !conn.req.aborted && !conn.responseFinished) {
@@ -1623,4 +1634,4 @@ export function createServer(options, requestListener) {
 }
 
 export { Server, ServerResponse, ServerIncomingMessage };
-export default { Server, ServerResponse, ServerIncomingMessage, createServer, _signalClientAbort };
+export default { Server, ServerResponse, ServerIncomingMessage, createServer, _prepareClientRequest, _signalClientAbort };
