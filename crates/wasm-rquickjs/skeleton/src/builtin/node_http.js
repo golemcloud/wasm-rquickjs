@@ -1861,6 +1861,10 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     _emitRequestError(error) {
+        if (this._inProcessRequest) {
+            _releaseClientRequest(this._inProcessRequest);
+            this._inProcessRequest = null;
+        }
         const parsed = _parseNativeHttpError(error);
         if (onClientRequestError.hasSubscribers) {
             onClientRequestError.publish({ request: this, error: parsed });
@@ -2633,6 +2637,7 @@ import {
     ServerResponse as _ServerResponse,
     createServer as _createServer,
     _prepareClientRequest,
+    _releaseClientRequest,
     _signalClientAbort,
 } from '__wasm_rquickjs_builtin/node_http_server';
 

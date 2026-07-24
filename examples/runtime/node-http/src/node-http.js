@@ -253,6 +253,7 @@ export async function httpAbortIsolation() {
         let userHeaderPreserved = false;
         let headeredRequestAborted = false;
         let earlyAbortTombstonePreserved = false;
+        let failedCorrelationReleased = false;
         let headeredClientRequest;
         let strandedToken;
         const server = http.createServer((req, res) => {
@@ -268,7 +269,8 @@ export async function httpAbortIsolation() {
                         !localRequestAborted &&
                         userHeaderPreserved &&
                         headeredRequestAborted &&
-                        earlyAbortTombstonePreserved
+                        earlyAbortTombstonePreserved &&
+                        failedCorrelationReleased
                     ));
                 });
                 return;
@@ -306,6 +308,16 @@ export async function httpAbortIsolation() {
         }
 
         server.listen(0, () => {
+            const failed = http.request({
+                hostname: 'localhost',
+                port: server.address().port,
+            });
+            const failedToken = failed._inProcessRequest;
+            failed.on('error', () => {});
+            failed._emitRequestError(new Error('intentional native failure'));
+            failedCorrelationReleased =
+                !failedToken.server._pendingInProcessRequests.has(failedToken.requestId);
+
             const early = http.request({
                 hostname: 'localhost',
                 port: server.address().port,

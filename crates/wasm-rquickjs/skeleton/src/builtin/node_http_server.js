@@ -1653,14 +1653,6 @@ export function _prepareClientRequest(hostname, port, existingHeaderNames) {
     } while (excludedNames.has(headerName));
     const pendingRequest = { headerName, cancelled: false, cleanupTimer: null };
     server._pendingInProcessRequests.set(requestId, pendingRequest);
-    pendingRequest.cleanupTimer = setTimeout(() => {
-        if (server._pendingInProcessRequests.get(requestId) === pendingRequest) {
-            server._pendingInProcessRequests.delete(requestId);
-        }
-    }, 10_000);
-    if (typeof pendingRequest.cleanupTimer.unref === 'function') {
-        pendingRequest.cleanupTimer.unref();
-    }
     return { server, requestId, headerName };
 }
 
@@ -1679,12 +1671,31 @@ function _consumeClientRequest(server, headers) {
     return null;
 }
 
+export function _releaseClientRequest(inProcessRequest) {
+    if (!inProcessRequest) return;
+    const { server, requestId } = inProcessRequest;
+    const pendingRequest = server._pendingInProcessRequests.get(requestId);
+    if (pendingRequest && pendingRequest.cancelled) return;
+    if (pendingRequest && pendingRequest.cleanupTimer) {
+        clearTimeout(pendingRequest.cleanupTimer);
+    }
+    server._pendingInProcessRequests.delete(requestId);
+}
+
 export function _signalClientAbort(inProcessRequest) {
     if (!inProcessRequest) return;
     const { server, requestId } = inProcessRequest;
     const pendingRequest = server._pendingInProcessRequests.get(requestId);
     if (pendingRequest) {
         pendingRequest.cancelled = true;
+        pendingRequest.cleanupTimer = setTimeout(() => {
+            if (server._pendingInProcessRequests.get(requestId) === pendingRequest) {
+                server._pendingInProcessRequests.delete(requestId);
+            }
+        }, 10_000);
+        if (typeof pendingRequest.cleanupTimer.unref === 'function') {
+            pendingRequest.cleanupTimer.unref();
+        }
     }
     for (const conn of server._httpConnections) {
         if (conn.clientRequestId !== String(requestId)) continue;
@@ -1700,4 +1711,4 @@ export function createServer(options, requestListener) {
 }
 
 export { Server, ServerResponse, ServerIncomingMessage };
-export default { Server, ServerResponse, ServerIncomingMessage, createServer, _prepareClientRequest, _signalClientAbort };
+export default { Server, ServerResponse, ServerIncomingMessage, createServer, _prepareClientRequest, _releaseClientRequest, _signalClientAbort };
