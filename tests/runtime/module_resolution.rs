@@ -301,6 +301,23 @@ async fn loader_commonjs_json_cache(
 }
 
 #[test]
+async fn loader_commonjs_require_apis(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-loader-commonjs-require-apis",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn loader_module_source_validation(
     #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

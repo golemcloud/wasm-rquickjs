@@ -3779,6 +3779,44 @@ export const testLoaderCommonjsJsonCache = async () => {
     return true;
 };
 
+export const testLoaderCommonjsRequireApis = async () => {
+    const hookSource = [
+        'export function resolve(specifier, context, nextResolve) {',
+        '  if (specifier === "virtual:require-apis") {',
+        '    return { shortCircuit: true, url: specifier, format: "commonjs" };',
+        '  }',
+        '  return nextResolve(specifier, context);',
+        '}',
+        'export function load(url, context, nextLoad) {',
+        '  if (url === "virtual:require-apis") {',
+        '    return { shortCircuit: true, format: "commonjs", source: [',
+        '      "const Module = require(\\"node:module\\");",',
+        '      "const ordinaryRequire = Module.createRequire(\\"/loader-require-api-check.cjs\\");",',
+        '      "module.exports = {",',
+        '      "  cacheIsLive: require.cache === ordinaryRequire.cache,",',
+        '      "  extensionsIsLive: require.extensions === ordinaryRequire.extensions,",',
+        '      "  packagePaths: require.resolve.paths(\\"some-package\\"),",',
+        '      "  builtinPaths: require.resolve.paths(\\"node:fs\\")",',
+        '      "};"',
+        '    ].join("\\n") };',
+        '  }',
+        '  return nextLoad(url, context);',
+        '}',
+    ].join('\n');
+    const hookUrl = 'data:text/javascript,' + encodeURIComponent(hookSource);
+    await import('data:text/javascript,' + encodeURIComponent(
+        'import { register } from "node:module"; register(' + JSON.stringify(hookUrl) + ');'
+    ));
+
+    const result = (await import('virtual:require-apis')).default;
+    assert.strictEqual(result.cacheIsLive, true);
+    assert.strictEqual(result.extensionsIsLive, true);
+    assert.ok(Array.isArray(result.packagePaths));
+    assert.ok(result.packagePaths.includes('/node_modules'));
+    assert.strictEqual(result.builtinPaths, null);
+    return true;
+};
+
 export const testLoaderModuleSourceValidation = async () => {
     try {
         fs.mkdirSync('/loader-module-source-app', { recursive: true });

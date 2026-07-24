@@ -2918,6 +2918,8 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
         }
         return fallbackRequire(id);
     }
+    loaderRequire.cache = fallbackRequire.cache;
+    loaderRequire.extensions = fallbackRequire.extensions;
     loaderRequire.resolve = function resolve(id, options) {
         validateRequireRequest(id);
         if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
@@ -2930,6 +2932,7 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
         }
         return fallbackRequire.resolve(id, options);
     };
+    loaderRequire.resolve.paths = fallbackRequire.resolve.paths;
     loaderRequire.main = fallbackRequire.main;
     return loaderRequire;
 }
