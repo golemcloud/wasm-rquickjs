@@ -59,3 +59,44 @@ async fn websocket_binary_send(
 
     Ok(())
 }
+
+/// The `WebSocketStream` writable sink has its own send paths. In particular the
+/// Blob branch must read the bytes and send a binary frame — an earlier version
+/// would have stringified a Blob chunk to `"[object Blob]"`. Writing a string,
+/// an ArrayBuffer, a typed array and a Blob through `writable.getWriter()` must
+/// land the exact frames, in order, with the Blob as binary.
+#[test]
+async fn websocket_stream_send(
+    #[tagged_as("websocket")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let prepared = GolemPreparedComponent::new(compiled.wasm_path())?;
+    let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
+
+    let (result, output) = instance
+        .invoke_and_capture_output(None, "test-websocket-stream-send", &[])
+        .await;
+    let result = result?;
+
+    assert_eq!(
+        result,
+        Some(Val::Bool(true)),
+        "test-websocket-stream-send should return true. Output:\n{output}"
+    );
+
+    let sent = instance.read_ws_sent();
+    println!("Recorded WS frames: {sent:?}\nOutput:\n{output}");
+
+    assert_eq!(
+        sent,
+        vec![
+            WsSentMessage::Text("hello".to_string()),
+            WsSentMessage::Binary(vec![1, 2, 3]),
+            WsSentMessage::Binary(vec![4, 5, 6]),
+            WsSentMessage::Binary(vec![7, 8, 9]),
+        ],
+        "WebSocketStream sink must send a Blob chunk as its binary frame, not as \
+         text (\"[object Blob]\"). Got {sent:?}"
+    );
+
+    Ok(())
+}

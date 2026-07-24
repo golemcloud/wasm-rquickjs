@@ -28,3 +28,22 @@ export const testBinarySend = async () => {
 
     return true;
 };
+
+// The WebSocketStream writable sink has its own send paths (string, ArrayBuffer,
+// typed array, Blob). The Blob branch reads via Blob.arrayBuffer() and must send
+// binary — not stringify the Blob to "[object Blob]". Writes go through a
+// WritableStream, which serializes them, so awaiting each write keeps the order.
+export const testWebsocketStreamSend = async () => {
+    const wss = new WebSocketStream('ws://localhost:9999/echo');
+    const { writable } = await wss.opened;
+    const writer = writable.getWriter();
+
+    await writer.write('hello');                          // text
+    await writer.write(new Uint8Array([1, 2, 3]).buffer); // ArrayBuffer -> binary
+    await writer.write(new Uint8Array([4, 5, 6]));        // typed array -> binary
+    await writer.write(new Blob([new Uint8Array([7, 8, 9])])); // Blob -> binary
+
+    try { await writer.close(); } catch (_) { /* mock may already be closed */ }
+
+    return true;
+};
