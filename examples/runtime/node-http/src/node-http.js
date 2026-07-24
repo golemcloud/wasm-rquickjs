@@ -245,3 +245,45 @@ export async function httpSelfConnectPost() {
         });
     });
 }
+
+export async function httpAbortIsolation() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let localRequestAborted = false;
+        const server = http.createServer((req, res) => {
+            req.on('aborted', () => {
+                localRequestAborted = true;
+            });
+
+            const unrelated = http.request({
+                hostname: 'remote.example',
+                port: server.address().port,
+                path: '/unrelated',
+            });
+            unrelated.on('error', () => {});
+            unrelated.destroy(new Error('intentional remote abort'));
+
+            setImmediate(() => {
+                if (!res.destroyed) res.end('ok');
+            });
+        });
+
+        function finish(result) {
+            if (settled) return;
+            settled = true;
+            server.close(() => resolve(result));
+        }
+
+        server.listen(0, () => {
+            const req = http.get({
+                hostname: 'localhost',
+                port: server.address().port,
+                path: '/local',
+            }, (res) => {
+                res.resume();
+                res.on('end', () => finish(!localRequestAborted));
+            });
+            req.on('error', () => finish(false));
+        });
+    });
+}

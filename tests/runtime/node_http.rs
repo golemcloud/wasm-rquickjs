@@ -150,3 +150,14 @@ async fn node_http_self_connect_post(
 
     Ok(())
 }
+
+#[test]
+async fn node_http_abort_isolation(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "http-abort-isolation", &[]).await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}

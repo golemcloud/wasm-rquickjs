@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
+const IN_PROCESS_REQUEST_ID_HEADER = 'x-wasm-rquickjs-internal-request-id';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -907,6 +908,7 @@ function createConnectionParser(server, socket) {
         shouldKeepAliveAfterResponse: false,
         requestsServed: 0,
         detached: false,
+        clientRequestId: null,
     };
 
     const keepAlive = computeKeepAlive(null, '1.1');
@@ -1020,6 +1022,7 @@ function createConnectionParser(server, socket) {
         state.shouldKeepAliveAfterResponse = false;
         state.req = null;
         state.res = null;
+        state.clientRequestId = null;
         state.state = IDLE;
 
         // Emit 'close' on the response asynchronously, matching Node.js
@@ -1091,6 +1094,21 @@ function createConnectionParser(server, socket) {
                     parsed.rawHeaders,
                     server._joinDuplicateHeaders,
                 );
+                const clientRequestId = req.headers[IN_PROCESS_REQUEST_ID_HEADER];
+                state.clientRequestId = typeof clientRequestId === 'string'
+                    ? clientRequestId
+                    : null;
+                if (clientRequestId !== undefined) {
+                    delete req.headers[IN_PROCESS_REQUEST_ID_HEADER];
+                    delete req.headersDistinct[IN_PROCESS_REQUEST_ID_HEADER];
+                    const visibleRawHeaders = [];
+                    for (let i = 0; i < req.rawHeaders.length; i += 2) {
+                        if (String(req.rawHeaders[i]).toLowerCase() !== IN_PROCESS_REQUEST_ID_HEADER) {
+                            visibleRawHeaders.push(req.rawHeaders[i], req.rawHeaders[i + 1]);
+                        }
+                    }
+                    req.rawHeaders = visibleRawHeaders;
+                }
 
                 // CONNECT method: hand the socket to the application
                 if (parsed.method === 'CONNECT') {
@@ -1571,10 +1589,12 @@ function _unregisterServer(server) {
     }
 }
 
-export function _signalClientAbort(port) {
+export function _signalClientAbort(port, requestId) {
+    if (requestId === undefined || requestId === null) return;
     const server = _activeServersByPort.get(port);
     if (!server) return;
     for (const conn of server._httpConnections) {
+        if (conn.clientRequestId !== String(requestId)) continue;
         if (conn.req && !conn.req.aborted && !conn.responseFinished) {
             conn.req.aborted = true;
             conn.req.emit('aborted');
@@ -1592,6 +1612,7 @@ export function _signalClientAbort(port) {
         if (conn.socket && !conn.socket.destroyed) {
             conn.socket.destroy();
         }
+        return;
     }
 }
 

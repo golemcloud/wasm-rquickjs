@@ -23,6 +23,16 @@ const onClientRequestCreated = channel('http.client.request.created');
 const onClientRequestStart = channel('http.client.request.start');
 const onClientRequestError = channel('http.client.request.error');
 const onClientResponseFinish = channel('http.client.response.finish');
+const IN_PROCESS_REQUEST_ID_HEADER = 'x-wasm-rquickjs-internal-request-id';
+let nextInProcessRequestId = 0;
+
+function isLoopbackHostname(hostname) {
+    const normalized = String(hostname).toLowerCase();
+    return normalized === 'localhost' ||
+        normalized === '127.0.0.1' ||
+        normalized === '::1' ||
+        normalized === '[::1]';
+}
 
 // ===== Static Data =====
 
@@ -1751,6 +1761,7 @@ export class ClientRequest extends OutgoingMessage {
         this._refreshShouldKeepAlive();
 
         this._nativeReq = new NodeHttpClientRequest(this.method, url);
+        this._inProcessRequestId = null;
         if (this._rawHeaderPairs) {
             // Array headers: preserve duplicates by using appendHeader
             for (const [name, value] of this._rawHeaderPairs) {
@@ -1767,6 +1778,10 @@ export class ClientRequest extends OutgoingMessage {
                 }
                 this._nativeReq.setHeader(entry[0], headerValueForNative(entry[0], entry[1]));
             }
+        }
+        if (isLoopbackHostname(this.hostname)) {
+            this._inProcessRequestId = String(++nextInProcessRequestId);
+            this._nativeReq.setHeader(IN_PROCESS_REQUEST_ID_HEADER, this._inProcessRequestId);
         }
 
         this._pendingWrites = [];
@@ -2561,11 +2576,12 @@ export class ClientRequest extends OutgoingMessage {
             this._response.emit('aborted');
         }
         const targetPort = this.port;
+        const requestId = this._inProcessRequestId;
         process.nextTick(() => {
             this.emit('abort');
             this._emitCloseOnce();
-            if (targetPort) {
-                _signalClientAbort(+targetPort);
+            if (targetPort && requestId) {
+                _signalClientAbort(+targetPort, requestId);
             }
         });
     }
@@ -2577,6 +2593,7 @@ export class ClientRequest extends OutgoingMessage {
 
         this._abortNativeRequest();
         const targetPort = this.port;
+        const requestId = this._inProcessRequestId;
 
         if (!error && !this._response) {
             // Request destroyed before receiving a response — emit ECONNRESET
@@ -2597,8 +2614,8 @@ export class ClientRequest extends OutgoingMessage {
                 this._emitCloseOnce();
             });
         }
-        if (targetPort) {
-            process.nextTick(_signalClientAbort, +targetPort);
+        if (targetPort && requestId) {
+            process.nextTick(_signalClientAbort, +targetPort, requestId);
         }
 
         return this;
