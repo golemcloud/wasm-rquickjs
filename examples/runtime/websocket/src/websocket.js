@@ -11,18 +11,19 @@ export const testBinarySend = async () => {
         ws.onerror = (e) => reject(new Error((e && e.message) || 'WebSocket error'));
     });
 
+    // The four sends interleave sync and async paths on purpose: the Blob is
+    // drained asynchronously, and the text after it must still land last. The
+    // Rust side asserts the exact wire order [1,2,3], [4,5,6], [7,8,9], "hello".
     // Binary via ArrayBuffer.
     ws.send(new Uint8Array([1, 2, 3]).buffer);
     // Binary via typed array (ArrayBuffer view).
     ws.send(new Uint8Array([4, 5, 6]));
-    // Binary via Blob (flushed asynchronously via Blob.arrayBuffer()).
+    // Binary via Blob (drained asynchronously via Blob.arrayBuffer()).
     ws.send(new Blob([new Uint8Array([7, 8, 9])]));
-    // Text.
+    // Text — enqueued behind the pending Blob so it cannot overtake it.
     ws.send('hello');
 
-    // Let the Blob's asynchronous read flush its send (its send_binary runs from
-    // the arrayBuffer().then(...) job). All four sends complete on the JS job
-    // queue before the host receive loop's first poll turn, so no frame is lost.
+    // Let the Blob's asynchronous drain flush the queued frames before returning.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     return true;

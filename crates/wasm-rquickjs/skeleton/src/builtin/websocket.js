@@ -158,6 +158,13 @@ class WebSocket {
         this._extensions = '';
         this._protocol = '';
         this._connection = null;
+        // Outbound frames must go on the wire in send() call order. Blob sends
+        // resolve asynchronously (via Blob.arrayBuffer()), so once one is pending
+        // every later send — even a synchronous string — has to queue behind it,
+        // or it would overtake the Blob. `_sendPending` marks that a drain is in
+        // flight; while it is, send() only enqueues.
+        this._sendQueue = [];
+        this._sendPending = false;
 
         // Event handlers
         this._onopen = null;
@@ -278,6 +285,24 @@ class WebSocket {
             return;
         }
 
+        // A Blob is drained asynchronously, so anything queued after it (or sent
+        // while an earlier Blob is still draining) must also wait, to preserve the
+        // wire order. Everything else is sent synchronously on the fast path.
+        const isBlob = typeof Blob !== 'undefined' && data instanceof Blob;
+        if (this._sendPending || isBlob) {
+            this._sendQueue.push(data);
+            if (!this._sendPending) {
+                this._drainSendQueue();
+            }
+            return;
+        }
+
+        this._sendNow(data);
+    }
+
+    // Synchronous send of a non-Blob frame. Blobs never reach here; they are
+    // resolved in _drainSendQueue.
+    _sendNow(data) {
         try {
             if (typeof data === 'string') {
                 this._bufferedAmount += utf8ByteLength(data);
@@ -291,22 +316,6 @@ class WebSocket {
                 this._bufferedAmount += data.byteLength;
                 this._connection.send_binary(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
                 this._bufferedAmount = 0;
-            } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
-                // Blob support: read the blob's bytes and send them as binary.
-                // Uses Blob.arrayBuffer() directly (the runtime has no FileReader).
-                data.arrayBuffer().then((result) => {
-                    if (this._readyState === OPEN && this._connection) {
-                        const buf = new Uint8Array(result);
-                        this._bufferedAmount += buf.byteLength;
-                        this._connection.send_binary(buf);
-                        this._bufferedAmount = 0;
-                    }
-                }).catch((e2) => {
-                    this._bufferedAmount = 0;
-                    this._readyState = CLOSED;
-                    this._dispatch('error', new ErrorEvent(e2.message || String(e2)));
-                    this._dispatch('close', new CloseEvent(1006, '', false));
-                });
             } else {
                 // Fallback: coerce to string per spec
                 const str = String(data);
@@ -319,6 +328,41 @@ class WebSocket {
             this._readyState = CLOSED;
             this._dispatch('error', new ErrorEvent(e.message || String(e)));
             this._dispatch('close', new CloseEvent(1006, '', false));
+        }
+    }
+
+    // Drains queued frames strictly in order. A Blob is read via
+    // Blob.arrayBuffer() (the runtime has no FileReader) and sent as binary;
+    // frames enqueued while a Blob is resolving are picked up on the next turn,
+    // so ordering holds.
+    async _drainSendQueue() {
+        this._sendPending = true;
+        try {
+            while (this._sendQueue.length > 0) {
+                const data = this._sendQueue.shift();
+                if (typeof Blob !== 'undefined' && data instanceof Blob) {
+                    let buf;
+                    try {
+                        buf = new Uint8Array(await data.arrayBuffer());
+                    } catch (e2) {
+                        this._bufferedAmount = 0;
+                        this._readyState = CLOSED;
+                        this._sendQueue.length = 0;
+                        this._dispatch('error', new ErrorEvent(e2.message || String(e2)));
+                        this._dispatch('close', new CloseEvent(1006, '', false));
+                        return;
+                    }
+                    if (this._readyState === OPEN && this._connection) {
+                        this._bufferedAmount += buf.byteLength;
+                        this._connection.send_binary(buf);
+                        this._bufferedAmount = 0;
+                    }
+                } else if (this._readyState === OPEN && this._connection) {
+                    this._sendNow(data);
+                }
+            }
+        } finally {
+            this._sendPending = false;
         }
     }
 

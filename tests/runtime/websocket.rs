@@ -41,21 +41,20 @@ async fn websocket_binary_send(
     let sent = instance.read_ws_sent();
     println!("Recorded WS frames: {sent:?}\nOutput:\n{output}");
 
-    assert!(
-        sent.contains(&WsSentMessage::Binary(vec![1, 2, 3])),
-        "expected Binary([1,2,3]) (ArrayBuffer send), got {sent:?}"
-    );
-    assert!(
-        sent.contains(&WsSentMessage::Binary(vec![4, 5, 6])),
-        "expected Binary([4,5,6]) (typed-array send), got {sent:?}"
-    );
-    assert!(
-        sent.contains(&WsSentMessage::Binary(vec![7, 8, 9])),
-        "expected Binary([7,8,9]) (Blob send), got {sent:?}"
-    );
-    assert!(
-        sent.contains(&WsSentMessage::Text("hello".to_string())),
-        "expected Text(\"hello\"), got {sent:?}"
+    // Exact order matters: the Blob send is asynchronous, so a weaker `contains`
+    // check would miss the regression where the trailing text overtakes the Blob.
+    // The guest sends ArrayBuffer, typed array, Blob, then text — the wire order
+    // must match that call order.
+    assert_eq!(
+        sent,
+        vec![
+            WsSentMessage::Binary(vec![1, 2, 3]),
+            WsSentMessage::Binary(vec![4, 5, 6]),
+            WsSentMessage::Binary(vec![7, 8, 9]),
+            WsSentMessage::Text("hello".to_string()),
+        ],
+        "WS frames must preserve send() call order (Blob must not be overtaken \
+         by the following text). Got {sent:?}"
     );
 
     Ok(())
