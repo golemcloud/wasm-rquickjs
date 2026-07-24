@@ -1481,7 +1481,6 @@ pub struct GolemPreparedComponent {
     engine: Engine,
     linker: Linker<Host>,
     component: Component,
-    pub spans: Arc<Mutex<Vec<GolemSpan>>>,
 }
 
 impl GolemPreparedComponent {
@@ -1500,13 +1499,12 @@ impl GolemPreparedComponent {
     fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
         let mut linker = p3_linker(&engine)?;
-        let spans = add_golem_context_mock(&mut linker)?;
+        add_golem_context_mock(&mut linker)?;
         let component = Component::from_file(&engine, wasm_path)?;
         Ok(Self {
             engine,
             linker,
             component,
-            spans,
         })
     }
 
@@ -1518,7 +1516,7 @@ impl GolemPreparedComponent {
         let mut linker = test_linker_with_common_hosts(&engine)?;
 
         // Mock golem:api/context@1.5.0
-        let spans = add_golem_context_mock(&mut linker)?;
+        add_golem_context_mock(&mut linker)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -1526,7 +1524,6 @@ impl GolemPreparedComponent {
             engine,
             linker,
             component,
-            spans,
         })
     }
 }
@@ -1570,7 +1567,7 @@ impl TestInstance {
             &prepared.engine,
             &prepared.linker,
             &prepared.component,
-            Some(prepared.spans.clone()),
+            Some(Arc::new(Mutex::new(Vec::new()))),
         )
         .await
     }
@@ -2377,33 +2374,34 @@ fn add_wasi_logging_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
 }
 
 /// Mock `golem:api/context@1.5.0`: implements `start-span`, `span.set-attribute`, and
-/// `span.finish`, recording every span in the returned shared list so tests can assert on the
-/// emitted tracing spans.
-fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex<Vec<GolemSpan>>>> {
-    let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
-    let spans_clone = spans.clone();
-
+/// `span.finish`, recording every span in the current store's list so tests can assert on the
+/// emitted tracing spans without sharing records between component instances.
+fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
 
     // Register the span resource type
     let span_resource_type = ResourceType::host::<GolemSpan>();
     golem_ctx.resource("span", span_resource_type, {
-        let spans = spans_clone.clone();
         move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
             // Destructor: mark span as finished if not already
             let table = ctx.data_mut().table.lock().unwrap();
             // Resource already dropped by wasmtime
-            let _ = (spans.as_ref(), rep, table);
+            let _ = (rep, table);
             Ok(())
         }
     })?;
 
     // start-span: func(name: string) -> span
-    golem_ctx.func_wrap("start-span", {
-        let spans = spans_clone.clone();
+    golem_ctx.func_wrap(
+        "start-span",
         move |mut ctx: StoreContextMut<'_, Host>,
               (name,): (String,)|
               -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
+            let spans = ctx
+                .data()
+                .golem_spans
+                .clone()
+                .expect("Golem span host requires an instance-local span collection");
             let span = GolemSpan {
                 name: name.clone(),
                 attributes: Vec::new(),
@@ -2423,13 +2421,13 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex
                 resource_rep: Some(resource_rep),
             });
             Ok((resource,))
-        }
-    })?;
+        },
+    )?;
 
     // [method]span.set-attribute: func(name: string, value: attribute-value)
     // attribute-value is a variant with one case: string(string)
-    golem_ctx.func_wrap("[method]span.set-attribute", {
-        let spans = spans_clone.clone();
+    golem_ctx.func_wrap(
+        "[method]span.set-attribute",
         move |mut ctx: StoreContextMut<'_, Host>,
               (span_res, attr_name, attr_value): (
             wasmtime::component::Resource<GolemSpan>,
@@ -2437,6 +2435,11 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex
             AttributeValue,
         )|
               -> Result<(), wasmtime::Error> {
+            let spans = ctx
+                .data()
+                .golem_spans
+                .clone()
+                .expect("Golem span host requires an instance-local span collection");
             let value_str = match &attr_value {
                 AttributeValue::String(s) => s.clone(),
             };
@@ -2454,15 +2457,20 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex
                 recorded.attributes.push((attr_name, value_str));
             }
             Ok(())
-        }
-    })?;
+        },
+    )?;
 
     // [method]span.finish: func()
-    golem_ctx.func_wrap("[method]span.finish", {
-        let spans = spans_clone.clone();
+    golem_ctx.func_wrap(
+        "[method]span.finish",
         move |mut ctx: StoreContextMut<'_, Host>,
               (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
               -> Result<(), wasmtime::Error> {
+            let spans = ctx
+                .data()
+                .golem_spans
+                .clone()
+                .expect("Golem span host requires an instance-local span collection");
             let resource_rep = span_res.rep();
             let mut table = ctx.data_mut().table.lock().unwrap();
             if let Ok(span) = table.get_mut(&span_res) {
@@ -2481,10 +2489,10 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex
                 }
             }
             Ok(())
-        }
-    })?;
+        },
+    )?;
 
-    Ok(spans)
+    Ok(())
 }
 
 /// Mock `golem:websocket/client@1.5.0`: registers the `websocket-connection` resource and stubs
