@@ -182,7 +182,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     env:
       # Selects the Preview 3 generation target in the test harness (tests/common/mod.rs).
       WASM_RQUICKJS_TEST_TARGET: p3
@@ -191,11 +191,17 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - uses: actions/setup-node@v4
+        if: matrix.group == 9
+        with:
+          node-version: "22.14.0"
       # Preview 3 runs on the stock crates.io wasmtime: the Golem wasmtime fork is Preview 2 only,
       # and the P3 host support in tests/common/mod.rs is gated to non-fork builds. So this lane
       # deliberately does NOT run enable-wasmtime-fork.sh or pass --features use-golem-wasmtime.
-      - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/8)
+      - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/9)
         run: cargo test --test runtime -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
