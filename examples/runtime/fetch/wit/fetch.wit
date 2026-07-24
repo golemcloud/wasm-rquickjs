@@ -40,4 +40,5 @@ world fetch {
   export fetch-function-shape: func();
   export abort-releases-request: func(port: u16);
   export abort-during-body-upload: func(port: u16);
+  export abort-during-redirect: func(port: u16);
   }

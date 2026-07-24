@@ -1069,6 +1069,74 @@ export async function abortDuringBodyUpload(port) {
     }
 }
 
+export async function abortDuringRedirect(port) {
+    console.log("fetch test 37 (abort during redirect chain)");
+
+    const controller = new AbortController();
+
+    // A ReadableStream body forces the streamingRequest path, whose redirect loop
+    // holds the abort checks under test (the top-of-loop `signal.aborted` re-check
+    // and the receiveResponse catch). The first 302 turns this into GET and drops
+    // the body, so the rest of the chain is plain GET hops.
+    const body = new ReadableStream({
+        start(c) {
+            c.enqueue(new Uint8Array([1, 2, 3]));
+            c.close();
+        }
+    });
+
+    // /slow-redirect keeps redirecting to itself, ~500ms per hop, so following
+    // the chain is slow and we can abort part-way through.
+    const fetchPromise = fetch(`http://localhost:${port}/slow-redirect`, {
+        method: 'POST',
+        body,
+        signal: controller.signal,
+        redirect: 'follow',
+    });
+
+    // Abort only once at least two hops have been served, so at least one
+    // redirect has actually been followed and the abort lands genuinely
+    // mid-chain rather than on the very first request.
+    let hits = 0;
+    for (let i = 0; i < 40 && hits < 2; i++) {
+        hits = Number(await fetch(`http://localhost:${port}/slow-redirect-hits`).then(r => r.text()));
+        if (hits < 2) await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    console.log(`Redirect chain started: ${hits >= 2}`);
+
+    const hitsAtAbort = Number(await fetch(`http://localhost:${port}/slow-redirect-hits`).then(r => r.text()));
+    const abortStart = Date.now();
+    controller.abort('redirect cancelled');
+
+    let outcome;
+    let reason;
+    try {
+        await fetchPromise;
+        outcome = 'completed';
+    } catch (e) {
+        outcome = 'aborted';
+        reason = e;
+        console.log(`Caught abort error: ${e && e.message ? e.message : e}`);
+    }
+    const abortElapsed = Date.now() - abortStart;
+
+    // Give the chain time for several more hops it must NOT take: if the abort
+    // did not stop the loop, hits would keep climbing toward the 20-hop cap.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const hitsAfter = Number(await fetch(`http://localhost:${port}/slow-redirect-hits`).then(r => r.text()));
+    // Allow one hop that may already have been in flight when the abort landed.
+    const stoppedIssuing = hitsAfter <= hitsAtAbort + 1;
+
+    console.log(`Abort outcome: ${outcome}`);
+    console.log(`Abort reason matches: ${reason === 'redirect cancelled'}`);
+    console.log(`No new redirects after abort: ${stoppedIssuing} (at abort ${hitsAtAbort}, after ${hitsAfter})`);
+    if (outcome === 'aborted' && reason === 'redirect cancelled' && stoppedIssuing && abortElapsed < 5000) {
+        console.log("abort during redirect stopped promptly: PASSED");
+    } else {
+        console.log(`abort during redirect stopped promptly: FAILED (${outcome}, ${reason}, at ${hitsAtAbort}, after ${hitsAfter}, ${abortElapsed}ms)`);
+    }
+}
+
 export async function fetchFunctionShape() {
     console.log("fetch test 35 (fetch function shape - Node compat)");
 

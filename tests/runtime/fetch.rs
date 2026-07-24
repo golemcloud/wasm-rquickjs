@@ -1015,3 +1015,60 @@ async fn fetch_abort_during_body_upload(
 
     Ok(())
 }
+
+/// Aborting part-way through a redirect chain must stop it promptly: reject with
+/// the signal reason and issue no further requests, instead of following the
+/// chain to its 20-hop cap.
+#[test]
+async fn fetch_abort_during_redirect(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let started = Instant::now();
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "abort-during-redirect",
+        &[Val::U16(port)],
+    )
+    .await;
+    let elapsed = started.elapsed();
+    let _ = result?;
+
+    println!("Output:\n{output}");
+
+    assert!(
+        output.contains("Redirect chain started: true"),
+        "the guest aborted before the redirect chain got going. Output:\n{output}"
+    );
+    assert!(
+        output.contains("Abort outcome: aborted"),
+        "fetch should have rejected. Output:\n{output}"
+    );
+    assert!(
+        output.contains("Abort reason matches: true"),
+        "rejection did not carry the signal's reason (a leaked chain would reject \
+         with 'Maximum redirects exceeded' instead). Output:\n{output}"
+    );
+    assert!(
+        output.contains("No new redirects after abort: true"),
+        "requests kept being issued after the abort. Output:\n{output}"
+    );
+    assert!(
+        output.contains("abort during redirect stopped promptly: PASSED"),
+        "guest-side redirect-abort check failed. Output:\n{output}"
+    );
+    // Backstop against a hard leak (which would stall to the 120s epoch): a
+    // working abort finishes in well under this once the fixed instantiation and
+    // native-cleanup cost is accounted for. The reason-match and no-new-redirects
+    // checks above are the real proof the abort took effect; a non-working abort
+    // would follow the chain to its cap and reject with "Maximum redirects
+    // exceeded" instead, failing those.
+    assert!(
+        elapsed < Duration::from_secs(30),
+        "invocation took {elapsed:?}; the aborted redirect chain kept running"
+    );
+
+    Ok(())
+}

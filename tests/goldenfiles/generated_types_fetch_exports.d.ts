@@ -38,4 +38,5 @@ declare module 'fetch' {
   export function fetchFunctionShape(): Promise<void>;
   export function abortReleasesRequest(port: number): Promise<void>;
   export function abortDuringBodyUpload(port: number): Promise<void>;
+  export function abortDuringRedirect(port: number): Promise<void>;
 }

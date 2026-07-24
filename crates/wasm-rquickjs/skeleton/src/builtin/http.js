@@ -397,6 +397,12 @@ async function streamingRequest(
                     delete currentHeaders['transfer-encoding'];
                 }
 
+                // Release the intermediate response's native body now — we only
+                // needed its Location header. Left to GC, it keeps a pollable
+                // alive, and aborting mid-chain would then stall the invocation
+                // on those abandoned bodies.
+                nativeResponse.discardBody();
+
                 currentUrl = newUrl;
                 currentMethod = newMethod;
                 currentRedirects++;

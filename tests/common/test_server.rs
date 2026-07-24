@@ -47,6 +47,13 @@ pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, Unbounde
         let immediate_hits_1 = immediate_hits.clone();
         let immediate_hits_2 = immediate_hits.clone();
 
+        // Counts hops through `/slow-redirect`, a deliberately slow self-redirect
+        // chain. A guest can abort mid-chain and then check that the hop count
+        // stops climbing — proving no further requests were issued after abort.
+        let redirect_hits = Arc::new(AtomicUsize::new(0));
+        let redirect_hits_1 = redirect_hits.clone();
+        let redirect_hits_2 = redirect_hits.clone();
+
         let state_mutex = Arc::new(Mutex::new(State::default()));
 
         let state_mutex_1 = state_mutex.clone();
@@ -269,6 +276,22 @@ pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, Unbounde
             .route(
                 "/immediate-response-hits",
                 get(async move || immediate_hits_2.load(Ordering::SeqCst).to_string()),
+            )
+            .route(
+                "/slow-redirect",
+                // `any` so the first POST hop and the GET hops it decays into
+                // after a 302 both match.
+                axum::routing::any(async move || {
+                    // Record the hop, wait, then redirect back to ourselves — a
+                    // slow chain the guest can abort part-way through.
+                    redirect_hits_1.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    (StatusCode::FOUND, [("Location", "/slow-redirect")]).into_response()
+                }),
+            )
+            .route(
+                "/slow-redirect-hits",
+                get(async move || redirect_hits_2.load(Ordering::SeqCst).to_string()),
             );
 
         axum::serve(listener, router).await.unwrap();

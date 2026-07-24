@@ -841,6 +841,15 @@ impl HttpResponse {
         }
     }
 
+    /// Drop the response body without reading it, releasing the native
+    /// incoming-body and the pollable behind it. Used on an intermediate redirect
+    /// response the fetch loop is about to abandon — otherwise that body lingers
+    /// until JS GC, and aborting mid-chain leaves the invocation busy on it.
+    #[qjs(rename = "discardBody")]
+    pub fn discard_body(&mut self) {
+        self.body_source = ResponseBodySource::Consumed;
+    }
+
     #[qjs(rename = "makeOpaque")]
     pub fn make_opaque(&mut self) {
         self.is_opaque = true;
