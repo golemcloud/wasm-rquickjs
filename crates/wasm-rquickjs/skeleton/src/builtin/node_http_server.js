@@ -1095,16 +1095,23 @@ function createConnectionParser(server, socket) {
                     parsed.rawHeaders,
                     server._joinDuplicateHeaders,
                 );
-                const clientRequestId = req.headers[IN_PROCESS_REQUEST_ID_HEADER];
-                const isInProcessRequest = typeof clientRequestId === 'string' &&
-                    server._pendingInProcessRequestIds.delete(clientRequestId);
-                state.clientRequestId = isInProcessRequest ? clientRequestId : null;
-                if (isInProcessRequest) {
-                    delete req.headers[IN_PROCESS_REQUEST_ID_HEADER];
-                    delete req.headersDistinct[IN_PROCESS_REQUEST_ID_HEADER];
+                let clientRequestId = null;
+                let clientRequestHeader = null;
+                for (const [requestId, headerName] of server._pendingInProcessRequests) {
+                    if (req.headers[headerName] === requestId) {
+                        clientRequestId = requestId;
+                        clientRequestHeader = headerName;
+                        server._pendingInProcessRequests.delete(requestId);
+                        break;
+                    }
+                }
+                state.clientRequestId = clientRequestId;
+                if (clientRequestId !== null) {
+                    delete req.headers[clientRequestHeader];
+                    delete req.headersDistinct[clientRequestHeader];
                     const visibleRawHeaders = [];
                     for (let i = 0; i < req.rawHeaders.length; i += 2) {
-                        if (String(req.rawHeaders[i]).toLowerCase() !== IN_PROCESS_REQUEST_ID_HEADER) {
+                        if (String(req.rawHeaders[i]).toLowerCase() !== clientRequestHeader) {
                             visibleRawHeaders.push(req.rawHeaders[i], req.rawHeaders[i + 1]);
                         }
                     }
@@ -1572,38 +1579,57 @@ Server.prototype.closeIdleConnections = function closeIdleConnections() {
 // request doesn't reliably close the underlying TCP connection. This registry
 // allows the client-side abort to directly signal the server-side connections.
 
-const _activeServersByPort = new Map();
+const _activeServers = new Set();
+
+function _serverMatchesTarget(server, hostname, port) {
+    const addr = server.address();
+    if (!addr || addr.port !== port) return false;
+    const hostnameValue = String(hostname).toLowerCase().replace(/^\[|\]$/g, '');
+    const target = hostnameValue === 'localhost' ? '127.0.0.1' : hostnameValue;
+    const address = String(addr.address).toLowerCase();
+    if (address === '0.0.0.0') {
+        return target === '127.0.0.1';
+    }
+    if (address === '::') return target === '::1';
+    return address === target;
+}
 
 function _registerServer(server) {
     const addr = server.address();
     if (addr && typeof addr.port === 'number') {
-        server._pendingInProcessRequestIds = new Set();
-        _activeServersByPort.set(addr.port, server);
+        server._pendingInProcessRequests = new Map();
+        _activeServers.add(server);
     }
 }
 
 function _unregisterServer(server) {
-    for (const [port, s] of _activeServersByPort) {
-        if (s === server) {
-            _activeServersByPort.delete(port);
+    _activeServers.delete(server);
+}
+
+export function _prepareClientRequest(hostname, port, existingHeaderNames) {
+    let server;
+    for (const candidate of _activeServers) {
+        if (_serverMatchesTarget(candidate, hostname, port)) {
+            server = candidate;
             break;
         }
     }
-}
-
-export function _prepareClientRequest(port) {
-    const server = _activeServersByPort.get(port);
     if (!server) return null;
     const requestId = String(++nextInProcessRequestId);
-    server._pendingInProcessRequestIds.add(requestId);
-    return requestId;
+    const excludedNames = new Set(existingHeaderNames || []);
+    let headerName = IN_PROCESS_REQUEST_ID_HEADER;
+    let suffix = 0;
+    while (excludedNames.has(headerName)) {
+        headerName = IN_PROCESS_REQUEST_ID_HEADER + '-' + (++suffix);
+    }
+    server._pendingInProcessRequests.set(requestId, headerName);
+    return { server, requestId, headerName };
 }
 
-export function _signalClientAbort(port, requestId) {
-    if (requestId === undefined || requestId === null) return;
-    const server = _activeServersByPort.get(port);
-    if (!server) return;
-    server._pendingInProcessRequestIds.delete(String(requestId));
+export function _signalClientAbort(inProcessRequest) {
+    if (!inProcessRequest) return;
+    const { server, requestId } = inProcessRequest;
+    server._pendingInProcessRequests.delete(requestId);
     for (const conn of server._httpConnections) {
         if (conn.clientRequestId !== String(requestId)) continue;
         if (conn.req && !conn.req.aborted && !conn.responseFinished) {

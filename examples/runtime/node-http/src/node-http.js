@@ -251,9 +251,25 @@ export async function httpAbortIsolation() {
         let settled = false;
         let localRequestAborted = false;
         let userHeaderPreserved = false;
+        let headeredRequestAborted = false;
+        let headeredClientRequest;
         const server = http.createServer((req, res) => {
             userHeaderPreserved =
                 req.headers['x-wasm-rquickjs-internal-request-id'] === 'user-value';
+            if (req.url === '/headered-abort') {
+                req.on('aborted', () => {
+                    headeredRequestAborted = true;
+                });
+                setImmediate(() => {
+                    headeredClientRequest.destroy(new Error('intentional local abort'));
+                    setImmediate(() => finish(
+                        !localRequestAborted &&
+                        userHeaderPreserved &&
+                        headeredRequestAborted
+                    ));
+                });
+                return;
+            }
             req.on('aborted', () => {
                 localRequestAborted = true;
             });
@@ -287,7 +303,19 @@ export async function httpAbortIsolation() {
                 },
             }, (res) => {
                 res.resume();
-                res.on('end', () => finish(!localRequestAborted && userHeaderPreserved));
+                res.on('end', () => {
+                    headeredClientRequest = http.request({
+                        hostname: 'localhost',
+                        port: server.address().port,
+                        method: 'POST',
+                        path: '/headered-abort',
+                        headers: {
+                            'x-wasm-rquickjs-internal-request-id': 'user-value',
+                        },
+                    });
+                    headeredClientRequest.on('error', () => {});
+                    headeredClientRequest.end('partial');
+                });
             });
             req.on('error', () => finish(false));
         });
