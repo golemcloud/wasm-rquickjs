@@ -254,6 +254,7 @@ export async function httpAbortIsolation() {
         let headeredRequestAborted = false;
         let earlyAbortTombstonePreserved = false;
         let headeredClientRequest;
+        let strandedToken;
         const server = http.createServer((req, res) => {
             userHeaderPreserved =
                 req.headers['x-wasm-rquickjs-internal-request-id'] === 'user-value';
@@ -292,7 +293,16 @@ export async function httpAbortIsolation() {
         function finish(result) {
             if (settled) return;
             settled = true;
-            server.close(() => resolve(result));
+            const stranded = http.request({
+                hostname: 'localhost',
+                port: server.address().port,
+            });
+            strandedToken = stranded._inProcessRequest;
+            stranded.on('error', () => {});
+            server.close(() => resolve(
+                result &&
+                strandedToken.server._pendingInProcessRequests.size === 0
+            ));
         }
 
         server.listen(0, () => {

@@ -1630,6 +1630,10 @@ function _registerServer(server) {
 
 function _unregisterServer(server) {
     _activeServers.delete(server);
+    for (const pendingRequest of server._pendingInProcessRequests.values()) {
+        if (pendingRequest.cleanupTimer) clearTimeout(pendingRequest.cleanupTimer);
+    }
+    server._pendingInProcessRequests.clear();
 }
 
 export function _prepareClientRequest(hostname, port, existingHeaderNames) {
@@ -1647,7 +1651,16 @@ export function _prepareClientRequest(hostname, port, existingHeaderNames) {
     do {
         headerName = IN_PROCESS_REQUEST_ID_HEADER + '-' + randomCorrelationToken();
     } while (excludedNames.has(headerName));
-    server._pendingInProcessRequests.set(requestId, { headerName, cancelled: false });
+    const pendingRequest = { headerName, cancelled: false, cleanupTimer: null };
+    server._pendingInProcessRequests.set(requestId, pendingRequest);
+    pendingRequest.cleanupTimer = setTimeout(() => {
+        if (server._pendingInProcessRequests.get(requestId) === pendingRequest) {
+            server._pendingInProcessRequests.delete(requestId);
+        }
+    }, 10_000);
+    if (typeof pendingRequest.cleanupTimer.unref === 'function') {
+        pendingRequest.cleanupTimer.unref();
+    }
     return { server, requestId, headerName };
 }
 
@@ -1672,14 +1685,6 @@ export function _signalClientAbort(inProcessRequest) {
     const pendingRequest = server._pendingInProcessRequests.get(requestId);
     if (pendingRequest) {
         pendingRequest.cancelled = true;
-        pendingRequest.cleanupTimer = setTimeout(() => {
-            if (server._pendingInProcessRequests.get(requestId) === pendingRequest) {
-                server._pendingInProcessRequests.delete(requestId);
-            }
-        }, 10_000);
-        if (typeof pendingRequest.cleanupTimer.unref === 'function') {
-            pendingRequest.cleanupTimer.unref();
-        }
     }
     for (const conn of server._httpConnections) {
         if (conn.clientRequestId !== String(requestId)) continue;
