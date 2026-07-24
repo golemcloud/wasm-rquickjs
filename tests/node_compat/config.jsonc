@@ -4068,8 +4068,8 @@
     // === es-module suite ===
     "es-module/test-dynamic-import-script-lifetime.js": { "category": "runnable" },
     "es-module/test-esm-loader-cache-clearing.js": { "category": "runnable" },
-    "es-module/test-vm-compile-function-leak.js": { "category": "runnable" },
-    "es-module/test-vm-contextified-script-leak.js": { "category": "runnable" },
+    "es-module/test-vm-compile-function-leak.js": { "category": "engine-difference", "reason": "uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection" },
+    "es-module/test-vm-contextified-script-leak.js": { "category": "engine-difference", "reason": "uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection" },
     "es-module/test-esm-import-meta.mjs": { "category": "runnable" },
     "es-module/test-esm-import-meta-resolve.mjs": { "category": "known-gap", "reason": "same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes" },
 
@@ -5974,7 +5974,7 @@
     "es-module/test-vm-compile-function-lineoffset.js": { "category": "runnable" },
     "es-module/test-vm-main-context-default-loader.js": { "category": "runnable" },
     "es-module/test-vm-source-text-module-leak.js": { "category": "engine-difference", "reason": "uses common/gc checkIfCollectableByCounting, which depends on V8-only v8.queryObjects" },
-    "es-module/test-vm-synthetic-module-leak.js": { "category": "runnable" },
+    "es-module/test-vm-synthetic-module-leak.js": { "category": "engine-difference", "reason": "uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection" },
     "es-module/test-wasm-memory-out-of-bound.js": { "category": "known-gap", "reason": "WebAssembly global is missing in current runtime" },
     "es-module/test-wasm-simple.js": { "category": "known-gap", "reason": "WebAssembly global is missing in current runtime" },
     "es-module/test-wasm-web-api.js": { "category": "known-gap", "reason": "WebAssembly global is missing in current runtime" },

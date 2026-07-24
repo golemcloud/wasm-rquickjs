@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-22 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Generated: 2026-07-24 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3241/4429 (73.2%)
+**Primary compatibility (CI-enforced):** 3238/4426 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3241 | 73.2% | 56.4% | 47.2% |
+| ✅ passing (runnable) | 3238 | 73.2% | 56.3% | 47.1% |
 | 🧩 known gap | 1188 | 26.8% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
-| ⚙️ engine difference (excluded) | 165 | — | 2.9% | 2.4% |
+| ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3241/5750 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3238/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | util | 174 | 89 | 8 | 0 | 0 | 0 | 77 | 91.8% | 91.8% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 128 | 76 | 39 | 3 | 10 | 0 | 0 | 66.1% | 59.4% |
+| vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
@@ -1513,7 +1513,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
 | wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied | 1 | `parallel/test-http-write-head.js` |
 
-### engine difference (165)
+### engine difference (168)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1530,6 +1530,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | v8.writeHeapSnapshot/getHeapSnapshot are V8-specific APIs and unavailable in QuickJS | 4 | `sequential/test-heapdump.js#block_00_block_00`, `sequential/test-heapdump.js#block_01_block_01`, `sequential/test-heapdump.js#block_02_block_02`, ... (+1) |
 | QuickJS does not mirror V8's legacy RegExp static properties initialization | 3 | `parallel/test-startup-empty-regexp-statics.js#block_00_block_00`, `parallel/test-startup-empty-regexp-statics.js#block_01_block_01`, `parallel/test-startup-empty-regexp-statics.js#block_02_block_02` |
 | targets V8 external string internals/limits that QuickJS does not replicate | 3 | `parallel/test-stringbytes-external.js#block_00_block_00`, `parallel/test-stringbytes-external.js#block_01_block_01`, `parallel/test-stringbytes-external.js#block_02_https_github_com_nodejs_node_issues_1024` |
+| uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection | 3 | `es-module/test-vm-compile-function-leak.js`, `es-module/test-vm-contextified-script-leak.js`, `es-module/test-vm-synthetic-module-leak.js` |
 | --heapsnapshot-signal depends on V8 heap snapshot support, unavailable in QuickJS | 2 | `sequential/test-heapdump-flag-custom-dir.js`, `sequential/test-heapdump-flag.js` |
 | --use-largepages is a V8 startup flag not applicable to QuickJS/WASM | 2 | `parallel/test-startup-large-pages.js#block_00_block_00`, `parallel/test-startup-large-pages.js#block_01_block_01` |
 | uses common/gc checkIfCollectableByCounting, which depends on V8-only v8.queryObjects | 2 | `es-module/test-vm-source-text-module-leak.js`, `parallel/test-diagnostics-channel-memory-leak.js` |

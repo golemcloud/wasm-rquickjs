@@ -54,6 +54,8 @@ jobs:
         run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
+      - name: Node compatibility parser contracts
+        run: cargo test --test js_subtest_parser $CI_WASMTIME_FORK_FEATURES -- --report-time
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
@@ -128,6 +130,9 @@ jobs:
         run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
+      - name: Module inventory contracts
+        if: matrix.shard == 0
+        run: cargo test --test node_compat_report $CI_WASMTIME_FORK_FEATURES -- module_related_node_compat_entries_are_configured module_related_known_gaps_are_deferred_or_covered --report-time
       - name: Node compat tests (shard ${{ matrix.shard }}/8)
         run: cargo test --test node_compat $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
       - name: Publish Test Report
