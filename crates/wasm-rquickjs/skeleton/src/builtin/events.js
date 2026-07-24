@@ -779,6 +779,7 @@ EventEmitter = new Proxy(EventEmitter, {
     },
 });
 
+EventEmitter.prototype.constructor = EventEmitter;
 EventEmitter.EventEmitter = EventEmitter;
 
 const _default = EventEmitter;

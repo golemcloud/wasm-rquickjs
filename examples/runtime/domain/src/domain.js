@@ -2,6 +2,12 @@ import domain from 'node:domain';
 import { active as activeExport, _stack, Domain, create, createDomain } from 'node:domain';
 import EventEmitter from 'node:events';
 
+export const testEventEmitterConstructorIdentity = () => {
+    const emitter = new EventEmitter();
+    return emitter.constructor === EventEmitter &&
+        EventEmitter.prototype.constructor === EventEmitter;
+};
+
 export const testCreate = () => {
     try {
         var d1 = domain.create();
