@@ -40,6 +40,13 @@ pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, Unbounde
         let slow_hits_1 = slow_hits.clone();
         let slow_hits_2 = slow_hits.clone();
 
+        // Counts requests to `/immediate-response`, which answers 200 at once
+        // without reading the body — so a guest can tell its request arrived (and
+        // was therefore already answered) while its upload is still draining.
+        let immediate_hits = Arc::new(AtomicUsize::new(0));
+        let immediate_hits_1 = immediate_hits.clone();
+        let immediate_hits_2 = immediate_hits.clone();
+
         let state_mutex = Arc::new(Mutex::new(State::default()));
 
         let state_mutex_1 = state_mutex.clone();
@@ -248,6 +255,20 @@ pub async fn start_test_server_with_arrivals() -> (u16, JoinHandle<()>, Unbounde
             .route(
                 "/slow-response-hits",
                 get(async move || slow_hits_2.load(Ordering::SeqCst).to_string()),
+            )
+            .route(
+                "/immediate-response",
+                post(async move || {
+                    // Deliberately take no body extractor: axum answers as soon
+                    // as the head arrives, so the response comes back while the
+                    // guest's (slow/never-resolving) upload is still in flight.
+                    immediate_hits_1.fetch_add(1, Ordering::SeqCst);
+                    "ok"
+                }),
+            )
+            .route(
+                "/immediate-response-hits",
+                get(async move || immediate_hits_2.load(Ordering::SeqCst).to_string()),
             );
 
         axum::serve(listener, router).await.unwrap();

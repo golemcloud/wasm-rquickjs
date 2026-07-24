@@ -20,6 +20,7 @@ interface response-constructor-exports {
     test-mock-fetch-pattern: func() -> test-result;
     test-headers-iteration: func() -> test-result;
     test-request-clone: func() -> test-result;
+    test-request-clone-after-consume: func() -> test-result;
     test-request-bytes-blob: func() -> test-result;
     test-response-clone-stream: func() -> test-result;
     test-typed-array-bodies: func() -> test-result;

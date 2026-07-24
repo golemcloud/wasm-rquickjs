@@ -1004,6 +1004,71 @@ export async function redirectWithInfiniteStreamBody(port) {
     }
 }
 
+export async function abortDuringBodyUpload(port) {
+    console.log("fetch test 36 (abort during slow body upload)");
+
+    const controller = new AbortController();
+
+    // A request body whose pull() never resolves: no chunk is ever produced, so
+    // sendBody parks on reader.read() forever. The server answers 200 right away
+    // (it never reads the body), so the fetch is left waiting on the upload — the
+    // exact spot that used to ignore the abort and stall the whole invocation.
+    let cancelled = false;
+    const stream = new ReadableStream({
+        pull() {
+            return new Promise(() => {}); // never resolves, never enqueues
+        },
+        cancel() {
+            cancelled = true;
+            console.log("Upload stream cancel() invoked");
+        }
+    });
+
+    const fetchPromise = fetch(`http://localhost:${port}/immediate-response`, {
+        method: 'POST',
+        body: stream,
+        signal: controller.signal,
+    });
+
+    // Abort only once the server confirms the request arrived (and therefore has
+    // already answered 200), so the fetch is genuinely parked on the upload.
+    let arrived = false;
+    for (let i = 0; i < 100 && !arrived; i++) {
+        const hits = await fetch(`http://localhost:${port}/immediate-response-hits`).then(r => r.text());
+        arrived = Number(hits) > 0;
+        if (!arrived) await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    console.log(`Request reached the server: ${arrived}`);
+
+    // Time only the abort->reject latency, isolated from the arrival polling.
+    const abortStart = Date.now();
+    controller.abort('upload cancelled');
+
+    let outcome;
+    let reason;
+    try {
+        await fetchPromise;
+        outcome = 'completed';
+    } catch (e) {
+        outcome = 'aborted';
+        reason = e;
+        console.log(`Caught abort error: ${e && e.message ? e.message : e}`);
+    }
+    const abortElapsed = Date.now() - abortStart;
+
+    console.log(`Abort outcome: ${outcome}`);
+    console.log(`Abort reason matches: ${reason === 'upload cancelled'}`);
+    console.log(`Upload stream cancelled: ${cancelled}`);
+    // Without the fix the abort never reaches the parked upload wait, so the
+    // fetch never settles and this never even prints — the invocation stalls
+    // until the epoch deadline.
+    if (outcome === 'aborted' && reason === 'upload cancelled' && cancelled && abortElapsed < 5000) {
+        console.log("abort during upload rejected promptly: PASSED");
+    } else {
+        console.log(`abort during upload rejected promptly: FAILED (${outcome}, ${reason}, cancelled=${cancelled}, ${abortElapsed}ms)`);
+    }
+}
+
 export async function fetchFunctionShape() {
     console.log("fetch test 35 (fetch function shape - Node compat)");
 

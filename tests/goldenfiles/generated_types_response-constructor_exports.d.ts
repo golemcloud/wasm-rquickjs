@@ -13,6 +13,7 @@ declare module 'response-constructor' {
     export function testMockFetchPattern(): Promise<TestResult>;
     export function testHeadersIteration(): Promise<TestResult>;
     export function testRequestClone(): Promise<TestResult>;
+    export function testRequestCloneAfterConsume(): Promise<TestResult>;
     export function testRequestBytesBlob(): Promise<TestResult>;
     export function testResponseCloneStream(): Promise<TestResult>;
     export function testTypedArrayBodies(): Promise<TestResult>;

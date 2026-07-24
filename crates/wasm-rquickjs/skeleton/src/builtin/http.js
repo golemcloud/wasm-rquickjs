@@ -165,8 +165,32 @@ export function fetch(resource, options = {}) {
 // arise when the server closes the upload (e.g. on an early redirect).
 const BODY_SOURCE_ERROR = Symbol('bodySourceError');
 
+// Stop an in-flight request-body upload: flag it and cancel the active reader.
+// A pending `reader.read()` on a slow or never-resolving body would otherwise
+// never come back to check `abortRef.aborted`, so the detached `sendBody` — and
+// with it the whole invocation — would hang until the epoch deadline. Cancelling
+// settles that read at once and lets `sendBody` unwind.
+function stopUpload(abortRef) {
+    abortRef.aborted = true;
+    const reader = abortRef.reader;
+    if (reader) {
+        try { reader.cancel().catch(() => {}); } catch (_) { /* ignore */ }
+    }
+    const bodyWriter = abortRef.bodyWriter;
+    if (bodyWriter) {
+        // Drop the native outgoing body so the host cancels the unfinished
+        // request now. Without this the request only ends when JS GC eventually
+        // collects the writer, so the invocation stays busy long after the fetch
+        // itself has rejected — the promise aborts fast, the request does not.
+        abortRef.bodyWriter = null;
+        try { bodyWriter.abortBody(); } catch (_) { /* ignore */ }
+    }
+}
+
 async function sendBody(bodyWriter, body, abortRef) {
     const reader = body.getReader();
+    // Expose the reader so stopUpload() can cancel a stalled read directly.
+    abortRef.reader = reader;
     try {
         while (true) {
             if (abortRef.aborted) {
@@ -200,6 +224,7 @@ async function sendBody(bodyWriter, body, abortRef) {
             }
         }
     } finally {
+        abortRef.reader = null;
         try { reader.releaseLock(); } catch (_) { /* ignore */ }
     }
     if (abortRef.aborted) return;
@@ -223,6 +248,23 @@ async function streamingRequest(
     const maxRedirects = 20;
     let currentRedirects = 0;
 
+    // The abort has to keep reaching the request-body upload for the whole
+    // streaming request, not only receiveResponse(): after a non-redirect
+    // response arrives we still `await bodyPromise`, and a slow/never-resolving
+    // upload must be cancellable there too, or the invocation stalls until the
+    // epoch deadline. This listener cancels whichever upload is active now.
+    let activeAbortRef = null;
+    const onSignalAbort = () => {
+        if (activeAbortRef) stopUpload(activeAbortRef);
+    };
+    if (signal) {
+        if (signal.aborted) {
+            throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+        }
+        signal.addEventListener('abort', onSignalAbort);
+    }
+
+    try {
     while (true) {
         // Don't start another request if the signal fired while we were
         // processing the previous redirect.
@@ -249,12 +291,16 @@ async function streamingRequest(
         // Track body upload state synchronously so we can inspect it from the
         // redirect path without having to await the upload promise (which may
         // never finish for slow/infinite streaming bodies).
-        const abortRef = {aborted: false};
+        const abortRef = {aborted: false, reader: null, bodyWriter: null};
+        activeAbortRef = abortRef;
         const bodyState = {settled: false, ok: true, error: undefined};
         let bodyPromise;
 
         if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
             const bodyStream = currentBodyCreator();
+            // Expose the writer so stopUpload() can drop the native outgoing body
+            // on abort; the else-branch finishes it, so it is only tracked here.
+            abortRef.bodyWriter = bodyWriter;
             bodyPromise = sendBody(bodyWriter, bodyStream, abortRef).then(
                 () => {
                     bodyState.settled = true;
@@ -278,7 +324,7 @@ async function streamingRequest(
         } catch (e) {
             // Stop the detached upload: nothing is waiting for this request any
             // more (an abort has already dropped it on the native side).
-            abortRef.aborted = true;
+            stopUpload(abortRef);
             bodyPromise.catch(() => {});
             throw e;
         }
@@ -301,15 +347,20 @@ async function streamingRequest(
             // Otherwise, do NOT await body upload. Servers can legitimately
             // respond with a redirect before consuming the full request body,
             // and slow/infinite streaming bodies must not delay redirect
-            // handling. Signal the upload to abort and ignore further errors
-            // (transport errors after this point are expected).
-            abortRef.aborted = true;
+            // handling. Cancel the upload (settling a stalled read) and ignore
+            // further errors (transport errors after this point are expected).
+            stopUpload(abortRef);
             // Suppress unhandled-rejection noise on the detached promise.
             bodyPromise.catch(() => {});
         } else {
-            // Non-redirect: wait for the body upload to complete and propagate
-            // any error (whether source-side or transport-side).
+            // Non-redirect: wait for the body upload to finish. If the signal
+            // aborts while a slow/infinite upload is still draining, onSignalAbort
+            // cancels the reader so sendBody settles and this await returns — we
+            // then reject with the abort reason instead of resolving the fetch.
             await bodyPromise;
+            if (signal && signal.aborted) {
+                throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+            }
             if (!bodyState.ok) {
                 throw bodyState.error;
             }
@@ -365,6 +416,11 @@ async function streamingRequest(
         }
 
         return response;
+    }
+    } finally {
+        // Detach the upload-abort listener however this settles (return, throw,
+        // or abort): a reused controller must not accumulate one per request.
+        if (signal) signal.removeEventListener('abort', onSignalAbort);
     }
 }
 
@@ -789,6 +845,13 @@ export class Headers {
 export class Request {
     constructor(input, options = {}) {
         if (input instanceof Request) {
+            // Per the Fetch contract, cloning (or re-wrapping) a request whose
+            // body has already been read/disturbed must throw — otherwise we'd
+            // tee a locked stream or hand out a second reader on consumed bytes.
+            // A bodyless request stays cloneable even after a (no-op) read.
+            if (input._bodyUsed && input._body != null) {
+                throw new TypeError('Request body is already consumed');
+            }
             this._url = input._url;
             this._headers = new Headers(input._headers);
             this._bodyUsed = false;

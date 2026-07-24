@@ -957,3 +957,61 @@ async fn fetch_abort_releases_request(
 
     Ok(())
 }
+
+/// Aborting after the response has arrived but while a slow/never-resolving
+/// request *body* is still uploading must also finish the invocation promptly.
+///
+/// The upload wait sits past `receiveResponse`, so the abort has to reach it
+/// separately — otherwise the parked `reader.read()` never settles and the whole
+/// invocation stalls until the epoch deadline instead of rejecting the fetch.
+#[test]
+async fn fetch_abort_during_body_upload(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _) = start_test_server().await;
+
+    let started = Instant::now();
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "abort-during-body-upload",
+        &[Val::U16(port)],
+    )
+    .await;
+    let elapsed = started.elapsed();
+    // A stalled invocation surfaces here as an epoch-interrupt error, so the fix
+    // is what lets `result?` succeed at all.
+    let _ = result?;
+
+    println!("Output:\n{output}");
+
+    assert!(
+        output.contains("Request reached the server: true"),
+        "the guest aborted before the request went out, so nothing was parked on \
+         the upload. Output:\n{output}"
+    );
+    assert!(
+        output.contains("Abort outcome: aborted"),
+        "fetch should have rejected. Output:\n{output}"
+    );
+    assert!(
+        output.contains("Abort reason matches: true"),
+        "rejection did not carry the signal's reason. Output:\n{output}"
+    );
+    assert!(
+        output.contains("Upload stream cancelled: true"),
+        "the request-body stream was not cancelled on abort. Output:\n{output}"
+    );
+    assert!(
+        output.contains("abort during upload rejected promptly: PASSED"),
+        "guest-side upload-abort check failed. Output:\n{output}"
+    );
+    // Belt and suspenders next to `result?`: prove we did not merely squeak under
+    // the 120s epoch.
+    assert!(
+        elapsed < Duration::from_secs(60),
+        "invocation took {elapsed:?}; the aborted upload was not released"
+    );
+
+    Ok(())
+}

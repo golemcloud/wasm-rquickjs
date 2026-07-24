@@ -244,6 +244,45 @@ const responseConstructorExports = {
         } catch (e) { return fail(name, e); }
     },
 
+    async testRequestCloneAfterConsume() {
+        const name = 'Request.clone() after body consumed throws';
+        try {
+            // clone() must throw once the body has been read.
+            const r = new Request('https://example.com/x', { method: 'POST', body: 'abc' });
+            await r.text();
+            let threwClone = false;
+            try {
+                r.clone();
+            } catch (e) {
+                threwClone = e instanceof TypeError;
+            }
+            if (!threwClone) return fail(name, 'clone() after text() should throw TypeError');
+
+            // new Request(consumedRequest) must throw for the same reason.
+            const r2 = new Request('https://example.com/x', { method: 'POST', body: 'abc' });
+            await r2.text();
+            let threwWrap = false;
+            try {
+                new Request(r2);
+            } catch (e) {
+                threwWrap = e instanceof TypeError;
+            }
+            if (!threwWrap) return fail(name, 'new Request(consumed) should throw TypeError');
+
+            // A bodyless request stays cloneable even after a (no-op) read.
+            const r3 = new Request('https://example.com/x');
+            await r3.text();
+            r3.clone();
+
+            // Cloning before consumption still works.
+            const r4 = new Request('https://example.com/x', { method: 'POST', body: 'abc' });
+            const c4 = r4.clone();
+            if ((await c4.text()) !== 'abc') return fail(name, 'pre-consume clone lost its body');
+
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
     async testRequestBytesBlob() {
         const name = 'Request.bytes() with Blob body';
         try {

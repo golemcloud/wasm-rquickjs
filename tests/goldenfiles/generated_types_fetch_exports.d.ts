@@ -37,4 +37,5 @@ declare module 'fetch' {
   export function redirectWithInfiniteStreamBody(port: number): Promise<void>;
   export function fetchFunctionShape(): Promise<void>;
   export function abortReleasesRequest(port: number): Promise<void>;
+  export function abortDuringBodyUpload(port: number): Promise<void>;
 }

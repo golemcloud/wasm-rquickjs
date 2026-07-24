@@ -142,6 +142,13 @@ async fn response_constructor_request_clone(
 }
 
 #[test]
+async fn response_constructor_request_clone_after_consume(
+    #[tagged_as("response_constructor")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_test(compiled, "test-request-clone-after-consume").await
+}
+
+#[test]
 async fn response_constructor_request_bytes_blob(
     #[tagged_as("response_constructor")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

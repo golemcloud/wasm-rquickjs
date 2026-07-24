@@ -776,6 +776,14 @@ impl WrappedRequestBodyWriter {
             ))
         }
     }
+
+    /// Drop the outgoing body *without* finishing it. Dropping the WASI writer is
+    /// what tells the host to cancel the still-incomplete request, so an aborted
+    /// upload is released now instead of lingering until JS GC eventually
+    /// collects this wrapper. Idempotent and infallible.
+    pub fn abort_body(&mut self) {
+        let _ = self.writer.take();
+    }
 }
 
 #[derive(Trace, JsLifetime)]
