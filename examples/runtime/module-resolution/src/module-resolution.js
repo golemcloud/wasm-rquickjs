@@ -3817,6 +3817,21 @@ export const testLoaderCommonjsRequireApis = async () => {
     return true;
 };
 
+export const testUnknownNodeSpecifierCannotBeShadowed = async () => {
+    fs.mkdirSync('/node_modules/node:not-a-builtin', { recursive: true });
+    fs.writeFileSync(
+        '/node_modules/node:not-a-builtin/package.json',
+        JSON.stringify({ type: 'module', exports: './index.js' }),
+    );
+    fs.writeFileSync(
+        '/node_modules/node:not-a-builtin/index.js',
+        'export default "shadowed";',
+    );
+
+    await expectImportError('node:not-a-builtin', 'ERR_UNKNOWN_BUILTIN_MODULE');
+    return true;
+};
+
 export const testLoaderModuleSourceValidation = async () => {
     try {
         fs.mkdirSync('/loader-module-source-app', { recursive: true });

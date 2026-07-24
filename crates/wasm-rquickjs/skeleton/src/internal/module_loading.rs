@@ -3876,6 +3876,23 @@ impl Resolver for NodeFileResolver {
 /// preceding resolvers couldn't handle.
 struct NodeModuleErrorResolver;
 
+struct NodeBuiltinNamespaceGuard;
+
+impl Resolver for NodeBuiltinNamespaceGuard {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if !name.starts_with("node:") {
+            return Err(Error::new_resolving(base, name));
+        }
+        let msg = format!("No such built-in module: {}", name);
+        throw_native_coded_error(ctx, &msg, "ERR_UNKNOWN_BUILTIN_MODULE", true)
+    }
+}
+
 impl Resolver for NodeModuleErrorResolver {
     fn resolve<'js>(
         &mut self,
@@ -10425,7 +10442,12 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             LoaderCjsFacadeResolver(loader_cjs_facades.clone()),
             RegisteredLoaderResolver,
         ),
-        (builtin_resolver, NodeModulesResolver, NodeFileResolver),
+        (
+            builtin_resolver,
+            NodeBuiltinNamespaceGuard,
+            NodeModulesResolver,
+            NodeFileResolver,
+        ),
         (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
     );
 

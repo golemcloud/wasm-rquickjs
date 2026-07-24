@@ -19,6 +19,7 @@ world module-resolution {
   export test-loader-commonjs-source-named-exports: func() -> bool;
   export test-loader-commonjs-json-cache: func() -> bool;
   export test-loader-commonjs-require-apis: func() -> bool;
+  export test-unknown-node-specifier-cannot-be-shadowed: func() -> bool;
   export test-loader-module-source-validation: func() -> bool;
   export test-package-custom-conditions: func() -> bool;
   export test-cjs-package-json-parse-cache: func() -> bool;
