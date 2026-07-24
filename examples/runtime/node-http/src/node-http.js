@@ -252,6 +252,7 @@ export async function httpAbortIsolation() {
         let localRequestAborted = false;
         let userHeaderPreserved = false;
         let headeredRequestAborted = false;
+        let earlyAbortTombstonePreserved = false;
         let headeredClientRequest;
         const server = http.createServer((req, res) => {
             userHeaderPreserved =
@@ -265,7 +266,8 @@ export async function httpAbortIsolation() {
                     setImmediate(() => finish(
                         !localRequestAborted &&
                         userHeaderPreserved &&
-                        headeredRequestAborted
+                        headeredRequestAborted &&
+                        earlyAbortTombstonePreserved
                     ));
                 });
                 return;
@@ -294,30 +296,49 @@ export async function httpAbortIsolation() {
         }
 
         server.listen(0, () => {
-            const req = http.get({
+            const early = http.request({
                 hostname: 'localhost',
                 port: server.address().port,
-                path: '/local',
                 headers: {
                     'x-wasm-rquickjs-internal-request-id': 'user-value',
                 },
-            }, (res) => {
-                res.resume();
-                res.on('end', () => {
-                    headeredClientRequest = http.request({
-                        hostname: 'localhost',
-                        port: server.address().port,
-                        method: 'POST',
-                        path: '/headered-abort',
-                        headers: {
-                            'x-wasm-rquickjs-internal-request-id': 'user-value',
-                        },
-                    });
-                    headeredClientRequest.on('error', () => {});
-                    headeredClientRequest.end('partial');
-                });
             });
-            req.on('error', () => finish(false));
+            const earlyToken = early._inProcessRequest;
+            early.on('error', () => {});
+            early.destroy(new Error('intentional early abort'));
+            process.nextTick(() => {
+                const pending =
+                    earlyToken.server._pendingInProcessRequests.get(earlyToken.requestId);
+                earlyAbortTombstonePreserved =
+                    earlyToken.headerName !== 'x-wasm-rquickjs-internal-request-id' &&
+                    pending.headerName === earlyToken.headerName &&
+                    pending.cancelled === true;
+
+                const req = http.get({
+                    hostname: 'localhost',
+                    port: server.address().port,
+                    path: '/local',
+                    headers: {
+                        'x-wasm-rquickjs-internal-request-id': 'user-value',
+                    },
+                }, (res) => {
+                    res.resume();
+                    res.on('end', () => {
+                        headeredClientRequest = http.request({
+                            hostname: 'localhost',
+                            port: server.address().port,
+                            method: 'POST',
+                            path: '/headered-abort',
+                            headers: {
+                                'x-wasm-rquickjs-internal-request-id': 'user-value',
+                            },
+                        });
+                        headeredClientRequest.on('error', () => {});
+                        headeredClientRequest.end('partial');
+                    });
+                });
+                req.on('error', () => finish(false));
+            });
         });
     });
 }
