@@ -3498,6 +3498,7 @@ export let register = function register(specifier, parentURL, options) {
     globalThis.__wasm_rquickjs_registered_loader_generation =
         (globalThis.__wasm_rquickjs_registered_loader_generation || 0) + 1;
     globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
+    globalThis.__wasm_rquickjs_sync_registered_loader_cache = Object.create(null);
     if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader === 'function') {
         wasmRquickjsModuleGlobalThis.__wasm_rquickjs_start_registered_loader(loader);
     }
@@ -3874,6 +3875,18 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
+        const useLoadCache = !resolveOnly && !isImportMode;
+        const loadCacheKey = useLoadCache
+            ? String(globalThis.__wasm_rquickjs_registered_loader_generation || 0) +
+                '\0' + String(baseUrl || fileUrlForPath('/')) + '\0' + String(specifier)
+            : undefined;
+        const loadCache = useLoadCache
+            ? (globalThis.__wasm_rquickjs_sync_registered_loader_cache ||
+                (globalThis.__wasm_rquickjs_sync_registered_loader_cache = Object.create(null)))
+            : undefined;
+        if (loadCache && Object.prototype.hasOwnProperty.call(loadCache, loadCacheKey)) {
+            return loadCache[loadCacheKey];
+        }
         const entries = [];
         for (let i = 0; i < loaders.length; i++) {
             const loader = loaders[i];
@@ -3962,7 +3975,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const loaded = runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
-        return normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
+        const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
+        if (loadCache) loadCache[loadCacheKey] = result;
+        return result;
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_run_registered_loaders_sync', {
         value: runRegisteredLoadersSync,
