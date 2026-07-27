@@ -11,6 +11,18 @@ import {
 
 import EventEmitter from 'node:events';
 
+const _objectDefineProperty = Object.defineProperty;
+Object.defineProperty = function defineProperty(target, property, descriptor) {
+    try {
+        return _objectDefineProperty(target, property, descriptor);
+    } catch (error) {
+        if (error instanceof TypeError && error.message === 'property is not configurable') {
+            throw new TypeError('Cannot redefine property: ' + String(property));
+        }
+        throw error;
+    }
+};
+
 function _invalidArgTypeHelper(value) {
     if (value == null) return ' Received ' + String(value);
     if (typeof value === 'function') return ' Received function ' + value.name;
@@ -268,13 +280,14 @@ function _diagnosticReport(error) {
     const now = new Date();
     const memory = process.memoryUsage();
     const usage = process.cpuUsage();
-    const stack = error && typeof error.stack === 'string'
+    const hasStack = error !== undefined && typeof error.stack === 'string';
+    const stack = hasStack
         ? error.stack.split('\n')
         : new Error().stack.split('\n').slice(1);
     return {
         header: {
             reportVersion: 5,
-            event: error ? 'JavaScript API' : 'JavaScript API',
+            event: 'JavaScript API',
             trigger: 'GetReport',
             filename: null,
             dumpEventTime: now.toISOString(),
@@ -294,8 +307,8 @@ function _diagnosticReport(error) {
             host: '',
         },
         javascriptStack: {
-            message: error ? String(error) : 'No stack.',
-            stack,
+            message: hasStack ? String(error) : 'No stack.',
+            stack: hasStack ? stack : [],
             errorProperties: {},
         },
         javascriptHeap: {
@@ -341,12 +354,29 @@ function _defaultReportFilename() {
 
 process.report = {
     getReport(error) {
+        if (error !== undefined && (error === null || typeof error !== 'object')) {
+            throw _makeTypeError(
+                'ERR_INVALID_ARG_TYPE',
+                'The "err" argument must be of type object.' + _invalidArgTypeHelper(error),
+            );
+        }
         return _diagnosticReport(error);
     },
     writeReport(filename, error) {
-        if (filename !== undefined && typeof filename !== 'string') {
+        if (filename !== undefined && filename !== null && typeof filename === 'object') {
             error = filename;
             filename = undefined;
+        } else if (filename !== undefined && typeof filename !== 'string') {
+            throw _makeTypeError(
+                'ERR_INVALID_ARG_TYPE',
+                'The "file" argument must be of type string.' + _invalidArgTypeHelper(filename),
+            );
+        }
+        if (error !== undefined && (error === null || typeof error !== 'object')) {
+            throw _makeTypeError(
+                'ERR_INVALID_ARG_TYPE',
+                'The "err" argument must be of type object.' + _invalidArgTypeHelper(error),
+            );
         }
         const selected = filename || _reportOptions.filename || _defaultReportFilename();
         const output = _reportOptions.directory && selected.charCodeAt(0) !== 47
@@ -972,12 +1002,31 @@ process._runExitHandlers = function _runExitHandlers(code) {
 // that handle the rejection synchronously don't cause false positives.
 const _pendingRejections = new Map();
 const _ignoredUnhandledRejections = new WeakSet();
+let _unhandledRejectionCheckScheduled = false;
+let _rejectionSequence = 0;
 
 function _isIgnoredUnhandledRejection(promise) {
     return _ignoredUnhandledRejections.has(promise);
 }
 
-function _scheduleUnhandledRejectionCheck(callback) {
+function _scheduleUnhandledRejectionCheck() {
+    if (_unhandledRejectionCheckScheduled) {
+        return;
+    }
+    _unhandledRejectionCheckScheduled = true;
+    const callback = function() {
+        _unhandledRejectionCheckScheduled = false;
+        const pending = Array.from(_pendingRejections);
+        for (const [promise, entry] of pending) {
+            if (!_pendingRejections.has(promise)) {
+                continue;
+            }
+            _pendingRejections.delete(promise);
+            if (!_isIgnoredUnhandledRejection(promise)) {
+                process.emit('unhandledRejection', entry.reason, promise);
+            }
+        }
+    };
     if (typeof globalThis.setTimeout === 'function') {
         globalThis.setTimeout(callback, 0);
     } else {
@@ -993,16 +1042,11 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
         return;
     }
     if (!isHandled) {
-        _pendingRejections.set(promise, reason);
-        _scheduleUnhandledRejectionCheck(function() {
-            if (_pendingRejections.has(promise)) {
-                _pendingRejections.delete(promise);
-                if (_isIgnoredUnhandledRejection(promise)) {
-                    return;
-                }
-                process.emit('unhandledRejection', reason, promise);
-            }
+        _pendingRejections.set(promise, {
+            reason,
+            sequence: ++_rejectionSequence,
         });
+        _scheduleUnhandledRejectionCheck();
     } else {
         _pendingRejections.delete(promise);
     }
@@ -1013,7 +1057,15 @@ globalThis.__wasm_rquickjs_ignore_unhandled_rejection = function(promise) {
     _pendingRejections.delete(promise);
 };
 
-globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPromise, reason) {
+globalThis.__wasm_rquickjs_begin_require_esm_rejection_scope = function() {
+    return _rejectionSequence;
+};
+
+globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(
+    evaluationPromise,
+    reason,
+    scopeStart,
+) {
     if (_pendingRejections.has(evaluationPromise)) {
         _ignoredUnhandledRejections.add(evaluationPromise);
         _pendingRejections.delete(evaluationPromise);
@@ -1021,9 +1073,11 @@ globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPro
     }
 
     let modulePromise;
-    for (const [promise, pendingReason] of _pendingRejections) {
-        if (pendingReason === reason) {
+    let moduleSequence = scopeStart;
+    for (const [promise, entry] of _pendingRejections) {
+        if (entry.reason === reason && entry.sequence > moduleSequence) {
             modulePromise = promise;
+            moduleSequence = entry.sequence;
         }
     }
     if (modulePromise !== undefined) {

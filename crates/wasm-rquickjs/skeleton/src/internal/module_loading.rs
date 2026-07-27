@@ -3220,6 +3220,7 @@ impl Resolver for FileUrlResolver {
             transfer_import_type_rewrite_token(name, &resolved);
             Ok(resolved)
         } else {
+            discard_import_type_rewrite_token(name);
             Err(Error::new_resolving(base, name))
         }
     }
@@ -5374,6 +5375,9 @@ impl NodeModulesResolver {
 
     fn package_pattern_key_match(pattern_key: &str, key: &str) -> Option<String> {
         let star = pattern_key.find('*')?;
+        if pattern_key[star + 1..].contains('*') {
+            return None;
+        }
         let prefix = &pattern_key[..star];
         let suffix = &pattern_key[star + 1..];
         if !key.starts_with(prefix) || !key.ends_with(suffix) {

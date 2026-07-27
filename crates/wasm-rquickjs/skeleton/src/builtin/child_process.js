@@ -962,7 +962,19 @@ function runInline(command, args, options) {
                 if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
                     source = '//' + source;
                 }
-                checkSyntaxWithFilename(moduleModule.wrap(source), scriptPath);
+                let isModule = scriptPath.endsWith('.mjs');
+                if (!isModule && scriptPath.endsWith('.js')) {
+                    const packageScopeInfo = globalThis.__wasm_rquickjs_cjs_package_scope_info;
+                    const packageScope = typeof packageScopeInfo === 'function'
+                        ? packageScopeInfo(scriptPath)
+                        : null;
+                    isModule = packageScope != null && packageScope.packageType === 'module';
+                }
+                checkSyntaxWithFilename(
+                    isModule ? source : moduleModule.wrap(source),
+                    scriptPath,
+                    isModule,
+                );
             } else if (moduleModule && typeof moduleModule.runMain === 'function') {
                 moduleModule.runMain();
             } else {

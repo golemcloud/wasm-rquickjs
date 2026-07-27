@@ -4087,6 +4087,26 @@ export const testSyncBuiltinEsmExports = async () => {
         assert.strictEqual(processModule.report, processModule.default.report);
         assert.strictEqual(typeof processModule.report.getReport, 'function');
         assert.strictEqual(typeof processModule.report.writeReport, 'function');
+        assert.throws(
+            () => processModule.report.getReport(null),
+            { code: 'ERR_INVALID_ARG_TYPE' },
+        );
+        assert.throws(
+            () => processModule.report.getReport(1),
+            { code: 'ERR_INVALID_ARG_TYPE' },
+        );
+        assert.strictEqual(
+            processModule.report.getReport({}).javascriptStack.message,
+            'No stack.',
+        );
+        assert.throws(
+            () => processModule.report.writeReport(null),
+            { code: 'ERR_INVALID_ARG_TYPE' },
+        );
+        assert.throws(
+            () => processModule.report.writeReport(undefined, 1),
+            { code: 'ERR_INVALID_ARG_TYPE' },
+        );
         const diagnosticReport = processModule.report.getReport();
         assert.strictEqual(diagnosticReport.header.platform, 'wasi');
         assert.strictEqual(diagnosticReport.header.arch, 'wasm32');
@@ -6209,6 +6229,56 @@ export const testPackageCustomConditions = async () => {
         assert.strictEqual(require.cache, parentModuleCache);
         assert.strictEqual(moduleBuiltin._pathCache, parentPathCache);
         assert.strictEqual(require('isolated-condition-pkg'), 'parent');
+
+        fs.writeFileSync(
+            '/package-custom-conditions-app/check.mjs',
+            'export const checked = true;\n',
+        );
+        fs.mkdirSync('/package-custom-conditions-app/module-scope', { recursive: true });
+        fs.writeFileSync(
+            '/package-custom-conditions-app/module-scope/package.json',
+            JSON.stringify({ type: 'module' }),
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/module-scope/check.js',
+            'export const checked = true;\n',
+        );
+        assert.strictEqual(execFileSync(
+            process.execPath,
+            ['--check', '/package-custom-conditions-app/check.mjs'],
+            { encoding: 'utf8' },
+        ), '');
+        assert.strictEqual(execFileSync(
+            process.execPath,
+            ['--check', '/package-custom-conditions-app/module-scope/check.js'],
+            { encoding: 'utf8' },
+        ), '');
+
+        fs.mkdirSync(
+            '/package-custom-conditions-app/node_modules/single-star-pattern-pkg',
+            { recursive: true },
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/node_modules/single-star-pattern-pkg/package.json',
+            JSON.stringify({
+                exports: {
+                    './feature/*/extra/*': './invalid-pattern.cjs',
+                    './feature/*': './valid-pattern.cjs',
+                },
+            }),
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/node_modules/single-star-pattern-pkg/invalid-pattern.cjs',
+            'module.exports = "invalid";',
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/node_modules/single-star-pattern-pkg/valid-pattern.cjs',
+            'module.exports = "valid";',
+        );
+        assert.strictEqual(
+            require('single-star-pattern-pkg/feature/value/extra/other'),
+            'valid',
+        );
 
         return true;
     } catch (error) {

@@ -478,7 +478,7 @@ function traceModuleRequire(id, parentFilename, fn) {
 }
 
 function traceModuleImport(url, parentFilename, fn) {
-    if (!parentFilename) return fn();
+    if (!parentFilename || !moduleImportTrace.hasSubscribers) return fn();
     return moduleImportTrace.tracePromise(fn, {
         url,
         parentURL: nodeUrl.pathToFileURL(parentFilename).href,

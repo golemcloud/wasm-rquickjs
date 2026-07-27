@@ -767,26 +767,6 @@ EventEmitter.addAbortListener = function(signal, listener) {
     };
 };
 
-EventEmitter = new Proxy(EventEmitter, {
-    defineProperty(target, property, descriptor) {
-        if (property === 'defaultMaxListeners') {
-            const current = Reflect.getOwnPropertyDescriptor(target, property);
-            const compatible = current &&
-                current.configurable === false &&
-                descriptor.configurable !== true &&
-                (descriptor.enumerable === undefined || descriptor.enumerable === current.enumerable) &&
-                !Object.prototype.hasOwnProperty.call(descriptor, 'value') &&
-                !Object.prototype.hasOwnProperty.call(descriptor, 'writable') &&
-                (descriptor.get === undefined || descriptor.get === current.get) &&
-                (descriptor.set === undefined || descriptor.set === current.set);
-            if (current && current.configurable === false && !compatible) {
-                throw new TypeError('Cannot redefine property: defaultMaxListeners');
-            }
-        }
-        return Reflect.defineProperty(target, property, descriptor);
-    },
-});
-
 EventEmitter.prototype.constructor = EventEmitter;
 EventEmitter.EventEmitter = EventEmitter;
 

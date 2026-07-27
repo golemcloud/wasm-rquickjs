@@ -40,8 +40,9 @@ pub mod native_module {
         ctx: Ctx<'_>,
         code: String,
         filename: String,
+        is_module: bool,
     ) -> rquickjs::Result<()> {
-        super::check_syntax_with_filename_impl(ctx, &code, &filename)
+        super::check_syntax_with_filename_impl(ctx, &code, &filename, is_module)
     }
 
     /// Load an ES module by filename and return its namespace object.
@@ -213,6 +214,7 @@ fn require_esm_impl<'js>(
         return throw_require_async_module(ctx, &globals, filename);
     }
 
+    let rejection_scope = begin_require_esm_rejection_scope(&ctx);
     let eval_result = unsafe { qjs::JS_EvalFunction(ctx.as_raw().as_ptr(), compiled_module) };
     if unsafe { qjs::JS_IsException(eval_result) } {
         leave_require_esm(&globals, filename, &file_url)?;
@@ -230,7 +232,7 @@ fn require_esm_impl<'js>(
                 ignore_unhandled_rejection(&ctx, eval_value.clone());
                 let _ = promise.result::<Value<'js>>();
                 let rejected = ctx.catch();
-                ignore_require_esm_rejection(&ctx, eval_value, rejected.clone());
+                ignore_require_esm_rejection(&ctx, eval_value, rejected.clone(), rejection_scope);
                 leave_require_esm(&globals, filename, &file_url)?;
                 return Err(ctx.throw(rejected));
             }
@@ -273,16 +275,24 @@ fn ignore_unhandled_rejection<'js>(ctx: &rquickjs::Ctx<'js>, promise: Value<'js>
     }
 }
 
+fn begin_require_esm_rejection_scope(ctx: &rquickjs::Ctx<'_>) -> i64 {
+    ctx.globals()
+        .get::<_, rquickjs::Function>("__wasm_rquickjs_begin_require_esm_rejection_scope")
+        .and_then(|handler| handler.call::<_, i64>(()))
+        .unwrap_or(0)
+}
+
 fn ignore_require_esm_rejection<'js>(
     ctx: &rquickjs::Ctx<'js>,
     promise: Value<'js>,
     reason: Value<'js>,
+    scope_start: i64,
 ) {
     if let Ok(handler) = ctx
         .globals()
         .get::<_, rquickjs::Function>("__wasm_rquickjs_ignore_require_esm_rejection")
     {
-        let _ = handler.call::<_, ()>((promise, reason));
+        let _ = handler.call::<_, ()>((promise, reason, scope_start));
     }
 }
 
@@ -415,18 +425,24 @@ fn check_syntax_with_filename_impl(
     ctx: rquickjs::Ctx<'_>,
     code: &str,
     filename: &str,
+    is_module: bool,
 ) -> rquickjs::Result<()> {
     use std::ffi::CString;
 
     let src = CString::new(code).map_err(|_| rquickjs::Error::Unknown)?;
     let fname = CString::new(filename).map_err(|_| rquickjs::Error::Unknown)?;
+    let eval_type = if is_module {
+        qjs::JS_EVAL_TYPE_MODULE
+    } else {
+        qjs::JS_EVAL_TYPE_GLOBAL
+    };
     let compiled = unsafe {
         qjs::JS_Eval(
             ctx.as_raw().as_ptr(),
             src.as_ptr(),
             code.len() as _,
             fname.as_ptr(),
-            (qjs::JS_EVAL_TYPE_GLOBAL | qjs::JS_EVAL_FLAG_COMPILE_ONLY) as i32,
+            (eval_type | qjs::JS_EVAL_FLAG_COMPILE_ONLY) as i32,
         )
     };
     if unsafe { qjs::JS_IsException(compiled) } {
