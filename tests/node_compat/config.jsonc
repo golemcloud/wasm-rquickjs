@@ -6042,7 +6042,7 @@
         "test_02_should_load_different_modules_when_the_url_is_different": { "category": "runnable" }
       }
     },
-    "es-module/test-esm-live-binding.mjs": { "category": "runnable" },
+    "es-module/test-esm-live-binding.mjs": { "category": "known-gap", "reason": "QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361" },
     "es-module/test-esm-loader-chaining.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-custom-condition.mjs": { "category": "runnable" },
     "es-module/test-esm-loader-default-resolver.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },

@@ -261,6 +261,7 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
         "common-shim spawnPromisified child emulation does not support --no-experimental-require-module",
         "emulated child_process inline eval does not keep the child alive for dynamic import() resolution",
         "loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support",
+        "QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361",
         "programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode",
         "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
         "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes",
