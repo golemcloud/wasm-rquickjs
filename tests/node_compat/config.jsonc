@@ -617,7 +617,7 @@
       }
     },
     "parallel/test-fs-exists.js": {},
-    "parallel/test-fs-existssync-false.js": {},
+    "parallel/test-fs-existssync-false.js": { "category": "wasi-impossible", "reason": "requires creating a path longer than the WASI filesystem path limit" },
     "parallel/test-fs-fchmod.js": {},
     "parallel/test-fs-fchown.js": {},
     "parallel/test-fs-filehandle.js": { "category": "node-internals", "reason": "uses internal/test/binding and internal/fs/utils internals" },

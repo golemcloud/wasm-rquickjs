@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3236/4426 (73.1%)
+**Primary compatibility (CI-enforced):** 3235/4425 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3236 | 73.1% | 56.3% | 47.1% |
+| ✅ passing (runnable) | 3235 | 73.1% | 56.3% | 47.1% |
 | 🧩 known gap | 1190 | 26.9% | 20.7% | 17.3% |
-| 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
+| 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3236/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3235/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -47,7 +47,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | eslint | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 0.0% | 0.0% |
 | events | 93 | 59 | 2 | 0 | 0 | 0 | 32 | 96.7% | 96.7% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| fs | 482 | 374 | 12 | 20 | 5 | 0 | 71 | 96.9% | 91.0% |
+| fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
 | http | 898 | 242 | 307 | 267 | 2 | 0 | 80 | 44.1% | 29.6% |
@@ -1342,7 +1342,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1156)
+### WASI-impossible (1157)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1470,6 +1470,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires cluster.fork/process forking | 1 | `sequential/test-dgram-bind-shared-ports.js` |
 | requires cluster.fork/process forking for shared-port behavior | 1 | `sequential/test-net-listen-shared-ports.js` |
 | requires cluster/process forking, not available in WASM | 1 | `parallel/test-dgram-exclusive-implicit-bind.js` |
+| requires creating a path longer than the WASI filesystem path limit | 1 | `parallel/test-fs-existssync-false.js` |
 | requires execSync/ps subprocess behavior not available in WASM | 1 | `parallel/test-setproctitle.js` |
 | requires external OpenSSL CLI via child_process.exec | 1 | `parallel/test-crypto-sign-verify.js#block_13_early_if_no_openssl_binary_is_found` |
 | requires external shell pipeline and cat subprocess via child_process | 1 | `parallel/test-http-chunk-problem.js` |
