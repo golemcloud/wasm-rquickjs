@@ -8957,6 +8957,11 @@ fn mark_async_esm_module<'js>(
     };
     registry.set(filename, true)?;
     registry.set(file_url, true)?;
+    if let Ok(in_progress) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_in_progress") {
+        for key in in_progress.keys::<String>().flatten() {
+            registry.set(key, true)?;
+        }
+    }
     Ok(())
 }
 

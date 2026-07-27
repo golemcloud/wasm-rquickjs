@@ -8241,8 +8241,19 @@ export const testRequireEsmTlaRetry = async () => {
     try {
         fs.mkdirSync('/require-esm-tla-app', { recursive: true });
         fs.writeFileSync('/require-esm-tla-app/tla-success.mjs', [
+            'globalThis.__requireEsmDirectTlaSideEffect = (globalThis.__requireEsmDirectTlaSideEffect || 0) + 1;',
             'await Promise.resolve();',
             'export const hello = "world";',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-tla-app/transitive-tla.mjs', [
+            'globalThis.__requireEsmTransitiveTlaSideEffect = (globalThis.__requireEsmTransitiveTlaSideEffect || 0) + 1;',
+            'await Promise.resolve();',
+            'export const value = "dependency";',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-tla-app/transitive-root.mjs', [
+            'import { value } from "./transitive-tla.mjs";',
+            'globalThis.__requireEsmTransitiveRootSideEffect = (globalThis.__requireEsmTransitiveRootSideEffect || 0) + 1;',
+            'export { value };',
         ].join('\n'));
 
         const { createRequire } = await import('node:module');
@@ -8251,12 +8262,24 @@ export const testRequireEsmTlaRetry = async () => {
         assert.throws(() => require('/require-esm-tla-app/tla-success.mjs'), {
             code: 'ERR_REQUIRE_ASYNC_MODULE',
         });
+        assert.strictEqual(globalThis.__requireEsmDirectTlaSideEffect, undefined);
+        assert.throws(() => require('/require-esm-tla-app/transitive-root.mjs'), {
+            code: 'ERR_REQUIRE_ASYNC_MODULE',
+        });
+        assert.strictEqual(globalThis.__requireEsmTransitiveTlaSideEffect, undefined);
+        assert.strictEqual(globalThis.__requireEsmTransitiveRootSideEffect, undefined);
 
         const first = await import('/require-esm-tla-app/tla-success.mjs');
         const second = await import('/require-esm-tla-app/tla-success.mjs');
         assert.strictEqual(first.hello, 'world');
         assert.strictEqual(second.hello, 'world');
         assert.strictEqual(first, second);
+        assert.strictEqual(globalThis.__requireEsmDirectTlaSideEffect, 1);
+
+        const transitive = await import('/require-esm-tla-app/transitive-root.mjs');
+        assert.strictEqual(transitive.value, 'dependency');
+        assert.strictEqual(globalThis.__requireEsmTransitiveTlaSideEffect, 1);
+        assert.strictEqual(globalThis.__requireEsmTransitiveRootSideEffect, 1);
 
         return true;
     } catch (error) {
@@ -8284,6 +8307,9 @@ export const testRequireEsmRejectionTracking = async () => {
         fs.writeFileSync('/require-esm-rejection-app/saved-reason.mjs', [
             'throw globalThis.__requireEsmSavedReason;',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/preexisting-reason.mjs', [
+            'throw globalThis.__requireEsmPreexistingReason;',
+        ].join('\n'));
 
         const { createRequire } = await import('node:module');
         const require = createRequire('/require-esm-rejection-app/main.cjs');
@@ -8307,6 +8333,14 @@ export const testRequireEsmRejectionTracking = async () => {
         const onUnhandled = (reason) => unhandled.push(reason && reason.message);
         process.on('unhandledRejection', onUnhandled);
         try {
+            globalThis.__requireEsmPreexistingReason = new Error('preexisting reason');
+            Promise.reject(globalThis.__requireEsmPreexistingReason);
+            assert.throws(() => require('/require-esm-rejection-app/preexisting-reason.mjs'), {
+                message: 'preexisting reason',
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
             assert.throws(() => require('/require-esm-rejection-app/throw-with-unhandled.mjs'), {
                 message: 'module failure',
             });
@@ -8330,7 +8364,12 @@ export const testRequireEsmRejectionTracking = async () => {
         } finally {
             process.removeListener('unhandledRejection', onUnhandled);
         }
-        assert.deepStrictEqual(unhandled, ['side rejection', 'shared reason', 'saved reason']);
+        assert.deepStrictEqual(unhandled, [
+            'preexisting reason',
+            'side rejection',
+            'shared reason',
+            'saved reason',
+        ]);
 
         return true;
     } catch (error) {

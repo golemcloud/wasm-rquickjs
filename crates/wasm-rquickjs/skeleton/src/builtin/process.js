@@ -845,25 +845,27 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
     }
 };
 
-globalThis.__wasm_rquickjs_mark_rejection_handled = function(promise) {
-    _pendingRejections.delete(promise);
-};
-
 globalThis.__wasm_rquickjs_ignore_unhandled_rejection = function(promise) {
     _ignoredUnhandledRejections.add(promise);
     _pendingRejections.delete(promise);
 };
 
-globalThis.__wasm_rquickjs_ignore_last_pending_unhandled_rejection = function(reason) {
-    let pendingPromise;
+globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPromise, reason) {
+    if (_pendingRejections.has(evaluationPromise)) {
+        _ignoredUnhandledRejections.add(evaluationPromise);
+        _pendingRejections.delete(evaluationPromise);
+        return;
+    }
+
+    let modulePromise;
     for (const [promise, pendingReason] of _pendingRejections) {
         if (pendingReason === reason) {
-            pendingPromise = promise;
+            modulePromise = promise;
         }
     }
-    if (pendingPromise !== undefined) {
-        _ignoredUnhandledRejections.add(pendingPromise);
-        _pendingRejections.delete(pendingPromise);
+    if (modulePromise !== undefined) {
+        _ignoredUnhandledRejections.add(modulePromise);
+        _pendingRejections.delete(modulePromise);
     }
 };
 
