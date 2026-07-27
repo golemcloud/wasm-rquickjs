@@ -5220,7 +5220,10 @@ impl NodeModulesResolver {
                 return Ok(PackageTargetResolution::Blocked);
             }
             PackageTarget::Bool(false) => {
-                return Ok(PackageTargetResolution::Blocked);
+                return Err(NodePackageResolveError::InvalidPackageTarget {
+                    kind: ctx.kind,
+                    target: "false".to_string(),
+                });
             }
             PackageTarget::Bool(true) => {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
@@ -5310,24 +5313,29 @@ impl NodeModulesResolver {
                     return Ok(PackageTargetResolution::Blocked);
                 }
                 let mut last_fallback_error = None;
+                let mut last_fallback_was_blocked = false;
                 for item in array {
                     match Self::resolve_package_target_value(item, ctx, resolution) {
                         Ok(PackageTargetResolution::Resolved(path)) => {
                             return Ok(PackageTargetResolution::Resolved(path));
                         }
                         Ok(PackageTargetResolution::Blocked) => {
-                            return Ok(PackageTargetResolution::Blocked);
+                            last_fallback_error = None;
+                            last_fallback_was_blocked = true;
                         }
                         Ok(PackageTargetResolution::NoMatch) => continue,
                         Err(err @ NodePackageResolveError::InvalidPackageTarget { .. }) => {
                             last_fallback_error = Some(err);
-                            continue;
+                            last_fallback_was_blocked = false;
                         }
                         Err(err) => return Err(err),
                     }
                 }
                 if let Some(err) = last_fallback_error {
                     return Err(err);
+                }
+                if last_fallback_was_blocked {
+                    return Ok(PackageTargetResolution::Blocked);
                 }
                 return Ok(PackageTargetResolution::NoMatch);
             }
