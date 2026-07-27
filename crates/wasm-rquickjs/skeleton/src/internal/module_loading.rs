@@ -4268,27 +4268,31 @@ impl NodeModulesResolver {
 
         let mut dir = base_dir.to_path_buf();
         loop {
-            let package_path = dir.join("node_modules").join(package_name);
-            if Self::module_resolution_path(&package_path).is_dir() {
-                if let Some(resolved) = Self::try_resolve_package_directory(
-                    base,
-                    name,
-                    package_name,
-                    subpath,
-                    package_root_trailing_slash,
-                    &package_path,
-                    resolution,
-                )? {
+            let skip_nested_node_modules = resolution.mode == NodePackageResolveMode::CjsAnalysis
+                && dir.file_name().is_some_and(|name| name == "node_modules");
+            if !skip_nested_node_modules {
+                let package_path = dir.join("node_modules").join(package_name);
+                if Self::module_resolution_path(&package_path).is_dir() {
+                    if let Some(resolved) = Self::try_resolve_package_directory(
+                        base,
+                        name,
+                        package_name,
+                        subpath,
+                        package_root_trailing_slash,
+                        &package_path,
+                        resolution,
+                    )? {
+                        return Ok(Some(resolved));
+                    }
+                }
+
+                if resolution.mode.probes_missing_package_root_file()
+                    && subpath.is_empty()
+                    && let Some(resolved) =
+                        Self::resolve_cjs_analysis_package_root_file(&package_path, resolution)
+                {
                     return Ok(Some(resolved));
                 }
-            }
-
-            if resolution.mode.probes_missing_package_root_file()
-                && subpath.is_empty()
-                && let Some(resolved) =
-                    Self::resolve_cjs_analysis_package_root_file(&package_path, resolution)
-            {
-                return Ok(Some(resolved));
             }
 
             if !dir.pop() {
@@ -4695,7 +4699,7 @@ impl NodeModulesResolver {
         if resolution.is_file(&target_path) {
             return Ok(Some(target_path.to_string_lossy().into_owned()));
         }
-        if target_path.is_dir() {
+        if resolution.is_dir(&target_path) {
             return Err(NodePackageResolveError::UnsupportedDirectoryImport {
                 request: target_path.to_string_lossy().into_owned(),
             });
@@ -5370,9 +5374,6 @@ impl NodeModulesResolver {
 
     fn package_pattern_key_match(pattern_key: &str, key: &str) -> Option<String> {
         let star = pattern_key.find('*')?;
-        if pattern_key[star + 1..].contains('*') {
-            return None;
-        }
         let prefix = &pattern_key[..star];
         let suffix = &pattern_key[star + 1..];
         if !key.starts_with(prefix) || !key.ends_with(suffix) {
@@ -5394,7 +5395,7 @@ impl NodeModulesResolver {
             return true;
         }
         substitution
-            .split('/')
+            .split(['/', '\\'])
             .any(|segment| !segment.is_empty() && Self::is_invalid_package_target_segment(segment))
     }
 
@@ -5551,7 +5552,7 @@ impl NodeModulesResolver {
 
     fn is_valid_package_target_path(target: &str) -> bool {
         target.strip_prefix("./").is_some_and(|rest| {
-            rest.split('/')
+            rest.split(['/', '\\'])
                 .all(|part| part.is_empty() || !Self::is_invalid_package_target_segment(part))
         })
     }
@@ -5562,7 +5563,7 @@ impl NodeModulesResolver {
     ) -> std::path::PathBuf {
         let mut relative_parts = Vec::<&str>::new();
         if let Some(rest) = target.strip_prefix("./") {
-            for part in rest.split('/') {
+            for part in rest.split(['/', '\\']) {
                 if !part.is_empty() {
                     relative_parts.push(part);
                 }

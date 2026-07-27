@@ -689,6 +689,10 @@ function runInline(command, args, options) {
     const oldStderrWrite = process.stderr && process.stderr.write;
     const oldEmitWarning = process.emitWarning;
     const oldExit = process.exit;
+    const runtimeRequire = moduleExports.require;
+    const oldModuleCache = moduleExports._cache;
+    const oldRuntimeRequireCache = runtimeRequire.cache;
+    const oldPathCache = moduleExports._pathCache;
     let firstExitCode = null;
     const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
@@ -710,6 +714,10 @@ function runInline(command, args, options) {
         process.argv = [String(command)].concat(invocationArgs);
         process.execArgv = execArgv;
         globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromExecArgv(execArgv);
+        const childModuleCache = Object.create(null);
+        moduleExports._cache = childModuleCache;
+        runtimeRequire.cache = childModuleCache;
+        moduleExports._pathCache = Object.create(null);
         process.argv0 = String(command);
         if (process.features) {
             process.features.require_module = execArgv.indexOf('--no-experimental-require-module') === -1;
@@ -785,8 +793,6 @@ function runInline(command, args, options) {
                 }
             };
         }
-
-        const runtimeRequire = moduleExports.require;
 
         if (stdinData !== null) {
             try {
@@ -970,6 +976,9 @@ function runInline(command, args, options) {
     } finally {
         process.argv = oldArgv;
         process.execArgv = oldExecArgv;
+        moduleExports._cache = oldModuleCache;
+        runtimeRequire.cache = oldRuntimeRequireCache;
+        moduleExports._pathCache = oldPathCache;
         if (hadPackageConditions) {
             globalThis.__wasm_rquickjs_package_conditions = oldPackageConditions;
         } else {

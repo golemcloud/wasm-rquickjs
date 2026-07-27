@@ -712,6 +712,11 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin',
 
 // Module cache: resolved absolute path -> Module object
 const moduleCache = Object.create(null);
+let moduleExportsInitialized = false;
+
+function currentModuleCache() {
+    return moduleExportsInitialized ? moduleExports._cache : moduleCache;
+}
 
 function shouldPreserveSymlinks(isMainModuleLoad) {
     return rustHasExecArgvFlag(isMainModuleLoad ? '--preserve-symlinks-main' : '--preserve-symlinks');
@@ -2626,7 +2631,7 @@ function unlinkModuleFromParent(parentModule, mod) {
 }
 
 function discardCjsModuleLoad(cacheKey, parentModule, mod) {
-    delete moduleCache[cacheKey];
+    delete currentModuleCache()[cacheKey];
     unlinkModuleFromParent(parentModule, mod);
 }
 
@@ -2666,9 +2671,9 @@ function loadCommonJsTransaction(descriptor) {
     const pathsBase = isLoaderSource && !pathModule.isAbsolute(filename) ? '/' : dirname;
 
     // Check cache
-    if (moduleCache[cacheKey]) {
+    if (currentModuleCache()[cacheKey]) {
         throwIfRequireEsmGraphCycle(cacheKey);
-        const cached = moduleCache[cacheKey];
+        const cached = currentModuleCache()[cacheKey];
         if (cached.__wasmRequireEsmInProgress) {
             const err = new Error('Cannot require() ES Module ' + filename + ' in a cycle.');
             err.code = 'ERR_REQUIRE_CYCLE_MODULE';
@@ -2692,7 +2697,7 @@ function loadCommonJsTransaction(descriptor) {
     }
 
     // Cache before executing (handles circular dependencies)
-    moduleCache[cacheKey] = mod;
+    currentModuleCache()[cacheKey] = mod;
     if (parentModule && parentModule.children) {
         parentModule.children.push(mod);
     }
@@ -3186,7 +3191,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
 
         // Check require.cache before builtins for non-node: specifiers
         // (allows shadowing builtins via require.cache)
-        const cached = moduleCache[id];
+        const cached = currentModuleCache()[id];
         if (cached !== undefined) {
             throwIfRequireEsmGraphCycle(id);
             if (cached.__wasmRequireEsmInProgress) {
@@ -3244,7 +3249,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         });
     }
 
-    localRequire.cache = moduleCache;
+    localRequire.cache = currentModuleCache();
     localRequire.extensions = requireExtensions;
 
     localRequire.resolve = function resolve(id, options) {
@@ -4415,11 +4420,13 @@ const moduleExports = Object.assign(Module, {
     _load: moduleLoad,
     _initPaths: _initPaths,
     _pathCache: Object.create(null),
+    _cache: moduleCache,
     _extensions: requireExtensions,
     _stat: _stat,
     globalPaths: globalPaths,
     setSourceMapsSupport,
 });
+moduleExportsInitialized = true;
 Object.defineProperties(moduleExports, {
     __wasm_rquickjs_cjs_facade_has_own: {
         value: cjsFacadeHasOwnProperty,

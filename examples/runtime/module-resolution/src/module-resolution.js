@@ -320,6 +320,8 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './double-encoded-dot-target': './%252e%252e/main.mjs',
                 './double-encoded-dot-file-target': './sub/%252e%252e.mjs',
                 './encoded-slash-target': './a%2Fb.mjs',
+                './backslash-target': './backslash\\entry.mjs',
+                './backslash-dot-target': './backslash\\..\\public.mjs',
                 './root-directory': './',
                 './deprecated-double': './/public.mjs',
                 './pattern-slash*': './subpath*.mjs',
@@ -392,6 +394,7 @@ export const testEsmPackageMapEdgeCases = async () => {
                     default: './public.mjs',
                 },
                 './directory': './subdir',
+                './symlink-directory': './linked-subdir',
                 './no-ext': './real',
             },
             imports: {
@@ -404,6 +407,8 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/private.mjs', 'export default { private: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/public.mjs', 'export default { public: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/sp ce.mjs', 'export default { encoded: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/backslash', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/backslash/entry.mjs', 'export default { backslash: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/%2e%2e', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/%2e%2e/main.mjs', 'export default { doubleEncodedDot: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/sub', { recursive: true });
@@ -434,6 +439,10 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/wrong.mjs', 'export default { multiplePattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
+        fs.symlinkSync(
+            '/esm-package-map-edge-app/node_modules/exported-pkg/subdir',
+            '/esm-package-map-edge-app/node_modules/exported-pkg/linked-subdir',
+        );
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/root-export-pkg', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/root-export-pkg/package.json', JSON.stringify({
@@ -444,6 +453,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/entry.mjs', [
             'export const publicValue = (await import("exported-pkg/public")).default;',
             'export const encodedTarget = (await import("exported-pkg/encoded-target")).default;',
+            'export const backslashTarget = (await import("exported-pkg/backslash-target")).default;',
             'export const doubleEncodedDotTarget = (await import("exported-pkg/double-encoded-dot-target")).default;',
             'export const doubleEncodedDotFileTarget = (await import("exported-pkg/double-encoded-dot-file-target")).default;',
             'export const conditionOrder = (await import("exported-pkg/condition-order")).default;',
@@ -451,11 +461,13 @@ export const testEsmPackageMapEdgeCases = async () => {
             'export const arrayInvalidFallback = (await import("exported-pkg/array-invalid-fallback")).default;',
             'export const conditionNoMatchFallback = (await import("exported-pkg/condition-no-match-fallback")).default;',
             'export const singlePattern = (await import("exported-pkg/multi/xAyB")).default;',
+            'export const multiplePattern = (await import("exported-pkg/multi/xQy*")).default;',
         ].join('\n'));
 
         const entry = await import('/esm-package-map-edge-app/entry.mjs');
         assert.deepStrictEqual(entry.publicValue, { public: true });
         assert.deepStrictEqual(entry.encodedTarget, { encoded: true });
+        assert.deepStrictEqual(entry.backslashTarget, { backslash: true });
         assert.deepStrictEqual(entry.doubleEncodedDotTarget, { doubleEncodedDot: true });
         assert.deepStrictEqual(entry.doubleEncodedDotFileTarget, { doubleEncodedDotFile: true });
         assert.deepStrictEqual(entry.conditionOrder, { condition: 'default' });
@@ -473,6 +485,23 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
         assert.deepStrictEqual(entry.singlePattern, { singlePattern: true });
+        assert.deepStrictEqual(entry.multiplePattern, { multiplePattern: true });
+        writeImportEntry(
+            '/esm-package-map-edge-app/backslash-dot-target-entry.mjs',
+            'exported-pkg/backslash-dot-target',
+        );
+        await expectImportError(
+            '/esm-package-map-edge-app/backslash-dot-target-entry.mjs',
+            'ERR_INVALID_PACKAGE_TARGET',
+        );
+        writeImportEntry(
+            '/esm-package-map-edge-app/symlink-directory-entry.mjs',
+            'exported-pkg/symlink-directory',
+        );
+        await expectImportError(
+            '/esm-package-map-edge-app/symlink-directory-entry.mjs',
+            'ERR_UNSUPPORTED_DIR_IMPORT',
+        );
         writeImportEntry(
             '/esm-package-map-edge-app/numeric-nested.mjs',
             'exported-pkg/numeric-nested',
@@ -502,6 +531,22 @@ export const testEsmPackageMapEdgeCases = async () => {
         const extensionlessRequire = createRequire('/esm-package-map-edge-app/extensionless-entry.cjs');
         assert.throws(
             () => extensionlessRequire('./extensionless-directory'),
+            { code: 'MODULE_NOT_FOUND' },
+        );
+
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/outer', { recursive: true });
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/node_modules/forbidden-pkg', {
+            recursive: true,
+        });
+        fs.writeFileSync(
+            '/esm-package-map-edge-app/node_modules/node_modules/forbidden-pkg/index.js',
+            'module.exports = "must-not-resolve";',
+        );
+        const nestedNodeModulesRequire = createRequire(
+            '/esm-package-map-edge-app/node_modules/outer/index.js',
+        );
+        assert.throws(
+            () => nestedNodeModulesRequire('forbidden-pkg'),
             { code: 'MODULE_NOT_FOUND' },
         );
 
@@ -6098,6 +6143,55 @@ export const testPackageCustomConditions = async () => {
         globalThis.__wasm_rquickjs_package_conditions = [undefined, null];
         assert.strictEqual((await import('/package-custom-conditions-app/undefined-entry.mjs')).default, 'undefined-import');
         assert.strictEqual(require('undefined-pkg/condition'), 'undefined-require');
+
+        globalThis.__wasm_rquickjs_package_conditions = [];
+        fs.mkdirSync('/package-custom-conditions-app/node_modules/isolated-condition-pkg', {
+            recursive: true,
+        });
+        fs.writeFileSync(
+            '/package-custom-conditions-app/node_modules/isolated-condition-pkg/package.json',
+            JSON.stringify({
+                exports: {
+                    '.': {
+                        'child-condition': './child.cjs',
+                        default: './parent.cjs',
+                    },
+                },
+            }),
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/node_modules/isolated-condition-pkg/child.cjs',
+            'module.exports = "child";',
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/node_modules/isolated-condition-pkg/parent.cjs',
+            'module.exports = "parent";',
+        );
+
+        const moduleBuiltin = require('node:module');
+        const parentModuleCache = require.cache;
+        const parentPathCache = moduleBuiltin._pathCache;
+        assert.strictEqual(moduleBuiltin._cache, parentModuleCache);
+        assert.strictEqual(require('isolated-condition-pkg'), 'parent');
+
+        const { execFileSync } = require('node:child_process');
+        const childOutput = execFileSync(
+            process.execPath,
+            [
+                '--conditions=child-condition',
+                '-e',
+                'process.stdout.write(require("isolated-condition-pkg"))',
+            ],
+            {
+                cwd: '/package-custom-conditions-app',
+                encoding: 'utf8',
+            },
+        );
+        assert.strictEqual(childOutput, 'child');
+        assert.strictEqual(moduleBuiltin._cache, parentModuleCache);
+        assert.strictEqual(require.cache, parentModuleCache);
+        assert.strictEqual(moduleBuiltin._pathCache, parentPathCache);
+        assert.strictEqual(require('isolated-condition-pkg'), 'parent');
 
         return true;
     } catch (error) {
