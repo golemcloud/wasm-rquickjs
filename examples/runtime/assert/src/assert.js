@@ -317,6 +317,17 @@ export const testMatch = () => {
 
         assert.doesNotMatch('hello', /goodbye/);
 
+        const global = /a/g;
+        assert.match('aa', global);
+        if (global.lastIndex !== 1) throw new Error('assert.match reset RegExp.lastIndex before matching');
+        assert.match('aa', global);
+        if (global.lastIndex !== 2) throw new Error('assert.match did not preserve RegExp.lastIndex');
+        caught = false;
+        try { assert.match('aa', global); } catch (e) { caught = true; }
+        if (!caught || global.lastIndex !== 0) {
+            throw new Error('assert.match did not preserve global RegExp execution semantics');
+        }
+
         caught = false;
         try { assert.doesNotMatch('hello', /hello/); } catch (e) { caught = true; }
         if (!caught) throw new Error('assert.doesNotMatch should have thrown');

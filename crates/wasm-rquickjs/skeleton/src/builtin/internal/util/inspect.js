@@ -1796,9 +1796,7 @@ function formatError(
         // No stack frames available: use bracketed error summary.
         improvedStack = `[${improvedStack}]`;
     } else if (ctx.colors && typeof improvedStack === "string") {
-        const hasOwnStackValue = ownStackDescriptor &&
-            Object.prototype.hasOwnProperty.call(ownStackDescriptor, "value");
-        improvedStack = colorizeStackTrace(ctx, improvedStack, !hasOwnStackValue);
+        improvedStack = colorizeStackTrace(ctx, improvedStack);
     }
     // The message and the stack have to be indented as well!
     if (ctx.indentationLvl !== 0) {
@@ -1917,7 +1915,7 @@ function markCwd(ctx, line, cwd) {
     return result;
 }
 
-function colorizeStackTrace(ctx, stack, colorGeneratedFrames) {
+function colorizeStackTrace(ctx, stack) {
     const lines = stack.split("\n");
     if (lines.length <= 1) {
         return stack;
@@ -1928,15 +1926,7 @@ function colorizeStackTrace(ctx, stack, colorGeneratedFrames) {
     let out = lines[0];
     for (let i = 1; i < lines.length; i++) {
         let line = lines[i];
-        if (colorGeneratedFrames && line.startsWith("    at ")) {
-            out += `\n${ctx.stylize(line, "undefined")}`;
-            continue;
-        }
         if (/^ {4}at .* \(native\)$/.test(line)) {
-            out += `\n${ctx.stylize(line, "undefined")}`;
-            continue;
-        }
-        if (/\(node-compat-runner:\d+:\d+\)$/.test(line)) {
             out += `\n${ctx.stylize(line, "undefined")}`;
             continue;
         }

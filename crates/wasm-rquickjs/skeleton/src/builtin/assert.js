@@ -27,7 +27,6 @@ function isRegExp(value) {
     if (value === null || typeof value !== 'object') return false;
     try {
         RegExpPrototypeSourceGetter.call(value);
-        RegExpPrototypeExec.call(value, '');
         return true;
     } catch (_) {
         return false;

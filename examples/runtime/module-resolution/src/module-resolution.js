@@ -515,9 +515,14 @@ export const testEsmPackageMapEdgeCases = async () => {
         };
         process.on('warning', onGenericDeprecationWarning);
         try {
+            const suppliedWarning = new Error('supplied warning');
+            const originalSuppliedWarningStack = suppliedWarning.stack;
+            suppliedWarning.name = 'CustomWarning';
+            process.emitWarning(suppliedWarning);
             process.emitWarning('generic dep0155', 'DeprecationWarning', 'DEP0155');
             process.emitWarning('generic dep0155', 'DeprecationWarning', 'DEP0155');
             await new Promise((resolve) => process.nextTick(resolve));
+            assert.strictEqual(suppliedWarning.stack, originalSuppliedWarningStack);
         } finally {
             process.removeListener('warning', onGenericDeprecationWarning);
         }

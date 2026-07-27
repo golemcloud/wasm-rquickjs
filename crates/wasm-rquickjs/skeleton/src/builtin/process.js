@@ -682,7 +682,9 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         }
     }
     let obj;
+    let createdWarning = false;
     if (typeof warning === 'string') {
+        createdWarning = true;
         obj = new Error(warning);
         obj.name = (typeof typeOrOptions === 'string') ? typeOrOptions : 'Warning';
         if (typeof typeOrOptions === 'object' && typeOrOptions !== null) {
@@ -704,14 +706,18 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     const warningCode = obj.code ? ' [' + String(obj.code) + ']' : '';
     const warningHeader = warningName + ': ' + String(obj.message || obj);
     const stderrHeader = warningName + warningCode + ': ' + String(obj.message || obj);
+    let formattedStack;
     if (typeof obj.stack === 'string') {
         const newline = obj.stack.indexOf('\n');
         const rest = newline === -1 ? '' : obj.stack.slice(newline);
-        if (!obj.stack.startsWith(warningHeader)) {
-            obj.stack = warningHeader + rest;
-        }
+        formattedStack = obj.stack.startsWith(warningHeader)
+            ? obj.stack
+            : warningHeader + rest;
     } else {
-        obj.stack = warningHeader;
+        formattedStack = warningHeader;
+    }
+    if (createdWarning) {
+        obj.stack = formattedStack;
     }
 
     const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
@@ -722,10 +728,10 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         }
         if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
             let text = stderrHeader;
-            if (typeof obj.stack === 'string') {
-                text = obj.stack.indexOf(String(obj.message || obj)) >= 0
-                    ? obj.stack
-                    : stderrHeader + '\n' + obj.stack;
+            if (typeof formattedStack === 'string') {
+                text = formattedStack.indexOf(String(obj.message || obj)) >= 0
+                    ? formattedStack
+                    : stderrHeader + '\n' + formattedStack;
                 if (warningCode && text.startsWith(warningHeader)) {
                     text = stderrHeader + text.slice(warningHeader.length);
                 }
