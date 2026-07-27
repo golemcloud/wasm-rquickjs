@@ -1498,6 +1498,7 @@ function Server(options, requestListener) {
     this._rejectNonStandardBodyWrites = !!options.rejectNonStandardBodyWrites;
     this._requireHostHeader = options.requireHostHeader !== false;
     this._joinDuplicateHeaders = !!options.joinDuplicateHeaders;
+    this._pendingInProcessRequests = new Map();
 
     // Apply timeout options with validation
     if (options.headersTimeout !== undefined) {
@@ -1623,7 +1624,6 @@ function _serverMatchesTarget(server, hostname, port) {
 function _registerServer(server) {
     const addr = server.address();
     if (addr && typeof addr.port === 'number') {
-        server._pendingInProcessRequests = new Map();
         _activeServers.add(server);
     }
 }
