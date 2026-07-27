@@ -3220,7 +3220,6 @@ impl Resolver for FileUrlResolver {
             transfer_import_type_rewrite_token(name, &resolved);
             Ok(resolved)
         } else {
-            discard_import_type_rewrite_token(name);
             Err(Error::new_resolving(base, name))
         }
     }
@@ -3835,7 +3834,6 @@ impl Resolver for NodeFileResolver {
             };
             (base_dir.join(name_path.as_ref()), url, false)
         } else {
-            discard_import_type_rewrite_token(name);
             return Err(Error::new_resolving(base, name));
         };
 
@@ -3901,6 +3899,7 @@ impl Resolver for NodeModuleErrorResolver {
         _base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
+        discard_import_type_rewrite_token(name);
         if name.starts_with("node:") {
             let msg = format!("No such built-in module: {}", name);
             return throw_native_coded_error(ctx, &msg, "ERR_UNKNOWN_BUILTIN_MODULE", true);
