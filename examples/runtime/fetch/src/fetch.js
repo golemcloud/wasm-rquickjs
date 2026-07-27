@@ -922,36 +922,37 @@ function assert_eq(a, b) {
 export async function redirectWithFailingStreamBody(port) {
     console.log("fetch test 33 (redirect with failing stream body)");
 
-    // The body source intentionally throws on its first pull.
-    // Delay the redirect response so the body-source failure deterministically
-    // wins the race. The infinite-body case below covers the opposite ordering.
-    const stream = new ReadableStream({
-        pull(controller) {
-            throw new Error("source body failure");
-        }
-    });
-
-    let caught = null;
-    try {
-        await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302&delay_ms=1000`, {
-            method: 'POST',
-            body: stream,
-            redirect: 'follow'
+    // Cover both orderings: an immediate source failure and one that occurs
+    // after the server has had time to return the redirect.
+    for (const delay of [0, 100]) {
+        const stream = new ReadableStream({
+            async pull() {
+                if (delay > 0) {
+                    await new Promise((resolve) => setTimeout(resolve, delay));
+                }
+                throw new Error(`source body failure ${delay}`);
+            }
         });
-    } catch (e) {
-        caught = e;
-    }
 
-    if (caught === null) {
-        console.log("Expected stream body source error to propagate, but fetch resolved");
-        return;
+        let caught = null;
+        try {
+            await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
+                method: 'POST',
+                body: stream,
+                redirect: 'follow'
+            });
+        } catch (e) {
+            caught = e;
+        }
+
+        if (caught === null) {
+            throw new Error(`Expected delayed=${delay} stream body source error to propagate`);
+        }
+        if (!String(caught.message).includes(`source body failure ${delay}`)) {
+            throw new Error(`Unexpected delayed=${delay} stream body error: ${caught.message}`);
+        }
     }
-    console.log(`Caught body source error: ${caught.message}`);
-    if (String(caught.message).includes("source body failure")) {
-        console.log("Stream body source error surfaced through redirect: PASSED");
-    } else {
-        console.log("Stream body source error NOT surfaced as expected: FAILED");
-    }
+    console.log("Stream body source errors surfaced across redirect orderings: PASSED");
 }
 
 export async function redirectWithInfiniteStreamBody(port) {

@@ -178,7 +178,7 @@ function abortableFetch(fetchPromise, signal) {
 // arise when the server closes the upload (e.g. on an early redirect).
 const BODY_SOURCE_ERROR = Symbol('bodySourceError');
 
-async function sendBody(bodyWriter, body, abortRef) {
+async function sendBody(bodyWriter, body, abortRef, onFirstChunk) {
     const reader = body.getReader();
     try {
         while (true) {
@@ -204,6 +204,7 @@ async function sendBody(bodyWriter, body, abortRef) {
             }
             try {
                 await bodyWriter.writeRequestBodyChunk(value);
+                onFirstChunk();
             } catch (err) {
                 // Transport/write error. If we've been aborted (e.g. because
                 // a redirect arrived), swallow it — the redirect path handles
@@ -258,11 +259,21 @@ async function streamingRequest(
         // never finish for slow/infinite streaming bodies).
         const abortRef = {aborted: false};
         const bodyState = {settled: false, ok: true, error: undefined};
+        let firstChunkWritten = false;
+        let notifyFirstChunk;
+        const firstChunkPromise = new Promise((resolve) => {
+            notifyFirstChunk = () => {
+                if (!firstChunkWritten) {
+                    firstChunkWritten = true;
+                    resolve();
+                }
+            };
+        });
         let bodyPromise;
 
         if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
             const bodyStream = currentBodyCreator();
-            bodyPromise = sendBody(bodyWriter, bodyStream, abortRef).then(
+            bodyPromise = sendBody(bodyWriter, bodyStream, abortRef, notifyFirstChunk).then(
                 () => {
                     bodyState.settled = true;
                     bodyState.ok = true;
@@ -288,10 +299,14 @@ async function streamingRequest(
             status !== 306; // SWITCH PROXY
 
         if (isRedirectStatus) {
-            // Always surface a body source error that has already manifested
-            // before we observed the redirect — those are genuine failures of
-            // the user's stream/blob/formdata and should not be silently
-            // swallowed even when the server happened to redirect.
+            // If the body source has not produced anything yet, preserve the
+            // race between its first pull and the redirect. A source failure is
+            // authoritative even if the server has already sent the redirect;
+            // once a chunk has been written, the redirect may cancel an
+            // otherwise unbounded upload.
+            if (!firstChunkWritten && !bodyState.settled) {
+                await Promise.race([bodyPromise, firstChunkPromise]);
+            }
             if (bodyState.settled && !bodyState.ok &&
                 bodyState.error && bodyState.error[BODY_SOURCE_ERROR]) {
                 throw bodyState.error;
