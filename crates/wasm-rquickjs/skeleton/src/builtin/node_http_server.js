@@ -234,6 +234,9 @@ function ServerResponse(req, options) {
     this._removedTE = false;
     this._outputSize = 0;
     this._pendingOutput = [];
+    this._pendingOutputWrites = 0;
+    this._outputCompletionCallbacks = [];
+    this._outputError = undefined;
 
     // strictContentLength enforcement
     this.strictContentLength = false;
@@ -605,11 +608,48 @@ ServerResponse.prototype._sendHeaders = function _sendHeaders() {
 };
 
 ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
+    this._pendingOutputWrites++;
+    let completed = false;
+    const onComplete = (error) => {
+        if (completed) return;
+        completed = true;
+        if (error && this._outputError === undefined) {
+            this._outputError = error;
+        }
+        try {
+            if (typeof callback === 'function') {
+                callback(error);
+            }
+        } finally {
+            this._pendingOutputWrites--;
+            if (this._pendingOutputWrites === 0) {
+                const callbacks = this._outputCompletionCallbacks;
+                this._outputCompletionCallbacks = [];
+                for (const completionCallback of callbacks) {
+                    completionCallback(this._outputError);
+                }
+            }
+        }
+    };
+
     if (this.socket && !this.socket.destroyed) {
-        return this.socket.write(data, callback);
+        try {
+            return this.socket.write(data, onComplete);
+        } catch (error) {
+            onComplete(error);
+            throw error;
+        }
     }
-    this._pendingOutput.push({ data, callback });
+    this._pendingOutput.push({ data, callback: onComplete });
     return false;
+};
+
+ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
+    if (this._pendingOutputWrites === 0) {
+        process.nextTick(() => callback(this._outputError));
+    } else {
+        this._outputCompletionCallbacks.push(callback);
+    }
 };
 
 ServerResponse.prototype.write = function write(chunk, encoding, cb) {
@@ -768,9 +808,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this.emit('finish');
     };
 
-    // An empty write acts as a completion barrier behind all response framing.
-    // Its callback runs only after every preceding socket write has completed.
-    this._writeOutput(Buffer.alloc(0), finishResponse);
+    this._afterOutputComplete(finishResponse);
 
     // Uncork the socket to flush any buffered writes (matches Node.js behavior)
     if (this.socket && typeof this.socket.uncork === 'function') {
