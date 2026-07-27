@@ -196,6 +196,15 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
 }
 
 #[test]
+fn module_known_gap_deferrals_require_an_exact_reason() {
+    let accepted = "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source";
+    assert!(is_accepted_module_known_gap_reason(Some(accepted)));
+    assert!(!is_accepted_module_known_gap_reason(Some(&format!(
+        "unrelated module failure; {accepted}"
+    ))));
+}
+
+#[test]
 fn vm_split_fixtures_include_top_level_executable_statements() -> anyhow::Result<()> {
     for (path, expected_count) in [
         ("parallel/test-vm-basic.js", 10),
@@ -219,49 +228,45 @@ fn vm_split_fixtures_include_top_level_executable_statements() -> anyhow::Result
 }
 
 fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
-    let Some(reason) = reason else {
-        return false;
-    };
-    let reason = reason.to_ascii_lowercase();
-    let has_cli_or_spawn_deferral = [
-        "process.execpath",
-        "simulated node cli",
-        "cli mode",
-        "cli flag",
-        "cli loader",
-        "--input-type=module",
-        "spawn(",
-        "spawnsync",
-        "spawnpromisified",
-        "child_process",
-        "child-process",
-        "child emulation",
-        " entry-point ",
-    ]
-    .iter()
-    .any(|accepted| reason.contains(accepted));
-    let has_typescript_deferral = reason.contains("typescript") || reason.contains("amaro");
-    let has_wasm_or_platform_boundary = [
-        "webassembly",
-        ".wasm",
-        "wasm module",
-        "webassembly global",
-        "worker_threads",
-        "messagechannel",
-        "native addon",
-        "windows-specific",
-        "wasi",
-        "single-threaded wasm",
-    ]
-    .iter()
-    .any(|accepted| reason.contains(accepted));
-    let has_engine_boundary = reason.contains("v8-specific")
-        || reason.contains("engine difference")
-        || (reason.contains("quickjs") && reason.contains("cannot"));
-    has_cli_or_spawn_deferral
-        || has_typescript_deferral
-        || has_wasm_or_platform_boundary
-        || has_engine_boundary
+    const ACCEPTED_REASONS: &[&str] = &[
+        "--input-type=module eval emulation is incomplete for cwd-relative static/dynamic imports",
+        "WASM child emulation does not support --experimental-test-module-mocks CLI flag",
+        "WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags",
+        "WASM child emulation does not support --permission/--allow-worker/--experimental-test-module-mocks flags",
+        "WASM child emulation does not support --permission/--experimental-test-module-mocks flags",
+        "WebAssembly global is missing in current runtime",
+        "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source",
+        "child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs",
+        "child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output",
+        "child_process execPath emulation does not implement --trace-require-module warning output",
+        "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js",
+        "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process CJS import/require interop is covered by module-interop runtime tests",
+        "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process builtin and CJS interop are covered by runtime and node_compat tests",
+        "child_process execPath emulation lacks full --import/--require preload semantics",
+        "common-shim spawnPromisified child emulation does not support --no-experimental-require-module",
+        "emulated child_process inline eval does not keep the child alive for dynamic import() resolution",
+        "loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support",
+        "programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode",
+        "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
+        "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes",
+        "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR",
+        "requires child_process execFileSync with copied process.execPath and Node global module path layout",
+        "requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module",
+        "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR",
+        "requires simulated process.execPath / Node CLI mode support for child-process JSON module warning assertions",
+        "requires simulated process.execPath / Node CLI module_timer and trace-event support",
+        "requires spawned process.execPath --check execution with --experimental-default-type=module",
+        "requires spawned process.execPath entry-point execution for extensionless ESM files",
+        "requires spawned process.execPath entry-point execution plus WebAssembly module loading support",
+        "requires spawned process.execPath entry-point execution to verify extensionless .wasm classification outside module scope",
+        "requires spawned process.execPath entry-point execution with --experimental-default-type=module",
+        "same-process ESM invalid package config diagnostics are covered by module-resolution runtime tests; vendored fixture asserts stderr/status through spawned process.execPath ESM entry-point emulation",
+        "same-process dynamic import cache behavior is covered by runner_dynamic_import_cache_survives_removed_file; full Node test also requires spawned process.execPath --input-type=module support",
+        "same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes",
+        "stripTypeScriptTypes requires Amaro support, which is not implemented",
+    ];
+
+    reason.is_some_and(|reason| ACCEPTED_REASONS.contains(&reason))
 }
 
 fn collect_module_related_entrypoints() -> anyhow::Result<BTreeSet<String>> {
