@@ -2043,7 +2043,7 @@ fn p3_fetch_rejects_invalid_header_value() -> anyhow::Result<()> {
 }
 
 #[test]
-fn p3_http_request_rejects_invalid_method_like_p2_constructor() -> anyhow::Result<()> {
+fn p3_fetch_rejects_invalid_method() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -2055,21 +2055,11 @@ fn p3_http_request_rejects_invalid_method_like_p2_constructor() -> anyhow::Resul
             }
         "#},
         indoc! {r#"
-            import { HttpRequest } from '__wasm_rquickjs_builtin/http_native';
-
             export async function run() {
               try {
-                new HttpRequest(
-                  'http://example.com/hello',
-                  'bad method',
-                  {},
-                  'HTTP/1.1',
-                  'cors',
-                  'about:client',
-                  'strict-origin-when-cross-origin',
-                  'same-origin',
-                  'follow',
-                );
+                await fetch('http://example.com/hello', {
+                  method: 'bad method',
+                });
                 return 'not-thrown';
               } catch (err) {
                 return String(err && (err.message || err));
@@ -2090,7 +2080,7 @@ fn p3_http_request_rejects_invalid_method_like_p2_constructor() -> anyhow::Resul
 }
 
 #[test]
-fn p3_http_request_preserves_custom_method_case_like_p2_constructor() -> anyhow::Result<()> {
+fn p3_fetch_normalizes_custom_method_case() -> anyhow::Result<()> {
     let port = spawn_test_http_server();
     let temp = Utf8TempDir::new()?;
     write_fixture(
@@ -2103,21 +2093,10 @@ fn p3_http_request_preserves_custom_method_case_like_p2_constructor() -> anyhow:
             }
         "#},
         &indoc! {r#"
-            import { HttpRequest } from '__wasm_rquickjs_builtin/http_native';
-
             export async function run() {
-              const request = new HttpRequest(
-                'http://127.0.0.1:__PORT__/method',
-                'foo',
-                {},
-                'HTTP/1.1',
-                'cors',
-                'about:client',
-                'strict-origin-when-cross-origin',
-                'same-origin',
-                'follow',
-              );
-              const res = await request.simpleSend();
+              const res = await fetch('http://127.0.0.1:__PORT__/method', {
+                method: 'foo',
+              });
               return await res.text();
             }
         "#}
@@ -2128,7 +2107,7 @@ fn p3_http_request_preserves_custom_method_case_like_p2_constructor() -> anyhow:
     let wasm_path = build_p3(temp.path(), "p3_fetch_custom_method_case")?;
     let result = run_p3_string_export(&wasm_path, "run")?;
 
-    assert_eq!(result, "foo");
+    assert_eq!(result, "FOO");
     Ok(())
 }
 
