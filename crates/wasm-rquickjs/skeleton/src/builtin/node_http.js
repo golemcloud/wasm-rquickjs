@@ -249,7 +249,7 @@ export class Agent extends EventEmitter {
             throw err;
         }
 
-        this.options = Object.assign({}, options, { scheduling });
+        this.options = Object.assign(Object.create(null), options);
         this.keepAlive = options.keepAlive || false;
         this.keepAliveMsecs = options.keepAliveMsecs || 1000;
         this.maxSockets = options.maxSockets || Infinity;

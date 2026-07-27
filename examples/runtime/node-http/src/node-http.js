@@ -167,6 +167,8 @@ export function httpConstants() {
     const agent = new http.Agent({ keepAlive: true });
     console.log(`Agent keepAlive: ${agent.keepAlive}`);
     console.log(`Agent maxSockets: ${agent.maxSockets}`);
+    console.log(`Agent options prototype is null: ${Object.getPrototypeOf(agent.options) === null}`);
+    console.log(`Agent options has scheduling: ${Object.hasOwn(agent.options, 'scheduling')}`);
     agent.timeout = 1234;
     console.log(`Agent timeout assignment: ${agent.timeout}`);
     console.log(`globalAgent exists: ${http.globalAgent !== null}`);
