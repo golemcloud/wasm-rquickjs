@@ -250,6 +250,10 @@ export class Agent extends EventEmitter {
         }
 
         this.options = Object.assign(Object.create(null), options);
+        this.options.path = null;
+        if (this.options.noDelay === undefined) {
+            this.options.noDelay = true;
+        }
         this.keepAlive = options.keepAlive || false;
         this.keepAliveMsecs = options.keepAliveMsecs || 1000;
         this.maxSockets = options.maxSockets || Infinity;

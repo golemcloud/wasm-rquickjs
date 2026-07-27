@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -609,6 +609,15 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         return false;
     }
 
+    if (this._writableEnded) {
+        const error = new ERR_STREAM_WRITE_AFTER_END();
+        process.nextTick(() => {
+            if (typeof cb === 'function') cb(error);
+            this.emit('error', error);
+        });
+        return false;
+    }
+
     if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
         throw new ERR_INVALID_ARG_TYPE('first argument',
             ['string', 'Buffer', 'Uint8Array'], chunk);
@@ -731,12 +740,19 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this.socket.write(Buffer.from('0\r\n\r\n'));
     }
 
-    // A standalone ServerResponse assigned through the public API uses the
-    // empty write to complete the custom Writable. Server-owned sockets do not
-    // need an extra native write after the response framing is complete.
-    if (this.socket && !this._chunked && this._standaloneSocket) {
-        this.socket.write(Buffer.alloc(0));
-    }
+    const finishResponse = (error) => {
+        if (error) {
+            this._errored = error;
+            this.emit('error', error);
+            return;
+        }
+        if (typeof cb === 'function') cb();
+        this.emit('finish');
+    };
+
+    // An empty write acts as a completion barrier behind all response framing.
+    // Its callback runs only after every preceding socket write has completed.
+    this.socket.write(Buffer.alloc(0), finishResponse);
 
     // Uncork the socket to flush any buffered writes (matches Node.js behavior)
     if (this.socket && typeof this.socket.uncork === 'function') {
@@ -744,10 +760,6 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
     }
 
     this.finished = true;
-
-    if (typeof cb === 'function') cb();
-
-    this.emit('finish');
 
     return this;
 };

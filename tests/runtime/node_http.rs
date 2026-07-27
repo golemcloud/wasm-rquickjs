@@ -106,6 +106,9 @@ async fn node_http_constants(
     assert!(output.contains("Agent maxSockets: Infinity"));
     assert!(output.contains("Agent options prototype is null: true"));
     assert!(output.contains("Agent options has scheduling: false"));
+    assert!(output.contains("Agent options path is null: true"));
+    assert!(output.contains("Agent options noDelay defaults true: true"));
+    assert!(output.contains("Agent options preserve noDelay false: true"));
     assert!(output.contains("Agent timeout assignment: 1234"));
     assert!(output.contains("globalAgent exists: true"));
     assert!(output.contains("validateHeaderName valid: passed"));

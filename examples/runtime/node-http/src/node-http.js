@@ -169,6 +169,9 @@ export function httpConstants() {
     console.log(`Agent maxSockets: ${agent.maxSockets}`);
     console.log(`Agent options prototype is null: ${Object.getPrototypeOf(agent.options) === null}`);
     console.log(`Agent options has scheduling: ${Object.hasOwn(agent.options, 'scheduling')}`);
+    console.log(`Agent options path is null: ${agent.options.path === null}`);
+    console.log(`Agent options noDelay defaults true: ${agent.options.noDelay === true}`);
+    console.log(`Agent options preserve noDelay false: ${new http.Agent({ noDelay: false }).options.noDelay === false}`);
     agent.timeout = 1234;
     console.log(`Agent timeout assignment: ${agent.timeout}`);
     console.log(`globalAgent exists: ${http.globalAgent !== null}`);

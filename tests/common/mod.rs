@@ -500,23 +500,6 @@ mod tests {
         assert_ne!(p2, p3);
     }
 
-    #[test]
-    fn p3_http_flake_detection_requires_current_transport_signature() {
-        let unrelated =
-            anyhow!("unrelated failure").context("host trace:\nprior ErrorCode::HttpProtocolError");
-        assert!(!current_error_is_http_protocol_flake(&unrelated));
-
-        let current =
-            anyhow!("request failed with ErrorCode::HttpProtocolError").context("captured output");
-        assert!(!current_error_is_http_protocol_flake(&current));
-
-        let flattened = anyhow!(
-            "guest stdout:\n\nguest stderr:\nJavaScript error: HTTP request failed: \
-             ErrorCode::HttpProtocolError\nhost trace:\nhyper request error: \
-             hyper::Error(IncompleteMessage)"
-        );
-        assert!(current_error_is_http_protocol_flake(&flattened));
-    }
 }
 
 fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Result<()> {
@@ -1849,32 +1832,6 @@ fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<Prepa
     Ok(component)
 }
 
-/// Maximum attempts for guest invocations that fail with the intermittent
-/// wasmtime-wasi-http p3 scheduling race (see [`is_p3_http_flake`]).
-const P3_HTTP_FLAKE_MAX_ATTEMPTS: u32 = 3;
-
-/// wasmtime-wasi-http 46's p3 outgoing request path has a scheduling-sensitive
-/// race in its manual connection-driving loop: under load, hyper intermittently
-/// fails with `IncompleteMessage` or `Canceled(UnexpectedMessage)`, both of
-/// which are flattened into `ErrorCode::HttpProtocolError` before reaching the
-/// guest. The p3 rework in wasmtime 47 replaces this code, but until that is
-/// released (and supported by the Golem fork) we retry invocations that fail
-/// with this signature. Each retry uses a fresh `TestInstance`.
-fn is_p3_http_flake(err: &anyhow::Error) -> bool {
-    test_target() == TestTarget::P3 && current_error_is_http_protocol_flake(err)
-}
-
-fn current_error_is_http_protocol_flake(err: &anyhow::Error) -> bool {
-    let captured_output = err.to_string();
-    captured_output.contains("guest stderr:")
-        && captured_output
-            .contains("JavaScript error: HTTP request failed: ErrorCode::HttpProtocolError")
-        && captured_output.contains("host trace:")
-        && (captured_output.contains("hyper request error: hyper::Error(IncompleteMessage)")
-            || captured_output
-                .contains("hyper request error: hyper::Error(Canceled(UnexpectedMessage))"))
-}
-
 pub async fn invoke_and_capture_output(
     wasm_path: &Utf8Path,
     interface_name: Option<&str>,
@@ -1892,28 +1849,14 @@ pub async fn invoke_and_capture_output_with_stderr(
     function_name: &str,
     args: &[Val],
 ) -> (anyhow::Result<Option<Val>>, String, String) {
-    let mut last = None;
-    for attempt in 1..=P3_HTTP_FLAKE_MAX_ATTEMPTS {
-        let result = match TestInstance::new(wasm_path).await {
-            Ok(mut test_instance) => {
-                test_instance
-                    .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
-                    .await
-            }
-            Err(e) => (Err(e), String::new(), String::new()),
-        };
-        match &result.0 {
-            Err(e) if attempt < P3_HTTP_FLAKE_MAX_ATTEMPTS && is_p3_http_flake(e) => {
-                eprintln!(
-                    "Invocation of {function_name} failed with the intermittent p3 \
-                     HttpProtocolError (attempt {attempt}/{P3_HTTP_FLAKE_MAX_ATTEMPTS}), retrying"
-                );
-                last = Some(result);
-            }
-            _ => return result,
+    match TestInstance::new(wasm_path).await {
+        Ok(mut test_instance) => {
+            test_instance
+                .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
+                .await
         }
+        Err(e) => (Err(e), String::new(), String::new()),
     }
-    last.expect("at least one invocation attempt must have run")
 }
 
 enum WasmSource {
