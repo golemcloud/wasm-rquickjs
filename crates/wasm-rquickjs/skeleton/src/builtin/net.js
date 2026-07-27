@@ -1053,11 +1053,10 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
 
     const data = typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
     const buf = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    const byteArray = Array.from(buf);
 
     (async () => {
         try {
-            const written = await this._handle.write(byteArray);
+            const written = await this._handle.write(buf);
             this._bytesDispatched += written;
             this._resetTimeout();
             callback(null);

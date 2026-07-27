@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
-use rquickjs::{Ctx, Exception, JsLifetime};
+use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 
 #[cfg(feature = "p2")]
 use wasip2::io::streams::{InputStream, OutputStream, StreamError};
@@ -508,7 +508,15 @@ impl TcpSocket {
         }
     }
 
-    pub async fn write(&self, ctx: Ctx<'_>, data: Vec<u8>) -> rquickjs::Result<u32> {
+    pub async fn write<'js>(
+        &self,
+        ctx: Ctx<'js>,
+        data: TypedArray<'js, u8>,
+    ) -> rquickjs::Result<u32> {
+        let data = data
+            .as_bytes()
+            .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
+            .to_vec();
         let start_gen = {
             let inner = self.inner.borrow();
             if inner.closed {
@@ -1082,7 +1090,15 @@ impl TcpSocket {
         }
     }
 
-    pub async fn write(&self, ctx: Ctx<'_>, data: Vec<u8>) -> rquickjs::Result<u32> {
+    pub async fn write<'js>(
+        &self,
+        ctx: Ctx<'js>,
+        data: TypedArray<'js, u8>,
+    ) -> rquickjs::Result<u32> {
+        let data = data
+            .as_bytes()
+            .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
+            .to_vec();
         let total = data.len();
         let (_keepalive, mut writer, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
