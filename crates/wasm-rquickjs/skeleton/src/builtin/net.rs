@@ -166,6 +166,7 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             writer: None,
             send_future: None,
             recv_future: None,
+            recv_error: None,
             read_cancel: None,
             write_cancel: None,
             family: ip_family,
@@ -192,6 +193,9 @@ struct TcpInner {
     /// the operations are not cancelled while their streams are in use.
     send_future: Option<FutureReader<Result<(), ErrorCode>>>,
     recv_future: Option<FutureReader<Result<(), ErrorCode>>>,
+    /// Receive completion error retained until already-buffered bytes have been
+    /// delivered to JavaScript.
+    recv_error: Option<ErrorCode>,
     /// Wakes the in-flight `read()` / `write()` (if any) when the socket is
     /// closed or the corresponding side is shut down. Without this, a pending
     /// `StreamReader::read` would pin the socket resource (via its cloned `Rc`)
@@ -938,6 +942,7 @@ impl TcpSocket {
             inner.writer = None;
             inner.send_future = None;
             inner.recv_future = None;
+            inner.recv_error = None;
             return Err(throw_socket_error(
                 &ctx,
                 error_code_to_errno(&e),
@@ -964,6 +969,7 @@ impl TcpSocket {
         }
         inner.reader = Some(recv_reader);
         inner.recv_future = Some(recv_future);
+        inner.recv_error = None;
         inner.writer = Some(writer);
         inner.send_future = Some(send_future);
         inner.connected = true;
@@ -973,6 +979,14 @@ impl TcpSocket {
     pub async fn read(&self, ctx: Ctx<'_>, len: u64) -> rquickjs::Result<Option<Vec<u8>>> {
         let (_keepalive, mut reader, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
+            if let Some(error) = inner.recv_error.take() {
+                return Err(throw_socket_error(
+                    &ctx,
+                    error_code_to_errno(&error),
+                    "read",
+                    &format!("receive failed: {error:?}"),
+                ));
+            }
             if inner.closed {
                 return Err(throw_socket_error(
                     &ctx,
@@ -1044,6 +1058,10 @@ impl TcpSocket {
                     if let Some(recv_future) = recv_future
                         && let Err(error) = recv_future.await
                     {
+                        if !buf.is_empty() {
+                            self.inner.borrow_mut().recv_error = Some(error);
+                            return Ok(Some(buf));
+                        }
                         return Err(throw_socket_error(
                             &ctx,
                             error_code_to_errno(&error),
@@ -1390,6 +1408,7 @@ impl TcpSocket {
         inner.send_future = None;
         inner.reader = None;
         inner.recv_future = None;
+        inner.recv_error = None;
         inner.socket = None;
     }
 
@@ -2248,6 +2267,7 @@ impl TcpListener {
                 writer: Some(writer),
                 send_future: Some(send_future),
                 recv_future: Some(recv_future),
+                recv_error: None,
                 read_cancel: None,
                 write_cancel: None,
                 family: client_family,
