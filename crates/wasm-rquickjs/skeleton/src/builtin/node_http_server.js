@@ -648,7 +648,7 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         if (this._rejectNonStandardBodyWrites) {
             throw new ERR_HTTP_BODY_NOT_ALLOWED();
         }
-        if (typeof cb === 'function') cb();
+        this._writeOutput(Buffer.alloc(0), cb);
         return true;
     }
 
@@ -659,7 +659,7 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     }
 
     if (chunk.length === 0) {
-        if (typeof cb === 'function') cb();
+        this._writeOutput(Buffer.alloc(0), cb);
         return true;
     }
 
@@ -675,13 +675,12 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         const hex = chunk.length.toString(16);
         this._writeOutput(Buffer.from(hex + '\r\n'));
         this._writeOutput(chunk);
-        this._writeOutput(CRLF);
+        this._writeOutput(CRLF, cb);
     } else {
-        this._writeOutput(chunk);
+        this._writeOutput(chunk, cb);
     }
 
     this._outputSize += chunk.length;
-    if (typeof cb === 'function') cb();
     return this._outputSize < (16 * 1024);
 };
 

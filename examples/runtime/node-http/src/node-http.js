@@ -328,6 +328,21 @@ export function httpResponseLifecycle() {
     };
     response.assignSocket(socket);
 
+    const writeResponse = new http.ServerResponse(request);
+    const writeOrder = [];
+    writeResponse.write('chunk', () => writeOrder.push('callback'));
+    writeOrder.push('after-write');
+    if (writeOrder.join(',') !== 'after-write') {
+        return false;
+    }
+    const writeSocket = new EventEmitter();
+    writeSocket.destroyed = false;
+    writeSocket.write = (_chunk, callback) => {
+        if (typeof callback === 'function') callback();
+        return true;
+    };
+    writeResponse.assignSocket(writeSocket);
+
     let nullCode;
     try {
         response.write(null);
@@ -343,6 +358,7 @@ export function httpResponseLifecycle() {
 
     return Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') &&
         order.join(',') === 'listener,callback' &&
+        writeOrder.join(',') === 'after-write,callback' &&
         nullCode === 'ERR_STREAM_NULL_VALUES' &&
         typeCode === 'ERR_INVALID_ARG_TYPE';
 }
