@@ -15,6 +15,9 @@ declare module 'module-resolution' {
   export function testModuleBridgeGlobalsNonReplaceable(): Promise<boolean>;
   export function testCjsDynamicImportAttributeScanner(): Promise<boolean>;
   export function testLoaderCommonjsSourceNamedExports(): Promise<boolean>;
+  export function testLoaderCommonjsJsonCache(): Promise<boolean>;
+  export function testLoaderCommonjsRequireApis(): Promise<boolean>;
+  export function testUnknownNodeSpecifierCannotBeShadowed(): Promise<boolean>;
   export function testLoaderModuleSourceValidation(): Promise<boolean>;
   export function testPackageCustomConditions(): Promise<boolean>;
   export function testCjsPackageJsonParseCache(): Promise<boolean>;
