@@ -796,6 +796,10 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this._writeOutput(Buffer.from('0\r\n\r\n'));
     }
 
+    if (this._standaloneSocket) {
+        this._writeOutput(Buffer.alloc(0));
+    }
+
     if (typeof cb === 'function') {
         this.once('finish', cb);
     }
