@@ -61,7 +61,6 @@ jobs:
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
-        continue-on-error: true
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
@@ -102,7 +101,6 @@ jobs:
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
-        continue-on-error: true
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
@@ -142,7 +140,6 @@ jobs:
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
-        continue-on-error: true
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
@@ -215,7 +212,6 @@ jobs:
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
-        continue-on-error: true
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
@@ -259,7 +255,6 @@ jobs:
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
-        continue-on-error: true
         with:
           report-path: "**/target/ctrf-*.json"
           upload-artifact: "true"
