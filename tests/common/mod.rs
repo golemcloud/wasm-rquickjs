@@ -509,6 +509,13 @@ mod tests {
         let current =
             anyhow!("request failed with ErrorCode::HttpProtocolError").context("captured output");
         assert!(current_error_is_http_protocol_flake(&current));
+
+        let flattened = anyhow!(
+            "guest stdout:\n\nguest stderr:\nJavaScript error: HTTP request failed: \
+             ErrorCode::HttpProtocolError\nhost trace:\nhyper request error: \
+             hyper::Error(IncompleteMessage)"
+        );
+        assert!(current_error_is_http_protocol_flake(&flattened));
     }
 }
 
@@ -1858,9 +1865,22 @@ fn is_p3_http_flake(err: &anyhow::Error) -> bool {
 }
 
 fn current_error_is_http_protocol_flake(err: &anyhow::Error) -> bool {
-    err.chain()
+    let direct_cause = err
+        .chain()
         .skip(1)
-        .any(|cause| cause.to_string().contains("ErrorCode::HttpProtocolError"))
+        .any(|cause| cause.to_string().contains("ErrorCode::HttpProtocolError"));
+    if direct_cause {
+        return true;
+    }
+
+    let captured_output = err.to_string();
+    captured_output.contains("guest stderr:")
+        && captured_output
+            .contains("JavaScript error: HTTP request failed: ErrorCode::HttpProtocolError")
+        && captured_output.contains("host trace:")
+        && (captured_output.contains("hyper request error: hyper::Error(IncompleteMessage)")
+            || captured_output
+                .contains("hyper request error: hyper::Error(Canceled(UnexpectedMessage))"))
 }
 
 pub async fn invoke_and_capture_output(
