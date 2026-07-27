@@ -4073,6 +4073,8 @@ export const testSyncBuiltinEsmExports = async () => {
         module.syncBuiltinESMExports();
 
         const events = eventsModule.default;
+        const event = new eventsModule.Event('before-sync');
+        assert.strictEqual(new eventsModule.EventTarget().dispatchEvent(event), true);
         const originalDefaultMaxListeners = events.defaultMaxListeners;
         const originalOnce = events.once;
         const originalGetMaxListeners = events.getMaxListeners;
@@ -4085,6 +4087,15 @@ export const testSyncBuiltinEsmExports = async () => {
         assert.strictEqual(eventsModule.defaultMaxListeners, originalDefaultMaxListeners + 1);
         assert.strictEqual(eventsModule.once, replacementOnce);
         assert.strictEqual(eventsModule.getMaxListeners, replacementGetMaxListeners);
+        assert.strictEqual(new eventsModule.EventTarget().dispatchEvent(new eventsModule.Event('after-sync')), true);
+
+        const defaultMaxListenersDescriptor =
+            Object.getOwnPropertyDescriptor(events, 'defaultMaxListeners');
+        Object.defineProperty(events, 'defaultMaxListeners', defaultMaxListenersDescriptor);
+        assert.throws(
+            () => Object.defineProperty(events, 'defaultMaxListeners', { value: 1 }),
+            TypeError,
+        );
         events.defaultMaxListeners = originalDefaultMaxListeners;
         events.once = originalOnce;
         events.getMaxListeners = originalGetMaxListeners;

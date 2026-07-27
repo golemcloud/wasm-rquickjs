@@ -771,7 +771,15 @@ EventEmitter = new Proxy(EventEmitter, {
     defineProperty(target, property, descriptor) {
         if (property === 'defaultMaxListeners') {
             const current = Reflect.getOwnPropertyDescriptor(target, property);
-            if (current && current.configurable === false) {
+            const compatible = current &&
+                current.configurable === false &&
+                descriptor.configurable !== true &&
+                (descriptor.enumerable === undefined || descriptor.enumerable === current.enumerable) &&
+                !Object.prototype.hasOwnProperty.call(descriptor, 'value') &&
+                !Object.prototype.hasOwnProperty.call(descriptor, 'writable') &&
+                (descriptor.get === undefined || descriptor.get === current.get) &&
+                (descriptor.set === undefined || descriptor.set === current.set);
+            if (current && current.configurable === false && !compatible) {
                 throw new TypeError('Cannot redefine property: defaultMaxListeners');
             }
         }
@@ -802,9 +810,6 @@ const _syncBuiltinESMExportsRegistry = globalThis.__wasm_rquickjs_sync_builtin_e
 
 _syncBuiltinESMExportsRegistry.events = function syncEventsBuiltinESMExports() {
     EventEmitter = _default.EventEmitter;
-    Event = _default.Event;
-    EventTarget = _default.EventTarget;
-    CustomEvent = _default.CustomEvent;
     once = _default.once;
     on = _default.on;
     getEventListeners = _default.getEventListeners;
