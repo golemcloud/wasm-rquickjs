@@ -190,6 +190,10 @@ class FakeAgentSocket extends EventEmitter {
         this.writable = false;
         this.readable = false;
         this._clearTimeoutTimer();
+        const request = this._httpMessage;
+        if (!this._suppressRequestDestroy && request && !request.destroyed) {
+            request.destroy();
+        }
         process.nextTick(() => {
             this.emit('close');
         });
@@ -2265,6 +2269,14 @@ export class ClientRequest extends OutgoingMessage {
             const socket = this.socket;
             const agent = this.agent;
             const name = this._agentName;
+            const destroyForCleanup = () => {
+                socket._suppressRequestDestroy = true;
+                try {
+                    socket.destroy();
+                } finally {
+                    socket._suppressRequestDestroy = false;
+                }
+            };
 
             // Remove request-specific timeout listener
             if (this.timeoutCb) {
@@ -2307,12 +2319,12 @@ export class ClientRequest extends OutgoingMessage {
                     }
 
                     // keepSocketAlive returned false or maxFreeSockets exceeded
-                    socket.destroy();
+                    destroyForCleanup();
                     return;
                 }
             }
 
-            socket.destroy();
+            destroyForCleanup();
         }
     }
 
@@ -2415,6 +2427,13 @@ export class ClientRequest extends OutgoingMessage {
                 this._response = res;
                 res.req = this;
                 this.emit('response', res);
+
+                if (this.aborted || this.destroyed) {
+                    if (res._nativeRes && typeof res._nativeRes.discardBody === 'function') {
+                        res._nativeRes.discardBody();
+                    }
+                    return;
+                }
 
                 const hasDataListeners = res.listenerCount('data') > 0;
                 const hasEndListeners = res.listenerCount('end') > 0;
