@@ -14,6 +14,7 @@ test_r::enable!();
 #[allow(dead_code)]
 mod common;
 
+use common::js_subtest_parser::{BlockKind, SubtestDiscovery, discover_subtests_with_options};
 use common::{
     NodeCompatCategory, NodeCompatTestEntry, classify_test, load_node_compat_config,
     strip_jsonc_comments,
@@ -190,6 +191,29 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
         "module-related known-gap entries need an accepted deferral reason:\n{}",
         unexpected.join("\n")
     );
+
+    Ok(())
+}
+
+#[test]
+fn vm_split_fixtures_include_top_level_executable_statements() -> anyhow::Result<()> {
+    for (path, expected_count) in [
+        ("parallel/test-vm-basic.js", 10),
+        ("parallel/test-vm-module-basic.js", 13),
+    ] {
+        let source = fs::read_to_string(Path::new(SUITE_ROOT).join(path))?;
+        let blocks = match discover_subtests_with_options(path, &source, false, true) {
+            SubtestDiscovery::Block(blocks) => blocks,
+            other => panic!("Expected block discovery for {path}, got {other:?}"),
+        };
+        assert_eq!(blocks.len(), expected_count, "{path}");
+        assert!(
+            blocks
+                .iter()
+                .any(|block| block.kind == BlockKind::Statement),
+            "{path} must expose executable statements as subtests"
+        );
+    }
 
     Ok(())
 }

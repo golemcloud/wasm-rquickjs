@@ -141,28 +141,6 @@ fn test_isolated_mjs_discovers_top_level_executable_statements() {
 }
 
 #[test]
-fn test_vm_split_fixtures_include_top_level_executable_statements() {
-    for (path, expected_count) in [
-        ("parallel/test-vm-basic.js", 10),
-        ("parallel/test-vm-module-basic.js", 13),
-    ] {
-        let source = std::fs::read_to_string(format!("tests/node_compat/suite/{path}"))
-            .expect("read vendored VM fixture");
-        let blocks = match discover_subtests_with_options(path, &source, false, true) {
-            SubtestDiscovery::Block(blocks) => blocks,
-            other => panic!("Expected block discovery for {path}, got {other:?}"),
-        };
-        assert_eq!(blocks.len(), expected_count, "{path}");
-        assert!(
-            blocks
-                .iter()
-                .any(|block| block.kind == BlockKind::Statement),
-            "{path} must expose executable statements as subtests"
-        );
-    }
-}
-
-#[test]
 fn test_rewrite_for_node_test() {
     let source =
         "const { test } = require('node:test');\ntest('a', () => {});\ntest('b', () => {});\n";
