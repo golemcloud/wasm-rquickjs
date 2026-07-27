@@ -231,6 +231,162 @@ Object.defineProperty(process, 'title', {
 });
 process.release = { name: 'node' };
 process.allowedNodeEnvironmentFlags = new Set();
+
+const _reportOptions = {
+    directory: '',
+    filename: '',
+    compact: false,
+    excludeNetwork: false,
+    signal: 'SIGUSR2',
+    reportOnFatalError: false,
+    reportOnSignal: false,
+    reportOnUncaughtException: false,
+    excludeEnv: false,
+};
+
+function _reportStringOption(name, value) {
+    if (typeof value !== 'string') {
+        throw _makeTypeError(
+            'ERR_INVALID_ARG_TYPE',
+            'The "' + name + '" property must be of type string.' + _invalidArgTypeHelper(value),
+        );
+    }
+    _reportOptions[name] = value;
+}
+
+function _reportBooleanOption(name, value) {
+    if (typeof value !== 'boolean') {
+        throw _makeTypeError(
+            'ERR_INVALID_ARG_TYPE',
+            'The "' + name + '" property must be of type boolean.' + _invalidArgTypeHelper(value),
+        );
+    }
+    _reportOptions[name] = value;
+}
+
+function _diagnosticReport(error) {
+    const now = new Date();
+    const memory = process.memoryUsage();
+    const usage = process.cpuUsage();
+    const stack = error && typeof error.stack === 'string'
+        ? error.stack.split('\n')
+        : new Error().stack.split('\n').slice(1);
+    return {
+        header: {
+            reportVersion: 5,
+            event: error ? 'JavaScript API' : 'JavaScript API',
+            trigger: 'GetReport',
+            filename: null,
+            dumpEventTime: now.toISOString(),
+            dumpEventTimeStamp: String(now.getTime()),
+            processId: process.pid,
+            threadId: 0,
+            cwd: process.cwd(),
+            commandLine: process.argv.slice(),
+            nodejsVersion: process.version,
+            wordSize: 32,
+            arch: process.arch,
+            platform: process.platform,
+            componentVersions: Object.assign({}, process.versions),
+            release: Object.assign({}, process.release),
+            cpus: [],
+            networkInterfaces: [],
+            host: '',
+        },
+        javascriptStack: {
+            message: error ? String(error) : 'No stack.',
+            stack,
+            errorProperties: {},
+        },
+        javascriptHeap: {
+            totalMemory: memory.heapTotal,
+            executableMemory: 0,
+            totalCommittedMemory: memory.heapTotal,
+            availableMemory: 0,
+            totalGlobalHandlesMemory: 0,
+            usedGlobalHandlesMemory: 0,
+            usedMemory: memory.heapUsed,
+            memoryLimit: memory.heapTotal,
+            mallocedMemory: memory.external,
+            externalMemory: memory.external,
+            peakMallocedMemory: memory.rss,
+            nativeContextCount: 1,
+            detachedContextCount: 0,
+            doesZapGarbage: 0,
+            heapSpaces: {},
+        },
+        nativeStack: [],
+        resourceUsage: {
+            userCpuSeconds: usage.user / 1e6,
+            kernelCpuSeconds: usage.system / 1e6,
+            cpuConsumptionPercent: 0,
+            userCpuConsumptionPercent: 0,
+            kernelCpuConsumptionPercent: 0,
+            maxRss: memory.rss,
+            pageFaults: { IORequired: 0, IONotRequired: 0 },
+            fsActivity: { reads: 0, writes: 0 },
+        },
+        libuv: [],
+        workers: [],
+        environmentVariables: _reportOptions.excludeEnv ? {} : Object.assign({}, process.env),
+        userLimits: {},
+        sharedObjects: [],
+    };
+}
+
+function _defaultReportFilename() {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '');
+    return 'report.' + stamp + '.' + process.pid + '.0.001.json';
+}
+
+process.report = {
+    getReport(error) {
+        return _diagnosticReport(error);
+    },
+    writeReport(filename, error) {
+        if (filename !== undefined && typeof filename !== 'string') {
+            error = filename;
+            filename = undefined;
+        }
+        const selected = filename || _reportOptions.filename || _defaultReportFilename();
+        const output = _reportOptions.directory && selected.charCodeAt(0) !== 47
+            ? _reportOptions.directory.replace(/\/+$/, '') + '/' + selected
+            : selected;
+        const createRequire = globalThis.__wasm_rquickjs_create_require;
+        if (typeof createRequire !== 'function') {
+            throw _makeError('ERR_FEATURE_UNAVAILABLE_ON_PLATFORM', 'process.report.writeReport is unavailable');
+        }
+        const fs = createRequire(process.cwd(), null)('node:fs');
+        const report = _diagnosticReport(error);
+        report.header.filename = output;
+        fs.writeFileSync(output, JSON.stringify(report, null, _reportOptions.compact ? 0 : 2));
+        return output;
+    },
+};
+
+for (const name of ['directory', 'filename', 'signal']) {
+    Object.defineProperty(process.report, name, {
+        get() { return _reportOptions[name]; },
+        set(value) { _reportStringOption(name, value); },
+        enumerable: true,
+        configurable: true,
+    });
+}
+for (const name of [
+    'compact',
+    'excludeNetwork',
+    'reportOnFatalError',
+    'reportOnSignal',
+    'reportOnUncaughtException',
+    'excludeEnv',
+]) {
+    Object.defineProperty(process.report, name, {
+        get() { return _reportOptions[name]; },
+        set(value) { _reportBooleanOption(name, value); },
+        enumerable: true,
+        configurable: true,
+    });
+}
 Object.defineProperty(process, Symbol.toStringTag, {
     value: 'process',
     writable: true,
@@ -821,6 +977,16 @@ function _isIgnoredUnhandledRejection(promise) {
     return _ignoredUnhandledRejections.has(promise);
 }
 
+function _scheduleUnhandledRejectionCheck(callback) {
+    if (typeof globalThis.setTimeout === 'function') {
+        globalThis.setTimeout(callback, 0);
+    } else {
+        Promise.resolve().then(function() {
+            Promise.resolve().then(callback);
+        });
+    }
+}
+
 globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandled) {
     if (_isIgnoredUnhandledRejection(promise)) {
         _pendingRejections.delete(promise);
@@ -828,8 +994,7 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
     }
     if (!isHandled) {
         _pendingRejections.set(promise, reason);
-        Promise.resolve().then(function() {
-        Promise.resolve().then(function() {
+        _scheduleUnhandledRejectionCheck(function() {
             if (_pendingRejections.has(promise)) {
                 _pendingRejections.delete(promise);
                 if (_isIgnoredUnhandledRejection(promise)) {
@@ -837,7 +1002,6 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
                 }
                 process.emit('unhandledRejection', reason, promise);
             }
-        });
         });
     } else {
         _pendingRejections.delete(promise);

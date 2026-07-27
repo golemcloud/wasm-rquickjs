@@ -4083,10 +4083,23 @@ export const testSyncBuiltinEsmExports = async () => {
         const processModule = await import('node:process');
         const vmModule = await import('node:vm');
 
-        assert.strictEqual(processModule.default.report, undefined);
-        assert.strictEqual(processModule.report, undefined);
-
         const fs = fsModule.default;
+        assert.strictEqual(processModule.report, processModule.default.report);
+        assert.strictEqual(typeof processModule.report.getReport, 'function');
+        assert.strictEqual(typeof processModule.report.writeReport, 'function');
+        const diagnosticReport = processModule.report.getReport();
+        assert.strictEqual(diagnosticReport.header.platform, 'wasi');
+        assert.strictEqual(diagnosticReport.header.arch, 'wasm32');
+        assert(Array.isArray(diagnosticReport.javascriptStack.stack));
+        assert.strictEqual(typeof diagnosticReport.javascriptHeap.usedMemory, 'number');
+        const originalReportCompact = processModule.report.compact;
+        processModule.report.compact = true;
+        const reportPath = '/process-report.json';
+        assert.strictEqual(processModule.report.writeReport(reportPath), reportPath);
+        assert.strictEqual(JSON.parse(fs.readFileSync(reportPath, 'utf8')).header.filename, reportPath);
+        fs.unlinkSync(reportPath);
+        processModule.report.compact = originalReportCompact;
+
         const originalReadFile = fs.readFile;
         const originalReadFileSync = fs.readFileSync;
         const originalWriteFile = fs.writeFile;
@@ -8459,6 +8472,7 @@ export const testRequireEsmRejectionTracking = async () => {
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
+            await new Promise((resolve) => setTimeout(resolve, 0));
         } finally {
             process.removeListener('unhandledRejection', onUnhandled);
         }

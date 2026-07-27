@@ -35,6 +35,15 @@ pub mod native_module {
         super::eval_with_filename_impl(ctx, &code, &filename)
     }
 
+    #[rquickjs::function]
+    pub fn check_syntax_with_filename(
+        ctx: Ctx<'_>,
+        code: String,
+        filename: String,
+    ) -> rquickjs::Result<()> {
+        super::check_syntax_with_filename_impl(ctx, &code, &filename)
+    }
+
     /// Load an ES module by filename and return its namespace object.
     /// This implements `require()` of ES modules (Node.js --experimental-require-module).
     /// The module goes through the normal ESM resolver/loader chain.
@@ -400,6 +409,33 @@ fn eval_with_filename_impl<'js>(
     let result: Value = globals.get("__wasm_rquickjs_eval_tmp")?;
     globals.remove("__wasm_rquickjs_eval_tmp")?;
     Ok(result)
+}
+
+fn check_syntax_with_filename_impl(
+    ctx: rquickjs::Ctx<'_>,
+    code: &str,
+    filename: &str,
+) -> rquickjs::Result<()> {
+    use std::ffi::CString;
+
+    let src = CString::new(code).map_err(|_| rquickjs::Error::Unknown)?;
+    let fname = CString::new(filename).map_err(|_| rquickjs::Error::Unknown)?;
+    let compiled = unsafe {
+        qjs::JS_Eval(
+            ctx.as_raw().as_ptr(),
+            src.as_ptr(),
+            code.len() as _,
+            fname.as_ptr(),
+            (qjs::JS_EVAL_TYPE_GLOBAL | qjs::JS_EVAL_FLAG_COMPILE_ONLY) as i32,
+        )
+    };
+    if unsafe { qjs::JS_IsException(compiled) } {
+        return Err(rquickjs::Error::Exception);
+    }
+    unsafe {
+        qjs::JS_FreeValue(ctx.as_raw().as_ptr(), compiled);
+    }
+    Ok(())
 }
 
 /// Minimal JSON string quoting for error messages.

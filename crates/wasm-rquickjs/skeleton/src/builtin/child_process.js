@@ -10,6 +10,7 @@ import { Buffer } from 'node:buffer';
 import { EventEmitter } from 'node:events';
 import process from 'node:process';
 import moduleExports from 'node:module';
+import { check_syntax_with_filename as checkSyntaxWithFilename } from '__wasm_rquickjs_builtin/vm_native';
 
 const FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
 
@@ -693,6 +694,7 @@ function runInline(command, args, options) {
     const oldModuleCache = moduleExports._cache;
     const oldRuntimeRequireCache = runtimeRequire.cache;
     const oldPathCache = moduleExports._pathCache;
+    const oldModuleWrapper = moduleExports.wrapper;
     let firstExitCode = null;
     const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
@@ -951,7 +953,17 @@ function runInline(command, args, options) {
             }
 
             const moduleModule = runtimeRequire('module');
-            if (moduleModule && typeof moduleModule.runMain === 'function') {
+            if (checkSyntaxMode) {
+                const fsForCheck = runtimeRequire('node:fs');
+                let source = fsForCheck.readFileSync(scriptPath, 'utf8');
+                if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
+                    source = source.slice(1);
+                }
+                if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
+                    source = '//' + source;
+                }
+                checkSyntaxWithFilename(moduleModule.wrap(source), scriptPath);
+            } else if (moduleModule && typeof moduleModule.runMain === 'function') {
                 moduleModule.runMain();
             } else {
                 runtimeRequire(scriptPath);
@@ -979,6 +991,7 @@ function runInline(command, args, options) {
         moduleExports._cache = oldModuleCache;
         runtimeRequire.cache = oldRuntimeRequireCache;
         moduleExports._pathCache = oldPathCache;
+        moduleExports.wrapper = oldModuleWrapper;
         if (hadPackageConditions) {
             globalThis.__wasm_rquickjs_package_conditions = oldPackageConditions;
         } else {
