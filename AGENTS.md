@@ -41,7 +41,9 @@ cargo test
 
 ### Optional test caches
 
-The runtime and node compatibility test harness keeps all cache behavior off by default. For local iteration, enable the clean-state-preserving caches explicitly:
+The runtime and node compatibility test harness keeps generated-artifact and
+Wasmtime caches off by default. For local iteration, enable the
+clean-state-preserving caches explicitly:
 
 ```bash
 WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1 \
@@ -50,12 +52,16 @@ cargo test --test runtime --features use-golem-wasmtime -- module_resolution --r
 ```
 
 - `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` uses Wasmtime's filesystem compilation cache.
-- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` reuses wrapper build and optimized component artifacts when their source inputs are unchanged. Node modules app tests also reuse a process-local installed app template, then copy it into a fresh temp app directory for each test.
+- `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` reuses wrapper build and optimized component artifacts when their source inputs are unchanged.
 - `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for short rebuild loops.
 - `WASM_RQUICKJS_TEST_DROP_CACHE=1` refreshes generated artifacts and bypasses the Wasmtime cache.
 - `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` is experimental/manual-only. It reuses process-local immutable `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path, but did not improve the measured node-compat hot path.
 
 Artifact caches never reuse wasm memory, QuickJS runtime state, a Wasmtime `Store`, a component instance, a WASI context, or a temp directory across cases.
+
+Independently of those optional caches, node modules app tests run `npm ci` once
+per app and process, then copy the installed template into a fresh temp app
+directory for each case. Runtime state is never shared between cases.
 
 Do not use grouped tests to speed up module compatibility checks; these tests rely on clean runtime state per case.
 
@@ -177,7 +183,7 @@ Important rules:
 
 - `tests/node_modules_apps/config.jsonc` is the source of truth for node modules app tests. Runtime tests in `tests/runtime/node_modules_apps.rs` are generated from it.
 - Add app fixtures under `tests/node_modules_apps/apps/<app>/` with a `package.json`, `run-node.mjs`, and `test-*` files exporting `run()`.
-- Node modules app tests run `npm install --install-links --ignore-scripts --no-audit --no-fund`, verify the raw test with host Node.js, then run it through wasm-rquickjs from `/app`.
+- Node modules app tests run `npm ci --install-links --ignore-scripts --no-audit --no-fund`, verify the raw test with host Node.js, then run it through wasm-rquickjs from `/app`.
 - Keep this suite focused on real `node_modules` module loading, CJS/ESM interop, package maps, filesystem-backed package behavior, and high-value smoke tests. Do not use it for native `.node`, WASM artifact loading, subprocess-heavy, or live-network scenarios.
 - CI runs node modules app tests as runtime `group9`; regular runtime tests use `group1` through `group8`.
 - Before running node modules app runtime tests after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- ':tag:group9'` for the CI-like group, `cargo test --test runtime --features use-golem-wasmtime -- node_modules_app --nocapture` for the full node modules app suite, or a narrower node modules app filter.
