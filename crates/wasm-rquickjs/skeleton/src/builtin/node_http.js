@@ -24,14 +24,6 @@ const onClientRequestStart = channel('http.client.request.start');
 const onClientRequestError = channel('http.client.request.error');
 const onClientResponseFinish = channel('http.client.response.finish');
 
-function isLoopbackHostname(hostname) {
-    const normalized = String(hostname).toLowerCase();
-    return normalized === 'localhost' ||
-        normalized === '127.0.0.1' ||
-        normalized === '::1' ||
-        normalized === '[::1]';
-}
-
 // ===== Static Data =====
 
 export const METHODS = [
@@ -271,10 +263,6 @@ export class Agent extends EventEmitter {
         this._requestQueue = {};
     }
 
-    get timeout() {
-        return this.options ? this.options.timeout : undefined;
-    }
-
     get totalSocketCount() {
         let n = 0;
         for (const key of Object.keys(this.sockets)) {
@@ -486,7 +474,7 @@ export class Agent extends EventEmitter {
     keepSocketAlive(socket) {
         socket.setKeepAlive(true, this.keepAliveMsecs);
         socket.unref();
-        const agentTimeout = this.timeout || 0;
+        const agentTimeout = this.options.timeout || 0;
         if (agentTimeout) {
             socket.setTimeout(agentTimeout);
         }
@@ -1759,7 +1747,6 @@ export class ClientRequest extends OutgoingMessage {
         this._refreshShouldKeepAlive();
 
         this._nativeReq = new NodeHttpClientRequest(this.method, url);
-        this._inProcessRequest = null;
         if (this._rawHeaderPairs) {
             // Array headers: preserve duplicates by using appendHeader
             for (const [name, value] of this._rawHeaderPairs) {
@@ -1777,19 +1764,6 @@ export class ClientRequest extends OutgoingMessage {
                 this._nativeReq.setHeader(entry[0], headerValueForNative(entry[0], entry[1]));
             }
         }
-        const requestHeaderNames = this._rawHeaderPairs
-            ? this._rawHeaderPairs.map(([name]) => String(name).toLowerCase())
-            : Object.keys(this[kOutHeaders] || {});
-        this._inProcessRequest = isLoopbackHostname(this.hostname)
-            ? _prepareClientRequest(this.hostname, +this.port, requestHeaderNames)
-            : null;
-        if (this._inProcessRequest !== null) {
-            this._nativeReq.setHeader(
-                this._inProcessRequest.headerName,
-                this._inProcessRequest.requestId,
-            );
-        }
-
         this._pendingWrites = [];
         this._bufferedBytes = 0;
         this._needDrain = false;
@@ -1838,7 +1812,7 @@ export class ClientRequest extends OutgoingMessage {
         }
 
         const requestTimeout = options.timeout !== undefined ? options.timeout
-            : (this.agent && this.agent.timeout != null ? this.agent.timeout : undefined);
+            : (this.agent && this.agent.options ? this.agent.options.timeout : undefined);
         if (requestTimeout !== undefined && requestTimeout > 0) {
             this.setTimeout(requestTimeout);
         }
@@ -1861,10 +1835,6 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     _emitRequestError(error) {
-        if (this._inProcessRequest) {
-            _releaseClientRequest(this._inProcessRequest);
-            this._inProcessRequest = null;
-        }
         const parsed = _parseNativeHttpError(error);
         if (onClientRequestError.hasSubscribers) {
             onClientRequestError.publish({ request: this, error: parsed });
@@ -2275,7 +2245,7 @@ export class ClientRequest extends OutgoingMessage {
         mockSocket.once('timeout', this.timeoutCb);
 
         // Apply timeout value to the socket
-        const timeout = this._timeout || (agent && agent.timeout) || 0;
+        const timeout = this._timeout || (agent && agent.options && agent.options.timeout) || 0;
         if (timeout > 0) {
             mockSocket.timeout = timeout;
         }
@@ -2585,13 +2555,9 @@ export class ClientRequest extends OutgoingMessage {
             this._response.destroyed = true;
             this._response.emit('aborted');
         }
-        const inProcessRequest = this._inProcessRequest;
         process.nextTick(() => {
             this.emit('abort');
             this._emitCloseOnce();
-            if (inProcessRequest) {
-                _signalClientAbort(inProcessRequest);
-            }
         });
     }
 
@@ -2601,8 +2567,6 @@ export class ClientRequest extends OutgoingMessage {
         this.destroyed = true;
 
         this._abortNativeRequest();
-        const inProcessRequest = this._inProcessRequest;
-
         if (!error && !this._response) {
             // Request destroyed before receiving a response — emit ECONNRESET
             // matching Node.js behavior for destroyed pending requests.
@@ -2622,10 +2586,6 @@ export class ClientRequest extends OutgoingMessage {
                 this._emitCloseOnce();
             });
         }
-        if (inProcessRequest) {
-            process.nextTick(_signalClientAbort, inProcessRequest);
-        }
-
         return this;
     }
 }
@@ -2636,9 +2596,6 @@ import {
     Server as _Server,
     ServerResponse as _ServerResponse,
     createServer as _createServer,
-    _prepareClientRequest,
-    _releaseClientRequest,
-    _signalClientAbort,
 } from '__wasm_rquickjs_builtin/node_http_server';
 
 import { connect as _netConnect } from 'node:net';

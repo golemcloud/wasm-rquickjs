@@ -104,6 +104,7 @@ async fn node_http_constants(
     assert!(output.contains("maxHeaderSize: 16384"));
     assert!(output.contains("Agent keepAlive: true"));
     assert!(output.contains("Agent maxSockets: Infinity"));
+    assert!(output.contains("Agent timeout assignment: 1234"));
     assert!(output.contains("globalAgent exists: true"));
     assert!(output.contains("validateHeaderName valid: passed"));
     assert!(output.contains("validateHeaderName invalid: correctly threw"));

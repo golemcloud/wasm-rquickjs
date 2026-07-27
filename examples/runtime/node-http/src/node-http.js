@@ -167,6 +167,8 @@ export function httpConstants() {
     const agent = new http.Agent({ keepAlive: true });
     console.log(`Agent keepAlive: ${agent.keepAlive}`);
     console.log(`Agent maxSockets: ${agent.maxSockets}`);
+    agent.timeout = 1234;
+    console.log(`Agent timeout assignment: ${agent.timeout}`);
     console.log(`globalAgent exists: ${http.globalAgent !== null}`);
 
     // validateHeaderName
@@ -248,37 +250,9 @@ export async function httpSelfConnectPost() {
 
 export async function httpAbortIsolation() {
     return new Promise((resolve) => {
-        let settled = false;
-        let localRequestAborted = false;
-        let userHeaderPreserved = false;
-        let headeredRequestAborted = false;
-        let earlyAbortTombstonePreserved = false;
-        let failedCorrelationReleased = false;
-        let headeredClientRequest;
-        let strandedToken;
         const server = http.createServer((req, res) => {
-            userHeaderPreserved =
+            const userHeaderPreserved =
                 req.headers['x-wasm-rquickjs-internal-request-id'] === 'user-value';
-            if (req.url === '/headered-abort') {
-                req.on('aborted', () => {
-                    headeredRequestAborted = true;
-                });
-                setImmediate(() => {
-                    headeredClientRequest.destroy(new Error('intentional local abort'));
-                    setImmediate(() => finish(
-                        !localRequestAborted &&
-                        userHeaderPreserved &&
-                        headeredRequestAborted &&
-                        earlyAbortTombstonePreserved &&
-                        failedCorrelationReleased
-                    ));
-                });
-                return;
-            }
-            req.on('aborted', () => {
-                localRequestAborted = true;
-            });
-
             const unrelated = http.request({
                 hostname: 'remote.example',
                 port: server.address().port,
@@ -288,79 +262,36 @@ export async function httpAbortIsolation() {
             unrelated.destroy(new Error('intentional remote abort'));
 
             setImmediate(() => {
-                if (!res.destroyed) res.end('ok');
+                if (!res.destroyed && userHeaderPreserved) {
+                    res.end('ok');
+                }
+            });
+        });
+        let rawRequest = '';
+        server.on('connection', (socket) => {
+            socket.on('data', (chunk) => {
+                rawRequest += chunk.toString();
             });
         });
 
-        function finish(result) {
-            if (settled) return;
-            settled = true;
-            const stranded = http.request({
-                hostname: 'localhost',
-                port: server.address().port,
-            });
-            strandedToken = stranded._inProcessRequest;
-            stranded.on('error', () => {});
-            server.close(() => resolve(
-                result &&
-                strandedToken.server._pendingInProcessRequests.size === 0
-            ));
-        }
-
         server.listen(0, () => {
-            const failed = http.request({
-                hostname: 'localhost',
-                port: server.address().port,
-            });
-            const failedToken = failed._inProcessRequest;
-            failed.on('error', () => {});
-            failed._emitRequestError(new Error('intentional native failure'));
-            failedCorrelationReleased =
-                !failedToken.server._pendingInProcessRequests.has(failedToken.requestId);
-
-            const early = http.request({
-                hostname: 'localhost',
+            const req = http.get({
+                hostname: '127.0.0.1',
                 port: server.address().port,
                 headers: {
                     'x-wasm-rquickjs-internal-request-id': 'user-value',
                 },
-            });
-            const earlyToken = early._inProcessRequest;
-            early.on('error', () => {});
-            early.destroy(new Error('intentional early abort'));
-            process.nextTick(() => {
-                const pending =
-                    earlyToken.server._pendingInProcessRequests.get(earlyToken.requestId);
-                earlyAbortTombstonePreserved =
-                    earlyToken.headerName !== 'x-wasm-rquickjs-internal-request-id' &&
-                    pending.headerName === earlyToken.headerName &&
-                    pending.cancelled === true;
-
-                const req = http.get({
-                    hostname: 'localhost',
-                    port: server.address().port,
-                    path: '/local',
-                    headers: {
-                        'x-wasm-rquickjs-internal-request-id': 'user-value',
-                    },
-                }, (res) => {
-                    res.resume();
-                    res.on('end', () => {
-                        headeredClientRequest = http.request({
-                            hostname: 'localhost',
-                            port: server.address().port,
-                            method: 'POST',
-                            path: '/headered-abort',
-                            headers: {
-                                'x-wasm-rquickjs-internal-request-id': 'user-value',
-                            },
-                        });
-                        headeredClientRequest.on('error', () => {});
-                        headeredClientRequest.end('partial');
-                    });
+            }, (res) => {
+                res.resume();
+                res.on('end', () => {
+                    const hasUserHeader =
+                        /x-wasm-rquickjs-internal-request-id: user-value/i.test(rawRequest);
+                    const hasInjectedHeader =
+                        /x-wasm-rquickjs-internal-request-id-[^:]*:/i.test(rawRequest);
+                    server.close(() => resolve(hasUserHeader && !hasInjectedHeader));
                 });
-                req.on('error', () => finish(false));
             });
+            req.on('error', () => server.close(() => resolve(false)));
         });
     });
 }

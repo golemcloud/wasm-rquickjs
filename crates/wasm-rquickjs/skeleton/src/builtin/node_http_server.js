@@ -4,16 +4,6 @@ import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
-const IN_PROCESS_REQUEST_ID_HEADER = 'x-wasm-rquickjs-internal-request-id';
-
-function randomCorrelationToken() {
-    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
-        return globalThis.crypto.randomUUID();
-    }
-    return Date.now().toString(36) + '-' +
-        Math.random().toString(36).slice(2) + '-' +
-        Math.random().toString(36).slice(2);
-}
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -903,26 +893,6 @@ function closeServerResponse(res) {
     }
 }
 
-function abortServerConnection(conn) {
-    if (conn.req && !conn.req.aborted && !conn.responseFinished) {
-        conn.req.aborted = true;
-        conn.req.emit('aborted');
-        if (!conn.req.complete) {
-            conn.req.complete = true;
-            conn.req.push(null);
-        }
-        if (conn.req.listenerCount('error') > 0) {
-            const abortError = new Error('aborted');
-            abortError.code = 'ECONNRESET';
-            conn.req.emit('error', abortError);
-        }
-    }
-    closeServerResponse(conn.res);
-    if (conn.socket && !conn.socket.destroyed) {
-        conn.socket.destroy();
-    }
-}
-
 function createConnectionParser(server, socket) {
     const state = {
         buffer: Buffer.alloc(0),
@@ -939,8 +909,6 @@ function createConnectionParser(server, socket) {
         shouldKeepAliveAfterResponse: false,
         requestsServed: 0,
         detached: false,
-        clientRequestId: null,
-        clientRequestCancelled: false,
     };
 
     const keepAlive = computeKeepAlive(null, '1.1');
@@ -1054,8 +1022,6 @@ function createConnectionParser(server, socket) {
         state.shouldKeepAliveAfterResponse = false;
         state.req = null;
         state.res = null;
-        state.clientRequestId = null;
-        state.clientRequestCancelled = false;
         state.state = IDLE;
 
         // Emit 'close' on the response asynchronously, matching Node.js
@@ -1127,21 +1093,6 @@ function createConnectionParser(server, socket) {
                     parsed.rawHeaders,
                     server._joinDuplicateHeaders,
                 );
-                const inProcessRequest = _consumeClientRequest(server, req.headers);
-                state.clientRequestId = inProcessRequest && inProcessRequest.requestId;
-                state.clientRequestCancelled = !!(inProcessRequest && inProcessRequest.cancelled);
-                if (inProcessRequest) {
-                    delete req.headers[inProcessRequest.headerName];
-                    delete req.headersDistinct[inProcessRequest.headerName];
-                    const visibleRawHeaders = [];
-                    for (let i = 0; i < req.rawHeaders.length; i += 2) {
-                        if (String(req.rawHeaders[i]).toLowerCase() !== inProcessRequest.headerName) {
-                            visibleRawHeaders.push(req.rawHeaders[i], req.rawHeaders[i + 1]);
-                        }
-                    }
-                    req.rawHeaders = visibleRawHeaders;
-                }
-
                 // CONNECT method: hand the socket to the application
                 if (parsed.method === 'CONNECT') {
                     const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
@@ -1246,10 +1197,6 @@ function createConnectionParser(server, socket) {
                 }
 
                 server.emit('request', req, res);
-                if (state.clientRequestCancelled) {
-                    abortServerConnection(state);
-                    return;
-                }
                 if (requestHasNoBody) {
                     // Emit EOF after request handlers had a chance to attach `end` listeners.
                     Promise.resolve().then(function () {
@@ -1500,8 +1447,6 @@ function Server(options, requestListener) {
     this._rejectNonStandardBodyWrites = !!options.rejectNonStandardBodyWrites;
     this._requireHostHeader = options.requireHostHeader !== false;
     this._joinDuplicateHeaders = !!options.joinDuplicateHeaders;
-    this._pendingInProcessRequests = new Map();
-
     // Apply timeout options with validation
     if (options.headersTimeout !== undefined) {
         this.headersTimeout = options.headersTimeout;
@@ -1535,8 +1480,6 @@ function Server(options, requestListener) {
     }
 
     const self = this;
-    this.on('listening', function () { _registerServer(self); });
-    this.on('close', function () { _unregisterServer(self); });
     this.on('connection', function connectionListener(socket) {
         // Force-close idle keep-alive connections to prevent WASI resource
         // exhaustion. In WASM, each socket consumes limited resources
@@ -1603,109 +1546,6 @@ Server.prototype.closeIdleConnections = function closeIdleConnections() {
     }
 };
 
-// ===== In-process abort signaling =====
-// When client and server are in the same WASM component, aborting a WASI HTTP
-// request doesn't reliably close the underlying TCP connection. This registry
-// allows the client-side abort to directly signal the server-side connections.
-
-const _activeServers = new Set();
-
-function _serverMatchesTarget(server, hostname, port) {
-    const addr = server.address();
-    if (!addr || addr.port !== port) return false;
-    const hostnameValue = String(hostname).toLowerCase().replace(/^\[|\]$/g, '');
-    const target = hostnameValue === 'localhost' ? '127.0.0.1' : hostnameValue;
-    const address = String(addr.address).toLowerCase();
-    if (address === '0.0.0.0') {
-        return target === '127.0.0.1';
-    }
-    if (address === '::') return target === '::1';
-    return address === target;
-}
-
-function _registerServer(server) {
-    const addr = server.address();
-    if (addr && typeof addr.port === 'number') {
-        _activeServers.add(server);
-    }
-}
-
-function _unregisterServer(server) {
-    _activeServers.delete(server);
-    for (const pendingRequest of server._pendingInProcessRequests.values()) {
-        if (pendingRequest.cleanupTimer) clearTimeout(pendingRequest.cleanupTimer);
-    }
-    server._pendingInProcessRequests.clear();
-}
-
-export function _prepareClientRequest(hostname, port, existingHeaderNames) {
-    let server;
-    for (const candidate of _activeServers) {
-        if (_serverMatchesTarget(candidate, hostname, port)) {
-            server = candidate;
-            break;
-        }
-    }
-    if (!server) return null;
-    const requestId = randomCorrelationToken();
-    const excludedNames = new Set(existingHeaderNames || []);
-    let headerName;
-    do {
-        headerName = IN_PROCESS_REQUEST_ID_HEADER + '-' + randomCorrelationToken();
-    } while (excludedNames.has(headerName));
-    const pendingRequest = { headerName, cancelled: false, cleanupTimer: null };
-    server._pendingInProcessRequests.set(requestId, pendingRequest);
-    return { server, requestId, headerName };
-}
-
-function _consumeClientRequest(server, headers) {
-    for (const [requestId, pendingRequest] of server._pendingInProcessRequests) {
-        if (headers[pendingRequest.headerName] === requestId) {
-            server._pendingInProcessRequests.delete(requestId);
-            if (pendingRequest.cleanupTimer) clearTimeout(pendingRequest.cleanupTimer);
-            return {
-                requestId,
-                headerName: pendingRequest.headerName,
-                cancelled: pendingRequest.cancelled,
-            };
-        }
-    }
-    return null;
-}
-
-export function _releaseClientRequest(inProcessRequest) {
-    if (!inProcessRequest) return;
-    const { server, requestId } = inProcessRequest;
-    const pendingRequest = server._pendingInProcessRequests.get(requestId);
-    if (pendingRequest && pendingRequest.cancelled) return;
-    if (pendingRequest && pendingRequest.cleanupTimer) {
-        clearTimeout(pendingRequest.cleanupTimer);
-    }
-    server._pendingInProcessRequests.delete(requestId);
-}
-
-export function _signalClientAbort(inProcessRequest) {
-    if (!inProcessRequest) return;
-    const { server, requestId } = inProcessRequest;
-    const pendingRequest = server._pendingInProcessRequests.get(requestId);
-    if (pendingRequest) {
-        pendingRequest.cancelled = true;
-        pendingRequest.cleanupTimer = setTimeout(() => {
-            if (server._pendingInProcessRequests.get(requestId) === pendingRequest) {
-                server._pendingInProcessRequests.delete(requestId);
-            }
-        }, 10_000);
-        if (typeof pendingRequest.cleanupTimer.unref === 'function') {
-            pendingRequest.cleanupTimer.unref();
-        }
-    }
-    for (const conn of server._httpConnections) {
-        if (conn.clientRequestId !== String(requestId)) continue;
-        abortServerConnection(conn);
-        return;
-    }
-}
-
 // ===== createServer =====
 
 export function createServer(options, requestListener) {
@@ -1713,4 +1553,4 @@ export function createServer(options, requestListener) {
 }
 
 export { Server, ServerResponse, ServerIncomingMessage };
-export default { Server, ServerResponse, ServerIncomingMessage, createServer, _prepareClientRequest, _releaseClientRequest, _signalClientAbort };
+export default { Server, ServerResponse, ServerIncomingMessage, createServer };
