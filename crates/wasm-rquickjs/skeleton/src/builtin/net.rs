@@ -541,12 +541,15 @@ impl TcpSocket {
                         StreamError::Closed => {
                             throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                         }
-                        StreamError::LastOperationFailed(e) => throw_socket_error(
-                            &ctx,
-                            "EIO",
-                            "write",
-                            &format!("check_write failed: {e:?}"),
-                        ),
+                        StreamError::LastOperationFailed(e) => {
+                            let debug_message = e.to_debug_string();
+                            throw_socket_error(
+                                &ctx,
+                                stream_error_to_errno(&debug_message),
+                                "write",
+                                &format!("check_write failed: {debug_message}"),
+                            )
+                        }
                     })?
                 };
 
@@ -591,7 +594,13 @@ impl TcpSocket {
                         throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                     }
                     StreamError::LastOperationFailed(e) => {
-                        throw_socket_error(&ctx, "EIO", "write", &format!("write failed: {e:?}"))
+                        let debug_message = e.to_debug_string();
+                        throw_socket_error(
+                            &ctx,
+                            stream_error_to_errno(&debug_message),
+                            "write",
+                            &format!("write failed: {debug_message}"),
+                        )
                     }
                 })?;
             };
@@ -1024,12 +1033,24 @@ impl TcpSocket {
                 // A zero-length completion carries no data and no EOF signal; retry.
                 StreamResult::Complete(_) => continue,
                 StreamResult::Dropped => {
-                    // Peer sent FIN / stream closed. Drop the reader so subsequent
-                    // reads observe EOF.
-                    let mut inner = self.inner.borrow_mut();
-                    inner.read_cancel = None;
-                    inner.reader = None;
-                    inner.recv_future = None;
+                    // The stream closing does not distinguish a graceful FIN
+                    // from a socket error. The receive completion future does.
+                    let recv_future = {
+                        let mut inner = self.inner.borrow_mut();
+                        inner.read_cancel = None;
+                        inner.reader = None;
+                        inner.recv_future.take()
+                    };
+                    if let Some(recv_future) = recv_future
+                        && let Err(error) = recv_future.await
+                    {
+                        return Err(throw_socket_error(
+                            &ctx,
+                            error_code_to_errno(&error),
+                            "read",
+                            &format!("receive failed: {error:?}"),
+                        ));
+                    }
                     if buf.is_empty() {
                         return Ok(None);
                     }
@@ -1106,7 +1127,18 @@ impl TcpSocket {
         if !leftover.is_empty() {
             // The peer hung up before all bytes were accepted.
             inner.writer = None;
-            inner.send_future = None;
+            let send_future = inner.send_future.take();
+            drop(inner);
+            if let Some(send_future) = send_future
+                && let Err(error) = send_future.await
+            {
+                return Err(throw_socket_error(
+                    &ctx,
+                    error_code_to_errno(&error),
+                    "write",
+                    &format!("send failed: {error:?}"),
+                ));
+            }
             return Err(throw_socket_error(&ctx, "EPIPE", "write", "Stream closed"));
         }
         if !inner.closed {
