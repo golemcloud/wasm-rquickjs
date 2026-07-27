@@ -270,8 +270,11 @@ impl JsState {
 
     /// Refresh host-derived process state after restoring a Wizer snapshot.
     async fn refresh_process_env(state: &JsState) {
-        let argv: Vec<String> = std::env::args().collect();
-        let env_vars: std::collections::HashMap<String, String> = std::env::vars().collect();
+        let argv = wasip3::cli::environment::get_arguments();
+        let env_vars: std::collections::HashMap<String, String> =
+            wasip3::cli::environment::get_environment()
+                .into_iter()
+                .collect();
 
         async_with!(state.ctx => |ctx| {
             let globals = ctx.globals();
