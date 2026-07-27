@@ -499,7 +499,6 @@ mod tests {
 
         assert_ne!(p2, p3);
     }
-
 }
 
 fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Result<()> {

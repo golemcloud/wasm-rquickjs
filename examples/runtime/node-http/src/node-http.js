@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import { EventEmitter } from 'node:events';
 
 // Test 1: http.get - use await on the _endPromise to let the runtime drive it
 export async function httpGet(port) {
@@ -299,4 +300,49 @@ export async function httpAbortIsolation() {
             req.on('error', () => server.close(() => resolve(false)));
         });
     });
+}
+
+export function httpResponseLifecycle() {
+    const request = {
+        method: 'GET',
+        httpVersionMajor: 1,
+        httpVersionMinor: 1,
+        socket: null,
+    };
+    const response = new http.ServerResponse(request);
+    const order = [];
+    response.on('finish', () => order.push('listener'));
+    response.end('body', () => order.push('callback'));
+
+    if (order.length !== 0) {
+        return false;
+    }
+
+    const wire = [];
+    const socket = new EventEmitter();
+    socket.destroyed = false;
+    socket.write = (chunk, callback) => {
+        wire.push(Buffer.from(chunk));
+        if (typeof callback === 'function') callback();
+        return true;
+    };
+    response.assignSocket(socket);
+
+    let nullCode;
+    try {
+        response.write(null);
+    } catch (error) {
+        nullCode = error.code;
+    }
+    let typeCode;
+    try {
+        response.write(42);
+    } catch (error) {
+        typeCode = error.code;
+    }
+
+    return Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') &&
+        order.join(',') === 'listener,callback' &&
+        nullCode === 'ERR_STREAM_NULL_VALUES' &&
+        typeCode === 'ERR_INVALID_ARG_TYPE';
 }

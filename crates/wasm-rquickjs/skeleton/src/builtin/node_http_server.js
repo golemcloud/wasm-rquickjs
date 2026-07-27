@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -233,6 +233,7 @@ function ServerResponse(req, options) {
     this._removedContLen = false;
     this._removedTE = false;
     this._outputSize = 0;
+    this._pendingOutput = [];
 
     // strictContentLength enforcement
     this.strictContentLength = false;
@@ -253,6 +254,11 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     this.connection = socket;
     this._standaloneSocket = true;
     socket._httpMessage = this;
+    const pending = this._pendingOutput;
+    this._pendingOutput = [];
+    for (const entry of pending) {
+        socket.write(entry.data, entry.callback);
+    }
 };
 
 ServerResponse.prototype.detachSocket = function detachSocket(socket) {
@@ -594,8 +600,16 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
 ServerResponse.prototype._sendHeaders = function _sendHeaders() {
     const head = this._buildHeaderString();
     if (head) {
-        this.socket.write(Buffer.from(head));
+        this._writeOutput(Buffer.from(head));
     }
+};
+
+ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
+    if (this.socket && !this.socket.destroyed) {
+        return this.socket.write(data, callback);
+    }
+    this._pendingOutput.push({ data, callback });
+    return false;
 };
 
 ServerResponse.prototype.write = function write(chunk, encoding, cb) {
@@ -604,9 +618,12 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         encoding = undefined;
     }
 
-    if (this._destroyed || this._closed) {
-        if (typeof cb === 'function') cb();
-        return false;
+    if (chunk === null) {
+        throw new ERR_STREAM_NULL_VALUES();
+    }
+    if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+        throw new ERR_INVALID_ARG_TYPE('first argument',
+            ['string', 'Buffer', 'Uint8Array'], chunk);
     }
 
     if (this._writableEnded) {
@@ -618,9 +635,9 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         return false;
     }
 
-    if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
-        throw new ERR_INVALID_ARG_TYPE('first argument',
-            ['string', 'Buffer', 'Uint8Array'], chunk);
+    if (this._destroyed || this._closed) {
+        if (typeof cb === 'function') cb();
+        return false;
     }
 
     if (!this._headersSentWire) {
@@ -656,11 +673,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._chunked) {
         const hex = chunk.length.toString(16);
-        this.socket.write(Buffer.from(hex + '\r\n'));
-        this.socket.write(chunk);
-        this.socket.write(CRLF);
+        this._writeOutput(Buffer.from(hex + '\r\n'));
+        this._writeOutput(chunk);
+        this._writeOutput(CRLF);
     } else {
-        this.socket.write(chunk);
+        this._writeOutput(chunk);
     }
 
     this._outputSize += chunk.length;
@@ -705,8 +722,6 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         }
     }
 
-    this._writableEnded = true;
-
     if (!this._headersSentWire) {
         if (data && !this.headersSent && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
             // writeHead() was NOT called and full body is known at end-time:
@@ -717,9 +732,9 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
             if (this._hasBody && head) {
                 const headerBuf = Buffer.from(head);
                 const combined = Buffer.concat([headerBuf, body]);
-                this.socket.write(combined);
+                this._writeOutput(combined);
             } else if (head) {
-                this.socket.write(Buffer.from(head));
+                this._writeOutput(Buffer.from(head));
             }
             data = null; // already written
         } else {
@@ -736,23 +751,27 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this.write(data, encoding);
     }
 
+    this._writableEnded = true;
+
     if (this._chunked && this._hasBody) {
-        this.socket.write(Buffer.from('0\r\n\r\n'));
+        this._writeOutput(Buffer.from('0\r\n\r\n'));
     }
 
+    if (typeof cb === 'function') {
+        this.once('finish', cb);
+    }
     const finishResponse = (error) => {
         if (error) {
             this._errored = error;
             this.emit('error', error);
             return;
         }
-        if (typeof cb === 'function') cb();
         this.emit('finish');
     };
 
     // An empty write acts as a completion barrier behind all response framing.
     // Its callback runs only after every preceding socket write has completed.
-    this.socket.write(Buffer.alloc(0), finishResponse);
+    this._writeOutput(Buffer.alloc(0), finishResponse);
 
     // Uncork the socket to flush any buffered writes (matches Node.js behavior)
     if (this.socket && typeof this.socket.uncork === 'function') {
