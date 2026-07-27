@@ -123,6 +123,12 @@ export async function test() {
     } catch (error) {
         results.lookupServiceCallbackValidation = error.code === 'ERR_INVALID_ARG_TYPE';
     }
+    try {
+        dns.lookupService('invalid');
+        results.lookupServiceMissingArgs = false;
+    } catch (error) {
+        results.lookupServiceMissingArgs = error.code === 'ERR_MISSING_ARGS';
+    }
 
     return JSON.stringify(results);
 }

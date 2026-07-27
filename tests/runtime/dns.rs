@@ -183,6 +183,12 @@ async fn dns_module_api(#[tagged_as("dns")] compiled: &CompiledTest) -> anyhow::
                 .unwrap_or(false),
             "lookupService should use ERR_INVALID_ARG_TYPE for callback"
         );
+        assert!(
+            result_obj["lookupServiceMissingArgs"]
+                .as_bool()
+                .unwrap_or(false),
+            "lookupService should use ERR_MISSING_ARGS when arguments are omitted"
+        );
     } else {
         anyhow::bail!("Expected string result from test function");
     }
