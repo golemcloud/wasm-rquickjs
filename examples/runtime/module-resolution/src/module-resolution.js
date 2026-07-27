@@ -4081,6 +4081,7 @@ export const testSyncBuiltinEsmExports = async () => {
         const fsModule = await import('node:fs');
         const eventsModule = await import('node:events');
         const processModule = await import('node:process');
+        const utilModule = await import('node:util');
         const vmModule = await import('node:vm');
 
         const fs = fsModule.default;
@@ -4095,6 +4096,10 @@ export const testSyncBuiltinEsmExports = async () => {
             () => processModule.report.getReport(1),
             { code: 'ERR_INVALID_ARG_TYPE' },
         );
+        assert.throws(
+            () => processModule.report.getReport([]),
+            { code: 'ERR_INVALID_ARG_TYPE' },
+        );
         assert.strictEqual(
             processModule.report.getReport({}).javascriptStack.message,
             'No stack.',
@@ -4107,10 +4112,19 @@ export const testSyncBuiltinEsmExports = async () => {
             () => processModule.report.writeReport(undefined, 1),
             { code: 'ERR_INVALID_ARG_TYPE' },
         );
+        assert.throws(
+            () => processModule.report.writeReport([]),
+            { code: 'ERR_INVALID_ARG_TYPE' },
+        );
         const diagnosticReport = processModule.report.getReport();
         assert.strictEqual(diagnosticReport.header.platform, 'wasi');
         assert.strictEqual(diagnosticReport.header.arch, 'wasm32');
         assert(Array.isArray(diagnosticReport.javascriptStack.stack));
+        assert.strictEqual(
+            diagnosticReport.javascriptStack.message,
+            'Error [ERR_SYNTHETIC]: JavaScript Callstack',
+        );
+        assert(diagnosticReport.javascriptStack.stack.length > 0);
         assert.strictEqual(typeof diagnosticReport.javascriptHeap.usedMemory, 'number');
         const originalReportCompact = processModule.report.compact;
         processModule.report.compact = true;
@@ -4155,6 +4169,12 @@ export const testSyncBuiltinEsmExports = async () => {
         module.syncBuiltinESMExports();
 
         const events = eventsModule.default;
+        assert.strictEqual(new events().constructor, events);
+        assert.strictEqual(utilModule.types.isProxy(events), false);
+        assert.match(
+            Function.prototype.toString.call(Object.defineProperty),
+            /\[native code\]/,
+        );
         const event = new eventsModule.Event('before-sync');
         assert.strictEqual(new eventsModule.EventTarget().dispatchEvent(event), true);
         const originalDefaultMaxListeners = events.defaultMaxListeners;
@@ -6243,6 +6263,14 @@ export const testPackageCustomConditions = async () => {
             '/package-custom-conditions-app/module-scope/check.js',
             'export const checked = true;\n',
         );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/ambiguous-check.js',
+            'export const checked = true;\n',
+        );
+        fs.writeFileSync(
+            '/package-custom-conditions-app/extensionless-check',
+            'export const checked = true;\n',
+        );
         assert.strictEqual(execFileSync(
             process.execPath,
             ['--check', '/package-custom-conditions-app/check.mjs'],
@@ -6251,6 +6279,16 @@ export const testPackageCustomConditions = async () => {
         assert.strictEqual(execFileSync(
             process.execPath,
             ['--check', '/package-custom-conditions-app/module-scope/check.js'],
+            { encoding: 'utf8' },
+        ), '');
+        assert.strictEqual(execFileSync(
+            process.execPath,
+            ['--check', '/package-custom-conditions-app/ambiguous-check.js'],
+            { encoding: 'utf8' },
+        ), '');
+        assert.strictEqual(execFileSync(
+            process.execPath,
+            ['--check', '/package-custom-conditions-app/extensionless-check'],
             { encoding: 'utf8' },
         ), '');
 
@@ -8488,6 +8526,10 @@ export const testRequireEsmRejectionTracking = async () => {
         fs.writeFileSync('/require-esm-rejection-app/saved-reason.mjs', [
             'throw globalThis.__requireEsmSavedReason;',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/queued-shared-reason.mjs', [
+            'queueMicrotask(() => Promise.reject(globalThis.__requireEsmQueuedReason));',
+            'throw globalThis.__requireEsmQueuedReason;',
+        ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/preexisting-reason.mjs', [
             'throw globalThis.__requireEsmPreexistingReason;',
         ].join('\n'));
@@ -8534,6 +8576,13 @@ export const testRequireEsmRejectionTracking = async () => {
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
+            globalThis.__requireEsmQueuedReason = new Error('queued shared reason');
+            assert.throws(() => require('/require-esm-rejection-app/queued-shared-reason.mjs'), {
+                message: 'queued shared reason',
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
             globalThis.__requireEsmSavedReason = new Error('saved reason');
             assert.throws(() => require('/require-esm-rejection-app/saved-reason.mjs'), {
                 message: 'saved reason',
@@ -8550,6 +8599,7 @@ export const testRequireEsmRejectionTracking = async () => {
             'preexisting reason',
             'side rejection',
             'shared reason',
+            'queued shared reason',
             'saved reason',
         ]);
 

@@ -11,18 +11,6 @@ import {
 
 import EventEmitter from 'node:events';
 
-const _objectDefineProperty = Object.defineProperty;
-Object.defineProperty = function defineProperty(target, property, descriptor) {
-    try {
-        return _objectDefineProperty(target, property, descriptor);
-    } catch (error) {
-        if (error instanceof TypeError && error.message === 'property is not configurable') {
-            throw new TypeError('Cannot redefine property: ' + String(property));
-        }
-        throw error;
-    }
-};
-
 function _invalidArgTypeHelper(value) {
     if (value == null) return ' Received ' + String(value);
     if (typeof value === 'function') return ' Received function ' + value.name;
@@ -277,13 +265,17 @@ function _reportBooleanOption(name, value) {
 }
 
 function _diagnosticReport(error) {
+    if (error === undefined) {
+        error = new Error('JavaScript Callstack');
+        error.name = 'Error [ERR_SYNTHETIC]';
+        const frames = String(error.stack).split('\n').slice(1);
+        error.stack = 'Error [ERR_SYNTHETIC]: JavaScript Callstack\n' + frames.join('\n');
+    }
     const now = new Date();
     const memory = process.memoryUsage();
     const usage = process.cpuUsage();
-    const hasStack = error !== undefined && typeof error.stack === 'string';
-    const stack = hasStack
-        ? error.stack.split('\n')
-        : new Error().stack.split('\n').slice(1);
+    const hasStack = error !== null && typeof error.stack === 'string';
+    const stackLines = hasStack ? error.stack.split('\n') : [];
     return {
         header: {
             reportVersion: 5,
@@ -307,8 +299,8 @@ function _diagnosticReport(error) {
             host: '',
         },
         javascriptStack: {
-            message: hasStack ? String(error) : 'No stack.',
-            stack: hasStack ? stack : [],
+            message: hasStack ? stackLines[0] : 'No stack.',
+            stack: hasStack ? stackLines.slice(1) : [],
             errorProperties: {},
         },
         javascriptHeap: {
@@ -354,7 +346,8 @@ function _defaultReportFilename() {
 
 process.report = {
     getReport(error) {
-        if (error !== undefined && (error === null || typeof error !== 'object')) {
+        if (error !== undefined &&
+            (error === null || typeof error !== 'object' || Array.isArray(error))) {
             throw _makeTypeError(
                 'ERR_INVALID_ARG_TYPE',
                 'The "err" argument must be of type object.' + _invalidArgTypeHelper(error),
@@ -372,7 +365,8 @@ process.report = {
                 'The "file" argument must be of type string.' + _invalidArgTypeHelper(filename),
             );
         }
-        if (error !== undefined && (error === null || typeof error !== 'object')) {
+        if (error !== undefined &&
+            (error === null || typeof error !== 'object' || Array.isArray(error))) {
             throw _makeTypeError(
                 'ERR_INVALID_ARG_TYPE',
                 'The "err" argument must be of type object.' + _invalidArgTypeHelper(error),
@@ -1002,8 +996,9 @@ process._runExitHandlers = function _runExitHandlers(code) {
 // that handle the rejection synchronously don't cause false positives.
 const _pendingRejections = new Map();
 const _ignoredUnhandledRejections = new WeakSet();
+const _requireEsmRejectionScopes = [];
 let _unhandledRejectionCheckScheduled = false;
-let _rejectionSequence = 0;
+let _nextRequireEsmRejectionScope = 0;
 
 function _isIgnoredUnhandledRejection(promise) {
     return _ignoredUnhandledRejections.has(promise);
@@ -1042,10 +1037,11 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
         return;
     }
     if (!isHandled) {
-        _pendingRejections.set(promise, {
-            reason,
-            sequence: ++_rejectionSequence,
-        });
+        _pendingRejections.set(promise, { reason });
+        const scope = _requireEsmRejectionScopes[_requireEsmRejectionScopes.length - 1];
+        if (scope !== undefined) {
+            scope.promises.push(promise);
+        }
         _scheduleUnhandledRejectionCheck();
     } else {
         _pendingRejections.delete(promise);
@@ -1058,26 +1054,35 @@ globalThis.__wasm_rquickjs_ignore_unhandled_rejection = function(promise) {
 };
 
 globalThis.__wasm_rquickjs_begin_require_esm_rejection_scope = function() {
-    return _rejectionSequence;
+    const id = ++_nextRequireEsmRejectionScope;
+    _requireEsmRejectionScopes.push({ id, promises: [] });
+    return id;
 };
 
-globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(
-    evaluationPromise,
-    reason,
-    scopeStart,
-) {
-    if (_pendingRejections.has(evaluationPromise)) {
-        _ignoredUnhandledRejections.add(evaluationPromise);
-        _pendingRejections.delete(evaluationPromise);
-        return;
+function _takeRequireEsmRejectionScope(id) {
+    for (let i = _requireEsmRejectionScopes.length - 1; i >= 0; i--) {
+        if (_requireEsmRejectionScopes[i].id === id) {
+            return _requireEsmRejectionScopes.splice(i, 1)[0];
+        }
     }
+    return undefined;
+}
 
-    let modulePromise;
-    let moduleSequence = scopeStart;
-    for (const [promise, entry] of _pendingRejections) {
-        if (entry.reason === reason && entry.sequence > moduleSequence) {
-            modulePromise = promise;
-            moduleSequence = entry.sequence;
+globalThis.__wasm_rquickjs_end_require_esm_rejection_scope = function(id) {
+    _takeRequireEsmRejectionScope(id);
+};
+
+globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPromise, id) {
+    const scope = _takeRequireEsmRejectionScope(id);
+    let modulePromise = _pendingRejections.has(evaluationPromise)
+        ? evaluationPromise
+        : undefined;
+    if (modulePromise === undefined && scope !== undefined) {
+        for (let i = scope.promises.length - 1; i >= 0; i--) {
+            if (_pendingRejections.has(scope.promises[i])) {
+                modulePromise = scope.promises[i];
+                break;
+            }
         }
     }
     if (modulePromise !== undefined) {

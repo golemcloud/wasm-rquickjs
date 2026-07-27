@@ -8595,6 +8595,10 @@ fn cjs_package_scope_info<'js>(
     Ok(Some(result))
 }
 
+fn source_uses_esm_format(source: String) -> bool {
+    source_looks_like_esm(&source) || has_cjs_wrapper_lexical_redeclaration(&source)
+}
+
 fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
     let Some(parent) = dir.parent() else {
         return false;
@@ -10649,6 +10653,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create CJS package scope classifier"),
         )
         .expect("Failed to initialize CJS package scope classifier");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_source_uses_esm_format",
+            Function::new(ctx.clone(), source_uses_esm_format)
+                .expect("Failed to create source format classifier"),
+        )
+        .expect("Failed to initialize source format classifier");
 
         set_non_replaceable_global(
             &global,

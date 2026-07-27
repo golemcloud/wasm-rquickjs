@@ -963,12 +963,25 @@ function runInline(command, args, options) {
                     source = '//' + source;
                 }
                 let isModule = scriptPath.endsWith('.mjs');
-                if (!isModule && scriptPath.endsWith('.js')) {
+                if (!isModule && !scriptPath.endsWith('.cjs') &&
+                    (scriptPath.endsWith('.js') || path.extname(scriptPath) === '')) {
                     const packageScopeInfo = globalThis.__wasm_rquickjs_cjs_package_scope_info;
                     const packageScope = typeof packageScopeInfo === 'function'
                         ? packageScopeInfo(scriptPath)
                         : null;
-                    isModule = packageScope != null && packageScope.packageType === 'module';
+                    if (packageScope != null && packageScope.packageType === 'module') {
+                        isModule = true;
+                    } else {
+                        const explicitlyCommonJs = packageScope != null &&
+                            (packageScope.packageType === 'commonjs' ||
+                                (packageScope.packageType == null &&
+                                    packageScope.isNodeModulesPackage === true));
+                        const classifySource =
+                            globalThis.__wasm_rquickjs_source_uses_esm_format;
+                        isModule = !explicitlyCommonJs &&
+                            typeof classifySource === 'function' &&
+                            classifySource(source);
+                    }
                 }
                 checkSyntaxWithFilename(
                     isModule ? source : moduleModule.wrap(source),
