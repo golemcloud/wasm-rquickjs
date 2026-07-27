@@ -82,6 +82,37 @@ impl CategoryCounts {
 
 #[test]
 fn generate_node_compat_config_report() -> anyhow::Result<()> {
+    let (report, counts) = render_node_compat_config_report()?;
+    fs::write(REPORT_PATH, &report)?;
+
+    println!("Report written to {REPORT_PATH}");
+    println!("Expanded inventory entries: {}", counts.total());
+    println!(
+        "Primary compatibility (CI-enforced): {}/{} ({:.1}%)",
+        counts.runnable,
+        counts.primary_total(),
+        pct(counts.runnable, counts.primary_total())
+    );
+    println!(
+        "Excluded from primary: WASI-impossible={}, engine-difference={}, unevaluated={}, node-internals={}",
+        counts.wasi_impossible, counts.engine_difference, counts.unevaluated, counts.node_internals
+    );
+
+    Ok(())
+}
+
+#[test]
+fn node_compat_config_report_is_current() -> anyhow::Result<()> {
+    let (expected, _) = render_node_compat_config_report()?;
+    let actual = fs::read_to_string(REPORT_PATH)?;
+    assert_eq!(
+        actual, expected,
+        "{REPORT_PATH} is stale; run `cargo test --test node_compat_report -- generate_node_compat_config_report`"
+    );
+    Ok(())
+}
+
+fn render_node_compat_config_report() -> anyhow::Result<(String, CategoryCounts)> {
     let entries = load_node_compat_config(CONFIG_PATH)?;
     let node_version = load_node_version(CONFIG_PATH)?;
     let items = expand_entries(&entries);
@@ -111,8 +142,7 @@ fn generate_node_compat_config_report() -> anyhow::Result<()> {
         "# Node.js v{node_version} Compatibility Inventory\n\n"
     ));
     report.push_str(&format!(
-        "Generated: {} | Source: `{CONFIG_PATH}` | Engine: wasm-rquickjs (QuickJS)\n\n",
-        now_date()
+        "Source: `{CONFIG_PATH}` | Engine: wasm-rquickjs (QuickJS)\n\n"
     ));
     report.push_str(
         "This report is generated from `config.jsonc` only. It does **not** run the vendored \
@@ -126,22 +156,7 @@ fn generate_node_compat_config_report() -> anyhow::Result<()> {
     push_reason_sections(&mut report, &by_category);
     push_missing_reasons(&mut report, &missing_reasons);
 
-    fs::write(REPORT_PATH, &report)?;
-
-    println!("Report written to {REPORT_PATH}");
-    println!("Expanded inventory entries: {}", counts.total());
-    println!(
-        "Primary compatibility (CI-enforced): {}/{} ({:.1}%)",
-        counts.runnable,
-        counts.primary_total(),
-        pct(counts.runnable, counts.primary_total())
-    );
-    println!(
-        "Excluded from primary: WASI-impossible={}, engine-difference={}, unevaluated={}, node-internals={}",
-        counts.wasi_impossible, counts.engine_difference, counts.unevaluated, counts.node_internals
-    );
-
-    Ok(())
+    Ok((report, counts))
 }
 
 #[test]
@@ -636,8 +651,4 @@ fn pct(numerator: usize, denominator: usize) -> f64 {
 
 fn escape_table_cell(value: &str) -> String {
     value.replace('\n', " ").replace('|', "\\|")
-}
-
-fn now_date() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
 }

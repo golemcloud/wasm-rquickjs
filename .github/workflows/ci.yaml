@@ -134,7 +134,7 @@ jobs:
         run: bash tests/node_compat/vendor.sh
       - name: Module inventory contracts
         if: matrix.shard == 0
-        run: cargo test --test node_compat_report $CI_WASMTIME_FORK_FEATURES -- module_related_node_compat_entries_are_configured module_related_known_gaps_are_deferred_or_covered module_known_gap_deferrals_require_an_exact_reason vm_split_fixtures_include_top_level_executable_statements --report-time
+        run: cargo test --test node_compat_report $CI_WASMTIME_FORK_FEATURES -- module_related_node_compat_entries_are_configured module_related_known_gaps_are_deferred_or_covered module_known_gap_deferrals_require_an_exact_reason node_compat_config_report_is_current vm_split_fixtures_include_top_level_executable_statements --report-time
       - name: Node compat tests (shard ${{ matrix.shard }}/8)
         run: cargo test --test node_compat $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
       - name: Publish Test Report

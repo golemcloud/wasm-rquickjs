@@ -1,6 +1,6 @@
 # Node.js v22.14.0 Compatibility Inventory
 
-Generated: 2026-07-24 | Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
+Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
 This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3238/4426 (73.2%)
+**Primary compatibility (CI-enforced):** 3237/4426 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3238 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1188 | 26.8% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3237 | 73.1% | 56.3% | 47.1% |
+| 🧩 known gap | 1189 | 26.9% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1156 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3238/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3237/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 374 | 12 | 20 | 5 | 0 | 71 | 96.9% | 91.0% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 243 | 306 | 267 | 2 | 0 | 80 | 44.3% | 29.7% |
+| http | 898 | 242 | 307 | 267 | 2 | 0 | 80 | 44.1% | 29.6% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
@@ -285,7 +285,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-handle-wrap-hasref.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
 | `test-heap-prof-invalid-args.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
 | `test-http-1.0.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-http-aborted.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-aborted.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-http-agent-timeout.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-chunk-extensions-limit.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-client-abort-destroy.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1188)
+### known gap (1189)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1319,6 +1319,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.createContext does not validate null name/origin options like Node | 1 | `parallel/test-vm-basic.js#block_07_statement_07` |
 | vm.runInNewContext does not validate null contextName/contextOrigin options like Node | 1 | `parallel/test-vm-basic.js#block_08_statement_08` |
 | wasi module and --permission integration are incomplete | 1 | `parallel/test-permission-wasi.js` |
+| wasi:http cancellation does not yet propagate ClientRequest.abort() to the exact in-process server request | 1 | `parallel/test-http-aborted.js#block_00_block_00` |
 | wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-chunked-with-content-length.js` |
 | wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses | 1 | `parallel/test-http-client-reject-cr-no-lf.js` |
 | wasi:http client does not surface informational 1xx responses as 'information' events | 1 | `parallel/test-http-information-processing.js` |

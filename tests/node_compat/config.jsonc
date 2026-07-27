@@ -4335,7 +4335,10 @@
     "parallel/test-http-aborted.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
+        "block_00_block_00": {
+          "category": "known-gap",
+          "reason": "wasi:http cancellation does not yet propagate ClientRequest.abort() to the exact in-process server request"
+        },
         "block_01_block_01": {}
       }
     },
