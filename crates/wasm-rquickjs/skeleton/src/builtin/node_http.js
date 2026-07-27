@@ -2424,10 +2424,7 @@ export class ClientRequest extends OutgoingMessage {
                     res.resume();
                 } else if (hasReadableListeners) {
                     res.read(0);
-                } else if (res._nativeRes && typeof res._nativeRes.discardBody === 'function') {
-                    res._nativeRes.discardBody();
-                    res.complete = true;
-                    res.push(null);
+                } else {
                     res.resume();
                 }
             }
