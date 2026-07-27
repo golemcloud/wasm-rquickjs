@@ -231,7 +231,6 @@ Object.defineProperty(process, 'title', {
 });
 process.release = { name: 'node' };
 process.allowedNodeEnvironmentFlags = new Set();
-process.report = {};
 Object.defineProperty(process, Symbol.toStringTag, {
     value: 'process',
     writable: true,

@@ -4080,7 +4080,11 @@ export const testSyncBuiltinEsmExports = async () => {
         const module = await import('node:module');
         const fsModule = await import('node:fs');
         const eventsModule = await import('node:events');
+        const processModule = await import('node:process');
         const vmModule = await import('node:vm');
+
+        assert.strictEqual(processModule.default.report, undefined);
+        assert.strictEqual(processModule.report, undefined);
 
         const fs = fsModule.default;
         const originalReadFile = fs.readFile;
