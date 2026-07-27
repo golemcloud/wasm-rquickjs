@@ -2522,10 +2522,6 @@ function loaderCommonJsFilename(url) {
 }
 
 function loaderCommonJsCacheKey(url, filename) {
-    url = String(url || '');
-    if (url.startsWith('file://') && /[?#]/.test(url)) {
-        return url;
-    }
     return filename;
 }
 

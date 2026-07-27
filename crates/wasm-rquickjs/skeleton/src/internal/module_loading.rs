@@ -5220,10 +5220,7 @@ impl NodeModulesResolver {
                 return Ok(PackageTargetResolution::Blocked);
             }
             PackageTarget::Bool(false) => {
-                return Err(NodePackageResolveError::InvalidPackageTarget {
-                    kind: ctx.kind,
-                    target: "false".to_string(),
-                });
+                return Ok(PackageTargetResolution::Blocked);
             }
             PackageTarget::Bool(true) => {
                 return Err(NodePackageResolveError::InvalidPackageTarget {
@@ -5309,13 +5306,18 @@ impl NodeModulesResolver {
                 });
             }
             PackageTarget::Array(array) => {
+                if array.is_empty() {
+                    return Ok(PackageTargetResolution::Blocked);
+                }
                 let mut last_fallback_error = None;
                 for item in array {
                     match Self::resolve_package_target_value(item, ctx, resolution) {
                         Ok(PackageTargetResolution::Resolved(path)) => {
                             return Ok(PackageTargetResolution::Resolved(path));
                         }
-                        Ok(PackageTargetResolution::Blocked) => continue,
+                        Ok(PackageTargetResolution::Blocked) => {
+                            return Ok(PackageTargetResolution::Blocked);
+                        }
                         Ok(PackageTargetResolution::NoMatch) => continue,
                         Err(err @ NodePackageResolveError::InvalidPackageTarget { .. }) => {
                             last_fallback_error = Some(err);
@@ -5337,10 +5339,7 @@ impl NodeModulesResolver {
                             .join("package.json")
                             .to_string_lossy()
                             .into_owned(),
-                        reason: Some(format!(
-                            "\"{}\" cannot contain numeric property keys.",
-                            ctx.kind
-                        )),
+                        reason: Some("\"exports\" cannot contain numeric property keys.".to_string()),
                     });
                 }
                 for (condition, value) in map {

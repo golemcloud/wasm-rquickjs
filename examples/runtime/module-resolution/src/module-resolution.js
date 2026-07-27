@@ -359,6 +359,14 @@ export const testEsmPackageMapEdgeCases = async () => {
                     false,
                     './public.mjs',
                 ],
+                './condition-array-empty': {
+                    node: [],
+                    default: './public.mjs',
+                },
+                './condition-array-false': {
+                    node: [false],
+                    default: './public.mjs',
+                },
                 './array-missing-first': [
                     './missing.mjs',
                     './public.mjs',
@@ -436,8 +444,6 @@ export const testEsmPackageMapEdgeCases = async () => {
             'export const doubleEncodedDotFileTarget = (await import("exported-pkg/double-encoded-dot-file-target")).default;',
             'export const conditionOrder = (await import("exported-pkg/condition-order")).default;',
             'export const arrayFallback = (await import("exported-pkg/array-fallback")).default;',
-            'export const arrayBlocked = (await import("exported-pkg/array-blocked")).default;',
-            'export const arrayFalseFallback = (await import("exported-pkg/array-false-fallback")).default;',
             'export const arrayInvalidFallback = (await import("exported-pkg/array-invalid-fallback")).default;',
             'export const conditionNoMatchFallback = (await import("exported-pkg/condition-no-match-fallback")).default;',
             'export const singlePattern = (await import("exported-pkg/multi/xAyB")).default;',
@@ -450,8 +456,6 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.doubleEncodedDotFileTarget, { doubleEncodedDotFile: true });
         assert.deepStrictEqual(entry.conditionOrder, { condition: 'default' });
         assert.deepStrictEqual(entry.arrayFallback, { public: true });
-        assert.deepStrictEqual(entry.arrayBlocked, { public: true });
-        assert.deepStrictEqual(entry.arrayFalseFallback, { public: true });
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
         assert.deepStrictEqual(entry.singlePattern, { singlePattern: true });
@@ -463,6 +467,16 @@ export const testEsmPackageMapEdgeCases = async () => {
             '/esm-package-map-edge-app/numeric-nested.mjs',
             /"exports" cannot contain numeric property keys\./,
         );
+        for (const [name, specifier] of [
+            ['array-blocked', 'exported-pkg/array-blocked'],
+            ['array-false-fallback', 'exported-pkg/array-false-fallback'],
+            ['condition-array-empty', 'exported-pkg/condition-array-empty'],
+            ['condition-array-false', 'exported-pkg/condition-array-false'],
+        ]) {
+            const entryPath = `/esm-package-map-edge-app/${name}.mjs`;
+            writeImportEntry(entryPath, specifier);
+            await expectImportRejectsCode(entryPath, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+        }
 
         fs.mkdirSync('/esm-package-map-edge-app/extensionless-directory', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/extensionless-directory/index', 'module.exports = "must-not-load";');
@@ -729,7 +743,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/encoded-dot-target-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         await expectImportError('/esm-package-map-edge-app/encoded-slash-target-subpath.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportError('/esm-package-map-edge-app/blocked-null-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
-        await expectImportError('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'ERR_INVALID_PACKAGE_TARGET');
+        await expectImportError('/esm-package-map-edge-app/blocked-false-subpath.mjs', 'ERR_PACKAGE_PATH_NOT_EXPORTED');
         await expectImportError('/esm-package-map-edge-app/array-missing-first-subpath.mjs', 'ERR_MODULE_NOT_FOUND');
         await expectImportError('/esm-package-map-edge-app/root-directory-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
         await expectImportError('/esm-package-map-edge-app/array-root-first-subpath.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
@@ -857,14 +871,20 @@ export const testEsmPackageMapEdgeCases = async () => {
                     false,
                     './app-alias.mjs',
                 ],
+                '#condition-array-empty': {
+                    node: [],
+                    default: './app-alias.mjs',
+                },
+                '#numeric-nested': {
+                    node: { 0: './app-alias.mjs' },
+                    default: './app-alias.mjs',
+                },
             },
         }));
         fs.writeFileSync('/esm-package-map-edge-app/app-alias.mjs', 'export default { appAlias: true };');
         fs.writeFileSync('/esm-package-map-edge-app/imports-entry.mjs', [
             'import external from "#external";',
-            'import arrayFalseFallback from "#array-false-fallback";',
             'export default external;',
-            'export const arrayFalseFallbackValue = arrayFalseFallback;',
         ].join('\n'));
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/dep/package.json', JSON.stringify({
             type: 'module',
@@ -878,7 +898,19 @@ export const testEsmPackageMapEdgeCases = async () => {
 
         const importsEntry = await import('/esm-package-map-edge-app/imports-entry.mjs');
         assert.deepStrictEqual(importsEntry.default, { external: true });
-        assert.deepStrictEqual(importsEntry.arrayFalseFallbackValue, { appAlias: true });
+        for (const [name, specifier] of [
+            ['imports-array-false', '#array-false-fallback'],
+            ['imports-condition-array-empty', '#condition-array-empty'],
+        ]) {
+            const entryPath = `/esm-package-map-edge-app/${name}.mjs`;
+            writeImportEntry(entryPath, specifier);
+            await expectImportRejectsCode(entryPath, 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
+        }
+        writeImportEntry('/esm-package-map-edge-app/imports-numeric-nested.mjs', '#numeric-nested');
+        await expectImportRejectsMessage(
+            '/esm-package-map-edge-app/imports-numeric-nested.mjs',
+            /"exports" cannot contain numeric property keys\./,
+        );
         fs.writeFileSync('/esm-package-map-edge-app/imports-builtin-entry.mjs', 'export default await import("#builtin");');
         await expectImportError('/esm-package-map-edge-app/imports-builtin-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
         fs.writeFileSync('/esm-package-map-edge-app/imports-external-encoded-slash-entry.mjs', 'export default await import("#external-encoded-slash");');
@@ -890,7 +922,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         await expectImportError('/esm-package-map-edge-app/imports-relative-encoded-slash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportError('/esm-package-map-edge-app/imports-relative-encoded-backslash-entry.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         fs.writeFileSync('/esm-package-map-edge-app/imports-false-entry.mjs', 'export default await import("#false-target");');
-        await expectImportError('/esm-package-map-edge-app/imports-false-entry.mjs', 'ERR_INVALID_PACKAGE_TARGET');
+        await expectImportError('/esm-package-map-edge-app/imports-false-entry.mjs', 'ERR_PACKAGE_IMPORT_NOT_DEFINED');
         fs.writeFileSync('/esm-package-map-edge-app/imports-root-directory-entry.mjs', 'export default await import("#root-directory");');
         await expectImportError('/esm-package-map-edge-app/imports-root-directory-entry.mjs', 'ERR_UNSUPPORTED_DIR_IMPORT');
         assert.throws(() => requireRootDirectory('#root-directory'), { code: 'MODULE_NOT_FOUND' });
@@ -3604,8 +3636,8 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'const fileQueryA = await import("virtual:file-query-a");',
             'const fileQueryB = await import("virtual:file-query-b");',
             'assert.strictEqual(fileQueryA.query, "one");',
-            'assert.strictEqual(fileQueryB.query, "two");',
-            'assert.notStrictEqual(fileQueryA.default, fileQueryB.default);',
+            'assert.strictEqual(fileQueryB.query, "one");',
+            'assert.strictEqual(fileQueryA.default, fileQueryB.default);',
             'assert.strictEqual(fileQueryA.filename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual(fileQueryB.filename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual(fileQueryA.moduleId, "/loader-cjs-source-app/query.cjs");',
