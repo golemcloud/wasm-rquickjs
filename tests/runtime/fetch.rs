@@ -922,6 +922,8 @@ async fn fetch_function_shape(#[tagged_as("fetch")] compiled: &CompiledTest) -> 
     assert!(output.contains("fetch test 35 (fetch function shape - Node compat)"));
     assert!(output.contains("fetch instanceof AsyncFunction: false"));
     assert!(output.contains("fetch has Function.prototype: true"));
+    assert!(output.contains("Request standard method normalized: true"));
+    assert!(output.contains("Request custom method preserved: true"));
     assert!(output.contains("new fetch threw: false"));
     assert!(output.contains("new fetch returned Promise: true"));
     assert!(output.contains("fetch function shape matches Node: PASSED"));

@@ -1021,6 +1021,8 @@ export async function fetchFunctionShape() {
     console.log(`fetch instanceof AsyncFunction: ${isAsync}`);
     console.log(`fetch has Function.prototype: ${hasFunctionProto}`);
     console.log(`fetch prototype !== AsyncFunction prototype: ${notAsyncProto}`);
+    console.log(`Request standard method normalized: ${new Request('data:text/plain,', { method: 'post' }).method === 'POST'}`);
+    console.log(`Request custom method preserved: ${new Request('data:text/plain,', { method: 'foo' }).method === 'foo'}`);
 
     // Verify `new fetch(...)` matches Node behavior: returns a Promise without throwing.
     let newResult = null;

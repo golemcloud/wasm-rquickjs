@@ -7,6 +7,14 @@ import * as base64 from 'base64-js';
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
+const normalizedFetchMethods = new Set(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT']);
+
+function normalizeFetchMethod(method) {
+    const value = String(method);
+    const upper = value.toUpperCase();
+    return normalizedFetchMethods.has(upper) ? upper : value;
+}
+
 // Defined as a plain (non-async) function so its prototype is
 // `Function.prototype` (not `AsyncFunction.prototype`) — which Node's vendored
 // `parallel/test-fetch.mjs` asserts. We deliberately do NOT use a
@@ -30,7 +38,7 @@ export function fetch(resource, options = {}) {
         let signal;
 
         if (typeof resource === 'object' && resource instanceof Request) {
-            method = resource.method.toUpperCase();
+            method = normalizeFetchMethod(resource.method);
             const headers = resource.headers;
             if (!headers.has('Accept')) {
                 headers.set('Accept', '*/*');
@@ -54,7 +62,7 @@ export function fetch(resource, options = {}) {
             body = resource._body;
             url = resource.url;
         } else {
-            method = (options.method || 'GET').toUpperCase();
+            method = normalizeFetchMethod(options.method || 'GET');
             const headers = new Headers(options.headers || {});
             if (!headers.has('Accept')) {
                 headers.set('Accept', '*/*');
@@ -931,7 +939,7 @@ export class Request {
     }
 
     get method() {
-        return this._options.method ?? 'GET';
+        return normalizeFetchMethod(this._options.method ?? 'GET');
     }
 
     get mode() {

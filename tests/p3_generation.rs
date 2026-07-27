@@ -2080,7 +2080,7 @@ fn p3_fetch_rejects_invalid_method() -> anyhow::Result<()> {
 }
 
 #[test]
-fn p3_fetch_normalizes_custom_method_case() -> anyhow::Result<()> {
+fn p3_fetch_preserves_custom_method_case() -> anyhow::Result<()> {
     let port = spawn_test_http_server();
     let temp = Utf8TempDir::new()?;
     write_fixture(
@@ -2107,7 +2107,7 @@ fn p3_fetch_normalizes_custom_method_case() -> anyhow::Result<()> {
     let wasm_path = build_p3(temp.path(), "p3_fetch_custom_method_case")?;
     let result = run_p3_string_export(&wasm_path, "run")?;
 
-    assert_eq!(result, "FOO");
+    assert_eq!(result, "foo");
     Ok(())
 }
 
