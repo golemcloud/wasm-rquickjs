@@ -272,10 +272,8 @@ export const runTest = async (testPath) => {
     var restoreArgv = null;
     var restoreCwd = null;
     var restoreLoaders = null;
-    var previousNodeTestEntryFile = globalThis.__wasm_rquickjs_node_test_entry_file;
     var hadPackageConditions = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_package_conditions');
     var previousPackageConditions = globalThis.__wasm_rquickjs_package_conditions;
-    globalThis.__wasm_rquickjs_node_test_entry_file = testPath;
 
     if (globalThis.process) {
         var originalArgv = Array.isArray(globalThis.process.argv) ? globalThis.process.argv.slice() : null;
@@ -399,11 +397,6 @@ export const runTest = async (testPath) => {
     } finally {
         if (restoreLoaders) {
             restoreLoaders();
-        }
-        if (previousNodeTestEntryFile === undefined) {
-            delete globalThis.__wasm_rquickjs_node_test_entry_file;
-        } else {
-            globalThis.__wasm_rquickjs_node_test_entry_file = previousNodeTestEntryFile;
         }
         if (hadPackageConditions) {
             globalThis.__wasm_rquickjs_package_conditions = previousPackageConditions;

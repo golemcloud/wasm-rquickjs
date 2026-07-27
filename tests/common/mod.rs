@@ -501,14 +501,14 @@ mod tests {
     }
 
     #[test]
-    fn p3_http_flake_detection_ignores_attached_stale_trace() {
+    fn p3_http_flake_detection_requires_current_transport_signature() {
         let unrelated =
             anyhow!("unrelated failure").context("host trace:\nprior ErrorCode::HttpProtocolError");
         assert!(!current_error_is_http_protocol_flake(&unrelated));
 
         let current =
             anyhow!("request failed with ErrorCode::HttpProtocolError").context("captured output");
-        assert!(current_error_is_http_protocol_flake(&current));
+        assert!(!current_error_is_http_protocol_flake(&current));
 
         let flattened = anyhow!(
             "guest stdout:\n\nguest stderr:\nJavaScript error: HTTP request failed: \
@@ -1865,14 +1865,6 @@ fn is_p3_http_flake(err: &anyhow::Error) -> bool {
 }
 
 fn current_error_is_http_protocol_flake(err: &anyhow::Error) -> bool {
-    let direct_cause = err
-        .chain()
-        .skip(1)
-        .any(|cause| cause.to_string().contains("ErrorCode::HttpProtocolError"));
-    if direct_cause {
-        return true;
-    }
-
     let captured_output = err.to_string();
     captured_output.contains("guest stderr:")
         && captured_output

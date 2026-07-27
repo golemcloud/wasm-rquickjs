@@ -10,8 +10,9 @@ import { validateNumber, validateInteger } from '__wasm_rquickjs_builtin/interna
 let currentSuite = null;
 
 function activeTestEntryFile(moduleContext) {
-    if (typeof globalThis.__wasm_rquickjs_node_test_entry_file === 'string') {
-        return globalThis.__wasm_rquickjs_node_test_entry_file;
+    if (globalThis.process && Array.isArray(globalThis.process.argv) &&
+        typeof globalThis.process.argv[1] === 'string') {
+        return globalThis.process.argv[1];
     }
     return moduleContext ? moduleContext.filename : undefined;
 }
