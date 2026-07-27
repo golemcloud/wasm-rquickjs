@@ -1,5 +1,5 @@
 // node:http server implementation
-import { Server as NetServer } from 'node:net';
+import { Server as NetServer, Socket as NetSocket } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
@@ -738,8 +738,10 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this.socket.write(Buffer.from('0\r\n\r\n'));
     }
 
-    // Write empty chunk to signal end of response (matches Node.js behavior)
-    if (this.socket && !this._chunked) {
+    // Standalone ServerResponse instances use the empty write to signal completion
+    // to an assigned custom Writable. It has no framing meaning on a TCP socket and
+    // would leave a redundant native write queued after the response bytes.
+    if (this.socket && !this._chunked && !(this.socket instanceof NetSocket)) {
         this.socket.write(Buffer.alloc(0));
     }
 
