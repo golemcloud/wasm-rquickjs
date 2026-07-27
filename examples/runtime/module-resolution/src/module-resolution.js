@@ -436,7 +436,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subpath/dir1/dir1.mjs', 'export default { patternSlash: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/src', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/src/xAyB.mjs', 'export default { singlePattern: true };');
-        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/wrong.mjs', 'export default { multiplePattern: true };');
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/src/xQy*.mjs', 'export default { multiplePattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.symlinkSync(
