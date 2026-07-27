@@ -872,8 +872,14 @@ async fn fetch_redirect_with_failing_stream_body(
 
     println!("{output}");
 
-    assert!(output.contains("fetch test 33 (redirect with failing stream body)"));
-    assert!(output.contains("Stream body source error surfaced through redirect: PASSED"));
+    assert!(
+        output.contains("fetch test 33 (redirect with failing stream body)"),
+        "unexpected output:\n{output}"
+    );
+    assert!(
+        output.contains("Stream body source error surfaced through redirect: PASSED"),
+        "unexpected output:\n{output}"
+    );
 
     Ok(())
 }

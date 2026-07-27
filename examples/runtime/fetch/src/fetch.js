@@ -923,8 +923,8 @@ export async function redirectWithFailingStreamBody(port) {
     console.log("fetch test 33 (redirect with failing stream body)");
 
     // The body source intentionally throws on its first pull.
-    // Even though the target server (/redirect-to) responds with a redirect,
-    // the genuine stream-source error must be propagated (not swallowed).
+    // Delay the redirect response so the body-source failure deterministically
+    // wins the race. The infinite-body case below covers the opposite ordering.
     const stream = new ReadableStream({
         pull(controller) {
             throw new Error("source body failure");
@@ -933,7 +933,7 @@ export async function redirectWithFailingStreamBody(port) {
 
     let caught = null;
     try {
-        await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302`, {
+        await fetch(`http://localhost:${port}/redirect-to?url=/todos&status=302&delay_ms=1000`, {
             method: 'POST',
             body: stream,
             redirect: 'follow'
