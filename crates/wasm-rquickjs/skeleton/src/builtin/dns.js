@@ -1,7 +1,7 @@
 // node:dns implementation backed by wasi:sockets/ip-name-lookup
 import { resolve as native_resolve } from '__wasm_rquickjs_builtin/dns_native';
 import { ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
-import { validatePort } from '__wasm_rquickjs_builtin/internal/validators';
+import { validateFunction, validatePort } from '__wasm_rquickjs_builtin/internal/validators';
 import { isIP, isIPv4, isIPv6 } from 'node:net';
 
 const NOT_SUPPORTED_ERROR_MSG = 'dns record type queries are not supported in WebAssembly environment';
@@ -308,10 +308,8 @@ export function reverse(ip, callback) {
 }
 
 export function lookupService(address, port, callback) {
-    if (typeof callback !== 'function') {
-        throw new TypeError('callback must be a function');
-    }
     validateLookupServiceArgs(address, port);
+    validateFunction(callback, 'callback');
     queueMicrotask(() => callback(Object.assign(
         new Error(`getnameinfo ${NOT_SUPPORTED_ERROR_MSG}`),
         { code: 'ENOTIMP' }

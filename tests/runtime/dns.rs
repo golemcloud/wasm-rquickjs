@@ -165,6 +165,24 @@ async fn dns_module_api(#[tagged_as("dns")] compiled: &CompiledTest) -> anyhow::
             result_obj["hasAll"].as_bool().unwrap_or(false),
             "ALL should be 16"
         );
+        assert!(
+            result_obj["lookupServiceAddressValidationFirst"]
+                .as_bool()
+                .unwrap_or(false),
+            "lookupService should validate address before callback"
+        );
+        assert!(
+            result_obj["lookupServicePortValidationFirst"]
+                .as_bool()
+                .unwrap_or(false),
+            "lookupService should validate port before callback"
+        );
+        assert!(
+            result_obj["lookupServiceCallbackValidation"]
+                .as_bool()
+                .unwrap_or(false),
+            "lookupService should use ERR_INVALID_ARG_TYPE for callback"
+        );
     } else {
         anyhow::bail!("Expected string result from test function");
     }
