@@ -855,7 +855,7 @@ function loadAsDirectory(candidate, id, parentDir, seen) {
         }
     }
 
-    const indexResolved = loadAsFile(pathModule.join(candidate, 'index'), false);
+    const indexResolved = loadAsFile(pathModule.join(candidate, 'index'), true);
     if (indexResolved !== null) {
         emitInvalidMainWarning(pkgJsonPath, invalidMain);
         return indexResolved;
@@ -2522,6 +2522,10 @@ function loaderCommonJsFilename(url) {
 }
 
 function loaderCommonJsCacheKey(url, filename) {
+    url = String(url || '');
+    if (url.startsWith('file://') && /[?#]/.test(url)) {
+        return url;
+    }
     return filename;
 }
 

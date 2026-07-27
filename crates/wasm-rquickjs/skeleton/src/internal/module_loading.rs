@@ -4185,6 +4185,13 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         self.normalized_is_file(&normalized)
     }
 
+    fn is_dir(&self, path: &std::path::Path) -> bool {
+        let normalized = CjsEvalResolver::normalize_path(path);
+        let fs_path = crate::builtin::realpath_for_module_resolution(&normalized)
+            .unwrap_or(normalized);
+        std::path::Path::new(&fs_path).is_dir()
+    }
+
     fn with_mode<T>(
         &mut self,
         mode: NodePackageResolveMode,
@@ -5174,17 +5181,6 @@ impl NodeModulesResolver {
         let PackageTarget::Object(map) = exports else {
             return Ok(());
         };
-        if map.keys().any(|key| {
-            !key.is_empty()
-                && key.chars().enumerate().all(|(idx, ch)| {
-                    ch.is_ascii_digit() && (idx > 0 || ch != '0' || key.len() == 1)
-                })
-        }) {
-            return Err(NodePackageResolveError::InvalidPackageConfig {
-                path: pkg_path.to_string_lossy().into_owned(),
-                reason: Some("\"exports\" cannot contain numeric property keys".to_string()),
-            });
-        }
         let has_subpath_key = map.keys().any(|key| key.starts_with('.'));
         let has_condition_key = map.keys().any(|key| !key.starts_with('.'));
         if has_subpath_key && has_condition_key {
@@ -5298,7 +5294,7 @@ impl NodeModulesResolver {
                         candidate.to_string_lossy().into_owned(),
                     ));
                 }
-                if candidate.is_dir() {
+                if resolution.is_dir(&candidate) {
                     if resolution.mode == NodePackageResolveMode::CjsAnalysis {
                         return Err(NodePackageResolveError::ModuleNotFound {
                             request: candidate.to_string_lossy().into_owned(),
@@ -5334,11 +5330,25 @@ impl NodeModulesResolver {
                 return Ok(PackageTargetResolution::NoMatch);
             }
             PackageTarget::Object(map) => {
+                if map.keys().any(|key| Self::is_array_index(key)) {
+                    return Err(NodePackageResolveError::InvalidPackageConfig {
+                        path: ctx
+                            .package_dir
+                            .join("package.json")
+                            .to_string_lossy()
+                            .into_owned(),
+                        reason: Some(format!(
+                            "\"{}\" cannot contain numeric property keys.",
+                            ctx.kind
+                        )),
+                    });
+                }
                 for (condition, value) in map {
-                    if ctx
-                        .conditions
-                        .iter()
-                        .any(|candidate| candidate == condition)
+                    if condition == "default"
+                        || ctx
+                            .conditions
+                            .iter()
+                            .any(|candidate| candidate == condition)
                     {
                         match Self::resolve_package_target_value(value, ctx, resolution)? {
                             PackageTargetResolution::NoMatch => continue,
@@ -5353,6 +5363,9 @@ impl NodeModulesResolver {
 
     fn package_pattern_key_match(pattern_key: &str, key: &str) -> Option<String> {
         let star = pattern_key.find('*')?;
+        if pattern_key[star + 1..].contains('*') {
+            return None;
+        }
         let prefix = &pattern_key[..star];
         let suffix = &pattern_key[star + 1..];
         if !key.starts_with(prefix) || !key.ends_with(suffix) {
@@ -5469,9 +5482,14 @@ impl NodeModulesResolver {
             ordering => return ordering,
         }
         match b.len().cmp(&a.len()) {
-            std::cmp::Ordering::Equal => a.cmp(b),
+            std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
             ordering => ordering,
         }
+    }
+
+    fn is_array_index(key: &str) -> bool {
+        key.parse::<u32>()
+            .is_ok_and(|index| index != u32::MAX && index.to_string() == key)
     }
 
     fn target_resolution_to_export_result(

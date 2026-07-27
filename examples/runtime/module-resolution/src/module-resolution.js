@@ -323,6 +323,8 @@ export const testEsmPackageMapEdgeCases = async () => {
                 './root-directory': './',
                 './deprecated-double': './/public.mjs',
                 './pattern-slash*': './subpath*.mjs',
+                './multi/*': './src/*.mjs',
+                './multi/x*y*': './wrong.mjs',
                 './trailing-pattern-slash*': './trailing-pattern-slash*index.mjs',
                 './folder-pattern*': './folder-pattern*index.mjs',
                 './tamper-pattern*': './tamper-pattern*index.mjs',
@@ -373,6 +375,10 @@ export const testEsmPackageMapEdgeCases = async () => {
                     node: { browser: './browser.mjs' },
                     default: './public.mjs',
                 },
+                './numeric-nested': {
+                    node: { 0: './public.mjs' },
+                    default: './public.mjs',
+                },
                 './directory': './subdir',
                 './no-ext': './real',
             },
@@ -411,6 +417,9 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/folder-pattern/foo/index.mjs', 'export default { folderPattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subpath/dir1', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subpath/dir1/dir1.mjs', 'export default { patternSlash: true };');
+        fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/src', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/src/xAyB.mjs', 'export default { singlePattern: true };');
+        fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/wrong.mjs', 'export default { multiplePattern: true };');
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
@@ -431,6 +440,7 @@ export const testEsmPackageMapEdgeCases = async () => {
             'export const arrayFalseFallback = (await import("exported-pkg/array-false-fallback")).default;',
             'export const arrayInvalidFallback = (await import("exported-pkg/array-invalid-fallback")).default;',
             'export const conditionNoMatchFallback = (await import("exported-pkg/condition-no-match-fallback")).default;',
+            'export const singlePattern = (await import("exported-pkg/multi/xAyB")).default;',
         ].join('\n'));
 
         const entry = await import('/esm-package-map-edge-app/entry.mjs');
@@ -444,6 +454,23 @@ export const testEsmPackageMapEdgeCases = async () => {
         assert.deepStrictEqual(entry.arrayFalseFallback, { public: true });
         assert.deepStrictEqual(entry.arrayInvalidFallback, { public: true });
         assert.deepStrictEqual(entry.conditionNoMatchFallback, { public: true });
+        assert.deepStrictEqual(entry.singlePattern, { singlePattern: true });
+        writeImportEntry(
+            '/esm-package-map-edge-app/numeric-nested.mjs',
+            'exported-pkg/numeric-nested',
+        );
+        await expectImportRejectsMessage(
+            '/esm-package-map-edge-app/numeric-nested.mjs',
+            /"exports" cannot contain numeric property keys\./,
+        );
+
+        fs.mkdirSync('/esm-package-map-edge-app/extensionless-directory', { recursive: true });
+        fs.writeFileSync('/esm-package-map-edge-app/extensionless-directory/index', 'module.exports = "must-not-load";');
+        const extensionlessRequire = createRequire('/esm-package-map-edge-app/extensionless-entry.cjs');
+        assert.throws(
+            () => extensionlessRequire('./extensionless-directory'),
+            { code: 'MODULE_NOT_FOUND' },
+        );
 
         assert.strictEqual(Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_emit_package_deprecation_warning'), false);
 
@@ -3577,8 +3604,8 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'const fileQueryA = await import("virtual:file-query-a");',
             'const fileQueryB = await import("virtual:file-query-b");',
             'assert.strictEqual(fileQueryA.query, "one");',
-            'assert.strictEqual(fileQueryB.query, "one");',
-            'assert.strictEqual(fileQueryA.default, fileQueryB.default);',
+            'assert.strictEqual(fileQueryB.query, "two");',
+            'assert.notStrictEqual(fileQueryA.default, fileQueryB.default);',
             'assert.strictEqual(fileQueryA.filename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual(fileQueryB.filename, "/loader-cjs-source-app/query.cjs");',
             'assert.strictEqual(fileQueryA.moduleId, "/loader-cjs-source-app/query.cjs");',
