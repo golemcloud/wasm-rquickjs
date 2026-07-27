@@ -1,5 +1,5 @@
 // node:http server implementation
-import { Server as NetServer, Socket as NetSocket } from 'node:net';
+import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
@@ -205,6 +205,7 @@ function ServerResponse(req, options) {
     this.req = req;
     this.socket = req.socket;
     this.connection = req.socket;
+    this._standaloneSocket = false;
     this.statusCode = 200;
     this.statusMessage = undefined;
     this.sendDate = true;
@@ -250,6 +251,7 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     }
     this.socket = socket;
     this.connection = socket;
+    this._standaloneSocket = true;
     socket._httpMessage = this;
 };
 
@@ -259,6 +261,7 @@ ServerResponse.prototype.detachSocket = function detachSocket(socket) {
     }
     this.socket = null;
     this.connection = null;
+    this._standaloneSocket = false;
 };
 
 Object.defineProperty(ServerResponse.prototype, 'writableEnded', {
@@ -728,10 +731,10 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this.socket.write(Buffer.from('0\r\n\r\n'));
     }
 
-    // Standalone ServerResponse instances use the empty write to signal completion
-    // to an assigned custom Writable. It has no framing meaning on a TCP socket and
-    // would leave a redundant native write queued after the response bytes.
-    if (this.socket && !this._chunked && !(this.socket instanceof NetSocket)) {
+    // A standalone ServerResponse assigned through the public API uses the
+    // empty write to complete the custom Writable. Server-owned sockets do not
+    // need an extra native write after the response framing is complete.
+    if (this.socket && !this._chunked && this._standaloneSocket) {
         this.socket.write(Buffer.alloc(0));
     }
 
