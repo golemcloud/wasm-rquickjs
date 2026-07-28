@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3235/4425 (73.1%)
+**Primary compatibility (CI-enforced):** 3234/4425 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3235 | 73.1% | 56.3% | 47.1% |
-| 🧩 known gap | 1190 | 26.9% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3234 | 73.1% | 56.2% | 47.1% |
+| 🧩 known gap | 1191 | 26.9% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3235/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3234/5750 (56.2%)**.
 
 ## Inventory by Module
 
@@ -57,7 +57,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 614 | 188 | 144 | 86 | 13 | 0 | 183 | 56.6% | 43.6% |
+| other | 614 | 187 | 145 | 86 | 13 | 0 | 183 | 56.3% | 43.4% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1190)
+### known gap (1191)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -987,6 +987,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | X25519/X448 deriveBits vector compatibility is incomplete | 1 | `parallel/test-webcrypto-derivebits-cfrg.js` |
 | X25519/X448 deriveKey compatibility is incomplete | 1 | `parallel/test-webcrypto-derivekey-cfrg.js` |
 | addAbortListener lacks argument validation and already-aborted/stopImmediatePropagation handling | 1 | `parallel/test-events-add-abort-listener.mjs` |
+| asserts a CJS module's source map stays findable until GC reclaims the module; QuickJS reference counting reclaims the module as soon as its require.cache and module.children references are dropped, so the pre-GC precondition cannot hold — a tracing-GC vs refcount engine difference | 1 | `parallel/test-source-map-cjs-require-cache.js` |
 | async handler rejection after partial body write does not follow Node-compatible close semantics | 1 | `parallel/test-http-server-capture-rejections.js#block_01_block_01` |
 | async handler rejection after writeHead(200) does not emit expected ECONNRESET path | 1 | `parallel/test-http-server-capture-rejections.js#block_02_block_02` |
 | async handler rejection before response commit does not produce Node-compatible 500 response lifecycle | 1 | `parallel/test-http-server-capture-rejections.js#block_00_block_00` |

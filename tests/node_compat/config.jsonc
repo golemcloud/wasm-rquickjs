@@ -8278,7 +8278,7 @@
         "block_08_observed_see_https_github_com_mozilla_source_map_pull_92": { "category": "runnable" }
       }
     },
-    "parallel/test-source-map-cjs-require-cache.js": { "category": "runnable" },
+    "parallel/test-source-map-cjs-require-cache.js": { "category": "known-gap", "reason": "asserts a CJS module's source map stays findable until GC reclaims the module; QuickJS reference counting reclaims the module as soon as its require.cache and module.children references are dropped, so the pre-GC precondition cannot hold — a tracing-GC vs refcount engine difference" },
     "parallel/test-spawn-cmd-named-pipe.js": { "category": "wasi-impossible", "reason": "Windows-only named pipe/cmd shell behavior is not available in WASI" },
     "parallel/test-sqlite-custom-functions.js": {},
     "parallel/test-sqlite-data-types.js": {},
