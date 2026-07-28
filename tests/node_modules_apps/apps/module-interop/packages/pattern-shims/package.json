@@ -1,0 +1,14 @@
+{
+  "name": "pattern-shims",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./_shims/auto/*": {
+      "node": {
+        "default": "./_shims/auto/*-node.mjs",
+        "require": "./_shims/auto/*-node.cjs"
+      },
+      "default": "./_shims/auto/*.mjs"
+    }
+  }
+}

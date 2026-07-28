@@ -1,5 +1,9 @@
 import assert from 'node:assert';
 import { AssertionError } from 'node:assert';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 export const testOk = () => {
     try {
@@ -313,6 +317,17 @@ export const testMatch = () => {
 
         assert.doesNotMatch('hello', /goodbye/);
 
+        const global = /a/g;
+        assert.match('aa', global);
+        if (global.lastIndex !== 1) throw new Error('assert.match reset RegExp.lastIndex before matching');
+        assert.match('aa', global);
+        if (global.lastIndex !== 2) throw new Error('assert.match did not preserve RegExp.lastIndex');
+        caught = false;
+        try { assert.match('aa', global); } catch (e) { caught = true; }
+        if (!caught || global.lastIndex !== 0) {
+            throw new Error('assert.match did not preserve global RegExp execution semantics');
+        }
+
         caught = false;
         try { assert.doesNotMatch('hello', /hello/); } catch (e) { caught = true; }
         if (!caught) throw new Error('assert.doesNotMatch should have thrown');
@@ -449,4 +464,24 @@ export const testAssertionError = () => {
         console.error(e);
         return false;
     }
+};
+
+export const testEvalGeneratedMessage = () => {
+    let evalError;
+    try {
+        eval('console.log("FOO");\nassert.ok(1 === 2);');
+    } catch (err) {
+        evalError = err;
+    }
+    if (!evalError || evalError.code !== 'ERR_ASSERTION' || evalError.message !== 'false == true') return false;
+
+    const filename = '/assert-eval-named-function.cjs';
+    fs.writeFileSync(filename, [
+        "const assert = require('assert');",
+        "const namedFunction = { ['eval helper']() { assert.ok(false); } };",
+        "try { namedFunction['eval helper'](); } catch (err) { module.exports = err.message; }",
+    ].join('\n'));
+    const message = require(filename);
+    return message !== 'false == true' &&
+        message.startsWith('The expression evaluated to a falsy value:');
 };

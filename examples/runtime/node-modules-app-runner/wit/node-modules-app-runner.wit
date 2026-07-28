@@ -1,0 +1,5 @@
+package quickjs:node-modules-app-runner;
+
+world node-modules-app-runner {
+  export run-test: func(test-path: string) -> string;
+}

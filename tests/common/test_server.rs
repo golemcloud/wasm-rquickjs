@@ -171,6 +171,9 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
             .route(
                 "/redirect-to",
                 axum::routing::any(async move |query: axum::extract::Query<RedirectParams>| {
+                    if query.delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(query.delay_ms)).await;
+                    }
                     let status = StatusCode::from_u16(query.status).unwrap_or(StatusCode::FOUND);
                     (status, [("Location", query.url.clone())]).into_response()
                 }),
@@ -239,6 +242,8 @@ struct NewTodo {
 struct RedirectParams {
     url: String,
     status: u16,
+    #[serde(default)]
+    delay_ms: u64,
 }
 
 #[derive(Default)]

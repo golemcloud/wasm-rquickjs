@@ -19,8 +19,8 @@ default = ["p2", "normal"]
 # WASI generation target (mutually exclusive; select exactly one). `p2` is the historical
 # Preview 2 path (synchronous exports, full Node.js builtins, wstd/wasip2, Wizer). `p3` is the
 # opt-in Preview 3 async path (async exports/imports, minimal runtime spine, wasip3, no wstd).
-# These are selected by the code generator, which rewrites `default` to `["p3"]` for the
-# Preview 3 target.
+# These are selected by the code generator, which rewrites `default` to
+# `["p3", "normal-p3"]` for the Preview 3 target.
 p2 = ["dep:wit-bindgen", "dep:wit-bindgen-rt", "dep:wasip2", "dep:wstd", "golem-websocket?/p2"]
 # `wasip2` is also needed on the P3 path: the `utimes` family in `builtin/fs.rs` uses the
 # synchronous Preview 2 `set-times-at` on both paths, because P3's async `set-times-at` would
@@ -130,6 +130,9 @@ ecdsa = { version = "0.16", default-features = false, features = ["signing", "ve
 signature = { version = "2", optional = true }
 futures = { version = "0.3.31", features = [] }
 futures-concurrency = "7.6.3"
+indexmap = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 url = "2.5.7"
 uuid = { version = "1.18.1", features = ["v4"] }
 rand = "0.9.2"

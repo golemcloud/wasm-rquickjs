@@ -1,7 +1,8 @@
 test_r::enable!();
 
 use crate::common::js_subtest_parser::{
-    BlockInfo, SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
+    BlockInfo, SubtestDiscovery, TestInfo, discover_subtests_with_options,
+    rewrite_for_block_with_options, rewrite_for_node_test,
 };
 use crate::common::{
     CompiledTest, GolemPreparedComponent, TestInstance, load_node_compat_config,
@@ -54,13 +55,398 @@ fn prepare_node_compat_full(
     )))
 }
 
+#[test_r::test]
+async fn runner_import_preload_flag(prepared: &Arc<FullPreparedComponent>) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("preload-smoke-preload.mjs"),
+        "globalThis.__nodeCompatPreloadValue = 41;\n",
+    )?;
+    fs::write(
+        suite_dir.join("preload-smoke.mjs"),
+        [
+            "// Flags: --import ./test/es-module/preload-smoke-preload.mjs",
+            "if (globalThis.__nodeCompatPreloadValue !== 41) {",
+            "  throw new Error('preload did not run before entry');",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/preload-smoke.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
+async fn runner_dynamic_import_cache_survives_removed_file(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("dynamic-import-cache-entry.mjs"),
+        [
+            "import assert from 'node:assert';",
+            "import fs from 'node:fs/promises';",
+            "const target = new URL('./dynamic-import-cache-target.mjs', import.meta.url);",
+            "await assert.rejects(import(target), { code: 'ERR_MODULE_NOT_FOUND' });",
+            "await fs.writeFile(target, 'export default \"actual target\"\\n');",
+            "const moduleRecord = await import(target);",
+            "await fs.rm(target);",
+            "assert.strictEqual(await import(target), moduleRecord);",
+        ]
+        .join("\n"),
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/dynamic-import-cache-entry.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
+async fn runner_static_registered_loader_async_resolve(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("async-static-loader.mjs"),
+        [
+            "export async function resolve(specifier, context, nextResolve) {",
+            "  if (specifier === './dep.mjs') {",
+            "    return nextResolve('./real.mjs', context);",
+            "  }",
+            "  if (specifier === './generated.mjs') {",
+            "    return { shortCircuit: true, url: 'virtual:generated', format: 'module' };",
+            "  }",
+            "  if (specifier === 'virtual:child') {",
+            "    return { shortCircuit: true, url: new URL('./child.mjs', import.meta.url).href, format: 'module' };",
+            "  }",
+            "  return nextResolve(specifier, context);",
+            "}",
+            "export async function load(url, context, nextLoad) {",
+            "  if (url === 'virtual:generated') {",
+            "    return { shortCircuit: true, format: 'module', source: 'import value from \"virtual:child\"; export default value;' };",
+            "  }",
+            "  return nextLoad(url, context);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("async-static-entry.mjs"),
+        [
+            "// Flags: --experimental-loader ./test/es-module/async-static-loader.mjs",
+            "import value from './dep.mjs';",
+            "import generated from './generated.mjs';",
+            "if (value !== 42) throw new Error('static async loader resolve did not run');",
+            "if (generated !== 7) throw new Error('loader source child import was not prepared');",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(suite_dir.join("real.mjs"), "export default 42;\n")?;
+    fs::write(suite_dir.join("child.mjs"), "export default 7;\n")?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/async-static-entry.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
+async fn runner_programmatic_registered_loader_chain(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("register-chain-loader-a.mjs"),
+        [
+            "export function resolve(specifier, context, nextResolve) {",
+            "  if (!specifier.startsWith('virtual:registered-chain')) return nextResolve(specifier, context);",
+            "  return nextResolve(`${specifier}:a`, context);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("register-chain-loader-b.mjs"),
+        [
+            "let tag;",
+            "export function initialize(data) { tag = data.tag; }",
+            "export function resolve(specifier, context, nextResolve) {",
+            "  if (!specifier.startsWith('virtual:registered-chain')) return nextResolve(specifier, context);",
+            "  return nextResolve(`${specifier}:${tag}`, context);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("register-chain-terminal.mjs"),
+        [
+            "let tag;",
+            "export function initialize(data) { tag = data.tag; }",
+            "export function resolve(specifier, context, nextResolve) {",
+            "  if (!specifier.startsWith('virtual:registered-chain')) return nextResolve(specifier, context);",
+            "  return { shortCircuit: true, url: `virtual:done:${specifier}:${tag}`, format: 'module' };",
+            "}",
+            "export function load(url, context, nextLoad) {",
+            "  if (!url.startsWith('virtual:done:')) return nextLoad(url, context);",
+            "  return { shortCircuit: true, format: 'module', source: `export default ${JSON.stringify(url)};` };",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("register-chain-entry.mjs"),
+        [
+            "import { register } from 'node:module';",
+            "register('./register-chain-terminal.mjs', { parentURL: import.meta.url, data: { tag: 'terminal' } });",
+            "register('./register-chain-loader-a.mjs', { parentURL: import.meta.url });",
+            "register('./register-chain-loader-b.mjs', { parentURL: import.meta.url, data: { tag: 'b' } });",
+            "register('./register-chain-loader-a.mjs', { parentURL: import.meta.url });",
+            "const ns = await import('virtual:registered-chain');",
+            "if (ns.default !== 'virtual:done:virtual:registered-chain:a:b:a:terminal') {",
+            "  throw new Error('programmatic loader chain order mismatch: ' + ns.default);",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/register-chain-entry.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
+async fn runner_module_load_uses_parent_resolution(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+
+    let suite_dir = instance
+        .temp_dir_path()
+        .join("home")
+        .join("node")
+        .join("test")
+        .join("es-module");
+    fs::create_dir_all(&suite_dir)?;
+    fs::write(
+        suite_dir.join("module-load-parent.mjs"),
+        [
+            "import Module from 'node:module';",
+            "const parent = new Module('/home/node/test/es-module/parent.cjs');",
+            "parent.filename = '/home/node/test/es-module/parent.cjs';",
+            "parent.path = '/home/node/test/es-module';",
+            "parent.paths = Module._nodeModulePaths('/home/node/test/es-module');",
+            "parent.require = () => { throw new Error('Module._load must not call parent.require'); };",
+            "const loaded = Module._load('./module-load-dep.cjs', parent);",
+            "if (loaded.marker !== 42) throw new Error('Module._load did not resolve relative to parent');",
+            "const resolved = Module._resolveFilename('./module-load-dep.cjs', parent);",
+            "if (!resolved.endsWith('/module-load-dep.cjs')) throw new Error('Module._resolveFilename did not resolve relative to parent: ' + resolved);",
+            "const viaPrototype = Module.prototype.require.call(parent, './module-load-dep.cjs');",
+            "if (viaPrototype.marker !== 42) throw new Error('Module.prototype.require did not resolve relative to receiver');",
+            "const customParent = new Module('synthetic-parent');",
+            "if (customParent.path !== '.') throw new Error('Module constructor did not derive relative id path: ' + customParent.path);",
+            "if (Object.prototype.hasOwnProperty.call(customParent, 'paths')) throw new Error('Module constructor should not define own paths');",
+            "const undefinedId = new Module(undefined);",
+            "if (undefinedId.id !== '' || undefinedId.path !== '.') throw new Error('Module constructor did not default undefined id');",
+            "const constructorParent = new Module('/home/node/test/es-module/constructor-parent.cjs');",
+            "const constructorChild = new Module('/home/node/test/es-module/subdir/constructor-child.cjs', constructorParent);",
+            "if (constructorParent.path !== '/home/node/test/es-module') throw new Error('Module constructor parent path mismatch: ' + constructorParent.path);",
+            "if (constructorChild.path !== '/home/node/test/es-module/subdir') throw new Error('Module constructor child path mismatch: ' + constructorChild.path);",
+            "if (constructorChild.parent !== constructorParent) throw new Error('Module constructor did not expose parent');",
+            "if (!constructorParent.children.includes(constructorChild)) throw new Error('Module constructor did not add child to parent.children');",
+            "assertInvalidArgType(() => new Module(null));",
+            "assertInvalidArgType(() => new Module(0));",
+            "const arrayLikeParent = { children: { length: 0 } };",
+            "const arrayLikeChild = new Module('array-like-child', arrayLikeParent);",
+            "if (arrayLikeParent.children[0] !== arrayLikeChild || arrayLikeParent.children.length !== 1) throw new Error('Module constructor did not append to array-like children');",
+            "customParent.path = '/not-used-for-bare-resolution';",
+            "customParent.paths = ['/home/node/test/es-module/custom_lookup'];",
+            "const packageLoaded = Module._load('parent-only-pkg', customParent);",
+            "if (packageLoaded.marker !== 84) throw new Error('Module._load did not honor parent.paths');",
+            "const packageResolved = Module._resolveFilename('parent-only-pkg', customParent);",
+            "if (!packageResolved.endsWith('/custom_lookup/parent-only-pkg/index.js')) throw new Error('Module._resolveFilename did not honor parent.paths: ' + packageResolved);",
+            "const pathsOptionResolved = Module._resolveFilename('paths-option-pkg', customParent, false, { paths: ['/home/node/test/es-module/paths_option'] });",
+            "if (!pathsOptionResolved.endsWith('/paths_option/node_modules/paths-option-pkg/index.js')) throw new Error('Module._resolveFilename did not honor options.paths: ' + pathsOptionResolved);",
+            "assertModuleNotFound(() => Module._resolveFilename('./missing-paths-option.cjs', parent, false, { paths: ['/home/node/test/es-module/paths_option'] }), '/home/node/test/es-module/parent.cjs');",
+            "const packageViaPrototype = Module.prototype.require.call(customParent, 'parent-only-pkg');",
+            "if (packageViaPrototype.marker !== 84) throw new Error('Module.prototype.require did not honor receiver.paths');",
+            "if (Module._resolveFilename('node:module') !== 'node:module') throw new Error('Module._resolveFilename changed node: builtin specifier');",
+            "if (Module._resolveFilename('module') !== 'module') throw new Error('Module._resolveFilename changed bare builtin specifier');",
+            "if (!Module.isBuiltin('module')) throw new Error('Module.isBuiltin did not recognize module');",
+            "if (!Module.isBuiltin('node:module')) throw new Error('Module.isBuiltin did not recognize node:module');",
+            "if (!Module.builtinModules.includes('module')) throw new Error('Module.builtinModules is missing module');",
+            "if (Module.builtinModules.includes('node:module')) throw new Error('Module.builtinModules should not include node:module');",
+            "if (Module.prototype.require.call(parent, 'node:module').createRequire(import.meta.url).resolve.paths('module') !== null) throw new Error('require.resolve.paths should return null for module');",
+            "if (Module.prototype.require.call(parent, 'node:module').createRequire(import.meta.url).resolve.paths('node:module') !== null) throw new Error('require.resolve.paths should return null for node:module');",
+            "const pathOnlyParent = new Module('path-only-parent');",
+            "pathOnlyParent.path = '/home/node/test/es-module/path_only_base';",
+            "pathOnlyParent.paths = [];",
+            "assertModuleNotFound(() => Module._load('./path-only-dep.cjs', pathOnlyParent));",
+            "assertModuleNotFound(() => Module._resolveFilename('./path-only-dep.cjs', pathOnlyParent));",
+            "assertModuleNotFound(() => Module.prototype.require.call(pathOnlyParent, './path-only-dep.cjs'));",
+            "const compiled = new Module('/home/node/test/es-module/compiled-parent.cjs');",
+            "const compiledPathBefore = compiled.path;",
+            "compiled._compile('exports.filename = __filename; exports.dirname = __dirname; exports.dep = require(\"./compiled-dep.cjs\");', '/home/node/test/es-module/compiled-parent.cjs');",
+            "if (compiled.filename !== null) throw new Error('Module.prototype._compile should not mutate synthetic module.filename');",
+            "if (compiled.loaded !== false) throw new Error('Module.prototype._compile should not mutate synthetic module.loaded');",
+            "if (compiled.path !== compiledPathBefore) throw new Error('Module.prototype._compile should not mutate synthetic module.path');",
+            "if (compiled.exports.filename !== '/home/node/test/es-module/compiled-parent.cjs') throw new Error('Module.prototype._compile passed wrong __filename');",
+            "if (compiled.exports.dirname !== '/home/node/test/es-module') throw new Error('Module.prototype._compile passed wrong __dirname');",
+            "if (compiled.exports.dep.marker !== 252) throw new Error('Module.prototype._compile require did not resolve relative to filename');",
+            "const missingCompile = new Module('/home/node/test/es-module/compiled-parent.cjs');",
+            "assertModuleNotFound(() => missingCompile._compile('require(\"./missing-compiled-dep.cjs\");', '/home/node/test/es-module/compiled-parent.cjs'), '/home/node/test/es-module/compiled-parent.cjs');",
+            "assertInvalidArgType(() => Module.prototype._compile.call(null, 'exports.x = 1;', '/home/node/test/es-module/null.cjs'));",
+            "assertInvalidArgType(() => Module.prototype._compile.call({}, 'exports.x = 1;', '/home/node/test/es-module/plain.cjs'));",
+            "const cacheRequire = Module.createRequire(import.meta.url);",
+            "cacheRequire('./loaded-compile-target.cjs');",
+            "const loadedModule = cacheRequire.cache[cacheRequire.resolve('./loaded-compile-target.cjs')];",
+            "const unboundCompile = loadedModule._compile;",
+            "assertInvalidArgType(() => unboundCompile('exports.x = 1;', '/home/node/test/es-module/unbound.cjs'));",
+            "loadedModule._compile('exports.emptyFilename = __filename; exports.emptyDirname = __dirname; exports.emptyDep = require(\"./compiled-dep.cjs\");', '');",
+            "if (loadedModule.exports.emptyFilename !== '') throw new Error('loaded module _compile should honor empty filename');",
+            "if (loadedModule.exports.emptyDirname !== '.') throw new Error('loaded module _compile should use dot dirname for empty filename');",
+            "if (loadedModule.exports.emptyDep.marker !== 252) throw new Error('loaded module _compile empty-filename require should resolve from original module');",
+            "function assertModuleNotFound(fn) {",
+            "  const expectedStack = arguments.length > 1 ? arguments[1] : undefined;",
+            "  try { fn(); } catch (err) {",
+            "    if (err && err.code === 'MODULE_NOT_FOUND') {",
+            "      if (expectedStack && (!Array.isArray(err.requireStack) || !err.requireStack.includes(expectedStack))) throw err;",
+            "      return;",
+            "    }",
+            "    throw err;",
+            "  }",
+            "  throw new Error('expected MODULE_NOT_FOUND');",
+            "}",
+            "function assertInvalidArgType(fn) {",
+            "  try { fn(); } catch (err) { if (err && err.code === 'ERR_INVALID_ARG_TYPE') return; throw err; }",
+            "  throw new Error('expected ERR_INVALID_ARG_TYPE');",
+            "}",
+        ]
+        .join("\n"),
+    )?;
+    fs::write(
+        suite_dir.join("module-load-dep.cjs"),
+        "module.exports = { marker: 42 };\n",
+    )?;
+    let package_dir = suite_dir.join("custom_lookup").join("parent-only-pkg");
+    fs::create_dir_all(&package_dir)?;
+    fs::write(
+        package_dir.join("index.js"),
+        "module.exports = { marker: 84 };\n",
+    )?;
+    let paths_option_package_dir = suite_dir
+        .join("paths_option")
+        .join("node_modules")
+        .join("paths-option-pkg");
+    fs::create_dir_all(&paths_option_package_dir)?;
+    fs::write(
+        paths_option_package_dir.join("index.js"),
+        "module.exports = { marker: 126 };\n",
+    )?;
+    let path_only_dir = suite_dir.join("path_only_base");
+    fs::create_dir_all(&path_only_dir)?;
+    fs::write(
+        path_only_dir.join("path-only-dep.cjs"),
+        "module.exports = { marker: 168 };\n",
+    )?;
+    fs::write(
+        suite_dir.join("compiled-dep.cjs"),
+        "module.exports = { marker: 252 };\n",
+    )?;
+    fs::write(
+        suite_dir.join("loaded-compile-target.cjs"),
+        "module.exports = { marker: 294 };\n",
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/es-module/module-load-parent.mjs".to_string(),
+            )],
+        )
+        .await;
+
+    handle_test_result(result, &stdout, &stderr)
+}
+
 // --- Helper types and functions ---
 
 /// Cloneable representation of discovery data for use in test closures.
 #[derive(Clone)]
 enum DiscoveryData {
     Block(Vec<BlockInfo>),
-    NodeTest,
+    NodeTest(Vec<TestInfo>),
 }
 
 fn handle_test_result(
@@ -223,7 +609,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 }
             };
 
-            let discovery = discover_subtests(&path, &source);
+            let discovery = discover_subtests_with_options(
+                &path,
+                &source,
+                entry.nested_node_test,
+                entry.isolate_block_subtests,
+            );
 
             // Staleness check: compare discovered subtest count vs config count
             let discovered_count = match &discovery {
@@ -231,14 +622,12 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 SubtestDiscovery::Block(blocks) => blocks.len(),
                 SubtestDiscovery::NodeTest(tests) => tests.len(),
             };
-            if discovered_count != entry.subtests.len() {
-                eprintln!(
-                    "WARNING: Subtest count mismatch for {}: config has {}, discovered {}. Run migration tool.",
-                    path,
-                    entry.subtests.len(),
-                    discovered_count
-                );
-            }
+            assert_eq!(
+                discovered_count,
+                entry.subtests.len(),
+                "Subtest count mismatch for {path}: config has {}, discovered {discovered_count}. Run migration tool.",
+                entry.subtests.len()
+            );
 
             for subtest in &entry.subtests {
                 let test_name = format!("{}__{}", file_test_name, subtest.name);
@@ -252,10 +641,13 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 let path = path.clone();
                 let subtest_index = subtest.index;
                 let source = source.clone();
+                let isolate_block_subtests = entry.isolate_block_subtests;
                 let discovery_clone = match &discovery {
                     SubtestDiscovery::None => None,
                     SubtestDiscovery::Block(blocks) => Some(DiscoveryData::Block(blocks.clone())),
-                    SubtestDiscovery::NodeTest(_) => Some(DiscoveryData::NodeTest),
+                    SubtestDiscovery::NodeTest(tests) => {
+                        Some(DiscoveryData::NodeTest(tests.clone()))
+                    }
                 };
                 let subtest_flaky = subtest.flaky;
 
@@ -290,11 +682,14 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
                                     // Rewrite the test file to isolate the target subtest
                                     let rewritten = match &discovery_clone {
-                                        Some(DiscoveryData::Block(blocks)) => {
-                                            rewrite_for_block(&source, blocks, subtest_index)
-                                        }
-                                        Some(DiscoveryData::NodeTest) => {
-                                            rewrite_for_node_test(&source, subtest_index)
+                                        Some(DiscoveryData::Block(blocks)) => rewrite_for_block_with_options(
+                                            &source,
+                                            blocks,
+                                            subtest_index,
+                                            isolate_block_subtests,
+                                        ),
+                                        Some(DiscoveryData::NodeTest(tests)) => {
+                                            rewrite_for_node_test(&source, tests, subtest_index)
                                         }
                                         None => source.clone(),
                                     };

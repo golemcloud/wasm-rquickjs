@@ -1,0 +1,8 @@
+{
+  "name": "cjs-reexport-pkg",
+  "version": "1.0.0",
+  "main": "index.cjs",
+  "dependencies": {
+    "cjs-basic": "file:../cjs-basic"
+  }
+}

@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import { EventEmitter } from 'node:events';
 
 // Test 1: http.get - use await on the _endPromise to let the runtime drive it
 export async function httpGet(port) {
@@ -167,6 +168,13 @@ export function httpConstants() {
     const agent = new http.Agent({ keepAlive: true });
     console.log(`Agent keepAlive: ${agent.keepAlive}`);
     console.log(`Agent maxSockets: ${agent.maxSockets}`);
+    console.log(`Agent options prototype is null: ${Object.getPrototypeOf(agent.options) === null}`);
+    console.log(`Agent options has scheduling: ${Object.hasOwn(agent.options, 'scheduling')}`);
+    console.log(`Agent options path is null: ${agent.options.path === null}`);
+    console.log(`Agent options noDelay defaults true: ${agent.options.noDelay === true}`);
+    console.log(`Agent options preserve noDelay false: ${new http.Agent({ noDelay: false }).options.noDelay === false}`);
+    agent.timeout = 1234;
+    console.log(`Agent timeout assignment: ${agent.timeout}`);
     console.log(`globalAgent exists: ${http.globalAgent !== null}`);
 
     // validateHeaderName
@@ -244,4 +252,113 @@ export async function httpSelfConnectPost() {
             req.end();
         });
     });
+}
+
+export async function httpAbortIsolation() {
+    return new Promise((resolve) => {
+        const server = http.createServer((req, res) => {
+            const userHeaderPreserved =
+                req.headers['x-wasm-rquickjs-internal-request-id'] === 'user-value';
+            const unrelated = http.request({
+                hostname: 'remote.example',
+                port: server.address().port,
+                path: '/unrelated',
+            });
+            unrelated.on('error', () => {});
+            unrelated.destroy(new Error('intentional remote abort'));
+
+            setImmediate(() => {
+                if (!res.destroyed && userHeaderPreserved) {
+                    res.end('ok');
+                }
+            });
+        });
+        let rawRequest = '';
+        server.on('connection', (socket) => {
+            socket.on('data', (chunk) => {
+                rawRequest += chunk.toString();
+            });
+        });
+
+        server.listen(0, () => {
+            const req = http.get({
+                hostname: '127.0.0.1',
+                port: server.address().port,
+                headers: {
+                    'x-wasm-rquickjs-internal-request-id': 'user-value',
+                },
+            }, (res) => {
+                res.resume();
+                res.on('end', () => {
+                    const hasUserHeader =
+                        /x-wasm-rquickjs-internal-request-id: user-value/i.test(rawRequest);
+                    const hasInjectedHeader =
+                        /x-wasm-rquickjs-internal-request-id-[^:]*:/i.test(rawRequest);
+                    server.close(() => resolve(hasUserHeader && !hasInjectedHeader));
+                });
+            });
+            req.on('error', () => server.close(() => resolve(false)));
+        });
+    });
+}
+
+export function httpResponseLifecycle() {
+    const request = {
+        method: 'GET',
+        httpVersionMajor: 1,
+        httpVersionMinor: 1,
+        socket: null,
+    };
+    const response = new http.ServerResponse(request);
+    const order = [];
+    response.on('finish', () => order.push('listener'));
+    response.end('body', () => order.push('callback'));
+
+    if (order.length !== 0) {
+        return false;
+    }
+
+    const wire = [];
+    const socket = new EventEmitter();
+    socket.destroyed = false;
+    socket.write = (chunk, callback) => {
+        wire.push(Buffer.from(chunk));
+        if (typeof callback === 'function') callback();
+        return true;
+    };
+    response.assignSocket(socket);
+
+    const writeResponse = new http.ServerResponse(request);
+    const writeOrder = [];
+    writeResponse.write('chunk', () => writeOrder.push('callback'));
+    writeOrder.push('after-write');
+    if (writeOrder.join(',') !== 'after-write') {
+        return false;
+    }
+    const writeSocket = new EventEmitter();
+    writeSocket.destroyed = false;
+    writeSocket.write = (_chunk, callback) => {
+        if (typeof callback === 'function') callback();
+        return true;
+    };
+    writeResponse.assignSocket(writeSocket);
+
+    let nullCode;
+    try {
+        response.write(null);
+    } catch (error) {
+        nullCode = error.code;
+    }
+    let typeCode;
+    try {
+        response.write(42);
+    } catch (error) {
+        typeCode = error.code;
+    }
+
+    return Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') &&
+        order.join(',') === 'listener,callback' &&
+        writeOrder.join(',') === 'after-write,callback' &&
+        nullCode === 'ERR_STREAM_NULL_VALUES' &&
+        typeCode === 'ERR_INVALID_ARG_TYPE';
 }

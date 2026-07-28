@@ -1,0 +1,20 @@
+{
+  "name": "condition-entry-imports-cycle",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "module-sync": "./entry.mjs",
+      "require": "./entry.mjs",
+      "default": "./entry.mjs"
+    }
+  },
+  "imports": {
+    "#dep": {
+      "import": "./dep-import.mjs",
+      "module-sync": "./dep-sync.mjs",
+      "require": "./dep-sync.mjs",
+      "default": "./dep-sync.mjs"
+    }
+  }
+}

@@ -641,7 +641,8 @@ Compatibility stubs — no V8 inspector in WASM.
 <details>
 <summary><strong><code>node:module</code></strong></summary>
 
-- `require`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
+- `require`, `require.resolve`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
+- Package resolution supports `package.json` `main`, `exports` root/subpath maps, wildcard `exports` patterns, `imports` maps, and wildcard `imports` patterns. CJS resolution recognizes `golem`, `node`, `require`, `module-sync`, and `default` conditions; ESM resolution recognizes `golem`, `node`, `import`, `module-sync`, and `default`. Package `imports` can target relative files, external packages, and `node:` builtins.
 
 </details>
 
@@ -1522,6 +1523,25 @@ There are a few important things to keep in mind when working on the project:
   embedding everything from the `skeleton` directory **including** the `target` directory, resulting in slow compilation
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
+
+- Runtime and node compatibility tests support opt-in caches for faster local iteration. Select Node with
+  `nvm use 22.14.0`, then use the artifact and Wasmtime caches explicitly:
+
+  ```sh
+  WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1 \
+  WASM_RQUICKJS_TEST_WASMTIME_CACHE=1 \
+  cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time
+  ```
+
+  These caches may reuse generated wrapper, optimized component, and compiled Wasmtime artifacts. Every test still
+  creates fresh wasm memory, a fresh Wasmtime `Store` and component instance, a fresh WASI context and temporary
+  directory, and fresh QuickJS runtime state. Do not group compatibility cases into one wasm instance.
+
+  `WASM_RQUICKJS_TEST_DROP_CACHE=1` forces generated artifacts to be rebuilt and bypasses Wasmtime's filesystem cache.
+  `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop. The separate
+  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` switch is experimental and manual-only: it reuses immutable prepared
+  `Engine`/`Linker`/`Component` state on the normal `TestInstance::new` path, did not improve the measured node-compat
+  hot path, and must not be part of the recommended cache setup.
 
 ## Acknowledgements
 

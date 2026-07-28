@@ -872,8 +872,14 @@ async fn fetch_redirect_with_failing_stream_body(
 
     println!("{output}");
 
-    assert!(output.contains("fetch test 33 (redirect with failing stream body)"));
-    assert!(output.contains("Stream body source error surfaced through redirect: PASSED"));
+    assert!(
+        output.contains("fetch test 33 (redirect with failing stream body)"),
+        "unexpected output:\n{output}"
+    );
+    assert!(
+        output.contains("Stream body source errors surfaced across redirect orderings: PASSED"),
+        "unexpected output:\n{output}"
+    );
 
     Ok(())
 }
@@ -916,6 +922,8 @@ async fn fetch_function_shape(#[tagged_as("fetch")] compiled: &CompiledTest) -> 
     assert!(output.contains("fetch test 35 (fetch function shape - Node compat)"));
     assert!(output.contains("fetch instanceof AsyncFunction: false"));
     assert!(output.contains("fetch has Function.prototype: true"));
+    assert!(output.contains("Request standard method normalized: true"));
+    assert!(output.contains("Request custom method preserved: true"));
     assert!(output.contains("new fetch threw: false"));
     assert!(output.contains("new fetch returned Promise: true"));
     assert!(output.contains("fetch function shape matches Node: PASSED"));

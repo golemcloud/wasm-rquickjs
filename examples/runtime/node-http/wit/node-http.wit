@@ -7,4 +7,6 @@ world node-http {
   export http-constants: func();
   export http-self-connect: func();
   export http-self-connect-post: func();
+  export http-abort-isolation: func() -> bool;
+  export http-response-lifecycle: func() -> bool;
 }

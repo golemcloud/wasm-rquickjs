@@ -1,6 +1,7 @@
 package quickjs:domain;
 
 world domain {
+  export test-event-emitter-constructor-identity: func() -> bool;
   export test-create: func() -> bool;
   export test-run: func() -> bool;
   export test-bind: func() -> bool;

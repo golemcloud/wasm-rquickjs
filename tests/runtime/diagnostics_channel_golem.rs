@@ -61,7 +61,10 @@ async fn golem_context_tracing(
         );
 
         // Verify spans were recorded by the mock host (2 http.client + 1 custom)
-        let spans = prepared.spans.lock().unwrap();
+        let golem_spans = instance
+            .golem_spans()
+            .expect("Golem-prepared test instance should record spans");
+        let spans = golem_spans.lock().unwrap();
         assert!(
             spans.len() >= 3,
             "Expected at least 3 spans (2 http.client + 1 custom), got {}. Output: {}",
@@ -96,6 +99,16 @@ async fn golem_context_tracing(
                 .any(|(k, v)| k == "error" && v == "true"),
             "Second span should have error=true: {:?}",
             second_span.attributes
+        );
+        drop(spans);
+
+        let second_instance = TestInstance::from_golem_prepared(&prepared).await?;
+        let second_golem_spans = second_instance
+            .golem_spans()
+            .expect("Golem-prepared test instance should record spans");
+        assert!(
+            second_golem_spans.lock().unwrap().is_empty(),
+            "Golem span recording should be scoped to a TestInstance"
         );
     } else {
         anyhow::bail!("Expected string result from test function");

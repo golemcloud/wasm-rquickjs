@@ -14,16 +14,19 @@ test_r::enable!();
 #[allow(dead_code)]
 mod common;
 
+use common::js_subtest_parser::{BlockKind, SubtestDiscovery, discover_subtests_with_options};
 use common::{
     NodeCompatCategory, NodeCompatTestEntry, classify_test, load_node_compat_config,
     strip_jsonc_comments,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::path::Path;
 use test_r::test;
 
 const CONFIG_PATH: &str = "tests/node_compat/config.jsonc";
 const REPORT_PATH: &str = "tests/node_compat/report.md";
+const SUITE_ROOT: &str = "tests/node_compat/suite";
 
 #[derive(Debug, Clone)]
 struct InventoryItem {
@@ -79,6 +82,37 @@ impl CategoryCounts {
 
 #[test]
 fn generate_node_compat_config_report() -> anyhow::Result<()> {
+    let (report, counts) = render_node_compat_config_report()?;
+    fs::write(REPORT_PATH, &report)?;
+
+    println!("Report written to {REPORT_PATH}");
+    println!("Expanded inventory entries: {}", counts.total());
+    println!(
+        "Primary compatibility (CI-enforced): {}/{} ({:.1}%)",
+        counts.runnable,
+        counts.primary_total(),
+        pct(counts.runnable, counts.primary_total())
+    );
+    println!(
+        "Excluded from primary: WASI-impossible={}, engine-difference={}, unevaluated={}, node-internals={}",
+        counts.wasi_impossible, counts.engine_difference, counts.unevaluated, counts.node_internals
+    );
+
+    Ok(())
+}
+
+#[test]
+fn node_compat_config_report_is_current() -> anyhow::Result<()> {
+    let (expected, _) = render_node_compat_config_report()?;
+    let actual = fs::read_to_string(REPORT_PATH)?;
+    assert_eq!(
+        actual, expected,
+        "{REPORT_PATH} is stale; run `cargo test --test node_compat_report -- generate_node_compat_config_report`"
+    );
+    Ok(())
+}
+
+fn render_node_compat_config_report() -> anyhow::Result<(String, CategoryCounts)> {
     let entries = load_node_compat_config(CONFIG_PATH)?;
     let node_version = load_node_version(CONFIG_PATH)?;
     let items = expand_entries(&entries);
@@ -108,8 +142,7 @@ fn generate_node_compat_config_report() -> anyhow::Result<()> {
         "# Node.js v{node_version} Compatibility Inventory\n\n"
     ));
     report.push_str(&format!(
-        "Generated: {} | Source: `{CONFIG_PATH}` | Engine: wasm-rquickjs (QuickJS)\n\n",
-        now_date()
+        "Source: `{CONFIG_PATH}` | Engine: wasm-rquickjs (QuickJS)\n\n"
     ));
     report.push_str(
         "This report is generated from `config.jsonc` only. It does **not** run the vendored \
@@ -123,22 +156,206 @@ fn generate_node_compat_config_report() -> anyhow::Result<()> {
     push_reason_sections(&mut report, &by_category);
     push_missing_reasons(&mut report, &missing_reasons);
 
-    fs::write(REPORT_PATH, &report)?;
+    Ok((report, counts))
+}
 
-    println!("Report written to {REPORT_PATH}");
-    println!("Expanded inventory entries: {}", counts.total());
-    println!(
-        "Primary compatibility (CI-enforced): {}/{} ({:.1}%)",
-        counts.runnable,
-        counts.primary_total(),
-        pct(counts.runnable, counts.primary_total())
-    );
-    println!(
-        "Excluded from primary: WASI-impossible={}, engine-difference={}, unevaluated={}, node-internals={}",
-        counts.wasi_impossible, counts.engine_difference, counts.unevaluated, counts.node_internals
+#[test]
+fn module_related_node_compat_entries_are_configured() -> anyhow::Result<()> {
+    let entries = load_node_compat_config(CONFIG_PATH)?;
+    let configured: BTreeSet<_> = entries.into_iter().map(|entry| entry.path).collect();
+    let expected = collect_module_related_entrypoints()?;
+
+    let missing: Vec<_> = expected
+        .into_iter()
+        .filter(|entry| !configured.contains(entry))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "module-related node_compat tests are vendored but missing from {CONFIG_PATH}:\n{}",
+        missing.join("\n")
     );
 
     Ok(())
+}
+
+#[test]
+fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
+    let entries = load_node_compat_config(CONFIG_PATH)?;
+    let module_entrypoints = collect_module_related_entrypoints()?;
+    let items = expand_entries(&entries);
+
+    let unexpected: Vec<_> = items
+        .iter()
+        .filter(|item| {
+            (module_entrypoints.contains(&item.file_path) || is_module_adjacent_known_gap(item))
+                && item.category == NodeCompatCategory::KnownGap
+                && !is_accepted_module_known_gap_reason(item.reason.as_deref())
+        })
+        .map(|item| {
+            format!(
+                "{}: {}",
+                item.key,
+                item.reason.as_deref().unwrap_or("<missing reason>")
+            )
+        })
+        .collect();
+
+    assert!(
+        unexpected.is_empty(),
+        "module-related known-gap entries need an accepted deferral reason:\n{}",
+        unexpected.join("\n")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn module_known_gap_deferrals_require_an_exact_reason() {
+    let accepted = "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source";
+    assert!(is_accepted_module_known_gap_reason(Some(accepted)));
+    assert!(!is_accepted_module_known_gap_reason(Some(&format!(
+        "unrelated module failure; {accepted}"
+    ))));
+}
+
+#[test]
+fn vm_split_fixtures_include_top_level_executable_statements() -> anyhow::Result<()> {
+    for (path, expected_count) in [
+        ("parallel/test-vm-basic.js", 10),
+        ("parallel/test-vm-module-basic.js", 13),
+    ] {
+        let source = fs::read_to_string(Path::new(SUITE_ROOT).join(path))?;
+        let blocks = match discover_subtests_with_options(path, &source, false, true) {
+            SubtestDiscovery::Block(blocks) => blocks,
+            other => panic!("Expected block discovery for {path}, got {other:?}"),
+        };
+        assert_eq!(blocks.len(), expected_count, "{path}");
+        assert!(
+            blocks
+                .iter()
+                .any(|block| block.kind == BlockKind::Statement),
+            "{path} must expose executable statements as subtests"
+        );
+    }
+
+    Ok(())
+}
+
+fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
+    const ACCEPTED_REASONS: &[&str] = &[
+        "--input-type=module eval emulation is incomplete for cwd-relative static/dynamic imports",
+        "WASM child emulation does not support --experimental-test-module-mocks CLI flag",
+        "WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags",
+        "WASM child emulation does not support --permission/--allow-worker/--experimental-test-module-mocks flags",
+        "WASM child emulation does not support --permission/--experimental-test-module-mocks flags",
+        "WebAssembly global is missing in current runtime",
+        "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source",
+        "child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs",
+        "child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output",
+        "child_process execPath emulation does not implement --trace-require-module warning output",
+        "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js",
+        "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process CJS import/require interop is covered by module-interop runtime tests",
+        "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process builtin and CJS interop are covered by runtime and node_compat tests",
+        "child_process execPath emulation lacks full --import/--require preload semantics",
+        "common-shim spawnPromisified child emulation does not support --no-experimental-require-module",
+        "emulated child_process inline eval does not keep the child alive for dynamic import() resolution",
+        "loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support",
+        "QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361",
+        "programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode",
+        "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
+        "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes",
+        "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR",
+        "requires child_process execFileSync with copied process.execPath and Node global module path layout",
+        "requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module",
+        "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR",
+        "requires simulated process.execPath / Node CLI mode support for child-process JSON module warning assertions",
+        "requires simulated process.execPath / Node CLI module_timer and trace-event support",
+        "requires spawned process.execPath --check execution with --experimental-default-type=module",
+        "requires spawned process.execPath entry-point execution for extensionless ESM files",
+        "requires spawned process.execPath entry-point execution plus WebAssembly module loading support",
+        "requires spawned process.execPath entry-point execution to verify extensionless .wasm classification outside module scope",
+        "requires spawned process.execPath entry-point execution with --experimental-default-type=module",
+        "same-process ESM invalid package config diagnostics are covered by module-resolution runtime tests; vendored fixture asserts stderr/status through spawned process.execPath ESM entry-point emulation",
+        "same-process dynamic import cache behavior is covered by runner_dynamic_import_cache_survives_removed_file; full Node test also requires spawned process.execPath --input-type=module support",
+        "same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes",
+        "stripTypeScriptTypes requires Amaro support, which is not implemented",
+    ];
+
+    reason.is_some_and(|reason| ACCEPTED_REASONS.contains(&reason))
+}
+
+fn collect_module_related_entrypoints() -> anyhow::Result<BTreeSet<String>> {
+    let mut entries = BTreeSet::new();
+    collect_matching_files("es-module", is_es_module_entrypoint, &mut entries)?;
+    collect_matching_files("parallel", is_parallel_module_entrypoint, &mut entries)?;
+    collect_matching_files("sequential", is_sequential_module_entrypoint, &mut entries)?;
+    Ok(entries)
+}
+
+fn collect_matching_files(
+    suite_dir: &str,
+    predicate: fn(&str) -> bool,
+    entries: &mut BTreeSet<String>,
+) -> anyhow::Result<()> {
+    let dir = Path::new(SUITE_ROOT).join(suite_dir);
+    for entry in fs::read_dir(&dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if predicate(&file_name) {
+            entries.insert(format!("{suite_dir}/{file_name}"));
+        }
+    }
+    Ok(())
+}
+
+fn is_js_entrypoint(name: &str) -> bool {
+    name.starts_with("test-") && (name.ends_with(".js") || name.ends_with(".mjs"))
+}
+
+fn is_es_module_entrypoint(name: &str) -> bool {
+    is_js_entrypoint(name)
+}
+
+fn is_parallel_module_entrypoint(name: &str) -> bool {
+    is_js_entrypoint(name)
+        && [
+            "test-module-",
+            "test-module.",
+            "test-require-",
+            "test-require.",
+            "test-cjs-",
+            "test-cjs.",
+            "test-esm-",
+            "test-esm.",
+            "test-commonjs-",
+            "test-commonjs.",
+        ]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+}
+
+fn is_sequential_module_entrypoint(name: &str) -> bool {
+    is_js_entrypoint(name) && name.starts_with("test-module")
+}
+
+fn is_module_adjacent_known_gap(item: &InventoryItem) -> bool {
+    match item.file_path.as_str() {
+        "parallel/test-cli-eval.js" => item
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("--input-type=module")),
+        "parallel/test-cli-syntax-piped-good.js" => true,
+        "parallel/test-no-addons-resolution-condition.js" => true,
+        "parallel/test-runner-import-no-scheme.js" => true,
+        "parallel/test-runner-module-mocking.js" => true,
+        _ => false,
+    }
 }
 
 fn expand_entries(entries: &[NodeCompatTestEntry]) -> Vec<InventoryItem> {
@@ -435,8 +652,4 @@ fn pct(numerator: usize, denominator: usize) -> f64 {
 
 fn escape_table_cell(value: &str) -> String {
     value.replace('\n', " ").replace('|', "\\|")
-}
-
-fn now_date() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
 }

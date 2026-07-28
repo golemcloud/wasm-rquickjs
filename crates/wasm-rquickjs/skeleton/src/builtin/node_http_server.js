@@ -3,7 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -205,6 +205,7 @@ function ServerResponse(req, options) {
     this.req = req;
     this.socket = req.socket;
     this.connection = req.socket;
+    this._standaloneSocket = false;
     this.statusCode = 200;
     this.statusMessage = undefined;
     this.sendDate = true;
@@ -232,6 +233,10 @@ function ServerResponse(req, options) {
     this._removedContLen = false;
     this._removedTE = false;
     this._outputSize = 0;
+    this._pendingOutput = [];
+    this._pendingOutputWrites = 0;
+    this._outputCompletionCallbacks = [];
+    this._outputError = undefined;
 
     // strictContentLength enforcement
     this.strictContentLength = false;
@@ -250,7 +255,13 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     }
     this.socket = socket;
     this.connection = socket;
+    this._standaloneSocket = true;
     socket._httpMessage = this;
+    const pending = this._pendingOutput;
+    this._pendingOutput = [];
+    for (const entry of pending) {
+        socket.write(entry.data, entry.callback);
+    }
 };
 
 ServerResponse.prototype.detachSocket = function detachSocket(socket) {
@@ -259,6 +270,7 @@ ServerResponse.prototype.detachSocket = function detachSocket(socket) {
     }
     this.socket = null;
     this.connection = null;
+    this._standaloneSocket = false;
 };
 
 Object.defineProperty(ServerResponse.prototype, 'writableEnded', {
@@ -591,7 +603,52 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
 ServerResponse.prototype._sendHeaders = function _sendHeaders() {
     const head = this._buildHeaderString();
     if (head) {
-        this.socket.write(Buffer.from(head));
+        this._writeOutput(Buffer.from(head));
+    }
+};
+
+ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
+    this._pendingOutputWrites++;
+    let completed = false;
+    const onComplete = (error) => {
+        if (completed) return;
+        completed = true;
+        if (error && this._outputError === undefined) {
+            this._outputError = error;
+        }
+        try {
+            if (typeof callback === 'function') {
+                callback(error);
+            }
+        } finally {
+            this._pendingOutputWrites--;
+            if (this._pendingOutputWrites === 0) {
+                const callbacks = this._outputCompletionCallbacks;
+                this._outputCompletionCallbacks = [];
+                for (const completionCallback of callbacks) {
+                    completionCallback(this._outputError);
+                }
+            }
+        }
+    };
+
+    if (this.socket && !this.socket.destroyed) {
+        try {
+            return this.socket.write(data, onComplete);
+        } catch (error) {
+            onComplete(error);
+            throw error;
+        }
+    }
+    this._pendingOutput.push({ data, callback: onComplete });
+    return false;
+};
+
+ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
+    if (this._pendingOutputWrites === 0) {
+        process.nextTick(() => callback(this._outputError));
+    } else {
+        this._outputCompletionCallbacks.push(callback);
     }
 };
 
@@ -601,14 +658,26 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         encoding = undefined;
     }
 
-    if (this._destroyed || this._closed) {
-        if (typeof cb === 'function') cb();
-        return false;
+    if (chunk === null) {
+        throw new ERR_STREAM_NULL_VALUES();
     }
-
     if (typeof chunk !== 'string' && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
         throw new ERR_INVALID_ARG_TYPE('first argument',
             ['string', 'Buffer', 'Uint8Array'], chunk);
+    }
+
+    if (this._writableEnded) {
+        const error = new ERR_STREAM_WRITE_AFTER_END();
+        process.nextTick(() => {
+            if (typeof cb === 'function') cb(error);
+            this.emit('error', error);
+        });
+        return false;
+    }
+
+    if (this._destroyed || this._closed) {
+        if (typeof cb === 'function') cb();
+        return false;
     }
 
     if (!this._headersSentWire) {
@@ -619,7 +688,7 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         if (this._rejectNonStandardBodyWrites) {
             throw new ERR_HTTP_BODY_NOT_ALLOWED();
         }
-        if (typeof cb === 'function') cb();
+        this._writeOutput(Buffer.alloc(0), cb);
         return true;
     }
 
@@ -630,7 +699,7 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     }
 
     if (chunk.length === 0) {
-        if (typeof cb === 'function') cb();
+        this._writeOutput(Buffer.alloc(0), cb);
         return true;
     }
 
@@ -644,15 +713,14 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._chunked) {
         const hex = chunk.length.toString(16);
-        this.socket.write(Buffer.from(hex + '\r\n'));
-        this.socket.write(chunk);
-        this.socket.write(CRLF);
+        this._writeOutput(Buffer.from(hex + '\r\n'));
+        this._writeOutput(chunk);
+        this._writeOutput(CRLF, cb);
     } else {
-        this.socket.write(chunk);
+        this._writeOutput(chunk, cb);
     }
 
     this._outputSize += chunk.length;
-    if (typeof cb === 'function') cb();
     return this._outputSize < (16 * 1024);
 };
 
@@ -693,8 +761,6 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         }
     }
 
-    this._writableEnded = true;
-
     if (!this._headersSentWire) {
         if (data && !this.headersSent && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
             // writeHead() was NOT called and full body is known at end-time:
@@ -705,9 +771,9 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
             if (this._hasBody && head) {
                 const headerBuf = Buffer.from(head);
                 const combined = Buffer.concat([headerBuf, body]);
-                this.socket.write(combined);
+                this._writeOutput(combined);
             } else if (head) {
-                this.socket.write(Buffer.from(head));
+                this._writeOutput(Buffer.from(head));
             }
             data = null; // already written
         } else {
@@ -724,14 +790,29 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this.write(data, encoding);
     }
 
+    this._writableEnded = true;
+
     if (this._chunked && this._hasBody) {
-        this.socket.write(Buffer.from('0\r\n\r\n'));
+        this._writeOutput(Buffer.from('0\r\n\r\n'));
     }
 
-    // Write empty chunk to signal end of response (matches Node.js behavior)
-    if (this.socket && !this._chunked) {
-        this.socket.write(Buffer.alloc(0));
+    if (this._standaloneSocket) {
+        this._writeOutput(Buffer.alloc(0));
     }
+
+    if (typeof cb === 'function') {
+        this.once('finish', cb);
+    }
+    const finishResponse = (error) => {
+        if (error) {
+            this._errored = error;
+            this.emit('error', error);
+            return;
+        }
+        this.emit('finish');
+    };
+
+    this._afterOutputComplete(finishResponse);
 
     // Uncork the socket to flush any buffered writes (matches Node.js behavior)
     if (this.socket && typeof this.socket.uncork === 'function') {
@@ -739,10 +820,6 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
     }
 
     this.finished = true;
-
-    if (typeof cb === 'function') cb();
-
-    this.emit('finish');
 
     return this;
 };
@@ -884,6 +961,13 @@ ServerResponse.prototype.uncork = function uncork() {
 
 // ===== HTTP Parser =====
 
+function closeServerResponse(res) {
+    if (res && !res._closed) {
+        res._closed = true;
+        res.emit('close');
+    }
+}
+
 function createConnectionParser(server, socket) {
     const state = {
         buffer: Buffer.alloc(0),
@@ -995,10 +1079,7 @@ function createConnectionParser(server, socket) {
                 state.req.emit('aborted');
             }
         }
-        if (state.res) {
-            state.res._closed = true;
-            state.res.emit('close');
-        }
+        closeServerResponse(state.res);
     });
 
     function maybeFinalizeResponse() {
@@ -1022,8 +1103,7 @@ function createConnectionParser(server, socket) {
         // OutgoingMessage behavior where 'close' fires after 'finish'.
         if (finishedRes) {
             process.nextTick(function() {
-                finishedRes._closed = true;
-                finishedRes.emit('close');
+                closeServerResponse(finishedRes);
             });
         }
 
@@ -1088,7 +1168,6 @@ function createConnectionParser(server, socket) {
                     parsed.rawHeaders,
                     server._joinDuplicateHeaders,
                 );
-
                 // CONNECT method: hand the socket to the application
                 if (parsed.method === 'CONNECT') {
                     const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
@@ -1443,7 +1522,6 @@ function Server(options, requestListener) {
     this._rejectNonStandardBodyWrites = !!options.rejectNonStandardBodyWrites;
     this._requireHostHeader = options.requireHostHeader !== false;
     this._joinDuplicateHeaders = !!options.joinDuplicateHeaders;
-
     // Apply timeout options with validation
     if (options.headersTimeout !== undefined) {
         this.headersTimeout = options.headersTimeout;
@@ -1477,8 +1555,6 @@ function Server(options, requestListener) {
     }
 
     const self = this;
-    this.on('listening', function () { _registerServer(self); });
-    this.on('close', function () { _unregisterServer(self); });
     this.on('connection', function connectionListener(socket) {
         // Force-close idle keep-alive connections to prevent WASI resource
         // exhaustion. In WASM, each socket consumes limited resources
@@ -1545,52 +1621,6 @@ Server.prototype.closeIdleConnections = function closeIdleConnections() {
     }
 };
 
-// ===== In-process abort signaling =====
-// When client and server are in the same WASM component, aborting a WASI HTTP
-// request doesn't reliably close the underlying TCP connection. This registry
-// allows the client-side abort to directly signal the server-side connections.
-
-const _activeServersByPort = new Map();
-
-function _registerServer(server) {
-    const addr = server.address();
-    if (addr && typeof addr.port === 'number') {
-        _activeServersByPort.set(addr.port, server);
-    }
-}
-
-function _unregisterServer(server) {
-    for (const [port, s] of _activeServersByPort) {
-        if (s === server) {
-            _activeServersByPort.delete(port);
-            break;
-        }
-    }
-}
-
-export function _signalClientAbort(port) {
-    const server = _activeServersByPort.get(port);
-    if (!server) return;
-    for (const conn of server._httpConnections) {
-        if (conn.req && !conn.req.aborted && !conn.responseFinished) {
-            conn.req.aborted = true;
-            conn.req.emit('aborted');
-            if (!conn.req.complete) {
-                conn.req.complete = true;
-                conn.req.push(null);
-            }
-            if (conn.req.listenerCount('error') > 0) {
-                const abortError = new Error('aborted');
-                abortError.code = 'ECONNRESET';
-                conn.req.emit('error', abortError);
-            }
-        }
-        if (conn.socket && !conn.socket.destroyed) {
-            conn.socket.destroy();
-        }
-    }
-}
-
 // ===== createServer =====
 
 export function createServer(options, requestListener) {
@@ -1598,4 +1628,4 @@ export function createServer(options, requestListener) {
 }
 
 export { Server, ServerResponse, ServerIncomingMessage };
-export default { Server, ServerResponse, ServerIncomingMessage, createServer, _signalClientAbort };
+export default { Server, ServerResponse, ServerIncomingMessage, createServer };

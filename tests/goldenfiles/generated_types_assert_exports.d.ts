@@ -12,4 +12,5 @@ declare module 'assert' {
   export function testRejects(): Promise<boolean>;
   export function testStrictMode(): Promise<boolean>;
   export function testAssertionError(): Promise<boolean>;
+  export function testEvalGeneratedMessage(): Promise<boolean>;
 }

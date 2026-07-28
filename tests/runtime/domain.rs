@@ -12,6 +12,23 @@ async fn compiled_domain() -> CompiledTest {
 }
 
 #[test]
+async fn event_emitter_constructor_identity(
+    #[tagged_as("domain")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-event-emitter-constructor-identity",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn domain_test_create(
     #[tagged_as("domain")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

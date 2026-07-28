@@ -104,6 +104,12 @@ async fn node_http_constants(
     assert!(output.contains("maxHeaderSize: 16384"));
     assert!(output.contains("Agent keepAlive: true"));
     assert!(output.contains("Agent maxSockets: Infinity"));
+    assert!(output.contains("Agent options prototype is null: true"));
+    assert!(output.contains("Agent options has scheduling: false"));
+    assert!(output.contains("Agent options path is null: true"));
+    assert!(output.contains("Agent options noDelay defaults true: true"));
+    assert!(output.contains("Agent options preserve noDelay false: true"));
+    assert!(output.contains("Agent timeout assignment: 1234"));
     assert!(output.contains("globalAgent exists: true"));
     assert!(output.contains("validateHeaderName valid: passed"));
     assert!(output.contains("validateHeaderName invalid: correctly threw"));
@@ -148,5 +154,27 @@ async fn node_http_self_connect_post(
     assert!(output.contains("Got response, status: 200"));
     assert!(output.contains("server closed"));
 
+    Ok(())
+}
+
+#[test]
+async fn node_http_abort_isolation(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "http-abort-isolation", &[]).await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_response_lifecycle(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "http-response-lifecycle", &[]).await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
     Ok(())
 }

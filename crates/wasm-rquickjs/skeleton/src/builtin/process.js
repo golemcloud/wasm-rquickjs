@@ -232,6 +232,192 @@ Object.defineProperty(process, 'title', {
 process.release = { name: 'node' };
 process.allowedNodeEnvironmentFlags = new Set();
 
+const _reportOptions = {
+    directory: '',
+    filename: '',
+    compact: false,
+    excludeNetwork: false,
+    signal: 'SIGUSR2',
+    reportOnFatalError: false,
+    reportOnSignal: false,
+    reportOnUncaughtException: false,
+    excludeEnv: false,
+};
+
+function _reportStringOption(name, value) {
+    if (typeof value !== 'string') {
+        throw _makeTypeError(
+            'ERR_INVALID_ARG_TYPE',
+            'The "' + name + '" property must be of type string.' + _invalidArgTypeHelper(value),
+        );
+    }
+    _reportOptions[name] = value;
+}
+
+function _reportBooleanOption(name, value) {
+    if (typeof value !== 'boolean') {
+        throw _makeTypeError(
+            'ERR_INVALID_ARG_TYPE',
+            'The "' + name + '" property must be of type boolean.' + _invalidArgTypeHelper(value),
+        );
+    }
+    _reportOptions[name] = value;
+}
+
+function _diagnosticReport(error) {
+    if (error === undefined) {
+        error = new Error('JavaScript Callstack');
+        error.name = 'Error [ERR_SYNTHETIC]';
+        const frames = String(error.stack).split('\n').slice(1);
+        error.stack = 'Error [ERR_SYNTHETIC]: JavaScript Callstack\n' + frames.join('\n');
+    }
+    const now = new Date();
+    const memory = process.memoryUsage();
+    const usage = process.cpuUsage();
+    const hasStack = error !== null && typeof error.stack === 'string';
+    const stackLines = hasStack ? error.stack.split('\n') : [];
+    return {
+        header: {
+            reportVersion: 5,
+            event: 'JavaScript API',
+            trigger: 'GetReport',
+            filename: null,
+            dumpEventTime: now.toISOString(),
+            dumpEventTimeStamp: String(now.getTime()),
+            processId: process.pid,
+            threadId: 0,
+            cwd: process.cwd(),
+            commandLine: process.argv.slice(),
+            nodejsVersion: process.version,
+            wordSize: 32,
+            arch: process.arch,
+            platform: process.platform,
+            componentVersions: Object.assign({}, process.versions),
+            release: Object.assign({}, process.release),
+            cpus: [],
+            networkInterfaces: [],
+            host: '',
+        },
+        javascriptStack: {
+            message: hasStack ? stackLines[0] : 'No stack.',
+            stack: hasStack ? stackLines.slice(1) : [],
+            errorProperties: {},
+        },
+        javascriptHeap: {
+            totalMemory: memory.heapTotal,
+            executableMemory: 0,
+            totalCommittedMemory: memory.heapTotal,
+            availableMemory: 0,
+            totalGlobalHandlesMemory: 0,
+            usedGlobalHandlesMemory: 0,
+            usedMemory: memory.heapUsed,
+            memoryLimit: memory.heapTotal,
+            mallocedMemory: memory.external,
+            externalMemory: memory.external,
+            peakMallocedMemory: memory.rss,
+            nativeContextCount: 1,
+            detachedContextCount: 0,
+            doesZapGarbage: 0,
+            heapSpaces: {},
+        },
+        nativeStack: [],
+        resourceUsage: {
+            userCpuSeconds: usage.user / 1e6,
+            kernelCpuSeconds: usage.system / 1e6,
+            cpuConsumptionPercent: 0,
+            userCpuConsumptionPercent: 0,
+            kernelCpuConsumptionPercent: 0,
+            maxRss: memory.rss,
+            pageFaults: { IORequired: 0, IONotRequired: 0 },
+            fsActivity: { reads: 0, writes: 0 },
+        },
+        libuv: [],
+        workers: [],
+        environmentVariables: _reportOptions.excludeEnv ? {} : Object.assign({}, process.env),
+        userLimits: {},
+        sharedObjects: [],
+    };
+}
+
+function _defaultReportFilename() {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '');
+    return 'report.' + stamp + '.' + process.pid + '.0.001.json';
+}
+
+process.report = {
+    getReport(error) {
+        if (error !== undefined &&
+            (error === null || typeof error !== 'object' || Array.isArray(error))) {
+            throw _makeTypeError(
+                'ERR_INVALID_ARG_TYPE',
+                'The "err" argument must be of type object.' + _invalidArgTypeHelper(error),
+            );
+        }
+        return _diagnosticReport(error);
+    },
+    writeReport(filename, error) {
+        if (filename !== undefined && filename !== null && typeof filename === 'object') {
+            error = filename;
+            filename = undefined;
+        } else if (filename !== undefined && typeof filename !== 'string') {
+            throw _makeTypeError(
+                'ERR_INVALID_ARG_TYPE',
+                'The "file" argument must be of type string.' + _invalidArgTypeHelper(filename),
+            );
+        }
+        if (error !== undefined &&
+            (error === null || typeof error !== 'object' || Array.isArray(error))) {
+            throw _makeTypeError(
+                'ERR_INVALID_ARG_TYPE',
+                'The "err" argument must be of type object.' + _invalidArgTypeHelper(error),
+            );
+        }
+        const selected = filename || _reportOptions.filename || _defaultReportFilename();
+        const output = _reportOptions.directory && selected.charCodeAt(0) !== 47
+            ? _reportOptions.directory.replace(/\/+$/, '') + '/' + selected
+            : selected;
+        const createRequire = globalThis.__wasm_rquickjs_create_require;
+        if (typeof createRequire !== 'function') {
+            throw _makeError('ERR_FEATURE_UNAVAILABLE_ON_PLATFORM', 'process.report.writeReport is unavailable');
+        }
+        const fs = createRequire(process.cwd(), null)('node:fs');
+        const report = _diagnosticReport(error);
+        report.header.filename = output;
+        fs.writeFileSync(output, JSON.stringify(report, null, _reportOptions.compact ? 0 : 2));
+        return output;
+    },
+};
+
+for (const name of ['directory', 'filename', 'signal']) {
+    Object.defineProperty(process.report, name, {
+        get() { return _reportOptions[name]; },
+        set(value) { _reportStringOption(name, value); },
+        enumerable: true,
+        configurable: true,
+    });
+}
+for (const name of [
+    'compact',
+    'excludeNetwork',
+    'reportOnFatalError',
+    'reportOnSignal',
+    'reportOnUncaughtException',
+    'excludeEnv',
+]) {
+    Object.defineProperty(process.report, name, {
+        get() { return _reportOptions[name]; },
+        set(value) { _reportBooleanOption(name, value); },
+        enumerable: true,
+        configurable: true,
+    });
+}
+Object.defineProperty(process, Symbol.toStringTag, {
+    value: 'process',
+    writable: true,
+    enumerable: false,
+    configurable: true,
+});
+
 let _startTime = null;
 
 process.cpuUsage = function cpuUsage(previousValue) {
@@ -675,7 +861,9 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         }
     }
     let obj;
+    let createdWarning = false;
     if (typeof warning === 'string') {
+        createdWarning = true;
         obj = new Error(warning);
         obj.name = (typeof typeOrOptions === 'string') ? typeOrOptions : 'Warning';
         if (typeof typeOrOptions === 'object' && typeOrOptions !== null) {
@@ -694,6 +882,22 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     if (isDeprecationWarning && process.noDeprecation) {
         return;
     }
+    const warningCode = obj.code ? ' [' + String(obj.code) + ']' : '';
+    const warningHeader = warningName + ': ' + String(obj.message || obj);
+    const stderrHeader = warningName + warningCode + ': ' + String(obj.message || obj);
+    let formattedStack;
+    if (typeof obj.stack === 'string') {
+        const newline = obj.stack.indexOf('\n');
+        const rest = newline === -1 ? '' : obj.stack.slice(newline);
+        formattedStack = obj.stack.startsWith(warningHeader)
+            ? obj.stack
+            : warningHeader + rest;
+    } else {
+        formattedStack = warningHeader;
+    }
+    if (createdWarning) {
+        obj.stack = formattedStack;
+    }
 
     const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
     const shouldThrowDeprecation = isDeprecationWarning && !!process.throwDeprecation;
@@ -702,12 +906,14 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
             throw obj;
         }
         if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
-            const header = warningName + ': ' + String(obj.message || obj);
-            let text = header;
-            if (typeof obj.stack === 'string') {
-                text = obj.stack.indexOf(String(obj.message || obj)) >= 0
-                    ? obj.stack
-                    : header + '\n' + obj.stack;
+            let text = stderrHeader;
+            if (typeof formattedStack === 'string') {
+                text = formattedStack.indexOf(String(obj.message || obj)) >= 0
+                    ? formattedStack
+                    : stderrHeader + '\n' + formattedStack;
+                if (warningCode && text.startsWith(warningHeader)) {
+                    text = stderrHeader + text.slice(warningHeader.length);
+                }
             }
             process.stderr.write(text.endsWith('\n') ? text : text + '\n');
         }
@@ -789,20 +995,99 @@ process._runExitHandlers = function _runExitHandlers(code) {
 // after a microtask turn, so that assert.rejects() and similar patterns
 // that handle the rejection synchronously don't cause false positives.
 const _pendingRejections = new Map();
+const _ignoredUnhandledRejections = new WeakSet();
+const _requireEsmRejectionScopes = [];
+let _unhandledRejectionCheckScheduled = false;
+let _nextRequireEsmRejectionScope = 0;
+
+function _isIgnoredUnhandledRejection(promise) {
+    return _ignoredUnhandledRejections.has(promise);
+}
+
+function _scheduleUnhandledRejectionCheck() {
+    if (_unhandledRejectionCheckScheduled) {
+        return;
+    }
+    _unhandledRejectionCheckScheduled = true;
+    const callback = function() {
+        _unhandledRejectionCheckScheduled = false;
+        const pending = Array.from(_pendingRejections);
+        for (const [promise, entry] of pending) {
+            if (!_pendingRejections.has(promise)) {
+                continue;
+            }
+            _pendingRejections.delete(promise);
+            if (!_isIgnoredUnhandledRejection(promise)) {
+                process.emit('unhandledRejection', entry.reason, promise);
+            }
+        }
+    };
+    if (typeof globalThis.setTimeout === 'function') {
+        globalThis.setTimeout(callback, 0);
+    } else {
+        Promise.resolve().then(function() {
+            Promise.resolve().then(callback);
+        });
+    }
+}
 
 globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandled) {
+    if (_isIgnoredUnhandledRejection(promise)) {
+        _pendingRejections.delete(promise);
+        return;
+    }
     if (!isHandled) {
-        _pendingRejections.set(promise, reason);
-        Promise.resolve().then(function() {
-        Promise.resolve().then(function() {
-            if (_pendingRejections.has(promise)) {
-                _pendingRejections.delete(promise);
-                process.emit('unhandledRejection', reason, promise);
-            }
-        });
-        });
+        _pendingRejections.set(promise, { reason });
+        const scope = _requireEsmRejectionScopes[_requireEsmRejectionScopes.length - 1];
+        if (scope !== undefined) {
+            scope.promises.push(promise);
+        }
+        _scheduleUnhandledRejectionCheck();
     } else {
         _pendingRejections.delete(promise);
+    }
+};
+
+globalThis.__wasm_rquickjs_ignore_unhandled_rejection = function(promise) {
+    _ignoredUnhandledRejections.add(promise);
+    _pendingRejections.delete(promise);
+};
+
+globalThis.__wasm_rquickjs_begin_require_esm_rejection_scope = function() {
+    const id = ++_nextRequireEsmRejectionScope;
+    _requireEsmRejectionScopes.push({ id, promises: [] });
+    return id;
+};
+
+function _takeRequireEsmRejectionScope(id) {
+    for (let i = _requireEsmRejectionScopes.length - 1; i >= 0; i--) {
+        if (_requireEsmRejectionScopes[i].id === id) {
+            return _requireEsmRejectionScopes.splice(i, 1)[0];
+        }
+    }
+    return undefined;
+}
+
+globalThis.__wasm_rquickjs_end_require_esm_rejection_scope = function(id) {
+    _takeRequireEsmRejectionScope(id);
+};
+
+globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPromise, id) {
+    const scope = _takeRequireEsmRejectionScope(id);
+    let modulePromise = _pendingRejections.has(evaluationPromise)
+        ? evaluationPromise
+        : undefined;
+    if (modulePromise === undefined && scope !== undefined) {
+        for (let i = scope.promises.length - 1; i >= 0; i--) {
+            if (_pendingRejections.has(scope.promises[i])) {
+                modulePromise = scope.promises[i];
+                break;
+            }
+        }
+    }
+    if (modulePromise !== undefined) {
+        _ignoredUnhandledRejections.add(modulePromise);
+        _pendingRejections.delete(modulePromise);
     }
 };
 
@@ -825,6 +1110,7 @@ export var cpuUsage = process.cpuUsage;
 export var memoryUsage = process.memoryUsage;
 export var uptime = process.uptime;
 export var release = process.release;
+export var report = process.report;
 export var stdin = process.stdin;
 export var kill = process.kill;
 export var emitWarning = process.emitWarning;

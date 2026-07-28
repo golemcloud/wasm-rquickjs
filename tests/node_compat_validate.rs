@@ -19,7 +19,8 @@ mod common;
 
 use camino::Utf8Path;
 use common::js_subtest_parser::{
-    SubtestDiscovery, discover_subtests, rewrite_for_block, rewrite_for_node_test,
+    SubtestDiscovery, discover_subtests_with_options, rewrite_for_block_with_options,
+    rewrite_for_node_test,
 };
 use common::{
     CompiledTest, GolemPreparedComponent, NodeCompatCategory, TestInstance,
@@ -43,6 +44,8 @@ struct ValidationCase {
     reason: Option<String>,
     timeout_secs: u64,
     subtest_index: Option<usize>,
+    nested_node_test: bool,
+    isolate_block_subtests: bool,
 }
 
 #[derive(Debug)]
@@ -162,6 +165,8 @@ fn load_cases() -> anyhow::Result<Vec<ValidationCase>> {
                     reason: subtest.reason,
                     timeout_secs: entry.timeout_secs,
                     subtest_index: Some(subtest.index),
+                    nested_node_test: entry.nested_node_test,
+                    isolate_block_subtests: entry.isolate_block_subtests,
                 });
             }
         } else {
@@ -172,6 +177,8 @@ fn load_cases() -> anyhow::Result<Vec<ValidationCase>> {
                 reason: entry.reason,
                 timeout_secs: entry.timeout_secs,
                 subtest_index: None,
+                nested_node_test: entry.nested_node_test,
+                isolate_block_subtests: entry.isolate_block_subtests,
             });
         }
     }
@@ -221,10 +228,20 @@ async fn run_case(
         setup_node_compat_test_files(instance.temp_dir_path(), &case.path)?;
 
         if let Some(index) = case.subtest_index {
-            let (source, discovery) = load_split_source(&case.path, source_cache)?;
+            let (source, discovery) = load_split_source(
+                &case.path,
+                case.nested_node_test,
+                case.isolate_block_subtests,
+                source_cache,
+            )?;
             let rewritten = match discovery {
-                SubtestDiscovery::Block(blocks) => rewrite_for_block(source, blocks, index),
-                SubtestDiscovery::NodeTest(_) => rewrite_for_node_test(source, index),
+                SubtestDiscovery::Block(blocks) => rewrite_for_block_with_options(
+                    source,
+                    blocks,
+                    index,
+                    case.isolate_block_subtests,
+                ),
+                SubtestDiscovery::NodeTest(tests) => rewrite_for_node_test(source, tests, index),
                 SubtestDiscovery::None => source.to_string(),
             };
             let test_filename = case.path.rsplit('/').next().unwrap_or(&case.path);
@@ -270,15 +287,19 @@ async fn run_case(
 
 fn load_split_source<'a>(
     path: &str,
+    nested_node_test: bool,
+    isolate_block_subtests: bool,
     source_cache: &'a mut BTreeMap<String, (String, SubtestDiscovery)>,
 ) -> anyhow::Result<(&'a str, &'a SubtestDiscovery)> {
-    if !source_cache.contains_key(path) {
+    let cache_key = format!("{path}#{nested_node_test}#{isolate_block_subtests}");
+    if !source_cache.contains_key(&cache_key) {
         let source = fs::read_to_string(format!("tests/node_compat/suite/{path}"))?;
-        let discovery = discover_subtests(path, &source);
-        source_cache.insert(path.to_string(), (source, discovery));
+        let discovery =
+            discover_subtests_with_options(path, &source, nested_node_test, isolate_block_subtests);
+        source_cache.insert(cache_key.clone(), (source, discovery));
     }
     let (source, discovery) = source_cache
-        .get(path)
+        .get(&cache_key)
         .expect("split source was just inserted");
     Ok((source.as_str(), discovery))
 }

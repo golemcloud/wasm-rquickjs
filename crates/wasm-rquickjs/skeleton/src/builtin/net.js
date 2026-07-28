@@ -114,6 +114,7 @@ function deferred(fn) {
 
 function createHandleWrap() {
     return {
+        writeQueueSize: 0,
         setKeepAlive() {},
         set_keep_alive() {},
         set_no_delay() {},
@@ -1053,16 +1054,19 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
 
     const data = typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
     const buf = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    const byteArray = Array.from(buf);
+    const handle = this._handle;
+    handle.writeQueueSize += buf.byteLength;
 
     (async () => {
         try {
-            const written = await this._handle.write(byteArray);
+            const written = await handle.write(buf);
             this._bytesDispatched += written;
             this._resetTimeout();
             callback(null);
         } catch (e) {
             callback(parseNativeError(e));
+        } finally {
+            handle.writeQueueSize = Math.max(0, handle.writeQueueSize - buf.byteLength);
         }
     })();
 };
@@ -1138,9 +1142,17 @@ Socket.prototype._resetTimeout = function _resetTimeout() {
     if (this._timeoutValue > 0) {
         this._clearTimeout();
         this._timeout = globalThis.setTimeout(() => {
-            this.emit('timeout');
+            this._onTimeout();
         }, this._timeoutValue);
     }
+};
+
+Socket.prototype._onTimeout = function _onTimeout() {
+    if (this._handle && this._handle.writeQueueSize > 0) {
+        this._resetTimeout();
+        return;
+    }
+    this.emit('timeout');
 };
 
 Socket.prototype._clearTimeout = function _clearTimeout() {

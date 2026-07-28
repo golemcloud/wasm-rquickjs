@@ -7,6 +7,14 @@ import * as base64 from 'base64-js';
 // Partially based on https://github.com/JakeChampion/fetch/blob/main/fetch.js
 // Depends on https://github.com/jimmywarting/FormData and https://github.com/node-fetch/fetch-blob
 
+const normalizedFetchMethods = new Set(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'POST', 'PUT']);
+
+function normalizeFetchMethod(method) {
+    const value = String(method);
+    const upper = value.toUpperCase();
+    return normalizedFetchMethods.has(upper) ? upper : value;
+}
+
 // Defined as a plain (non-async) function so its prototype is
 // `Function.prototype` (not `AsyncFunction.prototype`) — which Node's vendored
 // `parallel/test-fetch.mjs` asserts. We deliberately do NOT use a
@@ -30,7 +38,7 @@ export function fetch(resource, options = {}) {
         let signal;
 
         if (typeof resource === 'object' && resource instanceof Request) {
-            method = resource.method.toUpperCase();
+            method = normalizeFetchMethod(resource.method);
             const headers = resource.headers;
             if (!headers.has('Accept')) {
                 headers.set('Accept', '*/*');
@@ -54,7 +62,7 @@ export function fetch(resource, options = {}) {
             body = resource._body;
             url = resource.url;
         } else {
-            method = (options.method || 'GET').toUpperCase();
+            method = normalizeFetchMethod(options.method || 'GET');
             const headers = new Headers(options.headers || {});
             if (!headers.has('Accept')) {
                 headers.set('Accept', '*/*');
@@ -178,7 +186,7 @@ function abortableFetch(fetchPromise, signal) {
 // arise when the server closes the upload (e.g. on an early redirect).
 const BODY_SOURCE_ERROR = Symbol('bodySourceError');
 
-async function sendBody(bodyWriter, body, abortRef) {
+async function sendBody(bodyWriter, body, abortRef, onFirstChunk) {
     const reader = body.getReader();
     try {
         while (true) {
@@ -204,6 +212,7 @@ async function sendBody(bodyWriter, body, abortRef) {
             }
             try {
                 await bodyWriter.writeRequestBodyChunk(value);
+                onFirstChunk();
             } catch (err) {
                 // Transport/write error. If we've been aborted (e.g. because
                 // a redirect arrived), swallow it — the redirect path handles
@@ -258,11 +267,21 @@ async function streamingRequest(
         // never finish for slow/infinite streaming bodies).
         const abortRef = {aborted: false};
         const bodyState = {settled: false, ok: true, error: undefined};
+        let firstChunkWritten = false;
+        let notifyFirstChunk;
+        const firstChunkPromise = new Promise((resolve) => {
+            notifyFirstChunk = () => {
+                if (!firstChunkWritten) {
+                    firstChunkWritten = true;
+                    resolve();
+                }
+            };
+        });
         let bodyPromise;
 
         if (currentBodyCreator && (currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
             const bodyStream = currentBodyCreator();
-            bodyPromise = sendBody(bodyWriter, bodyStream, abortRef).then(
+            bodyPromise = sendBody(bodyWriter, bodyStream, abortRef, notifyFirstChunk).then(
                 () => {
                     bodyState.settled = true;
                     bodyState.ok = true;
@@ -288,10 +307,14 @@ async function streamingRequest(
             status !== 306; // SWITCH PROXY
 
         if (isRedirectStatus) {
-            // Always surface a body source error that has already manifested
-            // before we observed the redirect — those are genuine failures of
-            // the user's stream/blob/formdata and should not be silently
-            // swallowed even when the server happened to redirect.
+            // If the body source has not produced anything yet, preserve the
+            // race between its first pull and the redirect. A source failure is
+            // authoritative even if the server has already sent the redirect;
+            // once a chunk has been written, the redirect may cancel an
+            // otherwise unbounded upload.
+            if (!firstChunkWritten && !bodyState.settled) {
+                await Promise.race([bodyPromise, firstChunkPromise]);
+            }
             if (bodyState.settled && !bodyState.ok &&
                 bodyState.error && bodyState.error[BODY_SOURCE_ERROR]) {
                 throw bodyState.error;
@@ -916,7 +939,7 @@ export class Request {
     }
 
     get method() {
-        return this._options.method ?? 'GET';
+        return normalizeFetchMethod(this._options.method ?? 'GET');
     }
 
     get mode() {

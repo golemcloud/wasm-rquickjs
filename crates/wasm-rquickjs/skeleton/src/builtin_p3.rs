@@ -169,6 +169,10 @@ mod zlib {
 #[path = "builtin/websocket.rs"]
 mod websocket;
 
+pub(crate) fn realpath_for_module_resolution(path: &str) -> Option<String> {
+    fs::realpath_for_module_resolution(path)
+}
+
 /// Registers builtin native and JavaScript module names with the resolver.
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
@@ -192,7 +196,9 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/intl_native")
         .with_module("__wasm_rquickjs_builtin/intl")
         .with_module("node:util")
+        .with_module("node:util/types")
         .with_module("util")
+        .with_module("util/types")
         .with_module("node:buffer")
         .with_module("buffer")
         .with_module("base64-js")
@@ -441,7 +447,9 @@ pub fn module_loader() -> (
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
         .with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
         .with_module("node:util", util::UTIL_JS)
-        .with_module("util", util::REEXPORT_JS)
+        .with_module("node:util/types", util::UTIL_TYPES_JS)
+        .with_module("util", util::BARE_UTIL_REEXPORT_JS)
+        .with_module("util/types", util::UTIL_TYPES_JS)
         .with_module("base64-js", base64::BASE64_JS)
         .with_module("ieee754", ieee754::IEEE754_JS)
         .with_module("node:buffer", buffer::BUFFER_JS)

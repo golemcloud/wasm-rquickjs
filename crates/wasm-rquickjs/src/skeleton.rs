@@ -138,3 +138,6 @@ fn recursive_copy_sources(dir: &Dir, output: &Utf8Path) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod module_loader_architecture;

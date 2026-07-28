@@ -4,7 +4,9 @@ test_r::enable!();
 #[path = "common/mod.rs"]
 mod common;
 
-use crate::common::js_subtest_parser::{SubtestDiscovery, discover_subtests};
+use crate::common::js_subtest_parser::{
+    SubtestDiscovery, discover_subtests, discover_subtests_with_options,
+};
 use crate::common::strip_jsonc_comments;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -302,7 +304,7 @@ fn discovered_names(discovery: &SubtestDiscovery) -> BTreeSet<String> {
 }
 
 /// Discover all `.js` test files from vendored suite directories.
-/// Matches the approach used by the report generator in node_compat_report.rs.
+/// Matches the approach used by the config report generator.
 fn discover_suite_files() -> BTreeSet<String> {
     let suites = ["parallel", "sequential", "es-module"];
     let mut files = BTreeSet::new();
@@ -372,7 +374,20 @@ fn migrate_config_split() {
             }
         };
 
-        let discovery = discover_subtests(test_path, &source);
+        let nested_node_test = opts
+            .get("nestedNodeTest")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let isolate_block_subtests = opts
+            .get("isolateBlockSubtests")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let discovery = discover_subtests_with_options(
+            test_path,
+            &source,
+            nested_node_test,
+            isolate_block_subtests,
+        );
         let file_skip = opts.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
         let file_reason = opts.get("reason").and_then(|v| v.as_str()).unwrap_or("");
 

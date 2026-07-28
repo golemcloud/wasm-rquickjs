@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "axios": "1.7.9",
+    "graphql": "16.10.0",
+    "graphql-request": "7.1.2",
+    "ky": "1.7.4",
+    "node-fetch": "3.3.2"
+  }
+}

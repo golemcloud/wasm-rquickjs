@@ -8,6 +8,10 @@ world cjs-require {
   export test-require-cache: func() -> bool;
   export test-create-require: func() -> bool;
   export test-require-json: func() -> bool;
+  export test-require-extensions-order: func() -> bool;
   export test-require-module-exports-function: func() -> bool;
   export test-require-module-not-found: func() -> bool;
+  export test-require-package-exports: func() -> bool;
+  export test-require-package-imports: func() -> bool;
+  export test-require-package-map-edge-cases: func() -> bool;
 }

@@ -54,6 +54,10 @@ jobs:
         run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
+      - name: Node compatibility parser contracts
+        run: cargo test --test js_subtest_parser $CI_WASMTIME_FORK_FEATURES -- --report-time
+      - name: Module loader architecture contracts
+        run: cargo test -p wasm-rquickjs --lib $CI_WASMTIME_FORK_FEATURES -- module_loader_architecture
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
@@ -78,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,8 +90,14 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
-      - name: Runtime tests (group ${{ matrix.group }}/8)
+      - uses: actions/setup-node@v4
+        if: matrix.group == 9
+        with:
+          node-version: "22.14.0"
+      - name: Runtime tests (group ${{ matrix.group }}/9)
         run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()
@@ -122,6 +132,9 @@ jobs:
         run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
+      - name: Module inventory contracts
+        if: matrix.shard == 0
+        run: cargo test --test node_compat_report $CI_WASMTIME_FORK_FEATURES -- module_related_node_compat_entries_are_configured module_related_known_gaps_are_deferred_or_covered module_known_gap_deferrals_require_an_exact_reason node_compat_config_report_is_current vm_split_fixtures_include_top_level_executable_statements --report-time
       - name: Node compat tests (shard ${{ matrix.shard }}/8)
         run: cargo test --test node_compat $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
       - name: Publish Test Report
@@ -176,7 +189,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     env:
       # Selects the Preview 3 generation target in the test harness (tests/common/mod.rs).
       WASM_RQUICKJS_TEST_TARGET: p3
@@ -185,11 +198,17 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - uses: actions/setup-node@v4
+        if: matrix.group == 9
+        with:
+          node-version: "22.14.0"
       # Preview 3 runs on the stock crates.io wasmtime: the Golem wasmtime fork is Preview 2 only,
       # and the P3 host support in tests/common/mod.rs is gated to non-fork builds. So this lane
       # deliberately does NOT run enable-wasmtime-fork.sh or pass --features use-golem-wasmtime.
-      - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/8)
+      - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/9)
         run: cargo test --test runtime -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()

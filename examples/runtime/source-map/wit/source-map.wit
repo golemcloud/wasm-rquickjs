@@ -1,0 +1,5 @@
+package quickjs:source-map;
+
+world source-map {
+  export test-source-map-api: func() -> bool;
+}

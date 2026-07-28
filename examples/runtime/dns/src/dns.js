@@ -104,5 +104,37 @@ export async function test() {
     results.hasV4mapped = dns.V4MAPPED === 8;
     results.hasAll = dns.ALL === 16;
 
+    // Test 15: lookupService validates address and port before callback.
+    try {
+        dns.lookupService('invalid', -1, null);
+        results.lookupServiceAddressValidationFirst = false;
+    } catch (error) {
+        results.lookupServiceAddressValidationFirst = error.code === 'ERR_INVALID_ARG_VALUE';
+    }
+    try {
+        dns.lookupService('127.0.0.1', -1, null);
+        results.lookupServicePortValidationFirst = false;
+    } catch (error) {
+        results.lookupServicePortValidationFirst = error.code === 'ERR_SOCKET_BAD_PORT';
+    }
+    try {
+        dns.lookupService('127.0.0.1', 80, null);
+        results.lookupServiceCallbackValidation = false;
+    } catch (error) {
+        results.lookupServiceCallbackValidation = error.code === 'ERR_INVALID_ARG_TYPE';
+    }
+    try {
+        dns.lookupService('invalid');
+        results.lookupServiceMissingArgs = false;
+    } catch (error) {
+        results.lookupServiceMissingArgs = error.code === 'ERR_MISSING_ARGS';
+    }
+    try {
+        dns.promises.lookupService('127.0.0.1');
+        results.promisesLookupServiceMissingArgs = false;
+    } catch (error) {
+        results.promisesLookupServiceMissingArgs = error.code === 'ERR_MISSING_ARGS';
+    }
+
     return JSON.stringify(results);
 }

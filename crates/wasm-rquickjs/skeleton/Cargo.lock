@@ -911,10 +911,9 @@ dependencies = [
 [[package]]
 name = "golem-websocket"
 version = "0.0.3"
-source = "git+https://github.com/golemcloud/wasm-rquickjs?rev=dda5a2ad5f6140544dc013a94a13a1c384c14c0c#dda5a2ad5f6140544dc013a94a13a1c384c14c0c"
+source = "git+https://github.com/golemcloud/wasm-rquickjs?branch=wasi-p3#497153b73e833e483ffb2c9281bda19d4d122427"
 dependencies = [
- "wit-bindgen 0.51.0",
- "wit-bindgen-rt",
+ "wit-bindgen 0.58.0",
 ]
 
 [[package]]
@@ -1776,6 +1775,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "http",
+ "indexmap",
  "k256",
  "md-5",
  "num-bigint-dig",
@@ -1792,6 +1792,8 @@ dependencies = [
  "rusqlite",
  "scrypt",
  "sec1",
+ "serde",
+ "serde_json",
  "sha1",
  "sha2",
  "sha3",
@@ -1966,6 +1968,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]

@@ -1,7 +1,6 @@
 use futures::future::AbortHandle;
 use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Persistent, Promise, String as JsString, Value, async_with,
@@ -13,12 +12,7 @@ use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
-use super::module_loading::{
-    CjsCompatLoader, CjsEvalResolver, DataUrlLoader, DataUrlResolver, FileUrlResolver,
-    ImportMetaInit, ImportMetaLoader, JsonFileLoader, MockModuleLoader, MockModuleResolver,
-    NodeFileResolver, NodeModuleErrorResolver, NodeModulesResolver, RealmGuardResolver,
-    inject_import_meta_prologue,
-};
+use super::module_loading::initialize_module_loading;
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
@@ -35,6 +29,7 @@ pub struct JsState {
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
     pub unrefed_timers: RefCell<HashSet<usize>>,
+    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
@@ -79,83 +74,13 @@ impl JsState {
             .await
             .expect("Failed to create AsyncContext");
 
-        let mut builtin_resolver =
-            BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-        for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-            builtin_resolver = builtin_resolver.with_module(name.to_string());
-        }
-        let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
-        let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
-
-        let file_resolver = FileResolver::default()
-            .with_path("/")
-            .with_pattern("{}.js")
-            .with_pattern("{}.mjs")
-            .with_pattern("{}.json");
-
-        let resolver = (
-            (
-                RealmGuardResolver,
-                MockModuleResolver,
-                DataUrlResolver,
-                FileUrlResolver,
-                builtin_resolver,
-                NodeModulesResolver,
-                NodeFileResolver,
-            ),
-            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
-        );
-
-        let mut builtin_loader = BuiltinLoader::default().with_module(
-            crate::JS_EXPORT_MODULE_NAME,
-            inject_import_meta_prologue(
-                &ImportMetaInit {
-                    url: format!(
-                        "file:///__wasm_rquickjs_virtual__/{}.mjs",
-                        crate::JS_EXPORT_MODULE_NAME
-                    ),
-                    filename: None,
-                    dirname: None,
-                    include_resolve: true,
-                },
-                crate::js_export_module(),
-            ),
-        );
-        for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
-            let source = (get_module)();
-            let injected = inject_import_meta_prologue(
-                &ImportMetaInit {
-                    url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
-                    filename: None,
-                    dirname: None,
-                    include_resolve: true,
-                },
-                &source,
-            );
-            builtin_loader = builtin_loader.with_module(name.to_string(), injected);
-        }
-
-        let loader = (
-            MockModuleLoader,
-            builtin_loader,
-            crate::modules::module_loader(),
-            crate::builtin::module_loader(),
-            DataUrlLoader,
-            JsonFileLoader,
-            CjsCompatLoader,
-            ImportMetaLoader,
-        );
-
-        rt.set_loader(resolver, loader).await;
+        initialize_module_loading(&rt, &ctx).await;
 
         async_with!(ctx => |ctx| {
             let global = ctx.globals();
 
             global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                 .expect("Failed to initialize resource table");
-
-            global.set("__wasm_rquickjs_mock_seq", 0i64)
-                .expect("Failed to initialize mock sequence counter");
         })
         .await;
 
@@ -185,6 +110,7 @@ impl JsState {
             abort_handles: RefCell::new(HashMap::new()),
             last_abort_id: AtomicUsize::new(0),
             unrefed_timers: RefCell::new(HashSet::new()),
+            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
             gc_pending: std::sync::atomic::AtomicBool::new(false),
         }
     }

@@ -106,6 +106,10 @@ mod sqlite {
     pub use super::sqlite_disabled::*;
 }
 
+pub(crate) fn realpath_for_module_resolution(path: &str) -> Option<String> {
+    fs::realpath_for_module_resolution(path)
+}
+
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
 ) -> rquickjs::loader::BuiltinResolver {
@@ -128,7 +132,9 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/intl_native")
         .with_module("__wasm_rquickjs_builtin/intl")
         .with_module("node:util")
+        .with_module("node:util/types")
         .with_module("util")
+        .with_module("util/types")
         .with_module("__wasm_rquickjs_builtin/fs_native")
         .with_module("node:fs")
         .with_module("fs")
@@ -375,7 +381,9 @@ pub fn module_loader() -> (
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
         .with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
         .with_module("node:util", util::UTIL_JS)
-        .with_module("util", util::REEXPORT_JS)
+        .with_module("node:util/types", util::UTIL_TYPES_JS)
+        .with_module("util", util::BARE_UTIL_REEXPORT_JS)
+        .with_module("util/types", util::UTIL_TYPES_JS)
         .with_module("base64-js", base64::BASE64_JS)
         .with_module("ieee754", ieee754::IEEE754_JS)
         .with_module("node:buffer", buffer::BUFFER_JS)

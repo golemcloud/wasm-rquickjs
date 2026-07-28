@@ -1,4 +1,5 @@
 declare module 'domain' {
+  export function testEventEmitterConstructorIdentity(): Promise<boolean>;
   export function testCreate(): Promise<boolean>;
   export function testRun(): Promise<boolean>;
   export function testBind(): Promise<boolean>;

@@ -1,0 +1,12 @@
+{
+  "name": "condition-entry-module-sync-cycle",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "module-sync": "./entry.mjs",
+      "import": "./entry-import.mjs",
+      "default": "./entry-import.mjs"
+    }
+  }
+}

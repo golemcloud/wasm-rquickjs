@@ -7,12 +7,14 @@ use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use futures::FutureExt;
 use heck::ToSnakeCase;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::io::Write;
+use std::hash::{Hash, Hasher};
+use std::io::{Read, Write};
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
@@ -31,6 +33,12 @@ use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
 
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
+
+const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
+const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
+const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
+const TEST_UNOPTIMIZED_ENV: &str = "WASM_RQUICKJS_TEST_UNOPTIMIZED";
+const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 
 /// In-memory buffer holding host-side tracing output so it can be attached to test failure
 /// messages. On CI only the failure message itself is visible (in the ctrf report and the
@@ -147,6 +155,470 @@ pub fn strip_jsonc_comments(input: &str) -> String {
     result
 }
 
+fn truthy_env(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+pub(crate) fn test_artifact_cache_enabled() -> bool {
+    truthy_env(TEST_ARTIFACT_CACHE_ENV)
+}
+
+fn test_drop_cache_enabled() -> bool {
+    truthy_env(TEST_DROP_CACHE_ENV)
+}
+
+fn test_prepared_component_cache_enabled() -> bool {
+    truthy_env(TEST_PREPARED_COMPONENT_CACHE_ENV)
+}
+
+fn test_unoptimized_enabled() -> bool {
+    truthy_env(TEST_UNOPTIMIZED_ENV)
+}
+
+fn test_wasmtime_cache_enabled() -> bool {
+    test_wasmtime_cache_enabled_from(
+        truthy_env(TEST_WASMTIME_CACHE_ENV),
+        test_drop_cache_enabled(),
+    )
+}
+
+fn test_wasmtime_cache_enabled_from(enabled: bool, drop_cache: bool) -> bool {
+    enabled && !drop_cache
+}
+
+fn test_cache_stamp_dir() -> Utf8PathBuf {
+    Utf8Path::new("tmp").join("test-artifact-cache")
+}
+
+fn drop_test_artifact_cache_once() {
+    static DROPPED: OnceLock<()> = OnceLock::new();
+    DROPPED.get_or_init(|| {
+        if test_drop_cache_enabled() {
+            let _ = fs::remove_dir_all(test_cache_stamp_dir());
+        }
+    });
+}
+
+fn test_cache_stamp(
+    name: &str,
+    feature_combination: FeatureCombination,
+    kind: &str,
+) -> Utf8PathBuf {
+    test_cache_stamp_for_target(name, feature_combination, kind, test_target())
+}
+
+fn test_cache_stamp_for_target(
+    name: &str,
+    feature_combination: FeatureCombination,
+    kind: &str,
+    target: TestTarget,
+) -> Utf8PathBuf {
+    test_cache_stamp_dir().join(format!(
+        "{}-{}{}-{kind}.stamp",
+        name.to_snake_case(),
+        feature_combination.label(),
+        target.dir_suffix(),
+    ))
+}
+
+fn test_cache_lock(name: &str, feature_combination: FeatureCombination, kind: &str) -> Utf8PathBuf {
+    test_cache_stamp_dir().join(format!(
+        "{}-{}{}-{kind}.lock",
+        name.to_snake_case(),
+        feature_combination.label(),
+        test_target().dir_suffix(),
+    ))
+}
+
+fn rustc_version_verbose() -> String {
+    Command::new("rustc")
+        .arg("-Vv")
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                Some(String::from_utf8_lossy(&output.stdout).to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "rustc-version-unavailable".to_string())
+}
+
+fn cache_stamp_signature(
+    name: &str,
+    feature_combination: FeatureCombination,
+    kind: &str,
+    extra: &[(&str, String)],
+) -> String {
+    static RUSTC_VERSION_VERBOSE: OnceLock<String> = OnceLock::new();
+    let rustc_version = RUSTC_VERSION_VERBOSE.get_or_init(rustc_version_verbose);
+    let mut signature = format!(
+        "wasm-rquickjs-test-cache-v2\nname={name}\nfeature={}\nkind={kind}\nrustc={rustc_version}\n",
+        feature_combination.label(),
+    );
+
+    for env_name in [
+        "CARGO",
+        "CARGO_BUILD_TARGET",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "CARGO_PROFILE_TEST_OPT_LEVEL",
+        "CARGO_TARGET_DIR",
+        "RUSTC",
+        "RUSTFLAGS",
+        "RUSTUP_TOOLCHAIN",
+    ] {
+        if let Ok(value) = std::env::var(env_name) {
+            signature.push_str(env_name);
+            signature.push('=');
+            signature.push_str(&value);
+            signature.push('\n');
+        }
+    }
+
+    for (key, value) in extra {
+        signature.push_str(key);
+        signature.push('=');
+        signature.push_str(value);
+        signature.push('\n');
+    }
+
+    signature
+}
+
+fn modified_time(path: &Utf8Path) -> anyhow::Result<SystemTime> {
+    Ok(fs::metadata(path)?.modified()?)
+}
+
+fn newest_modified_time(path: &Utf8Path) -> anyhow::Result<SystemTime> {
+    let metadata = fs::metadata(path)?;
+    let mut newest = metadata.modified()?;
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let entry_path = Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|_| anyhow!("Non UTF-8 path under {path}"))?;
+            newest = newest.max(newest_modified_time(&entry_path)?);
+        }
+    }
+    Ok(newest)
+}
+
+fn newest_modified_time_of_existing(paths: &[Utf8PathBuf]) -> anyhow::Result<SystemTime> {
+    let mut newest = SystemTime::UNIX_EPOCH;
+    for path in paths {
+        if path.exists() {
+            newest = newest.max(newest_modified_time(path)?);
+        }
+    }
+    Ok(newest)
+}
+
+fn output_fresh_for_inputs(
+    output: &Utf8Path,
+    stamp: &Utf8Path,
+    inputs: &[Utf8PathBuf],
+    signature: &str,
+) -> bool {
+    drop_test_artifact_cache_once();
+
+    if !output.exists() || !stamp.exists() || test_drop_cache_enabled() {
+        return false;
+    }
+
+    let Ok(stamp_contents) = fs::read_to_string(stamp) else {
+        return false;
+    };
+    if stamp_contents != signature {
+        return false;
+    }
+
+    let Ok(output_mtime) = modified_time(output) else {
+        return false;
+    };
+    let Ok(stamp_mtime) = modified_time(stamp) else {
+        return false;
+    };
+    if stamp_mtime < output_mtime {
+        return false;
+    }
+    let Ok(input_mtime) = newest_modified_time_of_existing(inputs) else {
+        return false;
+    };
+
+    output_mtime >= input_mtime && stamp_mtime >= input_mtime
+}
+
+fn refresh_cache_stamp(stamp: &Utf8Path, signature: &str) -> anyhow::Result<()> {
+    if let Some(parent) = stamp.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(stamp, signature)?;
+    Ok(())
+}
+
+struct TestCacheLock {
+    path: Utf8PathBuf,
+}
+
+impl TestCacheLock {
+    fn acquire(path: Utf8PathBuf) -> anyhow::Result<Self> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let started = Instant::now();
+        loop {
+            match fs::create_dir(&path) {
+                Ok(()) => return Ok(Self { path }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if fs::metadata(&path)
+                        .and_then(|metadata| metadata.modified())
+                        .ok()
+                        .and_then(|modified| modified.elapsed().ok())
+                        .is_some_and(|age| age > Duration::from_secs(10 * 60))
+                    {
+                        let _ = fs::remove_dir_all(&path);
+                        continue;
+                    }
+                    if started.elapsed() > Duration::from_secs(120) {
+                        anyhow::bail!("timed out waiting for test artifact cache lock {path}");
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+}
+
+impl Drop for TestCacheLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir(&self.path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_r::test;
+
+    #[test]
+    fn artifact_cache_stamp_must_not_be_older_than_output() -> anyhow::Result<()> {
+        if test_drop_cache_enabled() {
+            return Ok(());
+        }
+
+        let temp = Utf8TempDir::new()?;
+        let input = temp.path().join("input.txt");
+        let output = temp.path().join("output.wasm");
+        let stamp = temp.path().join("output.stamp");
+        let signature = "test-signature";
+        fs::write(&input, "input")?;
+        fs::write(&output, "output-v1")?;
+        refresh_cache_stamp(&stamp, signature)?;
+
+        assert!(output_fresh_for_inputs(
+            &output,
+            &stamp,
+            &[input.clone()],
+            signature,
+        ));
+
+        let stamp_mtime = modified_time(&stamp)?;
+        let started = Instant::now();
+        loop {
+            thread::sleep(Duration::from_millis(10));
+            fs::write(&output, format!("output-v2-{:?}", started.elapsed()))?;
+            if modified_time(&output)? > stamp_mtime {
+                break;
+            }
+            if started.elapsed() > Duration::from_secs(2) {
+                anyhow::bail!("output mtime did not advance beyond cache stamp mtime");
+            }
+        }
+
+        assert!(
+            !output_fresh_for_inputs(&output, &stamp, &[input], signature),
+            "a stale stamp must not validate an artifact rewritten after the stamp was produced"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn prepared_component_cache_key_includes_content_hash() -> anyhow::Result<()> {
+        let temp = Utf8TempDir::new()?;
+        let wasm = temp.path().join("component.wasm");
+
+        fs::write(&wasm, b"aaaa")?;
+        let first = prepared_component_cache_key(&wasm)?;
+
+        fs::write(&wasm, b"bbbb")?;
+        let second = prepared_component_cache_key(&wasm)?;
+
+        assert_eq!(first.path, second.path);
+        assert_eq!(first.len, second.len);
+        assert_ne!(
+            first.content_hash, second.content_hash,
+            "prepared component cache keys must change when same-length component bytes change"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn drop_cache_bypasses_explicit_wasmtime_cache() {
+        assert!(test_wasmtime_cache_enabled_from(true, false));
+        assert!(!test_wasmtime_cache_enabled_from(false, false));
+        assert!(!test_wasmtime_cache_enabled_from(true, true));
+        assert!(!test_wasmtime_cache_enabled_from(false, true));
+    }
+
+    #[test]
+    fn artifact_cache_stamps_are_target_specific() {
+        let p2 = test_cache_stamp_for_target(
+            "module-resolution",
+            FeatureCombination::Normal,
+            "compile",
+            TestTarget::P2,
+        );
+        let p3 = test_cache_stamp_for_target(
+            "module-resolution",
+            FeatureCombination::Normal,
+            "compile",
+            TestTarget::P3,
+        );
+
+        assert_ne!(p2, p3);
+    }
+}
+
+fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Result<()> {
+    if test_wasmtime_cache_enabled() {
+        config.cache(Some(wasmtime::Cache::new(wasmtime::CacheConfig::new())?));
+    }
+    Ok(())
+}
+
+fn test_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
+    let mut config = wasmtime::Config::default();
+    config.wasm_component_model(true);
+    config.epoch_interruption(true);
+    config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
+    config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
+    configure_test_wasmtime_cache(&mut config)?;
+    Ok(config)
+}
+
+fn start_test_epoch_thread(engine: &Engine) {
+    let epoch_engine = engine.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            epoch_engine.increment_epoch();
+        }
+    });
+}
+
+fn test_linker_with_common_hosts(engine: &Engine) -> anyhow::Result<Linker<Host>> {
+    let mut linker: Linker<Host> = Linker::new(engine);
+
+    wasmtime_wasi::p2::add_to_linker_with_options_async(
+        &mut linker,
+        &bindings::LinkOptions::default(),
+    )?;
+    wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
+
+    {
+        let mut logging = linker.instance("wasi:logging/logging")?;
+        logging.func_wrap(
+            "log",
+            |mut ctx: StoreContextMut<'_, Host>,
+             (level, context, message): (LogLevel, String, String)|
+             -> Result<(), wasmtime::Error> {
+                ctx.data_mut()
+                    .log_messages
+                    .lock()
+                    .unwrap()
+                    .push((level, context, message));
+                Ok(())
+            },
+        )?;
+    }
+
+    {
+        struct WsConn;
+        let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
+        ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
+            move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
+        })?;
+
+        ws.func_new(
+            "[static]websocket-connection.connect",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket connect not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.send",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket send not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.receive",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket receive not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.receive-with-timeout",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket receive-with-timeout not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.close",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket close not available in tests",
+                ))
+            },
+        )?;
+
+        ws.func_new(
+            "[method]websocket-connection.subscribe",
+            |_store, _ty, _params, _results| {
+                Err(wasmtime::Error::msg(
+                    "WebSocket subscribe not available in tests",
+                ))
+            },
+        )?;
+    }
+
+    Ok(linker)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NodeCompatCategory {
     /// The test exercises supported public API and should pass. Failures count against primary compatibility.
@@ -215,9 +687,67 @@ pub struct NodeCompatTestEntry {
     pub category: NodeCompatCategory,
     pub reason: Option<String>,
     pub split: bool,
+    pub nested_node_test: bool,
+    pub isolate_block_subtests: bool,
     pub timeout_secs: u64,
     pub flaky: bool,
     pub subtests: Vec<NodeCompatSubtestEntry>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum NodeModulesAppCategory {
+    Runnable,
+    KnownGap,
+    Deferred,
+}
+
+impl NodeModulesAppCategory {
+    pub fn from_config_value(value: &str) -> anyhow::Result<Self> {
+        match value {
+            "runnable" => Ok(Self::Runnable),
+            "known-gap" | "gap" => Ok(Self::KnownGap),
+            "deferred" => Ok(Self::Deferred),
+            other => anyhow::bail!("unknown node_modules_apps category '{other}'"),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Runnable => "runnable",
+            Self::KnownGap => "known gap",
+            Self::Deferred => "deferred",
+        }
+    }
+
+    pub fn status_label(self) -> &'static str {
+        match self {
+            Self::Runnable => "Passing",
+            Self::KnownGap => "Known gap",
+            Self::Deferred => "Deferred",
+        }
+    }
+
+    pub fn should_ignore_in_runner(self) -> bool {
+        !matches!(self, Self::Runnable)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeModulesAppTestEntry {
+    pub file: String,
+    pub category: NodeModulesAppCategory,
+    pub coverage: String,
+    pub reason: Option<String>,
+    pub timeout_secs: u64,
+    pub flaky: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeModulesAppEntry {
+    pub name: String,
+    pub category: NodeModulesAppCategory,
+    pub reason: Option<String>,
+    pub tests: Vec<NodeModulesAppTestEntry>,
 }
 
 /// Extract the numeric index from a subtest name like "block_00_foo" or "test_03_bar".
@@ -303,6 +833,14 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         let split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
+        let nested_node_test = opts
+            .get("nestedNodeTest")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let isolate_block_subtests = opts
+            .get("isolateBlockSubtests")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let timeout_secs = opts
             .get("timeout")
             .and_then(|v| v.as_u64())
@@ -339,6 +877,8 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
             category,
             reason,
             split,
+            nested_node_test,
+            isolate_block_subtests,
             timeout_secs,
             flaky,
             subtests,
@@ -346,6 +886,111 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
     }
 
     Ok(tests)
+}
+
+pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModulesAppEntry>> {
+    let content = fs::read_to_string(path)?;
+    let json_str = strip_jsonc_comments(&content);
+    let value: serde_json::Value = serde_json::from_str(&json_str)?;
+
+    let apps_obj = value
+        .get("apps")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| anyhow::anyhow!("node_modules_apps config missing 'apps' object"))?;
+
+    let mut apps = Vec::new();
+    for (app_name, opts) in apps_obj {
+        let category = node_modules_app_category_from_value(opts, None)?;
+        let reason = opts
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let default_timeout_secs = opts
+            .get("timeout")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS);
+        let tests_obj = opts
+            .get("tests")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| {
+                anyhow::anyhow!("node_modules app '{app_name}' missing 'tests' object")
+            })?;
+
+        let mut tests = Vec::new();
+        for (test_file, test_opts) in tests_obj {
+            let test_category = node_modules_app_category_from_value(test_opts, Some(category))?;
+            let (coverage, test_reason, timeout_secs, flaky) = match test_opts {
+                serde_json::Value::String(coverage) => (
+                    coverage.clone(),
+                    reason.clone(),
+                    default_timeout_secs,
+                    false,
+                ),
+                serde_json::Value::Object(_) => {
+                    let coverage = test_opts
+                        .get("coverage")
+                        .or_else(|| test_opts.get("description"))
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "node_modules app '{app_name}' test '{test_file}' missing coverage"
+                            )
+                        })?
+                        .to_string();
+                    let test_reason = test_opts
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                        .or_else(|| reason.clone());
+                    let timeout_secs = test_opts
+                        .get("timeout")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(default_timeout_secs);
+                    let flaky = test_opts
+                        .get("flaky")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    (coverage, test_reason, timeout_secs, flaky)
+                }
+                _ => anyhow::bail!(
+                    "node_modules app '{app_name}' test '{test_file}' must be a coverage string or object"
+                ),
+            };
+
+            tests.push(NodeModulesAppTestEntry {
+                file: test_file.clone(),
+                category: test_category,
+                coverage,
+                reason: test_reason,
+                timeout_secs,
+                flaky,
+            });
+        }
+        tests.sort_by(|a, b| a.file.cmp(&b.file));
+
+        apps.push(NodeModulesAppEntry {
+            name: app_name.clone(),
+            category,
+            reason,
+            tests,
+        });
+    }
+    apps.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(apps)
+}
+
+fn node_modules_app_category_from_value(
+    value: &serde_json::Value,
+    inherited: Option<NodeModulesAppCategory>,
+) -> anyhow::Result<NodeModulesAppCategory> {
+    if let Some(category) = value.get("category").and_then(|v| v.as_str()) {
+        return NodeModulesAppCategory::from_config_value(category);
+    }
+    if value.get("skip").and_then(|v| v.as_bool()).unwrap_or(false) {
+        return Ok(NodeModulesAppCategory::KnownGap);
+    }
+    Ok(inherited.unwrap_or(NodeModulesAppCategory::Runnable))
 }
 
 /// Recursively copy a directory and all its contents to a destination.
@@ -389,6 +1034,24 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     let dst_test = suite_dir.join(test_filename);
     fs::copy(&src_test, &dst_test)?;
 
+    // Some vendored ESM tests import sibling test files with relative specifiers.
+    // The split runner still executes one configured test at a time, but those
+    // relative imports need the original suite directory shape.
+    let src_suite_dir = std::path::Path::new("tests/node_compat/suite").join(suite);
+    if suite == "es-module" && src_suite_dir.exists() {
+        for entry in fs::read_dir(&src_suite_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                let file_name = entry.file_name();
+                let file_name_str = file_name.to_string_lossy();
+                let dst = suite_dir.join(file_name_str.as_ref());
+                if !dst.exists() {
+                    fs::copy(entry.path(), dst)?;
+                }
+            }
+        }
+    }
+
     // Copy the common shim
     let src_shim = "tests/node_compat/common-shim/index.js";
     let dst_shim = common_dir.join("index.js");
@@ -417,6 +1080,22 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
         }
     }
 
+    // Copy vendored ESM common helpers that are not replaced by local shims.
+    let vendored_common_dir = std::path::Path::new("tests/node_compat/suite/common");
+    if vendored_common_dir.exists() {
+        for entry in fs::read_dir(vendored_common_dir)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let file_name_str = file_name.to_string_lossy();
+            if entry.file_type()?.is_file()
+                && file_name_str.ends_with(".mjs")
+                && !common_dir.join(file_name_str.as_ref()).exists()
+            {
+                fs::copy(entry.path(), common_dir.join(file_name_str.as_ref()))?;
+            }
+        }
+    }
+
     // Create /tmp directory for tmpdir shim
     let tmp_dir = temp.join("tmp");
     fs::create_dir_all(&tmp_dir)?;
@@ -434,6 +1113,10 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     let fixtures_src = std::path::Path::new("tests/node_compat/fixtures");
     if fixtures_src.exists() {
         copy_dir_recursive(fixtures_src, fixtures_dst.as_std_path())?;
+    }
+
+    if test_rel_path == "sequential/test-module-loading.js" && vendored_fixtures_src.exists() {
+        copy_dir_recursive(vendored_fixtures_src, fixtures_dst.as_std_path())?;
     }
 
     Ok(())
@@ -461,7 +1144,7 @@ pub fn collect_example_paths(dirs: &[&str]) -> anyhow::Result<Vec<Utf8PathBuf>> 
 /// Selected once per process via the `WASM_RQUICKJS_TEST_TARGET` environment variable
 /// (`p2` — the default — or `p3`). Preview 2 reproduces the historical behavior; Preview 3
 /// generates async component exports and runs them on a Component Model async host.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum TestTarget {
     P2,
     P3,
@@ -730,35 +1413,11 @@ impl PreparedComponent {
     }
 
     fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let mut config = wasmtime::Config::default();
-        config.wasm_component_model(true);
-        config.epoch_interruption(true);
-        config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
-        config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
+        let config = test_wasmtime_config()?;
         let engine = Engine::new(&config)?;
 
-        // Start a background thread that increments the epoch every 10ms,
-        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
-        let epoch_engine = engine.clone();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                epoch_engine.increment_epoch();
-            }
-        });
-        let mut linker: Linker<Host> = Linker::new(&engine);
-
-        wasmtime_wasi::p2::add_to_linker_with_options_async(
-            &mut linker,
-            &bindings::LinkOptions::default(),
-        )?;
-        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-
-        // Mock wasi:logging/logging (required by the full feature)
-        add_wasi_logging_mock(&mut linker)?;
-
-        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        add_websocket_client_mock(&mut linker, TestTarget::P2)?;
+        start_test_epoch_thread(&engine);
+        let linker = test_linker_with_common_hosts(&engine)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -803,6 +1462,7 @@ pub struct GolemSpan {
     pub name: String,
     pub attributes: Vec<(String, String)>,
     pub finished: bool,
+    resource_rep: Option<u32>,
 }
 
 /// A PreparedComponent that includes a mock golem:api/context host implementation.
@@ -810,7 +1470,6 @@ pub struct GolemPreparedComponent {
     engine: Engine,
     linker: Linker<Host>,
     component: Component,
-    pub spans: Arc<Mutex<Vec<GolemSpan>>>,
 }
 
 impl GolemPreparedComponent {
@@ -829,49 +1488,24 @@ impl GolemPreparedComponent {
     fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
         let mut linker = p3_linker(&engine)?;
-        let spans = add_golem_context_mock(&mut linker)?;
+        add_golem_context_mock(&mut linker)?;
         let component = Component::from_file(&engine, wasm_path)?;
         Ok(Self {
             engine,
             linker,
             component,
-            spans,
         })
     }
 
     fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let mut config = wasmtime::Config::default();
-        config.wasm_component_model(true);
-        config.epoch_interruption(true);
-        config.async_stack_size(32 * 1024 * 1024);
-        config.max_wasm_stack(16 * 1024 * 1024);
+        let config = test_wasmtime_config()?;
         let engine = Engine::new(&config)?;
 
-        // Start a background thread that increments the epoch every 10ms,
-        // enabling epoch-based interruption to enforce timeouts on spinning WASM.
-        let epoch_engine = engine.clone();
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                epoch_engine.increment_epoch();
-            }
-        });
-        let mut linker: Linker<Host> = Linker::new(&engine);
-
-        wasmtime_wasi::p2::add_to_linker_with_options_async(
-            &mut linker,
-            &bindings::LinkOptions::default(),
-        )?;
-        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-
-        // Mock wasi:logging/logging (required by the golem feature)
-        add_wasi_logging_mock(&mut linker)?;
-
-        // Mock golem:websocket/client@1.5.0 (required when websocket module is included)
-        add_websocket_client_mock(&mut linker, TestTarget::P2)?;
+        start_test_epoch_thread(&engine);
+        let mut linker = test_linker_with_common_hosts(&engine)?;
 
         // Mock golem:api/context@1.5.0
-        let spans = add_golem_context_mock(&mut linker)?;
+        add_golem_context_mock(&mut linker)?;
 
         let component = Component::from_file(&engine, wasm_path)?;
 
@@ -879,7 +1513,6 @@ impl GolemPreparedComponent {
             engine,
             linker,
             component,
-            spans,
         })
     }
 }
@@ -894,26 +1527,45 @@ pub struct TestInstance {
     stdout_file: NamedUtf8TempFile,
     stderr_file: NamedUtf8TempFile,
     temp_dir: Utf8TempDir,
+    golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
 }
 
 impl TestInstance {
     pub async fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        if test_prepared_component_cache_enabled() {
+            let prepared = prepared_component_for_path(wasm_path)?;
+            return Self::from_prepared(&prepared).await;
+        }
+
         let prepared = PreparedComponent::new(wasm_path)?;
         Self::from_prepared(&prepared).await
     }
 
     pub async fn from_prepared(prepared: &PreparedComponent) -> anyhow::Result<Self> {
-        Self::from_parts(&prepared.engine, &prepared.linker, &prepared.component).await
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            None,
+        )
+        .await
     }
 
     pub async fn from_golem_prepared(prepared: &GolemPreparedComponent) -> anyhow::Result<Self> {
-        Self::from_parts(&prepared.engine, &prepared.linker, &prepared.component).await
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            Some(Arc::new(Mutex::new(Vec::new()))),
+        )
+        .await
     }
 
     async fn from_parts(
         engine: &Engine,
         linker: &Linker<Host>,
         component: &Component,
+        golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
     ) -> anyhow::Result<Self> {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
@@ -947,6 +1599,7 @@ impl TestInstance {
             log_messages: Arc::new(Mutex::new(Vec::new())),
             #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
+            golem_spans: golem_spans.clone(),
         };
 
         let mut store = Store::new(engine, host);
@@ -974,6 +1627,7 @@ impl TestInstance {
             stdout_file,
             stderr_file,
             temp_dir,
+            golem_spans,
         })
     }
 
@@ -1050,6 +1704,10 @@ impl TestInstance {
         self.temp_dir.path()
     }
 
+    pub fn golem_spans(&self) -> Option<Arc<Mutex<Vec<GolemSpan>>>> {
+        self.golem_spans.clone()
+    }
+
     pub fn read_stdout(&self) -> anyhow::Result<String> {
         Ok(fs::read_to_string(&self.stdout_file)?)
     }
@@ -1110,19 +1768,67 @@ impl TestInstance {
     }
 }
 
-/// Maximum attempts for guest invocations that fail with the intermittent
-/// wasmtime-wasi-http p3 scheduling race (see [`is_p3_http_flake`]).
-const P3_HTTP_FLAKE_MAX_ATTEMPTS: u32 = 3;
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct PreparedComponentCacheKey {
+    target: TestTarget,
+    path: Utf8PathBuf,
+    len: u64,
+    modified: Duration,
+    content_hash: u64,
+}
 
-/// wasmtime-wasi-http 46's p3 outgoing request path has a scheduling-sensitive
-/// race in its manual connection-driving loop: under load, hyper intermittently
-/// fails with `IncompleteMessage` or `Canceled(UnexpectedMessage)`, both of
-/// which are flattened into `ErrorCode::HttpProtocolError` before reaching the
-/// guest. The p3 rework in wasmtime 47 replaces this code, but until that is
-/// released (and supported by the Golem fork) we retry invocations that fail
-/// with this signature. Each retry uses a fresh `TestInstance`.
-fn is_p3_http_flake(err: &anyhow::Error) -> bool {
-    test_target() == TestTarget::P3 && format!("{err:#}").contains("ErrorCode::HttpProtocolError")
+fn prepared_component_cache_key(wasm_path: &Utf8Path) -> anyhow::Result<PreparedComponentCacheKey> {
+    let metadata = fs::metadata(wasm_path)?;
+    let path = fs::canonicalize(wasm_path)
+        .ok()
+        .and_then(|path| Utf8PathBuf::from_path_buf(path).ok())
+        .unwrap_or_else(|| wasm_path.to_path_buf());
+    let modified = metadata
+        .modified()?
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut file = fs::File::open(wasm_path)?;
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        buffer[..read].hash(&mut hasher);
+    }
+    Ok(PreparedComponentCacheKey {
+        target: test_target(),
+        path,
+        len: metadata.len(),
+        modified,
+        content_hash: hasher.finish(),
+    })
+}
+
+fn prepared_component_for_path(wasm_path: &Utf8Path) -> anyhow::Result<Arc<PreparedComponent>> {
+    static PREPARED_COMPONENTS: OnceLock<
+        Mutex<HashMap<PreparedComponentCacheKey, Arc<PreparedComponent>>>,
+    > = OnceLock::new();
+    static DROPPED: OnceLock<()> = OnceLock::new();
+
+    let key = prepared_component_cache_key(wasm_path)?;
+    let mut prepared = PREPARED_COMPONENTS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap();
+
+    if test_drop_cache_enabled() {
+        DROPPED.get_or_init(|| prepared.clear());
+    }
+
+    if let Some(component) = prepared.get(&key) {
+        return Ok(component.clone());
+    }
+
+    let component = Arc::new(PreparedComponent::new(wasm_path)?);
+    prepared.insert(key, component.clone());
+    Ok(component)
 }
 
 pub async fn invoke_and_capture_output(
@@ -1142,28 +1848,14 @@ pub async fn invoke_and_capture_output_with_stderr(
     function_name: &str,
     args: &[Val],
 ) -> (anyhow::Result<Option<Val>>, String, String) {
-    let mut last = None;
-    for attempt in 1..=P3_HTTP_FLAKE_MAX_ATTEMPTS {
-        let result = match TestInstance::new(wasm_path).await {
-            Ok(mut test_instance) => {
-                test_instance
-                    .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
-                    .await
-            }
-            Err(e) => (Err(e), String::new(), String::new()),
-        };
-        match &result.0 {
-            Err(e) if attempt < P3_HTTP_FLAKE_MAX_ATTEMPTS && is_p3_http_flake(e) => {
-                eprintln!(
-                    "Invocation of {function_name} failed with the intermittent p3 \
-                     HttpProtocolError (attempt {attempt}/{P3_HTTP_FLAKE_MAX_ATTEMPTS}), retrying"
-                );
-                last = Some(result);
-            }
-            _ => return result,
+    match TestInstance::new(wasm_path).await {
+        Ok(mut test_instance) => {
+            test_instance
+                .invoke_and_capture_output_with_stderr(interface_name, function_name, args)
+                .await
         }
+        Err(e) => (Err(e), String::new(), String::new()),
     }
-    last.expect("at least one invocation attempt must have run")
 }
 
 enum WasmSource {
@@ -1195,7 +1887,11 @@ impl CompiledTest {
     ) -> anyhow::Result<CompiledTest> {
         let compiled =
             Self::compile_with_features(path, use_shared_target, feature_combination).await?;
-        compiled.optimize().await
+        if test_unoptimized_enabled() {
+            Ok(compiled)
+        } else {
+            compiled.optimize().await
+        }
     }
 
     async fn compile_with_features(
@@ -1203,6 +1899,7 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
+        drop_test_artifact_cache_once();
         let target = test_target();
         let name = path.file_name().unwrap();
         // P2 and P3 builds of the same example never share an output tree.
@@ -1215,6 +1912,89 @@ impl CompiledTest {
         // shared target so P2 and P3 artifacts never collide.
         let shared_target_name = format!("rt-target{}", target.dir_suffix());
         let shared_target = Utf8Path::new("..").join("..").join(&shared_target_name);
+        let wasm_file_name = format!("{}.wasm", name.to_snake_case());
+        let compiled_wasm_path = if use_shared_target {
+            Utf8Path::new("tmp")
+                .join(&shared_target_name)
+                .join("wasm32-wasip2")
+                .join("debug")
+                .join(&wasm_file_name)
+        } else {
+            wrapper_crate_root
+                .join("target")
+                .join("wasm32-wasip2")
+                .join("debug")
+                .join(&wasm_file_name)
+        };
+        let compile_stamp = test_cache_stamp(name, feature_combination, "compile");
+        let compile_inputs = vec![
+            path.to_path_buf(),
+            Utf8Path::new("crates").join("wasm-rquickjs").join("src"),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("skeleton"),
+            Utf8Path::new("crates").join("wasi-logging").join("src"),
+            Utf8Path::new("Cargo.toml").to_path_buf(),
+            Utf8Path::new("Cargo.lock").to_path_buf(),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("Cargo.toml"),
+            Utf8Path::new("crates")
+                .join("wasi-logging")
+                .join("Cargo.toml"),
+        ];
+        let compile_signature = cache_stamp_signature(
+            name,
+            feature_combination,
+            "compile",
+            &[
+                ("target", "wasm32-wasip2".to_string()),
+                ("generation_target", format!("{target:?}")),
+                ("use_shared_target", use_shared_target.to_string()),
+                (
+                    "cargo_args",
+                    feature_combination.cargo_args_for_target(target).join("|"),
+                ),
+            ],
+        );
+
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(
+                &compiled_wasm_path,
+                &compile_stamp,
+                &compile_inputs,
+                &compile_signature,
+            )
+        {
+            println!("Reusing cached wrapper component {compiled_wasm_path}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(compiled_wasm_path),
+            });
+        }
+
+        let _cache_lock = if test_artifact_cache_enabled() {
+            Some(TestCacheLock::acquire(test_cache_lock(
+                name,
+                feature_combination,
+                "compile",
+            ))?)
+        } else {
+            None
+        };
+
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(
+                &compiled_wasm_path,
+                &compile_stamp,
+                &compile_inputs,
+                &compile_signature,
+            )
+        {
+            println!("Reusing cached wrapper component {compiled_wasm_path}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(compiled_wasm_path),
+            });
+        }
 
         // The Preview 3 generation path rejects synchronous freestanding exports, so for P3 we
         // rewrite the example's WIT so its world-level exported functions become `async func`
@@ -1265,38 +2045,89 @@ impl CompiledTest {
                 }
             })?;
 
-        let compiled = if use_shared_target {
-            CompiledTest {
-                wasm: Precompiled(
-                    Utf8Path::new("tmp")
-                        .join(&shared_target_name)
-                        .join("wasm32-wasip2")
-                        .join("debug")
-                        .join(format!("{}.wasm", name.to_snake_case())),
-                ),
-            }
-        } else {
-            CompiledTest {
-                wasm: Precompiled(
-                    wrapper_crate_root
-                        .join("target")
-                        .join("wasm32-wasip2")
-                        .join("debug")
-                        .join(format!("{}.wasm", name.to_snake_case())),
-                ),
-            }
-        };
+        if test_artifact_cache_enabled() {
+            refresh_cache_stamp(&compile_stamp, &compile_signature)?;
+        }
 
-        Ok(compiled)
+        Ok(CompiledTest {
+            wasm: Precompiled(compiled_wasm_path),
+        })
     }
 
     /// Run Wizer pre-initialization on the compiled component.
     /// Returns a new `CompiledTest` pointing to the optimized wasm file.
     pub async fn optimize(&self) -> anyhow::Result<CompiledTest> {
+        drop_test_artifact_cache_once();
+
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
+        let optimize_stamp = input.with_extension("optimized.stamp");
+        let optimize_inputs = vec![
+            input.to_path_buf(),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("src")
+                .join("optimize.rs"),
+            Utf8Path::new("Cargo.toml").to_path_buf(),
+            Utf8Path::new("Cargo.lock").to_path_buf(),
+            Utf8Path::new("crates")
+                .join("wasm-rquickjs")
+                .join("Cargo.toml"),
+        ];
+        let optimize_signature = cache_stamp_signature(
+            input.file_stem().unwrap_or("component"),
+            FeatureCombination::Normal,
+            "optimize",
+            &[
+                ("input", input.to_string()),
+                ("init_func", "wizer-initialize".to_string()),
+                ("optimizer", "wasm_rquickjs::optimize_component".to_string()),
+            ],
+        );
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(
+                &optimized,
+                &optimize_stamp,
+                &optimize_inputs,
+                &optimize_signature,
+            )
+        {
+            println!("Reusing cached optimized component {optimized}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(optimized),
+            });
+        }
+
+        let _cache_lock = if test_artifact_cache_enabled() {
+            let lock_name = input.file_stem().unwrap_or("component");
+            Some(TestCacheLock::acquire(test_cache_lock(
+                lock_name,
+                FeatureCombination::Normal,
+                "optimize",
+            ))?)
+        } else {
+            None
+        };
+
+        if test_artifact_cache_enabled()
+            && output_fresh_for_inputs(
+                &optimized,
+                &optimize_stamp,
+                &optimize_inputs,
+                &optimize_signature,
+            )
+        {
+            println!("Reusing cached optimized component {optimized}");
+            return Ok(CompiledTest {
+                wasm: Precompiled(optimized),
+            });
+        }
+
         println!("Optimizing component {input} -> {optimized}");
         wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
+        if test_artifact_cache_enabled() {
+            refresh_cache_stamp(&optimize_stamp, &optimize_signature)?;
+        }
         Ok(CompiledTest {
             wasm: Precompiled(optimized),
         })
@@ -1397,6 +2228,7 @@ pub struct Host {
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
     #[cfg(feature = "use-golem-wasmtime")]
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
+    pub golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
 }
 
 impl WasiView for Host {
@@ -1454,15 +2286,10 @@ fn p3_engine() -> anyhow::Result<Engine> {
     config.epoch_interruption(true);
     config.async_stack_size(32 * 1024 * 1024);
     config.max_wasm_stack(16 * 1024 * 1024);
+    configure_test_wasmtime_cache(&mut config)?;
     let engine = Engine::new(&config)?;
 
-    let epoch_engine = engine.clone();
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            epoch_engine.increment_epoch();
-        }
-    });
+    start_test_epoch_thread(&engine);
     Ok(engine)
 }
 
@@ -1501,53 +2328,60 @@ fn add_wasi_logging_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
 }
 
 /// Mock `golem:api/context@1.5.0`: implements `start-span`, `span.set-attribute`, and
-/// `span.finish`, recording every span in the returned shared list so tests can assert on the
-/// emitted tracing spans.
-fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex<Vec<GolemSpan>>>> {
-    let spans: Arc<Mutex<Vec<GolemSpan>>> = Arc::new(Mutex::new(Vec::new()));
-    let spans_clone = spans.clone();
-
+/// `span.finish`, recording every span in the current store's list so tests can assert on the
+/// emitted tracing spans without sharing records between component instances.
+fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     let mut golem_ctx = linker.instance("golem:api/context@1.5.0")?;
 
     // Register the span resource type
     let span_resource_type = ResourceType::host::<GolemSpan>();
     golem_ctx.resource("span", span_resource_type, {
-        let spans = spans_clone.clone();
         move |mut ctx: StoreContextMut<'_, Host>, rep: u32| {
             // Destructor: mark span as finished if not already
             let table = ctx.data_mut().table.lock().unwrap();
             // Resource already dropped by wasmtime
-            let _ = (spans.as_ref(), rep, table);
+            let _ = (rep, table);
             Ok(())
         }
     })?;
 
     // start-span: func(name: string) -> span
-    golem_ctx.func_wrap("start-span", {
-        let spans = spans_clone.clone();
+    golem_ctx.func_wrap(
+        "start-span",
         move |mut ctx: StoreContextMut<'_, Host>,
               (name,): (String,)|
               -> Result<(wasmtime::component::Resource<GolemSpan>,), wasmtime::Error> {
+            let spans = ctx
+                .data()
+                .golem_spans
+                .clone()
+                .expect("Golem span host requires an instance-local span collection");
             let span = GolemSpan {
-                name,
+                name: name.clone(),
                 attributes: Vec::new(),
                 finished: false,
+                resource_rep: None,
             };
             let mut table = ctx.data_mut().table.lock().unwrap();
             let resource = table.push(span)?;
+            let resource_rep = resource.rep();
+            if let Ok(span) = table.get_mut(&resource) {
+                span.resource_rep = Some(resource_rep);
+            }
             spans.lock().unwrap().push(GolemSpan {
-                name: String::new(), // placeholder, real data is in table
+                name,
                 attributes: Vec::new(),
                 finished: false,
+                resource_rep: Some(resource_rep),
             });
             Ok((resource,))
-        }
-    })?;
+        },
+    )?;
 
     // [method]span.set-attribute: func(name: string, value: attribute-value)
     // attribute-value is a variant with one case: string(string)
-    golem_ctx.func_wrap("[method]span.set-attribute", {
-        let spans = spans_clone.clone();
+    golem_ctx.func_wrap(
+        "[method]span.set-attribute",
         move |mut ctx: StoreContextMut<'_, Host>,
               (span_res, attr_name, attr_value): (
             wasmtime::component::Resource<GolemSpan>,
@@ -1555,46 +2389,64 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<Arc<Mutex
             AttributeValue,
         )|
               -> Result<(), wasmtime::Error> {
+            let spans = ctx
+                .data()
+                .golem_spans
+                .clone()
+                .expect("Golem span host requires an instance-local span collection");
             let value_str = match &attr_value {
                 AttributeValue::String(s) => s.clone(),
             };
+            let resource_rep = span_res.rep();
             let mut table = ctx.data_mut().table.lock().unwrap();
             if let Ok(span) = table.get_mut(&span_res) {
                 span.attributes.push((attr_name.clone(), value_str.clone()));
             }
-            // Also record in the shared spans list
             let mut shared = spans.lock().unwrap();
-            if let Some(last) = shared.last_mut() {
-                last.attributes.push((attr_name, value_str));
+            if let Some(recorded) = shared
+                .iter_mut()
+                .rev()
+                .find(|span| span.resource_rep == Some(resource_rep))
+            {
+                recorded.attributes.push((attr_name, value_str));
             }
             Ok(())
-        }
-    })?;
+        },
+    )?;
 
     // [method]span.finish: func()
-    golem_ctx.func_wrap("[method]span.finish", {
-        let spans = spans_clone.clone();
+    golem_ctx.func_wrap(
+        "[method]span.finish",
         move |mut ctx: StoreContextMut<'_, Host>,
               (span_res,): (wasmtime::component::Resource<GolemSpan>,)|
               -> Result<(), wasmtime::Error> {
+            let spans = ctx
+                .data()
+                .golem_spans
+                .clone()
+                .expect("Golem span host requires an instance-local span collection");
+            let resource_rep = span_res.rep();
             let mut table = ctx.data_mut().table.lock().unwrap();
             if let Ok(span) = table.get_mut(&span_res) {
                 span.finished = true;
-                // Copy final state to shared spans
                 let name = span.name.clone();
                 let attributes = span.attributes.clone();
                 let mut shared = spans.lock().unwrap();
-                if let Some(last) = shared.last_mut() {
-                    last.name = name;
-                    last.finished = true;
-                    last.attributes = attributes;
+                if let Some(recorded) = shared
+                    .iter_mut()
+                    .rev()
+                    .find(|span| span.resource_rep == Some(resource_rep))
+                {
+                    recorded.name = name;
+                    recorded.finished = true;
+                    recorded.attributes = attributes;
                 }
             }
             Ok(())
-        }
-    })?;
+        },
+    )?;
 
-    Ok(spans)
+    Ok(())
 }
 
 /// Mock `golem:websocket/client@1.5.0`: registers the `websocket-connection` resource and stubs

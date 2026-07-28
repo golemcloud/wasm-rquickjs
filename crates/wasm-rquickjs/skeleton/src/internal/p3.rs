@@ -8,7 +8,6 @@
 
 use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::{Args, Constructor, IntoArgs, This};
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver, FileResolver};
 use rquickjs::promise::Promised;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Filter, FromJs, Function,
@@ -25,12 +24,7 @@ use wit_bindgen_p3::rt::async_support::{
     FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
 };
 
-use super::module_loading::{
-    CjsCompatLoader, CjsEvalResolver, DataUrlLoader, DataUrlResolver, FileUrlResolver,
-    ImportMetaInit, ImportMetaLoader, JsonFileLoader, MockModuleLoader, MockModuleResolver,
-    NodeFileResolver, NodeModuleErrorResolver, NodeModulesResolver, RealmGuardResolver,
-    inject_import_meta_prologue,
-};
+use super::module_loading::initialize_module_loading;
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
@@ -56,6 +50,7 @@ pub struct JsState {
     pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub last_abort_id: AtomicUsize,
     pub unrefed_timers: RefCell<HashSet<usize>>,
+    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     /// Monotonic id allocator for exported resource instances (starts at 1; 0 is never used).
     pub last_resource_id: AtomicUsize,
     /// Ids of exported resource instances whose host handle has been dropped. Populated
@@ -87,87 +82,7 @@ impl JsState {
             .await
             .expect("Failed to create AsyncContext");
 
-        let mut builtin_resolver =
-            BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-        for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-            builtin_resolver = builtin_resolver.with_module(name.to_string());
-        }
-        let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
-        let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
-
-        // The resolver/loader stack must stay identical to the Preview 2 path
-        // (`internal/p2.rs::new_base`) so module resolution semantics (file/`node_modules`
-        // lookup, `data:`/`file://` URLs, module mocking, CJS-in-ESM compatibility, JSON
-        // modules and `import.meta`) do not diverge between the two targets.
-        let file_resolver = FileResolver::default()
-            .with_path("/")
-            .with_pattern("{}.js")
-            .with_pattern("{}.mjs")
-            .with_pattern("{}.json");
-
-        let resolver = (
-            (
-                RealmGuardResolver,
-                MockModuleResolver,
-                DataUrlResolver,
-                FileUrlResolver,
-                builtin_resolver,
-                NodeModulesResolver,
-                NodeFileResolver,
-            ),
-            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
-        );
-
-        let mut builtin_loader = BuiltinLoader::default().with_module(
-            crate::JS_EXPORT_MODULE_NAME,
-            inject_import_meta_prologue(
-                &ImportMetaInit {
-                    url: format!(
-                        "file:///__wasm_rquickjs_virtual__/{}.mjs",
-                        crate::JS_EXPORT_MODULE_NAME
-                    ),
-                    filename: None,
-                    dirname: None,
-                    include_resolve: true,
-                },
-                crate::js_export_module(),
-            ),
-        );
-        for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
-            let source = (get_module)();
-            let injected = inject_import_meta_prologue(
-                &ImportMetaInit {
-                    url: format!("file:///__wasm_rquickjs_virtual__/{}.mjs", name),
-                    filename: None,
-                    dirname: None,
-                    include_resolve: true,
-                },
-                &source,
-            );
-            builtin_loader = builtin_loader.with_module(name.to_string(), injected);
-        }
-
-        let loader = (
-            MockModuleLoader,
-            builtin_loader,
-            crate::modules::module_loader(),
-            crate::builtin::module_loader(),
-            DataUrlLoader,
-            JsonFileLoader,
-            CjsCompatLoader,
-            ImportMetaLoader,
-        );
-
-        rt.set_loader(resolver, loader).await;
-
-        // Module mocking (`test.mock.module`) allocates synthetic module ids from this
-        // counter; it must exist before any test file is loaded. Mirrors the Preview 2 path.
-        async_with!(ctx => |ctx| {
-            ctx.globals()
-                .set("__wasm_rquickjs_mock_seq", 0i64)
-                .expect("Failed to initialize mock sequence counter");
-        })
-        .await;
+        initialize_module_loading(&rt, &ctx).await;
 
         // `process.js` publishes `__wasm_rquickjs_rejection_tracker` to surface unhandled
         // promise rejections as `process` events. Mirrors the Preview 2 path.
@@ -191,6 +106,7 @@ impl JsState {
             abort_handles: RefCell::new(HashMap::new()),
             last_abort_id: AtomicUsize::new(0),
             unrefed_timers: RefCell::new(HashSet::new()),
+            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
             last_resource_id: AtomicUsize::new(1),
             pending_resource_drops: RefCell::new(Vec::new()),
             export_result_writer_group: RefCell::new(None),
@@ -352,19 +268,17 @@ impl JsState {
         self.init_user_module().await;
     }
 
-    /// Refresh host-derived process state after restoring a Wizer snapshot. The P3 wrapper still
-    /// imports the synchronous Preview 2 environment interface through `std`, so this can run
-    /// before the first async export enters the component executor.
+    /// Refresh host-derived process state after restoring a Wizer snapshot.
     async fn refresh_process_env(state: &JsState) {
-        let argv = wasip2::cli::environment::get_arguments();
+        let argv = wasip3::cli::environment::get_arguments();
         let env_vars: std::collections::HashMap<String, String> =
-            wasip2::cli::environment::get_environment()
+            wasip3::cli::environment::get_environment()
                 .into_iter()
                 .collect();
 
         async_with!(state.ctx => |ctx| {
             let globals = ctx.globals();
-            if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
+            if globals.get::<_, rquickjs::Object>("process").is_ok() {
                 let new_argv = rquickjs::Array::new(ctx.clone())
                     .expect("failed to create process.argv for Wizer restoration");
                 for (i, arg) in argv.iter().enumerate() {

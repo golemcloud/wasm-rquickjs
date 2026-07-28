@@ -1,3 +1,7 @@
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
 export const test1 = () => {
     if (URL.canParse("cats", "http://www.example.com/dogs")) {
         const url = new URL("cats", "http://www.example.com/dogs");
