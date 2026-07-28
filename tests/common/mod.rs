@@ -37,6 +37,7 @@ pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
 const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
 const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
+const TEST_PRIME_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PRIME_WASMTIME_CACHE";
 const TEST_UNOPTIMIZED_ENV: &str = "WASM_RQUICKJS_TEST_UNOPTIMIZED";
 const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 
@@ -516,6 +517,52 @@ fn test_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
     config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
     configure_test_wasmtime_cache(&mut config)?;
     Ok(config)
+}
+
+fn test_p3_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
+    let mut config = wasmtime::Config::default();
+    config.wasm_component_model(true);
+    config.wasm_component_model_async(true);
+    config.epoch_interruption(true);
+    config.async_stack_size(32 * 1024 * 1024);
+    config.max_wasm_stack(16 * 1024 * 1024);
+    configure_test_wasmtime_cache(&mut config)?;
+    Ok(config)
+}
+
+fn prime_wasmtime_component_cache(wasm_path: &Utf8Path) -> anyhow::Result<bool> {
+    if !test_wasmtime_cache_enabled() {
+        return Ok(false);
+    }
+
+    let stamp = wasm_path.with_extension("wasmtime-cache-primed.stamp");
+    let signature = cache_stamp_signature(
+        wasm_path.file_stem().unwrap_or("component"),
+        FeatureCombination::Normal,
+        "wasmtime-cache-prime",
+        &[
+            ("component", wasm_path.to_string()),
+            ("target", format!("{:?}", test_target())),
+        ],
+    );
+    let inputs = [wasm_path.to_path_buf()];
+    if output_fresh_for_inputs(&stamp, &stamp, &inputs, &signature) {
+        return Ok(false);
+    }
+
+    let _lock = TestCacheLock::acquire(stamp.with_extension("lock"))?;
+    if output_fresh_for_inputs(&stamp, &stamp, &inputs, &signature) {
+        return Ok(false);
+    }
+
+    let config = match test_target() {
+        TestTarget::P2 => test_wasmtime_config()?,
+        TestTarget::P3 => test_p3_wasmtime_config()?,
+    };
+    let engine = Engine::new(&config)?;
+    drop(Component::from_file(&engine, wasm_path)?);
+    refresh_cache_stamp(&stamp, &signature)?;
+    Ok(true)
 }
 
 fn start_test_epoch_thread(engine: &Engine) {
@@ -1887,11 +1934,22 @@ impl CompiledTest {
     ) -> anyhow::Result<CompiledTest> {
         let compiled =
             Self::compile_with_features(path, use_shared_target, feature_combination).await?;
-        if test_unoptimized_enabled() {
-            Ok(compiled)
+        let compiled = if test_unoptimized_enabled() {
+            compiled
         } else {
-            compiled.optimize().await
+            compiled.optimize().await?
+        };
+        if truthy_env(TEST_PRIME_WASMTIME_CACHE_ENV) {
+            let started = Instant::now();
+            if prime_wasmtime_component_cache(compiled.wasm_path())? {
+                println!(
+                    "Primed Wasmtime component cache for {} in {:.3?}",
+                    compiled.wasm_path(),
+                    started.elapsed()
+                );
+            }
         }
+        Ok(compiled)
     }
 
     async fn compile_with_features(
@@ -2280,13 +2338,7 @@ impl WasiHttpView for Host {
 /// support so that async-lifted exports can be driven by the concurrent executor that
 /// `Func::call_async` uses internally.
 fn p3_engine() -> anyhow::Result<Engine> {
-    let mut config = wasmtime::Config::default();
-    config.wasm_component_model(true);
-    config.wasm_component_model_async(true);
-    config.epoch_interruption(true);
-    config.async_stack_size(32 * 1024 * 1024);
-    config.max_wasm_stack(16 * 1024 * 1024);
-    configure_test_wasmtime_cache(&mut config)?;
+    let config = test_p3_wasmtime_config()?;
     let engine = Engine::new(&config)?;
 
     start_test_epoch_thread(&engine);
