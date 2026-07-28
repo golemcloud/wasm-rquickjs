@@ -63,6 +63,7 @@ unset CARGO_NET_OFFLINE
 
 features=""
 test_r_args=()
+plan_only=${WASM_RQUICKJS_DEV_TEST_PLAN_ONLY:-0}
 
 case "$profile" in
     fast-start)
@@ -93,6 +94,10 @@ esac
 
 prepare_p2_workspace() {
     local shadow="$repo_root/tmp/p2-dev-workspace"
+    if [[ "$plan_only" == 1 ]]; then
+        return
+    fi
+
     local source_hash
     local dependency_files=(
         Cargo.toml
@@ -142,8 +147,6 @@ prepare_p2_workspace() {
         fi
         printf '%s\n' "$source_hash" > "$shadow/.source-hash"
     fi
-
-    features="use-golem-wasmtime,wasm-rquickjs/external-skeleton"
 }
 
 if [[ "$target" == p2 ]]; then
@@ -179,4 +182,18 @@ if ((${#test_r_args[@]})); then
     cargo_command+=("${test_r_args[@]}")
 fi
 cargo_command+=("$@")
+
+if [[ "$plan_only" == 1 ]]; then
+    printf 'features=%s\n' "$features"
+    printf 'artifact_cache=%s\n' "${WASM_RQUICKJS_TEST_ARTIFACT_CACHE:-0}"
+    printf 'locked_builds=%s\n' "${WASM_RQUICKJS_TEST_LOCKED_BUILDS:-0}"
+    printf 'precompile_component=%s\n' "${WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT:-0}"
+    printf 'prepared_component_cache=%s\n' "${WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE:-0}"
+    printf 'unoptimized=%s\n' "${WASM_RQUICKJS_TEST_UNOPTIMIZED:-0}"
+    printf 'wasmtime_cache=%s\n' "${WASM_RQUICKJS_TEST_WASMTIME_CACHE:-0}"
+    printf 'test_target=%s\n' "${WASM_RQUICKJS_TEST_TARGET:-p2}"
+    printf 'command_arg=%s\n' "${cargo_command[@]}"
+    exit 0
+fi
+
 exec "${cargo_command[@]}"

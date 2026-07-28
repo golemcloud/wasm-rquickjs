@@ -53,8 +53,9 @@ If the skeleton's `target/` directory exists in an embedded build, it causes:
 - Dramatically slower compilation
 - Significantly larger binaries
 
-The `tools/dev-test.sh` path uses the `external-skeleton` feature and does not embed that
-directory, so cleanup is not part of the normal edit loop.
+The accelerated `tools/dev-test.sh` profiles use the `external-skeleton` feature and do not
+embed that directory, so cleanup is not part of the normal edit loop. The `standard` profile
+uses the embedded skeleton and still requires cleanup when skeleton-local artifacts exist.
 
 ## Test Rules
 
