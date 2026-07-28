@@ -189,6 +189,12 @@ async fn dns_module_api(#[tagged_as("dns")] compiled: &CompiledTest) -> anyhow::
                 .unwrap_or(false),
             "lookupService should use ERR_MISSING_ARGS when arguments are omitted"
         );
+        assert!(
+            result_obj["promisesLookupServiceMissingArgs"]
+                .as_bool()
+                .unwrap_or(false),
+            "dns.promises.lookupService should use ERR_MISSING_ARGS when the port is omitted"
+        );
     } else {
         anyhow::bail!("Expected string result from test function");
     }

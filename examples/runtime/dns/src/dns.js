@@ -129,6 +129,12 @@ export async function test() {
     } catch (error) {
         results.lookupServiceMissingArgs = error.code === 'ERR_MISSING_ARGS';
     }
+    try {
+        dns.promises.lookupService('127.0.0.1');
+        results.promisesLookupServiceMissingArgs = false;
+    } catch (error) {
+        results.promisesLookupServiceMissingArgs = error.code === 'ERR_MISSING_ARGS';
+    }
 
     return JSON.stringify(results);
 }

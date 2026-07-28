@@ -423,6 +423,9 @@ export const promises = {
     },
 
     lookupService(address, port) {
+        if (arguments.length !== 2) {
+            throw new ERR_MISSING_ARGS('address', 'port');
+        }
         validateLookupServiceArgs(address, port);
         return new Promise((resolve, reject) => {
             lookupService(address, port, (err, hostname, service) => {
