@@ -2181,15 +2181,6 @@ function compileModuleInto(mod, source, filename, requireOverride) {
     return callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
 }
 
-function makeModuleCompile(mod) {
-    return function _compile(content, filename) {
-        if (this !== mod) {
-            throw new ERR_INVALID_ARG_TYPE('mod', 'Module', this);
-        }
-        return compileModuleInto(mod, content, arguments.length > 1 ? filename : mod.filename);
-    };
-}
-
 function loaderValueTypeName(value) {
     if (value === null) return 'null';
     const type = typeof value;
@@ -2286,6 +2277,18 @@ function resultForEsmFileUrl(url) {
 
 function parentFilenameForLoaderResolve(parentURL, baseUrl) {
     parentURL = String(parentURL || baseUrl);
+    if (parentURL.startsWith('data:')) {
+        const metadataEnd = parentURL.indexOf(',');
+        if (metadataEnd !== -1) {
+            const metadata = parentURL.slice(5, metadataEnd);
+            for (const parameter of metadata.split(';').slice(1)) {
+                if (parameter.startsWith('wasm-rquickjs-source-url=')) {
+                    parentURL = decodeURIComponent(parameter.slice('wasm-rquickjs-source-url='.length));
+                    break;
+                }
+            }
+        }
+    }
     if (parentURL.startsWith('file://')) {
         return nodeUrl.fileURLToPath(parentURL);
     }
@@ -2530,12 +2533,6 @@ function loaderCommonJsCacheKey(url, filename) {
     return filename;
 }
 
-function makeModuleRequire(mod) {
-    return function require(id) {
-        return makeRequire(pathModule.dirname(mod.filename), mod)(id);
-    };
-}
-
 function validateRequireId(id) {
     if (typeof id !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('id', 'string', id);
@@ -2653,8 +2650,7 @@ function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pat
     defineEnumerableWritable(mod, 'parent', parentModule || null);
     defineEnumerableWritable(mod, 'children', []);
     defineEnumerableWritable(mod, 'paths', _nodeModulePaths(pathsBase));
-    mod._compile = makeModuleCompile(mod);
-    mod.require = makeModuleRequire(mod);
+    moduleRequireOverrides.delete(mod);
     installCjsEsmDefaultSnapshotSlot(mod);
     return mod;
 }
@@ -2693,7 +2689,14 @@ function loadCommonJsTransaction(descriptor) {
             globalThis.process.mainModule = mod;
         }
     } else {
-        mod = initializeCjsModuleRecord({}, filename, filename, dirname, parentModule, pathsBase);
+        mod = initializeCjsModuleRecord(
+            Object.create(Module.prototype),
+            filename,
+            filename,
+            dirname,
+            parentModule,
+            pathsBase,
+        );
     }
 
     // Cache before executing (handles circular dependencies)
@@ -2724,7 +2727,7 @@ function loadCommonJsTransaction(descriptor) {
                     mod,
                     filename,
                 );
-                mod.require = loaderRequire;
+                moduleRequireOverrides.set(mod, loaderRequire);
                 compileModuleInto(mod, source, filename, loaderRequire);
             }
             cjsEsmDefaultSnapshotEligible = true;
@@ -2987,7 +2990,7 @@ if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function'
 }
 
 // The root "main" module
-const mainModule = {
+const mainModule = Object.assign(Object.create(Module.prototype), {
     id: '.',
     filename: '/',
     path: '/',
@@ -2995,9 +2998,7 @@ const mainModule = {
     loaded: true,
     parent: null,
     children: [],
-};
-mainModule._compile = makeModuleCompile(mainModule);
-mainModule.require = makeModuleRequire(mainModule);
+});
 installCjsEsmDefaultSnapshotSlot(mainModule);
 
 function rustSplitPackageName(id) {
@@ -3700,13 +3701,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return url.startsWith('file://') ? loaderFileUrlSource(url) : undefined;
     }
 
-    function registeredLoaderModuleSourceReturn(source) {
-        return 'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source));
+    function registeredLoaderModuleSourceReturn(source, url) {
+        return 'data:text/javascript;wasm-rquickjs-source-url=' +
+            encodeURIComponent(String(url)) + ',' +
+            encodeURIComponent(loaderSourceToString(source));
     }
 
-    function registeredLoaderJsonSourceReturn(source) {
+    function registeredLoaderJsonSourceReturn(source, url) {
         return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(
-            'data:application/json,' + encodeURIComponent(loaderSourceToString(source)),
+            'data:application/json;wasm-rquickjs-source-url=' +
+                encodeURIComponent(String(url)) + ',' +
+                encodeURIComponent(loaderSourceToString(source)),
             'json',
         );
     }
@@ -3833,7 +3838,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
 
         if (loadedHasSource && loadedFormat === 'module') {
-            return registeredLoaderModuleSourceReturn(result.source);
+            return registeredLoaderModuleSourceReturn(result.source, normalizedResolved.url);
         }
         if (!loadedHasSource && loadedFormat === 'module') {
             if (String(normalizedResolved.url).startsWith('file://')) {
@@ -3843,14 +3848,14 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
             const fileSource = registeredLoaderFileSourceFallback(normalizedResolved.url);
             if (fileSource !== null && fileSource !== undefined) {
-                return registeredLoaderModuleSourceReturn(fileSource);
+                return registeredLoaderModuleSourceReturn(fileSource, normalizedResolved.url);
             }
         }
         if (loadedFormat === 'commonjs') {
             return registeredLoaderCommonJsReturn(result, normalizedResolved.url, undefined);
         }
         if (loadedHasSource && loadedFormat === 'json') {
-            return registeredLoaderJsonSourceReturn(result.source);
+            return registeredLoaderJsonSourceReturn(result.source, normalizedResolved.url);
         }
         if (resolvedState.loadContext.importAttributes && resolvedState.loadContext.importAttributes.type === 'json') {
             return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
@@ -4040,7 +4045,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const format = loaderFormatOrUndefined(loaded.format);
         const hasSource = registeredLoaderHasSource(loaded);
         if (hasSource && (format === undefined || format === 'module')) {
-            return registeredLoaderModuleSourceReturn(loaded.source);
+            return registeredLoaderModuleSourceReturn(loaded.source, url);
         }
         if (!hasSource && format === 'module') {
             return staticRegisteredLoaderPathReturn(url);
@@ -4049,7 +4054,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderCommonJsReturn(loaded, url, staticRegisteredLoaderPathReturn(url));
         }
         if (hasSource && format === 'json') {
-            return registeredLoaderJsonSourceReturn(loaded.source);
+            return registeredLoaderJsonSourceReturn(loaded.source, url);
         }
         return staticRegisteredLoaderPathReturn(url);
     }
@@ -4365,7 +4370,13 @@ function Module(id, parent) {
     installCjsEsmDefaultSnapshotSlot(this);
 }
 
+const moduleRequireOverrides = new WeakMap();
+
 Module.prototype.require = function require(id) {
+    const override = moduleRequireOverrides.get(this);
+    if (override) {
+        return override(id);
+    }
     const baseDir = this && typeof this.filename === 'string'
         ? pathModule.dirname(this.filename)
         : '.';

@@ -477,6 +477,19 @@ impl DataUrlLoader {
         String::from_utf8(decoded).ok()
     }
 
+    fn source_url(path: &str) -> Option<String> {
+        let rest = path.strip_prefix("data:")?;
+        let comma_pos = Self::content_separator_pos(rest)?;
+        rest[..comma_pos]
+            .split(';')
+            .skip(1)
+            .find_map(|parameter| {
+                parameter
+                    .strip_prefix("wasm-rquickjs-source-url=")
+                    .and_then(Self::percent_decode)
+            })
+    }
+
     fn js_string_escape(s: &str) -> String {
         let mut result = String::with_capacity(s.len());
         for ch in s.chars() {
@@ -804,7 +817,10 @@ impl Loader for DataUrlLoader {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
 
-            let init = url_only_import_meta_init(path.to_string());
+            let source_url = Self::source_url(path).unwrap_or_else(|| path.to_string());
+            let init = FileUrlResolver::file_url_to_path_parts(&source_url)
+                .map(|(filename, _)| file_import_meta_init(source_url.clone(), filename))
+                .unwrap_or_else(|| url_only_import_meta_init(source_url));
             let injected = inject_module_source_prologue(
                 init.filename.as_deref(),
                 &processed.source,
@@ -3267,6 +3283,8 @@ impl Resolver for RegisteredLoaderResolver {
         };
         let base_url = if let Some(url) = static_registered_file_url_from_id(base) {
             url
+        } else if let Some(url) = DataUrlLoader::source_url(base) {
+            url
         } else if base.starts_with("data:")
             || base.starts_with("file://")
             || base.starts_with("node:")
@@ -5693,16 +5711,36 @@ impl NodeModulesResolver {
             .iter()
             .map(|condition| (*condition).to_string())
             .collect();
-        let Ok(user_conditions) = ctx
+
+        if let Ok(process) = ctx.globals().get::<_, Object>("process")
+            && let Ok(exec_argv) = process.get::<_, rquickjs::Array>("execArgv")
+        {
+            let mut i = 0;
+            while i < exec_argv.len() {
+                let Ok(arg) = exec_argv.get::<String>(i) else {
+                    i += 1;
+                    continue;
+                };
+                if let Some(condition) = arg.strip_prefix("--conditions=") {
+                    Self::add_condition(&mut conditions, condition);
+                } else if (arg == "--conditions" || arg == "-C") && i + 1 < exec_argv.len() {
+                    i += 1;
+                    if let Ok(condition) = exec_argv.get::<String>(i) {
+                        Self::add_condition(&mut conditions, &condition);
+                    }
+                }
+                i += 1;
+            }
+        }
+
+        if let Ok(user_conditions) = ctx
             .globals()
             .get::<_, rquickjs::Array>("__wasm_rquickjs_package_conditions")
-        else {
-            return conditions;
-        };
-
-        for i in 0..user_conditions.len() {
-            if let Ok(condition) = user_conditions.get::<String>(i) {
-                Self::add_condition(&mut conditions, &condition);
+        {
+            for i in 0..user_conditions.len() {
+                if let Ok(condition) = user_conditions.get::<String>(i) {
+                    Self::add_condition(&mut conditions, &condition);
+                }
             }
         }
 

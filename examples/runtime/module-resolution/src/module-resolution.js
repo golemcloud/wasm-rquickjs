@@ -3980,6 +3980,7 @@ export const testLoaderModuleSourceValidation = async () => {
         fs.writeFileSync('/loader-module-source-app/inherited-null-source.cjs', 'exports.marker = "inherited-null-source";');
         fs.writeFileSync('/loader-module-source-app/undefined-source.cjs', 'exports.marker = "undefined-source";');
         fs.writeFileSync('/loader-module-source-app/resolve-source-null.cjs', 'exports.marker = "filesystem-source";');
+        fs.writeFileSync('/loader-module-source-app/generated-child.mjs', 'export default 37;');
 
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
@@ -4002,6 +4003,11 @@ export const testLoaderModuleSourceValidation = async () => {
             'function resolve(specifier, context, next) {',
             '  if (specifier === "virtual:module-source") return { shortCircuit: true, url: "virtual:module-source", format: "module" };',
             '  if (specifier === "virtual:module-view") return { shortCircuit: true, url: "virtual:module-view", format: "module" };',
+            '  if (specifier === "virtual:identity-a") return { shortCircuit: true, url: "virtual:identity-a", format: "module" };',
+            '  if (specifier === "virtual:identity-b") return { shortCircuit: true, url: "virtual:identity-b", format: "module" };',
+            '  if (specifier === "virtual:json-identity-a") return { shortCircuit: true, url: "virtual:json-identity-a", format: "json" };',
+            '  if (specifier === "virtual:json-identity-b") return { shortCircuit: true, url: "virtual:json-identity-b", format: "json" };',
+            '  if (specifier === "virtual:relative-source") return { shortCircuit: true, url: "file:///loader-module-source-app/generated.mjs", format: "module" };',
             '  if (specifier === "virtual:accessor-resolve-next") return { url: "virtual:accessor-resolve-next", get format() { next("data:text/javascript,export default 0", context); return "module"; } };',
             '  if (specifier === "virtual:accessor-load-next") return { shortCircuit: true, url: "virtual:accessor-load-next", format: "module" };',
             '  if (specifier === "virtual:static-url") return { shortCircuit: true, url: "data:text/javascript,export default 23;", format: "module" };',
@@ -4024,6 +4030,9 @@ export const testLoaderModuleSourceValidation = async () => {
             'function load(url, context, next) {',
             '  if (url === "virtual:module-source") return { shortCircuit: true, format: "module", source: "export const named = 42; export default named;" };',
             '  if (url === "virtual:module-view") return { shortCircuit: true, format: "module", source: sourceView("export default 7;") };',
+            '  if (url === "virtual:identity-a" || url === "virtual:identity-b") return { shortCircuit: true, format: "module", source: "globalThis.__loaderIdentityCount = (globalThis.__loaderIdentityCount || 0) + 1; export const count = globalThis.__loaderIdentityCount; export const url = import.meta.url;" };',
+            '  if (url === "virtual:json-identity-a" || url === "virtual:json-identity-b") return { shortCircuit: true, format: "json", source: "{\\"marker\\":1}" };',
+            '  if (url === "file:///loader-module-source-app/generated.mjs") return { shortCircuit: true, format: "module", source: "import value from \\"./generated-child.mjs\\"; export { value }; export const url = import.meta.url; export const filename = import.meta.filename; export const dirname = import.meta.dirname;" };',
             '  if (url === "virtual:accessor-resolve-next") return { shortCircuit: true, format: "module", source: "export default 29;" };',
             '  if (url === "virtual:accessor-load-next") return { source: "export default 31;", get format() { next(url, context); return "module"; } };',
             '  if (url === "virtual:invalid-result") return "export default 0;";',
@@ -4048,6 +4057,21 @@ export const testLoaderModuleSourceValidation = async () => {
             '));',
             'assert.deepStrictEqual(staticConsumer.default, { value: 42, named: 42, urlValue: 23 });',
             'assert.strictEqual((await import("virtual:module-view")).default, 7);',
+            'const identityA = await import("virtual:identity-a");',
+            'const identityB = await import("virtual:identity-b");',
+            'assert.notStrictEqual(identityA, identityB);',
+            'assert.deepStrictEqual([identityA.count, identityB.count], [1, 2]);',
+            'assert.deepStrictEqual([identityA.url, identityB.url], ["virtual:identity-a", "virtual:identity-b"]);',
+            'const jsonIdentityA = await import("virtual:json-identity-a", { with: { type: "json" } });',
+            'const jsonIdentityB = await import("virtual:json-identity-b", { with: { type: "json" } });',
+            'assert.notStrictEqual(jsonIdentityA, jsonIdentityB);',
+            'assert.notStrictEqual(jsonIdentityA.default, jsonIdentityB.default);',
+            'assert.deepStrictEqual([jsonIdentityA.default, jsonIdentityB.default], [{ marker: 1 }, { marker: 1 }]);',
+            'const relativeSource = await import("virtual:relative-source");',
+            'assert.strictEqual(relativeSource.value, 37);',
+            'assert.strictEqual(relativeSource.url, "file:///loader-module-source-app/generated.mjs");',
+            'assert.strictEqual(relativeSource.filename, "/loader-module-source-app/generated.mjs");',
+            'assert.strictEqual(relativeSource.dirname, "/loader-module-source-app");',
             'assert.strictEqual((await import("virtual:accessor-resolve-next")).default, 29);',
             'assert.strictEqual((await import("virtual:accessor-load-next")).default, 31);',
             'const ext = await import("file:///loader-module-source-app/as-module.ext");',
@@ -6082,8 +6106,10 @@ export const testModuleSyntaxDetectionAndDiagnostics = async () => {
 export const testPackageCustomConditions = async () => {
     const hadPackageConditions = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_package_conditions');
     const originalPackageConditions = globalThis.__wasm_rquickjs_package_conditions;
+    const originalExecArgv = process.execArgv;
     try {
-        globalThis.__wasm_rquickjs_package_conditions = ['custom-condition', 'another'];
+        process.execArgv = ['--conditions=custom-condition'];
+        globalThis.__wasm_rquickjs_package_conditions = ['another'];
         assert.deepStrictEqual(
             globalThis.__wasm_rquickjs_package_global_conditions('loader'),
             ['node', 'import', 'module-sync', 'node-addons', 'custom-condition', 'another'],
@@ -6323,6 +6349,7 @@ export const testPackageCustomConditions = async () => {
         console.error(error);
         throw error;
     } finally {
+        process.execArgv = originalExecArgv;
         if (hadPackageConditions) {
             globalThis.__wasm_rquickjs_package_conditions = originalPackageConditions;
         } else {
@@ -9086,9 +9113,34 @@ export const testEsmSymlinkModuleIdentity = async () => {
 
 export const testCjsNodeModuleLoadingCompat = async () => {
     try {
-        const { createRequire } = await import('node:module');
+        const moduleBuiltin = await import('node:module');
+        const { createRequire } = moduleBuiltin;
         const root = '/cjs-node-module-loading-app';
         const require = createRequire(`${root}/entry.cjs`);
+        fs.mkdirSync(root, { recursive: true });
+
+        fs.writeFileSync(
+            `${root}/module-instance.js`,
+            [
+                'module.exports = {',
+                '  moduleIsInstance: module instanceof require("node:module"),',
+                '  cacheIsInstance: require.cache[__filename] instanceof require("node:module"),',
+                '  constructorIsModule: module.constructor === require("node:module"),',
+                '  prototypeMarker: module.prototypeMarker,',
+                '};',
+            ].join('\n'),
+        );
+        moduleBuiltin.default.prototype.prototypeMarker = 'from-module-prototype';
+        try {
+            assert.deepStrictEqual(require(`${root}/module-instance.js`), {
+                moduleIsInstance: true,
+                cacheIsInstance: true,
+                constructorIsModule: true,
+                prototypeMarker: 'from-module-prototype',
+            });
+        } finally {
+            delete moduleBuiltin.default.prototype.prototypeMarker;
+        }
 
         fs.mkdirSync(`${root}/missing-main-with-index`, { recursive: true });
         fs.writeFileSync(`${root}/missing-main-with-index/package.json`, JSON.stringify({ main: 'missing.js' }));
