@@ -20,24 +20,40 @@ The skeleton's `Cargo.toml` is stored as **`Cargo.toml_`** in the repository to 
 ### When modifying skeleton files
 
 ```bash
-# 1. Make your changes in crates/wasm-rquickjs/skeleton/src/
+# Fast counterexample after an edit: no Wizer, one worker.
+tools/dev-test.sh p2 quick runtime <exact_test_filter>
 
-# 2. ALWAYS clean skeleton build artifacts before testing from the repo root
-./cleanup-skeleton.sh
+# Focused verification: Wizer, Wasmtime cache priming, at most eight workers.
+tools/dev-test.sh p2 verify runtime <module_filter>
+tools/dev-test.sh p2 verify node_compat <test_filter>
 
-# 3. Run the appropriate test harness (NEVER run unfiltered)
-cargo test --test runtime <module> -- --nocapture 2>&1 | tee /tmp/test-output.txt
-# or
-cargo test --test node_compat <test_filter> -- --nocapture 2>&1 | tee /tmp/test-output.txt
+# Preview 3 uses the stock workspace rather than the P2 shadow workspace.
+tools/dev-test.sh p3 quick runtime <exact_test_filter>
+tools/dev-test.sh p3 verify node_compat <test_filter>
 ```
 
-### Why `cleanup-skeleton.sh` is mandatory
+The command enables the generated-artifact and Wasmtime caches, reads the skeleton from the
+checkout without embedding it in the host test binary, and keeps P2's Golem Wasmtime patch in
+an ignored shadow workspace. It is offline by default. After dependency or fork changes, retry
+once with `WASM_RQUICKJS_DEV_ONLINE=1`. Verification mode also primes each new component in
+Wasmtime's filesystem cache before workers start and reuses immutable prepared components within
+each runtime-test worker. Every test still creates fresh mutable runtime state.
 
-The `include_dir!` macro embeds the **entire skeleton directory** into the main crate during compilation. If the skeleton's `target/` directory exists, it gets embedded too, causing:
+### When `cleanup-skeleton.sh` is required
+
+Production/default builds still use `include_dir!` to embed the **entire skeleton directory**.
+Before a default build or test, remove skeleton-local artifacts:
+
+```bash
+./cleanup-skeleton.sh
+```
+
+If the skeleton's `target/` directory exists in an embedded build, it causes:
 - Dramatically slower compilation
 - Significantly larger binaries
 
-**Always run `./cleanup-skeleton.sh` before any `cargo test` or `cargo build` from the repo root.**
+The `tools/dev-test.sh` path uses the `external-skeleton` feature and does not embed that
+directory, so cleanup is not part of the normal edit loop.
 
 ## Test Rules
 
@@ -59,42 +75,34 @@ cargo test --test node_compat -- --nocapture                               # ❌
 
 **DO NOT run `cargo test --test compilation`** unless you modified files in `crates/wasm-rquickjs/src/` (the code generator). Skeleton-only changes do NOT require compilation tests.
 
-**Always save test output** to a temp file for analysis without re-running:
+Save unusually verbose or failing output when it will be useful for analysis:
 ```bash
-cargo test --test runtime url -- --nocapture 2>&1 | tee /tmp/test-output.txt
+tools/dev-test.sh p2 verify runtime url 2>&1 | tee /tmp/test-output.txt
 ```
 
-## Always pass `--nocapture` when running `node_compat` (or any `#[test_dep]` harness) locally
+## Test concurrency
 
-The `tests/node_compat.rs` harness shares a single `#[test_dep] FullPreparedComponent`
-across every test. In `test-r 3.0.x`, **with output capture on** (i.e. `--nocapture` not
-passed) and shared `#[test_dep]` dependencies, the harness forcibly sets
-`test_threads = 1` and emits a warning. This is why local shard runs that omit
-`--nocapture` take an order of magnitude longer than CI — they collapse to a single
-thread, even though tests are isolated and safe to run in parallel.
+The runtime and node-compat dependencies use test-r's `Cloneable` or `PerWorker` scopes, so
+captured output no longer forces serial execution. `--nocapture` is optional.
 
-CI runs are already correct (they pass `--nocapture`). For local runs:
-
-```bash
-# ✅ multi-threaded (default = std::thread::available_parallelism())
-cargo test --test node_compat <filter> -- --nocapture
-
-# ❌ forced single-thread because of shared #[test_dep] + capture-on
-cargo test --test node_compat <filter>
-```
-
-If you must keep capture on for some reason, explicitly opt back into parallelism with
-`--test-threads <N>` (test-r reads it from CLI args, NOT from `RUST_TEST_THREADS`):
+Do not leave focused component tests at machine-wide concurrency. On the development machine,
+6–8 workers have the best measured throughput; launching 12 cold workers made a 12-test batch
+take 94 seconds instead of 7 seconds. `tools/dev-test.sh ... verify` primes Wasmtime's cache in
+the parent, then caps execution at eight workers.
 
 ```bash
+# Direct Cargo equivalent when the workflow command is unsuitable:
 cargo test --test node_compat <filter> -- --test-threads 8
 ```
 
-The same rule applies to any test binary that uses a shared `#[test_dep]`.
-
 ## Target Platform
 
-The skeleton is **always compiled to `wasm32-wasip1`**. Never write conditional code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`, `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`, `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code complexity.
+The skeleton is compiled as a component for the `wasm32-wasip2` Rust target. The generated
+component can expose either the Preview 2 or Preview 3 runtime path. Never write conditional
+code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`,
+`#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`,
+`path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code
+complexity.
 
 ## Adding Dependencies
 

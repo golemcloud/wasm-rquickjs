@@ -55,9 +55,28 @@ cargo test --test runtime --features use-golem-wasmtime -- module_resolution --r
 - `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` reuses wrapper build and optimized component artifacts when their source inputs are unchanged.
 - `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for short rebuild loops.
 - `WASM_RQUICKJS_TEST_DROP_CACHE=1` refreshes generated artifacts and bypasses the Wasmtime cache.
-- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` is experimental/manual-only. It reuses process-local immutable `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path, but did not improve the measured node-compat hot path.
+- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` reuses process-local immutable
+  `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path.
+  This improves grouped runtime tests; node-compat already prepares one component
+  per worker. Stores, instances, WASI state, temp directories, wasm memory, and
+  QuickJS state remain fresh.
 
 Artifact caches never reuse wasm memory, QuickJS runtime state, a Wasmtime `Store`, a component instance, a WASI context, or a temp directory across cases.
+
+For skeleton work, prefer the measured local workflow wrapper:
+
+```bash
+# One counterexample immediately after an edit.
+tools/dev-test.sh p2 quick runtime <exact_test_filter>
+
+# A focused verification group, with parent cache priming and capped parallelism.
+tools/dev-test.sh p2 verify node_compat <test_filter>
+```
+
+Use `p3` instead of `p2` for Preview 3. The P2 command keeps the Golem Wasmtime
+patch and its lockfile in an ignored shadow workspace, so the real manifests stay
+clean. It is offline by default; set `WASM_RQUICKJS_DEV_ONLINE=1` after dependency
+or fork changes.
 
 Independently of those optional caches, node modules app tests run `npm ci` once
 per app and process, then copy the installed template into a fresh temp app
