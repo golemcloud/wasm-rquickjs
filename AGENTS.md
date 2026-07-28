@@ -66,17 +66,31 @@ Artifact caches never reuse wasm memory, QuickJS runtime state, a Wasmtime `Stor
 For skeleton work, prefer the measured local workflow wrapper:
 
 ```bash
-# One counterexample immediately after an edit.
-tools/dev-test.sh p2 quick runtime <exact_test_filter>
+# Minimize latency to the first result after an edit.
+tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
 
-# A focused verification group, with parent cache priming and capped parallelism.
-tools/dev-test.sh p2 verify node_compat <test_filter>
+# Precompile a changed component once before parallel workers start.
+tools/dev-test.sh p2 fast-run node_compat <test_filter>
+
+# Override the fast-run default when another worker count suits the machine or filter.
+tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
+
+# Use the embedded skeleton and default test semantics.
+tools/dev-test.sh p3 standard runtime ':tag:group3'
 ```
 
 Use `p3` instead of `p2` for Preview 3. The P2 command keeps the Golem Wasmtime
 patch and its lockfile in an ignored shadow workspace, so the real manifests stay
-clean. It is offline by default; set `WASM_RQUICKJS_DEV_ONLINE=1` after dependency
-or fork changes.
+clean. The accelerated profiles use locked Cargo builds; missing packages can still
+be downloaded. Root manifest or lockfile changes rebuild the P2 shadow dependency
+state automatically. Intentional Golem Wasmtime branch updates remain explicit
+dependency maintenance.
+
+`fast-run` defaults to eight workers, while `fast-start` defaults to one. An explicit
+test-r `--test-threads N` argument overrides either default. Eight workers was selected
+from local measurements on a 14-core Apple M3 Max MacBook Pro (10 performance cores,
+4 efficiency cores, 36 GB RAM, macOS 26.5.1); other machines and filters may perform
+better with a different value.
 
 Independently of those optional caches, node modules app tests run `npm ci` once
 per app and process, then copy the installed template into a fresh temp app

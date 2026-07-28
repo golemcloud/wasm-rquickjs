@@ -3,15 +3,12 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/dev-test.sh <p2|p3> <quick|verify> <test-target> <filter> [test-r args...]
+Usage: tools/dev-test.sh <p2|p3> <fast-start|fast-run|standard> <test-target> <filter> [test-r args...]
 
 Examples:
-  tools/dev-test.sh p2 quick runtime module_resolution::esm_package_map_edge_cases
-  tools/dev-test.sh p2 verify runtime module_resolution::esm_
-  tools/dev-test.sh p3 verify node_compat es_module__test_esm_pkgname_mjs
-
-The command is offline by default so nested wrapper builds do not update the registry index.
-Set WASM_RQUICKJS_DEV_ONLINE=1 after dependency or Wasmtime-fork changes.
+  tools/dev-test.sh p2 fast-start runtime module_resolution::esm_package_map_edge_cases
+  tools/dev-test.sh p2 fast-run runtime module_resolution::esm_
+  tools/dev-test.sh p3 standard node_compat es_module__test_esm_pkgname_mjs
 EOF
 }
 
@@ -21,10 +18,19 @@ if [[ $# -lt 4 ]]; then
 fi
 
 target=$1
-mode=$2
+profile=$2
 test_target=$3
 filter=$4
 shift 4
+
+test_threads_overridden=false
+for arg in "$@"; do
+    case "$arg" in
+        --test-threads | --test-threads=*)
+            test_threads_overridden=true
+            ;;
+    esac
+done
 
 case "$target" in
     p2 | p3) ;;
@@ -34,10 +40,10 @@ case "$target" in
         ;;
 esac
 
-case "$mode" in
-    quick | verify) ;;
+case "$profile" in
+    fast-start | fast-run | standard) ;;
     *)
-        echo "Unknown mode '$mode'; expected quick or verify." >&2
+        echo "Unknown profile '$profile'; expected fast-start, fast-run, or standard." >&2
         exit 2
         ;;
 esac
@@ -45,25 +51,60 @@ esac
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-export WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1
-export WASM_RQUICKJS_TEST_WASMTIME_CACHE=1
-unset WASM_RQUICKJS_TEST_PRIME_WASMTIME_CACHE
+unset WASM_RQUICKJS_TEST_ARTIFACT_CACHE
+unset WASM_RQUICKJS_TEST_DROP_CACHE
+unset WASM_RQUICKJS_TEST_LOCKED_BUILDS
+unset WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT
 unset WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE
 unset WASM_RQUICKJS_TEST_TARGET
 unset WASM_RQUICKJS_TEST_UNOPTIMIZED
+unset WASM_RQUICKJS_TEST_WASMTIME_CACHE
+unset CARGO_NET_OFFLINE
 
-if [[ "${WASM_RQUICKJS_DEV_ONLINE:-0}" == 1 ]]; then
-    unset CARGO_NET_OFFLINE
-else
-    export CARGO_NET_OFFLINE=true
-fi
+features=""
+test_r_args=()
 
-features="wasm-rquickjs/external-skeleton"
+case "$profile" in
+    fast-start)
+        export WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1
+        export WASM_RQUICKJS_TEST_LOCKED_BUILDS=1
+        export WASM_RQUICKJS_TEST_UNOPTIMIZED=1
+        export WASM_RQUICKJS_TEST_WASMTIME_CACHE=1
+        features="wasm-rquickjs/external-skeleton"
+        test_r_args+=(--report-time)
+        if [[ "$test_threads_overridden" == false ]]; then
+            test_r_args+=(--test-threads 1)
+        fi
+        ;;
+    fast-run)
+        export WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1
+        export WASM_RQUICKJS_TEST_LOCKED_BUILDS=1
+        export WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT=1
+        export WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1
+        export WASM_RQUICKJS_TEST_WASMTIME_CACHE=1
+        features="wasm-rquickjs/external-skeleton"
+        test_r_args+=(--report-time)
+        if [[ "$test_threads_overridden" == false ]]; then
+            test_r_args+=(--test-threads 8)
+        fi
+        ;;
+    standard) ;;
+esac
 
 prepare_p2_workspace() {
     local shadow="$repo_root/tmp/p2-dev-workspace"
     local source_hash
-    source_hash=$(git hash-object Cargo.toml Cargo.lock | git hash-object --stdin)
+    local dependency_files=(
+        Cargo.toml
+        Cargo.lock
+        crates/golem-context/Cargo.toml
+        crates/golem-websocket/Cargo.toml
+        crates/wasi-logging/Cargo.toml
+        crates/wasm-rquickjs/Cargo.toml
+        crates/wasm-rquickjs/skeleton/Cargo.toml_
+        crates/wasm-rquickjs/skeleton/Cargo.lock
+    )
+    source_hash=$(git hash-object "${dependency_files[@]}" | git hash-object --stdin)
 
     mkdir -p "$shadow"
     for path in src tests examples crates README.md LICENSE; do
@@ -97,7 +138,6 @@ prepare_p2_workspace() {
             >/dev/null
         then
             echo "Failed to resolve the P2 shadow workspace." >&2
-            echo "Retry with WASM_RQUICKJS_DEV_ONLINE=1 if the fork or dependencies are not cached." >&2
             exit 1
         fi
         printf '%s\n' "$source_hash" > "$shadow/.source-hash"
@@ -108,35 +148,35 @@ prepare_p2_workspace() {
 
 if [[ "$target" == p2 ]]; then
     prepare_p2_workspace
+    if [[ -n "$features" ]]; then
+        features="use-golem-wasmtime,$features"
+    else
+        features="use-golem-wasmtime"
+    fi
 else
     export WASM_RQUICKJS_TEST_TARGET=p3
 fi
 
-test_r_args=(--report-time)
-if [[ "$mode" == quick ]]; then
-    export WASM_RQUICKJS_TEST_UNOPTIMIZED=1
-    test_r_args+=(--test-threads 1)
+if [[ "$target" == p2 ]]; then
+    cargo_command=(
+        cargo test
+        --manifest-path "$repo_root/tmp/p2-dev-workspace/Cargo.toml"
+        --target-dir "$repo_root/target"
+    )
 else
-    export WASM_RQUICKJS_TEST_PRIME_WASMTIME_CACHE=1
-    export WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1
-    test_r_args+=(--test-threads 8)
+    cargo_command=(cargo test --target-dir "$repo_root/target")
 fi
 
-if [[ "$target" == p2 ]]; then
-    exec cargo test \
-        --manifest-path "$repo_root/tmp/p2-dev-workspace/Cargo.toml" \
-        --target-dir "$repo_root/target" \
-        --test "$test_target" \
-        --features "$features" \
-        -- "$filter" \
-        "${test_r_args[@]}" \
-        "$@"
-else
-    exec cargo test \
-        --target-dir "$repo_root/target" \
-        --test "$test_target" \
-        --features "$features" \
-        -- "$filter" \
-        "${test_r_args[@]}" \
-        "$@"
+if [[ "$profile" != standard ]]; then
+    cargo_command+=(--locked)
 fi
+cargo_command+=(--test "$test_target")
+if [[ -n "$features" ]]; then
+    cargo_command+=(--features "$features")
+fi
+cargo_command+=(-- "$filter")
+if ((${#test_r_args[@]})); then
+    cargo_command+=("${test_r_args[@]}")
+fi
+cargo_command+=("$@")
+exec "${cargo_command[@]}"

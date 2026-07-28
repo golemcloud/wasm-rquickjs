@@ -105,19 +105,25 @@ const GENERATED_FILES: &[&str] = &["src/lib.rs"];
 /// Copies the skeleton's `Cargo.lock` to the output directory so that dependency
 /// resolution is instant instead of resolving 300+ crates from scratch each time.
 #[cfg(not(feature = "external-skeleton"))]
-pub fn copy_skeleton_lock(output: &Utf8Path) -> anyhow::Result<()> {
+pub fn copy_skeleton_lock(output: &Utf8Path, package_name: &str) -> anyhow::Result<()> {
     if let Some(lock_file) = SKELETON.get_file("Cargo.lock") {
         let dest = output.join("Cargo.lock");
-        crate::write_if_changed(dest, lock_file.contents())?;
+        let contents = lock_file
+            .contents_utf8()
+            .ok_or_else(|| anyhow!("Embedded skeleton Cargo.lock contains invalid UTF-8"))?;
+        crate::write_if_changed(dest, generated_lock(contents, package_name).as_bytes())?;
     }
     Ok(())
 }
 
 #[cfg(feature = "external-skeleton")]
-pub fn copy_skeleton_lock(output: &Utf8Path) -> anyhow::Result<()> {
+pub fn copy_skeleton_lock(output: &Utf8Path, package_name: &str) -> anyhow::Result<()> {
     let source = skeleton_root().join("Cargo.lock");
-    match std::fs::read(&source) {
-        Ok(contents) => crate::write_if_changed(output.join("Cargo.lock"), contents)?,
+    match std::fs::read_to_string(&source) {
+        Ok(contents) => crate::write_if_changed(
+            output.join("Cargo.lock"),
+            generated_lock(&contents, package_name).as_bytes(),
+        )?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => {
             return Err(anyhow!(
@@ -126,6 +132,14 @@ pub fn copy_skeleton_lock(output: &Utf8Path) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn generated_lock(contents: &str, package_name: &str) -> String {
+    contents.replacen(
+        "name = \"rquickjs-component\"",
+        &format!("name = \"{package_name}\""),
+        1,
+    )
 }
 
 /// Copies all source files from the skeleton directory to `<output>/src`.

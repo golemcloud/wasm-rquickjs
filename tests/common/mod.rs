@@ -36,8 +36,9 @@ pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
 
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
 const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
+const TEST_LOCKED_BUILDS_ENV: &str = "WASM_RQUICKJS_TEST_LOCKED_BUILDS";
 const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
-const TEST_PRIME_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PRIME_WASMTIME_CACHE";
+const TEST_PRECOMPILE_COMPONENT_ENV: &str = "WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT";
 const TEST_UNOPTIMIZED_ENV: &str = "WASM_RQUICKJS_TEST_UNOPTIMIZED";
 const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 
@@ -530,16 +531,16 @@ fn test_p3_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
     Ok(config)
 }
 
-fn prime_wasmtime_component_cache(wasm_path: &Utf8Path) -> anyhow::Result<bool> {
+fn precompile_component(wasm_path: &Utf8Path) -> anyhow::Result<bool> {
     if !test_wasmtime_cache_enabled() {
         return Ok(false);
     }
 
-    let stamp = wasm_path.with_extension("wasmtime-cache-primed.stamp");
+    let stamp = wasm_path.with_extension("component-precompiled.stamp");
     let signature = cache_stamp_signature(
         wasm_path.file_stem().unwrap_or("component"),
         FeatureCombination::Normal,
-        "wasmtime-cache-prime",
+        "component-precompile",
         &[
             ("component", wasm_path.to_string()),
             ("target", format!("{:?}", test_target())),
@@ -1939,11 +1940,11 @@ impl CompiledTest {
         } else {
             compiled.optimize().await?
         };
-        if truthy_env(TEST_PRIME_WASMTIME_CACHE_ENV) {
+        if truthy_env(TEST_PRECOMPILE_COMPONENT_ENV) {
             let started = Instant::now();
-            if prime_wasmtime_component_cache(compiled.wasm_path())? {
+            if precompile_component(compiled.wasm_path())? {
                 println!(
-                    "Primed Wasmtime component cache for {} in {:.3?}",
+                    "Precompiled changed component once before parallel workers start: {} ({:.3?})",
                     compiled.wasm_path(),
                     started.elapsed()
                 );
@@ -2083,25 +2084,37 @@ impl CompiledTest {
         )?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
-        let mut command = Command::new("cargo");
-        command.arg("build").arg("--target").arg("wasm32-wasip2");
-        if use_shared_target {
-            command.arg("--target-dir");
-            command.arg(shared_target);
+        let locked_build = truthy_env(TEST_LOCKED_BUILDS_ENV);
+        let build_wrapper = |offline: bool| -> std::io::Result<_> {
+            let mut command = Command::new("cargo");
+            command.arg("build");
+            if locked_build {
+                command.arg("--locked");
+            }
+            if offline {
+                command.arg("--offline");
+            }
+            command.arg("--target").arg("wasm32-wasip2");
+            if use_shared_target {
+                command.arg("--target-dir");
+                command.arg(&shared_target);
+            }
+            command
+                .args(feature_combination.cargo_args_for_target(target))
+                .current_dir(&wrapper_crate_root)
+                .status()
+        };
+        let mut status = build_wrapper(locked_build)?;
+        if locked_build && !status.success() {
+            println!("Locked local build failed; retrying with dependency downloads enabled");
+            status = build_wrapper(false)?;
         }
-        command
-            .args(feature_combination.cargo_args_for_target(target))
-            .current_dir(&wrapper_crate_root)
-            .status()
-            .and_then(|status| {
-                if status.success() {
-                    Ok(status)
-                } else {
-                    Err(std::io::Error::other(format!(
-                        "cargo build failed for {wrapper_crate_root}"
-                    )))
-                }
-            })?;
+        if !status.success() {
+            return Err(std::io::Error::other(format!(
+                "cargo build failed for {wrapper_crate_root}"
+            ))
+            .into());
+        }
 
         if test_artifact_cache_enabled() {
             refresh_cache_stamp(&compile_stamp, &compile_signature)?;

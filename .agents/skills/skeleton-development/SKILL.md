@@ -20,24 +20,25 @@ The skeleton's `Cargo.toml` is stored as **`Cargo.toml_`** in the repository to 
 ### When modifying skeleton files
 
 ```bash
-# Fast counterexample after an edit: no Wizer, one worker.
-tools/dev-test.sh p2 quick runtime <exact_test_filter>
+# Minimize latency to the first result after an edit: no Wizer, one worker.
+tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
 
-# Focused verification: Wizer, Wasmtime cache priming, at most eight workers.
-tools/dev-test.sh p2 verify runtime <module_filter>
-tools/dev-test.sh p2 verify node_compat <test_filter>
+# Precompile a changed component once before parallel workers start.
+tools/dev-test.sh p2 fast-run runtime <module_filter>
+tools/dev-test.sh p2 fast-run node_compat <test_filter>
+tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
 
-# Preview 3 uses the stock workspace rather than the P2 shadow workspace.
-tools/dev-test.sh p3 quick runtime <exact_test_filter>
-tools/dev-test.sh p3 verify node_compat <test_filter>
+# Default semantics use the embedded skeleton.
+tools/dev-test.sh p3 standard runtime ':tag:group3'
 ```
 
-The command enables the generated-artifact and Wasmtime caches, reads the skeleton from the
-checkout without embedding it in the host test binary, and keeps P2's Golem Wasmtime patch in
-an ignored shadow workspace. It is offline by default. After dependency or fork changes, retry
-once with `WASM_RQUICKJS_DEV_ONLINE=1`. Verification mode also primes each new component in
-Wasmtime's filesystem cache before workers start and reuses immutable prepared components within
-each runtime-test worker. Every test still creates fresh mutable runtime state.
+The accelerated profiles enable the generated-artifact and Wasmtime caches, read the skeleton
+from the checkout without embedding it in the host test binary, and keep P2's Golem Wasmtime
+patch in an ignored shadow workspace. They use locked Cargo builds while allowing missing
+packages to be downloaded. `fast-run` also precompiles a changed component once before parallel
+workers start and reuses immutable prepared components within each runtime-test worker.
+`standard` uses the embedded skeleton and default test behavior. Every test creates fresh mutable
+runtime state.
 
 ### When `cleanup-skeleton.sh` is required
 
@@ -77,7 +78,7 @@ cargo test --test node_compat -- --nocapture                               # ❌
 
 Save unusually verbose or failing output when it will be useful for analysis:
 ```bash
-tools/dev-test.sh p2 verify runtime url 2>&1 | tee /tmp/test-output.txt
+tools/dev-test.sh p2 fast-run runtime url 2>&1 | tee /tmp/test-output.txt
 ```
 
 ## Test concurrency
@@ -87,8 +88,14 @@ captured output no longer forces serial execution. `--nocapture` is optional.
 
 Do not leave focused component tests at machine-wide concurrency. On the development machine,
 6–8 workers have the best measured throughput; launching 12 cold workers made a 12-test batch
-take 94 seconds instead of 7 seconds. `tools/dev-test.sh ... verify` primes Wasmtime's cache in
-the parent, then caps execution at eight workers.
+take 94 seconds instead of 7 seconds. `tools/dev-test.sh ... fast-run` precompiles a changed
+component once before parallel workers start, then defaults to eight workers. Pass test-r's
+`--test-threads N` after the filter to override the profile default. These measurements used a
+14-core Apple M3 Max MacBook Pro (10 performance cores, 4 efficiency cores, 36 GB RAM,
+macOS 26.5.1).
+
+When comparing profiles, report preparation, test execution, and total wall time separately.
+Precompilation can sharply reduce the execution phase while still increasing preparation time.
 
 ```bash
 # Direct Cargo equivalent when the workflow command is unsuitable:

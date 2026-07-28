@@ -1538,10 +1538,30 @@ There are a few important things to keep in mind when working on the project:
   directory, and fresh QuickJS runtime state. Do not group compatibility cases into one wasm instance.
 
   `WASM_RQUICKJS_TEST_DROP_CACHE=1` forces generated artifacts to be rebuilt and bypasses Wasmtime's filesystem cache.
-  `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop. The separate
-  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` switch is experimental and manual-only: it reuses immutable prepared
-  `Engine`/`Linker`/`Component` state on the normal `TestInstance::new` path, did not improve the measured node-compat
-  hot path, and must not be part of the recommended cache setup.
+  `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop.
+  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` reuses immutable prepared `Engine`/`Linker`/`Component` state on the
+  normal `TestInstance::new` path.
+
+  For skeleton development, select a local performance profile:
+
+  ```sh
+  tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
+  tools/dev-test.sh p2 fast-run node_compat <test_filter>
+  tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
+  tools/dev-test.sh p3 standard runtime ':tag:group3'
+  ```
+
+  `fast-start` skips Wizer and uses one worker to minimize latency to the first result. `fast-run` runs Wizer,
+  precompiles a changed component once before parallel workers start, reuses prepared components, and uses eight
+  workers. Both accelerated profiles read the skeleton externally, reuse generated artifacts and Wasmtime's filesystem
+  cache, and use locked Cargo builds. `standard` uses the embedded skeleton with optional caches and parent
+  precompilation disabled, normal Wizer optimization, and default test-runner behavior.
+
+  `fast-run` defaults to eight workers and `fast-start` to one; pass test-r's `--test-threads N` after the filter to
+  override either default. The eight-worker default was measured on a 14-core Apple M3 Max MacBook Pro (10 performance
+  cores, 4 efficiency cores, 36 GB RAM, macOS 26.5.1). Performance comparisons must report preparation time, test
+  execution time, and total wall time separately: precompilation makes the execution phase much faster but adds
+  preparation that is only recovered by a sufficiently large or repeated filter.
 
 ## Acknowledgements
 
