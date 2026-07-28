@@ -11,6 +11,9 @@ description.workspace = true
 default = []
 optimize = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:wasmtime-wizer", "dep:tokio"]
 use-golem-wasmtime = []
+# Development-only: read the skeleton from the checkout instead of embedding it into this
+# crate. This keeps skeleton edits from invalidating the host-side test binary.
+external-skeleton = []
 
 [dependencies]
 anyhow = { workspace = true }
