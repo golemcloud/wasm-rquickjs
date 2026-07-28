@@ -2277,17 +2277,11 @@ function resultForEsmFileUrl(url) {
 
 function parentFilenameForLoaderResolve(parentURL, baseUrl) {
     parentURL = String(parentURL || baseUrl);
-    if (parentURL.startsWith('data:')) {
-        const metadataEnd = parentURL.indexOf(',');
-        if (metadataEnd !== -1) {
-            const metadata = parentURL.slice(5, metadataEnd);
-            for (const parameter of metadata.split(';').slice(1)) {
-                if (parameter.startsWith('wasm-rquickjs-source-url=')) {
-                    parentURL = decodeURIComponent(parameter.slice('wasm-rquickjs-source-url='.length));
-                    break;
-                }
-            }
-        }
+    if (
+        parentURL.startsWith('data:') &&
+        typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_lookup_loader_source_url === 'function'
+    ) {
+        parentURL = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_lookup_loader_source_url(parentURL) || parentURL;
     }
     if (parentURL.startsWith('file://')) {
         return nodeUrl.fileURLToPath(parentURL);
@@ -3702,16 +3696,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function registeredLoaderModuleSourceReturn(source, url) {
-        return 'data:text/javascript;wasm-rquickjs-source-url=' +
-            encodeURIComponent(String(url)) + ',' +
-            encodeURIComponent(loaderSourceToString(source));
+        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
+            'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source)),
+            String(url),
+        );
     }
 
     function registeredLoaderJsonSourceReturn(source, url) {
+        const registered = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
+            'data:application/json,' + encodeURIComponent(loaderSourceToString(source)),
+            String(url),
+        );
         return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(
-            'data:application/json;wasm-rquickjs-source-url=' +
-                encodeURIComponent(String(url)) + ',' +
-                encodeURIComponent(loaderSourceToString(source)),
+            registered,
             'json',
         );
     }

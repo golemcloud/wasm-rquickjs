@@ -637,6 +637,8 @@ fn module_loader_architecture() {
         "__wasm_rquickjs_cjs_resolve_package_fallback",
         "__wasm_rquickjs_package_global_conditions",
         "__wasm_rquickjs_build_loader_cjs_facade",
+        "__wasm_rquickjs_register_loader_source_url",
+        "__wasm_rquickjs_lookup_loader_source_url",
         "__wasm_rquickjs_analyze_module_source",
         "__wasm_rquickjs_prepare_cjs_source",
         "__wasm_rquickjs_module_has_exec_argv_flag",

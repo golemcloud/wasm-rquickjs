@@ -478,16 +478,8 @@ impl DataUrlLoader {
     }
 
     fn source_url(path: &str) -> Option<String> {
-        let rest = path.strip_prefix("data:")?;
-        let comma_pos = Self::content_separator_pos(rest)?;
-        rest[..comma_pos]
-            .split(';')
-            .skip(1)
-            .find_map(|parameter| {
-                parameter
-                    .strip_prefix("wasm-rquickjs-source-url=")
-                    .and_then(Self::percent_decode)
-            })
+        let registered_path = strip_import_type_rewrite_token(path);
+        LOADER_SOURCE_URLS.with(|urls| urls.borrow().get(&registered_path).cloned())
     }
 
     fn js_string_escape(s: &str) -> String {
@@ -867,9 +859,11 @@ const IMPORT_TYPE_QUERY_PREFIX: &str = "__wasm_rquickjs_import_type=";
 
 thread_local! {
     static IMPORT_ATTR_REWRITE_TOKENS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    static LOADER_SOURCE_URLS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
 }
 
 static IMPORT_ATTR_REWRITE_SEQ: AtomicUsize = AtomicUsize::new(1);
+static LOADER_SOURCE_URL_SEQ: AtomicUsize = AtomicUsize::new(1);
 
 fn next_import_attr_rewrite_token(import_type: &str) -> String {
     let seq = IMPORT_ATTR_REWRITE_SEQ.fetch_add(1, Ordering::Relaxed);
@@ -878,6 +872,20 @@ fn next_import_attr_rewrite_token(import_type: &str) -> String {
         .map(|duration| duration.as_nanos())
         .unwrap_or(seq as u128);
     format!("{import_type}-{seq:x}-{nonce:x}")
+}
+
+fn register_loader_source_url(specifier: &str, source_url: &str) -> String {
+    let seq = LOADER_SOURCE_URL_SEQ.fetch_add(1, Ordering::Relaxed);
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(seq as u128);
+    let registered = format!("{specifier}#__wasm_rquickjs_loader_source={seq:x}-{nonce:x}");
+    LOADER_SOURCE_URLS.with(|urls| {
+        urls.borrow_mut()
+            .insert(registered.clone(), source_url.to_string());
+    });
+    registered
 }
 
 fn register_import_attr_rewrite(token: &str, rewritten_specifier: &str) {
@@ -5711,27 +5719,6 @@ impl NodeModulesResolver {
             .iter()
             .map(|condition| (*condition).to_string())
             .collect();
-
-        if let Ok(process) = ctx.globals().get::<_, Object>("process")
-            && let Ok(exec_argv) = process.get::<_, rquickjs::Array>("execArgv")
-        {
-            let mut i = 0;
-            while i < exec_argv.len() {
-                let Ok(arg) = exec_argv.get::<String>(i) else {
-                    i += 1;
-                    continue;
-                };
-                if let Some(condition) = arg.strip_prefix("--conditions=") {
-                    Self::add_condition(&mut conditions, condition);
-                } else if (arg == "--conditions" || arg == "-C") && i + 1 < exec_argv.len() {
-                    i += 1;
-                    if let Ok(condition) = exec_argv.get::<String>(i) {
-                        Self::add_condition(&mut conditions, &condition);
-                    }
-                }
-                i += 1;
-            }
-        }
 
         if let Ok(user_conditions) = ctx
             .globals()
@@ -10572,6 +10559,29 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             .expect("Failed to create import attribute rewrite registrar"),
         )
         .expect("Failed to initialize import attribute rewrite registrar");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_register_loader_source_url",
+            Function::new(
+                ctx.clone(),
+                |specifier: String, source_url: String| {
+                    register_loader_source_url(&specifier, &source_url)
+                },
+            )
+            .expect("Failed to create loader source URL registrar"),
+        )
+        .expect("Failed to initialize loader source URL registrar");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_lookup_loader_source_url",
+            Function::new(ctx.clone(), |specifier: String| {
+                DataUrlLoader::source_url(&specifier)
+            })
+            .expect("Failed to create loader source URL lookup"),
+        )
+        .expect("Failed to initialize loader source URL lookup");
 
         set_non_replaceable_global(
             &global,

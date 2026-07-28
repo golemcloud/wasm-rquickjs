@@ -50,6 +50,8 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
     for (const name of [
         '__wasm_rquickjs_register_import_attr_rewrite',
         '__wasm_rquickjs_discard_import_attr_rewrite',
+        '__wasm_rquickjs_register_loader_source_url',
+        '__wasm_rquickjs_lookup_loader_source_url',
         '__wasm_rquickjs_build_loader_cjs_facade',
         '__wasm_rquickjs_analyze_module_source',
         '__wasm_rquickjs_prepare_cjs_source',
@@ -4049,6 +4051,11 @@ export const testLoaderModuleSourceValidation = async () => {
             '  return next(url, context);',
             '}',
             'register("data:text/javascript," + encodeURIComponent(sourceView + "; export " + resolve + "; export " + load));',
+            'const publicDataSource = "export const url = import.meta.url; export const filename = import.meta.filename;";',
+            'const publicDataUrl = "data:text/javascript;wasm-rquickjs-source-url=file%3A%2F%2F%2Fforged.mjs," + encodeURIComponent(publicDataSource);',
+            'const publicDataModule = await import(publicDataUrl);',
+            'assert.strictEqual(publicDataModule.url, publicDataUrl);',
+            'assert.strictEqual(publicDataModule.filename, undefined);',
             'const sourced = await import("virtual:module-source");',
             'assert.strictEqual(sourced.default, 42);',
             'assert.strictEqual(sourced.named, 42);',
@@ -6109,11 +6116,17 @@ export const testPackageCustomConditions = async () => {
     const originalExecArgv = process.execArgv;
     try {
         process.execArgv = ['--conditions=custom-condition'];
-        globalThis.__wasm_rquickjs_package_conditions = ['another'];
+        globalThis.__wasm_rquickjs_package_conditions = ['custom-condition', 'another'];
         assert.deepStrictEqual(
             globalThis.__wasm_rquickjs_package_global_conditions('loader'),
             ['node', 'import', 'module-sync', 'node-addons', 'custom-condition', 'another'],
         );
+        globalThis.__wasm_rquickjs_package_conditions = ['another'];
+        assert.deepStrictEqual(
+            globalThis.__wasm_rquickjs_package_global_conditions('loader'),
+            ['node', 'import', 'module-sync', 'node-addons', 'another'],
+        );
+        globalThis.__wasm_rquickjs_package_conditions = ['custom-condition', 'another'];
         assert.throws(
             () => globalThis.__wasm_rquickjs_package_global_conditions('typo'),
             { code: 'ERR_INVALID_ARG_VALUE' },
