@@ -640,6 +640,10 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
             throw error;
         }
     }
+    if (this.socket && this.socket.destroyed) {
+        onComplete(new Error('Socket is closed'));
+        return false;
+    }
     this._pendingOutput.push({ data, callback: onComplete });
     return false;
 };
@@ -1129,6 +1133,11 @@ function createConnectionParser(server, socket) {
         const shouldKeepAlive = context.shouldKeepAliveAfterResponse;
         const finishedRes = context.res;
         state.responseQueue.shift();
+        if (state.responseQueue.length === 0 &&
+            state.current === null &&
+            state.buffer.length === 0) {
+            state.state = IDLE;
+        }
 
         // Emit 'close' on the response asynchronously, matching Node.js
         // OutgoingMessage behavior where 'close' fires after 'finish'.
@@ -1255,7 +1264,7 @@ function createConnectionParser(server, socket) {
                 });
                 if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
                     res._keepAlive = false;
-                    res._outputBlocked = true;
+                    res._outputBlocked = state.responseQueue.length > 0;
                     const context = {
                         req,
                         res,

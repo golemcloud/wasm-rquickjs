@@ -1075,7 +1075,25 @@ Socket.prototype._writev = function _writev(chunks, callback) {
     const buffers = chunks.map(({ chunk, encoding }) => (
         typeof chunk === 'string' ? Buffer.from(chunk, encoding) : Buffer.from(chunk)
     ));
-    this._write(Buffer.concat(buffers), 'buffer', callback);
+    const totalLength = buffers.reduce((total, buffer) => total + buffer.length, 0);
+
+    // Coalesce ordinary corked writes (notably HTTP response framing) without
+    // turning arbitrarily large batches into one allocation and one
+    // uninterruptible native write.
+    if (totalLength <= 64 * 1024) {
+        this._write(Buffer.concat(buffers, totalLength), 'buffer', callback);
+        return;
+    }
+
+    let index = 0;
+    const writeNext = (error) => {
+        if (error || index === buffers.length) {
+            callback(error || null);
+            return;
+        }
+        this._write(buffers[index++], 'buffer', writeNext);
+    };
+    writeNext();
 };
 
 Socket.prototype._final = function _final(callback) {

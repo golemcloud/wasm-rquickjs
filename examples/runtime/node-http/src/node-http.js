@@ -474,3 +474,195 @@ export async function httpPipelinedCloseLifecycle() {
         });
     });
 }
+
+export async function httpCloseIdleConnections() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let partialClosed = false;
+        let idleClosed = false;
+        let cleanupStarted = false;
+        let partialSocket;
+        let idleSocket;
+        const server = http.createServer((_req, res) => res.end('ok'));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (partialSocket) partialSocket.destroy();
+            if (idleSocket) idleSocket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            const port = server.address().port;
+            partialSocket = net.connect({ port });
+            idleSocket = net.connect({ port });
+            let response = '';
+
+            partialSocket.on('connect', () => {
+                partialSocket.write('GET /partial HTTP/1.1\r\nHost: localhost');
+            });
+            partialSocket.on('close', () => {
+                partialClosed = true;
+            });
+            partialSocket.on('error', () => {});
+
+            idleSocket.on('connect', () => {
+                idleSocket.write('GET /idle HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            idleSocket.on('data', (chunk) => {
+                response += chunk.toString('latin1');
+                if (!cleanupStarted && response.includes('\r\n\r\nok')) {
+                    cleanupStarted = true;
+                    setImmediate(() => server.closeIdleConnections());
+                }
+            });
+            idleSocket.on('close', () => {
+                idleClosed = true;
+                setTimeout(() => finish(idleClosed && !partialClosed), 25);
+            });
+            idleSocket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpInformationalWriteAfterClose() {
+    return new Promise((resolve) => {
+        let settled = false;
+        const server = http.createServer((_req, res) => {
+            res.socket.once('close', () => {
+                let callbackCount = 0;
+                res.writeEarlyHints(
+                    { link: '</after-close.js>; rel=preload' },
+                    (error) => {
+                        callbackCount++;
+                        setImmediate(() => finish(
+                            callbackCount === 1 &&
+                            error instanceof Error &&
+                            error.message === 'Socket is closed'
+                        ));
+                    }
+                );
+            });
+            res.end('ok');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.once('data', () => socket.destroy());
+            socket.on('error', () => {});
+        });
+    });
+}
+
+export async function netWritevBoundaries() {
+    const runBatch = (sizes) => new Promise((resolve) => {
+        const expected = sizes.map((size, index) =>
+            Buffer.alloc(size, 65 + index)
+        );
+        const expectedWire = Buffer.concat(expected);
+        let received = Buffer.alloc(0);
+        let callbackCount = 0;
+        let settled = false;
+
+        const server = net.createServer((socket) => {
+            socket.on('data', (chunk) => {
+                received = Buffer.concat([received, chunk]);
+            });
+            socket.on('end', () => {
+                socket.end();
+            });
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.cork();
+                for (const buffer of expected) {
+                    socket.write(buffer, (error) => {
+                        callbackCount++;
+                        if (error) finish(false);
+                    });
+                }
+                socket.end();
+            });
+            socket.on('close', () => {
+                clearTimeout(timeout);
+                finish(
+                    callbackCount === expected.length &&
+                    received.equals(expectedWire)
+                );
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+
+    return await runBatch([32 * 1024, 32 * 1024]) &&
+        await runBatch([32 * 1024, 32 * 1024, 1]);
+}
+
+export async function httpPipelinedMaxRequests() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let socket;
+        const server = http.createServer((_req, res) => res.end('first'));
+        server.maxRequestsPerSocket = 1;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /overflow HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                const first = wire.indexOf('HTTP/1.1 200');
+                const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable');
+                if (first !== -1 && overflow > first && wire.endsWith('0\r\n\r\n')) {
+                    finish(!wire.includes('first', overflow));
+                }
+            });
+            socket.on('error', () => finish(false));
+            socket.on('end', () => {
+                const first = wire.indexOf('HTTP/1.1 200');
+                const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable');
+                finish(first !== -1 && overflow > first && !wire.includes('first', overflow));
+            });
+        });
+    });
+}
