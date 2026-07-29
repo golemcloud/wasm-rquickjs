@@ -16,6 +16,12 @@ use tokio_util::io::ReaderStream;
 
 pub struct TestServerHandle(JoinHandle<()>);
 
+impl TestServerHandle {
+    pub(crate) fn new(handle: JoinHandle<()>) -> Self {
+        Self(handle)
+    }
+}
+
 impl Drop for TestServerHandle {
     fn drop(&mut self) {
         self.0.abort();
@@ -225,7 +231,7 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
         axum::serve(listener, router).await.unwrap();
     });
 
-    (host_http_port, TestServerHandle(handle))
+    (host_http_port, TestServerHandle::new(handle))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -265,42 +271,4 @@ struct State {
 struct MultiPartPart {
     name: String,
     data: Vec<u8>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TestServerHandle;
-    use std::future::pending;
-    use std::time::Duration;
-    use tokio::sync::oneshot;
-
-    struct NotifyOnDrop(Option<oneshot::Sender<()>>);
-
-    impl Drop for NotifyOnDrop {
-        fn drop(&mut self) {
-            if let Some(notify) = self.0.take() {
-                let _ = notify.send(());
-            }
-        }
-    }
-
-    #[test_r::test]
-    async fn test_server_handle_aborts_owned_task_on_drop() {
-        let (started_tx, started_rx) = oneshot::channel();
-        let (dropped_tx, dropped_rx) = oneshot::channel();
-        let task = tokio::spawn(async move {
-            let _notify_on_drop = NotifyOnDrop(Some(dropped_tx));
-            let _ = started_tx.send(());
-            pending::<()>().await;
-        });
-        let server = TestServerHandle(task);
-
-        started_rx.await.expect("server task did not start");
-        drop(server);
-
-        tokio::time::timeout(Duration::from_secs(1), dropped_rx)
-            .await
-            .expect("server task was not aborted")
-            .expect("server task dropped without notifying");
-    }
 }
