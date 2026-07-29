@@ -643,8 +643,10 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
     }
     if (this.socket && this.socket.destroyed) {
         // Node drops informational writes made after the response socket
-        // closes without invoking their public callbacks. Retire our internal
-        // accounting without exposing a callback Node would not emit.
+        // closes without invoking their public callbacks or completing the
+        // response successfully. Retire our internal accounting without
+        // exposing a callback or 'finish' event Node would not emit.
+        this._outputAborted = true;
         onComplete(new Error('Socket is closed'), false, false);
         return false;
     }
@@ -1304,7 +1306,7 @@ function createConnectionParser(server, socket) {
                             (token) => token.trim() === 'close'
                         );
                     context.shouldKeepAliveAfterResponse =
-                        connKeepAlive &&
+                        res._keepAlive &&
                         !isDroppedRequest &&
                         !responseCloses &&
                         !server._closeRequested;

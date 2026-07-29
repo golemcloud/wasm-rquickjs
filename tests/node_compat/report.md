@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3237/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3238/4425 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3237 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1188 | 26.8% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3238 | 73.2% | 56.3% | 47.1% |
+| 🧩 known gap | 1187 | 26.8% | 20.6% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3237/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3238/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 244 | 305 | 267 | 2 | 0 | 80 | 44.4% | 29.8% |
+| http | 898 | 245 | 304 | 267 | 2 | 0 | 80 | 44.6% | 30.0% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1188)
+### known gap (1187)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -889,7 +889,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP server close/reopen ECONNREFUSED sequencing is not Node-compatible | 1 | `sequential/test-http-econnrefused.js` |
 | HTTP server duplicate request-header coalescing for allowed/forbidden header sets is not Node-compatible | 1 | `parallel/test-http-server-multiheaders2.js` |
 | HTTP server duplicate request-header coalescing/deduplication is not Node-compatible | 1 | `parallel/test-http-server-multiheaders.js` |
-| HTTP server flood-prevention backpressure behavior (socket cork/uncork) is not Node-compatible | 1 | `parallel/test-http-pipeline-flood.js` |
 | HTTP server incorrectly emits chunked terminator semantics for 204/304 responses | 1 | `parallel/test-http-chunked-304.js` |
 | HTTP server parser does not emit Node-compatible HPE_HEADER_OVERFLOW/431 behavior for oversized headers | 1 | `parallel/test-http-header-overflow.js` |
 | HTTP server socket.setEncoding('') error path (ERR_HTTP_SOCKET_ENCODING) is not Node-compatible | 1 | `parallel/test-http-socket-encoding-error.js` |
@@ -1118,7 +1117,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | global process/Buffer accessor setter semantics are incomplete | 1 | `parallel/test-global-setters.js` |
 | global web streams and node:stream/web exports are inconsistent | 1 | `parallel/test-global-webstreams.js` |
 | globalThis shape differs from Node.js | 1 | `parallel/test-global.js` |
-| half-open/pipelined HTTP/1.1 server behavior is not fully Node-compatible | 1 | `parallel/test-http-server.js` |
 | hidden TextDecoder inspect output exposes Node/V8 internal decoder handles that are not represented in this runtime | 1 | `parallel/test-whatwg-encoding-custom-textdecoder.js#block_05_test_textdecoder_inspect_with_hidden_fields` |
 | http client request lifecycle can hang in method-token validation scenario | 1 | `parallel/test-http-client-check-http-token.js` |
 | http.Agent keepAlive maxSockets/maxFreeSockets pooling semantics are not Node-compatible | 1 | `sequential/test-http-keepalive-maxsockets.js` |
@@ -1138,7 +1136,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior | 1 | `parallel/test-http-no-read-no-dump.js` |
-| keep-alive socket reuse plus drain/backpressure behavior for corked responses is not Node-compatible | 1 | `parallel/test-http-outgoing-end-cork.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
@@ -1285,6 +1282,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream.write()/console.log tick scheduling is not fully Node-compatible | 1 | `parallel/test-stream-writable-samecb-singletick.js` |
 | stream/web compression constructor error codes are not Node-compatible yet | 1 | `parallel/test-whatwg-webstreams-compression.js` |
 | subtle.digest unsupported-algorithm error semantics do not match Node | 1 | `parallel/test-webcrypto-digest.js` |
+| the client never observes a reused keep-alive socket, so the corked-response reuse loop does not terminate | 1 | `parallel/test-http-outgoing-end-cork.js` |
+| the flood connection resets before the server handles it, so the backpressure callback contract is not exercised | 1 | `parallel/test-http-pipeline-flood.js` |
 | timeout option does not reliably emit request timeout before close | 1 | `parallel/test-http-client-timeout-option.js` |
 | timers/promises scheduler constructor and error-code semantics are not fully Node-compatible | 1 | `parallel/test-timers-promises-scheduler.js` |
 | tls.checkServerIdentity() is a stub that throws instead of performing hostname/certificate matching | 1 | `parallel/test-tls-check-server-identity.js` |

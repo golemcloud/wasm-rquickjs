@@ -12,6 +12,7 @@ declare module 'node-http' {
   export function httpPipelinedActiveTimeout(): Promise<boolean>;
   export function httpCloseIdleConnections(): Promise<boolean>;
   export function httpInformationalWriteAfterClose(): Promise<boolean>;
+  export function httpMaxRequestsClosesSocket(): Promise<boolean>;
   export function netWritevBoundaries(): Promise<boolean>;
   export function httpPipelinedMaxRequests(): Promise<boolean>;
 }

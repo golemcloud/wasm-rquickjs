@@ -604,18 +604,34 @@ export async function httpCloseIdleConnections() {
 export async function httpInformationalWriteAfterClose() {
     return new Promise((resolve) => {
         let settled = false;
+        let callbackCount = 0;
+        let finishCount = 0;
+        let closeCount = 0;
         const server = http.createServer((_req, res) => {
-            res.socket.once('close', () => {
-                let callbackCount = 0;
-                res.writeEarlyHints(
-                    { link: '</after-close.js>; rel=preload' },
-                    () => {
-                        callbackCount++;
-                    }
-                );
-                setTimeout(() => finish(callbackCount === 0), 30);
+            res.on('finish', () => {
+                finishCount++;
             });
-            res.end('ok');
+            res.socket.once('close', () => {
+                closeCount++;
+                setTimeout(() => {
+                    finish(
+                        callbackCount === 0 &&
+                        finishCount === 0 &&
+                        closeCount === 1
+                    );
+                }, 30);
+            });
+
+            res.socket.destroy();
+            res.writeEarlyHints(
+                { link: '</after-close.js>; rel=preload' },
+                () => {
+                    callbackCount++;
+                }
+            );
+            res.end('unwritten', () => {
+                callbackCount++;
+            });
         });
 
         const finish = (result) => {
@@ -632,8 +648,46 @@ export async function httpInformationalWriteAfterClose() {
             socket.on('connect', () => {
                 socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
             });
-            socket.once('data', () => socket.destroy());
             socket.on('error', () => {});
+        });
+    });
+}
+
+export async function httpMaxRequestsClosesSocket() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let socket;
+        const server = http.createServer((_req, res) => res.end('only'));
+        server.maxRequestsPerSocket = 1;
+        server.keepAliveTimeout = 1000;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 500);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => finish(false));
+            socket.on('end', () => {
+                finish(
+                    wire.includes('HTTP/1.1 200') &&
+                    wire.toLowerCase().includes('connection: close') &&
+                    wire.includes('\r\n\r\nonly')
+                );
+            });
         });
     });
 }
