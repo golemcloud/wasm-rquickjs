@@ -2026,11 +2026,12 @@ impl CompiledTest {
                 ),
                 (
                     "crypto_dev_opt_level",
-                    feature_combination
-                        .includes_crypto_full()
-                        .then_some("3")
-                        .unwrap_or("default")
-                        .to_string(),
+                    if feature_combination.includes_crypto_full() {
+                        "3"
+                    } else {
+                        "default"
+                    }
+                    .to_string(),
                 ),
             ],
         );

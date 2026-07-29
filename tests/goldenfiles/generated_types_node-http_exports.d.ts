@@ -9,6 +9,7 @@ declare module 'node-http' {
   export function httpResponseLifecycle(): Promise<boolean>;
   export function httpPipelinedResponseOrder(): Promise<boolean>;
   export function httpPipelinedCloseLifecycle(): Promise<boolean>;
+  export function httpPipelinedActiveTimeout(): Promise<boolean>;
   export function httpCloseIdleConnections(): Promise<boolean>;
   export function httpInformationalWriteAfterClose(): Promise<boolean>;
   export function netWritevBoundaries(): Promise<boolean>;

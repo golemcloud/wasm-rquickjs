@@ -11,6 +11,7 @@ world node-http {
   export http-response-lifecycle: func() -> bool;
   export http-pipelined-response-order: func() -> bool;
   export http-pipelined-close-lifecycle: func() -> bool;
+  export http-pipelined-active-timeout: func() -> bool;
   export http-close-idle-connections: func() -> bool;
   export http-informational-write-after-close: func() -> bool;
   export net-writev-boundaries: func() -> bool;

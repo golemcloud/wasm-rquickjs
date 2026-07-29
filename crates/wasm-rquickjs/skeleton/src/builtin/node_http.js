@@ -2615,6 +2615,7 @@ export class ClientRequest extends OutgoingMessage {
 import {
     Server as _Server,
     ServerResponse as _ServerResponse,
+    ServerIncomingMessage as _ServerIncomingMessage,
     createServer as _createServer,
 } from '__wasm_rquickjs_builtin/node_http_server';
 
@@ -2623,6 +2624,8 @@ import { connect as _netConnect } from 'node:net';
 export const Server = _Server;
 export const ServerResponse = _ServerResponse;
 export const createServer = _createServer;
+Object.setPrototypeOf(_ServerIncomingMessage.prototype, IncomingMessage.prototype);
+Object.setPrototypeOf(_ServerIncomingMessage, IncomingMessage);
 
 // ===== request / get =====
 

@@ -1081,9 +1081,8 @@ Socket.prototype._writev = function _writev(chunks, callback) {
     ));
     const totalLength = buffers.reduce((total, buffer) => total + buffer.length, 0);
 
-    // Coalesce ordinary corked writes (notably HTTP response framing) without
-    // turning arbitrarily large batches into one allocation and one
-    // uninterruptible native write.
+    // Coalesce ordinary corked writes (notably HTTP response framing) while
+    // bounding the temporary Buffer.concat allocation for large batches.
     if (totalLength <= 64 * 1024) {
         this._write(Buffer.concat(buffers, totalLength), 'buffer', callback);
         return;

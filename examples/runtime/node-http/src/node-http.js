@@ -429,23 +429,22 @@ export async function httpPipelinedResponseOrder() {
 
 export async function httpPipelinedCloseLifecycle() {
     return new Promise((resolve) => {
-        let secondResponse;
         let settled = false;
         const events = [];
+        let wire = '';
         const server = http.createServer((req, res) => {
             if (req.url === '/first') {
                 setTimeout(() => res.destroy(), 25);
                 return;
             }
 
-            secondResponse = res;
             res.on('error', () => events.push('error'));
             res.on('finish', () => events.push('finish'));
             res.on('close', () => {
                 events.push('close');
                 setImmediate(() => finish(
-                    events.join(',') === 'error,close' &&
-                    secondResponse._pendingOutputWrites === 0
+                    events.join(',') === 'close' &&
+                    !wire.includes('second')
                 ));
             });
             res.end('second');
@@ -469,8 +468,58 @@ export async function httpPipelinedCloseLifecycle() {
                     'GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n'
                 );
             });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
             socket.on('error', () => {});
             socket.on('close', () => clearTimeout(timeout));
+        });
+    });
+}
+
+export async function httpPipelinedActiveTimeout() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let socket;
+        const server = http.createServer((req, res) => {
+            if (req.url === '/first') {
+                res.end('first');
+                return;
+            }
+            setTimeout(() => res.end('second'), 75);
+        });
+        server.keepAliveTimeout = 20;
+        server.timeout = 500;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('end', () => {
+                const first = wire.indexOf('first');
+                const secondStatus = wire.indexOf('HTTP/1.1 200', first);
+                const second = wire.indexOf('second', secondStatus);
+                finish(first !== -1 && secondStatus > first && second > secondStatus);
+            });
+            socket.on('error', () => finish(false));
         });
     });
 }
@@ -648,7 +697,15 @@ export async function httpPipelinedMaxRequests() {
         let wire = '';
         let socket;
         const server = http.createServer((_req, res) => res.end('first'));
+        let dropped = 0;
+        let droppedTypesValid = true;
         server.maxRequestsPerSocket = 1;
+        server.on('dropRequest', (req, droppedSocket) => {
+            dropped++;
+            droppedTypesValid = droppedTypesValid &&
+                req instanceof http.IncomingMessage &&
+                droppedSocket instanceof net.Socket;
+        });
 
         const finish = (result) => {
             if (settled) return;
@@ -670,17 +727,20 @@ export async function httpPipelinedMaxRequests() {
             });
             socket.on('data', (chunk) => {
                 wire += chunk.toString('latin1');
-                const first = wire.indexOf('HTTP/1.1 200');
-                const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable');
-                if (first !== -1 && overflow > first && wire.endsWith('0\r\n\r\n')) {
-                    finish(!wire.includes('first', overflow));
-                }
             });
             socket.on('error', () => finish(false));
             socket.on('end', () => {
                 const first = wire.indexOf('HTTP/1.1 200');
+                const firstBody = wire.indexOf('first', first);
                 const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable');
-                finish(first !== -1 && overflow > first && !wire.includes('first', overflow));
+                finish(
+                    dropped === 1 &&
+                    droppedTypesValid &&
+                    first !== -1 &&
+                    firstBody > first &&
+                    overflow > firstBody &&
+                    !wire.includes('first', overflow)
+                );
             });
         });
     });

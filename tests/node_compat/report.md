@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3234/4425 (73.1%)
+**Primary compatibility (CI-enforced):** 3237/4425 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3234 | 73.1% | 56.2% | 47.1% |
-| 🧩 known gap | 1191 | 26.9% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3237 | 73.2% | 56.3% | 47.1% |
+| 🧩 known gap | 1188 | 26.8% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3234/5750 (56.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3237/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 241 | 308 | 267 | 2 | 0 | 80 | 43.9% | 29.5% |
+| http | 898 | 244 | 305 | 267 | 2 | 0 | 80 | 44.4% | 29.8% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1191)
+### known gap (1188)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -924,8 +924,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | OutgoingMessage implicit Content-Length/Transfer-Encoding and Connection header behavior is not Node-compatible | 1 | `parallel/test-http-content-length.js` |
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
 | Overridden globalAgent socket bookkeeping (agent.sockets/close lifecycle) is not Node-compatible | 1 | `parallel/test-http-client-override-global-agent.js` |
-| P2 TCP reads can deliver an already-pipelined overflow request after the max-request response has finished and closed the socket | 1 | `parallel/test-http-keep-alive-pipeline-max-requests.js` |
-| P2 server responses are not corked into the single readable delivery this test expects for the final max-request response | 1 | `parallel/test-http-keep-alive-max-requests.js` |
 | QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361 | 1 | `es-module/test-esm-live-binding.mjs` |
 | QuickJS stack frame formatting differs for Error objects whose name is a non-string object | 1 | `parallel/test-util-inspect.js#block_97_block_97` |
 | RSA imported-key algorithm metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-encrypt-decrypt-rsa.js` |
@@ -988,6 +986,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Worker transferList missing-port DataCloneError is not enforced | 1 | `parallel/test-worker-workerdata-messageport.js#block_03_block_03` |
 | X25519/X448 deriveBits vector compatibility is incomplete | 1 | `parallel/test-webcrypto-derivebits-cfrg.js` |
 | X25519/X448 deriveKey compatibility is incomplete | 1 | `parallel/test-webcrypto-derivekey-cfrg.js` |
+| accepting a second connection force-closes the first idle keep-alive connection, breaking the test's per-socket max-request isolation | 1 | `parallel/test-http-keep-alive-max-requests.js` |
 | addAbortListener lacks argument validation and already-aborted/stopImmediatePropagation handling | 1 | `parallel/test-events-add-abort-listener.mjs` |
 | asserts a CJS module's source map stays findable until GC reclaims the module; QuickJS reference counting reclaims the module as soon as its require.cache and module.children references are dropped, so the pre-GC precondition cannot hold — a tracing-GC vs refcount engine difference | 1 | `parallel/test-source-map-cjs-require-cache.js` |
 | async handler rejection after partial body write does not follow Node-compatible close semantics | 1 | `parallel/test-http-server-capture-rejections.js#block_01_block_01` |
@@ -1180,7 +1179,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | performance.timerify function entries are not implemented | 1 | `parallel/test-performance-function-async.js` |
 | permission mode does not yet honor --allow-addons/node-addons export-condition semantics | 1 | `parallel/test-permission-no-addons.js` |
 | permission security-warning emission for --allow-* flags is incomplete | 1 | `parallel/test-permission-warning-flags.js` |
-| pipelined responses with forced socket destroy trigger unhandled readable-stream rejection | 1 | `parallel/test-http-many-ended-pipelines.js` |
 | postMessage function cloning should throw DataCloneError | 1 | `parallel/test-worker-message-port-transfer-native.js#block_00_block_00` |
 | postMessage transferList argument validation is not Node-compatible yet | 1 | `parallel/test-worker-message-port.js#block_05_block_05` |
 | posting a port to its target and channel-loss warning semantics are incomplete | 1 | `parallel/test-worker-message-port-transfer-target.js` |
@@ -1258,7 +1256,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | server.headersTimeout 408 behavior for interrupted header lines is incomplete | 1 | `parallel/test-http-server-headers-timeout-interrupted-headers.js` |
 | server.headersTimeout handling across keep-alive requests is not Node-compatible | 1 | `parallel/test-http-server-headers-timeout-keepalive.js` |
 | server.headersTimeout handling for pipelined requests is not Node-compatible | 1 | `parallel/test-http-server-headers-timeout-pipelining.js` |
-| server.maxRequestsPerSocket/dropRequest behavior is not fully implemented | 1 | `parallel/test-http-keep-alive-drop-requests.js` |
 | server.requestTimeout 408 behavior for delayed header start is incomplete | 1 | `parallel/test-http-server-request-timeout-delayed-headers.js` |
 | server.requestTimeout 408 behavior for delayed request body is incomplete | 1 | `parallel/test-http-server-request-timeout-delayed-body.js` |
 | server.requestTimeout 408 behavior for interrupted request body is incomplete | 1 | `parallel/test-http-server-request-timeout-interrupted-body.js` |

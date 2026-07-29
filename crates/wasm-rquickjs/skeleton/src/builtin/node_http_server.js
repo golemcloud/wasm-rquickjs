@@ -236,6 +236,7 @@ function ServerResponse(req, options) {
     this._pendingOutputWrites = 0;
     this._outputCompletionCallbacks = [];
     this._outputError = undefined;
+    this._outputAborted = false;
     this._outputBlocked = false;
 
     // strictContentLength enforcement
@@ -610,10 +611,10 @@ ServerResponse.prototype._sendHeaders = function _sendHeaders() {
 ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
     this._pendingOutputWrites++;
     let completed = false;
-    const onComplete = (error, invokeCallback = true) => {
+    const onComplete = (error, invokeCallback = true, recordError = true) => {
         if (completed) return;
         completed = true;
-        if (error && this._outputError === undefined) {
+        if (recordError && error && this._outputError === undefined) {
             this._outputError = error;
         }
         try {
@@ -644,7 +645,7 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
         // Node drops informational writes made after the response socket
         // closes without invoking their public callbacks. Retire our internal
         // accounting without exposing a callback Node would not emit.
-        onComplete(new Error('Socket is closed'), false);
+        onComplete(new Error('Socket is closed'), false, false);
         return false;
     }
     this._pendingOutput.push({ data, callback: onComplete });
@@ -661,7 +662,7 @@ ServerResponse.prototype._activateOutput = function _activateOutput() {
 
     if (!this.socket || this.socket.destroyed) {
         for (const entry of pending) {
-            entry.callback(new Error('Socket is closed'));
+            entry.callback(new Error('Socket is closed'), false, false);
         }
         return;
     }
@@ -677,14 +678,19 @@ ServerResponse.prototype._activateOutput = function _activateOutput() {
 
 ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(error) {
     this._outputBlocked = false;
+    this._outputAborted = true;
+    this._outputCompletionCallbacks = [];
     const pending = this._pendingOutput;
     this._pendingOutput = [];
     for (const entry of pending) {
-        entry.callback(error);
+        entry.callback(error, false, false);
     }
 };
 
 ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
+    if (this._outputAborted) {
+        return;
+    }
     if (this._pendingOutputWrites === 0) {
         process.nextTick(() => callback(this._outputError));
     } else {
@@ -1037,11 +1043,14 @@ function createConnectionParser(server, socket) {
 
         state.buffer = Buffer.concat([state.buffer, data]);
         parseLoop();
-        setImmediate(() => {
-            if (state.responseQueue.length > 0) {
-                state.responseQueue[0].res._activateOutput();
-            }
-        });
+        if (state.responseQueue.length > 0 &&
+            state.responseQueue[0].res._outputBlocked) {
+            setImmediate(() => {
+                if (state.responseQueue.length > 0) {
+                    state.responseQueue[0].res._activateOutput();
+                }
+            });
+        }
 
         // Track active request inactivity via server.setTimeout().
         // Keep-alive idle timeout remains managed after responses finish.
@@ -1162,6 +1171,10 @@ function createConnectionParser(server, socket) {
 
         if (state.buffer.length > 0 && state.state === IDLE) {
             parseLoop();
+            if (state.responseQueue.length > 0 || state.current !== null) {
+                socket.setTimeout(server.timeout || 0);
+                return true;
+            }
         }
 
         if (state.readableEnded && state.closeAfterResponse && state.responseQueue.length === 0) {
@@ -1265,30 +1278,8 @@ function createConnectionParser(server, socket) {
                 const res = new ServerResponse(req, {
                     rejectNonStandardBodyWrites: server._rejectNonStandardBodyWrites,
                 });
-                if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
-                    res._keepAlive = false;
-                    res._outputBlocked = state.responseQueue.length > 0;
-                    const context = {
-                        req,
-                        res,
-                        responseFinished: false,
-                        shouldKeepAliveAfterResponse: false,
-                    };
-                    state.responseQueue.push(context);
-                    req.complete = true;
-                    state.current = null;
-                    state.buffer = Buffer.alloc(0);
-                    state.closeAfterResponse = true;
-                    state.state = IDLE;
-                    res.on('finish', function onFinish() {
-                        context.responseFinished = true;
-                        maybeFinalizeResponse(context);
-                    });
-                    res.statusCode = 503;
-                    res.statusMessage = 'Service Unavailable';
-                    res.end();
-                    return;
-                }
+                const isDroppedRequest = maxRequestsPerSocket > 0 &&
+                    requestNumber > maxRequestsPerSocket;
                 res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
                 res._keepAliveTimeout = server.keepAliveTimeout;
                 res._keepAliveMaxRequests = maxRequestsPerSocket;
@@ -1307,7 +1298,16 @@ function createConnectionParser(server, socket) {
                 // Set up finish handler for request sequencing
                 res.on('finish', function onFinish() {
                     context.responseFinished = true;
-                    context.shouldKeepAliveAfterResponse = res._keepAlive && !server._closeRequested;
+                    const responseConnection = res.getHeader('connection');
+                    const responseCloses = typeof responseConnection === 'string' &&
+                        responseConnection.toLowerCase().split(',').some(
+                            (token) => token.trim() === 'close'
+                        );
+                    context.shouldKeepAliveAfterResponse =
+                        connKeepAlive &&
+                        !isDroppedRequest &&
+                        !responseCloses &&
+                        !server._closeRequested;
                     maybeFinalizeResponse(context);
                 });
 
@@ -1344,7 +1344,14 @@ function createConnectionParser(server, socket) {
                     state.state = IDLE;
                 }
 
-                server.emit('request', req, res);
+                if (isDroppedRequest) {
+                    server.emit('dropRequest', req, socket);
+                    res.statusCode = 503;
+                    res.statusMessage = 'Service Unavailable';
+                    res.end();
+                } else {
+                    server.emit('request', req, res);
+                }
                 if (requestHasNoBody) {
                     // Emit EOF after request handlers had a chance to attach `end` listeners.
                     Promise.resolve().then(function () {
