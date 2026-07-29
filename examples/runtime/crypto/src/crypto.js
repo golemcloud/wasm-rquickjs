@@ -261,3 +261,17 @@ export async function subtleSignVerifyEd25519(message) {
     const signature = await crypto.subtle.sign('Ed25519', keyPair.privateKey, data);
     return await crypto.subtle.verify('Ed25519', keyPair.publicKey, signature, data);
 }
+
+export async function subtleSignVerifyRsaPss(message) {
+    const algorithm = {
+        name: 'RSA-PSS',
+        modulusLength: 1024,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+    };
+    const keyPair = await crypto.subtle.generateKey(algorithm, true, ['sign', 'verify']);
+    const data = new TextEncoder().encode(message);
+    const pss = { name: 'RSA-PSS', saltLength: 32 };
+    const signature = await crypto.subtle.sign(pss, keyPair.privateKey, data);
+    return await crypto.subtle.verify(pss, keyPair.publicKey, signature, data);
+}

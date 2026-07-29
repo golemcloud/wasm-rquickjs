@@ -34,4 +34,5 @@ world crypto {
   export subtle-digest-sha256: func(input: string) -> string;
   export subtle-sign-verify-hmac: func(message: string) -> bool;
   export subtle-sign-verify-ed25519: func(message: string) -> bool;
+  export subtle-sign-verify-rsa-pss: func(message: string) -> bool;
 }

@@ -1032,3 +1032,25 @@ async fn crypto_subtle_sign_verify_ed25519(
         _ => Err(anyhow!("Expected bool result")),
     }
 }
+
+#[test]
+async fn crypto_subtle_sign_verify_rsa_pss(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "subtle-sign-verify-rsa-pss",
+        &[Val::String("Hello, SubtleCrypto RSA-PSS!".to_string())],
+    )
+    .await;
+
+    let result = result?;
+    match result {
+        Some(Val::Bool(valid)) => {
+            assert!(valid, "SubtleCrypto RSA-PSS sign/verify should succeed");
+            Ok(())
+        }
+        _ => Err(anyhow!("Expected bool result")),
+    }
+}

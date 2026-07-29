@@ -9,6 +9,12 @@ edition = "2024"
 opt-level = "s"
 lto = true
 
+[profile.dev.package.rsa]
+opt-level = 3
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
 [lib]
 path = "src/lib.rs"
 crate-type = ["cdylib"]
