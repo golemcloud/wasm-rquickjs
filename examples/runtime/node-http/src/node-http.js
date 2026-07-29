@@ -478,12 +478,17 @@ export async function httpPipelinedCloseLifecycle() {
 export async function httpCloseIdleConnections() {
     return new Promise((resolve) => {
         let settled = false;
-        let partialClosed = false;
-        let idleClosed = false;
-        let cleanupStarted = false;
         let partialSocket;
         let idleSocket;
-        const server = http.createServer((_req, res) => res.end('ok'));
+        let partialResponse = '';
+        let idleResponse = '';
+        let observedPartialRequest = '';
+        const server = http.createServer((_req, res) => {
+            res.on('finish', () => {
+                setImmediate(() => server.closeIdleConnections());
+            });
+            res.end('ok');
+        });
 
         const finish = (result) => {
             if (settled) return;
@@ -496,35 +501,53 @@ export async function httpCloseIdleConnections() {
         };
         const timeout = setTimeout(() => finish(false), 2000);
 
+        let partialObserved = false;
+        server.on('connection', (socket) => {
+            socket.on('data', (chunk) => {
+                if (partialObserved) return;
+                observedPartialRequest += chunk.toString('latin1');
+                if (observedPartialRequest.includes('GET /partial HTTP/1.1')) {
+                    partialObserved = true;
+                    idleSocket = net.connect({ port: server.address().port });
+                    idleSocket.on('connect', () => {
+                        idleSocket.write('GET /idle HTTP/1.1\r\nHost: localhost\r\n\r\n');
+                    });
+                    idleSocket.on('data', (idleChunk) => {
+                        idleResponse += idleChunk.toString('latin1');
+                    });
+                    idleSocket.on('close', () => {
+                        if (!idleResponse.includes('HTTP/1.1 200') ||
+                            !idleResponse.includes('\r\n\r\nok')) {
+                            finish(false);
+                            return;
+                        }
+                        partialSocket.write('\r\n\r\n');
+                    });
+                    idleSocket.on('error', () => finish(false));
+                }
+            });
+        });
+
         server.listen(0, () => {
             const port = server.address().port;
             partialSocket = net.connect({ port });
-            idleSocket = net.connect({ port });
-            let response = '';
-
             partialSocket.on('connect', () => {
-                partialSocket.write('GET /partial HTTP/1.1\r\nHost: localhost');
+                partialSocket.write(
+                    'GET /partial HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Connection: close'
+                );
+            });
+            partialSocket.on('data', (chunk) => {
+                partialResponse += chunk.toString('latin1');
             });
             partialSocket.on('close', () => {
-                partialClosed = true;
+                finish(
+                    partialResponse.includes('HTTP/1.1 200') &&
+                    partialResponse.includes('\r\n\r\nok')
+                );
             });
-            partialSocket.on('error', () => {});
-
-            idleSocket.on('connect', () => {
-                idleSocket.write('GET /idle HTTP/1.1\r\nHost: localhost\r\n\r\n');
-            });
-            idleSocket.on('data', (chunk) => {
-                response += chunk.toString('latin1');
-                if (!cleanupStarted && response.includes('\r\n\r\nok')) {
-                    cleanupStarted = true;
-                    setImmediate(() => server.closeIdleConnections());
-                }
-            });
-            idleSocket.on('close', () => {
-                idleClosed = true;
-                setTimeout(() => finish(idleClosed && !partialClosed), 25);
-            });
-            idleSocket.on('error', () => finish(false));
+            partialSocket.on('error', () => finish(false));
         });
     });
 }
