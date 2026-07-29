@@ -14,7 +14,7 @@ async fn compiled_xhr() -> CompiledTest {
 
 #[test]
 async fn xhr_simple_get(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) =
         invoke_and_capture_output(compiled.wasm_path(), None, "simple-get", &[Val::U16(port)])
@@ -32,7 +32,7 @@ async fn xhr_simple_get(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::
 
 #[test]
 async fn xhr_simple_post(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) =
         invoke_and_capture_output(compiled.wasm_path(), None, "simple-post", &[Val::U16(port)])
@@ -51,7 +51,7 @@ async fn xhr_simple_post(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow:
 async fn xhr_set_request_headers(
     #[tagged_as("xhr")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -74,7 +74,7 @@ async fn xhr_set_request_headers(
 async fn xhr_get_response_headers(
     #[tagged_as("xhr")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -95,7 +95,7 @@ async fn xhr_get_response_headers(
 
 #[test]
 async fn xhr_response_types(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -116,7 +116,7 @@ async fn xhr_response_types(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyh
 
 #[test]
 async fn xhr_readystate_events(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -137,7 +137,7 @@ async fn xhr_readystate_events(#[tagged_as("xhr")] compiled: &CompiledTest) -> a
 
 #[test]
 async fn xhr_error_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -163,7 +163,7 @@ async fn xhr_error_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyh
 
 #[test]
 async fn xhr_abort_request(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -184,7 +184,7 @@ async fn xhr_abort_request(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyho
 
 #[test]
 async fn xhr_timeout_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -208,7 +208,7 @@ async fn xhr_timeout_handling(#[tagged_as("xhr")] compiled: &CompiledTest) -> an
 async fn xhr_post_with_form_data(
     #[tagged_as("xhr")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -231,7 +231,7 @@ async fn xhr_post_with_form_data(
 async fn xhr_post_with_json_body(
     #[tagged_as("xhr")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -252,7 +252,7 @@ async fn xhr_post_with_json_body(
 
 #[test]
 async fn xhr_basic_auth(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -273,7 +273,7 @@ async fn xhr_basic_auth(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::
 
 #[test]
 async fn xhr_status_is_number(#[tagged_as("xhr")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),

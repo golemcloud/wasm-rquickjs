@@ -14,7 +14,15 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
-pub async fn start_test_server() -> (u16, JoinHandle<()>) {
+pub struct TestServerHandle(JoinHandle<()>);
+
+impl Drop for TestServerHandle {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+pub async fn start_test_server() -> (u16, TestServerHandle) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
     let host_http_port = listener.local_addr().unwrap().port();
 
@@ -217,7 +225,7 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
         axum::serve(listener, router).await.unwrap();
     });
 
-    (host_http_port, handle)
+    (host_http_port, TestServerHandle(handle))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -257,4 +265,42 @@ struct State {
 struct MultiPartPart {
     name: String,
     data: Vec<u8>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TestServerHandle;
+    use std::future::pending;
+    use std::time::Duration;
+    use tokio::sync::oneshot;
+
+    struct NotifyOnDrop(Option<oneshot::Sender<()>>);
+
+    impl Drop for NotifyOnDrop {
+        fn drop(&mut self) {
+            if let Some(notify) = self.0.take() {
+                let _ = notify.send(());
+            }
+        }
+    }
+
+    #[test_r::test]
+    async fn test_server_handle_aborts_owned_task_on_drop() {
+        let (started_tx, started_rx) = oneshot::channel();
+        let (dropped_tx, dropped_rx) = oneshot::channel();
+        let task = tokio::spawn(async move {
+            let _notify_on_drop = NotifyOnDrop(Some(dropped_tx));
+            let _ = started_tx.send(());
+            pending::<()>().await;
+        });
+        let server = TestServerHandle(task);
+
+        started_rx.await.expect("server task did not start");
+        drop(server);
+
+        tokio::time::timeout(Duration::from_secs(1), dropped_rx)
+            .await
+            .expect("server task was not aborted")
+            .expect("server task dropped without notifying");
+    }
 }

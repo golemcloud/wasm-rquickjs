@@ -14,7 +14,7 @@ async fn compiled_node_http() -> CompiledTest {
 
 #[test]
 async fn node_http_get(#[tagged_as("node_http")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) =
         invoke_and_capture_output(compiled.wasm_path(), None, "http-get", &[Val::U16(port)]).await;
@@ -35,7 +35,7 @@ async fn node_http_get(#[tagged_as("node_http")] compiled: &CompiledTest) -> any
 async fn node_http_post_json(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     // First post to create a todo, then we check the response
     let (r, output) = invoke_and_capture_output(
@@ -61,7 +61,7 @@ async fn node_http_post_json(
 async fn node_http_request_with_headers(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
