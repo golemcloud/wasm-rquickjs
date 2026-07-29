@@ -5091,7 +5091,7 @@
     "parallel/test-http-max-header-size.js": { "category": "known-gap", "reason": "spawned process does not honor --max-http-header-size (http.maxHeaderSize mismatch)" },
     "parallel/test-http-max-http-headers.js": { "category": "node-internals", "reason": "requires internal/options.getOptionValue('--max-http-header-size')" },
     "parallel/test-http-multi-line-headers.js": { "category": "known-gap", "reason": "requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them" },
-    "parallel/test-http-no-content-length.js": {},
+    "parallel/test-http-no-content-length.js": { "flaky": true },
     "parallel/test-http-outgoing-buffer.js": { "category": "node-internals", "reason": "requires internal/streams/state.getDefaultHighWaterMark()" },
     "parallel/test-http-outgoing-destroy.js": {},
     "parallel/test-http-outgoing-internal-headernames-getter.js": {

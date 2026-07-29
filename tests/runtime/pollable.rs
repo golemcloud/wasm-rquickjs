@@ -20,7 +20,10 @@ async fn await_pollable(#[tagged_as("pollable")] compiled: &CompiledTest) -> any
     let Some(Val::U64(n)) = result else {
         return Err(anyhow!("Expected a u64 result"));
     };
-    assert!(n > 2000000000);
+    assert!(
+        n >= 2_000_000_000,
+        "pollable became ready before its two-second deadline: {n}ns"
+    );
     Ok(())
 }
 
