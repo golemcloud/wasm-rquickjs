@@ -713,6 +713,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         return false;
     }
 
+    if (this.socket && !this._outputBlocked && !this.socket.writableCorked) {
+        this.socket.cork();
+        process.nextTick((socket) => socket.uncork(), this.socket);
+    }
+
     if (!this._headersSentWire) {
         this._sendHeaders();
     }
@@ -746,11 +751,9 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._chunked) {
         const hex = chunk.length.toString(16);
-        this._writeOutput(Buffer.concat([
-            Buffer.from(hex + '\r\n'),
-            chunk,
-            CRLF,
-        ]), cb);
+        this._writeOutput(Buffer.from(hex + '\r\n'));
+        this._writeOutput(chunk);
+        this._writeOutput(CRLF, cb);
     } else {
         this._writeOutput(chunk, cb);
     }
@@ -1277,12 +1280,9 @@ function createConnectionParser(server, socket) {
                 res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
                 res._keepAliveTimeout = server.keepAliveTimeout;
                 res._keepAliveMaxRequests = maxRequestsPerSocket;
-                // Hold synchronous response framing until this parser turn has
-                // consumed all currently available pipelined requests. This
-                // keeps the head response atomic while later responses remain
-                // blocked behind it. Asynchronous/streaming writes proceed
-                // normally after onData returns.
-                res._outputBlocked = true;
+                // The queue head can write immediately. Later responses remain
+                // blocked until every earlier response has completed.
+                res._outputBlocked = state.responseQueue.length > 0;
                 const context = {
                     req,
                     res,

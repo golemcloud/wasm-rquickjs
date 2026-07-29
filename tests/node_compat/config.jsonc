@@ -7296,7 +7296,7 @@
     "parallel/test-pipe-head.js": { "category": "wasi-impossible", "reason": "requires external shell pipeline tooling (e.g. head), unavailable in WASM" },
     "parallel/test-pipe-stream.js": {},
     "parallel/test-pipe-unref.js": { "category": "wasi-impossible", "reason": "requires real child_process for fork/event-loop-exit semantics" },
-    "parallel/test-pipe-writev.js": { "category": "known-gap", "reason": "pipe/net edge case" },
+    "parallel/test-pipe-writev.js": {},
     "parallel/test-preload-print-process-argv.js": { "category": "known-gap", "reason": "child_process execPath emulation has incomplete --require preload/argv handling" },
     "parallel/test-preload-self-referential.js": { "category": "known-gap", "reason": "child_process execPath emulation lacks cwd-relative --require preload resolution for self-referential packages" },
     "parallel/test-preload-worker.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },

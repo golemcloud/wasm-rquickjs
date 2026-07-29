@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3233/4425 (73.1%)
+**Primary compatibility (CI-enforced):** 3234/4425 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3233 | 73.1% | 56.2% | 47.0% |
-| 🧩 known gap | 1192 | 26.9% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3234 | 73.1% | 56.2% | 47.1% |
+| 🧩 known gap | 1191 | 26.9% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3233/5750 (56.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3234/5750 (56.2%)**.
 
 ## Inventory by Module
 
@@ -54,7 +54,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
-| net | 223 | 147 | 39 | 19 | 1 | 0 | 17 | 79.0% | 71.4% |
+| net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | other | 614 | 187 | 145 | 86 | 13 | 0 | 183 | 56.3% | 43.4% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1192)
+### known gap (1191)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1180,7 +1180,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | performance.timerify function entries are not implemented | 1 | `parallel/test-performance-function-async.js` |
 | permission mode does not yet honor --allow-addons/node-addons export-condition semantics | 1 | `parallel/test-permission-no-addons.js` |
 | permission security-warning emission for --allow-* flags is incomplete | 1 | `parallel/test-permission-warning-flags.js` |
-| pipe/net edge case | 1 | `parallel/test-pipe-writev.js` |
 | pipelined responses with forced socket destroy trigger unhandled readable-stream rejection | 1 | `parallel/test-http-many-ended-pipelines.js` |
 | postMessage function cloning should throw DataCloneError | 1 | `parallel/test-worker-message-port-transfer-native.js#block_00_block_00` |
 | postMessage transferList argument validation is not Node-compatible yet | 1 | `parallel/test-worker-message-port.js#block_05_block_05` |

@@ -1071,6 +1071,13 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     })();
 };
 
+Socket.prototype._writev = function _writev(chunks, callback) {
+    const buffers = chunks.map(({ chunk, encoding }) => (
+        typeof chunk === 'string' ? Buffer.from(chunk, encoding) : Buffer.from(chunk)
+    ));
+    this._write(Buffer.concat(buffers), 'buffer', callback);
+};
+
 Socket.prototype._final = function _final(callback) {
     if (this.connecting) {
         this.once('connect', () => this._final(callback));
