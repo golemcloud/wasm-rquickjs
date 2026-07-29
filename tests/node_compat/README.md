@@ -44,7 +44,7 @@ developer runs the vendor script to populate it.
 are run by the test harness. Each entry can include:
 
 - `{}` — test should pass
-- `{ "flaky": true }` — retry up to 3 times
+- `{ "flaky": true }` — retry up to 10 times
 - `{ "skip": true, "reason": "..." }` — skip with explanation
 
 ## Common Shim

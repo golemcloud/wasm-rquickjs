@@ -12,7 +12,7 @@
   //                         "engine-difference" - V8 behavior QuickJS cannot reasonably mirror
   //                         "node-internals"    - tests Node.js internals/implementation details
   //                         "unevaluated"       - not triaged yet; excluded from percentages
-  //   "flaky": true       - retry up to 3 times before failing
+  //   "flaky": true       - retry up to 10 times before failing
   //   "reason": "..."     - explanation for skip/flaky/impossible marking
   //
   // Only tests listed here will be run by the test harness.
