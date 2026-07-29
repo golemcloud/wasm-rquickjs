@@ -610,14 +610,14 @@ ServerResponse.prototype._sendHeaders = function _sendHeaders() {
 ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
     this._pendingOutputWrites++;
     let completed = false;
-    const onComplete = (error) => {
+    const onComplete = (error, invokeCallback = true) => {
         if (completed) return;
         completed = true;
         if (error && this._outputError === undefined) {
             this._outputError = error;
         }
         try {
-            if (typeof callback === 'function') {
+            if (invokeCallback && typeof callback === 'function') {
                 callback(error);
             }
         } finally {
@@ -641,7 +641,10 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
         }
     }
     if (this.socket && this.socket.destroyed) {
-        onComplete(new Error('Socket is closed'));
+        // Node drops informational writes made after the response socket
+        // closes without invoking their public callbacks. Retire our internal
+        // accounting without exposing a callback Node would not emit.
+        onComplete(new Error('Socket is closed'), false);
         return false;
     }
     this._pendingOutput.push({ data, callback: onComplete });

@@ -537,15 +537,11 @@ export async function httpInformationalWriteAfterClose() {
                 let callbackCount = 0;
                 res.writeEarlyHints(
                     { link: '</after-close.js>; rel=preload' },
-                    (error) => {
+                    () => {
                         callbackCount++;
-                        setImmediate(() => finish(
-                            callbackCount === 1 &&
-                            error instanceof Error &&
-                            error.message === 'Socket is closed'
-                        ));
                     }
                 );
+                setTimeout(() => finish(callbackCount === 0), 30);
             });
             res.end('ok');
         });

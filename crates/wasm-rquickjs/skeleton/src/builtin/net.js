@@ -1073,7 +1073,11 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
 
 Socket.prototype._writev = function _writev(chunks, callback) {
     const buffers = chunks.map(({ chunk, encoding }) => (
-        typeof chunk === 'string' ? Buffer.from(chunk, encoding) : Buffer.from(chunk)
+        typeof chunk === 'string'
+            ? Buffer.from(chunk, encoding)
+            : Buffer.isBuffer(chunk)
+                ? chunk
+                : Buffer.from(chunk)
     ));
     const totalLength = buffers.reduce((total, buffer) => total + buffer.length, 0);
 
