@@ -663,9 +663,8 @@ ServerResponse.prototype._activateOutput = function _activateOutput() {
     if (pending.length === 0) return;
 
     if (!this.socket || this.socket.destroyed) {
-        for (const entry of pending) {
-            entry.callback(new Error('Socket is closed'), false, false);
-        }
+        this._pendingOutput = pending;
+        this._abortPendingOutput(new Error('Socket is closed'));
         return;
     }
 
