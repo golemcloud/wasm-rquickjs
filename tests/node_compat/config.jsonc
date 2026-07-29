@@ -4523,7 +4523,7 @@
     "parallel/test-http-invalidheaderfield.js": { "category": "known-gap", "reason": "HTTP header-name validation/request lifecycle behavior can hang" },
     "parallel/test-http-keep-alive-close-on-header.js": { "category": "known-gap", "reason": "Agent/socket bookkeeping on 'Connection: close' responses is not Node-compatible" },
     "parallel/test-http-keep-alive-drop-requests.js": {},
-    "parallel/test-http-keep-alive-max-requests.js": { "category": "known-gap", "reason": "accepting a second connection force-closes the first idle keep-alive connection, breaking the test's per-socket max-request isolation" },
+    "parallel/test-http-keep-alive-max-requests.js": {},
     "parallel/test-http-keep-alive-pipeline-max-requests.js": {},
     "parallel/test-http-keep-alive-timeout-custom.js": { "category": "known-gap", "reason": "wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients" },
     "parallel/test-http-keep-alive-timeout-race-condition.js": { "category": "known-gap", "reason": "keep-alive socket timeout/reuse race handling is not Node-compatible" },
