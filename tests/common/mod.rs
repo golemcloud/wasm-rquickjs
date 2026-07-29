@@ -1430,6 +1430,16 @@ impl FeatureCombination {
             }
         }
     }
+
+    fn includes_crypto_full(self) -> bool {
+        matches!(
+            self,
+            FeatureCombination::Full
+                | FeatureCombination::FullNoLogging
+                | FeatureCombination::FullWithGolem
+                | FeatureCombination::FullNoLoggingWithGolem
+        )
+    }
 }
 
 pub struct PreparedComponent {
@@ -2014,6 +2024,14 @@ impl CompiledTest {
                     "cargo_args",
                     feature_combination.cargo_args_for_target(target).join("|"),
                 ),
+                (
+                    "crypto_dev_opt_level",
+                    feature_combination
+                        .includes_crypto_full()
+                        .then_some("3")
+                        .unwrap_or("default")
+                        .to_string(),
+                ),
             ],
         );
 
@@ -2093,6 +2111,13 @@ impl CompiledTest {
             }
             if offline {
                 command.arg("--offline");
+            }
+            if feature_combination.includes_crypto_full() {
+                command
+                    .arg("--config")
+                    .arg("profile.dev.package.rsa.opt-level=3")
+                    .arg("--config")
+                    .arg("profile.dev.package.num-bigint-dig.opt-level=3");
             }
             command.arg("--target").arg("wasm32-wasip2");
             if use_shared_target {
