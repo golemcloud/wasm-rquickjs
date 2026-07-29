@@ -178,3 +178,35 @@ async fn node_http_response_lifecycle(
     assert_eq!(r?, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn node_http_pipelined_response_order(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-response-order",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipelined_close_lifecycle(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-close-lifecycle",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}

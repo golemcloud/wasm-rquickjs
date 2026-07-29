@@ -33,7 +33,6 @@ const HEADERS = 0;
 const BODY_CONTENT_LENGTH = 1;
 const BODY_CHUNKED = 2;
 const IDLE = 3;
-const AWAITING_RESPONSE = 4;
 
 const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
@@ -237,6 +236,7 @@ function ServerResponse(req, options) {
     this._pendingOutputWrites = 0;
     this._outputCompletionCallbacks = [];
     this._outputError = undefined;
+    this._outputBlocked = false;
 
     // strictContentLength enforcement
     this.strictContentLength = false;
@@ -560,11 +560,6 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         }
     }
 
-    // Implicit Transfer-Encoding (after user headers)
-    if (addImplicitTE) {
-        head += 'Transfer-Encoding: chunked\r\n';
-    }
-
     // Implicit Connection header (after user headers)
     const userConnection = this.getHeader('connection');
     const userConnectionTokens = typeof userConnection === 'string'
@@ -594,6 +589,11 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
             head += ', max=' + this._keepAliveMaxRequests;
         }
         head += '\r\n';
+    }
+
+    // Node writes implicit framing after the connection persistence headers.
+    if (addImplicitTE) {
+        head += 'Transfer-Encoding: chunked\r\n';
     }
 
     head += '\r\n';
@@ -632,7 +632,7 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
         }
     };
 
-    if (this.socket && !this.socket.destroyed) {
+    if (this.socket && !this.socket.destroyed && !this._outputBlocked) {
         try {
             return this.socket.write(data, onComplete);
         } catch (error) {
@@ -642,6 +642,39 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
     }
     this._pendingOutput.push({ data, callback: onComplete });
     return false;
+};
+
+ServerResponse.prototype._activateOutput = function _activateOutput() {
+    if (!this._outputBlocked) return;
+    this._outputBlocked = false;
+
+    const pending = this._pendingOutput;
+    this._pendingOutput = [];
+    if (pending.length === 0) return;
+
+    if (!this.socket || this.socket.destroyed) {
+        for (const entry of pending) {
+            entry.callback(new Error('Socket is closed'));
+        }
+        return;
+    }
+
+    for (const entry of pending) {
+        try {
+            this.socket.write(entry.data, entry.callback);
+        } catch (error) {
+            entry.callback(error);
+        }
+    }
+};
+
+ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(error) {
+    this._outputBlocked = false;
+    const pending = this._pendingOutput;
+    this._pendingOutput = [];
+    for (const entry of pending) {
+        entry.callback(error);
+    }
 };
 
 ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
@@ -713,9 +746,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._chunked) {
         const hex = chunk.length.toString(16);
-        this._writeOutput(Buffer.from(hex + '\r\n'));
-        this._writeOutput(chunk);
-        this._writeOutput(CRLF, cb);
+        this._writeOutput(Buffer.concat([
+            Buffer.from(hex + '\r\n'),
+            chunk,
+            CRLF,
+        ]), cb);
     } else {
         this._writeOutput(chunk, cb);
     }
@@ -836,13 +871,6 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
         encoding = undefined;
     }
 
-    if (!this.socket || this.socket.destroyed) {
-        if (typeof callback === 'function') {
-            callback(new Error('Socket is closed'));
-        }
-        return false;
-    }
-
     let chunk;
     if (typeof data === 'string') {
         chunk = Buffer.from(data, encoding || 'latin1');
@@ -854,18 +882,15 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
         chunk = Buffer.from(String(data), encoding || 'latin1');
     }
 
-    if (typeof callback === 'function') {
-        return this.socket.write(chunk, callback);
-    }
-    return this.socket.write(chunk);
+    return this._writeOutput(chunk, callback);
 };
 
 ServerResponse.prototype.writeContinue = function writeContinue() {
-    this.socket.write(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
+    this._writeOutput(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
 };
 
 ServerResponse.prototype.writeProcessing = function writeProcessing() {
-    this.socket.write(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'));
+    this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'));
 };
 
 const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;
@@ -922,11 +947,7 @@ ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
     }
     head += '\r\n';
 
-    if (typeof cb === 'function') {
-        this.socket.write(Buffer.from(head), cb);
-    } else {
-        this.socket.write(Buffer.from(head));
-    }
+    this._writeOutput(Buffer.from(head), cb);
 };
 
 ServerResponse.prototype.addTrailers = function addTrailers() {
@@ -973,20 +994,16 @@ function createConnectionParser(server, socket) {
         buffer: Buffer.alloc(0),
         state: IDLE,
         socket: socket,
-        req: null,
-        res: null,
+        current: null,
+        responseQueue: [],
         contentLength: 0,
         bodyReceived: 0,
         chunkState: null,
         readableEnded: false,
         closeAfterResponse: false,
-        responseFinished: false,
-        shouldKeepAliveAfterResponse: false,
         requestsServed: 0,
         detached: false,
     };
-
-    const keepAlive = computeKeepAlive(null, '1.1');
 
     // Install a single timeout handler for idle keep-alive connections
     socket.on('timeout', function onIdleTimeout() {
@@ -1010,10 +1027,15 @@ function createConnectionParser(server, socket) {
 
         state.buffer = Buffer.concat([state.buffer, data]);
         parseLoop();
+        setImmediate(() => {
+            if (state.responseQueue.length > 0) {
+                state.responseQueue[0].res._activateOutput();
+            }
+        });
 
         // Track active request inactivity via server.setTimeout().
         // Keep-alive idle timeout remains managed after responses finish.
-        if (state.res && !state.responseFinished) {
+        if (state.responseQueue.some((context) => !context.responseFinished)) {
             socket.setTimeout(server.timeout || 0);
         }
     });
@@ -1023,14 +1045,14 @@ function createConnectionParser(server, socket) {
 
         state.readableEnded = true;
 
-        if (state.req && !state.req.aborted) {
-            if (!state.req.complete) {
-                state.req.complete = true;
-                state.req.push(null);
+        for (const context of state.responseQueue) {
+            if (!context.req.aborted && !context.req.complete) {
+                context.req.complete = true;
+                context.req.push(null);
             }
-            if (!state.responseFinished) {
-                state.req.aborted = true;
-                state.req.emit('aborted');
+            if (!context.responseFinished && !context.req.aborted) {
+                context.req.aborted = true;
+                context.req.emit('aborted');
             }
         }
 
@@ -1039,7 +1061,7 @@ function createConnectionParser(server, socket) {
             return;
         }
 
-        const hasPendingResponse = state.res !== null;
+        const hasPendingResponse = state.responseQueue.length > 0;
         const hasBufferedRequests = state.buffer.length > 0;
         if (hasPendingResponse || hasBufferedRequests) {
             state.closeAfterResponse = true;
@@ -1055,49 +1077,55 @@ function createConnectionParser(server, socket) {
     socket.on('error', function onError(err) {
         if (state.detached) return;
 
-        if (state.req && !state.req.aborted) {
-            if (!state.req.complete) {
-                state.req.complete = true;
-                state.req.push(null);
+        for (const context of state.responseQueue) {
+            context.res._abortPendingOutput(err);
+            if (!context.req.aborted) {
+                if (!context.req.complete) {
+                    context.req.complete = true;
+                    context.req.push(null);
+                }
+                context.req.aborted = true;
+                context.req.emit('aborted');
+                context.req.emit('error', err);
             }
-            state.req.aborted = true;
-            state.req.emit('aborted');
-            state.req.emit('error', err);
         }
     });
 
     socket.on('close', function onClose() {
         if (state.detached) return;
 
-        if (state.req && !state.req.aborted) {
-            if (!state.req.complete) {
-                state.req.complete = true;
-                state.req.push(null);
+        for (const context of state.responseQueue) {
+            context.res._abortPendingOutput(new Error('Socket is closed'));
+            if (!context.req.aborted) {
+                if (!context.req.complete) {
+                    context.req.complete = true;
+                    context.req.push(null);
+                }
+                if (!context.responseFinished) {
+                    context.req.aborted = true;
+                    context.req.emit('aborted');
+                }
             }
-            if (!state.responseFinished) {
-                state.req.aborted = true;
-                state.req.emit('aborted');
-            }
+            closeServerResponse(context.res);
         }
-        closeServerResponse(state.res);
     });
 
-    function maybeFinalizeResponse() {
-        if (!state.responseFinished) {
+    function maybeFinalizeResponse(context) {
+        if (!context.responseFinished) {
             return false;
         }
 
-        if (state.req && !state.req.complete) {
+        if (!context.req.complete) {
             return false;
         }
 
-        const shouldKeepAlive = state.shouldKeepAliveAfterResponse;
-        const finishedRes = state.res;
-        state.responseFinished = false;
-        state.shouldKeepAliveAfterResponse = false;
-        state.req = null;
-        state.res = null;
-        state.state = IDLE;
+        if (state.responseQueue[0] !== context) {
+            return false;
+        }
+
+        const shouldKeepAlive = context.shouldKeepAliveAfterResponse;
+        const finishedRes = context.res;
+        state.responseQueue.shift();
 
         // Emit 'close' on the response asynchronously, matching Node.js
         // OutgoingMessage behavior where 'close' fires after 'finish'.
@@ -1107,17 +1135,21 @@ function createConnectionParser(server, socket) {
             });
         }
 
+        if (state.responseQueue.length > 0) {
+            state.responseQueue[0].res._activateOutput();
+            return true;
+        }
+
         if (!shouldKeepAlive) {
             socket.end();
             return true;
         }
 
-        if (state.buffer.length > 0) {
+        if (state.buffer.length > 0 && state.state === IDLE) {
             parseLoop();
-            return true;
         }
 
-        if (state.readableEnded && state.closeAfterResponse) {
+        if (state.readableEnded && state.closeAfterResponse && state.responseQueue.length === 0) {
             socket.end();
             return true;
         }
@@ -1146,6 +1178,10 @@ function createConnectionParser(server, socket) {
 
             if (state.state === IDLE || state.state === HEADERS) {
                 state.state = HEADERS;
+                while (state.buffer.length >= 2 &&
+                    state.buffer[0] === 0x0d && state.buffer[1] === 0x0a) {
+                    state.buffer = state.buffer.slice(2);
+                }
                 const idx = bufferIndexOf(state.buffer, HEADER_END);
                 if (idx === -1) continue;
 
@@ -1173,8 +1209,7 @@ function createConnectionParser(server, socket) {
                     const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
                     state.buffer = Buffer.alloc(0);
                     state.detached = true;
-                    state.req = null;
-                    state.res = null;
+                    state.current = null;
                     req.complete = true;
 
                     if (server.listenerCount('connect') > 0) {
@@ -1193,8 +1228,7 @@ function createConnectionParser(server, socket) {
                     const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
                     state.buffer = Buffer.alloc(0);
                     state.detached = true;
-                    state.req = null;
-                    state.res = null;
+                    state.current = null;
                     req.complete = true;
                     server.emit('upgrade', req, socket, head);
                     return;
@@ -1213,28 +1247,56 @@ function createConnectionParser(server, socket) {
                     ? 0
                     : Math.max(0, server.maxRequestsPerSocket | 0);
                 const requestNumber = ++state.requestsServed;
-                if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
-                    socket.write(Buffer.from('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'));
-                    socket.end();
-                    return;
-                }
                 const res = new ServerResponse(req, {
                     rejectNonStandardBodyWrites: server._rejectNonStandardBodyWrites,
                 });
+                if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
+                    res._keepAlive = false;
+                    res._outputBlocked = true;
+                    const context = {
+                        req,
+                        res,
+                        responseFinished: false,
+                        shouldKeepAliveAfterResponse: false,
+                    };
+                    state.responseQueue.push(context);
+                    req.complete = true;
+                    state.current = null;
+                    state.buffer = Buffer.alloc(0);
+                    state.closeAfterResponse = true;
+                    state.state = IDLE;
+                    res.on('finish', function onFinish() {
+                        context.responseFinished = true;
+                        maybeFinalizeResponse(context);
+                    });
+                    res.statusCode = 503;
+                    res.statusMessage = 'Service Unavailable';
+                    res.end();
+                    return;
+                }
                 res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
                 res._keepAliveTimeout = server.keepAliveTimeout;
                 res._keepAliveMaxRequests = maxRequestsPerSocket;
-
-                state.req = req;
-                state.res = res;
-                state.responseFinished = false;
-                state.shouldKeepAliveAfterResponse = false;
+                // Hold synchronous response framing until this parser turn has
+                // consumed all currently available pipelined requests. This
+                // keeps the head response atomic while later responses remain
+                // blocked behind it. Asynchronous/streaming writes proceed
+                // normally after onData returns.
+                res._outputBlocked = true;
+                const context = {
+                    req,
+                    res,
+                    responseFinished: false,
+                    shouldKeepAliveAfterResponse: false,
+                };
+                state.responseQueue.push(context);
+                state.current = context;
 
                 // Set up finish handler for request sequencing
                 res.on('finish', function onFinish() {
-                    state.responseFinished = true;
-                    state.shouldKeepAliveAfterResponse = res._keepAlive && !server._closeRequested;
-                    maybeFinalizeResponse();
+                    context.responseFinished = true;
+                    context.shouldKeepAliveAfterResponse = res._keepAlive && !server._closeRequested;
+                    maybeFinalizeResponse(context);
                 });
 
                 const cl = req.headers['content-length'];
@@ -1266,8 +1328,7 @@ function createConnectionParser(server, socket) {
                     // No body
                     req.complete = true;
                     requestHasNoBody = true;
-                    // Keep parsing pipelined requests even if earlier responses
-                    // have not finished yet.
+                    state.current = null;
                     state.state = IDLE;
                 }
 
@@ -1284,18 +1345,20 @@ function createConnectionParser(server, socket) {
 
             if (state.state === BODY_CONTENT_LENGTH) {
                 if (state.buffer.length === 0) continue;
+                const context = state.current;
                 const remaining = state.contentLength - state.bodyReceived;
                 const available = Math.min(state.buffer.length, remaining);
                 const chunk = state.buffer.slice(0, available);
                 state.buffer = state.buffer.slice(available);
                 state.bodyReceived += available;
-                state.req.push(chunk);
+                context.req.push(chunk);
 
                 if (state.bodyReceived >= state.contentLength) {
-                    state.req.complete = true;
-                    state.req.push(null);
-                    state.state = AWAITING_RESPONSE;
-                    maybeFinalizeResponse();
+                    context.req.complete = true;
+                    context.req.push(null);
+                    state.current = null;
+                    state.state = IDLE;
+                    maybeFinalizeResponse(context);
                 }
                 progress = true;
                 continue;
@@ -1306,10 +1369,12 @@ function createConnectionParser(server, socket) {
                 if (result === 'progress') {
                     progress = true;
                 } else if (result === 'done') {
-                    state.req.complete = true;
-                    state.req.push(null);
-                    state.state = AWAITING_RESPONSE;
-                    maybeFinalizeResponse();
+                    const context = state.current;
+                    context.req.complete = true;
+                    context.req.push(null);
+                    state.current = null;
+                    state.state = IDLE;
+                    maybeFinalizeResponse(context);
                     progress = true;
                 } else if (result === 'error') {
                     server.emit('clientError', new Error('HPE_INVALID_CHUNK'), socket);
@@ -1386,7 +1451,7 @@ function parseChunked(state) {
             const chunk = state.buffer.slice(0, available);
             state.buffer = state.buffer.slice(available);
             state.bodyReceived += available;
-            state.req.push(chunk);
+            state.current.req.push(chunk);
             if (state.bodyReceived >= state.contentLength) {
                 state.chunkState = 'TRAILER';
             }
@@ -1564,7 +1629,7 @@ function Server(options, requestListener) {
         // its first request bytes arrive, and closing it here would race
         // against the in-flight request (the client would see ECONNRESET).
         for (const conn of self._httpConnections) {
-            if (conn.state === IDLE && conn.requestsServed > 0 &&
+            if (conn.state === IDLE && conn.responseQueue.length === 0 && conn.requestsServed > 0 &&
                 conn.socket && !conn.socket.destroyed) {
                 // Use force_close on the native handle to immediately release
                 // WASI resources, even if async poll loops hold pollables.
@@ -1615,7 +1680,8 @@ Server.prototype.closeAllConnections = function closeAllConnections() {
 
 Server.prototype.closeIdleConnections = function closeIdleConnections() {
     for (const conn of this._httpConnections) {
-        if (conn.state === IDLE && conn.socket && !conn.socket.destroyed) {
+        if (conn.state === IDLE && conn.responseQueue.length === 0 &&
+            conn.socket && !conn.socket.destroyed) {
             conn.socket.end();
         }
     }

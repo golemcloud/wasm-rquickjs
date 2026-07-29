@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import * as net from 'node:net';
 import { EventEmitter } from 'node:events';
 
 // Test 1: http.get - use await on the _endPromise to let the runtime drive it
@@ -361,4 +362,115 @@ export function httpResponseLifecycle() {
         writeOrder.join(',') === 'after-write,callback' &&
         nullCode === 'ERR_STREAM_NULL_VALUES' &&
         typeCode === 'ERR_INVALID_ARG_TYPE';
+}
+
+export async function httpPipelinedResponseOrder() {
+    return new Promise((resolve) => {
+        let settled = false;
+        const server = http.createServer((req, res) => {
+            if (req.url === '/first') {
+                setTimeout(() => res.end('first'), 25);
+                return;
+            }
+
+            res.writeContinue();
+            res.writeProcessing();
+            res.writeEarlyHints({ link: '</asset.js>; rel=preload' });
+            res.end('second');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            server.close(() => resolve(result));
+        };
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            let wire = '';
+            const timeout = setTimeout(() => {
+                socket.destroy();
+                finish(false);
+            }, 2000);
+
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /second HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => {
+                clearTimeout(timeout);
+                finish(false);
+            });
+            socket.on('end', () => {
+                clearTimeout(timeout);
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const firstBody = wire.indexOf('first', firstStatus);
+                const continued = wire.indexOf('HTTP/1.1 100 Continue', firstBody);
+                const processing = wire.indexOf('HTTP/1.1 102 Processing', continued);
+                const earlyHints = wire.indexOf('HTTP/1.1 103 Early Hints', processing);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', firstStatus + 1);
+                const secondBody = wire.indexOf('second', secondStatus);
+                finish(firstStatus !== -1 &&
+                    firstBody > firstStatus &&
+                    continued > firstBody &&
+                    processing > continued &&
+                    earlyHints > processing &&
+                    secondStatus > earlyHints &&
+                    secondBody > secondStatus);
+            });
+        });
+    });
+}
+
+export async function httpPipelinedCloseLifecycle() {
+    return new Promise((resolve) => {
+        let secondResponse;
+        let settled = false;
+        const events = [];
+        const server = http.createServer((req, res) => {
+            if (req.url === '/first') {
+                setTimeout(() => res.destroy(), 25);
+                return;
+            }
+
+            secondResponse = res;
+            res.on('error', () => events.push('error'));
+            res.on('finish', () => events.push('finish'));
+            res.on('close', () => {
+                events.push('close');
+                setImmediate(() => finish(
+                    events.join(',') === 'error,close' &&
+                    secondResponse._pendingOutputWrites === 0
+                ));
+            });
+            res.end('second');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            server.close(() => resolve(result));
+        };
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            const timeout = setTimeout(() => {
+                socket.destroy();
+                finish(false);
+            }, 2000);
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                );
+            });
+            socket.on('error', () => {});
+            socket.on('close', () => clearTimeout(timeout));
+        });
+    });
 }
