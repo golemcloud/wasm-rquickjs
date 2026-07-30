@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3239/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3228/4425 (72.9%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3239 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1186 | 26.8% | 20.6% | 17.3% |
+| ✅ passing (runnable) | 3228 | 72.9% | 56.1% | 47.0% |
+| 🧩 known gap | 1197 | 27.1% | 20.8% | 17.4% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3228/5750 (56.1%)**.
 
 ## Inventory by Module
 
@@ -84,7 +84,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
+| whatwg | 261 | 43 | 32 | 0 | 0 | 0 | 186 | 57.3% | 57.3% |
 | worker_threads | 189 | 4 | 51 | 126 | 0 | 0 | 8 | 7.3% | 2.2% |
 | zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
 
@@ -616,7 +616,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-webstreams-pipeline.js` | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-encoding-custom-fatal-streaming.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-whatwg-encoding-custom-interop.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
-| `test-whatwg-encoding-custom-textdecoder.js` | 12 | 11 | 1 | 0 | 0 | 0 | 0 |
+| `test-whatwg-encoding-custom-textdecoder.js` | 12 | 0 | 12 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-passive.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-signal.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-customevent.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1186)
+### known gap (1197)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -697,6 +697,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
 | inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 11 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+8) |
+| inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility | 11 | `parallel/test-whatwg-encoding-custom-textdecoder.js#block_00_test_textdecoder_utf_8_fatal_false_ignorebom_false`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_01_test_textdecoder_utf_8_fatal_false_ignorebom_true`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_02_invalid_encoders`, ... (+8) |
 | net.js TCP implementation incomplete - needs event handling and API fixes | 11 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+8) |
 | remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps | 11 | `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_00_a_mjs_b_cjs_c_mjs_a_mjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_01_b_cjs_c_mjs_a_mjs_b_cjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_02_c_mjs_a_mjs_b_cjs_c_mjs`, ... (+8) |
 | wasi:sockets UDP implementation hangs in wasmtime | 11 | `parallel/test-dgram-implicit-bind.js`, `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`, `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`, ... (+8) |
