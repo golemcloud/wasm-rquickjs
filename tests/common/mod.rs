@@ -217,7 +217,9 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnectionWithStore<Host
             ws_mock_p3::golem::websocket::client::Error,
         >,
     > {
-        Ok(Ok(None))
+        Ok(Err(ws_mock_p3::golem::websocket::client::Error::Closed(
+            None,
+        )))
     }
 }
 

@@ -325,7 +325,9 @@ class WebSocket {
                         byteLength: entry.byteLength,
                     };
                 }
-                if (!this._connection) throw new Error('WebSocket connection is closed');
+                if (!this._connection || this._readyState === CLOSED) {
+                    throw new Error('WebSocket connection is closed');
+                }
                 this._sendEntry(entry);
             }
             this._sendQueue.length = 0;
@@ -336,10 +338,13 @@ class WebSocket {
             this._sendQueue.length = 0;
             this._sendQueueIndex = 0;
             this._pendingClose = null;
+            const wasClosed = this._readyState === CLOSED;
             this._readyState = CLOSED;
             this._connection = null;
-            this._dispatch('error', new ErrorEvent(e.message || String(e)));
-            this._dispatch('close', new CloseEvent(1006, '', false));
+            if (!wasClosed) {
+                this._dispatch('error', new ErrorEvent(e.message || String(e)));
+                this._dispatch('close', new CloseEvent(1006, '', false));
+            }
         } finally {
             this._sendPending = false;
         }

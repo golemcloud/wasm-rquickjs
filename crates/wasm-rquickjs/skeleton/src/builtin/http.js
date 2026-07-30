@@ -1104,7 +1104,7 @@ export class Request {
         } else if (this._body instanceof ArrayBuffer) {
             return new Uint8Array(this._body);
         } else if (ArrayBuffer.isView(this._body)) {
-            return viewToBytes(this._body);
+            return viewToBytes(this._body).slice();
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new TextEncoder().encode(this._body);
         } else {

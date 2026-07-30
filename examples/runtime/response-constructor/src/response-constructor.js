@@ -323,7 +323,9 @@ const responseConstructorExports = {
             });
             const requestClone = request.clone();
             requestBacking.fill(8);
-            eq(new Uint8Array(await request.arrayBuffer()), [4, 5, 6], 'Request');
+            const returnedBytes = await request.bytes();
+            eq(returnedBytes, [4, 5, 6], 'Request');
+            returnedBytes.fill(7);
             eq(new Uint8Array(await requestClone.arrayBuffer()), [4, 5, 6], 'Request clone');
             return ok(name);
         } catch (e) { return fail(name, e); }
