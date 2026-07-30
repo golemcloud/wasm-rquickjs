@@ -1,4 +1,4 @@
-use crate::common::test_server::start_test_server;
+use crate::common::test_server::{start_abort_test_server, start_test_server};
 use crate::common::{CompiledTest, TestTarget, invoke_and_capture_output, test_target};
 use camino::Utf8Path;
 
@@ -929,4 +929,70 @@ async fn fetch_function_shape(#[tagged_as("fetch")] compiled: &CompiledTest) -> 
     assert!(output.contains("fetch function shape matches Node: PASSED"));
 
     Ok(())
+}
+
+#[test]
+async fn fetch_abort_releases_request(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _server, mut arrivals) = start_abort_test_server().await;
+    let wasm_path = compiled.wasm_path().to_path_buf();
+    let invocation = tokio::spawn(async move {
+        invoke_and_capture_output(
+            &wasm_path,
+            None,
+            "abort-releases-request",
+            &[Val::U16(port)],
+        )
+        .await
+    });
+
+    tokio::time::timeout(std::time::Duration::from_secs(5), arrivals.recv())
+        .await
+        .expect("timed out waiting for /slow-response")
+        .expect("abort test server stopped before the request arrived");
+    let (result, output) = tokio::time::timeout(std::time::Duration::from_secs(5), invocation)
+        .await
+        .expect("aborted fetch kept the component invocation alive")?;
+    assert_eq!(
+        result?,
+        Some(Val::Bool(true)),
+        "fetch must reject with the signal's exact reason. Output:\n{output}"
+    );
+    Ok(())
+}
+
+async fn run_abort_case(compiled: &CompiledTest, function: &'static str) -> anyhow::Result<()> {
+    let (port, _server, mut arrivals) = start_abort_test_server().await;
+    let wasm_path = compiled.wasm_path().to_path_buf();
+    let invocation = tokio::spawn(async move {
+        invoke_and_capture_output(&wasm_path, None, function, &[Val::U16(port)]).await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(5), arrivals.recv())
+        .await
+        .expect("timed out waiting for /slow-response")
+        .expect("abort test server stopped before the request arrived");
+    let (result, output) = tokio::time::timeout(std::time::Duration::from_secs(5), invocation)
+        .await
+        .unwrap_or_else(|_| panic!("{function} kept the component invocation alive"))?;
+    assert_eq!(
+        result?,
+        Some(Val::Bool(true)),
+        "{function} must cancel native work and preserve the exact reason. Output:\n{output}"
+    );
+    Ok(())
+}
+
+#[test]
+async fn fetch_abort_releases_upload(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_abort_case(compiled, "abort-releases-upload").await
+}
+
+#[test]
+async fn fetch_abort_after_redirect(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_abort_case(compiled, "abort-after-redirect").await
 }

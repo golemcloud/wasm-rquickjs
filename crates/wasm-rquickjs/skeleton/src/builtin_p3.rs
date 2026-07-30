@@ -29,6 +29,8 @@ use std::fmt::Write;
 
 #[path = "builtin/abort_controller.rs"]
 mod abort_controller;
+#[path = "builtin/abort_signal.rs"]
+mod abort_signal;
 #[path = "builtin/assert.rs"]
 mod assert;
 #[path = "builtin/async_hooks.rs"]

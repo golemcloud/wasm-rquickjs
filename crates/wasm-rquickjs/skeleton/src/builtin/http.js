@@ -119,7 +119,7 @@ export function fetch(resource, options = {}) {
 
             fetchPromise = streamingRequest(
                 url, method, rawHeaders, version, mode, referer, referrerPolicy, credentials, redirect,
-                bodyCreator
+                bodyCreator, signal
             );
         } else {
             // Simple request
@@ -151,36 +151,13 @@ export function fetch(resource, options = {}) {
             }
 
             fetchPromise = (async () => {
-                const nativeResponse = await request.simpleSend();
+                const nativeResponse = await request.simpleSend(signal);
                 return new Response(nativeResponse, request.url, credentials);
             })();
         }
 
-        // If signal is provided, wrap the promise to support abort
-        if (signal) {
-            fetchPromise = abortableFetch(fetchPromise, signal);
-        }
-
         return fetchPromise;
     })();
-}
-
-function abortableFetch(fetchPromise, signal) {
-    // Create a race between the fetch and the abort signal
-    return Promise.race([
-        fetchPromise,
-        new Promise((_, reject) => {
-            // If signal is already aborted, this won't execute
-            if (signal.aborted) {
-                reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
-            } else {
-                // Listen for abort event
-                signal.addEventListener('abort', () => {
-                    reject(signal.reason || new DOMException('The operation was aborted.', 'AbortError'));
-                });
-            }
-        })
-    ]);
 }
 
 // Marker tag for body source (ReadableStream/Blob/FormData) errors so the
@@ -188,8 +165,21 @@ function abortableFetch(fetchPromise, signal) {
 // arise when the server closes the upload (e.g. on an early redirect).
 const BODY_SOURCE_ERROR = Symbol('bodySourceError');
 
+function stopUpload(abortRef) {
+    abortRef.aborted = true;
+    if (abortRef.reader) {
+        try { abortRef.reader.cancel().catch(() => {}); } catch (_) { /* ignore */ }
+    }
+    if (abortRef.bodyWriter) {
+        const bodyWriter = abortRef.bodyWriter;
+        abortRef.bodyWriter = null;
+        try { bodyWriter.abortBody(); } catch (_) { /* ignore */ }
+    }
+}
+
 async function sendBody(bodyWriter, body, abortRef, onFirstChunk) {
     const reader = body.getReader();
+    abortRef.reader = reader;
     try {
         while (true) {
             if (abortRef.aborted) {
@@ -224,11 +214,13 @@ async function sendBody(bodyWriter, body, abortRef, onFirstChunk) {
             }
         }
     } finally {
+        abortRef.reader = null;
         try { reader.releaseLock(); } catch (_) { /* ignore */ }
     }
     if (abortRef.aborted) return;
     try {
         bodyWriter.finishBody();
+        abortRef.bodyWriter = null;
     } catch (err) {
         if (abortRef.aborted) return;
         throw err;
@@ -237,7 +229,7 @@ async function sendBody(bodyWriter, body, abortRef, onFirstChunk) {
 
 async function streamingRequest(
     url, method, headers, version, mode, referer, referrerPolicy, credentials, redirect,
-    bodyCreator
+    bodyCreator, signal
 ) {
     let currentUrl = url;
     let currentMethod = method;
@@ -247,7 +239,22 @@ async function streamingRequest(
     const maxRedirects = 20;
     let currentRedirects = 0;
 
+    let activeAbortRef = null;
+    const onSignalAbort = () => {
+        if (activeAbortRef) stopUpload(activeAbortRef);
+    };
+    if (signal) {
+        if (signal.aborted) {
+            throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+        }
+        signal.addEventListener('abort', onSignalAbort);
+    }
+
+    try {
     while (true) {
+        if (signal && signal.aborted) {
+            throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+        }
         const request = new httpNative.HttpRequest(
             currentUrl,
             currentMethod,
@@ -267,7 +274,8 @@ async function streamingRequest(
         // Track body upload state synchronously so we can inspect it from the
         // redirect path without having to await the upload promise (which may
         // never finish for slow/infinite streaming bodies).
-        const abortRef = {aborted: false};
+        const abortRef = {aborted: false, reader: null, bodyWriter: bodyWriter};
+        activeAbortRef = abortRef;
         const bodyState = {settled: false, ok: true, error: undefined};
         let firstChunkWritten = false;
         let notifyFirstChunk;
@@ -296,11 +304,19 @@ async function streamingRequest(
             );
         } else {
             bodyWriter.finishBody();
+            abortRef.bodyWriter = null;
             bodyState.settled = true;
             bodyPromise = Promise.resolve();
         }
 
-        const nativeResponse = await request.receiveResponse();
+        let nativeResponse;
+        try {
+            nativeResponse = await request.receiveResponse(signal);
+        } catch (e) {
+            stopUpload(abortRef);
+            bodyPromise.catch(() => {});
+            throw e;
+        }
 
         const status = nativeResponse.status;
         const isRedirectStatus = status >= 300 && status < 400 && // is redirect
@@ -326,13 +342,16 @@ async function streamingRequest(
             // and slow/infinite streaming bodies must not delay redirect
             // handling. Signal the upload to abort and ignore further errors
             // (transport errors after this point are expected).
-            abortRef.aborted = true;
+            stopUpload(abortRef);
             // Suppress unhandled-rejection noise on the detached promise.
             bodyPromise.catch(() => {});
         } else {
             // Non-redirect: wait for the body upload to complete and propagate
             // any error (whether source-side or transport-side).
             await bodyPromise;
+            if (signal && signal.aborted) {
+                throw signal.reason || new DOMException('The operation was aborted.', 'AbortError');
+            }
             if (!bodyState.ok) {
                 throw bodyState.error;
             }
@@ -395,6 +414,7 @@ async function streamingRequest(
                     currentUrl = newUrl;
                     currentMethod = newMethod;
                     currentRedirects++;
+                    nativeResponse.discardBody();
                     continue;
                 }
             }
@@ -420,6 +440,9 @@ async function streamingRequest(
         }
 
         return response;
+    }
+    } finally {
+        if (signal) signal.removeEventListener('abort', onSignalAbort);
     }
 }
 

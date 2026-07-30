@@ -10,7 +10,7 @@ use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
@@ -232,6 +232,41 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
     });
 
     (host_http_port, TestServerHandle::new(handle))
+}
+
+pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::UnboundedReceiver<()>) {
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (arrived_tx, arrived_rx) = mpsc::unbounded_channel();
+    let (ready_tx, ready_rx) = watch::channel(false);
+
+    let handle = tokio::spawn(async move {
+        let slow_ready = ready_tx.clone();
+        let slow = axum::routing::any(async move || {
+            let _ = arrived_tx.send(());
+            let _ = slow_ready.send(true);
+            std::future::pending::<&'static str>().await
+        });
+        let ready = axum::routing::get(async move || {
+            let mut ready_rx = ready_rx;
+            while !*ready_rx.borrow() {
+                if ready_rx.changed().await.is_err() {
+                    break;
+                }
+            }
+            "ready"
+        });
+        let router = Router::new()
+            .route("/slow-response", slow)
+            .route(
+                "/redirect-to-slow",
+                axum::routing::any(async || (StatusCode::FOUND, [("Location", "/slow-response")])),
+            )
+            .route("/abort-ready", ready);
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    (port, TestServerHandle::new(handle), arrived_rx)
 }
 
 #[derive(Debug, Clone, Serialize)]

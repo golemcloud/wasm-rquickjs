@@ -36,4 +36,7 @@ declare module 'fetch' {
   export function redirectWithFailingStreamBody(port: number): Promise<void>;
   export function redirectWithInfiniteStreamBody(port: number): Promise<void>;
   export function fetchFunctionShape(): Promise<void>;
+  export function abortReleasesRequest(port: number): Promise<boolean>;
+  export function abortReleasesUpload(port: number): Promise<boolean>;
+  export function abortAfterRedirect(port: number): Promise<boolean>;
 }
