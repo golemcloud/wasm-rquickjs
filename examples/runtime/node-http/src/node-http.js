@@ -400,14 +400,36 @@ export function httpResponseLifecycle() {
 export async function httpPipelinedResponseOrder() {
     return new Promise((resolve) => {
         let settled = false;
+        let informationalCallbacks = 0;
+        let informationalCallbackError = false;
+        let informationalCallbackArity = 0;
+        const informationalCallbackValues = [];
+        let continueReturn;
+        let processingReturn;
+        let sent100Before;
+        let sent100AfterContinue;
+        let sent100AfterProcessing;
         const server = http.createServer((req, res) => {
             if (req.url === '/first') {
                 setTimeout(() => res.end('first'), 25);
                 return;
             }
 
-            res.writeContinue();
-            res.writeProcessing();
+            sent100Before = res._sent100;
+            continueReturn = res.writeContinue(function (error) {
+                informationalCallbacks++;
+                informationalCallbackArity += arguments.length;
+                informationalCallbackValues.push(error);
+                informationalCallbackError ||= !!error;
+            });
+            sent100AfterContinue = res._sent100;
+            processingReturn = res.writeProcessing(function (error) {
+                informationalCallbacks++;
+                informationalCallbackArity += arguments.length;
+                informationalCallbackValues.push(error);
+                informationalCallbackError ||= !!error;
+            });
+            sent100AfterProcessing = res._sent100;
             res.writeEarlyHints({ link: '</asset.js>; rel=preload' });
             res.end('second');
         });
@@ -454,7 +476,16 @@ export async function httpPipelinedResponseOrder() {
                     processing > continued &&
                     earlyHints > processing &&
                     secondStatus > earlyHints &&
-                    secondBody > secondStatus);
+                    secondBody > secondStatus &&
+                    informationalCallbacks === 2 &&
+                    informationalCallbackArity === 2 &&
+                    informationalCallbackValues.every((value) => value === null) &&
+                    continueReturn === undefined &&
+                    processingReturn === undefined &&
+                    sent100Before === false &&
+                    sent100AfterContinue === true &&
+                    sent100AfterProcessing === true &&
+                    !informationalCallbackError);
             });
         });
     });
@@ -789,9 +820,18 @@ export async function httpMaxRequestsClosesSocket() {
         let settled = false;
         let wire = '';
         let socket;
-        const server = http.createServer((_req, res) => res.end('only'));
+        let requestCount = 0;
+        let dropped = 0;
+        let sentOverflow = false;
+        const server = http.createServer((_req, res) => {
+            requestCount++;
+            res.end('only');
+        });
         server.maxRequestsPerSocket = 1;
         server.keepAliveTimeout = 1000;
+        server.on('dropRequest', () => {
+            dropped++;
+        });
 
         const finish = (result) => {
             if (settled) return;
@@ -801,7 +841,7 @@ export async function httpMaxRequestsClosesSocket() {
             server.closeAllConnections();
             server.close(() => resolve(result));
         };
-        const timeout = setTimeout(() => finish(false), 500);
+        const timeout = setTimeout(() => finish(false), 2000);
 
         server.listen(0, () => {
             socket = net.connect({ port: server.address().port });
@@ -810,13 +850,27 @@ export async function httpMaxRequestsClosesSocket() {
             });
             socket.on('data', (chunk) => {
                 wire += chunk.toString('latin1');
+                if (!sentOverflow &&
+                    wire.includes('HTTP/1.1 200') &&
+                    wire.includes('\r\n\r\nonly')) {
+                    sentOverflow = true;
+                    socket.write('GET /overflow HTTP/1.1\r\nHost: localhost\r\n\r\n');
+                }
             });
             socket.on('error', () => finish(false));
             socket.on('end', () => {
+                const first = wire.indexOf('HTTP/1.1 200');
+                const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable', first + 1);
+                const closeHeader = wire.toLowerCase().indexOf('connection: close', first);
                 finish(
-                    wire.includes('HTTP/1.1 200') &&
-                    wire.toLowerCase().includes('connection: close') &&
-                    wire.includes('\r\n\r\nonly')
+                    sentOverflow &&
+                    requestCount === 1 &&
+                    dropped === 1 &&
+                    first !== -1 &&
+                    closeHeader > first &&
+                    closeHeader < overflow &&
+                    wire.indexOf('only', first) > first &&
+                    overflow > first
                 );
             });
         });

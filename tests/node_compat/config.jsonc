@@ -4593,7 +4593,7 @@
     "parallel/test-http-pause-no-dump.js": { "category": "node-internals", "reason": "asserts private req._dumped internal state" },
     "parallel/test-http-pause.js": { "category": "known-gap", "reason": "request/response pause-resume flow control does not complete with Node-compatible behavior" },
     "parallel/test-http-pipeline-assertionerror-finish.js": {},
-    "parallel/test-http-pipeline-flood.js": { "category": "known-gap", "reason": "the flood connection resets before the server handles it, so the backpressure callback contract is not exercised" },
+    "parallel/test-http-pipeline-flood.js": { "category": "known-gap", "reason": "server-side pipelining lacks bounded queued-output accounting and a working write()/drain parser pause-resume contract (GOL-398)" },
     "parallel/test-http-pipeline-socket-parser-typeerror.js": {},
     "parallel/test-http-proxy.js": {},
     "parallel/test-http-raw-headers.js": { "category": "known-gap", "reason": "rawHeaders/rawTrailers casing and duplicate-header preservation differ from Node semantics" },
@@ -5091,7 +5091,7 @@
     "parallel/test-http-max-header-size.js": { "category": "known-gap", "reason": "spawned process does not honor --max-http-header-size (http.maxHeaderSize mismatch)" },
     "parallel/test-http-max-http-headers.js": { "category": "node-internals", "reason": "requires internal/options.getOptionValue('--max-http-header-size')" },
     "parallel/test-http-multi-line-headers.js": { "category": "known-gap", "reason": "requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them" },
-    "parallel/test-http-no-content-length.js": { "flaky": true, "reason": "intermittently times out in CI while waiting for the no-content-length response lifecycle to complete" },
+    "parallel/test-http-no-content-length.js": { "category": "known-gap", "reason": "wasi:http does not reliably close the client TCP send side after a close-delimited response, so net.Server.close() can wait indefinitely" },
     "parallel/test-http-outgoing-buffer.js": { "category": "node-internals", "reason": "requires internal/streams/state.getDefaultHighWaterMark()" },
     "parallel/test-http-outgoing-destroy.js": {},
     "parallel/test-http-outgoing-internal-headernames-getter.js": {

@@ -904,12 +904,13 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
     return this._writeOutput(chunk, callback);
 };
 
-ServerResponse.prototype.writeContinue = function writeContinue() {
-    this._writeOutput(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
+ServerResponse.prototype.writeContinue = function writeContinue(callback) {
+    this._writeOutput(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'), callback);
+    this._sent100 = true;
 };
 
-ServerResponse.prototype.writeProcessing = function writeProcessing() {
-    this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'));
+ServerResponse.prototype.writeProcessing = function writeProcessing(callback) {
+    this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'), callback);
 };
 
 const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;
@@ -1022,6 +1023,7 @@ function createConnectionParser(server, socket) {
         closeAfterResponse: false,
         requestsServed: 0,
         detached: false,
+        parsing: false,
     };
 
     // Install a single timeout handler for idle keep-alive connections
@@ -1216,11 +1218,14 @@ function createConnectionParser(server, socket) {
     }
 
     function parseLoop() {
-        let progress = true;
-        while (progress) {
-            progress = false;
+        if (state.parsing) return;
+        state.parsing = true;
+        try {
+            let progress = true;
+            while (progress) {
+                progress = false;
 
-            if (state.state === IDLE || state.state === HEADERS) {
+                if (state.state === IDLE || state.state === HEADERS) {
                 state.state = HEADERS;
                 while (state.buffer.length >= 2 &&
                     state.buffer[0] === 0x0d && state.buffer[1] === 0x0a) {
@@ -1297,6 +1302,9 @@ function createConnectionParser(server, socket) {
                 const isDroppedRequest = maxRequestsPerSocket > 0 &&
                     requestNumber > maxRequestsPerSocket;
                 res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
+                res._acceptOverflowRequest = connKeepAlive &&
+                    maxRequestsPerSocket > 0 &&
+                    requestNumber === maxRequestsPerSocket;
                 res._keepAliveTimeout = server.keepAliveTimeout;
                 res._keepAliveMaxRequests = maxRequestsPerSocket;
                 // The queue head can write immediately. Later responses remain
@@ -1320,7 +1328,7 @@ function createConnectionParser(server, socket) {
                             (token) => token.trim() === 'close'
                         );
                     context.shouldKeepAliveAfterResponse =
-                        res._keepAlive &&
+                        (res._keepAlive || res._acceptOverflowRequest) &&
                         !isDroppedRequest &&
                         !responseCloses &&
                         !server._closeRequested;
@@ -1378,7 +1386,7 @@ function createConnectionParser(server, socket) {
                 continue;
             }
 
-            if (state.state === BODY_CONTENT_LENGTH) {
+                if (state.state === BODY_CONTENT_LENGTH) {
                 if (state.buffer.length === 0) continue;
                 const context = state.current;
                 const remaining = state.contentLength - state.bodyReceived;
@@ -1399,7 +1407,7 @@ function createConnectionParser(server, socket) {
                 continue;
             }
 
-            if (state.state === BODY_CHUNKED) {
+                if (state.state === BODY_CHUNKED) {
                 const result = parseChunked(state);
                 if (result === 'progress') {
                     progress = true;
@@ -1422,8 +1430,11 @@ function createConnectionParser(server, socket) {
                     socket.end();
                     return;
                 }
-                continue;
+                    continue;
+                }
             }
+        } finally {
+            state.parsing = false;
         }
     }
 

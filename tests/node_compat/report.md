@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3239/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3238/4425 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3239 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1186 | 26.8% | 20.6% | 17.3% |
+| ✅ passing (runnable) | 3238 | 73.2% | 56.3% | 47.1% |
+| 🧩 known gap | 1187 | 26.8% | 20.6% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3238/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 246 | 303 | 267 | 2 | 0 | 80 | 44.8% | 30.1% |
+| http | 898 | 245 | 304 | 267 | 2 | 0 | 80 | 44.6% | 30.0% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1186)
+### known gap (1187)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1245,6 +1245,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | server parser accepts malformed chunk framing smuggling payloads instead of rejecting with 400/clientError | 1 | `parallel/test-http-dummy-characters-smuggling.js#block_01_block_01` |
 | server parser does not emit Node-compatible clientError (HPE_INVALID_EOF_STATE) on truncated headers | 1 | `parallel/test-http-parser-finish-error.js` |
 | server-side Upgrade event/error propagation is incomplete | 1 | `parallel/test-http-upgrade-server2.js` |
+| server-side pipelining lacks bounded queued-output accounting and a working write()/drain parser pause-resume contract (GOL-398) | 1 | `parallel/test-http-pipeline-flood.js` |
 | server.close() idle-socket shutdown semantics differ from Node (idle connection is not closed as expected) | 1 | `parallel/test-http-server-close-idle.js` |
 | server.closeAllConnections() does not close active and idle HTTP sockets with Node-compatible behavior | 1 | `parallel/test-http-server-close-all.js` |
 | server.closeIdleConnections() while waiting for a response does not fire expected callbacks | 1 | `parallel/test-http-server-close-idle-wait-response.js` |
@@ -1282,7 +1283,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream/web compression constructor error codes are not Node-compatible yet | 1 | `parallel/test-whatwg-webstreams-compression.js` |
 | subtle.digest unsupported-algorithm error semantics do not match Node | 1 | `parallel/test-webcrypto-digest.js` |
 | the client never observes a reused keep-alive socket, so the corked-response reuse loop does not terminate | 1 | `parallel/test-http-outgoing-end-cork.js` |
-| the flood connection resets before the server handles it, so the backpressure callback contract is not exercised | 1 | `parallel/test-http-pipeline-flood.js` |
 | timeout option does not reliably emit request timeout before close | 1 | `parallel/test-http-client-timeout-option.js` |
 | timers/promises scheduler constructor and error-code semantics are not fully Node-compatible | 1 | `parallel/test-timers-promises-scheduler.js` |
 | tls.checkServerIdentity() is a stub that throws instead of performing hostname/certificate matching | 1 | `parallel/test-tls-check-server-identity.js` |
@@ -1323,6 +1323,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http client does not surface informational 1xx responses with Node-compatible status/raw headers | 1 | `parallel/test-http-information-headers.js` |
 | wasi:http client does not surface llhttp parse errors/rawPacket for malformed raw TCP responses | 1 | `parallel/test-http-client-error-rawbytes.js` |
 | wasi:http client does not surface llhttp parser errors for malformed raw TCP responses | 1 | `parallel/test-http-client-parse-error.js` |
+| wasi:http does not reliably close the client TCP send side after a close-delimited response, so net.Server.close() can wait indefinitely | 1 | `parallel/test-http-no-content-length.js` |
 | wasi:http response header filtering strips headers like Host/Proxy-Authorization, so duplicate-header expectations diverge | 1 | `parallel/test-http-response-multiheaders.js` |
 | wasi:http strips forbidden hop-by-hop headers like Connection, so automatic response headers differ | 1 | `parallel/test-http-automatic-headers.js` |
 | wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients | 1 | `parallel/test-http-keep-alive-timeout-custom.js` |

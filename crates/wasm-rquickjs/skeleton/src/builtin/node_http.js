@@ -2624,6 +2624,10 @@ import { connect as _netConnect } from 'node:net';
 export const Server = _Server;
 export const ServerResponse = _ServerResponse;
 export const createServer = _createServer;
+// ServerIncomingMessage owns server parser state, while this prototype link
+// deliberately shares the public IncomingMessage stream methods and identity.
+// Keep duplicated public header/trailer fields aligned when either constructor
+// changes; transport-specific parsing must remain in its existing owner.
 Object.setPrototypeOf(_ServerIncomingMessage.prototype, IncomingMessage.prototype);
 Object.setPrototypeOf(_ServerIncomingMessage, IncomingMessage);
 
