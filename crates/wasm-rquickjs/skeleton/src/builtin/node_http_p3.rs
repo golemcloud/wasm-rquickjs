@@ -34,7 +34,9 @@ use std::future::Future;
 use std::pin::Pin;
 use url::Url;
 use wasip3::http::types::{ErrorCode, Fields, Method, Request, Response, Scheme, Trailers};
-use wasip3::wit_bindgen::rt::async_support::{FutureReader, StreamReader, StreamResult};
+use wasip3::wit_bindgen::rt::async_support::{
+    FutureReader, FutureWriter, StreamReader, StreamResult,
+};
 
 /// Boxed, pinned future that drives a `wasi:http/client.send` and the request-body upload
 /// concurrently, resolving once the response head is available.
@@ -43,6 +45,7 @@ type SendFuture = Pin<Box<dyn Future<Output = Result<Response, ErrorCode>>>>;
 /// Reader half of the response body result future. Resolves once the response body stream is
 /// closed, reporting whether the body was received successfully.
 type BodyResultReader = FutureReader<Result<Option<Trailers>, ErrorCode>>;
+type ResponseResultWriter = FutureWriter<Result<(), ErrorCode>>;
 
 #[rquickjs::module]
 pub mod native_module {
@@ -379,11 +382,13 @@ enum ResponseBodyState {
     Reading {
         reader: StreamReader<u8>,
         result: BodyResultReader,
+        response_result: ResponseResultWriter,
     },
     /// The body stream reported end-of-stream after a final data chunk; the body result future
     /// still needs to be awaited to surface a mid-transfer error.
     Finishing {
         result: BodyResultReader,
+        response_result: ResponseResultWriter,
     },
     Consumed,
 }
@@ -450,15 +455,30 @@ impl NodeHttpIncomingResponse {
                 // the transport; we always signal success by letting its writer resolve to `Ok(())`.
                 let (res_tx, res_rx) = wasip3::wit_future::new(|| Ok::<(), ErrorCode>(()));
                 let (reader, result) = Response::consume_body(response, res_rx);
-                drop(res_tx);
-                self.body_state = ResponseBodyState::Reading { reader, result };
+                self.body_state = ResponseBodyState::Reading {
+                    reader,
+                    result,
+                    response_result: res_tx,
+                };
                 self.read_from_reader(ctx).await
             }
-            ResponseBodyState::Reading { reader, result } => {
-                self.body_state = ResponseBodyState::Reading { reader, result };
+            ResponseBodyState::Reading {
+                reader,
+                result,
+                response_result,
+            } => {
+                self.body_state = ResponseBodyState::Reading {
+                    reader,
+                    result,
+                    response_result,
+                };
                 self.read_from_reader(ctx).await
             }
-            ResponseBodyState::Finishing { result } => {
+            ResponseBodyState::Finishing {
+                result,
+                response_result,
+            } => {
+                drop(response_result);
                 let body_error = body_result_error(result).await;
                 if let Some(err) = body_error {
                     return Err(Exception::throw_message(&ctx, &err));
@@ -477,7 +497,12 @@ impl NodeHttpIncomingResponse {
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, bool)>> {
         let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
 
-        let ResponseBodyState::Reading { mut reader, result } = state else {
+        let ResponseBodyState::Reading {
+            mut reader,
+            result,
+            response_result,
+        } = state
+        else {
             return Ok(List((None, true)));
         };
 
@@ -492,7 +517,11 @@ impl NodeHttpIncomingResponse {
                             "Failed to create TypedArray from response body chunk",
                         )
                     })?;
-                    self.body_state = ResponseBodyState::Reading { reader, result };
+                    self.body_state = ResponseBodyState::Reading {
+                        reader,
+                        result,
+                        response_result,
+                    };
                     return Ok(List((Some(js_array), false)));
                 }
                 // A zero-length completion carries no data and no EOF signal; retry.
@@ -502,6 +531,7 @@ impl NodeHttpIncomingResponse {
                     // now and the body result future is checked on the next call.
                     drop(reader);
                     if buf.is_empty() {
+                        drop(response_result);
                         let body_error = body_result_error(result).await;
                         if let Some(err) = body_error {
                             return Err(Exception::throw_message(&ctx, &err));
@@ -514,7 +544,10 @@ impl NodeHttpIncomingResponse {
                             "Failed to create TypedArray from response body chunk",
                         )
                     })?;
-                    self.body_state = ResponseBodyState::Finishing { result };
+                    self.body_state = ResponseBodyState::Finishing {
+                        result,
+                        response_result,
+                    };
                     return Ok(List((Some(js_array), false)));
                 }
                 StreamResult::Cancelled => return Ok(List((None, true))),

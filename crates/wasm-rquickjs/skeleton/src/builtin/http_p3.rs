@@ -779,8 +779,13 @@ async fn consume_response_body(response: Response) -> (Vec<u8>, Option<String>) 
     // the transport; we always signal success by letting its writer resolve to `Ok(())`.
     let (res_tx, res_rx) = wasip3::wit_future::new(|| Ok::<(), ErrorCode>(()));
     let (body_reader, body_result) = Response::consume_body(response, res_rx);
-    drop(res_tx);
     let body = body_reader.collect().await;
+    // Do not report successful response processing to the host until the body
+    // stream is fully consumed. Resolving this future early can let the HTTP
+    // transport recycle or tear down the connection while the guest still
+    // reads it, making a subsequent request intermittently observe an
+    // incomplete response under concurrent load.
+    drop(res_tx);
 
     // The returned future only resolves after the body stream is closed (which the `collect`
     // above guarantees). Await it to detect a body that failed mid-transfer — e.g. a truncated
