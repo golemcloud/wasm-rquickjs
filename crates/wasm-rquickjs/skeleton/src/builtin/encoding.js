@@ -5,7 +5,6 @@ import {
     ERR_ENCODING_NOT_SUPPORTED,
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_THIS,
-    ERR_NO_ICU,
 } from '__wasm_rquickjs_builtin/internal/errors';
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
@@ -144,9 +143,6 @@ export class TextDecoder {
         validateOptions(options);
         const encoding = normalizeLabel(label);
         const fatal = !!options?.fatal;
-        if (fatal) {
-            throw new ERR_NO_ICU('fatal');
-        }
 
         textDecoderState.set(this, {
             encoding,
@@ -248,9 +244,6 @@ export class TextDecoderStream extends streams.TransformStream {
         validateOptions(options);
         const encoding = normalizeLabel(label);
         const fatal = !!options?.fatal;
-        if (fatal) {
-            throw new ERR_NO_ICU('fatal');
-        }
 
         let decoder;
         super({

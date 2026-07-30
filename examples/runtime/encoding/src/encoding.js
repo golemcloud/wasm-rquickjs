@@ -117,3 +117,93 @@ export const test2 = () => {
 
     return true;
 };
+
+export const test3 = async () => {
+    const check = (condition, message) => {
+        if (!condition) throw new Error(message);
+    };
+
+    try {
+        const decoder = new TextDecoder('utf-8', {fatal: true});
+        check(decoder.fatal === true, 'fatal getter should be true');
+        check(
+            decoder.decode(new Uint8Array([0xe2, 0x82, 0xac])) === '€',
+            'valid UTF-8 should decode',
+        );
+
+        const invalids = {
+            'lone 0xff': [0xff],
+            'truncated multibyte': [0xe2, 0x82],
+            'overlong NUL': [0xc0, 0x80],
+            'lone surrogate': [0xed, 0xa0, 0x80],
+            'above U+10FFFF': [0xf4, 0x90, 0x80, 0x80],
+        };
+        for (const [name, bytes] of Object.entries(invalids)) {
+            let error;
+            try {
+                new TextDecoder('utf-8', {fatal: true}).decode(new Uint8Array(bytes));
+            } catch (caught) {
+                error = caught;
+            }
+            check(error !== undefined, `fatal decode should throw for ${name}`);
+            check(
+                error.code === 'ERR_ENCODING_INVALID_ENCODED_DATA',
+                `wrong error code for ${name}: ${error.code}`,
+            );
+            new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+        }
+
+        const bomAndA = new Uint8Array([0xef, 0xbb, 0xbf, 0x61]);
+        check(
+            new TextDecoder('utf-8', {fatal: true, ignoreBOM: false}).decode(bomAndA) === 'a',
+            'ignoreBOM:false should strip the BOM',
+        );
+        check(
+            new TextDecoder('utf-8', {fatal: true, ignoreBOM: true}).decode(bomAndA) === '\ufeffa',
+            'ignoreBOM:true should preserve the BOM',
+        );
+
+        const streaming = new TextDecoder('utf-8', {fatal: true});
+        const first = streaming.decode(new Uint8Array([0xe2, 0x82]), {stream: true});
+        const second = streaming.decode(new Uint8Array([0xac]), {stream: true});
+        check(first + second === '€', 'split streaming sequence should decode');
+
+        const truncated = new TextDecoder('utf-8', {fatal: true});
+        truncated.decode(new Uint8Array([0xe2, 0x82]), {stream: true});
+        let flushError;
+        try {
+            truncated.decode();
+        } catch (caught) {
+            flushError = caught;
+        }
+        check(flushError !== undefined, 'truncated sequence should fail on final decode');
+        check(
+            flushError.code === 'ERR_ENCODING_INVALID_ENCODED_DATA',
+            `wrong final decode error: ${flushError.code}`,
+        );
+
+        const stream = new TextDecoderStream('utf-8', {fatal: true});
+        check(stream.fatal === true, 'TextDecoderStream fatal getter should be true');
+
+        let streamError;
+        try {
+            const invalidStream = new TextDecoderStream('utf-8', {fatal: true});
+            const writer = invalidStream.writable.getWriter();
+            const reader = invalidStream.readable.getReader();
+            const drain = (async () => {
+                while (!(await reader.read()).done) {}
+            })();
+            await writer.write(new Uint8Array([0xff]));
+            await writer.close();
+            await drain;
+        } catch (caught) {
+            streamError = caught;
+        }
+        check(streamError !== undefined, 'fatal TextDecoderStream should reject invalid input');
+
+        return true;
+    } catch (error) {
+        console.log('test3 failure:', error?.message);
+        return false;
+    }
+};
