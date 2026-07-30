@@ -9539,10 +9539,12 @@
       }
     },
     "parallel/test-whatwg-encoding-custom-fatal-streaming.js": {
+      "category": "known-gap",
+      "reason": "gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "runnable" },
-        "block_01_block_01": { "category": "runnable" }
+        "block_00_block_00": { "reason": "inherited: gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" },
+        "block_01_block_01": { "reason": "inherited: gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" }
       }
     },
     "parallel/test-whatwg-encoding-custom-internals.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/encoding" },
@@ -9558,10 +9560,10 @@
       }
     },
     "parallel/test-whatwg-encoding-custom-textdecoder-api-invalid-label.js": { "category": "runnable" },
-    "parallel/test-whatwg-encoding-custom-textdecoder-fatal.js": { "category": "runnable" },
+    "parallel/test-whatwg-encoding-custom-textdecoder-fatal.js": { "category": "known-gap", "reason": "gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" },
     "parallel/test-whatwg-encoding-custom-textdecoder-invalid-arg.js": { "category": "runnable" },
     "parallel/test-whatwg-encoding-custom-textdecoder-streaming.js": { "category": "runnable" },
-    "parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js": { "category": "runnable" },
+    "parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js": { "category": "known-gap", "reason": "gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" },
     "parallel/test-whatwg-encoding-custom-textdecoder.js": {
       "category": "unevaluated",
       "reason": "newly discovered, not yet evaluated",

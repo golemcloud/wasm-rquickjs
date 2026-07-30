@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3243/4425 (73.3%)
+**Primary compatibility (CI-enforced):** 3239/4425 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3243 | 73.3% | 56.4% | 47.2% |
-| 🧩 known gap | 1182 | 26.7% | 20.6% | 17.2% |
+| ✅ passing (runnable) | 3239 | 73.2% | 56.3% | 47.1% |
+| 🧩 known gap | 1186 | 26.8% | 20.6% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3243/5750 (56.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -84,7 +84,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| whatwg | 261 | 58 | 17 | 0 | 0 | 0 | 186 | 77.3% | 77.3% |
+| whatwg | 261 | 54 | 21 | 0 | 0 | 0 | 186 | 72.0% | 72.0% |
 | worker_threads | 189 | 4 | 51 | 126 | 0 | 0 | 8 | 7.3% | 2.2% |
 | zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
 
@@ -614,7 +614,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-webstreams-compose.js` | 20 | 20 | 0 | 0 | 0 | 0 | 0 |
 | `test-webstreams-finished.js` | 20 | 20 | 0 | 0 | 0 | 0 | 0 |
 | `test-webstreams-pipeline.js` | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
-| `test-whatwg-encoding-custom-fatal-streaming.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-whatwg-encoding-custom-fatal-streaming.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-whatwg-encoding-custom-interop.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `test-whatwg-encoding-custom-textdecoder.js` | 12 | 11 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-passive.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1182)
+### known gap (1186)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -784,9 +784,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | execPath child emulation does not yet support trace-events CLI arg parsing used by -e runs | 2 | `parallel/test-trace-events-fs-async.js`, `parallel/test-trace-events-fs-sync.js` |
 | fork() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-fork-timeout-kill-signal.js#block_01_block_01` |
 | fork()/spawn() IPC send() boolean/backpressure semantics are not implemented | 2 | `parallel/test-child-process-send-returns-boolean.js#block_00_block_00`, `parallel/test-child-process-send-returns-boolean.js#block_01_block_01` |
+| gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible | 2 | `parallel/test-whatwg-encoding-custom-textdecoder-fatal.js`, `parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js` |
 | http edge case not yet handled | 2 | `parallel/test-http-agent-close.js`, `parallel/test-http-insecure-parser.js` |
 | inherited: dgram multicast loopback API is not implemented (ENOSYS) | 2 | `parallel/test-dgram-multicast-loopback.js#block_00_block_00`, `parallel/test-dgram-multicast-loopback.js#block_01_block_01` |
 | inherited: dgram setBroadcast API is not implemented (ENOSYS) | 2 | `parallel/test-dgram-setBroadcast.js#block_00_block_00`, `parallel/test-dgram-setBroadcast.js#block_01_block_01` |
+| inherited: gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible | 2 | `parallel/test-whatwg-encoding-custom-fatal-streaming.js#block_00_block_00`, `parallel/test-whatwg-encoding-custom-fatal-streaming.js#block_01_block_01` |
 | inherited: listen(options) argument validation/error semantics are not fully Node-compatible | 2 | `parallel/test-net-server-listen-options.js#block_01_block_01`, `parallel/test-net-server-listen-options.js#block_02_block_02` |
 | inherited: process.getActiveResourcesInfo() is not implemented | 2 | `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_00_block_00`, `parallel/test-process-getactiveresources-track-timer-lifetime.js#block_01_block_01` |
 | inherited: queueMicrotask argument validation/error codes are incomplete | 2 | `parallel/test-queue-microtask.js#block_00_block_00`, `parallel/test-queue-microtask.js#block_01_block_01` |
