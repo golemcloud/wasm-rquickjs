@@ -9,11 +9,15 @@ use std::ptr::NonNull;
 
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    #[cfg(feature = "encoding")]
     pub use super::NativeTextDecoder;
     use rquickjs::convert::Coerced;
     use rquickjs::prelude::*;
     use rquickjs::{Ctx, TypedArray};
+
+    #[rquickjs::function]
+    pub fn has_native_text_decoder() -> bool {
+        cfg!(feature = "encoding")
+    }
 
     #[rquickjs::function]
     pub fn supports_encoding(encoding: Coerced<String>) -> bool {
@@ -107,10 +111,10 @@ impl NativeDecoderState {
     }
 }
 
-#[cfg(feature = "encoding")]
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class]
 pub struct NativeTextDecoder {
+    #[cfg(feature = "encoding")]
     #[qjs(skip_trace)]
     inner: RefCell<NativeDecoderState>,
 }

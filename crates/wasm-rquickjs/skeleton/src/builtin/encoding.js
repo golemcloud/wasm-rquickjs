@@ -158,7 +158,7 @@ export class TextDecoder {
             ignoreBOMForNextDecode: !!options?.ignoreBOM,
             pending: new Uint8Array(0),
             streaming: false,
-            nativeDecoder: typeof encodingNative.NativeTextDecoder === 'function'
+            nativeDecoder: encodingNative.has_native_text_decoder()
                 ? new encodingNative.NativeTextDecoder(encoding, !!options?.ignoreBOM)
                 : null,
         });
