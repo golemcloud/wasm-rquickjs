@@ -4671,7 +4671,7 @@
     "parallel/test-http-server-client-error.js": { "category": "known-gap", "reason": "HTTP parser clientError handling does not produce Node-compatible parse error response bytes" },
     "parallel/test-http-server-close-all.js": { "category": "known-gap", "reason": "server.closeAllConnections() does not close active and idle HTTP sockets with Node-compatible behavior" },
     "parallel/test-http-server-close-idle-wait-response.js": { "category": "known-gap", "reason": "server.closeIdleConnections() while waiting for a response does not fire expected callbacks" },
-    "parallel/test-http-server-close-idle.js": { "category": "known-gap", "reason": "server.close() idle-socket shutdown semantics differ from Node (idle connection is not closed as expected)" },
+    "parallel/test-http-server-close-idle.js": { "category": "known-gap", "reason": "response header ordering differs before the test can verify server.close() idle-socket shutdown" },
     "parallel/test-http-server-connection-list-when-close.js": {
       "category": "node-internals",
       "reason": "asserts private req.socket.parser.free lifecycle from Node internals",
@@ -5091,7 +5091,7 @@
     "parallel/test-http-max-header-size.js": { "category": "known-gap", "reason": "spawned process does not honor --max-http-header-size (http.maxHeaderSize mismatch)" },
     "parallel/test-http-max-http-headers.js": { "category": "node-internals", "reason": "requires internal/options.getOptionValue('--max-http-header-size')" },
     "parallel/test-http-multi-line-headers.js": { "category": "known-gap", "reason": "requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them" },
-    "parallel/test-http-no-content-length.js": { "category": "known-gap", "reason": "wasi:http does not reliably close the client TCP send side after a close-delimited response, so net.Server.close() can wait indefinitely" },
+    "parallel/test-http-no-content-length.js": { "category": "known-gap", "reason": "GOL-221: wasi:http does not reliably close the client TCP send side after a close-delimited response, so net.Server.close() can wait indefinitely" },
     "parallel/test-http-outgoing-buffer.js": { "category": "node-internals", "reason": "requires internal/streams/state.getDefaultHighWaterMark()" },
     "parallel/test-http-outgoing-destroy.js": {},
     "parallel/test-http-outgoing-internal-headernames-getter.js": {

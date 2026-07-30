@@ -639,6 +639,55 @@ export async function httpPipelinedCloseLifecycle() {
     });
 }
 
+export async function httpPipelinedConnectionClose() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let handled = 0;
+        const server = http.createServer((req, res) => {
+            handled++;
+            if (req.url === '/first') {
+                res.setHeader('Connection', 'close');
+                res.end('first');
+                return;
+            }
+            res.end('must-not-reach-wire');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => finish(false));
+            socket.on('end', () => {
+                finish(
+                    handled === 2 &&
+                    (wire.match(/HTTP\/1\.1 200/g) || []).length === 1 &&
+                    wire.includes('\r\nConnection: close\r\n') &&
+                    wire.includes('first') &&
+                    !wire.includes('must-not-reach-wire')
+                );
+            });
+        });
+    });
+}
+
 export async function httpPipelinedActiveTimeout() {
     return new Promise((resolve) => {
         let settled = false;
@@ -862,6 +911,9 @@ export async function httpMaxRequestsClosesSocket() {
                 const first = wire.indexOf('HTTP/1.1 200');
                 const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable', first + 1);
                 const closeHeader = wire.toLowerCase().indexOf('connection: close', first);
+                const overflowHeadersEnd = wire.indexOf('\r\n\r\n', overflow);
+                const overflowHeaders = wire.slice(overflow, overflowHeadersEnd);
+                const overflowBody = wire.slice(overflowHeadersEnd + 4);
                 finish(
                     sentOverflow &&
                     requestCount === 1 &&
@@ -870,7 +922,10 @@ export async function httpMaxRequestsClosesSocket() {
                     closeHeader > first &&
                     closeHeader < overflow &&
                     wire.indexOf('only', first) > first &&
-                    overflow > first
+                    overflow > first &&
+                    /Transfer-Encoding: chunked/i.test(overflowHeaders) &&
+                    !/Content-Length:/i.test(overflowHeaders) &&
+                    overflowBody === '0\r\n\r\n'
                 );
             });
         });
@@ -943,7 +998,11 @@ export async function httpPipelinedMaxRequests() {
             dropped++;
             droppedTypesValid = droppedTypesValid &&
                 req instanceof http.IncomingMessage &&
-                droppedSocket instanceof net.Socket;
+                droppedSocket instanceof net.Socket &&
+                req.client === droppedSocket &&
+                req.connection === droppedSocket &&
+                Array.isArray(req.rawTrailers) &&
+                req.rawTrailers.length === 0;
         });
 
         const finish = (result) => {
@@ -972,13 +1031,19 @@ export async function httpPipelinedMaxRequests() {
                 const first = wire.indexOf('HTTP/1.1 200');
                 const firstBody = wire.indexOf('first', first);
                 const overflow = wire.indexOf('HTTP/1.1 503 Service Unavailable');
+                const overflowHeadersEnd = wire.indexOf('\r\n\r\n', overflow);
+                const overflowHeaders = wire.slice(overflow, overflowHeadersEnd);
+                const overflowBody = wire.slice(overflowHeadersEnd + 4);
                 finish(
                     dropped === 1 &&
                     droppedTypesValid &&
                     first !== -1 &&
                     firstBody > first &&
                     overflow > firstBody &&
-                    !wire.includes('first', overflow)
+                    !wire.includes('first', overflow) &&
+                    /Transfer-Encoding: chunked/i.test(overflowHeaders) &&
+                    !/Content-Length:/i.test(overflowHeaders) &&
+                    overflowBody === '0\r\n\r\n'
                 );
             });
         });

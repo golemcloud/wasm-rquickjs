@@ -870,6 +870,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Expect: 100-continue flow (checkContinue/continue events) is incomplete | 1 | `parallel/test-http-expect-continue.js` |
 | FileHandle clone/transfer behavior over MessagePort is incomplete | 1 | `parallel/test-worker-message-port-transfer-filehandle.js` |
 | FileHandle createReadStream close/abort lifecycle is incomplete | 1 | `parallel/test-fs-read-stream-file-handle.js` |
+| GOL-221: wasi:http does not reliably close the client TCP send side after a close-delimited response, so net.Server.close() can wait indefinitely | 1 | `parallel/test-http-no-content-length.js` |
 | HKDF deriveBits argument validation/error codes do not match Node | 1 | `parallel/test-webcrypto-derivebits-hkdf.js` |
 | HMAC sign/verify wrong-key error semantics do not match Node | 1 | `parallel/test-webcrypto-sign-verify-hmac.js` |
 | HTTP CONNECT tunnel socket detachment/data-forwarding semantics are incomplete | 1 | `parallel/test-http-connect.js` |
@@ -1225,6 +1226,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires simulated process.execPath / Node CLI module_timer and trace-event support | 1 | `parallel/test-module-print-timing.mjs` |
 | requires spawned process.execPath --check execution with --experimental-default-type=module | 1 | `es-module/test-esm-type-flag-loose-files.mjs#test_06_should_check_as_esm_input_passed_via_check` |
 | requires spawned process.execPath entry-point execution to verify extensionless .wasm classification outside module scope | 1 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_08_should_error_as_the_entry_point` |
+| response header ordering differs before the test can verify server.close() idle-socket shutdown | 1 | `parallel/test-http-server-close-idle.js` |
 | response writable state around aborted proxy close is not Node-compatible | 1 | `parallel/test-http-writable-true-after-close.js` |
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |
 | runInContext sloppy-mode var/delete semantics still require contextified global script bindings | 1 | `parallel/test-vm-not-strict.js` |
@@ -1246,7 +1248,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | server parser does not emit Node-compatible clientError (HPE_INVALID_EOF_STATE) on truncated headers | 1 | `parallel/test-http-parser-finish-error.js` |
 | server-side Upgrade event/error propagation is incomplete | 1 | `parallel/test-http-upgrade-server2.js` |
 | server-side pipelining lacks bounded queued-output accounting and a working write()/drain parser pause-resume contract (GOL-398) | 1 | `parallel/test-http-pipeline-flood.js` |
-| server.close() idle-socket shutdown semantics differ from Node (idle connection is not closed as expected) | 1 | `parallel/test-http-server-close-idle.js` |
 | server.closeAllConnections() does not close active and idle HTTP sockets with Node-compatible behavior | 1 | `parallel/test-http-server-close-all.js` |
 | server.closeIdleConnections() while waiting for a response does not fire expected callbacks | 1 | `parallel/test-http-server-close-idle-wait-response.js` |
 | server.headersTimeout 408 behavior for delayed header start is incomplete | 1 | `parallel/test-http-server-headers-timeout-delayed-headers.js` |
@@ -1323,7 +1324,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http client does not surface informational 1xx responses with Node-compatible status/raw headers | 1 | `parallel/test-http-information-headers.js` |
 | wasi:http client does not surface llhttp parse errors/rawPacket for malformed raw TCP responses | 1 | `parallel/test-http-client-error-rawbytes.js` |
 | wasi:http client does not surface llhttp parser errors for malformed raw TCP responses | 1 | `parallel/test-http-client-parse-error.js` |
-| wasi:http does not reliably close the client TCP send side after a close-delimited response, so net.Server.close() can wait indefinitely | 1 | `parallel/test-http-no-content-length.js` |
 | wasi:http response header filtering strips headers like Host/Proxy-Authorization, so duplicate-header expectations diverge | 1 | `parallel/test-http-response-multiheaders.js` |
 | wasi:http strips forbidden hop-by-hop headers like Connection, so automatic response headers differ | 1 | `parallel/test-http-automatic-headers.js` |
 | wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients | 1 | `parallel/test-http-keep-alive-timeout-custom.js` |

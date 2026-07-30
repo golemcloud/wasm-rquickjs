@@ -111,7 +111,11 @@ pub fn copy_skeleton_lock(output: &Utf8Path, package_name: &str) -> anyhow::Resu
         let contents = lock_file
             .contents_utf8()
             .ok_or_else(|| anyhow!("Embedded skeleton Cargo.lock contains invalid UTF-8"))?;
-        crate::write_if_changed(dest, generated_lock(contents, package_name).as_bytes())?;
+        let skeleton_package = skeleton_package_name()?;
+        crate::write_if_changed(
+            dest,
+            generated_lock(contents, &skeleton_package, package_name)?.as_bytes(),
+        )?;
     }
     Ok(())
 }
@@ -120,10 +124,13 @@ pub fn copy_skeleton_lock(output: &Utf8Path, package_name: &str) -> anyhow::Resu
 pub fn copy_skeleton_lock(output: &Utf8Path, package_name: &str) -> anyhow::Result<()> {
     let source = skeleton_root().join("Cargo.lock");
     match std::fs::read_to_string(&source) {
-        Ok(contents) => crate::write_if_changed(
-            output.join("Cargo.lock"),
-            generated_lock(&contents, package_name).as_bytes(),
-        )?,
+        Ok(contents) => {
+            let skeleton_package = skeleton_package_name()?;
+            crate::write_if_changed(
+                output.join("Cargo.lock"),
+                generated_lock(&contents, &skeleton_package, package_name)?.as_bytes(),
+            )?
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => {
             return Err(anyhow!(
@@ -134,12 +141,30 @@ pub fn copy_skeleton_lock(output: &Utf8Path, package_name: &str) -> anyhow::Resu
     Ok(())
 }
 
-fn generated_lock(contents: &str, package_name: &str) -> String {
-    contents.replacen(
-        "name = \"rquickjs-component\"",
-        &format!("name = \"{package_name}\""),
-        1,
-    )
+fn skeleton_package_name() -> anyhow::Result<String> {
+    let manifest = skeleton_cargo_toml()?
+        .parse::<DocumentMut>()
+        .map_err(|error| anyhow!("Failed to parse skeleton Cargo.toml: {error}"))?;
+    manifest["package"]["name"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("Missing package.name in skeleton Cargo.toml"))
+}
+
+fn generated_lock(
+    contents: &str,
+    skeleton_package_name: &str,
+    package_name: &str,
+) -> anyhow::Result<String> {
+    let skeleton_package = format!("name = \"{skeleton_package_name}\"");
+    let matches = contents.match_indices(&skeleton_package).count();
+    if matches != 1 {
+        return Err(anyhow!(
+            "Expected exactly one {skeleton_package:?} entry in the skeleton lockfile, found {matches}"
+        ));
+    }
+
+    Ok(contents.replacen(&skeleton_package, &format!("name = \"{package_name}\""), 1))
 }
 
 /// Copies all source files from the skeleton directory to `<output>/src`.
@@ -267,3 +292,33 @@ fn recursive_copy_external_sources(
 
 #[cfg(test)]
 mod module_loader_architecture;
+
+#[cfg(test)]
+mod tests {
+    use super::generated_lock;
+
+    #[test]
+    fn generated_lock_requires_exactly_one_skeleton_package() {
+        let lock = "[[package]]\nname = \"rquickjs-component\"\nversion = \"0.0.0\"\n";
+        assert_eq!(
+            generated_lock(lock, "rquickjs-component", "generated-world").unwrap(),
+            "[[package]]\nname = \"generated-world\"\nversion = \"0.0.0\"\n"
+        );
+        assert!(
+            generated_lock(
+                "[[package]]\nname = \"other\"\n",
+                "rquickjs-component",
+                "generated-world"
+            )
+            .is_err()
+        );
+        assert!(
+            generated_lock(
+                &format!("{lock}{lock}"),
+                "rquickjs-component",
+                "generated-world"
+            )
+            .is_err()
+        );
+    }
+}
