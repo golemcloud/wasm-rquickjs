@@ -231,7 +231,7 @@ function ServerResponse(req, options) {
     this._closed = false;
     this._destroyed = false;
     this._errored = undefined;
-    this._defaultKeepAlive = false;
+    this._defaultKeepAlive = true;
     this._removedConnection = false;
     this._removedContLen = false;
     this._removedTE = false;
@@ -586,12 +586,14 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         const timeoutMs = typeof this._keepAliveTimeout === 'number' && this._keepAliveTimeout >= 0
             ? this._keepAliveTimeout
             : 5000;
-        const timeoutSeconds = Math.trunc(timeoutMs / 1000);
-        head += 'Keep-Alive: timeout=' + timeoutSeconds;
-        if (this._keepAliveMaxRequests > 0) {
-            head += ', max=' + this._keepAliveMaxRequests;
+        if (timeoutMs > 0) {
+            const timeoutSeconds = Math.trunc(timeoutMs / 1000);
+            head += 'Keep-Alive: timeout=' + timeoutSeconds;
+            if (this._keepAliveMaxRequests > 0) {
+                head += ', max=' + this._keepAliveMaxRequests;
+            }
+            head += '\r\n';
         }
-        head += '\r\n';
     }
 
     // Node writes implicit framing after the connection persistence headers.
@@ -1075,15 +1077,6 @@ function createConnectionParser(server, socket) {
 
         state.buffer = Buffer.concat([state.buffer, data]);
         parseLoop();
-        if (!state.closing &&
-            state.responseQueue.length > 0 &&
-            state.responseQueue[0].res._outputBlocked) {
-            setImmediate(() => {
-                if (!state.closing && state.responseQueue.length > 0) {
-                    state.responseQueue[0].res._activateOutput();
-                }
-            });
-        }
 
         // Track active request inactivity via server.setTimeout().
         // Keep-alive idle timeout remains managed after responses finish.

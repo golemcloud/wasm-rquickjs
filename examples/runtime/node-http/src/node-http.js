@@ -762,6 +762,7 @@ export async function httpCloseIdleConnections() {
             });
             res.end('ok');
         });
+        server.keepAliveTimeout = 0;
 
         const finish = (result) => {
             if (settled) return;
@@ -797,7 +798,8 @@ export async function httpCloseIdleConnections() {
                     });
                     idleSocket.on('close', () => {
                         if (!idleResponse.includes('HTTP/1.1 200') ||
-                            !idleResponse.includes('\r\n\r\nok')) {
+                            !idleResponse.includes('\r\n\r\nok') ||
+                            idleResponse.includes('\r\nKeep-Alive:')) {
                             finish(false);
                             return;
                         }
