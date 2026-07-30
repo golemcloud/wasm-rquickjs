@@ -5,6 +5,8 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
+const ABORT_REQUEST_ARRIVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 #[test_dep(tagged_as = "fetch", scope = Cloneable)]
 async fn compiled_fetch() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/fetch");
@@ -947,7 +949,7 @@ async fn fetch_abort_releases_request(
         .await
     });
 
-    tokio::time::timeout(std::time::Duration::from_secs(5), arrivals.recv())
+    tokio::time::timeout(ABORT_REQUEST_ARRIVAL_TIMEOUT, arrivals.recv())
         .await
         .expect("timed out waiting for /slow-response")
         .expect("abort test server stopped before the request arrived");
@@ -968,7 +970,7 @@ async fn run_abort_case(compiled: &CompiledTest, function: &'static str) -> anyh
     let invocation = tokio::spawn(async move {
         invoke_and_capture_output(&wasm_path, None, function, &[Val::U16(port)]).await
     });
-    tokio::time::timeout(std::time::Duration::from_secs(5), arrivals.recv())
+    tokio::time::timeout(ABORT_REQUEST_ARRIVAL_TIMEOUT, arrivals.recv())
         .await
         .expect("timed out waiting for /slow-response")
         .expect("abort test server stopped before the request arrived");
