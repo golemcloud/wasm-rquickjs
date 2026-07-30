@@ -14,7 +14,7 @@ async fn compiled_node_http() -> CompiledTest {
 
 #[test]
 async fn node_http_get(#[tagged_as("node_http")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) =
         invoke_and_capture_output(compiled.wasm_path(), None, "http-get", &[Val::U16(port)]).await;
@@ -35,7 +35,7 @@ async fn node_http_get(#[tagged_as("node_http")] compiled: &CompiledTest) -> any
 async fn node_http_post_json(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     // First post to create a todo, then we check the response
     let (r, output) = invoke_and_capture_output(
@@ -61,7 +61,7 @@ async fn node_http_post_json(
 async fn node_http_request_with_headers(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -174,6 +174,161 @@ async fn node_http_response_lifecycle(
 ) -> anyhow::Result<()> {
     let (r, output) =
         invoke_and_capture_output(compiled.wasm_path(), None, "http-response-lifecycle", &[]).await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipelined_response_order(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-response-order",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_half_open_pipelined_requests(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-half-open-pipelined-requests",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipelined_close_lifecycle(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-close-lifecycle",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipelined_connection_close(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-connection-close",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipelined_active_timeout(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-active-timeout",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_close_idle_connections(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-close-idle-connections",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_informational_write_after_close(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-informational-write-after-close",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_max_requests_closes_socket(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-max-requests-closes-socket",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_net_writev_boundaries(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "net-writev-boundaries", &[]).await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipelined_max_requests(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipelined-max-requests",
+        &[],
+    )
+    .await;
     println!("{output}");
     assert_eq!(r?, Some(Val::Bool(true)));
     Ok(())

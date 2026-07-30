@@ -55,9 +55,42 @@ cargo test --test runtime --features use-golem-wasmtime -- module_resolution --r
 - `WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1` reuses wrapper build and optimized component artifacts when their source inputs are unchanged.
 - `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for short rebuild loops.
 - `WASM_RQUICKJS_TEST_DROP_CACHE=1` refreshes generated artifacts and bypasses the Wasmtime cache.
-- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` is experimental/manual-only. It reuses process-local immutable `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path, but did not improve the measured node-compat hot path.
+- `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` reuses process-local immutable
+  `Engine`/`Linker`/`Component` values on the normal `TestInstance::new` path.
+  This improves grouped runtime tests; node-compat already prepares one component
+  per worker. Stores, instances, WASI state, temp directories, wasm memory, and
+  QuickJS state remain fresh.
 
 Artifact caches never reuse wasm memory, QuickJS runtime state, a Wasmtime `Store`, a component instance, a WASI context, or a temp directory across cases.
+
+For skeleton work, prefer the measured local workflow wrapper:
+
+```bash
+# Minimize latency to the first result after an edit.
+tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
+
+# Precompile a changed component once before parallel workers start.
+tools/dev-test.sh p2 fast-run node_compat <test_filter>
+
+# Override the fast-run default when another worker count suits the machine or filter.
+tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
+
+# Use the embedded skeleton and default test semantics.
+tools/dev-test.sh p3 standard runtime ':tag:group3'
+```
+
+Use `p3` instead of `p2` for Preview 3. The P2 command keeps the Golem Wasmtime
+patch and its lockfile in an ignored shadow workspace, so the real manifests stay
+clean. The accelerated profiles use locked Cargo builds; missing packages can still
+be downloaded. Root manifest or lockfile changes rebuild the P2 shadow dependency
+state automatically. Intentional Golem Wasmtime branch updates remain explicit
+dependency maintenance.
+
+`fast-run` defaults to eight workers, while `fast-start` defaults to one. An explicit
+test-r `--test-threads N` argument overrides either default. Eight workers was selected
+from local measurements on a 14-core Apple M3 Max MacBook Pro (10 performance cores,
+4 efficiency cores, 36 GB RAM, macOS 26.5.1); other machines and filters may perform
+better with a different value.
 
 Independently of those optional caches, node modules app tests run `npm ci` once
 per app and process, then copy the installed template into a fresh temp app

@@ -17,7 +17,7 @@ async fn compiled_fetch() -> CompiledTest {
 async fn fetch_post_json_and_get(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -45,7 +45,7 @@ async fn fetch_post_json_and_get(
 async fn fetch_post_and_get_as_array_buffer(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -68,7 +68,7 @@ async fn fetch_post_and_get_as_array_buffer(
 async fn fetch_streaming_response_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -92,7 +92,7 @@ async fn fetch_streaming_response_body(
 async fn fetch_pipe_response_body_to_request(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -115,7 +115,7 @@ async fn fetch_pipe_response_body_to_request(
 async fn fetch_pipe_buffered_response_body_to_request(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -136,7 +136,7 @@ async fn fetch_pipe_buffered_response_body_to_request(
 
 #[test]
 async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     // Test: Redirect follow
     let (r, output) = invoke_and_capture_output(
@@ -202,7 +202,7 @@ async fn fetch_redirects(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyho
 async fn fetch_concurrent_post_and_get(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -226,7 +226,7 @@ async fn fetch_concurrent_post_and_get(
 async fn fetch_post_with_slow_streaming_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -268,7 +268,7 @@ async fn fetch_blob_operations(
 async fn fetch_post_with_blob_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -292,7 +292,7 @@ async fn fetch_post_with_blob_body(
 async fn fetch_post_form_data_with_files(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
         None,
@@ -314,7 +314,7 @@ async fn fetch_post_form_data_with_files(
 async fn fetch_with_request_object(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -344,7 +344,7 @@ async fn fetch_with_request_object(
 async fn fetch_post_with_data_view_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -372,7 +372,7 @@ async fn fetch_post_with_data_view_body(
 async fn fetch_post_with_url_search_params(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -399,7 +399,7 @@ async fn fetch_post_with_url_search_params(
 async fn fetch_request_with_url_search_params(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -424,7 +424,7 @@ async fn fetch_request_with_url_search_params(
 
 #[test]
 async fn fetch_with_referrer(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -451,7 +451,7 @@ async fn fetch_with_referrer(#[tagged_as("fetch")] compiled: &CompiledTest) -> a
 async fn fetch_with_referrer_policy(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -481,7 +481,7 @@ async fn fetch_with_referrer_policy(
 async fn fetch_with_credentials(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -526,7 +526,7 @@ async fn fetch_with_credentials(
 async fn fetch_response_clone_basic(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -549,7 +549,7 @@ async fn fetch_response_clone_basic(
 async fn fetch_response_clone_streaming_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -574,7 +574,7 @@ async fn fetch_response_clone_streaming_body(
 async fn fetch_response_clone_reuse_bodies(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -597,7 +597,7 @@ async fn fetch_response_clone_reuse_bodies(
 async fn fetch_response_clone_headers(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -620,7 +620,7 @@ async fn fetch_response_clone_headers(
 async fn fetch_response_form_data(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -648,7 +648,7 @@ async fn fetch_response_form_data(
 async fn fetch_headers_iterator(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -674,7 +674,7 @@ async fn fetch_headers_iterator(
 async fn fetch_headers_constructor_iterator(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -703,7 +703,7 @@ async fn fetch_headers_constructor_iterator(
 async fn fetch_with_url_object(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -725,7 +725,7 @@ async fn fetch_with_url_object(
 
 #[test]
 async fn post_with_url_object(#[tagged_as("fetch")] compiled: &CompiledTest) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -749,7 +749,7 @@ async fn post_with_url_object(#[tagged_as("fetch")] compiled: &CompiledTest) -> 
 async fn fetch_url_object_with_query_params(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -774,7 +774,7 @@ async fn fetch_url_object_with_query_params(
 async fn fetch_request_body_get_reader_after_access(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -800,7 +800,7 @@ async fn fetch_request_body_get_reader_after_access(
 async fn fetch_response_body_get_reader_after_access(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -859,7 +859,7 @@ async fn fetch_redirect_with_failing_stream_body(
         return Ok(());
     }
 
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),
@@ -892,7 +892,7 @@ async fn fetch_redirect_with_infinite_stream_body(
         return Ok(());
     }
 
-    let (port, _) = start_test_server().await;
+    let (port, _server) = start_test_server().await;
 
     let (r, output) = invoke_and_capture_output(
         compiled.wasm_path(),

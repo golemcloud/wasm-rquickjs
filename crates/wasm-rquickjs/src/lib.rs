@@ -200,7 +200,8 @@ pub fn generate_wrapper_crate_with_target(
     generate_cargo_toml(&context)?;
 
     // Copying the skeleton's Cargo.lock for faster dependency resolution
-    copy_skeleton_lock(context.output).context("Failed to copy skeleton Cargo.lock")?;
+    copy_skeleton_lock(context.output, &context.world_name)
+        .context("Failed to copy skeleton Cargo.lock")?;
 
     // Copying the skeleton files
     copy_skeleton_sources(context.output).context("Failed to copy skeleton sources")?;

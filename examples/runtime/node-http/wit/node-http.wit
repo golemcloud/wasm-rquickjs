@@ -9,4 +9,14 @@ world node-http {
   export http-self-connect-post: func();
   export http-abort-isolation: func() -> bool;
   export http-response-lifecycle: func() -> bool;
+  export http-pipelined-response-order: func() -> bool;
+  export http-half-open-pipelined-requests: func() -> bool;
+  export http-pipelined-close-lifecycle: func() -> bool;
+  export http-pipelined-connection-close: func() -> bool;
+  export http-pipelined-active-timeout: func() -> bool;
+  export http-close-idle-connections: func() -> bool;
+  export http-informational-write-after-close: func() -> bool;
+  export http-max-requests-closes-socket: func() -> bool;
+  export net-writev-boundaries: func() -> bool;
+  export http-pipelined-max-requests: func() -> bool;
 }

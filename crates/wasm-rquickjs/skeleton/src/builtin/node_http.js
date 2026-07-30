@@ -2615,6 +2615,7 @@ export class ClientRequest extends OutgoingMessage {
 import {
     Server as _Server,
     ServerResponse as _ServerResponse,
+    ServerIncomingMessage as _ServerIncomingMessage,
     createServer as _createServer,
 } from '__wasm_rquickjs_builtin/node_http_server';
 
@@ -2623,6 +2624,12 @@ import { connect as _netConnect } from 'node:net';
 export const Server = _Server;
 export const ServerResponse = _ServerResponse;
 export const createServer = _createServer;
+// ServerIncomingMessage owns server parser state, while this prototype link
+// deliberately shares the public IncomingMessage stream methods and identity.
+// Keep duplicated public header/trailer fields aligned when either constructor
+// changes; transport-specific parsing must remain in its existing owner.
+Object.setPrototypeOf(_ServerIncomingMessage.prototype, IncomingMessage.prototype);
+Object.setPrototypeOf(_ServerIncomingMessage, IncomingMessage);
 
 // ===== request / get =====
 

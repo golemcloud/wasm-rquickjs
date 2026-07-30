@@ -42,6 +42,7 @@ mod sqlite;
 mod stateful1;
 mod streams;
 mod structured_clone;
+mod test_server_handle;
 mod timeout;
 mod toplevel_timer;
 mod url;
@@ -68,6 +69,7 @@ tag_suite!(streams, group5);
 tag_suite!(diagnostics_channel, group5);
 tag_suite!(diagnostics_channel_golem, group5);
 tag_suite!(pollable, group5);
+tag_suite!(test_server_handle, group5);
 tag_suite!(toplevel_timer, group5);
 
 tag_suite!(path, group6);

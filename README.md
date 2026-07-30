@@ -610,13 +610,13 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `http.IncomingMessage` — `statusCode`, `statusMessage`, `headers`, `rawHeaders`, `httpVersion`
 - `https.request` / `https.get` — delegates to `http` (WASI-HTTP handles TLS transparently)
 - `http.createServer([options][, requestListener])` — create an HTTP/1.1 server (requires `wasi:sockets`)
-- `http.Server` (extends `net.Server`): `listen`, `close`, `closeAllConnections`, `closeIdleConnections`, `setTimeout`
-- `http.ServerResponse` (extends `EventEmitter`): `writeHead`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `write`, `end`, `flushHeaders`, `writeContinue`, `cork`, `uncork`
-- Server-side `IncomingMessage` (extends `stream.Readable`): `method`, `url`, `headers`, `headersDistinct`, `rawHeaders`, `httpVersion`, `socket`, `complete`, `aborted`, `trailers`
+- `http.Server` (extends `net.Server`): `listen`, `close`, `closeAllConnections`, `closeIdleConnections`, `setTimeout`, `maxRequestsPerSocket`; emits `dropRequest` when the per-socket limit is exceeded
+- `http.ServerResponse` (extends `EventEmitter`): `writeHead`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `write`, `end`, `flushHeaders`, `writeContinue`, `writeProcessing`, `writeEarlyHints`, `cork`, `uncork`
+- Server-side `IncomingMessage` (extends `stream.Readable`): `method`, `url`, `headers`, `headersDistinct`, `rawHeaders`, `httpVersion`, `socket`, `client`, `complete`, `aborted`, `trailers`, `rawTrailers` (chunked request trailers are not yet parsed)
 - `node:_http_common` — `_checkIsHttpToken`, `_checkInvalidHeaderChar`
-- Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, sequential request pipelining, idle connection cleanup
+- Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, ordered pipelined responses, server-side 100/102/103 informational responses, per-socket request limits, idle connection cleanup
 
-**Not yet supported:** HTTP Upgrade, 1xx informational events, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
+**Not yet supported:** HTTP Upgrade, client-side 1xx informational events through `wasi:http`, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
 
 </details>
 
@@ -1538,10 +1538,30 @@ There are a few important things to keep in mind when working on the project:
   directory, and fresh QuickJS runtime state. Do not group compatibility cases into one wasm instance.
 
   `WASM_RQUICKJS_TEST_DROP_CACHE=1` forces generated artifacts to be rebuilt and bypasses Wasmtime's filesystem cache.
-  `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop. The separate
-  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` switch is experimental and manual-only: it reuses immutable prepared
-  `Engine`/`Linker`/`Component` state on the normal `TestInstance::new` path, did not improve the measured node-compat
-  hot path, and must not be part of the recommended cache setup.
+  `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop.
+  `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` reuses immutable prepared `Engine`/`Linker`/`Component` state on the
+  normal `TestInstance::new` path.
+
+  For skeleton development, select a local performance profile:
+
+  ```sh
+  tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
+  tools/dev-test.sh p2 fast-run node_compat <test_filter>
+  tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
+  tools/dev-test.sh p3 standard runtime ':tag:group3'
+  ```
+
+  `fast-start` skips Wizer and uses one worker to minimize latency to the first result. `fast-run` runs Wizer,
+  precompiles a changed component once before parallel workers start, reuses prepared components, and uses eight
+  workers. Both accelerated profiles read the skeleton externally, reuse generated artifacts and Wasmtime's filesystem
+  cache, and use locked Cargo builds. `standard` uses the embedded skeleton with optional caches and parent
+  precompilation disabled, normal Wizer optimization, and default test-runner behavior.
+
+  `fast-run` defaults to eight workers and `fast-start` to one; pass test-r's `--test-threads N` after the filter to
+  override either default. The eight-worker default was measured on a 14-core Apple M3 Max MacBook Pro (10 performance
+  cores, 4 efficiency cores, 36 GB RAM, macOS 26.5.1). Performance comparisons must report preparation time, test
+  execution time, and total wall time separately: precompilation makes the execution phase much faster but adds
+  preparation that is only recovered by a sufficiently large or repeated filter.
 
 ## Acknowledgements
 

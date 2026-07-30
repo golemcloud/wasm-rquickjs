@@ -32,4 +32,5 @@ declare module 'crypto' {
   export function subtleDigestSha256(input: string): Promise<string>;
   export function subtleSignVerifyHmac(message: string): Promise<boolean>;
   export function subtleSignVerifyEd25519(message: string): Promise<boolean>;
+  export function subtleSignVerifyRsaPss(message: string): Promise<boolean>;
 }

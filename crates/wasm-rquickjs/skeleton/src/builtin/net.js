@@ -1071,6 +1071,34 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     })();
 };
 
+Socket.prototype._writev = function _writev(chunks, callback) {
+    const buffers = chunks.map(({ chunk, encoding }) => (
+        typeof chunk === 'string'
+            ? Buffer.from(chunk, encoding)
+            : Buffer.isBuffer(chunk)
+                ? chunk
+                : Buffer.from(chunk)
+    ));
+    const totalLength = buffers.reduce((total, buffer) => total + buffer.length, 0);
+
+    // Coalesce ordinary corked writes (notably HTTP response framing) while
+    // bounding the temporary Buffer.concat allocation for large batches.
+    if (totalLength <= 64 * 1024) {
+        this._write(Buffer.concat(buffers, totalLength), 'buffer', callback);
+        return;
+    }
+
+    let index = 0;
+    const writeNext = (error) => {
+        if (error || index === buffers.length) {
+            callback(error || null);
+            return;
+        }
+        this._write(buffers[index++], 'buffer', writeNext);
+    };
+    writeNext();
+};
+
 Socket.prototype._final = function _final(callback) {
     if (this.connecting) {
         this.once('connect', () => this._final(callback));

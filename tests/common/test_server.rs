@@ -14,7 +14,21 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
-pub async fn start_test_server() -> (u16, JoinHandle<()>) {
+pub struct TestServerHandle(JoinHandle<()>);
+
+impl TestServerHandle {
+    pub(crate) fn new(handle: JoinHandle<()>) -> Self {
+        Self(handle)
+    }
+}
+
+impl Drop for TestServerHandle {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+pub async fn start_test_server() -> (u16, TestServerHandle) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
     let host_http_port = listener.local_addr().unwrap().port();
 
@@ -217,7 +231,7 @@ pub async fn start_test_server() -> (u16, JoinHandle<()>) {
         axum::serve(listener, router).await.unwrap();
     });
 
-    (host_http_port, handle)
+    (host_http_port, TestServerHandle::new(handle))
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -33,7 +33,6 @@ const HEADERS = 0;
 const BODY_CONTENT_LENGTH = 1;
 const BODY_CHUNKED = 2;
 const IDLE = 3;
-const AWAITING_RESPONSE = 4;
 
 const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
@@ -141,6 +140,10 @@ function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs,
     this.aborted = false;
     this.trailers = {};
     this.trailersDistinct = {};
+    this.rawTrailers = [];
+    this.client = socket;
+    this._consuming = false;
+    this._dumped = false;
     this._timeout = null;
 }
 
@@ -228,7 +231,7 @@ function ServerResponse(req, options) {
     this._closed = false;
     this._destroyed = false;
     this._errored = undefined;
-    this._defaultKeepAlive = false;
+    this._defaultKeepAlive = true;
     this._removedConnection = false;
     this._removedContLen = false;
     this._removedTE = false;
@@ -237,6 +240,8 @@ function ServerResponse(req, options) {
     this._pendingOutputWrites = 0;
     this._outputCompletionCallbacks = [];
     this._outputError = undefined;
+    this._outputAborted = false;
+    this._outputBlocked = false;
 
     // strictContentLength enforcement
     this.strictContentLength = false;
@@ -259,9 +264,7 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     socket._httpMessage = this;
     const pending = this._pendingOutput;
     this._pendingOutput = [];
-    for (const entry of pending) {
-        socket.write(entry.data, entry.callback);
-    }
+    this._flushPendingOutput(socket, pending);
 };
 
 ServerResponse.prototype.detachSocket = function detachSocket(socket) {
@@ -518,10 +521,6 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     const isNoBodyStatus = code === 204 || code === 304 || (code >= 100 && code < 200);
     this._hasBody = !(isNoBodyStatus || isHeadRequest);
 
-    if (this.sendDate && !this.hasHeader('date')) {
-        head += 'Date: ' + (new Date()).toUTCString() + '\r\n';
-    }
-
     let addImplicitTE = false;
     if (isNoBodyStatus) {
         // 1xx, 204, 304: no Transfer-Encoding or Content-Length
@@ -560,9 +559,8 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         }
     }
 
-    // Implicit Transfer-Encoding (after user headers)
-    if (addImplicitTE) {
-        head += 'Transfer-Encoding: chunked\r\n';
+    if (this.sendDate && !this.hasHeader('date')) {
+        head += 'Date: ' + (new Date()).toUTCString() + '\r\n';
     }
 
     // Implicit Connection header (after user headers)
@@ -588,12 +586,19 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         const timeoutMs = typeof this._keepAliveTimeout === 'number' && this._keepAliveTimeout >= 0
             ? this._keepAliveTimeout
             : 5000;
-        const timeoutSeconds = Math.trunc(timeoutMs / 1000);
-        head += 'Keep-Alive: timeout=' + timeoutSeconds;
-        if (this._keepAliveMaxRequests > 0) {
-            head += ', max=' + this._keepAliveMaxRequests;
+        if (timeoutMs > 0) {
+            const timeoutSeconds = Math.trunc(timeoutMs / 1000);
+            head += 'Keep-Alive: timeout=' + timeoutSeconds;
+            if (this._keepAliveMaxRequests > 0) {
+                head += ', max=' + this._keepAliveMaxRequests;
+            }
+            head += '\r\n';
         }
-        head += '\r\n';
+    }
+
+    // Node writes implicit framing after the connection persistence headers.
+    if (addImplicitTE) {
+        head += 'Transfer-Encoding: chunked\r\n';
     }
 
     head += '\r\n';
@@ -610,14 +615,14 @@ ServerResponse.prototype._sendHeaders = function _sendHeaders() {
 ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
     this._pendingOutputWrites++;
     let completed = false;
-    const onComplete = (error) => {
+    const onComplete = (error, invokeCallback = true, recordError = true) => {
         if (completed) return;
         completed = true;
-        if (error && this._outputError === undefined) {
+        if (recordError && error && this._outputError === undefined) {
             this._outputError = error;
         }
         try {
-            if (typeof callback === 'function') {
+            if (invokeCallback && typeof callback === 'function') {
                 callback(error);
             }
         } finally {
@@ -632,7 +637,11 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
         }
     };
 
-    if (this.socket && !this.socket.destroyed) {
+    if (this.socket &&
+        !this.socket.destroyed &&
+        !this.socket.writableEnded &&
+        this.socket.writable !== false &&
+        !this._outputBlocked) {
         try {
             return this.socket.write(data, onComplete);
         } catch (error) {
@@ -640,11 +649,67 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
             throw error;
         }
     }
+    if (this.socket &&
+        (this.socket.destroyed ||
+            this.socket.writableEnded ||
+            this.socket.writable === false)) {
+        // Node drops informational writes made after the response socket
+        // closes without invoking their public callbacks or completing the
+        // response successfully. Retire our internal accounting without
+        // exposing a callback or 'finish' event Node would not emit.
+        this._outputAborted = true;
+        onComplete(new Error('Socket is closed'), false, false);
+        return false;
+    }
     this._pendingOutput.push({ data, callback: onComplete });
     return false;
 };
 
+ServerResponse.prototype._activateOutput = function _activateOutput() {
+    if (!this._outputBlocked) return;
+    this._outputBlocked = false;
+
+    const pending = this._pendingOutput;
+    this._pendingOutput = [];
+    if (pending.length === 0) return;
+
+    if (!this.socket ||
+        this.socket.destroyed ||
+        this.socket.writableEnded ||
+        this.socket.writable === false) {
+        this._pendingOutput = pending;
+        this._abortPendingOutput(new Error('Socket is closed'));
+        return;
+    }
+
+    this._flushPendingOutput(this.socket, pending);
+};
+
+ServerResponse.prototype._flushPendingOutput = function _flushPendingOutput(socket, pending) {
+    if (pending.length === 0) return;
+
+    socket.cork();
+    for (const entry of pending) {
+        socket.write(entry.data, entry.callback);
+    }
+    socket.uncork();
+};
+
+ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(error) {
+    this._outputBlocked = false;
+    this._outputAborted = true;
+    this._outputCompletionCallbacks = [];
+    const pending = this._pendingOutput;
+    this._pendingOutput = [];
+    for (const entry of pending) {
+        entry.callback(error, false, false);
+    }
+};
+
 ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
+    if (this._outputAborted) {
+        return;
+    }
     if (this._pendingOutputWrites === 0) {
         process.nextTick(() => callback(this._outputError));
     } else {
@@ -678,6 +743,11 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     if (this._destroyed || this._closed) {
         if (typeof cb === 'function') cb();
         return false;
+    }
+
+    if (this.socket && !this._outputBlocked && !this.socket.writableCorked) {
+        this.socket.cork();
+        process.nextTick((socket) => socket.uncork(), this.socket);
     }
 
     if (!this._headersSentWire) {
@@ -779,7 +849,10 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         } else {
             // writeHead() was called or explicit CL/TE set: send headers separately,
             // letting chunked encoding handle the body (matches Node.js behavior).
-            if (!data && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
+            if (!data &&
+                !this.headersSent &&
+                !this.hasHeader('content-length') &&
+                !this.hasHeader('transfer-encoding')) {
                 this.setHeader('Content-Length', 0);
             }
             this._sendHeaders();
@@ -814,8 +887,11 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
 
     this._afterOutputComplete(finishResponse);
 
-    // Uncork the socket to flush any buffered writes (matches Node.js behavior)
-    if (this.socket && typeof this.socket.uncork === 'function') {
+    // A queued response does not own the shared socket's cork. Its pending
+    // output is flushed with a balanced cork/uncork when it becomes active.
+    if (!this._outputBlocked &&
+        this.socket &&
+        typeof this.socket.uncork === 'function') {
         this.socket.uncork();
     }
 
@@ -836,13 +912,6 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
         encoding = undefined;
     }
 
-    if (!this.socket || this.socket.destroyed) {
-        if (typeof callback === 'function') {
-            callback(new Error('Socket is closed'));
-        }
-        return false;
-    }
-
     let chunk;
     if (typeof data === 'string') {
         chunk = Buffer.from(data, encoding || 'latin1');
@@ -854,18 +923,16 @@ ServerResponse.prototype._writeRaw = function _writeRaw(data, encoding, callback
         chunk = Buffer.from(String(data), encoding || 'latin1');
     }
 
-    if (typeof callback === 'function') {
-        return this.socket.write(chunk, callback);
-    }
-    return this.socket.write(chunk);
+    return this._writeOutput(chunk, callback);
 };
 
-ServerResponse.prototype.writeContinue = function writeContinue() {
-    this.socket.write(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'));
+ServerResponse.prototype.writeContinue = function writeContinue(callback) {
+    this._writeOutput(Buffer.from('HTTP/1.1 100 Continue\r\n\r\n'), callback);
+    this._sent100 = true;
 };
 
-ServerResponse.prototype.writeProcessing = function writeProcessing() {
-    this.socket.write(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'));
+ServerResponse.prototype.writeProcessing = function writeProcessing(callback) {
+    this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'), callback);
 };
 
 const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;
@@ -922,11 +989,7 @@ ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
     }
     head += '\r\n';
 
-    if (typeof cb === 'function') {
-        this.socket.write(Buffer.from(head), cb);
-    } else {
-        this.socket.write(Buffer.from(head));
-    }
+    this._writeOutput(Buffer.from(head), cb);
 };
 
 ServerResponse.prototype.addTrailers = function addTrailers() {
@@ -973,20 +1036,24 @@ function createConnectionParser(server, socket) {
         buffer: Buffer.alloc(0),
         state: IDLE,
         socket: socket,
-        req: null,
-        res: null,
+        current: null,
+        responseQueue: [],
         contentLength: 0,
         bodyReceived: 0,
         chunkState: null,
         readableEnded: false,
         closeAfterResponse: false,
-        responseFinished: false,
-        shouldKeepAliveAfterResponse: false,
         requestsServed: 0,
         detached: false,
+        parsing: false,
+        closing: false,
     };
 
-    const keepAlive = computeKeepAlive(null, '1.1');
+    function endConnection() {
+        state.closing = true;
+        socket.end();
+    }
+    state.endConnection = endConnection;
 
     // Install a single timeout handler for idle keep-alive connections
     socket.on('timeout', function onIdleTimeout() {
@@ -997,7 +1064,7 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('data', function onData(data) {
-        if (state.detached) return;
+        if (state.detached || state.closing) return;
 
         if (typeof data === 'string') {
             data = Buffer.from(data);
@@ -1013,7 +1080,7 @@ function createConnectionParser(server, socket) {
 
         // Track active request inactivity via server.setTimeout().
         // Keep-alive idle timeout remains managed after responses finish.
-        if (state.res && !state.responseFinished) {
+        if (state.responseQueue.some((context) => !context.responseFinished)) {
             socket.setTimeout(server.timeout || 0);
         }
     });
@@ -1023,23 +1090,36 @@ function createConnectionParser(server, socket) {
 
         state.readableEnded = true;
 
-        if (state.req && !state.req.aborted) {
-            if (!state.req.complete) {
-                state.req.complete = true;
-                state.req.push(null);
-            }
-            if (!state.responseFinished) {
-                state.req.aborted = true;
-                state.req.emit('aborted');
-            }
-        }
-
         if (!server.httpAllowHalfOpen) {
-            socket.end();
+            for (const context of state.responseQueue) {
+                if (!context.req.aborted && !context.req.complete) {
+                    context.req.complete = true;
+                    context.req.push(null);
+                }
+                if (!context.responseFinished && !context.req.aborted) {
+                    context.req.aborted = true;
+                    context.req.emit('aborted');
+                }
+            }
+
+            endConnection();
             return;
         }
 
-        const hasPendingResponse = state.res !== null;
+        let hasIncompleteRequest = false;
+        for (const context of state.responseQueue) {
+            if (!context.req.complete && !context.req.aborted) {
+                context.req.aborted = true;
+                context.req.emit('aborted');
+                hasIncompleteRequest = true;
+            }
+        }
+        if (hasIncompleteRequest) {
+            endConnection();
+            return;
+        }
+
+        const hasPendingResponse = state.responseQueue.length > 0;
         const hasBufferedRequests = state.buffer.length > 0;
         if (hasPendingResponse || hasBufferedRequests) {
             state.closeAfterResponse = true;
@@ -1049,55 +1129,72 @@ function createConnectionParser(server, socket) {
             return;
         }
 
-        socket.end();
+        endConnection();
     });
 
     socket.on('error', function onError(err) {
         if (state.detached) return;
 
-        if (state.req && !state.req.aborted) {
-            if (!state.req.complete) {
-                state.req.complete = true;
-                state.req.push(null);
+        const requestsWithErrors = [];
+        for (const context of state.responseQueue) {
+            context.res._abortPendingOutput(err);
+            if (!context.req.aborted) {
+                if (!context.req.complete) {
+                    context.req.complete = true;
+                    context.req.push(null);
+                }
+                context.req.aborted = true;
+                context.req.emit('aborted');
+                requestsWithErrors.push(context.req);
             }
-            state.req.aborted = true;
-            state.req.emit('aborted');
-            state.req.emit('error', err);
+        }
+        // Complete cleanup for the whole pipeline before invoking application
+        // error handlers, since an unhandled request error throws.
+        for (const req of requestsWithErrors) {
+            req.emit('error', err);
         }
     });
 
     socket.on('close', function onClose() {
         if (state.detached) return;
 
-        if (state.req && !state.req.aborted) {
-            if (!state.req.complete) {
-                state.req.complete = true;
-                state.req.push(null);
+        for (const context of state.responseQueue) {
+            context.res._abortPendingOutput(new Error('Socket is closed'));
+            if (!context.req.aborted) {
+                if (!context.req.complete) {
+                    context.req.complete = true;
+                    context.req.push(null);
+                }
+                if (!context.responseFinished) {
+                    context.req.aborted = true;
+                    context.req.emit('aborted');
+                }
             }
-            if (!state.responseFinished) {
-                state.req.aborted = true;
-                state.req.emit('aborted');
-            }
+            closeServerResponse(context.res);
         }
-        closeServerResponse(state.res);
     });
 
-    function maybeFinalizeResponse() {
-        if (!state.responseFinished) {
+    function maybeFinalizeResponse(context) {
+        if (!context.responseFinished) {
             return false;
         }
 
-        if (state.req && !state.req.complete) {
+        if (!context.req.complete) {
             return false;
         }
 
-        const shouldKeepAlive = state.shouldKeepAliveAfterResponse;
-        const finishedRes = state.res;
-        state.responseFinished = false;
-        state.shouldKeepAliveAfterResponse = false;
-        state.req = null;
-        state.res = null;
-        state.state = IDLE;
+        if (state.responseQueue[0] !== context) {
+            return false;
+        }
+
+        const shouldKeepAlive = context.shouldKeepAliveAfterResponse;
+        const finishedRes = context.res;
+        state.responseQueue.shift();
+        if (state.responseQueue.length === 0 &&
+            state.current === null &&
+            state.buffer.length === 0) {
+            state.state = IDLE;
+        }
 
         // Emit 'close' on the response asynchronously, matching Node.js
         // OutgoingMessage behavior where 'close' fires after 'finish'.
@@ -1108,17 +1205,25 @@ function createConnectionParser(server, socket) {
         }
 
         if (!shouldKeepAlive) {
-            socket.end();
+            endConnection();
             return true;
         }
 
-        if (state.buffer.length > 0) {
+        if (state.responseQueue.length > 0) {
+            state.responseQueue[0].res._activateOutput();
+            return true;
+        }
+
+        if (state.buffer.length > 0 && state.state === IDLE) {
             parseLoop();
-            return true;
+            if (state.responseQueue.length > 0 || state.current !== null) {
+                socket.setTimeout(server.timeout || 0);
+                return true;
+            }
         }
 
-        if (state.readableEnded && state.closeAfterResponse) {
-            socket.end();
+        if (state.readableEnded && state.closeAfterResponse && state.responseQueue.length === 0) {
+            endConnection();
             return true;
         }
 
@@ -1140,190 +1245,311 @@ function createConnectionParser(server, socket) {
     }
 
     function parseLoop() {
-        let progress = true;
-        while (progress) {
-            progress = false;
+        if (state.parsing) return;
+        state.parsing = true;
+        try {
+            let progress = true;
+            while (progress) {
+                progress = false;
 
-            if (state.state === IDLE || state.state === HEADERS) {
-                state.state = HEADERS;
-                const idx = bufferIndexOf(state.buffer, HEADER_END);
-                if (idx === -1) continue;
-
-                const headerBlock = state.buffer.slice(0, idx).toString('utf8');
-                state.buffer = state.buffer.slice(idx + 4);
-
-                const parsed = parseRequestHeaders(headerBlock);
-                if (!parsed) {
-                    server.emit('clientError', new Error('HPE_INVALID_REQUEST'), socket);
-                    socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
-                    socket.end();
-                    return;
-                }
-
-                const req = new ServerIncomingMessage(
-                    socket,
-                    parsed.method,
-                    parsed.url,
-                    parsed.httpVersion,
-                    parsed.rawHeaders,
-                    server._joinDuplicateHeaders,
-                );
-                // CONNECT method: hand the socket to the application
-                if (parsed.method === 'CONNECT') {
-                    const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
-                    state.buffer = Buffer.alloc(0);
-                    state.detached = true;
-                    state.req = null;
-                    state.res = null;
-                    req.complete = true;
-
-                    if (server.listenerCount('connect') > 0) {
-                        server.emit('connect', req, socket, head);
-                    } else {
-                        socket.write(Buffer.from('HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n'));
-                        socket.destroy();
+                if (state.state === IDLE || state.state === HEADERS) {
+                    state.state = HEADERS;
+                    while (
+                        state.buffer.length >= 2 &&
+                        state.buffer[0] === 0x0d &&
+                        state.buffer[1] === 0x0a
+                    ) {
+                        state.buffer = state.buffer.slice(2);
                     }
-                    return;
-                }
+                    const idx = bufferIndexOf(state.buffer, HEADER_END);
+                    if (idx === -1) continue;
 
-                // Upgrade request: emit 'upgrade' event before host header check
-                const connHeader = req.headers.connection;
-                const isUpgrade = connHeader && connHeader.toLowerCase().split(',').some(t => t.trim() === 'upgrade');
-                if (isUpgrade && server.listenerCount('upgrade') > 0) {
-                    const head = state.buffer.length > 0 ? Buffer.from(state.buffer) : Buffer.alloc(0);
-                    state.buffer = Buffer.alloc(0);
-                    state.detached = true;
-                    state.req = null;
-                    state.res = null;
-                    req.complete = true;
-                    server.emit('upgrade', req, socket, head);
-                    return;
-                }
+                    const headerBlock = state.buffer
+                        .slice(0, idx)
+                        .toString('utf8');
+                    state.buffer = state.buffer.slice(idx + 4);
 
-                // requireHostHeader check (default true for HTTP/1.1)
-                if (server._requireHostHeader && parsed.httpVersion === '1.1' && req.headers.host === undefined) {
-                    server.emit('clientError', new Error('HPE_MISSING_HOST_HEADER'), socket);
-                    socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
-                    socket.end();
-                    return;
-                }
-
-                const connKeepAlive = computeKeepAlive(req.headers.connection, parsed.httpVersion);
-                const maxRequestsPerSocket = server.maxRequestsPerSocket == null
-                    ? 0
-                    : Math.max(0, server.maxRequestsPerSocket | 0);
-                const requestNumber = ++state.requestsServed;
-                if (maxRequestsPerSocket > 0 && requestNumber > maxRequestsPerSocket) {
-                    socket.write(Buffer.from('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'));
-                    socket.end();
-                    return;
-                }
-                const res = new ServerResponse(req, {
-                    rejectNonStandardBodyWrites: server._rejectNonStandardBodyWrites,
-                });
-                res._keepAlive = connKeepAlive && (maxRequestsPerSocket === 0 || requestNumber < maxRequestsPerSocket);
-                res._keepAliveTimeout = server.keepAliveTimeout;
-                res._keepAliveMaxRequests = maxRequestsPerSocket;
-
-                state.req = req;
-                state.res = res;
-                state.responseFinished = false;
-                state.shouldKeepAliveAfterResponse = false;
-
-                // Set up finish handler for request sequencing
-                res.on('finish', function onFinish() {
-                    state.responseFinished = true;
-                    state.shouldKeepAliveAfterResponse = res._keepAlive && !server._closeRequested;
-                    maybeFinalizeResponse();
-                });
-
-                const cl = req.headers['content-length'];
-                const te = req.headers['transfer-encoding'];
-                let requestHasNoBody = false;
-
-                if (te) {
-                    if (!_isValidChunkedTE(te)) {
-                        server.emit('clientError', new Error('HPE_INVALID_TRANSFER_ENCODING'), socket);
-                        socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
-                        socket.end();
+                    const parsed = parseRequestHeaders(headerBlock);
+                    if (!parsed) {
+                        server.emit(
+                            'clientError',
+                            new Error('HPE_INVALID_REQUEST'),
+                            socket,
+                        );
+                        socket.write(
+                            Buffer.from(
+                                'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
+                            ),
+                        );
+                        endConnection();
                         return;
                     }
-                    state.state = BODY_CHUNKED;
-                    state.chunkState = 'SIZE';
-                    state.chunkExtensionSize = 0;
-                    state.contentLength = 0;
-                } else if (cl !== undefined && cl !== '0') {
-                    state.contentLength = parseInt(cl, 10);
-                    state.bodyReceived = 0;
-                    if (isNaN(state.contentLength) || state.contentLength < 0) {
-                        server.emit('clientError', new Error('HPE_INVALID_CONTENT_LENGTH'), socket);
-                        socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
-                        socket.end();
+
+                    const req = new ServerIncomingMessage(
+                        socket,
+                        parsed.method,
+                        parsed.url,
+                        parsed.httpVersion,
+                        parsed.rawHeaders,
+                        server._joinDuplicateHeaders,
+                    );
+                    // CONNECT method: hand the socket to the application
+                    if (parsed.method === 'CONNECT') {
+                        const head =
+                            state.buffer.length > 0
+                                ? Buffer.from(state.buffer)
+                                : Buffer.alloc(0);
+                        state.buffer = Buffer.alloc(0);
+                        state.detached = true;
+                        state.current = null;
+                        req.complete = true;
+
+                        if (server.listenerCount('connect') > 0) {
+                            server.emit('connect', req, socket, head);
+                        } else {
+                            socket.write(
+                                Buffer.from(
+                                    'HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n',
+                                ),
+                            );
+                            socket.destroy();
+                        }
                         return;
                     }
-                    state.state = BODY_CONTENT_LENGTH;
-                } else {
-                    // No body
-                    req.complete = true;
-                    requestHasNoBody = true;
-                    // Keep parsing pipelined requests even if earlier responses
-                    // have not finished yet.
-                    state.state = IDLE;
-                }
 
-                server.emit('request', req, res);
-                if (requestHasNoBody) {
-                    // Emit EOF after request handlers had a chance to attach `end` listeners.
-                    Promise.resolve().then(function () {
-                        req.push(null);
+                    // Upgrade request: emit 'upgrade' event before host header check
+                    const connHeader = req.headers.connection;
+                    const isUpgrade =
+                        connHeader &&
+                        connHeader
+                            .toLowerCase()
+                            .split(',')
+                            .some((t) => t.trim() === 'upgrade');
+                    if (isUpgrade && server.listenerCount('upgrade') > 0) {
+                        const head =
+                            state.buffer.length > 0
+                                ? Buffer.from(state.buffer)
+                                : Buffer.alloc(0);
+                        state.buffer = Buffer.alloc(0);
+                        state.detached = true;
+                        state.current = null;
+                        req.complete = true;
+                        server.emit('upgrade', req, socket, head);
+                        return;
+                    }
+
+                    // requireHostHeader check (default true for HTTP/1.1)
+                    if (
+                        server._requireHostHeader &&
+                        parsed.httpVersion === '1.1' &&
+                        req.headers.host === undefined
+                    ) {
+                        server.emit(
+                            'clientError',
+                            new Error('HPE_MISSING_HOST_HEADER'),
+                            socket,
+                        );
+                        socket.write(
+                            Buffer.from(
+                                'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
+                            ),
+                        );
+                        endConnection();
+                        return;
+                    }
+
+                    const connKeepAlive = computeKeepAlive(
+                        req.headers.connection,
+                        parsed.httpVersion,
+                    );
+                    const maxRequestsPerSocket =
+                        server.maxRequestsPerSocket == null
+                            ? 0
+                            : Math.max(0, server.maxRequestsPerSocket | 0);
+                    const requestNumber = ++state.requestsServed;
+                    const res = new ServerResponse(req, {
+                        rejectNonStandardBodyWrites:
+                            server._rejectNonStandardBodyWrites,
                     });
-                }
-                progress = true;
-                continue;
-            }
+                    const isDroppedRequest =
+                        maxRequestsPerSocket > 0 &&
+                        requestNumber > maxRequestsPerSocket;
+                    res._keepAlive =
+                        connKeepAlive &&
+                        (maxRequestsPerSocket === 0 ||
+                            requestNumber < maxRequestsPerSocket);
+                    res._acceptOverflowRequest =
+                        connKeepAlive &&
+                        maxRequestsPerSocket > 0 &&
+                        requestNumber === maxRequestsPerSocket;
+                    res._keepAliveTimeout = server.keepAliveTimeout;
+                    res._keepAliveMaxRequests = maxRequestsPerSocket;
+                    // The queue head can write immediately. Later responses remain
+                    // blocked until every earlier response has completed.
+                    res._outputBlocked = state.responseQueue.length > 0;
+                    const context = {
+                        req,
+                        res,
+                        responseFinished: false,
+                        shouldKeepAliveAfterResponse: false,
+                    };
+                    state.responseQueue.push(context);
+                    state.current = context;
 
-            if (state.state === BODY_CONTENT_LENGTH) {
-                if (state.buffer.length === 0) continue;
-                const remaining = state.contentLength - state.bodyReceived;
-                const available = Math.min(state.buffer.length, remaining);
-                const chunk = state.buffer.slice(0, available);
-                state.buffer = state.buffer.slice(available);
-                state.bodyReceived += available;
-                state.req.push(chunk);
+                    // Set up finish handler for request sequencing
+                    res.on('finish', function onFinish() {
+                        context.responseFinished = true;
+                        const responseConnection = res.getHeader('connection');
+                        const responseCloses =
+                            typeof responseConnection === 'string' &&
+                            responseConnection
+                                .toLowerCase()
+                                .split(',')
+                                .some((token) => token.trim() === 'close');
+                        context.shouldKeepAliveAfterResponse =
+                            (res._keepAlive || res._acceptOverflowRequest) &&
+                            !isDroppedRequest &&
+                            !responseCloses &&
+                            !server._closeRequested;
+                        maybeFinalizeResponse(context);
+                    });
 
-                if (state.bodyReceived >= state.contentLength) {
-                    state.req.complete = true;
-                    state.req.push(null);
-                    state.state = AWAITING_RESPONSE;
-                    maybeFinalizeResponse();
-                }
-                progress = true;
-                continue;
-            }
+                    const cl = req.headers['content-length'];
+                    const te = req.headers['transfer-encoding'];
+                    let requestHasNoBody = false;
 
-            if (state.state === BODY_CHUNKED) {
-                const result = parseChunked(state);
-                if (result === 'progress') {
+                    if (te) {
+                        if (!_isValidChunkedTE(te)) {
+                            server.emit(
+                                'clientError',
+                                new Error('HPE_INVALID_TRANSFER_ENCODING'),
+                                socket,
+                            );
+                            socket.write(
+                                Buffer.from(
+                                    'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
+                                ),
+                            );
+                            endConnection();
+                            return;
+                        }
+                        state.state = BODY_CHUNKED;
+                        state.chunkState = 'SIZE';
+                        state.chunkExtensionSize = 0;
+                        state.contentLength = 0;
+                    } else if (cl !== undefined && cl !== '0') {
+                        state.contentLength = parseInt(cl, 10);
+                        state.bodyReceived = 0;
+                        if (
+                            isNaN(state.contentLength) ||
+                            state.contentLength < 0
+                        ) {
+                            server.emit(
+                                'clientError',
+                                new Error('HPE_INVALID_CONTENT_LENGTH'),
+                                socket,
+                            );
+                            socket.write(
+                                Buffer.from(
+                                    'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
+                                ),
+                            );
+                            endConnection();
+                            return;
+                        }
+                        state.state = BODY_CONTENT_LENGTH;
+                    } else {
+                        // No body
+                        req.complete = true;
+                        requestHasNoBody = true;
+                        state.current = null;
+                        state.state = IDLE;
+                    }
+
+                    if (isDroppedRequest) {
+                        server.emit('dropRequest', req, socket);
+                        // Match Node's automatic maxRequestsPerSocket overflow
+                        // response, including its ordinary writeHead/end framing.
+                        res.writeHead(503);
+                        res.end();
+                    } else {
+                        server.emit('request', req, res);
+                    }
+                    if (requestHasNoBody) {
+                        // Emit EOF after request handlers had a chance to attach `end` listeners.
+                        Promise.resolve().then(function () {
+                            req.push(null);
+                        });
+                    }
                     progress = true;
-                } else if (result === 'done') {
-                    state.req.complete = true;
-                    state.req.push(null);
-                    state.state = AWAITING_RESPONSE;
-                    maybeFinalizeResponse();
-                    progress = true;
-                } else if (result === 'error') {
-                    server.emit('clientError', new Error('HPE_INVALID_CHUNK'), socket);
-                    socket.write(Buffer.from('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'));
-                    socket.end();
-                    return;
-                } else if (result === 'extension-limit') {
-                    server.emit('clientError', new Error('HPE_CHUNK_EXTENSIONS_OVERFLOW'), socket);
-                    socket.write(Buffer.from('HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n'));
-                    socket.end();
-                    return;
+                    continue;
                 }
-                continue;
+
+                if (state.state === BODY_CONTENT_LENGTH) {
+                    if (state.buffer.length === 0) continue;
+                    const context = state.current;
+                    const remaining = state.contentLength - state.bodyReceived;
+                    const available = Math.min(state.buffer.length, remaining);
+                    const chunk = state.buffer.slice(0, available);
+                    state.buffer = state.buffer.slice(available);
+                    state.bodyReceived += available;
+                    context.req.push(chunk);
+
+                    if (state.bodyReceived >= state.contentLength) {
+                        context.req.complete = true;
+                        context.req.push(null);
+                        state.current = null;
+                        state.state = IDLE;
+                        maybeFinalizeResponse(context);
+                    }
+                    progress = true;
+                    continue;
+                }
+
+                if (state.state === BODY_CHUNKED) {
+                    const result = parseChunked(state);
+                    if (result === 'progress') {
+                        progress = true;
+                    } else if (result === 'done') {
+                        const context = state.current;
+                        context.req.complete = true;
+                        context.req.push(null);
+                        state.current = null;
+                        state.state = IDLE;
+                        maybeFinalizeResponse(context);
+                        progress = true;
+                    } else if (result === 'error') {
+                        server.emit(
+                            'clientError',
+                            new Error('HPE_INVALID_CHUNK'),
+                            socket,
+                        );
+                        socket.write(
+                            Buffer.from(
+                                'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
+                            ),
+                        );
+                        endConnection();
+                        return;
+                    } else if (result === 'extension-limit') {
+                        server.emit(
+                            'clientError',
+                            new Error('HPE_CHUNK_EXTENSIONS_OVERFLOW'),
+                            socket,
+                        );
+                        socket.write(
+                            Buffer.from(
+                                'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n',
+                            ),
+                        );
+                        endConnection();
+                        return;
+                    }
+                    continue;
+                }
             }
+        } finally {
+            state.parsing = false;
         }
     }
 
@@ -1386,7 +1612,7 @@ function parseChunked(state) {
             const chunk = state.buffer.slice(0, available);
             state.buffer = state.buffer.slice(available);
             state.bodyReceived += available;
-            state.req.push(chunk);
+            state.current.req.push(chunk);
             if (state.bodyReceived >= state.contentLength) {
                 state.chunkState = 'TRAILER';
             }
@@ -1556,24 +1782,6 @@ function Server(options, requestListener) {
 
     const self = this;
     this.on('connection', function connectionListener(socket) {
-        // Force-close idle keep-alive connections to prevent WASI resource
-        // exhaustion. In WASM, each socket consumes limited resources
-        // (pollables, streams), and wasi:http clients create new connections
-        // per request. Only connections that have already served at least one
-        // request are closed: a freshly accepted connection is also IDLE until
-        // its first request bytes arrive, and closing it here would race
-        // against the in-flight request (the client would see ECONNRESET).
-        for (const conn of self._httpConnections) {
-            if (conn.state === IDLE && conn.requestsServed > 0 &&
-                conn.socket && !conn.socket.destroyed) {
-                // Use force_close on the native handle to immediately release
-                // WASI resources, even if async poll loops hold pollables.
-                if (conn.socket._handle && conn.socket._handle.force_close) {
-                    conn.socket._handle.force_close();
-                }
-                conn.socket.destroy();
-            }
-        }
         const connState = createConnectionParser(self, socket);
         self._httpConnections.add(connState);
         socket.on('close', function () {
@@ -1615,8 +1823,9 @@ Server.prototype.closeAllConnections = function closeAllConnections() {
 
 Server.prototype.closeIdleConnections = function closeIdleConnections() {
     for (const conn of this._httpConnections) {
-        if (conn.state === IDLE && conn.socket && !conn.socket.destroyed) {
-            conn.socket.end();
+        if (conn.state === IDLE && conn.responseQueue.length === 0 &&
+            conn.socket && !conn.socket.destroyed) {
+            conn.endConnection();
         }
     }
 };
