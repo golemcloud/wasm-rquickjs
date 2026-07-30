@@ -22,7 +22,8 @@ use wasm_rquickjs::{
     EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
 };
 use wasmtime::component::{
-    Component, Func, Instance, Linker, ResourceAny, ResourceTable, ResourceType, Val,
+    Component, Func, HasSelf, Instance, Linker, Resource, ResourceAny, ResourceTable, ResourceType,
+    Val,
 };
 use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
@@ -30,6 +31,186 @@ use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
+
+pub mod ws_mock_p2 {
+    wasmtime::component::bindgen!({
+        world: "golem-websocket",
+        path: "crates/golem-websocket/wit",
+        imports: { default: async | trappable },
+        with: {
+            "golem:websocket/client.websocket-connection": super::WsMockConnection,
+        },
+    });
+}
+
+pub mod ws_mock_p3 {
+    wasmtime::component::bindgen!({
+        world: "golem-websocket",
+        path: "crates/golem-websocket/wit-p3",
+        imports: { default: async | trappable },
+        with: {
+            "golem:websocket/client.websocket-connection": super::WsMockConnection,
+        },
+    });
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WsSentMessage {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+pub struct WsMockConnection;
+
+impl ws_mock_p2::golem::websocket::client::Host for Host {}
+
+impl ws_mock_p2::golem::websocket::client::HostWebsocketConnection for Host {
+    async fn connect(
+        &mut self,
+        _url: String,
+        _headers: Option<Vec<(String, String)>>,
+    ) -> wasmtime::Result<
+        Result<Resource<WsMockConnection>, ws_mock_p2::golem::websocket::client::Error>,
+    > {
+        Ok(Ok(self.table.lock().unwrap().push(WsMockConnection)?))
+    }
+
+    async fn send(
+        &mut self,
+        _self_: Resource<WsMockConnection>,
+        message: ws_mock_p2::golem::websocket::client::Message,
+    ) -> wasmtime::Result<Result<(), ws_mock_p2::golem::websocket::client::Error>> {
+        let message = match message {
+            ws_mock_p2::golem::websocket::client::Message::Text(value) => {
+                WsSentMessage::Text(value)
+            }
+            ws_mock_p2::golem::websocket::client::Message::Binary(value) => {
+                WsSentMessage::Binary(value)
+            }
+        };
+        self.ws_sent.lock().unwrap().push(message);
+        Ok(Ok(()))
+    }
+
+    async fn receive(
+        &mut self,
+        _self_: Resource<WsMockConnection>,
+    ) -> wasmtime::Result<
+        Result<
+            ws_mock_p2::golem::websocket::client::Message,
+            ws_mock_p2::golem::websocket::client::Error,
+        >,
+    > {
+        Ok(Err(ws_mock_p2::golem::websocket::client::Error::Closed(
+            None,
+        )))
+    }
+
+    async fn receive_with_timeout(
+        &mut self,
+        _self_: Resource<WsMockConnection>,
+        _timeout_ms: u64,
+    ) -> wasmtime::Result<
+        Result<
+            Option<ws_mock_p2::golem::websocket::client::Message>,
+            ws_mock_p2::golem::websocket::client::Error,
+        >,
+    > {
+        Ok(Err(ws_mock_p2::golem::websocket::client::Error::Closed(
+            None,
+        )))
+    }
+
+    async fn close(
+        &mut self,
+        _self_: Resource<WsMockConnection>,
+        _code: Option<u16>,
+        _reason: Option<String>,
+    ) -> wasmtime::Result<Result<(), ws_mock_p2::golem::websocket::client::Error>> {
+        Ok(Ok(()))
+    }
+
+    async fn drop(&mut self, rep: Resource<WsMockConnection>) -> wasmtime::Result<()> {
+        self.table.lock().unwrap().delete(rep)?;
+        Ok(())
+    }
+}
+
+impl ws_mock_p3::golem::websocket::client::Host for Host {}
+
+impl ws_mock_p3::golem::websocket::client::HostWebsocketConnection for Host {
+    async fn connect(
+        &mut self,
+        _url: String,
+        _headers: Option<Vec<(String, String)>>,
+    ) -> wasmtime::Result<
+        Result<Resource<WsMockConnection>, ws_mock_p3::golem::websocket::client::Error>,
+    > {
+        Ok(Ok(self.table.lock().unwrap().push(WsMockConnection)?))
+    }
+
+    async fn send(
+        &mut self,
+        _self_: Resource<WsMockConnection>,
+        message: ws_mock_p3::golem::websocket::client::Message,
+    ) -> wasmtime::Result<Result<(), ws_mock_p3::golem::websocket::client::Error>> {
+        let message = match message {
+            ws_mock_p3::golem::websocket::client::Message::Text(value) => {
+                WsSentMessage::Text(value)
+            }
+            ws_mock_p3::golem::websocket::client::Message::Binary(value) => {
+                WsSentMessage::Binary(value)
+            }
+        };
+        self.ws_sent.lock().unwrap().push(message);
+        Ok(Ok(()))
+    }
+
+    async fn close(
+        &mut self,
+        _self_: Resource<WsMockConnection>,
+        _code: Option<u16>,
+        _reason: Option<String>,
+    ) -> wasmtime::Result<Result<(), ws_mock_p3::golem::websocket::client::Error>> {
+        Ok(Ok(()))
+    }
+
+    async fn drop(&mut self, rep: Resource<WsMockConnection>) -> wasmtime::Result<()> {
+        self.table.lock().unwrap().delete(rep)?;
+        Ok(())
+    }
+}
+
+impl ws_mock_p3::golem::websocket::client::HostWebsocketConnectionWithStore<Host>
+    for HasSelf<Host>
+{
+    async fn receive(
+        _store: &wasmtime::component::Accessor<Host, Self>,
+        _self_: Resource<WsMockConnection>,
+    ) -> wasmtime::Result<
+        Result<
+            ws_mock_p3::golem::websocket::client::Message,
+            ws_mock_p3::golem::websocket::client::Error,
+        >,
+    > {
+        Ok(Err(ws_mock_p3::golem::websocket::client::Error::Closed(
+            None,
+        )))
+    }
+
+    async fn receive_with_timeout(
+        _store: &wasmtime::component::Accessor<Host, Self>,
+        _self_: Resource<WsMockConnection>,
+        _timeout_ms: u64,
+    ) -> wasmtime::Result<
+        Result<
+            Option<ws_mock_p3::golem::websocket::client::Message>,
+            ws_mock_p3::golem::websocket::client::Error,
+        >,
+    > {
+        Ok(Ok(None))
+    }
+}
 
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
@@ -602,67 +783,10 @@ fn test_linker_with_common_hosts(engine: &Engine) -> anyhow::Result<Linker<Host>
         )?;
     }
 
-    {
-        struct WsConn;
-        let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-        ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-            move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-        })?;
-
-        ws.func_new(
-            "[static]websocket-connection.connect",
-            |_store, _ty, _params, _results| {
-                Err(wasmtime::Error::msg(
-                    "WebSocket connect not available in tests",
-                ))
-            },
-        )?;
-
-        ws.func_new(
-            "[method]websocket-connection.send",
-            |_store, _ty, _params, _results| {
-                Err(wasmtime::Error::msg(
-                    "WebSocket send not available in tests",
-                ))
-            },
-        )?;
-
-        ws.func_new(
-            "[method]websocket-connection.receive",
-            |_store, _ty, _params, _results| {
-                Err(wasmtime::Error::msg(
-                    "WebSocket receive not available in tests",
-                ))
-            },
-        )?;
-
-        ws.func_new(
-            "[method]websocket-connection.receive-with-timeout",
-            |_store, _ty, _params, _results| {
-                Err(wasmtime::Error::msg(
-                    "WebSocket receive-with-timeout not available in tests",
-                ))
-            },
-        )?;
-
-        ws.func_new(
-            "[method]websocket-connection.close",
-            |_store, _ty, _params, _results| {
-                Err(wasmtime::Error::msg(
-                    "WebSocket close not available in tests",
-                ))
-            },
-        )?;
-
-        ws.func_new(
-            "[method]websocket-connection.subscribe",
-            |_store, _ty, _params, _results| {
-                Err(wasmtime::Error::msg(
-                    "WebSocket subscribe not available in tests",
-                ))
-            },
-        )?;
-    }
+    ws_mock_p2::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(
+        &mut linker,
+        |host| host,
+    )?;
 
     Ok(linker)
 }
@@ -1655,6 +1779,7 @@ impl TestInstance {
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
+            ws_sent: Arc::new(Mutex::new(Vec::new())),
             #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
             golem_spans: golem_spans.clone(),
@@ -1776,6 +1901,10 @@ impl TestInstance {
 
     pub fn read_log_messages(&self) -> Vec<(LogLevel, String, String)> {
         self.store.data().log_messages.lock().unwrap().clone()
+    }
+
+    pub fn read_ws_sent(&self) -> Vec<WsSentMessage> {
+        self.store.data().ws_sent.lock().unwrap().clone()
     }
 
     async fn invoke_and_capture_output_inner(
@@ -2323,6 +2452,7 @@ pub struct Host {
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
+    pub ws_sent: Arc<Mutex<Vec<WsSentMessage>>>,
     #[cfg(feature = "use-golem-wasmtime")]
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
     pub golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
@@ -2540,96 +2670,24 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Mock `golem:websocket/client@1.5.0`: registers the `websocket-connection` resource and stubs
-/// every method to fail. This satisfies the host import required when the `websocket` module is
-/// compiled in; tests only exercise the JS-side API surface (globals, brand checks), not live
-/// connections.
+/// Add the target-specific functional `golem:websocket/client@1.5.0` mock.
+///
+/// Connections close cleanly on receive and sent frames remain instance-local for exact assertions.
 fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> anyhow::Result<()> {
-    struct WsConn;
-    let mut ws = linker.instance("golem:websocket/client@1.5.0")?;
-    ws.resource("websocket-connection", ResourceType::host::<WsConn>(), {
-        move |_ctx: StoreContextMut<'_, Host>, _rep: u32| Ok(())
-    })?;
-
-    ws.func_new(
-        "[static]websocket-connection.connect",
-        |_store, _ty, _params, _results| {
-            Err(wasmtime::Error::msg(
-                "WebSocket connect not available in tests",
-            ))
-        },
-    )?;
-
-    ws.func_new(
-        "[method]websocket-connection.send",
-        |_store, _ty, _params, _results| {
-            Err(wasmtime::Error::msg(
-                "WebSocket send not available in tests",
-            ))
-        },
-    )?;
-
     match target {
         TestTarget::P2 => {
-            ws.func_new(
-                "[method]websocket-connection.receive",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive not available in tests",
-                    ))
-                },
-            )?;
-            ws.func_new(
-                "[method]websocket-connection.receive-with-timeout",
-                |_store, _ty, _params, _results| {
-                    Err(wasmtime::Error::msg(
-                        "WebSocket receive-with-timeout not available in tests",
-                    ))
-                },
+            ws_mock_p2::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(
+                linker,
+                |host| host,
             )?;
         }
         TestTarget::P3 => {
-            ws.func_new_concurrent(
-                "[method]websocket-connection.receive",
-                |_accessor, _ty, _params, _results| {
-                    Box::pin(async {
-                        Err(wasmtime::Error::msg(
-                            "WebSocket receive not available in tests",
-                        ))
-                    })
-                },
-            )?;
-            ws.func_new_concurrent(
-                "[method]websocket-connection.receive-with-timeout",
-                |_accessor, _ty, _params, _results| {
-                    Box::pin(async {
-                        Err(wasmtime::Error::msg(
-                            "WebSocket receive-with-timeout not available in tests",
-                        ))
-                    })
-                },
+            ws_mock_p3::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(
+                linker,
+                |host| host,
             )?;
         }
     }
-
-    ws.func_new(
-        "[method]websocket-connection.close",
-        |_store, _ty, _params, _results| {
-            Err(wasmtime::Error::msg(
-                "WebSocket close not available in tests",
-            ))
-        },
-    )?;
-
-    ws.func_new(
-        "[method]websocket-connection.subscribe",
-        |_store, _ty, _params, _results| {
-            Err(wasmtime::Error::msg(
-                "WebSocket subscribe not available in tests",
-            ))
-        },
-    )?;
-
     Ok(())
 }
 

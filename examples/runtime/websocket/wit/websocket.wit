@@ -1,0 +1,6 @@
+package quickjs:websocket;
+
+world websocket {
+  export test-binary-send: func() -> bool;
+  export test-websocket-stream-send: func() -> bool;
+}

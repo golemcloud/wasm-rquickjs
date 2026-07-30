@@ -48,6 +48,7 @@ mod toplevel_timer;
 mod url;
 mod v8_stack_trace;
 mod variant_list_roundtrip;
+mod websocket;
 mod xhr;
 
 // Tag suites into runtime groups for parallel CI matrix execution.
@@ -63,6 +64,7 @@ tag_suite!(assert, group4);
 tag_suite!(dns, group4);
 tag_suite!(console, group4);
 tag_suite!(encoding, group4);
+tag_suite!(websocket, group4);
 
 tag_suite!(response_constructor, group5);
 tag_suite!(streams, group5);

@@ -158,6 +158,9 @@ class WebSocket {
         this._extensions = '';
         this._protocol = '';
         this._connection = null;
+        this._sendQueue = [];
+        this._sendQueueIndex = 0;
+        this._sendPending = false;
 
         // Event handlers
         this._onopen = null;
@@ -278,50 +281,80 @@ class WebSocket {
             return;
         }
 
+        const isBlob = typeof Blob !== 'undefined' && data instanceof Blob;
+        if (this._sendPending || isBlob) {
+            this._bufferedAmount += isBlob ? data.size : this._dataByteLength(data);
+            this._sendQueue.push(data);
+            if (!this._sendPending) this._drainSendQueue();
+            return;
+        }
+
+        this._sendNow(data, false);
+    }
+
+    _dataByteLength(data) {
+        if (typeof data === 'string') return utf8ByteLength(data);
+        if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) return data.byteLength;
+        return utf8ByteLength(String(data));
+    }
+
+    _sendNow(data, alreadyCounted) {
         try {
             if (typeof data === 'string') {
-                this._bufferedAmount += utf8ByteLength(data);
+                if (!alreadyCounted) this._bufferedAmount += utf8ByteLength(data);
                 this._connection.send_text(data);
-                this._bufferedAmount = 0;
+                this._bufferedAmount -= utf8ByteLength(data);
             } else if (data instanceof ArrayBuffer) {
-                this._bufferedAmount += data.byteLength;
+                if (!alreadyCounted) this._bufferedAmount += data.byteLength;
                 this._connection.send_binary(new Uint8Array(data));
-                this._bufferedAmount = 0;
+                this._bufferedAmount -= data.byteLength;
             } else if (ArrayBuffer.isView(data)) {
-                this._bufferedAmount += data.byteLength;
+                if (!alreadyCounted) this._bufferedAmount += data.byteLength;
                 this._connection.send_binary(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-                this._bufferedAmount = 0;
-            } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
-                // Blob support: read as ArrayBuffer and send as binary
-                const reader = new FileReader();
-                reader.onload = () => {
-                    if (this._readyState === OPEN && this._connection) {
-                        try {
-                            const buf = new Uint8Array(reader.result);
-                            this._bufferedAmount += buf.byteLength;
-                            this._connection.send_binary(buf);
-                            this._bufferedAmount = 0;
-                        } catch (e2) {
-                            this._bufferedAmount = 0;
-                            this._readyState = CLOSED;
-                            this._dispatch('error', new ErrorEvent(e2.message || String(e2)));
-                            this._dispatch('close', new CloseEvent(1006, '', false));
-                        }
-                    }
-                };
-                reader.readAsArrayBuffer(data);
+                this._bufferedAmount -= data.byteLength;
             } else {
-                // Fallback: coerce to string per spec
                 const str = String(data);
-                this._bufferedAmount += utf8ByteLength(str);
+                const length = utf8ByteLength(str);
+                if (!alreadyCounted) this._bufferedAmount += length;
                 this._connection.send_text(str);
-                this._bufferedAmount = 0;
+                this._bufferedAmount -= length;
             }
         } catch (e) {
             this._bufferedAmount = 0;
             this._readyState = CLOSED;
             this._dispatch('error', new ErrorEvent(e.message || String(e)));
             this._dispatch('close', new CloseEvent(1006, '', false));
+        }
+    }
+
+    async _drainSendQueue() {
+        this._sendPending = true;
+        try {
+            while (this._sendQueueIndex < this._sendQueue.length) {
+                const data = this._sendQueue[this._sendQueueIndex++];
+                if (typeof Blob !== 'undefined' && data instanceof Blob) {
+                    const bytes = new Uint8Array(await data.arrayBuffer());
+                    if (this._readyState === OPEN && this._connection) {
+                        this._connection.send_binary(bytes);
+                    }
+                    this._bufferedAmount -= data.size;
+                } else if (this._readyState === OPEN && this._connection) {
+                    this._sendNow(data, true);
+                } else {
+                    this._bufferedAmount -= this._dataByteLength(data);
+                }
+            }
+            this._sendQueue.length = 0;
+            this._sendQueueIndex = 0;
+        } catch (e) {
+            this._bufferedAmount = 0;
+            this._sendQueue.length = 0;
+            this._sendQueueIndex = 0;
+            this._readyState = CLOSED;
+            this._dispatch('error', new ErrorEvent(e.message || String(e)));
+            this._dispatch('close', new CloseEvent(1006, '', false));
+        } finally {
+            this._sendPending = false;
         }
     }
 
@@ -481,7 +514,7 @@ class WebSocketStream {
             });
 
             const writable = new WritableStream({
-                write(chunk) {
+                async write(chunk) {
                     if (!conn) {
                         throw new Error('WebSocketStream is closed');
                     }
@@ -491,6 +524,8 @@ class WebSocketStream {
                         conn.send_binary(new Uint8Array(chunk));
                     } else if (ArrayBuffer.isView(chunk)) {
                         conn.send_binary(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+                    } else if (typeof Blob !== 'undefined' && chunk instanceof Blob) {
+                        conn.send_binary(new Uint8Array(await chunk.arrayBuffer()));
                     } else {
                         conn.send_text(String(chunk));
                     }
