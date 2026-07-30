@@ -58,6 +58,7 @@ pub mod ws_mock_p3 {
 pub enum WsSentMessage {
     Text(String),
     Binary(Vec<u8>),
+    Close(Option<u16>, Option<String>),
 }
 
 pub struct WsMockConnection;
@@ -124,9 +125,13 @@ impl ws_mock_p2::golem::websocket::client::HostWebsocketConnection for Host {
     async fn close(
         &mut self,
         _self_: Resource<WsMockConnection>,
-        _code: Option<u16>,
-        _reason: Option<String>,
+        code: Option<u16>,
+        reason: Option<String>,
     ) -> wasmtime::Result<Result<(), ws_mock_p2::golem::websocket::client::Error>> {
+        self.ws_sent
+            .lock()
+            .unwrap()
+            .push(WsSentMessage::Close(code, reason));
         Ok(Ok(()))
     }
 
@@ -169,9 +174,13 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnection for Host {
     async fn close(
         &mut self,
         _self_: Resource<WsMockConnection>,
-        _code: Option<u16>,
-        _reason: Option<String>,
+        code: Option<u16>,
+        reason: Option<String>,
     ) -> wasmtime::Result<Result<(), ws_mock_p3::golem::websocket::client::Error>> {
+        self.ws_sent
+            .lock()
+            .unwrap()
+            .push(WsSentMessage::Close(code, reason));
         Ok(Ok(()))
     }
 

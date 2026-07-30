@@ -27,3 +27,26 @@ export const testWebsocketStreamSend = async () => {
     await writer.write(new Blob([new Uint8Array([7, 8, 9])]));
     return true;
 };
+
+export const testSendSnapshotAndCloseOrder = async () => {
+    const ws = new WebSocket('ws://localhost:9999/echo');
+    await new Promise((resolve, reject) => {
+        ws.onopen = resolve;
+        ws.onerror = (event) => reject(new Error(event && event.message || 'WebSocket error'));
+    });
+
+    ws.send(new Blob([new Uint8Array([1])]));
+    const arrayBufferBytes = new Uint8Array([2, 3]);
+    ws.send(arrayBufferBytes.buffer);
+    arrayBufferBytes.fill(9);
+    const viewBacking = new Uint8Array([0, 4, 5, 0]);
+    ws.send(viewBacking.subarray(1, 3));
+    viewBacking.fill(8);
+    ws.send('tail');
+
+    await new Promise((resolve) => {
+        ws.onclose = resolve;
+        ws.close(3000, 'done');
+    });
+    return ws.bufferedAmount === 0;
+};

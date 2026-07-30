@@ -207,3 +207,62 @@ export const test3 = async () => {
         return false;
     }
 };
+
+export const test4 = async () => {
+    const check = (condition, message) => {
+        if (!condition) throw new Error(message);
+    };
+    try {
+        const vectors = [
+            ['shift_jis', [0x82, 0xa0], 'あ'],
+            ['gbk', [0xc4, 0xe3], '你'],
+            ['big5', [0xa7, 0x41], '你'],
+            ['euc-jp', [0xa4, 0xa2], 'あ'],
+        ];
+        for (const [encoding, bytes, expected] of vectors) {
+            const decoder = new TextDecoder(encoding, {fatal: true});
+            check(decoder.decode(new Uint8Array(bytes.slice(0, 1)), {stream: true}) === '',
+                `${encoding} should buffer its lead byte`);
+            check(decoder.decode(new Uint8Array(bytes.slice(1)), {stream: true}) === expected,
+                `${encoding} should complete a split character`);
+            check(decoder.decode() === '', `${encoding} final flush should be empty`);
+        }
+
+        const fatal = new TextDecoder('shift_jis', {fatal: true});
+        fatal.decode(new Uint8Array([0x82]), {stream: true});
+        let fatalError;
+        try {
+            fatal.decode();
+        } catch (error) {
+            fatalError = error;
+        }
+        check(fatalError?.code === 'ERR_ENCODING_INVALID_ENCODED_DATA',
+            'fatal truncated Shift_JIS should fail on flush');
+
+        const replacement = new TextDecoder('shift_jis');
+        check(replacement.decode(new Uint8Array([0x82]), {stream: true}) === '',
+            'nonfatal Shift_JIS should buffer its lead byte');
+        check(replacement.decode() === '\ufffd',
+            'nonfatal truncated Shift_JIS should replace on flush');
+
+        const decoded = new ReadableStream({
+            start(controller) {
+                controller.enqueue(new Uint8Array([0x82]));
+                controller.enqueue(new Uint8Array([0xa0]));
+                controller.close();
+            },
+        }).pipeThrough(new TextDecoderStream('shift_jis', {fatal: true}));
+        const reader = decoded.getReader();
+        let streamed = '';
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            streamed += value;
+        }
+        check(streamed === 'あ', 'TextDecoderStream should complete split Shift_JIS');
+        return true;
+    } catch (error) {
+        console.log('test4 failure:', error?.message);
+        return false;
+    }
+};

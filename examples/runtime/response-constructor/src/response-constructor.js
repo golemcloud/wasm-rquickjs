@@ -299,6 +299,35 @@ const responseConstructorExports = {
             return ok(name);
         } catch (e) { return fail(name, e); }
     },
+
+    async testBufferSourceSnapshot() {
+        const name = 'Request and Response snapshot BufferSource bodies';
+        const eq = (actual, expected, what) => {
+            const values = Array.from(actual);
+            if (values.length !== expected.length || values.some((v, i) => v !== expected[i])) {
+                throw new Error(`${what}: expected [${expected}], got [${values}]`);
+            }
+        };
+        try {
+            const responseBacking = new Uint8Array([0, 1, 2, 3, 0]);
+            const response = new Response(responseBacking.subarray(1, 4));
+            const responseClone = response.clone();
+            responseBacking.fill(9);
+            eq(new Uint8Array(await response.arrayBuffer()), [1, 2, 3], 'Response');
+            eq(new Uint8Array(await responseClone.arrayBuffer()), [1, 2, 3], 'Response clone');
+
+            const requestBacking = new Uint8Array([0, 4, 5, 6, 0]);
+            const request = new Request('https://example.com/x', {
+                method: 'POST',
+                body: new DataView(requestBacking.buffer, 1, 3),
+            });
+            const requestClone = request.clone();
+            requestBacking.fill(8);
+            eq(new Uint8Array(await request.arrayBuffer()), [4, 5, 6], 'Request');
+            eq(new Uint8Array(await requestClone.arrayBuffer()), [4, 5, 6], 'Request clone');
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
 };
 
 export { responseConstructorExports };

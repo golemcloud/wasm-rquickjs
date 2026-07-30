@@ -798,15 +798,24 @@ impl HttpResponse {
     }
 
     #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ArrayBuffer<'js>> {
+    pub async fn array_buffer<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<ArrayBuffer<'js>> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         let bytes = match source {
             ResponseBodySource::Bytes(body_bytes) => body_bytes,
-            ResponseBodySource::Native(response) => response
-                .bytes()
-                .await
-                .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))?
-                .to_vec(),
+            ResponseBodySource::Native(response) => {
+                with_abort_signal(&ctx, signal, async {
+                    response
+                        .bytes()
+                        .await
+                        .map(|bytes| bytes.to_vec())
+                        .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))
+                })
+                .await?
+            }
             ResponseBodySource::Shared(shared) => {
                 let mut shared = shared.borrow_mut();
                 if let Some(response) = shared.response.take() {
@@ -912,16 +921,24 @@ impl HttpResponse {
     }
 
     #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn text<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<String> {
+    pub async fn text<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<String> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Bytes(body_bytes) => {
                 Ok(String::from_utf8_lossy(&body_bytes).to_string())
             }
-            ResponseBodySource::Native(response) => response
-                .text()
+            ResponseBodySource::Native(response) => {
+                with_abort_signal(&ctx, signal, async {
+                    response.text().await.map_err(|_| {
+                        Exception::throw_message(&ctx, "failed to read response body")
+                    })
+                })
                 .await
-                .map_err(|_| Exception::throw_message(&ctx, "failed to read response body")),
+            }
             ResponseBodySource::Shared(shared) => {
                 let mut shared = shared.borrow_mut();
                 if let Some(response) = shared.response.take() {
@@ -1105,7 +1122,8 @@ impl ResponseBodyStream {
     pub async fn pull<'js>(
         &mut self,
         ctx: Ctx<'js>,
-    ) -> List<(Option<TypedArray<'js, u8>>, Option<String>)> {
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
         let (result, stream) = match self.stream.take() {
             Some(BodySource::Native {
                 stream,
@@ -1114,7 +1132,11 @@ impl ResponseBodyStream {
             }) => {
                 const CHUNK_SIZE: u64 = 4096;
                 let pollable = stream.subscribe();
-                AsyncPollable::new(pollable).wait_for().await;
+                with_abort_signal(&ctx, signal, async {
+                    AsyncPollable::new(pollable).wait_for().await;
+                    Ok(())
+                })
+                .await?;
 
                 match stream.read(CHUNK_SIZE) {
                     Ok(chunk) => match TypedArray::new_copy(ctx.clone(), chunk) {
@@ -1279,7 +1301,7 @@ impl ResponseBodyStream {
             ),
         };
         self.stream = stream;
-        result
+        Ok(result)
     }
 }
 

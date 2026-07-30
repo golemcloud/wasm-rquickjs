@@ -24,6 +24,7 @@ interface response-constructor-exports {
     test-request-bytes-blob: func() -> test-result;
     test-response-clone-stream: func() -> test-result;
     test-typed-array-bodies: func() -> test-result;
+    test-buffer-source-snapshot: func() -> test-result;
 }
 
 world response-constructor {

@@ -1051,7 +1051,11 @@ impl HttpResponse {
             .to_string()
     }
 
-    pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ArrayBuffer<'js>> {
+    pub async fn array_buffer<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        _signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<ArrayBuffer<'js>> {
         let bytes = self.take_body(&ctx)?;
         let ctx_clone = ctx.clone();
         ArrayBuffer::new(ctx, bytes).map_err(move |_| {
@@ -1062,7 +1066,11 @@ impl HttpResponse {
         })
     }
 
-    pub async fn text<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<String> {
+    pub async fn text<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        _signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<String> {
         let bytes = self.take_body(&ctx)?;
         Ok(String::from_utf8_lossy(&bytes).to_string())
     }
@@ -1191,6 +1199,7 @@ impl ResponseBodyStream {
     pub async fn pull<'js>(
         &mut self,
         ctx: Ctx<'js>,
+        _signal: Option<Value<'js>>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
         const CHUNK_SIZE: usize = 16384;
         let Some(bytes) = self.bytes.as_ref() else {

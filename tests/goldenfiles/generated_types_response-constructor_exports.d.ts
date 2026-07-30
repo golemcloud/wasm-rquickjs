@@ -17,6 +17,7 @@ declare module 'response-constructor' {
     export function testRequestBytesBlob(): Promise<TestResult>;
     export function testResponseCloneStream(): Promise<TestResult>;
     export function testTypedArrayBodies(): Promise<TestResult>;
+    export function testBufferSourceSnapshot(): Promise<TestResult>;
     export type TestResult = {
       name: string;
       passed: boolean;

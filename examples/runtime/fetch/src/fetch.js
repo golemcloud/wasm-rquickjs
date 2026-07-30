@@ -1108,3 +1108,33 @@ export async function abortAfterRedirect(port) {
         return error === reason;
     }
 }
+
+export async function abortResponseBody(port) {
+    const textController = new AbortController();
+    const textResponse = await fetch(`http://localhost:${port}/todos/0`, {
+        signal: textController.signal,
+    });
+    textController.abort('body reason must not escape');
+    let textError;
+    try {
+        await textResponse.text();
+    } catch (error) {
+        textError = error;
+    }
+    if (!(textError instanceof DOMException) || textError.name !== 'AbortError') {
+        return false;
+    }
+
+    const streamController = new AbortController();
+    const streamResponse = await fetch(`http://localhost:${port}/todos/0`, {
+        signal: streamController.signal,
+    });
+    streamController.abort('stream reason must not escape');
+    let streamError;
+    try {
+        await streamResponse.body.getReader().read();
+    } catch (error) {
+        streamError = error;
+    }
+    return streamError instanceof DOMException && streamError.name === 'AbortError';
+}

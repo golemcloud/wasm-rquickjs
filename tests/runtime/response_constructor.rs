@@ -168,3 +168,10 @@ async fn response_constructor_typed_array_bodies(
 ) -> anyhow::Result<()> {
     run_test(compiled, "test-typed-array-bodies").await
 }
+
+#[test]
+async fn response_constructor_buffer_source_snapshot(
+    #[tagged_as("response_constructor")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_test(compiled, "test-buffer-source-snapshot").await
+}

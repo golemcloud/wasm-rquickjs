@@ -161,6 +161,7 @@ class WebSocket {
         this._sendQueue = [];
         this._sendQueueIndex = 0;
         this._sendPending = false;
+        this._pendingClose = null;
 
         // Event handlers
         this._onopen = null;
@@ -281,76 +282,62 @@ class WebSocket {
             return;
         }
 
-        const isBlob = typeof Blob !== 'undefined' && data instanceof Blob;
-        if (this._sendPending || isBlob) {
-            this._bufferedAmount += isBlob ? data.size : this._dataByteLength(data);
-            this._sendQueue.push(data);
-            if (!this._sendPending) this._drainSendQueue();
-            return;
-        }
-
-        this._sendNow(data, false);
+        const entry = this._normalizeSendData(data);
+        this._bufferedAmount += entry.byteLength;
+        this._sendQueue.push(entry);
+        if (!this._sendPending) this._drainSendQueue();
     }
 
-    _dataByteLength(data) {
-        if (typeof data === 'string') return utf8ByteLength(data);
-        if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) return data.byteLength;
-        return utf8ByteLength(String(data));
+    _normalizeSendData(data) {
+        if (typeof Blob !== 'undefined' && data instanceof Blob) {
+            return {kind: 'blob', data, byteLength: data.size};
+        }
+        if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+            const source = data instanceof ArrayBuffer
+                ? new Uint8Array(data)
+                : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+            const snapshot = new Uint8Array(source.byteLength);
+            snapshot.set(source);
+            return {kind: 'binary', data: snapshot, byteLength: snapshot.byteLength};
+        }
+        const text = typeof data === 'string' ? data : String(data);
+        return {kind: 'text', data: text, byteLength: utf8ByteLength(text)};
     }
 
-    _sendNow(data, alreadyCounted) {
-        try {
-            if (typeof data === 'string') {
-                if (!alreadyCounted) this._bufferedAmount += utf8ByteLength(data);
-                this._connection.send_text(data);
-                this._bufferedAmount -= utf8ByteLength(data);
-            } else if (data instanceof ArrayBuffer) {
-                if (!alreadyCounted) this._bufferedAmount += data.byteLength;
-                this._connection.send_binary(new Uint8Array(data));
-                this._bufferedAmount -= data.byteLength;
-            } else if (ArrayBuffer.isView(data)) {
-                if (!alreadyCounted) this._bufferedAmount += data.byteLength;
-                this._connection.send_binary(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-                this._bufferedAmount -= data.byteLength;
-            } else {
-                const str = String(data);
-                const length = utf8ByteLength(str);
-                if (!alreadyCounted) this._bufferedAmount += length;
-                this._connection.send_text(str);
-                this._bufferedAmount -= length;
-            }
-        } catch (e) {
-            this._bufferedAmount = 0;
-            this._readyState = CLOSED;
-            this._dispatch('error', new ErrorEvent(e.message || String(e)));
-            this._dispatch('close', new CloseEvent(1006, '', false));
+    _sendEntry(entry) {
+        if (entry.kind === 'text') {
+            this._connection.send_text(entry.data);
+        } else {
+            this._connection.send_binary(entry.data);
         }
+        this._bufferedAmount -= entry.byteLength;
     }
 
     async _drainSendQueue() {
         this._sendPending = true;
         try {
             while (this._sendQueueIndex < this._sendQueue.length) {
-                const data = this._sendQueue[this._sendQueueIndex++];
-                if (typeof Blob !== 'undefined' && data instanceof Blob) {
-                    const bytes = new Uint8Array(await data.arrayBuffer());
-                    if (this._readyState === OPEN && this._connection) {
-                        this._connection.send_binary(bytes);
-                    }
-                    this._bufferedAmount -= data.size;
-                } else if (this._readyState === OPEN && this._connection) {
-                    this._sendNow(data, true);
-                } else {
-                    this._bufferedAmount -= this._dataByteLength(data);
+                let entry = this._sendQueue[this._sendQueueIndex++];
+                if (entry.kind === 'blob') {
+                    entry = {
+                        kind: 'binary',
+                        data: new Uint8Array(await entry.data.arrayBuffer()),
+                        byteLength: entry.byteLength,
+                    };
                 }
+                if (!this._connection) throw new Error('WebSocket connection is closed');
+                this._sendEntry(entry);
             }
             this._sendQueue.length = 0;
             this._sendQueueIndex = 0;
+            if (this._pendingClose) this._finishClose();
         } catch (e) {
             this._bufferedAmount = 0;
             this._sendQueue.length = 0;
             this._sendQueueIndex = 0;
+            this._pendingClose = null;
             this._readyState = CLOSED;
+            this._connection = null;
             this._dispatch('error', new ErrorEvent(e.message || String(e)));
             this._dispatch('close', new CloseEvent(1006, '', false));
         } finally {
@@ -384,7 +371,13 @@ class WebSocket {
         }
 
         this._readyState = CLOSING;
+        this._pendingClose = {code, reason};
+        if (!this._sendPending) this._drainSendQueue();
+    }
 
+    _finishClose() {
+        const {code, reason} = this._pendingClose;
+        this._pendingClose = null;
         try {
             if (this._connection) {
                 this._connection.close(

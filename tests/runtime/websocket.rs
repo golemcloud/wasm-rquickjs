@@ -68,3 +68,21 @@ async fn websocket_stream_send(
     )
     .await
 }
+
+#[test]
+async fn websocket_send_snapshot_and_close_order(
+    #[tagged_as("websocket")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_and_assert_frames(
+        compiled,
+        "test-send-snapshot-and-close-order",
+        vec![
+            WsSentMessage::Binary(vec![1]),
+            WsSentMessage::Binary(vec![2, 3]),
+            WsSentMessage::Binary(vec![4, 5]),
+            WsSentMessage::Text("tail".to_string()),
+            WsSentMessage::Close(Some(3000), Some("done".to_string())),
+        ],
+    )
+    .await
+}

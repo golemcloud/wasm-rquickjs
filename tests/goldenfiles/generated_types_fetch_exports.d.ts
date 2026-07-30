@@ -39,4 +39,5 @@ declare module 'fetch' {
   export function abortReleasesRequest(port: number): Promise<boolean>;
   export function abortReleasesUpload(port: number): Promise<boolean>;
   export function abortAfterRedirect(port: number): Promise<boolean>;
+  export function abortResponseBody(port: number): Promise<boolean>;
 }

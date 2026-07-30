@@ -996,3 +996,23 @@ async fn fetch_abort_after_redirect(
 ) -> anyhow::Result<()> {
     run_abort_case(compiled, "abort-after-redirect").await
 }
+
+#[test]
+async fn fetch_abort_response_body(
+    #[tagged_as("fetch")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _server) = start_test_server().await;
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "abort-response-body",
+        &[Val::U16(port)],
+    )
+    .await;
+    assert_eq!(
+        result?,
+        Some(Val::Bool(true)),
+        "response body consumption after abort must reject with AbortError. Output:\n{output}"
+    );
+    Ok(())
+}

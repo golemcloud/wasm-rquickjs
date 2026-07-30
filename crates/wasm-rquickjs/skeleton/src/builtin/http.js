@@ -19,6 +19,13 @@ function viewToBytes(view) {
     return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 }
 
+function snapshotBufferSource(value) {
+    const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : viewToBytes(value);
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    return copy;
+}
+
 // Defined as a plain (non-async) function so its prototype is
 // `Function.prototype` (not `AsyncFunction.prototype`) — which Node's vendored
 // `parallel/test-fetch.mjs` asserts. We deliberately do NOT use a
@@ -152,7 +159,7 @@ export function fetch(resource, options = {}) {
 
             fetchPromise = (async () => {
                 const nativeResponse = await request.simpleSend(signal);
-                return new Response(nativeResponse, request.url, credentials);
+                return new Response(nativeResponse, request.url, credentials, false, signal);
             })();
         }
 
@@ -422,7 +429,7 @@ async function streamingRequest(
             throw new Error("Unexpected redirect");
         }
 
-        const response = new Response(nativeResponse, currentUrl, credentials);
+        const response = new Response(nativeResponse, currentUrl, credentials, false, signal);
         if (currentRedirects > 0) {
             response.nativeResponse.redirected = true;
         }
@@ -446,8 +453,12 @@ async function streamingRequest(
     }
 }
 
+function responseAbortError() {
+    return new DOMException('The operation was aborted.', 'AbortError');
+}
+
 export class Response {
-    constructor(bodyOrNative, initOrUrl, credentials, isError = false) {
+    constructor(bodyOrNative, initOrUrl, credentials, isError = false, signal = undefined) {
         if (bodyOrNative instanceof httpNative.HttpResponse) {
             // Internal path: constructed from native HttpResponse
             this.nativeResponse = bodyOrNative;
@@ -456,6 +467,7 @@ export class Response {
             this._credentials = credentials || 'same-origin';
             this._isError = isError;
             this._isNative = true;
+            this._signal = signal;
         } else {
             // Standard Web API path: new Response(body, init)
             const body = bodyOrNative;
@@ -468,7 +480,10 @@ export class Response {
             this._credentials = 'same-origin';
             this._isError = false;
             this._isNative = false;
-            this._body = body !== undefined && body !== null ? body : null;
+            this._signal = undefined;
+            this._body = body instanceof ArrayBuffer || ArrayBuffer.isView(body)
+                ? snapshotBufferSource(body)
+                : body !== undefined && body !== null ? body : null;
         }
     }
 
@@ -499,12 +514,21 @@ export class Response {
                     return "bytes";
                 },
                 async pull(controller) {
+                    if (response._signal?.aborted) throw responseAbortError();
                     if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
                         nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
                         response.bodyUsed = true;
                     }
 
-                    const [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
+                    let next;
+                    let err;
+                    try {
+                        [next, err] =
+                            await nativeStreamSourceSlot.nativeStreamSource.pull(response._signal);
+                    } catch (error) {
+                        if (response._signal?.aborted) throw responseAbortError();
+                        throw error;
+                    }
                     if (err !== undefined) {
                         console.error("Error reading response body stream:", err);
                         controller.error(err);
@@ -640,7 +664,13 @@ export class Response {
         }
 
         if (this._isNative) {
-            return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
+            return new Response(
+                this.nativeResponse.clone(),
+                this.url,
+                this._credentials,
+                this._isError,
+                this._signal,
+            );
         }
         let clonedBody = this._body;
         if (this._body instanceof ReadableStream) {
@@ -677,7 +707,14 @@ export class Response {
 
     async arrayBuffer() {
         if (this._isNative) {
-            let result = await this.nativeResponse.arrayBuffer();
+            if (this._signal?.aborted) throw responseAbortError();
+            let result;
+            try {
+                result = await this.nativeResponse.arrayBuffer(this._signal);
+            } catch (error) {
+                if (this._signal?.aborted) throw responseAbortError();
+                throw error;
+            }
             this.bodyUsed = true;
             return result;
         }
@@ -734,7 +771,14 @@ export class Response {
 
     async text() {
         if (this._isNative) {
-            let result = await this.nativeResponse.text();
+            if (this._signal?.aborted) throw responseAbortError();
+            let result;
+            try {
+                result = await this.nativeResponse.text(this._signal);
+            } catch (error) {
+                if (this._signal?.aborted) throw responseAbortError();
+                throw error;
+            }
             this.bodyUsed = true;
             return result;
         }
@@ -885,11 +929,10 @@ export class Request {
             this._headers = new Headers(input._headers);
             this._bodyUsed = false;
             this._options = { ...input._options };
-            // Clone the request body. Buffered bodies (string / typed arrays / URLSearchParams /
-            // Blob / FormData) are replayable, so sharing the reference is safe and leaves the
-            // original request undisturbed. A ReadableStream body has a single reader, so it is
-            // tee'd per the Fetch standard: the original keeps one branch and the clone gets the
-            // other.
+            // Clone the request body. Buffered bodies have already been extracted from any mutable
+            // caller-owned BufferSource, so the internal value is replayable. A ReadableStream body
+            // has a single reader, so it is tee'd per the Fetch standard: the original keeps one
+            // branch and the clone gets the other.
             if (input._body instanceof ReadableStream) {
                 const [originalBranch, clonedBranch] = input._body.tee();
                 input._body = originalBranch;
@@ -904,7 +947,9 @@ export class Request {
             this._options = {
                 ...options,
             };
-            this._body = options.body;
+            this._body = options.body instanceof ArrayBuffer || ArrayBuffer.isView(options.body)
+                ? snapshotBufferSource(options.body)
+                : options.body;
         }
     }
 
