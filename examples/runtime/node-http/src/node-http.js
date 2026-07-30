@@ -644,8 +644,10 @@ export async function httpPipelinedConnectionClose() {
         let settled = false;
         let wire = '';
         let handled = 0;
+        let sentLateRequest = false;
         const server = http.createServer((req, res) => {
             handled++;
+            res.on('error', () => finish(false));
             if (req.url === '/first') {
                 res.setHeader('Connection', 'close');
                 res.end('first');
@@ -673,11 +675,19 @@ export async function httpPipelinedConnectionClose() {
             });
             socket.on('data', (chunk) => {
                 wire += chunk.toString('latin1');
+                if (!sentLateRequest && wire.includes('first')) {
+                    sentLateRequest = true;
+                    socket.write(
+                        'GET /late HTTP/1.1\r\nHost: localhost\r\n\r\n',
+                        () => {},
+                    );
+                }
             });
             socket.on('error', () => finish(false));
             socket.on('end', () => {
                 finish(
                     handled === 2 &&
+                    sentLateRequest &&
                     (wire.match(/HTTP\/1\.1 200/g) || []).length === 1 &&
                     wire.includes('\r\nConnection: close\r\n') &&
                     wire.includes('first') &&
@@ -743,7 +753,10 @@ export async function httpCloseIdleConnections() {
         let partialResponse = '';
         let idleResponse = '';
         let observedPartialRequest = '';
+        let handled = 0;
+        let sentLateRequest = false;
         const server = http.createServer((_req, res) => {
+            handled++;
             res.on('finish', () => {
                 setImmediate(() => server.closeIdleConnections());
             });
@@ -774,6 +787,13 @@ export async function httpCloseIdleConnections() {
                     });
                     idleSocket.on('data', (idleChunk) => {
                         idleResponse += idleChunk.toString('latin1');
+                        if (!sentLateRequest && idleResponse.includes('\r\n\r\nok')) {
+                            sentLateRequest = true;
+                            idleSocket.write(
+                                'GET /late HTTP/1.1\r\nHost: localhost\r\n\r\n',
+                                () => {},
+                            );
+                        }
                     });
                     idleSocket.on('close', () => {
                         if (!idleResponse.includes('HTTP/1.1 200') ||
@@ -803,6 +823,8 @@ export async function httpCloseIdleConnections() {
             });
             partialSocket.on('close', () => {
                 finish(
+                    handled === 2 &&
+                    sentLateRequest &&
                     partialResponse.includes('HTTP/1.1 200') &&
                     partialResponse.includes('\r\n\r\nok')
                 );

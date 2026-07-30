@@ -635,7 +635,11 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
         }
     };
 
-    if (this.socket && !this.socket.destroyed && !this._outputBlocked) {
+    if (this.socket &&
+        !this.socket.destroyed &&
+        !this.socket.writableEnded &&
+        this.socket.writable !== false &&
+        !this._outputBlocked) {
         try {
             return this.socket.write(data, onComplete);
         } catch (error) {
@@ -643,7 +647,10 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
             throw error;
         }
     }
-    if (this.socket && this.socket.destroyed) {
+    if (this.socket &&
+        (this.socket.destroyed ||
+            this.socket.writableEnded ||
+            this.socket.writable === false)) {
         // Node drops informational writes made after the response socket
         // closes without invoking their public callbacks or completing the
         // response successfully. Retire our internal accounting without
@@ -664,7 +671,10 @@ ServerResponse.prototype._activateOutput = function _activateOutput() {
     this._pendingOutput = [];
     if (pending.length === 0) return;
 
-    if (!this.socket || this.socket.destroyed) {
+    if (!this.socket ||
+        this.socket.destroyed ||
+        this.socket.writableEnded ||
+        this.socket.writable === false) {
         this._pendingOutput = pending;
         this._abortPendingOutput(new Error('Socket is closed'));
         return;
@@ -1034,7 +1044,14 @@ function createConnectionParser(server, socket) {
         requestsServed: 0,
         detached: false,
         parsing: false,
+        closing: false,
     };
+
+    function endConnection() {
+        state.closing = true;
+        socket.end();
+    }
+    state.endConnection = endConnection;
 
     // Install a single timeout handler for idle keep-alive connections
     socket.on('timeout', function onIdleTimeout() {
@@ -1045,7 +1062,7 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('data', function onData(data) {
-        if (state.detached) return;
+        if (state.detached || state.closing) return;
 
         if (typeof data === 'string') {
             data = Buffer.from(data);
@@ -1058,10 +1075,11 @@ function createConnectionParser(server, socket) {
 
         state.buffer = Buffer.concat([state.buffer, data]);
         parseLoop();
-        if (state.responseQueue.length > 0 &&
+        if (!state.closing &&
+            state.responseQueue.length > 0 &&
             state.responseQueue[0].res._outputBlocked) {
             setImmediate(() => {
-                if (state.responseQueue.length > 0) {
+                if (!state.closing && state.responseQueue.length > 0) {
                     state.responseQueue[0].res._activateOutput();
                 }
             });
@@ -1091,7 +1109,7 @@ function createConnectionParser(server, socket) {
                 }
             }
 
-            socket.end();
+            endConnection();
             return;
         }
 
@@ -1104,7 +1122,7 @@ function createConnectionParser(server, socket) {
             }
         }
         if (hasIncompleteRequest) {
-            socket.end();
+            endConnection();
             return;
         }
 
@@ -1118,12 +1136,13 @@ function createConnectionParser(server, socket) {
             return;
         }
 
-        socket.end();
+        endConnection();
     });
 
     socket.on('error', function onError(err) {
         if (state.detached) return;
 
+        const requestsWithErrors = [];
         for (const context of state.responseQueue) {
             context.res._abortPendingOutput(err);
             if (!context.req.aborted) {
@@ -1133,8 +1152,13 @@ function createConnectionParser(server, socket) {
                 }
                 context.req.aborted = true;
                 context.req.emit('aborted');
-                context.req.emit('error', err);
+                requestsWithErrors.push(context.req);
             }
+        }
+        // Complete cleanup for the whole pipeline before invoking application
+        // error handlers, since an unhandled request error throws.
+        for (const req of requestsWithErrors) {
+            req.emit('error', err);
         }
     });
 
@@ -1188,7 +1212,7 @@ function createConnectionParser(server, socket) {
         }
 
         if (!shouldKeepAlive) {
-            socket.end();
+            endConnection();
             return true;
         }
 
@@ -1206,7 +1230,7 @@ function createConnectionParser(server, socket) {
         }
 
         if (state.readableEnded && state.closeAfterResponse && state.responseQueue.length === 0) {
-            socket.end();
+            endConnection();
             return true;
         }
 
@@ -1264,7 +1288,7 @@ function createConnectionParser(server, socket) {
                                 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
                             ),
                         );
-                        socket.end();
+                        endConnection();
                         return;
                     }
 
@@ -1337,7 +1361,7 @@ function createConnectionParser(server, socket) {
                                 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
                             ),
                         );
-                        socket.end();
+                        endConnection();
                         return;
                     }
 
@@ -1413,7 +1437,7 @@ function createConnectionParser(server, socket) {
                                     'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
                                 ),
                             );
-                            socket.end();
+                            endConnection();
                             return;
                         }
                         state.state = BODY_CHUNKED;
@@ -1437,7 +1461,7 @@ function createConnectionParser(server, socket) {
                                     'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
                                 ),
                             );
-                            socket.end();
+                            endConnection();
                             return;
                         }
                         state.state = BODY_CONTENT_LENGTH;
@@ -1512,7 +1536,7 @@ function createConnectionParser(server, socket) {
                                 'HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n',
                             ),
                         );
-                        socket.end();
+                        endConnection();
                         return;
                     } else if (result === 'extension-limit') {
                         server.emit(
@@ -1525,7 +1549,7 @@ function createConnectionParser(server, socket) {
                                 'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\n\r\n',
                             ),
                         );
-                        socket.end();
+                        endConnection();
                         return;
                     }
                     continue;
@@ -1808,7 +1832,7 @@ Server.prototype.closeIdleConnections = function closeIdleConnections() {
     for (const conn of this._httpConnections) {
         if (conn.state === IDLE && conn.responseQueue.length === 0 &&
             conn.socket && !conn.socket.destroyed) {
-            conn.socket.end();
+            conn.endConnection();
         }
     }
 };
