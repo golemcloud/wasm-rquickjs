@@ -517,7 +517,7 @@ var common = {
 
     // Feature detection
     hasCrypto: true,
-    hasIntl: false,
+    hasIntl: true,
     hasIPv6: false,
     hasMultiLocalhost: false,
     hasQuic: false,
