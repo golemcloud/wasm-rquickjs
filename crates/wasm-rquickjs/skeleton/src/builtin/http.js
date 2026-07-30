@@ -523,8 +523,7 @@ export class Response {
                     let next;
                     let err;
                     try {
-                        [next, err] =
-                            await nativeStreamSourceSlot.nativeStreamSource.pull(response._signal);
+                        [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
                     } catch (error) {
                         if (response._signal?.aborted) throw responseAbortError();
                         throw error;
@@ -710,7 +709,7 @@ export class Response {
             if (this._signal?.aborted) throw responseAbortError();
             let result;
             try {
-                result = await this.nativeResponse.arrayBuffer(this._signal);
+                result = await this.nativeResponse.arrayBuffer();
             } catch (error) {
                 if (this._signal?.aborted) throw responseAbortError();
                 throw error;
@@ -774,7 +773,7 @@ export class Response {
             if (this._signal?.aborted) throw responseAbortError();
             let result;
             try {
-                result = await this.nativeResponse.text(this._signal);
+                result = await this.nativeResponse.text();
             } catch (error) {
                 if (this._signal?.aborted) throw responseAbortError();
                 throw error;
