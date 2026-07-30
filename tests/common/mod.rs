@@ -620,7 +620,7 @@ mod tests {
         assert!(output_fresh_for_inputs(
             &output,
             &stamp,
-            &[input.clone()],
+            std::slice::from_ref(&input),
             signature,
         ));
 

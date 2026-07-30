@@ -124,9 +124,8 @@ impl NativeTextDecoder {
         encoding: rquickjs::convert::Coerced<String>,
         ignore_bom: bool,
     ) -> rquickjs::Result<Self> {
-        let encoding = Encoding::for_label(encoding.0.as_bytes()).ok_or_else(|| {
-            rquickjs::Exception::throw_message(&ctx, "Unsupported text encoding")
-        })?;
+        let encoding = Encoding::for_label(encoding.0.as_bytes())
+            .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "Unsupported text encoding"))?;
         Ok(Self {
             inner: RefCell::new(NativeDecoderState::new(encoding, ignore_bom)),
         })
@@ -158,9 +157,7 @@ impl NativeTextDecoder {
                     .decode_to_string_without_replacement(bytes, &mut output, !stream);
             matches!(result, DecoderResult::Malformed(_, _))
         } else {
-            let (result, _, _) = state
-                .decoder
-                .decode_to_string(bytes, &mut output, !stream);
+            let (result, _, _) = state.decoder.decode_to_string(bytes, &mut output, !stream);
             matches!(result, CoderResult::OutputFull)
         };
         if !stream || malformed {
