@@ -15,6 +15,10 @@ function normalizeFetchMethod(method) {
     return normalizedFetchMethods.has(upper) ? upper : value;
 }
 
+function viewToBytes(view) {
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+}
+
 // Defined as a plain (non-async) function so its prototype is
 // `Function.prototype` (not `AsyncFunction.prototype`) — which Node's vendored
 // `parallel/test-fetch.mjs` asserts. We deliberately do NOT use a
@@ -135,10 +139,8 @@ export function fetch(resource, options = {}) {
                 // no body
             } else if (body instanceof ArrayBuffer) {
                 request.arrayBufferBody(body);
-            } else if (body instanceof DataView) {
-                request.uint8ArrayBody(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
-            } else if (body instanceof Uint8Array) {
-                request.uint8ArrayBody(body);
+            } else if (ArrayBuffer.isView(body)) {
+                request.uint8ArrayBody(viewToBytes(body));
             } else if (body instanceof URLSearchParams) {
                 request.addHeader('Content-Type', 'application/x-www-form-urlencoded');
                 request.stringBody(body.toString());
@@ -506,8 +508,8 @@ export class Response {
             bytes = new TextEncoder().encode(body);
         } else if (body instanceof ArrayBuffer) {
             bytes = new Uint8Array(body);
-        } else if (body instanceof Uint8Array) {
-            bytes = body;
+        } else if (ArrayBuffer.isView(body)) {
+            bytes = viewToBytes(body);
         } else if (body instanceof Blob) {
             return body.stream();
         } else {
@@ -617,7 +619,13 @@ export class Response {
         if (this._isNative) {
             return new Response(this.nativeResponse.clone(), this.url, this._credentials, this._isError);
         }
-        const cloned = new Response(this._body, {
+        let clonedBody = this._body;
+        if (this._body instanceof ReadableStream) {
+            const [originalBranch, clonedBranch] = this._body.tee();
+            this._body = originalBranch;
+            clonedBody = clonedBranch;
+        }
+        const cloned = new Response(clonedBody, {
             status: this._status,
             statusText: this._statusText,
             headers: this._headers,
@@ -657,8 +665,9 @@ export class Response {
         if (this._body instanceof ArrayBuffer) {
             return this._body;
         }
-        if (this._body instanceof Uint8Array) {
-            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
+        if (ArrayBuffer.isView(this._body)) {
+            const bytes = viewToBytes(this._body);
+            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
         }
         if (this._body instanceof Blob) {
             return this._body.arrayBuffer();
@@ -676,7 +685,8 @@ export class Response {
             const result = new Uint8Array(totalLength);
             let offset = 0;
             for (const chunk of chunks) {
-                result.set(new Uint8Array(chunk.buffer || chunk), offset);
+                const bytes = ArrayBuffer.isView(chunk) ? viewToBytes(chunk) : new Uint8Array(chunk);
+                result.set(bytes, offset);
                 offset += chunk.byteLength;
             }
             return result.buffer;
@@ -845,6 +855,9 @@ export class Headers {
 export class Request {
     constructor(input, options = {}) {
         if (input instanceof Request) {
+            if (input._bodyUsed && input._body != null) {
+                throw new TypeError('Request body is already consumed');
+            }
             this._url = input._url;
             this._headers = new Headers(input._headers);
             this._bodyUsed = false;
@@ -887,11 +900,8 @@ export class Request {
         } else if (this._body instanceof ArrayBuffer) {
             const blob = new Blob([this._body]);
             return blob.stream();
-        } else if (this._body instanceof DataView) {
-            const blob = new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
-            return blob.stream();
-        } else if (this._body instanceof Uint8Array) {
-            const blob = new Blob([this._body]);
+        } else if (ArrayBuffer.isView(this._body)) {
+            const blob = new Blob([viewToBytes(this._body)]);
             return blob.stream();
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             const blob = new Blob([this._body]);
@@ -979,10 +989,9 @@ export class Request {
             return new TextEncoder().encode(this._body.toString()).buffer;
         } else if (this._body instanceof ArrayBuffer) {
             return this._body;
-        } else if (this._body instanceof DataView) {
-            return this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength);
-        } else if (this._body instanceof Uint8Array) {
-            return this._body.buffer;
+        } else if (ArrayBuffer.isView(this._body)) {
+            const bytes = viewToBytes(this._body);
+            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new TextEncoder().encode(this._body).buffer;
         } else {
@@ -1004,10 +1013,8 @@ export class Request {
             return new Blob([this._body.toString()]);
         } else if (this._body instanceof ArrayBuffer) {
             return new Blob([this._body]);
-        } else if (this._body instanceof DataView) {
-            return new Blob([this._body.buffer.slice(this._body.byteOffset, this._body.byteOffset + this._body.byteLength)]);
-        } else if (this._body instanceof Uint8Array) {
-            return new Blob([this._body]);
+        } else if (ArrayBuffer.isView(this._body)) {
+            return new Blob([viewToBytes(this._body)]);
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new Blob([this._body]);
         } else {
@@ -1022,17 +1029,15 @@ export class Request {
             return new Uint8Array(await streamToArrayBuffer(this._body));
         } else if (this._body instanceof FormData) {
             const blob = formDataToBlob(this._body);
-            return blob.bytes();
+            return new Uint8Array(await blob.arrayBuffer());
         } else if (this._body instanceof Blob) {
-            return this._body.bytes();
+            return new Uint8Array(await this._body.arrayBuffer());
         } else if (this._body instanceof URLSearchParams) {
             return new TextEncoder().encode(this._body.toString());
         } else if (this._body instanceof ArrayBuffer) {
             return new Uint8Array(this._body);
-        } else if (this._body instanceof DataView) {
-            return new Uint8Array(this._body.buffer, this._body.byteOffset, this._body.byteLength);
-        } else if (this._body instanceof Uint8Array) {
-            return this._body;
+        } else if (ArrayBuffer.isView(this._body)) {
+            return viewToBytes(this._body);
         } else if (typeof this._body === 'string' || this._body instanceof String) {
             return new TextEncoder().encode(this._body);
         } else {
@@ -1326,8 +1331,8 @@ export class XMLHttpRequest {
                      fetchOptions.body = this._requestBody;
                  } else if (this._requestBody instanceof ArrayBuffer) {
                      fetchOptions.body = this._requestBody;
-                 } else if (this._requestBody instanceof Uint8Array) {
-                     fetchOptions.body = this._requestBody;
+                 } else if (ArrayBuffer.isView(this._requestBody)) {
+                     fetchOptions.body = viewToBytes(this._requestBody);
                  } else if (this._requestBody instanceof URLSearchParams) {
                      fetchOptions.body = this._requestBody;
                  } else {
