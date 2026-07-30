@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3238/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3239/4425 (73.2%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3238 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1187 | 26.8% | 20.6% | 17.3% |
+| ✅ passing (runnable) | 3239 | 73.2% | 56.3% | 47.1% |
+| 🧩 known gap | 1186 | 26.8% | 20.6% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3238/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3239/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 245 | 304 | 267 | 2 | 0 | 80 | 44.6% | 30.0% |
+| http | 898 | 246 | 303 | 267 | 2 | 0 | 80 | 44.8% | 30.1% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1187)
+### known gap (1186)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1226,7 +1226,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires simulated process.execPath / Node CLI module_timer and trace-event support | 1 | `parallel/test-module-print-timing.mjs` |
 | requires spawned process.execPath --check execution with --experimental-default-type=module | 1 | `es-module/test-esm-type-flag-loose-files.mjs#test_06_should_check_as_esm_input_passed_via_check` |
 | requires spawned process.execPath entry-point execution to verify extensionless .wasm classification outside module scope | 1 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_08_should_error_as_the_entry_point` |
-| response header ordering differs before the test can verify server.close() idle-socket shutdown | 1 | `parallel/test-http-server-close-idle.js` |
 | response writable state around aborted proxy close is not Node-compatible | 1 | `parallel/test-http-writable-true-after-close.js` |
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |
 | runInContext sloppy-mode var/delete semantics still require contextified global script bindings | 1 | `parallel/test-vm-not-strict.js` |

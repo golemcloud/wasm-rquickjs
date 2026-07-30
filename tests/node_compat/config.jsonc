@@ -4671,7 +4671,7 @@
     "parallel/test-http-server-client-error.js": { "category": "known-gap", "reason": "HTTP parser clientError handling does not produce Node-compatible parse error response bytes" },
     "parallel/test-http-server-close-all.js": { "category": "known-gap", "reason": "server.closeAllConnections() does not close active and idle HTTP sockets with Node-compatible behavior" },
     "parallel/test-http-server-close-idle-wait-response.js": { "category": "known-gap", "reason": "server.closeIdleConnections() while waiting for a response does not fire expected callbacks" },
-    "parallel/test-http-server-close-idle.js": { "category": "known-gap", "reason": "response header ordering differs before the test can verify server.close() idle-socket shutdown" },
+    "parallel/test-http-server-close-idle.js": {},
     "parallel/test-http-server-connection-list-when-close.js": {
       "category": "node-internals",
       "reason": "asserts private req.socket.parser.free lifecycle from Node internals",
