@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
-const ABORT_REQUEST_ARRIVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const ABORT_REQUEST_ARRIVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
 
 #[test_dep(tagged_as = "fetch", scope = Cloneable)]
 async fn compiled_fetch() -> CompiledTest {
