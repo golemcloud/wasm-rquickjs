@@ -108,6 +108,7 @@ prepare_p2_workspace() {
         crates/wasm-rquickjs/Cargo.toml
         crates/wasm-rquickjs/skeleton/Cargo.toml_
         crates/wasm-rquickjs/skeleton/Cargo.lock
+        .github/scripts/enable-wasmtime-fork.sh
     )
     source_hash=$(git hash-object "${dependency_files[@]}" | git hash-object --stdin)
 
@@ -115,14 +116,11 @@ prepare_p2_workspace() {
     for path in src tests examples crates README.md LICENSE; do
         ln -sfn "../../$path" "$shadow/$path"
     done
-    ln -sfn .. "$shadow/tmp"
+    mkdir -p "$repo_root/tmp/p2-dev-artifacts"
+    ln -sfn ../p2-dev-artifacts "$shadow/tmp"
 
     if [[ ! -f "$shadow/.source-hash" ]] || [[ "$(<"$shadow/.source-hash")" != "$source_hash" ]]; then
-        awk '
-            $0 == "#[patch.crates-io]" { print substr($0, 2); next }
-            $0 ~ /^#wasmtime(-wasi|-wasi-http|-wizer)? = / { print substr($0, 2); next }
-            { print }
-        ' Cargo.toml > "$shadow/Cargo.toml"
+        bash .github/scripts/enable-wasmtime-fork.sh Cargo.toml "$shadow/Cargo.toml"
         cp Cargo.lock "$shadow/Cargo.lock"
 
         if ! grep -q '^\[patch\.crates-io\]$' "$shadow/Cargo.toml"; then

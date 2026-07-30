@@ -25,6 +25,9 @@
 #   bash .github/scripts/enable-wasmtime-fork.sh
 #   cargo test ... --features use-golem-wasmtime
 #
+# Usage for a copied manifest:
+#   bash .github/scripts/enable-wasmtime-fork.sh Cargo.toml path/to/Cargo.toml
+#
 # Idempotent: re-running on an already-uncommented file is a no-op.
 
 set -euo pipefail
@@ -35,18 +38,21 @@ set -euo pipefail
 # We write to a temp file and `mv` over the original instead of `sed -i` to
 # stay portable between GNU sed (Linux/CI) and BSD sed (macOS local dev),
 # which disagree on the syntax of in-place edits.
-tmp=$(mktemp)
+source_manifest=${1:-Cargo.toml}
+output_manifest=${2:-$source_manifest}
+output_dir=$(dirname "$output_manifest")
+tmp=$(mktemp "$output_dir/.enable-wasmtime-fork.XXXXXX")
 # Strip a leading `#` from `[patch.crates-io]` and from any `wasmtime…` line
 # that uses the Golem fork git URL. This matches every relevant line in the
 # commented block without needing portability-fragile regex alternation.
 sed \
     -e 's|^#\[patch\.crates-io\]$|[patch.crates-io]|' \
     -e 's|^#\(wasmtime[a-z-]* = { git = "https://github.com/golemcloud/wasmtime\.git", branch = "golem-wasmtime-v46\.0\.1-p3" }\)$|\1|' \
-    Cargo.toml > "$tmp"
-mv "$tmp" Cargo.toml
+    "$source_manifest" > "$tmp"
+mv "$tmp" "$output_manifest"
 
-echo "Enabled Golem wasmtime fork in Cargo.toml:"
-grep -nE '^\[patch\.crates-io\]|^wasmtime[a-z-]* = \{ git = "https://github\.com/golemcloud/wasmtime' Cargo.toml || {
+echo "Enabled Golem wasmtime fork in $output_manifest:"
+grep -nE '^\[patch\.crates-io\]|^wasmtime[a-z-]* = \{ git = "https://github\.com/golemcloud/wasmtime' "$output_manifest" || {
     echo "ERROR: no [patch.crates-io] entries found after uncommenting." >&2
     exit 1
 }

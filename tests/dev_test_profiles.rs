@@ -1,6 +1,9 @@
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
+
+use camino_tempfile::Utf8TempDir;
 
 #[derive(Debug)]
 struct Plan {
@@ -121,4 +124,43 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
                 .any(|args| args == ["--test-threads", "8"])
         );
     }
+}
+
+#[test]
+fn wasmtime_fork_transform_supports_copied_manifests_and_new_patch_crates() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let temp = Utf8TempDir::new().expect("temporary directory should be created");
+    let source = temp.path().join("source.toml");
+    let output = temp.path().join("output.toml");
+    let branch = "golem-wasmtime-v46.0.1-p3";
+    fs::write(
+        &source,
+        format!(
+            "[workspace]\n\
+             #[patch.crates-io]\n\
+             #wasmtime = {{ git = \"https://github.com/golemcloud/wasmtime.git\", branch = \"{branch}\" }}\n\
+             #wasmtime-component-util = {{ git = \"https://github.com/golemcloud/wasmtime.git\", branch = \"{branch}\" }}\n"
+        ),
+    )
+    .expect("source manifest should be written");
+
+    let result = Command::new("bash")
+        .arg(repo_root.join(".github/scripts/enable-wasmtime-fork.sh"))
+        .arg(&source)
+        .arg(&output)
+        .output()
+        .expect("Wasmtime fork transform should run");
+    assert!(
+        result.status.success(),
+        "transform failed:\n{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let source_after = fs::read_to_string(&source).expect("source manifest should remain");
+    let output = fs::read_to_string(&output).expect("output manifest should exist");
+    assert!(source_after.contains("#[patch.crates-io]"));
+    assert!(output.contains("[patch.crates-io]"));
+    assert!(output.contains("wasmtime = { git = "));
+    assert!(output.contains("wasmtime-component-util = { git = "));
+    assert!(!output.contains("#wasmtime"));
 }
