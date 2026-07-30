@@ -260,9 +260,7 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     socket._httpMessage = this;
     const pending = this._pendingOutput;
     this._pendingOutput = [];
-    for (const entry of pending) {
-        socket.write(entry.data, entry.callback);
-    }
+    this._flushPendingOutput(socket, pending);
 };
 
 ServerResponse.prototype.detachSocket = function detachSocket(socket) {
@@ -668,13 +666,17 @@ ServerResponse.prototype._activateOutput = function _activateOutput() {
         return;
     }
 
+    this._flushPendingOutput(this.socket, pending);
+};
+
+ServerResponse.prototype._flushPendingOutput = function _flushPendingOutput(socket, pending) {
+    if (pending.length === 0) return;
+
+    socket.cork();
     for (const entry of pending) {
-        try {
-            this.socket.write(entry.data, entry.callback);
-        } catch (error) {
-            entry.callback(error);
-        }
+        socket.write(entry.data, entry.callback);
     }
+    socket.uncork();
 };
 
 ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(error) {
@@ -1065,18 +1067,31 @@ function createConnectionParser(server, socket) {
 
         state.readableEnded = true;
 
-        for (const context of state.responseQueue) {
-            if (!context.req.aborted && !context.req.complete) {
-                context.req.complete = true;
-                context.req.push(null);
+        if (!server.httpAllowHalfOpen) {
+            for (const context of state.responseQueue) {
+                if (!context.req.aborted && !context.req.complete) {
+                    context.req.complete = true;
+                    context.req.push(null);
+                }
+                if (!context.responseFinished && !context.req.aborted) {
+                    context.req.aborted = true;
+                    context.req.emit('aborted');
+                }
             }
-            if (!context.responseFinished && !context.req.aborted) {
-                context.req.aborted = true;
-                context.req.emit('aborted');
-            }
+
+            socket.end();
+            return;
         }
 
-        if (!server.httpAllowHalfOpen) {
+        let hasIncompleteRequest = false;
+        for (const context of state.responseQueue) {
+            if (!context.req.complete && !context.req.aborted) {
+                context.req.aborted = true;
+                context.req.emit('aborted');
+                hasIncompleteRequest = true;
+            }
+        }
+        if (hasIncompleteRequest) {
             socket.end();
             return;
         }

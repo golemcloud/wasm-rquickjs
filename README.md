@@ -610,13 +610,13 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `http.IncomingMessage` — `statusCode`, `statusMessage`, `headers`, `rawHeaders`, `httpVersion`
 - `https.request` / `https.get` — delegates to `http` (WASI-HTTP handles TLS transparently)
 - `http.createServer([options][, requestListener])` — create an HTTP/1.1 server (requires `wasi:sockets`)
-- `http.Server` (extends `net.Server`): `listen`, `close`, `closeAllConnections`, `closeIdleConnections`, `setTimeout`
-- `http.ServerResponse` (extends `EventEmitter`): `writeHead`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `write`, `end`, `flushHeaders`, `writeContinue`, `cork`, `uncork`
+- `http.Server` (extends `net.Server`): `listen`, `close`, `closeAllConnections`, `closeIdleConnections`, `setTimeout`, `maxRequestsPerSocket`; emits `dropRequest` when the per-socket limit is exceeded
+- `http.ServerResponse` (extends `EventEmitter`): `writeHead`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `write`, `end`, `flushHeaders`, `writeContinue`, `writeProcessing`, `writeEarlyHints`, `cork`, `uncork`
 - Server-side `IncomingMessage` (extends `stream.Readable`): `method`, `url`, `headers`, `headersDistinct`, `rawHeaders`, `httpVersion`, `socket`, `complete`, `aborted`, `trailers`
 - `node:_http_common` — `_checkIsHttpToken`, `_checkInvalidHeaderChar`
-- Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, sequential request pipelining, idle connection cleanup
+- Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, ordered pipelined responses, server-side 100/102/103 informational responses, per-socket request limits, idle connection cleanup
 
-**Not yet supported:** HTTP Upgrade, 1xx informational events, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
+**Not yet supported:** HTTP Upgrade, client-side 1xx informational events through `wasi:http`, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
 
 </details>
 

@@ -322,6 +322,8 @@ export function httpResponseLifecycle() {
     const wire = [];
     const socket = new EventEmitter();
     socket.destroyed = false;
+    socket.cork = () => {};
+    socket.uncork = () => {};
     socket.write = (chunk, callback) => {
         wire.push(Buffer.from(chunk));
         if (typeof callback === 'function') callback();
@@ -338,11 +340,38 @@ export function httpResponseLifecycle() {
     }
     const writeSocket = new EventEmitter();
     writeSocket.destroyed = false;
+    writeSocket.cork = () => {};
+    writeSocket.uncork = () => {};
     writeSocket.write = (_chunk, callback) => {
         if (typeof callback === 'function') callback();
         return true;
     };
     writeResponse.assignSocket(writeSocket);
+
+    const throwingResponse = new http.ServerResponse(request);
+    let throwingCallbackCount = 0;
+    throwingResponse.write('queued', () => {
+        throwingCallbackCount++;
+    });
+    const throwingSocket = new EventEmitter();
+    let throwingCorkCount = 0;
+    let throwingUncorkCount = 0;
+    throwingSocket.destroyed = false;
+    throwingSocket.cork = () => {
+        throwingCorkCount++;
+    };
+    throwingSocket.uncork = () => {
+        throwingUncorkCount++;
+    };
+    throwingSocket.write = () => {
+        throw new Error('socket write failed');
+    };
+    let throwingMessage;
+    try {
+        throwingResponse.assignSocket(throwingSocket);
+    } catch (error) {
+        throwingMessage = error.message;
+    }
 
     let nullCode;
     try {
@@ -360,6 +389,10 @@ export function httpResponseLifecycle() {
     return Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') &&
         order.join(',') === 'listener,callback' &&
         writeOrder.join(',') === 'after-write,callback' &&
+        throwingMessage === 'socket write failed' &&
+        throwingCallbackCount === 0 &&
+        throwingCorkCount === 1 &&
+        throwingUncorkCount === 0 &&
         nullCode === 'ERR_STREAM_NULL_VALUES' &&
         typeCode === 'ERR_INVALID_ARG_TYPE';
 }
@@ -422,6 +455,104 @@ export async function httpPipelinedResponseOrder() {
                     earlyHints > processing &&
                     secondStatus > earlyHints &&
                     secondBody > secondStatus);
+            });
+        });
+    });
+}
+
+export async function httpHalfOpenPipelinedRequests() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let handled = 0;
+        let aborted = 0;
+        let truncatedWasComplete;
+        let wire = '';
+        let socket;
+        const server = http.createServer((req, res) => {
+            handled++;
+            req.on('aborted', () => {
+                aborted++;
+                if (req.url === '/truncated') {
+                    truncatedWasComplete = req.complete;
+                }
+            });
+            setTimeout(() => {
+                if (req.url === '/truncated') {
+                    res.end('unexpected');
+                    return;
+                }
+                if (req.aborted) {
+                    finish(false);
+                    return;
+                }
+                res.end(req.url);
+            }, 25);
+        });
+        server.httpAllowHalfOpen = true;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        const runTruncatedRequest = () => {
+            wire = '';
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.end(
+                    'POST /truncated HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Content-Length: 10\r\n\r\nabc'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => finish(false));
+            socket.on('end', () => {
+                finish(
+                    handled === 3 &&
+                    aborted === 1 &&
+                    truncatedWasComplete === false &&
+                    !wire.includes('HTTP/1.1')
+                );
+            });
+        };
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.end(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => finish(false));
+            socket.on('end', () => {
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const firstBody = wire.indexOf('/first', firstStatus);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', firstStatus + 1);
+                const secondBody = wire.indexOf('/second', secondStatus);
+                if (
+                    handled === 2 &&
+                    aborted === 0 &&
+                    firstStatus !== -1 &&
+                    firstBody > firstStatus &&
+                    secondStatus > firstBody &&
+                    secondBody > secondStatus
+                ) {
+                    runTruncatedRequest();
+                } else {
+                    finish(false);
+                }
             });
         });
     });
