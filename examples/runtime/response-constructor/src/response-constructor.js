@@ -188,6 +188,148 @@ const responseConstructorExports = {
             return ok(name);
         } catch (e) { return fail(name, e); }
     },
+
+    async testRequestClone() {
+        const name = 'Request.clone() preserves bodies';
+        try {
+            const r = new Request('https://example.com/x', {
+                method: 'POST', headers: { 'X-Test': 'yes' }, body: 'hello body',
+            });
+            const c = r.clone();
+            if (await r.text() !== 'hello body' || await c.text() !== 'hello body') {
+                return fail(name, 'buffered body was not independently readable');
+            }
+            if (c.url !== r.url || c.method !== 'POST' || c.headers.get('x-test') !== 'yes') {
+                return fail(name, 'request metadata was not preserved');
+            }
+            const stream = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new TextEncoder().encode('stream body'));
+                    controller.close();
+                },
+            });
+            const streamed = new Request('https://example.com/y', { method: 'POST', body: stream });
+            const streamedClone = streamed.clone();
+            if (await streamed.text() !== 'stream body' || await streamedClone.text() !== 'stream body') {
+                return fail(name, 'stream body was not independently readable');
+            }
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testRequestCloneAfterConsume() {
+        const name = 'Request.clone() rejects consumed bodies';
+        try {
+            for (const wrap of [false, true]) {
+                const r = new Request('https://example.com/x', { method: 'POST', body: 'abc' });
+                await r.text();
+                let threw = false;
+                try {
+                    if (wrap) new Request(r);
+                    else r.clone();
+                } catch (e) {
+                    threw = e instanceof TypeError;
+                }
+                if (!threw) return fail(name, wrap ? 'new Request(consumed)' : 'clone after consume');
+            }
+            const bodyless = new Request('https://example.com/x');
+            await bodyless.text();
+            bodyless.clone();
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testRequestBytesBlob() {
+        const name = 'Request.bytes() with Blob body';
+        try {
+            const bytes = await new Request('https://example.com/x', {
+                method: 'POST', body: new Blob(['abc']),
+            }).bytes();
+            if (!(bytes instanceof Uint8Array) || new TextDecoder().decode(bytes) !== 'abc') {
+                return fail(name, `unexpected bytes: ${bytes}`);
+            }
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testResponseCloneStream() {
+        const name = 'Response.clone() tees stream body';
+        try {
+            const backing = new Uint8Array([0, 115, 116, 114, 101, 97, 109, 0]);
+            const stream = new ReadableStream({
+                start(controller) {
+                    controller.enqueue(backing.subarray(1, 4));
+                    controller.enqueue(backing.subarray(4, 7));
+                    controller.close();
+                },
+            });
+            const r = new Response(stream);
+            const c = r.clone();
+            if (await r.text() !== 'stream' || await c.text() !== 'stream') {
+                return fail(name, 'original and clone did not receive the exact stream bytes');
+            }
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testTypedArrayBodies() {
+        const name = 'all ArrayBuffer views are exact body sources';
+        const eq = (actual, expected, what) => {
+            const values = Array.from(actual);
+            if (values.length !== expected.length || values.some((v, i) => v !== expected[i])) {
+                throw new Error(`${what}: expected [${expected}], got [${values}]`);
+            }
+        };
+        try {
+            eq(new Uint8Array(await new Response(new Int8Array([1, 2, 3])).arrayBuffer()),
+                [1, 2, 3], 'Int8Array');
+            const u16 = new Uint16Array(new Uint8Array([1, 2, 3, 4]).buffer);
+            eq(new Uint8Array(await new Response(u16).arrayBuffer()), [1, 2, 3, 4], 'Uint16Array');
+            const dvBuf = new Uint8Array([9, 8, 7, 6]).buffer;
+            eq(new Uint8Array(await new Response(new DataView(dvBuf, 1, 2)).arrayBuffer()),
+                [8, 7], 'DataView');
+            const sub = new Uint8Array([10, 20, 30, 40, 50]).subarray(1, 4);
+            eq(new Uint8Array(await new Request('https://example.com/x', {
+                method: 'POST', body: sub,
+            }).arrayBuffer()), [20, 30, 40], 'Request.arrayBuffer subview');
+            eq(await new Request('https://example.com/x', { method: 'POST', body: sub }).bytes(),
+                [20, 30, 40], 'Request.bytes subview');
+            const blob = await new Response(new Int8Array([5, 6])).blob();
+            eq(new Uint8Array(await blob.arrayBuffer()), [5, 6], 'Blob');
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
+
+    async testBufferSourceSnapshot() {
+        const name = 'Request and Response snapshot BufferSource bodies';
+        const eq = (actual, expected, what) => {
+            const values = Array.from(actual);
+            if (values.length !== expected.length || values.some((v, i) => v !== expected[i])) {
+                throw new Error(`${what}: expected [${expected}], got [${values}]`);
+            }
+        };
+        try {
+            const responseBacking = new Uint8Array([0, 1, 2, 3, 0]);
+            const response = new Response(responseBacking.subarray(1, 4));
+            const responseClone = response.clone();
+            responseBacking.fill(9);
+            eq(new Uint8Array(await response.arrayBuffer()), [1, 2, 3], 'Response');
+            eq(new Uint8Array(await responseClone.arrayBuffer()), [1, 2, 3], 'Response clone');
+
+            const requestBacking = new Uint8Array([0, 4, 5, 6, 0]);
+            const request = new Request('https://example.com/x', {
+                method: 'POST',
+                body: new DataView(requestBacking.buffer, 1, 3),
+            });
+            const requestClone = request.clone();
+            requestBacking.fill(8);
+            const returnedBytes = await request.bytes();
+            eq(returnedBytes, [4, 5, 6], 'Request');
+            returnedBytes.fill(7);
+            eq(new Uint8Array(await requestClone.arrayBuffer()), [4, 5, 6], 'Request clone');
+            return ok(name);
+        } catch (e) { return fail(name, e); }
+    },
 };
 
 export { responseConstructorExports };

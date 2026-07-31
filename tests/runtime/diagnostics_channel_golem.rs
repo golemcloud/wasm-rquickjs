@@ -64,43 +64,44 @@ async fn golem_context_tracing(
         let golem_spans = instance
             .golem_spans()
             .expect("Golem-prepared test instance should record spans");
-        let spans = golem_spans.lock().unwrap();
-        assert!(
-            spans.len() >= 3,
-            "Expected at least 3 spans (2 http.client + 1 custom), got {}. Output: {}",
-            spans.len(),
-            output
-        );
+        {
+            let spans = golem_spans.lock().unwrap();
+            assert!(
+                spans.len() >= 3,
+                "Expected at least 3 spans (2 http.client + 1 custom), got {}. Output: {}",
+                spans.len(),
+                output
+            );
 
-        // Check first span (successful GET)
-        let first_span = &spans[0];
-        assert!(first_span.finished, "First span should be finished");
-        assert!(
-            first_span.attributes.iter().any(|(k, _)| k == "method"),
-            "First span should have 'method' attribute: {:?}",
-            first_span.attributes
-        );
-        assert!(
-            first_span
-                .attributes
-                .iter()
-                .any(|(k, v)| k == "method" && v == "GET"),
-            "First span method should be GET: {:?}",
-            first_span.attributes
-        );
+            // Check first span (successful GET)
+            let first_span = &spans[0];
+            assert!(first_span.finished, "First span should be finished");
+            assert!(
+                first_span.attributes.iter().any(|(k, _)| k == "method"),
+                "First span should have 'method' attribute: {:?}",
+                first_span.attributes
+            );
+            assert!(
+                first_span
+                    .attributes
+                    .iter()
+                    .any(|(k, v)| k == "method" && v == "GET"),
+                "First span method should be GET: {:?}",
+                first_span.attributes
+            );
 
-        // Check second span (failed POST with error)
-        let second_span = &spans[1];
-        assert!(second_span.finished, "Second span should be finished");
-        assert!(
-            second_span
-                .attributes
-                .iter()
-                .any(|(k, v)| k == "error" && v == "true"),
-            "Second span should have error=true: {:?}",
-            second_span.attributes
-        );
-        drop(spans);
+            // Check second span (failed POST with error)
+            let second_span = &spans[1];
+            assert!(second_span.finished, "Second span should be finished");
+            assert!(
+                second_span
+                    .attributes
+                    .iter()
+                    .any(|(k, v)| k == "error" && v == "true"),
+                "Second span should have error=true: {:?}",
+                second_span.attributes
+            );
+        }
 
         let second_instance = TestInstance::from_golem_prepared(&prepared).await?;
         let second_golem_spans = second_instance

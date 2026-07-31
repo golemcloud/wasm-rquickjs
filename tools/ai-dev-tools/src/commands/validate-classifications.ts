@@ -115,7 +115,7 @@ function loadValidationRecords(resultsPath: string): ValidationRecord[] {
       }
       records.push(record);
     } catch (err) {
-      throw new Error(`Invalid JSONL record at ${resultsPath}:${idx + 1}: ${err}`);
+      throw new Error(`Invalid JSONL record at ${resultsPath}:${idx + 1}: ${err}`, { cause: err });
     }
   }
   return records;

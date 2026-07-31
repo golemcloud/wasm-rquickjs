@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 mod abort_controller;
+mod abort_signal;
 mod assert;
 mod async_hooks;
 mod base64;

@@ -1,6 +1,6 @@
 use golem_websocket::{Error as WsError, Message, WebsocketConnection};
 use rquickjs::class::Trace;
-use rquickjs::{Ctx, Exception, JsLifetime};
+use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 use std::cell::RefCell;
 
 /// Upper bound (in milliseconds) that a Preview 2 `receive_with_timeout` host call may block the
@@ -113,7 +113,11 @@ impl WsConnection {
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 
-    pub fn send_binary(&self, ctx: Ctx<'_>, data: Vec<u8>) -> rquickjs::Result<()> {
+    pub fn send_binary(&self, ctx: Ctx<'_>, data: TypedArray<'_, u8>) -> rquickjs::Result<()> {
+        let data = data
+            .as_bytes()
+            .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket data buffer is detached"))?
+            .to_vec();
         let inner = self.inner.borrow();
         let conn = inner
             .as_ref()

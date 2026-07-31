@@ -1048,3 +1048,93 @@ export async function fetchFunctionShape() {
         console.log("fetch function shape: FAILED");
     }
 }
+
+export async function abortReleasesRequest(port) {
+    const controller = new AbortController();
+    const reason = 'cancelled by test';
+    const request = fetch(`http://localhost:${port}/slow-response`, {
+        signal: controller.signal,
+    });
+
+    await fetch(`http://localhost:${port}/abort-ready`);
+    controller.abort(reason);
+    try {
+        await request;
+        return false;
+    } catch (error) {
+        return error === reason;
+    }
+}
+
+export async function abortReleasesUpload(port) {
+    const controller = new AbortController();
+    const reason = 'cancelled upload';
+    let cancelled = false;
+    const body = new ReadableStream({
+        pull() {
+            return new Promise(() => {});
+        },
+        cancel() {
+            cancelled = true;
+        },
+    });
+    const request = fetch(`http://localhost:${port}/slow-response`, {
+        method: 'POST',
+        body,
+        signal: controller.signal,
+    });
+    await fetch(`http://localhost:${port}/abort-ready`);
+    controller.abort(reason);
+    try {
+        await request;
+        return false;
+    } catch (error) {
+        return error === reason && cancelled;
+    }
+}
+
+export async function abortAfterRedirect(port) {
+    const controller = new AbortController();
+    const reason = 'cancelled redirected request';
+    const request = fetch(`http://localhost:${port}/redirect-to-slow`, {
+        signal: controller.signal,
+    });
+    await fetch(`http://localhost:${port}/abort-ready`);
+    controller.abort(reason);
+    try {
+        await request;
+        return false;
+    } catch (error) {
+        return error === reason;
+    }
+}
+
+export async function abortResponseBody(port) {
+    const textController = new AbortController();
+    const textResponse = await fetch(`http://localhost:${port}/todos/0`, {
+        signal: textController.signal,
+    });
+    textController.abort('body reason must not escape');
+    let textError;
+    try {
+        await textResponse.text();
+    } catch (error) {
+        textError = error;
+    }
+    if (!(textError instanceof DOMException) || textError.name !== 'AbortError') {
+        return false;
+    }
+
+    const streamController = new AbortController();
+    const streamResponse = await fetch(`http://localhost:${port}/todos/0`, {
+        signal: streamController.signal,
+    });
+    streamController.abort('stream reason must not escape');
+    let streamError;
+    try {
+        await streamResponse.body.getReader().read();
+    } catch (error) {
+        streamError = error;
+    }
+    return streamError instanceof DOMException && streamError.name === 'AbortError';
+}

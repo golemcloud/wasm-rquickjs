@@ -1,0 +1,5 @@
+package test:lib-openrouter-sdk;
+
+world lib-openrouter-sdk {
+  export run: func() -> string;
+}

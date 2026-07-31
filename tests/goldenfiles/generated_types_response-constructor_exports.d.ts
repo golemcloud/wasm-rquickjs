@@ -12,6 +12,12 @@ declare module 'response-constructor' {
     export function testDefaultValues(): Promise<TestResult>;
     export function testMockFetchPattern(): Promise<TestResult>;
     export function testHeadersIteration(): Promise<TestResult>;
+    export function testRequestClone(): Promise<TestResult>;
+    export function testRequestCloneAfterConsume(): Promise<TestResult>;
+    export function testRequestBytesBlob(): Promise<TestResult>;
+    export function testResponseCloneStream(): Promise<TestResult>;
+    export function testTypedArrayBodies(): Promise<TestResult>;
+    export function testBufferSourceSnapshot(): Promise<TestResult>;
     export type TestResult = {
       name: string;
       passed: boolean;

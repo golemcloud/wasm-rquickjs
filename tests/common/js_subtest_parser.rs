@@ -187,10 +187,8 @@ fn extract_callback_body<'a>(call: &'a CallExpression<'a>) -> Option<&'a Functio
                     return Some(body);
                 }
             }
-            Argument::ArrowFunctionExpression(arrow) => {
-                if !arrow.expression {
-                    return Some(&arrow.body);
-                }
+            Argument::ArrowFunctionExpression(arrow) if !arrow.expression => {
+                return Some(&arrow.body);
             }
             _ => {}
         }

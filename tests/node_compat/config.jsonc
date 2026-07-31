@@ -6312,7 +6312,7 @@
     "parallel/test-cwd-enoent-repl.js": { "category": "wasi-impossible", "reason": "requires spawning an interactive Node REPL subprocess (--interactive) and driving it via stdin" },
     "parallel/test-cwd-enoent.js": { "category": "known-gap", "reason": "child_process spawn() stdio stream compatibility (e.g. pipe) is incomplete in execPath emulation" },
     "parallel/test-data-url.js": { "category": "node-internals", "reason": "uses --expose-internals and require('internal/data_url')" },
-    "parallel/test-datetime-change-notify.js": { "category": "known-gap", "reason": "requires Intl/timezone data support that is not available in the current runtime" },
+    "parallel/test-datetime-change-notify.js": { "category": "known-gap", "reason": "Date does not react to process.env.TZ changes with full regional timezone-name data" },
     "parallel/test-debug-process.js": { "category": "wasi-impossible", "reason": "Windows-specific process._debugProcess behavior is not available in WASI" },
     "parallel/test-debug-v8-fast-api.js": { "category": "node-internals", "reason": "uses --expose-internals with internal/test/binding and V8 native syntax" },
     "parallel/test-debugger-backtrace.js": { "category": "wasi-impossible", "reason": "inspector/debugger is not available in WASM" },
@@ -6761,14 +6761,14 @@
     "parallel/test-icu-stringwidth.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/util/inspect" },
     "parallel/test-icu-transcode.js": {
       "category": "known-gap",
-      "reason": "Intl is not available in current runtime",
+      "reason": "buffer.transcode and ICU transcoding are not implemented",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "reason": "inherited: Intl is not available in current runtime" },
-        "block_01_block_01": { "reason": "inherited: Intl is not available in current runtime" },
-        "block_02_test_that_uint8array_arguments_are_okay": { "reason": "inherited: Intl is not available in current runtime" },
-        "block_03_block_03": { "reason": "inherited: Intl is not available in current runtime" },
-        "block_04_test_that_it_doesn_t_crash": { "reason": "inherited: Intl is not available in current runtime" }
+        "block_00_block_00": { "reason": "inherited: buffer.transcode and ICU transcoding are not implemented" },
+        "block_01_block_01": { "reason": "inherited: buffer.transcode and ICU transcoding are not implemented" },
+        "block_02_test_that_uint8array_arguments_are_okay": { "reason": "inherited: buffer.transcode and ICU transcoding are not implemented" },
+        "block_03_block_03": { "reason": "inherited: buffer.transcode and ICU transcoding are not implemented" },
+        "block_04_test_that_it_doesn_t_crash": { "reason": "inherited: buffer.transcode and ICU transcoding are not implemented" }
       }
     },
     "parallel/test-inspect-address-in-use.js": { "category": "wasi-impossible", "reason": "inspector/debugger is not available in WASM" },
@@ -6945,8 +6945,8 @@
     },
     "parallel/test-internal-validators-validateport.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/validators" },
     "parallel/test-internal-webidl-converttoint.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/webidl" },
-    "parallel/test-intl-v8BreakIterator.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
-    "parallel/test-intl.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
+    "parallel/test-intl-v8BreakIterator.js": { "category": "known-gap", "reason": "Intl is not installed in vm contexts and Intl.v8BreakIterator is not implemented" },
+    "parallel/test-intl.js": { "category": "known-gap", "reason": "process.config reports ICU disabled and full Node Intl metadata and fidelity are not implemented" },
     "parallel/test-js-stream-call-properties.js": { "category": "node-internals", "reason": "requires internalBinding('js_stream').JSStream" },
     "parallel/test-kill-segfault-freebsd.js": {},
     "parallel/test-listen-fd-cluster.js": { "category": "wasi-impossible", "reason": "cluster requires process forking and fd passing between processes" },
@@ -9085,7 +9085,7 @@
     "parallel/test-tty-stdin-pipe.js": { "category": "known-gap", "reason": "node:readline module is not yet supported in WebAssembly environment" },
     "parallel/test-ttywrap-invalid-fd.js": { "category": "node-internals", "reason": "uses --expose-internals and internalBinding('uv')" },
     "parallel/test-ttywrap-stack.js": { "category": "known-gap", "reason": "deep async recursion intended to exercise V8 stack recovery can trap the QuickJS/WASM runtime before JavaScript can catch and log the RangeError" },
-    "parallel/test-tz-version.js": { "category": "known-gap", "reason": "Intl (including process.versions.tz expectations) is not available in current runtime" },
+    "parallel/test-tz-version.js": { "category": "known-gap", "reason": "process.config ICU path and process.versions.tz metadata are not available" },
     "parallel/test-unhandled-exception-rethrow-error.js": { "category": "known-gap", "reason": "uncaughtException rethrow exit-code semantics are incomplete" },
     "parallel/test-unhandled-exception-with-worker-inuse.js": { "category": "wasi-impossible", "reason": "requires worker_threads" },
     "parallel/test-unicode-node-options.js": { "category": "node-internals", "reason": "uses --expose-internals and internal/options" },
@@ -9540,11 +9540,11 @@
     },
     "parallel/test-whatwg-encoding-custom-fatal-streaming.js": {
       "category": "known-gap",
-      "reason": "Intl is not available in current runtime",
+      "reason": "gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "reason": "inherited: Intl is not available in current runtime" },
-        "block_01_block_01": { "reason": "inherited: Intl is not available in current runtime" }
+        "block_00_block_00": { "reason": "inherited: gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" },
+        "block_01_block_01": { "reason": "inherited: gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" }
       }
     },
     "parallel/test-whatwg-encoding-custom-internals.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/encoding" },
@@ -9560,27 +9560,27 @@
       }
     },
     "parallel/test-whatwg-encoding-custom-textdecoder-api-invalid-label.js": { "category": "runnable" },
-    "parallel/test-whatwg-encoding-custom-textdecoder-fatal.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
+    "parallel/test-whatwg-encoding-custom-textdecoder-fatal.js": { "category": "known-gap", "reason": "gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" },
     "parallel/test-whatwg-encoding-custom-textdecoder-invalid-arg.js": { "category": "runnable" },
     "parallel/test-whatwg-encoding-custom-textdecoder-streaming.js": { "category": "runnable" },
-    "parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
+    "parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js": { "category": "known-gap", "reason": "gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible" },
     "parallel/test-whatwg-encoding-custom-textdecoder.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
+      "category": "known-gap",
+      "reason": "the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility",
       "split": true,
       "subtests": {
-        "block_00_test_textdecoder_utf_8_fatal_false_ignorebom_false": { "category": "runnable" },
-        "block_01_test_textdecoder_utf_8_fatal_false_ignorebom_true": { "category": "runnable" },
-        "block_02_invalid_encoders": { "category": "runnable" },
-        "block_03_test_textdecoder_label_undefined_options_null": { "category": "runnable" },
-        "block_04_test_textdecoder_utf_16le": { "category": "runnable" },
+        "block_00_test_textdecoder_utf_8_fatal_false_ignorebom_false": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_01_test_textdecoder_utf_8_fatal_false_ignorebom_true": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_02_invalid_encoders": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_03_test_textdecoder_label_undefined_options_null": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_04_test_textdecoder_utf_16le": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
         "block_05_test_textdecoder_inspect_with_hidden_fields": { "category": "known-gap", "reason": "hidden TextDecoder inspect output exposes Node/V8 internal decoder handles that are not represented in this runtime" },
-        "block_06_test_textdecoder_inspect_without_hidden_fields": { "category": "runnable" },
-        "block_07_test_textdecoder_inspect_with_negative_depth": { "category": "runnable" },
-        "block_08_block_08": { "category": "runnable" },
-        "block_09_block_09": { "category": "runnable" },
-        "block_10_test_textdecoder_for_incomplete_utf_8_byte_sequence": { "category": "runnable" },
-        "block_11_block_11": { "category": "runnable" }
+        "block_06_test_textdecoder_inspect_without_hidden_fields": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_07_test_textdecoder_inspect_with_negative_depth": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_08_block_08": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_09_block_09": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_10_test_textdecoder_for_incomplete_utf_8_byte_sequence": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" },
+        "block_11_block_11": { "reason": "inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility" }
       }
     },
     "parallel/test-whatwg-events-add-event-listener-options-passive.js": {
@@ -9743,8 +9743,8 @@
     "parallel/test-whatwg-url-canparse.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-global.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-href-side-effect.js": { "category": "runnable" },
-    "parallel/test-whatwg-url-custom-inspect.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
-    "parallel/test-whatwg-url-custom-parsing.js": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
+    "parallel/test-whatwg-url-custom-inspect.js": { "category": "known-gap", "reason": "URL inspect output uses the URL string instead of Node's structured URL representation" },
+    "parallel/test-whatwg-url-custom-parsing.js": { "category": "known-gap", "reason": "invalid URL parsing errors lack Node's TypeError and ERR_INVALID_URL shape" },
     "parallel/test-whatwg-url-custom-properties.js": { "category": "known-gap", "reason": "native rquickjs URL class property enumeration order does not match Web IDL order and descriptors are not fully configurable from JS" },
     "parallel/test-whatwg-url-custom-searchparams-append.js": { "category": "runnable" },
     "parallel/test-whatwg-url-custom-searchparams-constructor.js": {
@@ -9782,8 +9782,8 @@
     "parallel/test-whatwg-url-custom-setters.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Intl is not available in current runtime" },
-        "block_01_block_01": { "category": "known-gap", "reason": "Intl is not available in current runtime" }
+        "block_00_block_00": { "category": "known-gap", "reason": "node_compat common shim is missing ../common/wpt harness" },
+        "block_01_block_01": { "category": "known-gap", "reason": "node_compat common shim is missing ../common/wpt harness" }
       }
     },
     "parallel/test-whatwg-url-custom-tostringtag.js": { "category": "runnable" },

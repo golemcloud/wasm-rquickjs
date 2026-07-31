@@ -65,3 +65,29 @@ async fn encoding_coercion(#[tagged_as("encoding")] compiled: &CompiledTest) -> 
     assert_eq!(r, Some(wasmtime::component::Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn encoding_fatal(#[tagged_as("encoding")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (result, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test3", &[]).await;
+    let result = result?;
+
+    println!("Output:\n{output}");
+
+    assert_eq!(result, Some(wasmtime::component::Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn encoding_legacy_streaming(
+    #[tagged_as("encoding")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test4", &[]).await;
+    let result = result?;
+
+    println!("Output:\n{output}");
+
+    assert_eq!(result, Some(wasmtime::component::Val::Bool(true)));
+    Ok(())
+}

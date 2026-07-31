@@ -38,4 +38,8 @@ world fetch {
   export redirect-with-failing-stream-body: func(port: u16);
   export redirect-with-infinite-stream-body: func(port: u16);
   export fetch-function-shape: func();
+  export abort-releases-request: func(port: u16) -> bool;
+  export abort-releases-upload: func(port: u16) -> bool;
+  export abort-after-redirect: func(port: u16) -> bool;
+  export abort-response-body: func(port: u16) -> bool;
   }

@@ -31,6 +31,8 @@ use http::{HeaderName, HeaderValue, StatusCode, Version};
 use rquickjs::convert::Coerced;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
+
+use super::abort_signal::with_abort_signal;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -475,7 +477,19 @@ impl HttpRequest {
     /// reading so a large / slow / never-ending discarded body cannot stall the redirect loop. Only
     /// the final visible response body is read; a body that failed mid-transfer is recorded and
     /// surfaced when JS actually consumes it.
-    pub async fn receive_response<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
+    pub async fn receive_response<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<HttpResponse> {
+        let receive = self.receive_response_inner(ctx.clone());
+        with_abort_signal(&ctx, signal, receive).await
+    }
+
+    async fn receive_response_inner<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+    ) -> rquickjs::Result<HttpResponse> {
         let Some(send_future) = self.send_future.take() else {
             return Err(Exception::throw_message(
                 &ctx,
@@ -545,7 +559,16 @@ impl HttpRequest {
     /// Buffered send with redirect handling. Only the final visible response body is read; the
     /// bodies of followed redirects, rejected redirects, and opaque responses are discarded without
     /// reading, so a large or never-ending discarded body cannot stall the fetch.
-    pub async fn simple_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
+    pub async fn simple_send<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<HttpResponse> {
+        let send = self.simple_send_inner(ctx.clone());
+        with_abort_signal(&ctx, signal, send).await
+    }
+
+    async fn simple_send_inner<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
         // Validate mode constraints (mirrors the Preview 2 path). The streaming request-body path
         // performs the same validation in `init_send`.
         self.validate_request_mode(&ctx)?;
@@ -874,6 +897,11 @@ impl WrappedRequestBodyWriter {
         self.trailers_tx = None;
         Ok(())
     }
+
+    pub fn abort_body(&mut self) {
+        self.body_tx = None;
+        self.trailers_tx = None;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -957,6 +985,11 @@ impl HttpResponse {
         self.status = 200; // reported as 0 while opaque
         // Opaque responses never surface their body to JS, so a deferred body-transfer error is
         // not observable and must not fail the fetch.
+        self.body_error = None;
+    }
+
+    pub fn discard_body(&mut self) {
+        self.body = ResponseBody::Consumed;
         self.body_error = None;
     }
 
