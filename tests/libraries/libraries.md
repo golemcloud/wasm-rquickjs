@@ -92,6 +92,7 @@ This document tracks compatibility testing of popular npm packages with the wasm
 | 40 | Anthropic SDK | `@anthropic-ai/sdk` | ✅ | 2026-03-17 | 5/5 wasm tests pass; constructor, URL builder, request builder, mock API call with `messages.create()`, error classes, and `toFile` all work; live API calls require credentials |
 | 41 | Vercel AI SDK | `ai` | ✅ | 2026-03-09 | All 5 bundled offline utility/message-processing tests pass in Node.js and wasm-rquickjs |
 | 42 | MCP SDK | `@modelcontextprotocol/sdk` | ✅ | 2026-03-09 | All 5 bundled offline tests pass in Node.js and wasm-rquickjs (in-memory client/server flows, tools, resources/prompts, stdio utilities, URI/error helpers) |
+| 201 | OpenRouter SDK | `@openrouter/sdk` | ✅💰 | 2026-07-31 | Version 0.12.35 passes bundled client construction and a real HTTP mock chat request in Node.js and wasm-rquickjs; Rollup's generated-helper warnings are non-fatal; live calls require `OPENROUTER_API_KEY` |
 
 ## Authentication & Security
 
