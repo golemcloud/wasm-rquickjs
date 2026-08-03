@@ -69,8 +69,7 @@ async fn owned_runtime_isolation(
     }
     for name in ["invalidEntryWithSource", "invalidSourceWithEntry", "both"] {
         assert_eq!(
-            report["invalidProgramOptions"][name],
-            "exactly one of entry or source is required",
+            report["invalidProgramOptions"][name], "exactly one of entry or source is required",
             "unexpected exclusivity result for {name}"
         );
     }
