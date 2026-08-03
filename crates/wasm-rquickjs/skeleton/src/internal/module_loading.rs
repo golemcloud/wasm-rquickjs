@@ -4062,15 +4062,17 @@ struct NodePackageWarning {
     dedupe_key: Option<String>,
 }
 
-pub(crate) fn node_package_deprecation_warning_seen(key: &str) -> bool {
-    super::get_js_state()
+pub(crate) fn node_package_deprecation_warning_seen(ctx: &Ctx<'_>, key: &str) -> bool {
+    ctx.userdata::<super::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
         .node_package_deprecation_warnings
         .borrow()
         .contains(key)
 }
 
-pub(crate) fn mark_node_package_deprecation_warning_seen(key: String) {
-    super::get_js_state()
+pub(crate) fn mark_node_package_deprecation_warning_seen(ctx: &Ctx<'_>, key: String) {
+    ctx.userdata::<super::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
         .node_package_deprecation_warnings
         .borrow_mut()
         .insert(key);
@@ -5795,12 +5797,12 @@ fn emit_node_package_deprecation_warnings<'js>(
             continue;
         }
         if let Some(warning_key) = warning_key.as_deref()
-            && node_package_deprecation_warning_seen(warning_key)
+            && node_package_deprecation_warning_seen(ctx, warning_key)
         {
             continue;
         }
         if let Some(warning_key) = warning_key.as_ref() {
-            mark_node_package_deprecation_warning_seen(warning_key.clone());
+            mark_node_package_deprecation_warning_seen(ctx, warning_key.clone());
         }
         let emit_warning: Function = process_object.get("emitWarning")?;
         let _: Value = emit_warning.call((

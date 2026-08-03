@@ -12,6 +12,7 @@ use std::sync::atomic::AtomicUsize;
 #[derive(Default)]
 pub(crate) struct RuntimeServices {
     pub(crate) timers: TimerServices,
+    pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
 }
 
 // RuntimeServices contains no JavaScript-lifetime-bound values.

@@ -6,7 +6,7 @@ use rquickjs::{
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
@@ -26,7 +26,6 @@ pub struct JsState {
     pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
-    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
@@ -110,7 +109,6 @@ impl JsState {
             last_resource_id,
             resource_drop_queue_tx,
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
             gc_pending: std::sync::atomic::AtomicBool::new(false),
         }
     }

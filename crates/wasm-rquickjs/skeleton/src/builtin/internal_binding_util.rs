@@ -62,13 +62,13 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn package_deprecation_warning_seen(key: String) -> bool {
-        crate::internal::node_package_deprecation_warning_seen(&key)
+    pub fn package_deprecation_warning_seen(ctx: Ctx<'_>, key: String) -> bool {
+        crate::internal::node_package_deprecation_warning_seen(&ctx, &key)
     }
 
     #[rquickjs::function]
-    pub fn mark_package_deprecation_warning_seen(key: String) {
-        crate::internal::mark_node_package_deprecation_warning_seen(key);
+    pub fn mark_package_deprecation_warning_seen(ctx: Ctx<'_>, key: String) {
+        crate::internal::mark_node_package_deprecation_warning_seen(&ctx, key);
     }
 
     fn get_proxy_target_or_null<'js>(ctx: &Ctx<'js>, proxy: &Value<'js>) -> Value<'js> {

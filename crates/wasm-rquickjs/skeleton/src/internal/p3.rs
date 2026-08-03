@@ -14,7 +14,7 @@ use rquickjs::{
     IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -48,7 +48,6 @@ pub struct JsState {
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
-    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     /// Monotonic id allocator for exported resource instances (starts at 1; 0 is never used).
     pub last_resource_id: AtomicUsize,
     /// Ids of exported resource instances whose host handle has been dropped. Populated
@@ -107,7 +106,6 @@ impl JsState {
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
             variant_case_tag_cache: RefCell::new(HashMap::new()),
-            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
             last_resource_id: AtomicUsize::new(1),
             pending_resource_drops: RefCell::new(Vec::new()),
             export_result_writer_group: RefCell::new(None),
