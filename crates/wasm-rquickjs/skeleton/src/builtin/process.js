@@ -997,6 +997,7 @@ process._runExitHandlers = function _runExitHandlers(code) {
 const _pendingRejections = new Map();
 const _ignoredUnhandledRejections = new WeakSet();
 const _requireEsmRejectionScopes = [];
+const _sameValue = Object.is;
 let _unhandledRejectionCheckScheduled = false;
 let _nextRequireEsmRejectionScope = 0;
 
@@ -1086,7 +1087,7 @@ globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPro
         if (evaluationIndex > 0 && scope.promises[evaluationIndex] === evaluationPromise) {
             const modulePromise = scope.promises[evaluationIndex - 1];
             const moduleEntry = _pendingRejections.get(modulePromise);
-            if (moduleEntry !== undefined && moduleEntry.reason === rejectedReason) {
+            if (moduleEntry !== undefined && _sameValue(moduleEntry.reason, rejectedReason)) {
                 _ignoredUnhandledRejections.add(modulePromise);
                 _pendingRejections.delete(modulePromise);
             }

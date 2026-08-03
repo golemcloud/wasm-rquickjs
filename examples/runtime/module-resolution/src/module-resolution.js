@@ -8563,6 +8563,10 @@ export const testRequireEsmRejectionTracking = async () => {
             'Promise.reject(shared);',
             'throw shared;',
         ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/nan-reason.mjs', [
+            'globalThis.__requireEsmNaNPromise = Promise.reject(NaN);',
+            'throw NaN;',
+        ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/saved-reason.mjs', [
             'throw globalThis.__requireEsmSavedReason;',
         ].join('\n'));
@@ -8630,6 +8634,17 @@ export const testRequireEsmRejectionTracking = async () => {
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
+            let nanThrown = false;
+            try {
+                require('/require-esm-rejection-app/nan-reason.mjs');
+            } catch (error) {
+                nanThrown = true;
+                assert.strictEqual(Object.is(error, NaN), true);
+            }
+            assert.strictEqual(nanThrown, true);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
             globalThis.__requireEsmQueuedReason = new Error('queued shared reason');
             assert.throws(() => require('/require-esm-rejection-app/queued-shared-reason.mjs'), {
                 message: 'queued shared reason',
@@ -8653,10 +8668,12 @@ export const testRequireEsmRejectionTracking = async () => {
             'preexisting reason',
             'side rejection',
             'shared reason',
+            NaN,
             'queued shared reason',
             'saved reason',
         ]);
         assert.strictEqual(unhandled[1].promise, globalThis.__requireEsmSidePromise);
+        assert.strictEqual(unhandled[3].promise, globalThis.__requireEsmNaNPromise);
 
         return true;
     } catch (error) {
