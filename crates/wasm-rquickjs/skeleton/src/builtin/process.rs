@@ -3,7 +3,7 @@
 pub mod native_module {
     use rquickjs::Ctx;
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::Path;
     use std::time::Instant;
 
     #[rquickjs::function]
@@ -39,26 +39,37 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn get_args() -> Vec<String> {
-        std::env::args().collect()
+    pub fn get_args(ctx: Ctx<'_>) -> Vec<String> {
+        ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .process
+            .args()
     }
 
     #[rquickjs::function]
-    pub fn get_env() -> HashMap<String, String> {
-        std::env::vars().collect()
+    pub fn get_env(ctx: Ctx<'_>) -> HashMap<String, String> {
+        ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .process
+            .env()
     }
 
     #[rquickjs::function]
-    pub fn get_cwd() -> String {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("/"))
+    pub fn get_cwd(ctx: Ctx<'_>) -> String {
+        ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .process
+            .cwd()
             .to_string_lossy()
             .into_owned()
     }
 
     #[rquickjs::function]
-    pub fn chdir(path: String) -> Option<String> {
-        match std::env::set_current_dir(path) {
+    pub fn chdir(ctx: Ctx<'_>, path: String) -> Option<String> {
+        let services = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized");
+        match services.process.chdir(Path::new(&path)) {
             Ok(()) => None,
             Err(error) => Some(
                 match error.kind() {

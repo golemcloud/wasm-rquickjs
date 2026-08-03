@@ -3,6 +3,7 @@ use rquickjs::{AsyncContext, AsyncRuntime, Function, JsLifetime, Value, async_wi
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
+use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
@@ -14,6 +15,7 @@ use std::sync::atomic::AtomicUsize;
 pub(crate) struct RuntimeServices {
     pub(crate) timers: TimerServices,
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
+    pub(crate) process: ProcessServices,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
 }
 
@@ -22,9 +24,110 @@ impl Default for RuntimeServices {
         Self {
             timers: TimerServices::default(),
             node_package_deprecation_warnings: RefCell::default(),
+            process: ProcessServices::default(),
             output: RefCell::new(Rc::new(ComponentOutputSink)),
         }
     }
+}
+
+#[derive(Default)]
+pub(crate) struct ProcessServices {
+    isolated: RefCell<Option<IsolatedProcessState>>,
+}
+
+struct IsolatedProcessState {
+    argv: Vec<String>,
+    env: HashMap<String, String>,
+    cwd: PathBuf,
+}
+
+impl ProcessServices {
+    pub(crate) fn configure(
+        &self,
+        argv: Vec<String>,
+        env: HashMap<String, String>,
+        cwd: PathBuf,
+    ) -> std::io::Result<()> {
+        let cwd = normalize_absolute_path(&cwd)?;
+        if !cwd.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "runner cwd is not a directory",
+            ));
+        }
+        *self.isolated.borrow_mut() = Some(IsolatedProcessState { argv, env, cwd });
+        Ok(())
+    }
+
+    pub(crate) fn args(&self) -> Vec<String> {
+        self.isolated
+            .borrow()
+            .as_ref()
+            .map(|state| state.argv.clone())
+            .unwrap_or_else(|| std::env::args().collect())
+    }
+
+    pub(crate) fn env(&self) -> HashMap<String, String> {
+        self.isolated
+            .borrow()
+            .as_ref()
+            .map(|state| state.env.clone())
+            .unwrap_or_else(|| std::env::vars().collect())
+    }
+
+    pub(crate) fn cwd(&self) -> PathBuf {
+        self.isolated
+            .borrow()
+            .as_ref()
+            .map(|state| state.cwd.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
+    }
+
+    pub(crate) fn chdir(&self, path: &Path) -> std::io::Result<()> {
+        let mut isolated = self.isolated.borrow_mut();
+        let Some(state) = isolated.as_mut() else {
+            return std::env::set_current_dir(path);
+        };
+        let resolved = if path.is_absolute() {
+            normalize_absolute_path(path)?
+        } else {
+            normalize_absolute_path(&state.cwd.join(path))?
+        };
+        if !resolved.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "cwd is not a directory",
+            ));
+        }
+        state.cwd = resolved;
+        Ok(())
+    }
+}
+
+fn normalize_absolute_path(path: &Path) -> std::io::Result<PathBuf> {
+    if !path.is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "path must be absolute",
+        ));
+    }
+    let mut normalized = PathBuf::from("/");
+    for component in path.components() {
+        match component {
+            Component::RootDir | Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Normal(part) => normalized.push(part),
+            Component::Prefix(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "unsupported path prefix",
+                ));
+            }
+        }
+    }
+    Ok(normalized)
 }
 
 pub(crate) trait RuntimeOutputSink {
