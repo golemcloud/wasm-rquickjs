@@ -1980,13 +1980,14 @@ fn cjs_named_import_error_module_source(
         ctx,
         NodePackageResolveMode::CjsAnalysis.condition_mode(),
     );
-    find_cjs_named_import_error(filename, source, &esm_conditions, &cjs_conditions).map(|message| {
+    find_cjs_named_import_error(ctx, filename, source, &esm_conditions, &cjs_conditions).map(|message| {
         let escaped = DataUrlLoader::js_string_escape(&message);
         format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
     })
 }
 
 fn find_cjs_named_import_error(
+    ctx: &Ctx<'_>,
     filename: &str,
     source: &str,
     esm_conditions: &[String],
@@ -1996,6 +1997,7 @@ fn find_cjs_named_import_error(
     let _ = scan_code_positions(source, true, |i, _| {
         if let Some((specifier, named_imports, next)) = parse_static_named_import(source, i) {
             if let Some(message) = cjs_named_import_error_message(
+                ctx,
                 filename,
                 &specifier,
                 &named_imports,
@@ -2013,6 +2015,7 @@ fn find_cjs_named_import_error(
 }
 
 fn cjs_named_import_error_message(
+    ctx: &Ctx<'_>,
     filename: &str,
     specifier: &str,
     named_imports: &[StaticNamedImport],
@@ -2022,14 +2025,15 @@ fn cjs_named_import_error_message(
     if named_imports.is_empty() || !could_resolve_to_cjs_for_named_import_error(specifier) {
         return None;
     }
-    let resolved = resolve_esm_named_import_candidate_path(filename, specifier, esm_conditions)
-        .or_else(|| resolve_cjs_reexport_path(filename, specifier, cjs_conditions))?;
-    if !resolved.ends_with(".cjs") && !is_cjs_js_file_for_named_import_error(&resolved) {
+    let resolved = resolve_esm_named_import_candidate_path(ctx, filename, specifier, esm_conditions)
+        .or_else(|| resolve_cjs_reexport_path(ctx, filename, specifier, cjs_conditions))?;
+    if !resolved.ends_with(".cjs") && !is_cjs_js_file_for_named_import_error(ctx, &resolved) {
         return None;
     }
-    let source = std::fs::read_to_string(&resolved).ok()?;
+    let source_path = canonical_cjs_analysis_path(ctx, &resolved);
+    let source = std::fs::read_to_string(&source_path).ok()?;
     let analysis =
-        analyze_cjs_exports_for_file(&resolved, &source, &mut HashSet::new(), cjs_conditions);
+        analyze_cjs_exports_for_file(ctx, &resolved, &source, &mut HashSet::new(), cjs_conditions);
     if !analysis.is_cjs && analysis.exports.is_empty() && analysis.reexports.is_empty() {
         return None;
     }
@@ -2060,6 +2064,7 @@ fn cjs_named_import_error_message(
 }
 
 fn resolve_esm_named_import_candidate_path(
+    ctx: &Ctx<'_>,
     filename: &str,
     specifier: &str,
     conditions: &[String],
@@ -2069,7 +2074,7 @@ fn resolve_esm_named_import_candidate_path(
     }
     let resolver = NodeModulesResolver;
     let mut warnings = Vec::new();
-    let mut resolution = esm_import_resolution_context(conditions, &mut warnings);
+    let mut resolution = esm_import_resolution_context(ctx, conditions, &mut warnings);
     resolver
         .try_resolve_with_context(filename, specifier, &mut resolution)
         .ok()
@@ -2123,8 +2128,8 @@ fn is_valid_js_identifier_name(value: &str) -> bool {
     is_ident_start(first) && rest.iter().copied().all(is_ident_continue)
 }
 
-fn is_cjs_js_file_for_named_import_error(filename: &str) -> bool {
-    filename.ends_with(".js") && package_scope_type(filename).as_deref() != Some("module")
+fn is_cjs_js_file_for_named_import_error(ctx: &Ctx<'_>, filename: &str) -> bool {
+    filename.ends_with(".js") && package_scope_type(ctx, filename).as_deref() != Some("module")
 }
 
 const CJS_GLOBAL_NAMES: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
@@ -3214,6 +3219,7 @@ impl Resolver for FileUrlResolver {
                     ctx,
                     "ERR_UNSUPPORTED_DIR_IMPORT",
                     NodeFileResolver::directory_import_message(
+                        ctx,
                         &normalized,
                         base,
                         !Self::is_same_directory_file_import(&normalized, base),
@@ -3773,6 +3779,7 @@ impl NodeFileResolver {
     }
 
     fn directory_import_message(
+        ctx: &Ctx<'_>,
         normalized_dir: &str,
         importer: &str,
         include_suggestion: bool,
@@ -3783,14 +3790,17 @@ impl NodeFileResolver {
             Self::format_importer(importer)
         );
         if include_suggestion {
+            let conditions = Vec::new();
+            let mut warnings = Vec::new();
+            let mut resolution = esm_import_resolution_context(ctx, &conditions, &mut warnings);
             let package_json_path = std::path::Path::new(normalized_dir).join("package.json");
             if let Ok(Some(package)) =
-                NodeModulesResolver::read_package_json_optional(&package_json_path)
+                NodeModulesResolver::read_package_json_optional_with_context(
+                    &package_json_path,
+                    &resolution,
+                )
                 && let Some(main) = package.main.as_deref()
             {
-                let conditions = Vec::new();
-                let mut warnings = Vec::new();
-                let mut resolution = esm_import_resolution_context(&conditions, &mut warnings);
                 if let Some((suggestion, _)) = NodeModulesResolver::resolve_package_legacy_main(
                     std::path::Path::new(normalized_dir),
                     main,
@@ -3876,6 +3886,7 @@ impl Resolver for NodeFileResolver {
                 ctx,
                 "ERR_UNSUPPORTED_DIR_IMPORT",
                 Self::directory_import_message(
+                    ctx,
                     &normalized,
                     base,
                     include_directory_suggestion
@@ -4058,10 +4069,6 @@ struct PackageJson {
     package_type: Option<String>,
 }
 
-thread_local! {
-    static PACKAGE_JSON_CACHE: RefCell<HashMap<String, Rc<PackageJson>>> = RefCell::new(HashMap::new());
-}
-
 struct NodePackageWarning {
     message: String,
     code: &'static str,
@@ -4186,19 +4193,29 @@ struct NodePackageResolutionContext<'a, 'w> {
     conditions: &'a [String],
     warnings: &'w mut Vec<NodePackageWarning>,
     file_probe_cache: HashMap<String, bool>,
+    emulated_symlinks: HashMap<String, String>,
 }
 
 impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
     fn new(
+        ctx: &Ctx<'_>,
         mode: NodePackageResolveMode,
         conditions: &'a [String],
         warnings: &'w mut Vec<NodePackageWarning>,
     ) -> Self {
+        let emulated_symlinks = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .fs
+            .borrow()
+            .emulated_symlinks
+            .clone();
         Self {
             mode,
             conditions,
             warnings,
             file_probe_cache: HashMap::new(),
+            emulated_symlinks,
         }
     }
 
@@ -4206,7 +4223,12 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         if let Some(cached) = self.file_probe_cache.get(normalized) {
             return *cached;
         }
-        let is_file = std::path::Path::new(normalized).is_file();
+        let fs_path = crate::builtin::realpath_for_module_resolution_with_symlinks(
+            &self.emulated_symlinks,
+            normalized,
+        )
+        .unwrap_or_else(|| normalized.to_string());
+        let is_file = std::path::Path::new(&fs_path).is_file();
         self.file_probe_cache
             .insert(normalized.to_string(), is_file);
         is_file
@@ -4219,7 +4241,12 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
 
     fn is_dir(&self, path: &std::path::Path) -> bool {
         let normalized = CjsEvalResolver::normalize_path(path);
-        std::path::Path::new(&normalized).is_dir()
+        let fs_path = crate::builtin::realpath_for_module_resolution_with_symlinks(
+            &self.emulated_symlinks,
+            &normalized,
+        )
+        .unwrap_or(normalized);
+        std::path::Path::new(&fs_path).is_dir()
     }
 
     fn with_mode<T>(
@@ -4258,9 +4285,17 @@ enum CjsAnalysisProbe {
 }
 
 impl NodeModulesResolver {
-    fn module_resolution_path(path: &std::path::Path) -> std::path::PathBuf {
+    fn module_resolution_path(
+        path: &std::path::Path,
+        resolution: &NodePackageResolutionContext<'_, '_>,
+    ) -> std::path::PathBuf {
         let normalized = CjsEvalResolver::normalize_path(path);
-        std::path::PathBuf::from(normalized)
+        crate::builtin::realpath_for_module_resolution_with_symlinks(
+            &resolution.emulated_symlinks,
+            &normalized,
+        )
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| path.to_path_buf())
     }
 
     fn try_resolve_with_context(
@@ -4300,7 +4335,7 @@ impl NodeModulesResolver {
                 && dir.file_name().is_some_and(|name| name == "node_modules");
             if !skip_nested_node_modules {
                 let package_path = dir.join("node_modules").join(package_name);
-                if Self::module_resolution_path(&package_path).is_dir() {
+                if Self::module_resolution_path(&package_path, resolution).is_dir() {
                     if let Some(resolved) = Self::try_resolve_package_directory(
                         base,
                         name,
@@ -4341,7 +4376,7 @@ impl NodeModulesResolver {
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<String>, NodePackageResolveError> {
         let pkg_path = package_path.join("package.json");
-        let package = Self::read_package_json_optional(&pkg_path)?;
+        let package = Self::read_package_json_optional_with_context(&pkg_path, resolution)?;
 
         if let Some(package) = package.as_ref() {
             if let Some(exports_field) = package
@@ -4390,28 +4425,19 @@ impl NodeModulesResolver {
         )
     }
 
-    fn read_package_json_optional(
+    fn read_package_json_optional_with_context(
         pkg_path: &std::path::Path,
+        resolution: &NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
-        let cache_key = CjsEvalResolver::normalize_path(pkg_path);
-        if let Some(cached) = PACKAGE_JSON_CACHE.with_borrow(|cache| cache.get(&cache_key).cloned())
-        {
-            return Ok(Some(cached));
-        }
-        let read_path = Self::module_resolution_path(pkg_path);
+        let read_path = Self::module_resolution_path(pkg_path, resolution);
         match std::fs::read_to_string(&read_path) {
-            Ok(pkg_content) => {
-                let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(
-                    |_| NodePackageResolveError::InvalidPackageConfig {
-                        path: pkg_path.to_string_lossy().into_owned(),
-                        reason: None,
-                    },
-                )?);
-                PACKAGE_JSON_CACHE.with_borrow_mut(|cache| {
-                    cache.insert(cache_key, package.clone());
-                });
-                Ok(Some(package))
-            }
+            Ok(pkg_content) => serde_json::from_str::<PackageJson>(&pkg_content)
+                .map(Rc::new)
+                .map(Some)
+                .map_err(|_| NodePackageResolveError::InvalidPackageConfig {
+                    path: pkg_path.to_string_lossy().into_owned(),
+                    reason: None,
+                }),
             Err(_) => Ok(None),
         }
     }
@@ -4592,7 +4618,7 @@ impl NodeModulesResolver {
             }
 
             let pkg_path = dir.join("package.json");
-            if let Some(package) = Self::read_package_json_optional(&pkg_path)? {
+            if let Some(package) = Self::read_package_json_optional_with_context(&pkg_path, resolution)? {
                 let Some(imports) = package.imports.as_ref() else {
                     return Err(NodePackageResolveError::PackageImportNotDefined {
                         specifier: name.to_string(),
@@ -4633,7 +4659,7 @@ impl NodeModulesResolver {
             }
 
             let pkg_path = dir.join("package.json");
-            if let Some(package) = Self::read_package_json_optional(&pkg_path)? {
+            if let Some(package) = Self::read_package_json_optional_with_context(&pkg_path, resolution)? {
                 if package.name.as_deref() == Some(package_name)
                     && let Some(exports_field) = package
                         .exports
@@ -4882,7 +4908,7 @@ impl NodeModulesResolver {
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<(String, String)>, NodePackageResolveError> {
         let nested_pkg_path = candidate.join("package.json");
-        if let Some(package) = Self::read_package_json_optional(&nested_pkg_path)?
+        if let Some(package) = Self::read_package_json_optional_with_context(&nested_pkg_path, resolution)?
             && let Some(main) = package.main.as_ref()
             && let Some(resolved) =
                 Self::resolve_runtime_cjs_file_or_index(candidate, main, extensions, resolution)
@@ -4937,7 +4963,7 @@ impl NodeModulesResolver {
         }
 
         let pkg_path = package_dir.join("package.json");
-        if let Some(package) = Self::read_package_json_optional(&pkg_path)?
+        if let Some(package) = Self::read_package_json_optional_with_context(&pkg_path, resolution)?
             && let Some(main) = package.main.as_ref()
             && let Some(resolved) =
                 Self::resolve_runtime_cjs_file_or_index(package_dir, main, extensions, resolution)
@@ -5054,7 +5080,7 @@ impl NodeModulesResolver {
         }
 
         let pkg_path = target_path.join("package.json");
-        let package = match Self::read_package_json_optional(&pkg_path) {
+        let package = match Self::read_package_json_optional_with_context(&pkg_path, resolution) {
             Ok(package) => package,
             Err(_) => return None,
         };
@@ -5955,7 +5981,7 @@ fn try_resolve_package_with_conditions<'js>(
     emit_warnings: bool,
 ) -> rquickjs::Result<Result<Option<String>, NodePackageResolveError>> {
     let mut warnings = Vec::new();
-    let mut resolution = NodePackageResolutionContext::new(mode, conditions, &mut warnings);
+    let mut resolution = NodePackageResolutionContext::new(ctx, mode, conditions, &mut warnings);
     let result = resolver.try_resolve_with_context(base, specifier, &mut resolution);
     if emit_warnings {
         emit_node_package_deprecation_warnings(ctx, &warnings)?;
@@ -5991,7 +6017,7 @@ fn import_meta_resolve_package(
             return throw_node_package_resolve_error(&ctx, err).map(Some);
         }
         let trailing_slash_package_has_exports =
-            match import_meta_trailing_slash_package_has_exports(&base, package_name) {
+            match import_meta_trailing_slash_package_has_exports(&ctx, &base, package_name) {
                 Ok(value) => value,
                 Err(err) => return throw_node_package_resolve_error(&ctx, err).map(Some),
             };
@@ -6087,17 +6113,19 @@ fn package_extensions_from_js_array<'js>(extensions: &rquickjs::Array<'js>) -> V
 }
 
 fn cjs_analysis_resolution_context<'a, 'w>(
+    ctx: &Ctx<'_>,
     conditions: &'a [String],
     warnings: &'w mut Vec<NodePackageWarning>,
 ) -> NodePackageResolutionContext<'a, 'w> {
-    NodePackageResolutionContext::new(NodePackageResolveMode::CjsAnalysis, conditions, warnings)
+    NodePackageResolutionContext::new(ctx, NodePackageResolveMode::CjsAnalysis, conditions, warnings)
 }
 
 fn esm_import_resolution_context<'a, 'w>(
+    ctx: &Ctx<'_>,
     conditions: &'a [String],
     warnings: &'w mut Vec<NodePackageWarning>,
 ) -> NodePackageResolutionContext<'a, 'w> {
-    NodePackageResolutionContext::new(NodePackageResolveMode::EsmImport, conditions, warnings)
+    NodePackageResolutionContext::new(ctx, NodePackageResolveMode::EsmImport, conditions, warnings)
 }
 
 fn loader_package_result_format(
@@ -6195,9 +6223,15 @@ fn cjs_resolve_package_exports<'js>(
     subpath: String,
     conditions: rquickjs::Array<'js>,
 ) -> rquickjs::Result<Option<Object<'js>>> {
+    let condition_vec = package_conditions_from_js_array(&conditions);
+    let mut warnings = Vec::new();
+    let mut resolution = cjs_analysis_resolution_context(&ctx, &condition_vec, &mut warnings);
     let package_dir = std::path::PathBuf::from(package_dir);
     let pkg_path = package_dir.join("package.json");
-    let package = match NodeModulesResolver::read_package_json_optional(&pkg_path) {
+    let package = match NodeModulesResolver::read_package_json_optional_with_context(
+        &pkg_path,
+        &resolution,
+    ) {
         Ok(Some(package)) => package,
         Ok(None) => return Ok(None),
         Err(err) => {
@@ -6217,9 +6251,6 @@ fn cjs_resolve_package_exports<'js>(
         unreachable!()
     }
 
-    let condition_vec = package_conditions_from_js_array(&conditions);
-    let mut warnings = Vec::new();
-    let mut resolution = cjs_analysis_resolution_context(&condition_vec, &mut warnings);
     let result = NodeModulesResolver::resolve_package_exports(
         &package_name,
         &package_dir,
@@ -6247,7 +6278,7 @@ fn cjs_resolve_package_self_reference<'js>(
 ) -> rquickjs::Result<Option<Object<'js>>> {
     let condition_vec = package_conditions_from_js_array(&conditions);
     let mut warnings = Vec::new();
-    let mut resolution = cjs_analysis_resolution_context(&condition_vec, &mut warnings);
+    let mut resolution = cjs_analysis_resolution_context(&ctx, &condition_vec, &mut warnings);
     let result = NodeModulesResolver::try_resolve_package_self(
         &std::path::PathBuf::from(parent_dir),
         None,
@@ -6314,7 +6345,7 @@ fn cjs_resolve_package_fallback<'js>(
 ) -> rquickjs::Result<Option<Object<'js>>> {
     let extension_vec = package_extensions_from_js_array(&extensions);
     let mut warnings = Vec::new();
-    let mut resolution = cjs_analysis_resolution_context(&[], &mut warnings);
+    let mut resolution = cjs_analysis_resolution_context(&ctx, &[], &mut warnings);
     let result = NodeModulesResolver::resolve_runtime_cjs_package_fallback(
         &std::path::PathBuf::from(package_dir),
         &subpath,
@@ -6340,14 +6371,14 @@ fn cjs_resolve_package_fallback<'js>(
 }
 
 fn cjs_resolve_file_candidate<'js>(
-    _ctx: Ctx<'js>,
+    ctx: Ctx<'js>,
     candidate: String,
     extensions: rquickjs::Array<'js>,
     include_exact: bool,
 ) -> rquickjs::Result<Option<String>> {
     let extension_vec = package_extensions_from_js_array(&extensions);
     let mut warnings = Vec::new();
-    let mut resolution = cjs_analysis_resolution_context(&[], &mut warnings);
+    let mut resolution = cjs_analysis_resolution_context(&ctx, &[], &mut warnings);
     Ok(NodeModulesResolver::first_existing_runtime_cjs_probe(
         &std::path::PathBuf::from(candidate),
         &extension_vec,
@@ -6378,9 +6409,17 @@ fn require_esm_graph_resolve_package<'js>(
 }
 
 fn import_meta_trailing_slash_package_has_exports(
+    ctx: &Ctx<'_>,
     base: &str,
     package_name: &str,
 ) -> Result<bool, NodePackageResolveError> {
+    let mut warnings = Vec::new();
+    let mut resolution = NodePackageResolutionContext::new(
+        ctx,
+        NodePackageResolveMode::EsmImport,
+        &[],
+        &mut warnings,
+    );
     let Some(base_dir) = std::path::Path::new(base).parent() else {
         return Ok(false);
     };
@@ -6392,7 +6431,10 @@ fn import_meta_trailing_slash_package_has_exports(
         }
 
         let pkg_path = dir.join("package.json");
-        if let Some(package) = NodeModulesResolver::read_package_json_optional(&pkg_path)? {
+        if let Some(package) = NodeModulesResolver::read_package_json_optional_with_context(
+            &pkg_path,
+            &mut resolution,
+        )? {
             if package.name.as_deref() == Some(package_name) {
                 return Ok(package.exports.as_ref().is_some_and(|exports| {
                     NodeModulesResolver::is_active_package_exports(exports)
@@ -6409,9 +6451,9 @@ fn import_meta_trailing_slash_package_has_exports(
     let mut dir = base_dir.to_path_buf();
     loop {
         let package_path = dir.join("node_modules").join(package_name);
-        if NodeModulesResolver::module_resolution_path(&package_path).is_dir() {
+        if NodeModulesResolver::module_resolution_path(&package_path, &resolution).is_dir() {
             let pkg_path = package_path.join("package.json");
-            return NodeModulesResolver::read_package_json_optional(&pkg_path).map(|package| {
+            return NodeModulesResolver::read_package_json_optional_with_context(&pkg_path, &mut resolution).map(|package| {
                 package.is_some_and(|package| {
                     package.exports.as_ref().is_some_and(|exports| {
                         NodeModulesResolver::is_active_package_exports(exports)
@@ -8482,6 +8524,7 @@ fn is_node_builtin_specifier(specifier: &str) -> bool {
 }
 
 fn resolve_cjs_reexport_path(
+    ctx: &Ctx<'_>,
     filename: &str,
     specifier: &str,
     conditions: &[String],
@@ -8490,7 +8533,7 @@ fn resolve_cjs_reexport_path(
         return None;
     }
     let mut warnings = Vec::new();
-    let mut resolution = cjs_analysis_resolution_context(conditions, &mut warnings);
+    let mut resolution = cjs_analysis_resolution_context(ctx, conditions, &mut warnings);
     if !is_relative_or_absolute_specifier(specifier) {
         let resolver = NodeModulesResolver;
         return resolver
@@ -8513,11 +8556,12 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
     !matches!(extension, Some("json" | "node"))
 }
 
-fn canonical_cjs_analysis_path(path: &str) -> String {
-    path.to_string()
+fn canonical_cjs_analysis_path(ctx: &Ctx<'_>, path: &str) -> String {
+    crate::builtin::realpath_for_module_resolution(ctx, path).unwrap_or_else(|| path.to_string())
 }
 
 fn analyze_cjs_reexport_specifier_names(
+    ctx: &Ctx<'_>,
     filename: &str,
     reexport_specifiers: Vec<String>,
     seen: &mut HashSet<String>,
@@ -8525,13 +8569,13 @@ fn analyze_cjs_reexport_specifier_names(
 ) -> Vec<String> {
     let mut names = Vec::new();
     for reexport in reexport_specifiers {
-        if let Some(resolved_path) = resolve_cjs_reexport_path(filename, &reexport, conditions)
-            && let path = canonical_cjs_analysis_path(&resolved_path)
+        if let Some(resolved_path) = resolve_cjs_reexport_path(ctx, filename, &reexport, conditions)
+            && let path = canonical_cjs_analysis_path(ctx, &resolved_path)
             && !seen.contains(&path)
             && is_cjs_analysis_source_path(&path)
             && let Ok(source) = std::fs::read_to_string(&path)
         {
-            let child = analyze_cjs_exports_for_file(&path, &source, seen, conditions);
+            let child = analyze_cjs_exports_for_file(ctx, &path, &source, seen, conditions);
             for name in child.exports {
                 add_unique(&mut names, name);
             }
@@ -8541,17 +8585,18 @@ fn analyze_cjs_reexport_specifier_names(
 }
 
 fn analyze_cjs_exports_for_file(
+    ctx: &Ctx<'_>,
     filename: &str,
     source: &str,
     seen: &mut HashSet<String>,
     conditions: &[String],
 ) -> CjsExportAnalysis {
     let mut analysis = analyze_cjs_exports(source);
-    if !seen.insert(canonical_cjs_analysis_path(filename)) {
+    if !seen.insert(canonical_cjs_analysis_path(ctx, filename)) {
         return analysis;
     }
     let reexports = analysis.reexports.clone();
-    for name in analyze_cjs_reexport_specifier_names(filename, reexports, seen, conditions) {
+    for name in analyze_cjs_reexport_specifier_names(ctx, filename, reexports, seen, conditions) {
         add_unique(&mut analysis.exports, name);
     }
     analysis
@@ -8562,24 +8607,29 @@ struct PackageScopeInfo {
     is_node_modules_package: bool,
 }
 
-fn package_scope_type(filename: &str) -> Option<String> {
-    package_scope_info(filename)
+fn package_scope_type(ctx: &Ctx<'_>, filename: &str) -> Option<String> {
+    package_scope_info(ctx, filename)
         .ok()
         .flatten()
         .and_then(|scope| scope.package_type)
 }
 
-fn package_scope_info(filename: &str) -> Result<Option<PackageScopeInfo>, NodePackageResolveError> {
+fn package_scope_info(ctx: &Ctx<'_>, filename: &str) -> Result<Option<PackageScopeInfo>, NodePackageResolveError> {
     let Some(parent) = std::path::Path::new(filename).parent() else {
         return Ok(None);
     };
     let mut dir = parent.to_path_buf();
+    let mut warnings = Vec::new();
+    let resolution = cjs_analysis_resolution_context(ctx, &[], &mut warnings);
     loop {
         if dir.file_name().is_some_and(|name| name == "node_modules") {
             return Ok(None);
         }
         let pkg_path = dir.join("package.json");
-        if let Some(package) = NodeModulesResolver::read_package_json_optional(&pkg_path)? {
+        if let Some(package) = NodeModulesResolver::read_package_json_optional_with_context(
+            &pkg_path,
+            &resolution,
+        )? {
             return Ok(Some(PackageScopeInfo {
                 package_type: package.package_type.clone(),
                 is_node_modules_package: is_node_modules_package_scope(&dir),
@@ -8596,7 +8646,7 @@ fn package_scope_info_or_throw<'js>(
     ctx: &Ctx<'js>,
     filename: &str,
 ) -> rquickjs::Result<Option<PackageScopeInfo>> {
-    match package_scope_info(filename) {
+    match package_scope_info(ctx, filename) {
         Ok(scope) => Ok(scope),
         Err(err) => {
             let _: String = throw_node_package_resolve_error(ctx, err)?;
@@ -8772,7 +8822,7 @@ fn build_loader_cjs_facade(
         NodePackageResolveMode::CjsAnalysis.condition_mode(),
     );
     let analysis =
-        analyze_cjs_exports_for_file(&filename, &source, &mut HashSet::new(), &cjs_conditions);
+        analyze_cjs_exports_for_file(&ctx, &filename, &source, &mut HashSet::new(), &cjs_conditions);
     let default_member_expression = format!(
         "__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
         escape_js_string(&filename),
@@ -8802,7 +8852,7 @@ impl Loader for CjsCompatLoader {
             return throw_import_attr_type_incompatible(ctx);
         }
 
-        let source_path = module_source_filesystem_path(path);
+        let source_path = module_source_filesystem_path(ctx, path);
         let source = read_module_source_or_throw(ctx, path, &source_path)?;
 
         let fs_abs_path = ensure_absolute_path(fs_path);
@@ -8852,6 +8902,7 @@ impl Loader for CjsCompatLoader {
             NodePackageResolveMode::CjsAnalysis.condition_mode(),
         );
         let detected_analysis = analyze_cjs_exports_for_file(
+            ctx,
             &fs_abs_path,
             &source,
             &mut HashSet::new(),
@@ -9180,9 +9231,10 @@ fn module_filesystem_path(path: &str) -> &str {
     split_module_path_suffix(path).0
 }
 
-fn module_source_filesystem_path(path: &str) -> String {
+fn module_source_filesystem_path(ctx: &Ctx<'_>, path: &str) -> String {
     let fs_path = module_filesystem_path(path);
-    fs_path.to_string()
+    crate::builtin::realpath_for_module_resolution(ctx, fs_path)
+        .unwrap_or_else(|| fs_path.to_string())
 }
 
 fn read_module_source_or_throw<'js>(
@@ -10919,7 +10971,7 @@ impl Loader for ImportMetaLoader {
             return throw_import_attr_type_incompatible(ctx);
         }
 
-        let source_path = module_source_filesystem_path(path);
+        let source_path = module_source_filesystem_path(ctx, path);
         declare_esm_file_module(
             ctx,
             path,
@@ -10947,7 +10999,7 @@ impl Loader for JsonFileLoader {
         }
 
         let import_attr_type = import_attr_type_from_path(path);
-        let source_path = module_source_filesystem_path(path);
+        let source_path = module_source_filesystem_path(ctx, path);
         let source = std::fs::read_to_string(&source_path).map_err(|_| Error::new_loading(path))?;
         let module_source = if import_attr_type.as_deref() != Some("json") {
             json_import_attribute_missing_module_source(path)

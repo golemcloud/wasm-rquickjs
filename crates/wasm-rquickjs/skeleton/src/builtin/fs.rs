@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // The bulk of this module performs filesystem I/O through `std::fs`, which is backed by the
@@ -253,7 +254,14 @@ fn apply_emulated_symlink_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>) {
 /// Resolve emulated symlinks in a path by walking each component and following
 /// symlink chains. Returns an ELOOP error if too many symlinks are followed.
 fn resolve_emulated_symlinks_checked(ctx: &rquickjs::Ctx<'_>, path: &str) -> std::io::Result<String> {
-    if with_fs(ctx, |fs| fs.emulated_symlinks.is_empty()) {
+    with_fs(ctx, |fs| resolve_emulated_symlinks_from(&fs.emulated_symlinks, path))
+}
+
+fn resolve_emulated_symlinks_from(
+    emulated_symlinks: &HashMap<String, String>,
+    path: &str,
+) -> std::io::Result<String> {
+    if emulated_symlinks.is_empty() {
         return Ok(path.to_string());
     }
 
@@ -295,7 +303,7 @@ fn resolve_emulated_symlinks_checked(ctx: &rquickjs::Ctx<'_>, path: &str) -> std
         resolved.push(seg);
         let current = format!("/{}", resolved.join("/"));
 
-        if let Some(target) = get_emulated_symlink_target(ctx, &current) {
+        if let Some(target) = emulated_symlinks.get(&current).cloned() {
             symlink_count += 1;
             if symlink_count > MAX_SYMLINK_FOLLOWS {
                 return Err(std::io::Error::other("too many levels of symbolic links"));
@@ -335,6 +343,15 @@ fn resolve_emulated_symlinks_checked(ctx: &rquickjs::Ctx<'_>, path: &str) -> std
     } else {
         Ok(format!("/{}", resolved.join("/")))
     }
+}
+
+pub(super) fn realpath_for_module_resolution_with_symlinks(
+    emulated_symlinks: &HashMap<String, String>,
+    path: &str,
+) -> Option<String> {
+    let resolved_path = resolve_emulated_symlinks_from(emulated_symlinks, path).ok()?;
+    std::fs::symlink_metadata(&resolved_path).ok()?;
+    Some(resolved_path)
 }
 
 /// Resolve emulated symlinks in a path. Falls back to the original path on error.

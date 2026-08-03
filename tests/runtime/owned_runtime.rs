@@ -55,6 +55,16 @@ async fn owned_runtime_isolation(
             report[side]["value"]["linkParentValue"],
             format!("{side}:sibling")
         );
+        assert_eq!(
+            report[side]["value"]["packageValue"],
+            format!("{side}:package")
+        );
+        assert_eq!(report[side]["value"]["esmValue"], format!("{side}:esm"));
+        assert_eq!(report[side]["value"]["jsonValue"], format!("{side}:json"));
+        assert_eq!(
+            report[side]["value"]["cjsReexportValue"],
+            format!("{side}:cjs")
+        );
         assert_eq!(report[side]["value"]["relativeModule"], side);
         assert_eq!(
             report[side]["stdout"],

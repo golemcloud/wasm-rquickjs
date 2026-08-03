@@ -444,6 +444,33 @@ async fn run_owned_runtime_probe(
             const linkParentValue = fs.readFileSync('./dir-link/../sibling.txt', 'utf8');
             fs.closeSync(fd);
             if (secondFd !== null) fs.closeSync(secondFd);
+            probeStage = 'symlinked-modules';
+            process.execArgv.push('--preserve-symlinks');
+            fs.mkdirSync('./node_modules/real-pkg', {{ recursive: true }});
+            fs.writeFileSync('./node_modules/real-pkg/package.json', JSON.stringify({{
+                name: 'linked-pkg',
+                type: 'module',
+                exports: './index.mjs',
+            }}));
+            fs.writeFileSync('./node_modules/real-pkg/index.mjs',
+                'export default "' + {label_json} + ':package";');
+            fs.symlinkSync('./real-pkg', './node_modules/linked-pkg');
+            fs.writeFileSync('./esm-target.mjs',
+                'export default "' + {label_json} + ':esm";');
+            fs.symlinkSync('./esm-target.mjs', './esm-link.mjs');
+            fs.writeFileSync('./json-target.json', JSON.stringify({{ value: {label_json} + ':json' }}));
+            fs.symlinkSync('./json-target.json', './json-link.json');
+            fs.writeFileSync('./json-consumer.mjs',
+                'import value from "./json-link.json" with {{ type: "json" }}; export default value;');
+            fs.writeFileSync('./cjs-base.cjs',
+                'exports.reexported = "' + {label_json} + ':cjs";');
+            fs.writeFileSync('./cjs-reexport-target.cjs',
+                'module.exports = require("./cjs-base.cjs");');
+            fs.symlinkSync('./cjs-reexport-target.cjs', './cjs-reexport-link.cjs');
+            const packageModule = await import('linked-pkg');
+            const esmModule = await import('./esm-link.mjs');
+            const jsonModule = await import('./json-consumer.mjs');
+            const cjsModule = await import('./cjs-reexport-link.cjs');
             probeStage = 'relative-import';
             const relativeModule = await import('./local.mjs');
             console.log({label_json} + ':start');
@@ -466,6 +493,10 @@ async fn run_owned_runtime_probe(
                     linkTarget,
                     linkValue,
                     linkParentValue,
+                    packageValue: packageModule.default,
+                    esmValue: esmModule.default,
+                    jsonValue: jsonModule.default.value,
+                    cjsReexportValue: cjsModule.reexported,
                     relativeModule: relativeModule.default,
                     }}));
                 }}, {delay_ms});
