@@ -52,6 +52,7 @@ pub(crate) struct RunnerJob {
     cancel: Arc<AtomicBool>,
     overflowed: Arc<AtomicBool>,
     timed_out: Arc<AtomicBool>,
+    forgotten: AtomicBool,
     completion: RefCell<Option<Result<String, String>>>,
     event_waker: AtomicWaker,
     control_waker: AtomicWaker,
@@ -70,6 +71,7 @@ impl RunnerJob {
             cancel: Arc::new(AtomicBool::new(false)),
             overflowed: Arc::new(AtomicBool::new(false)),
             timed_out: Arc::new(AtomicBool::new(false)),
+            forgotten: AtomicBool::new(false),
             completion: RefCell::default(),
             event_waker: AtomicWaker::new(),
             control_waker: AtomicWaker::new(),
@@ -228,17 +230,20 @@ pub mod native_module {
         }
         .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown runner job"))?;
         poll_fn(|cx| {
-            if job.has_event() {
+            if job.has_event() || job.forgotten.load(Ordering::Relaxed) {
                 return Poll::Ready(());
             }
             job.event_waker.register(cx.waker());
-            if job.has_event() {
+            if job.has_event() || job.forgotten.load(Ordering::Relaxed) {
                 Poll::Ready(())
             } else {
                 Poll::Pending
             }
         })
         .await;
+        if job.forgotten.load(Ordering::Relaxed) {
+            return Err(rquickjs::Exception::throw_range(&ctx, "unknown runner job"));
+        }
         let completion = job.completion.borrow();
         let (done, value, error) = match completion.as_ref() {
             Some(Ok(value)) => (true, Some(value.clone()), None),
@@ -266,16 +271,23 @@ pub mod native_module {
         };
         job.cancel.store(true, Ordering::Relaxed);
         job.control_waker.wake();
+        job.event_waker.wake();
         true
     }
 
     #[rquickjs::function]
     pub fn forget_job(ctx: Ctx<'_>, id: usize) {
-        ctx.userdata::<RuntimeServices>()
+        let job = ctx
+            .userdata::<RuntimeServices>()
             .expect("runtime services not initialized")
             .runner_jobs
             .borrow_mut()
             .remove(&id);
+        if let Some(job) = job {
+            job.forgotten.store(true, Ordering::Relaxed);
+            job.control_waker.wake();
+            job.event_waker.wake();
+        }
     }
 }
 
@@ -442,9 +454,9 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
         }
     });
     let timeout = async {
-        match options.timeout_ms {
-            Some(ms) => {
-                sleep_for_runner_timeout(ms).await;
+        match deadline {
+            Some(deadline) => {
+                sleep_until_runner_deadline(deadline).await;
                 job.timed_out.store(true, Ordering::Relaxed);
                 Err("runner job timed out".to_string())
             }
@@ -471,10 +483,21 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
     job.complete(result);
 }
 
-async fn sleep_for_runner_timeout(milliseconds: u64) {
+async fn sleep_until_runner_deadline(deadline: Instant) {
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return;
+        }
+        sleep_for_runner_timeout(remaining).await;
+    }
+}
+
+async fn sleep_for_runner_timeout(duration: Duration) {
     #[cfg(feature = "p2")]
-    wstd::task::sleep(wstd::time::Duration::from_millis(milliseconds)).await;
+    wstd::task::sleep(duration.into()).await;
 
     #[cfg(feature = "p3")]
-    wasip3::clocks::monotonic_clock::wait_for(milliseconds * 1_000_000).await;
+    wasip3::clocks::monotonic_clock::wait_for(duration.as_nanos().min(u64::MAX as u128) as u64)
+        .await;
 }

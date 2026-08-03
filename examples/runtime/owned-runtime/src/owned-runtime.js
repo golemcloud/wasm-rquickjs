@@ -71,6 +71,18 @@ export async function run() {
     } catch (error) {
         tightLoopTimeoutError = error.message;
     }
+    const cpuBeforeSuspendStarted = Date.now();
+    let cpuBeforeSuspendTimeoutError;
+    try {
+        await runJavaScript({ source: `
+            const burnStarted = Date.now();
+            while (Date.now() - burnStarted < 300) {}
+            await new Promise(() => {});
+        `, timeoutMs: 400 });
+    } catch (error) {
+        cpuBeforeSuspendTimeoutError = error.message;
+    }
+    const cpuBeforeSuspendElapsedMs = Date.now() - cpuBeforeSuspendStarted;
     let zeroTimeoutCode;
     try { spawnJavaScript({ source: `return 1;`, timeoutMs: 0 }); }
     catch (error) { zeroTimeoutCode = error.code; }
@@ -231,6 +243,7 @@ export async function run() {
     return JSON.stringify({
         liveStdout, liveStderr, liveResult, ordering, streamedBeforeResult, parentProgress,
         left, right, timeoutSuccess, timeoutError, tightLoopTimeoutError,
+        cpuBeforeSuspendTimeoutError, cpuBeforeSuspendElapsedMs,
         zeroTimeoutCode, hugeTimeoutCode, invalidProgramOptions,
         overflowError, truncated, entry, imports,
         privateImport, cloneChecks, resourceError, pathAliases,

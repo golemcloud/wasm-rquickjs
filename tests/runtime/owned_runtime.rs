@@ -48,6 +48,17 @@ async fn owned_runtime_isolation(
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
     assert_eq!(report["timeoutError"], "runner job timed out");
     assert_eq!(report["tightLoopTimeoutError"], "runner job timed out");
+    assert_eq!(
+        report["cpuBeforeSuspendTimeoutError"],
+        "runner job timed out"
+    );
+    assert!(
+        report["cpuBeforeSuspendElapsedMs"]
+            .as_u64()
+            .is_some_and(|elapsed| elapsed < 650),
+        "timeout budget restarted after child suspension: {} ms",
+        report["cpuBeforeSuspendElapsedMs"]
+    );
     assert_eq!(report["zeroTimeoutCode"], "ERR_INVALID_ARG_TYPE");
     assert_eq!(report["hugeTimeoutCode"], "ERR_OUT_OF_RANGE");
     for name in ["invalidEntry", "invalidSource"] {
