@@ -1,5 +1,7 @@
 use futures::future::AbortHandle;
-use rquickjs::{AsyncContext, AsyncRuntime, Function, JsLifetime, Value, async_with};
+use rquickjs::{
+    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
+};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -199,6 +201,76 @@ impl OwnedJsRuntime {
 
         Self { rt, ctx }
     }
+
+    /// Install the ordinary Node-compatible global environment without loading
+    /// the generated component entry module or any generated WIT bridge state.
+    pub(crate) async fn initialize_node_builtins(&self) -> Result<(), String> {
+        initialize_dispose_symbols(&self.ctx).await?;
+        self.rt.idle().await;
+        initialize_builtin_wiring(&self.ctx).await?;
+        self.rt.idle().await;
+        Ok(())
+    }
+}
+
+pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(), String> {
+    async_with!(ctx => |ctx| {
+        Module::evaluate(
+            ctx.clone(),
+            "dispose",
+            r#"
+            const dispose = Symbol.for("dispose");
+            globalThis.__wasm_rquickjs_symbol_dispose = dispose;
+            Symbol.dispose = dispose;
+            const asyncDispose = Symbol.for("asyncDispose");
+            Symbol.asyncDispose = asyncDispose;
+            "#,
+        )
+        .catch(&ctx)
+        .map_err(|error| {
+            format!(
+                "Failed to evaluate dispose module initialization:\n{}",
+                super::format_caught_error(error)
+            )
+        })?
+        .finish::<()>()
+        .catch(&ctx)
+        .map_err(|error| {
+            format!(
+                "Failed to finish dispose module initialization:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        Ok::<(), String>(())
+    })
+    .await
+}
+
+pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), String> {
+    async_with!(ctx => |ctx| {
+        Module::evaluate(
+            ctx.clone(),
+            "__wasm_rquickjs_init_wiring",
+            crate::builtin::wire_builtins(),
+        )
+        .catch(&ctx)
+        .map_err(|error| {
+            format!(
+                "Failed to evaluate built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?
+        .finish::<()>()
+        .catch(&ctx)
+        .map_err(|error| {
+            format!(
+                "Failed to finish built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        Ok::<(), String>(())
+    })
+    .await
 }
 
 // RuntimeServices contains no JavaScript-lifetime-bound values.

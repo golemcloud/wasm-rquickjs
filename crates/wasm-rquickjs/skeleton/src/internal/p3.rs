@@ -24,7 +24,9 @@ use wit_bindgen_p3::rt::async_support::{
     FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
 };
 
-use super::runtime_services::{OwnedJsRuntime, RuntimeServices};
+use super::runtime_services::{
+    OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
+};
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
@@ -87,29 +89,10 @@ impl JsState {
     /// Must run before user module code so bundled CJS-in-ESM shims see
     /// `globalThis.require`, `Buffer`, `process`, timers, and related globals.
     async fn init_engine(&self) {
+        initialize_dispose_symbols(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
         async_with!(self.ctx => |ctx| {
-            // Resource classes generated for imported WIT resources wire `[Symbol.dispose]` onto
-            // their prototype via the global `DISPOSE_SYMBOL`, so it must be defined before the
-            // user module (which triggers resource-class registration) is imported.
-            Module::evaluate(
-                ctx.clone(),
-                "dispose",
-                format!(
-                    r#"
-                    const dispose = Symbol.for("dispose");
-                    globalThis.{DISPOSE_SYMBOL} = dispose;
-                    Symbol.dispose = dispose;
-                    const asyncDispose = Symbol.for("asyncDispose");
-                    Symbol.asyncDispose = asyncDispose;
-                    "#
-                ),
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
-
             // Table holding live exported resource instances (see `RESOURCE_TABLE_NAME`). Must exist
             // before any exported resource is constructed or any resource handle is lowered to JS.
             ctx.globals()
@@ -173,19 +156,11 @@ impl JsState {
             .catch(&ctx)
             .unwrap_or_else(|e| panic!("Failed to finish async-value helpers:\n{}", format_caught_error(e)));
 
-            let wiring = crate::builtin::wire_builtins();
-            Module::evaluate(
-                ctx.clone(),
-                "__wasm_rquickjs_init_wiring",
-                wiring,
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
         })
         .await;
+        initialize_builtin_wiring(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
         // `idle()` from ever returning. Mirrors the Preview 2 init path.

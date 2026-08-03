@@ -11,7 +11,9 @@ use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
-use super::runtime_services::{OwnedJsRuntime, RuntimeServices};
+use super::runtime_services::{
+    OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
+};
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
@@ -87,48 +89,14 @@ impl JsState {
     /// Phase 2a: Initialize engine builtins — dispose symbols and builtin wiring.
     /// This can be pre-initialized by Wizer without user module code.
     async fn init_engine(&self) {
-        // Dispose symbols must be initialized before builtins, since builtin
-        // modules use [Symbol.dispose] in their class definitions.
-        async_with!(self.ctx => |ctx| {
-            Module::evaluate(
-                ctx.clone(),
-                "dispose",
-                format!(r#"
-                const dispose = Symbol.for("dispose");
-                globalThis.{DISPOSE_SYMBOL} = dispose;
-                Symbol.dispose = dispose;
-                const asyncDispose = Symbol.for("asyncDispose");
-                Symbol.asyncDispose = asyncDispose;
-                "#)
-            ).catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
-        })
-            .await;
+        initialize_dispose_symbols(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
         self.rt.idle().await;
 
-        async_with!(self.ctx => |ctx| {
-            // Wire built-in globals (globalThis.require, Buffer, process, etc.)
-            // This must complete before user code runs, because bundled CJS-in-ESM code
-            // (e.g. esbuild's __require shim) checks `typeof require` at the top level
-            // during module evaluation. ES module semantics hoist all imports and evaluate
-            // them before the module body, so wiring and user import cannot share a single
-            // Module::evaluate call.
-            let wiring = crate::builtin::wire_builtins();
-            Module::evaluate(
-                ctx.clone(),
-                "__wasm_rquickjs_init_wiring",
-                wiring,
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
-        })
-            .await;
+        initialize_builtin_wiring(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
         drain_and_idle(self).await;
     }
 
