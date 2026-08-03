@@ -24,8 +24,7 @@ use wit_bindgen_p3::rt::async_support::{
     FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
 };
 
-use super::module_loading::initialize_module_loading;
-use super::runtime_services::RuntimeServices;
+use super::runtime_services::{OwnedJsRuntime, RuntimeServices};
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
@@ -71,35 +70,7 @@ impl JsState {
     /// Create the runtime, context, resolvers and loaders. Does NOT evaluate any
     /// JavaScript, so it is safe to publish to `STATE` before `finish_init`.
     async fn new_base() -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
-        // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
-        // shape refcount bug during heavy async/promise workloads.
-        rt.set_gc_threshold(256 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
-
-        async_with!(ctx => |ctx| {
-            ctx.store_userdata(RuntimeServices::default())
-                .expect("Failed to initialize runtime services");
-        })
-        .await;
-
-        initialize_module_loading(&rt, &ctx).await;
-
-        // `process.js` publishes `__wasm_rquickjs_rejection_tracker` to surface unhandled
-        // promise rejections as `process` events. Mirrors the Preview 2 path.
-        rt.set_host_promise_rejection_tracker(Some(Box::new(
-            |ctx, promise, reason, is_handled| {
-                if let Ok(handler) = ctx
-                    .globals()
-                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
-                {
-                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
-                }
-            },
-        )))
-        .await;
+        let OwnedJsRuntime { rt, ctx } = OwnedJsRuntime::new().await;
 
         Self {
             rt,

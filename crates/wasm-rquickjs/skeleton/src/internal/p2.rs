@@ -11,8 +11,7 @@ use std::future::Future;
 use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
-use super::module_loading::initialize_module_loading;
-use super::runtime_services::RuntimeServices;
+use super::runtime_services::{OwnedJsRuntime, RuntimeServices};
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
@@ -60,23 +59,7 @@ impl JsState {
     /// state. Does NOT evaluate any JavaScript — safe to publish to `STATE` before
     /// JS module initialization runs.
     async fn new_base() -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
-        // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
-        // shape refcount bug during heavy async/promise workloads. The default
-        // threshold (0xFF) causes GC to run too frequently, which can trigger
-        // a use-after-free in the shape reference counting code path.
-        rt.set_gc_threshold(256 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
-
-        async_with!(ctx => |ctx| {
-            ctx.store_userdata(RuntimeServices::default())
-                .expect("Failed to initialize runtime services");
-        })
-        .await;
-
-        initialize_module_loading(&rt, &ctx).await;
+        let OwnedJsRuntime { rt, ctx } = OwnedJsRuntime::new().await;
 
         async_with!(ctx => |ctx| {
             let global = ctx.globals();
@@ -84,18 +67,6 @@ impl JsState {
             global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                 .expect("Failed to initialize resource table");
         })
-        .await;
-
-        rt.set_host_promise_rejection_tracker(Some(Box::new(
-            |ctx, promise, reason, is_handled| {
-                if let Ok(handler) = ctx
-                    .globals()
-                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
-                {
-                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
-                }
-            },
-        )))
         .await;
 
         let (resource_drop_queue_tx, resource_drop_queue_rx) = futures::channel::mpsc::unbounded();
