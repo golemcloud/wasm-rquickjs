@@ -8,8 +8,7 @@ mod base64;
 mod buffer;
 mod child_process;
 mod cluster;
-#[cfg(feature = "internal-test-code-runner")]
-mod code_runner;
+pub(crate) mod code_runner;
 mod console;
 mod constants;
 mod dgram;
@@ -277,10 +276,12 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/sqlite_native")
         .with_module("node:sqlite");
 
-    #[cfg(feature = "internal-test-code-runner")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/code_runner_native")
         .with_module("golem:code-runner");
+
+    #[cfg(feature = "internal-test-code-runner")]
+    let resolver = resolver.with_module("golem:code-runner-test");
 
     #[cfg(feature = "golem")]
     let resolver = resolver
@@ -365,7 +366,6 @@ pub fn module_loader() -> (
             string_decoder::js_native_module,
         );
 
-    #[cfg(feature = "internal-test-code-runner")]
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/code_runner_native",
         code_runner::js_native_module,
@@ -531,9 +531,14 @@ pub fn module_loader() -> (
         .with_module("zlib", zlib::REEXPORT_JS)
         .with_module("node:sqlite", sqlite::SQLITE_JS);
 
-    #[cfg(feature = "internal-test-code-runner")]
     let builtin_loader =
         builtin_loader.with_module("golem:code-runner", code_runner::CODE_RUNNER_JS);
+
+    #[cfg(feature = "internal-test-code-runner")]
+    let builtin_loader = builtin_loader.with_module(
+        "golem:code-runner-test",
+        code_runner::CODE_RUNNER_TEST_JS,
+    );
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

@@ -21,6 +21,9 @@ pub(crate) struct RuntimeServices {
     pub(crate) process: ProcessServices,
     pub(crate) fs: RefCell<FsServices>,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
+    pub(crate) runner_jobs: RefCell<HashMap<usize, Rc<crate::builtin::code_runner::RunnerJob>>>,
+    pub(crate) next_runner_job_id: Cell<usize>,
+    pub(crate) runner_enabled: Cell<bool>,
 }
 
 impl Default for RuntimeServices {
@@ -31,6 +34,9 @@ impl Default for RuntimeServices {
             process: ProcessServices::default(),
             fs: RefCell::new(FsServices::default()),
             output: RefCell::new(Rc::new(ComponentOutputSink)),
+            runner_jobs: RefCell::default(),
+            next_runner_job_id: Cell::new(1),
+            runner_enabled: Cell::new(true),
         }
     }
 }
@@ -321,6 +327,16 @@ impl OwnedJsRuntime {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .set_output_sink(output);
+        })
+        .await;
+    }
+
+    pub(crate) async fn disable_runner(&self) {
+        async_with!(self.ctx => |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .runner_enabled
+                .set(false);
         })
         .await;
     }

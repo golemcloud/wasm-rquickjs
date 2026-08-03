@@ -630,6 +630,26 @@ Compatibility stubs — HTTP/2 is not supported.
 </details>
 
 <details>
+<summary><strong><code>golem:code-runner</code></strong></summary>
+
+Runs JavaScript in a fresh, isolated QuickJS runtime. `spawnJavaScript(options)` returns live
+`stdout`/`stderr` readable streams, a structured-clone `result` promise, and `cancel()`;
+`runJavaScript(options)` returns bounded captured output with the structured result. Options accept
+exactly one of `entry` or inline `source`, plus `cwd`, `argv`, `env`, `timeoutMs`, `maxBytes`
+(1 MiB per stream by default), and `overflow` (`terminate` by default or `truncate`). CPU deadlines
+are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
+`default` function (or `run` function when there is no default function) is invoked and awaited.
+Cancellation is cooperative for queued or yielding code and cannot preempt a tight loop already
+running on the same thread; use `timeoutMs` when that guarantee is required. A runtime accepts at
+most eight active jobs, and runner children cannot recursively create more runner jobs. Isolation
+means fresh JavaScript, process, timer, and mutable runtime state; it is not a capability sandbox.
+Runner code inherits the component's filesystem, network, clocks, randomness, and other available
+host capabilities, and `cwd` is only a resolution base—not a filesystem boundary. Failed jobs are
+currently returned as parent-realm `Error` messages rather than structured-cloned thrown values.
+
+</details>
+
+<details>
 <summary><strong><code>node:inspector</code></strong> (stub)</summary>
 
 Compatibility stubs — no V8 inspector in WASM.
