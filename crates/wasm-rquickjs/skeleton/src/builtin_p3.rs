@@ -43,6 +43,8 @@ mod buffer;
 mod child_process;
 #[path = "builtin/cluster.rs"]
 mod cluster;
+#[path = "builtin/code_runner.rs"]
+mod code_runner;
 #[path = "builtin/console.rs"]
 mod console;
 #[path = "builtin/constants.rs"]
@@ -266,6 +268,8 @@ pub fn add_module_resolvers(
         .with_module("async_hooks")
         .with_module("node:cluster")
         .with_module("cluster")
+        .with_module("__wasm_rquickjs_builtin/code_runner_native")
+        .with_module("golem:code-runner")
         .with_module("node:constants")
         .with_module("constants")
         .with_module("__wasm_rquickjs_builtin/dgram_native")
@@ -360,6 +364,10 @@ pub fn module_loader() -> (
             console::js_native_module,
         )
         .with_module(
+            "__wasm_rquickjs_builtin/code_runner_native",
+            code_runner::js_native_module,
+        )
+        .with_module(
             "__wasm_rquickjs_builtin/timeout_native",
             timeout::js_native_module,
         )
@@ -443,6 +451,7 @@ pub fn module_loader() -> (
             webstreams::WEBSTREAMS_WRAPPER_JS,
         )
         .with_module("node:stream/web", webstreams::REEXPORT_JS)
+        .with_module("golem:code-runner", code_runner::CODE_RUNNER_JS)
         .with_module("stream/web", webstreams::REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
         .with_module("formdata-node", formdata_node::FORMDATA_NODE_JS)

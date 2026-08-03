@@ -1,6 +1,7 @@
 use futures::future::AbortHandle;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
+    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Promise, Value,
+    async_with,
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -137,6 +138,32 @@ pub(crate) trait RuntimeOutputSink {
     fn write_stderr(&self, data: &[u8]);
 }
 
+#[derive(Default)]
+pub(crate) struct BufferOutputSink {
+    stdout: RefCell<Vec<u8>>,
+    stderr: RefCell<Vec<u8>>,
+}
+
+impl BufferOutputSink {
+    pub(crate) fn stdout(&self) -> String {
+        String::from_utf8_lossy(&self.stdout.borrow()).into_owned()
+    }
+
+    pub(crate) fn stderr(&self) -> String {
+        String::from_utf8_lossy(&self.stderr.borrow()).into_owned()
+    }
+}
+
+impl RuntimeOutputSink for BufferOutputSink {
+    fn write_stdout(&self, data: &[u8]) {
+        self.stdout.borrow_mut().extend_from_slice(data);
+    }
+
+    fn write_stderr(&self, data: &[u8]) {
+        self.stderr.borrow_mut().extend_from_slice(data);
+    }
+}
+
 struct ComponentOutputSink;
 
 impl RuntimeOutputSink for ComponentOutputSink {
@@ -211,6 +238,107 @@ impl OwnedJsRuntime {
         self.rt.idle().await;
         Ok(())
     }
+
+    pub(crate) async fn configure_process(
+        &self,
+        argv: Vec<String>,
+        env: HashMap<String, String>,
+        cwd: PathBuf,
+    ) -> Result<(), String> {
+        async_with!(self.ctx => |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .process
+                .configure(argv, env, cwd)
+                .map_err(|error| error.to_string())
+        })
+        .await
+    }
+
+    pub(crate) async fn set_output_sink(&self, output: Rc<dyn RuntimeOutputSink>) {
+        async_with!(self.ctx => |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .set_output_sink(output);
+        })
+        .await;
+    }
+}
+
+/// Temporary integration probe used while the public runner lifecycle is built.
+/// Its native bridge and fixture are removed once runner tests cover these same
+/// cross-runtime invariants.
+pub(crate) async fn owned_runtime_isolation_probe() -> Result<String, String> {
+    let left = run_owned_runtime_probe("left", 8, "/");
+    let right = run_owned_runtime_probe("right", 1, "/test");
+    let (left, right) = futures::future::join(left, right).await;
+    let left = left?;
+    let right = right?;
+    serde_json::to_string(&serde_json::json!({ "left": left, "right": right }))
+        .map_err(|error| error.to_string())
+}
+
+async fn run_owned_runtime_probe(
+    label: &str,
+    delay_ms: u32,
+    cwd: &str,
+) -> Result<serde_json::Value, String> {
+    let runtime = OwnedJsRuntime::new().await;
+    let output = Rc::new(BufferOutputSink::default());
+    runtime
+        .configure_process(
+            vec!["node".to_string(), format!("/{label}.mjs")],
+            HashMap::from([("RUNNER_LABEL".to_string(), label.to_string())]),
+            PathBuf::from(cwd),
+        )
+        .await?;
+    runtime.set_output_sink(output.clone()).await;
+    runtime.initialize_node_builtins().await?;
+
+    let label_json = serde_json::to_string(label).map_err(|error| error.to_string())?;
+    let source = format!(
+        r#"
+        globalThis.__ownedRuntimeProbe = new Promise((resolve) => {{
+            console.log({label_json} + ':start');
+            const timer = setTimeout(() => {{
+                console.log({label_json} + ':end');
+                resolve(JSON.stringify({{
+                    label: process.env.RUNNER_LABEL,
+                    argv: process.argv,
+                    cwd: process.cwd(),
+                    timerId: Number(timer),
+                }}));
+            }}, {delay_ms});
+        }});
+        "#
+    );
+
+    let result = async_with!(runtime.ctx => |ctx| {
+        Module::evaluate(ctx.clone(), "__owned_runtime_probe", source)
+            .catch(&ctx)
+            .map_err(|error| super::format_caught_error(error))?
+            .finish::<()>()
+            .catch(&ctx)
+            .map_err(|error| super::format_caught_error(error))?;
+        let promise: Promise = ctx
+            .globals()
+            .get("__ownedRuntimeProbe")
+            .map_err(|error| format!("probe promise unavailable: {error:?}"))?;
+        promise
+            .into_future::<String>()
+            .await
+            .map_err(|error| format!("probe promise failed: {error:?}"))
+    })
+    .await?;
+    runtime.rt.idle().await;
+
+    let value: serde_json::Value =
+        serde_json::from_str(&result).map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({
+        "value": value,
+        "stdout": output.stdout(),
+        "stderr": output.stderr(),
+    }))
 }
 
 pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(), String> {
