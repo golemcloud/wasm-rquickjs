@@ -1,7 +1,8 @@
 use futures::future::AbortHandle;
+#[cfg(feature = "internal-test-code-runner")]
+use rquickjs::Promise;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Promise, Value,
-    async_with,
+    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
