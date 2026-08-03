@@ -8,6 +8,7 @@ mod base64;
 mod buffer;
 mod child_process;
 mod cluster;
+#[cfg(feature = "internal-test-code-runner")]
 mod code_runner;
 mod console;
 mod constants;
@@ -208,8 +209,6 @@ pub fn add_module_resolvers(
         .with_module("async_hooks")
         .with_module("node:cluster")
         .with_module("cluster")
-        .with_module("__wasm_rquickjs_builtin/code_runner_native")
-        .with_module("golem:code-runner")
         .with_module("node:constants")
         .with_module("constants")
         .with_module("__wasm_rquickjs_builtin/dgram_native")
@@ -268,6 +267,11 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/sqlite_native")
         .with_module("node:sqlite");
 
+    #[cfg(feature = "internal-test-code-runner")]
+    let resolver = resolver
+        .with_module("__wasm_rquickjs_builtin/code_runner_native")
+        .with_module("golem:code-runner");
+
     #[cfg(feature = "golem")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
@@ -294,10 +298,6 @@ pub fn module_loader() -> (
         .with_module(
             "__wasm_rquickjs_builtin/console_native",
             console::js_native_module,
-        )
-        .with_module(
-            "__wasm_rquickjs_builtin/code_runner_native",
-            code_runner::js_native_module,
         )
         .with_module(
             "__wasm_rquickjs_builtin/timeout_native",
@@ -355,6 +355,12 @@ pub fn module_loader() -> (
             string_decoder::js_native_module,
         );
 
+    #[cfg(feature = "internal-test-code-runner")]
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/code_runner_native",
+        code_runner::js_native_module,
+    );
+
     #[cfg(feature = "golem")]
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/diagnostics_channel_native",
@@ -383,7 +389,6 @@ pub fn module_loader() -> (
             webstreams::WEBSTREAMS_WRAPPER_JS,
         )
         .with_module("node:stream/web", webstreams::REEXPORT_JS)
-        .with_module("golem:code-runner", code_runner::CODE_RUNNER_JS)
         .with_module("stream/web", webstreams::REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
         .with_module("formdata-node", formdata_node::FORMDATA_NODE_JS)
@@ -515,6 +520,10 @@ pub fn module_loader() -> (
         .with_module("node:zlib", zlib::ZLIB_JS)
         .with_module("zlib", zlib::REEXPORT_JS)
         .with_module("node:sqlite", sqlite::SQLITE_JS);
+
+    #[cfg(feature = "internal-test-code-runner")]
+    let builtin_loader =
+        builtin_loader.with_module("golem:code-runner", code_runner::CODE_RUNNER_JS);
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

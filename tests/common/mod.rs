@@ -1484,6 +1484,7 @@ pub enum FeatureCombination {
     None,
     Lite,
     Normal,
+    InternalTestCodeRunner,
     Full,
     FullNoLogging,
     Golem,
@@ -1501,6 +1502,7 @@ impl FeatureCombination {
             Self::None => "none",
             Self::Lite => "lite",
             Self::Normal => "normal",
+            Self::InternalTestCodeRunner => "internal-test-code-runner",
             Self::Full => "full",
             Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
@@ -1518,6 +1520,9 @@ impl FeatureCombination {
                 vec!["--no-default-features", "--features", "lite"]
             }
             FeatureCombination::Normal => vec![],
+            FeatureCombination::InternalTestCodeRunner => {
+                vec!["--features", "internal-test-code-runner"]
+            }
             FeatureCombination::Full => {
                 vec!["--no-default-features", "--features", "full"]
             }
@@ -1555,6 +1560,9 @@ impl FeatureCombination {
                 let features = match self {
                     FeatureCombination::None | FeatureCombination::Lite => "p3",
                     FeatureCombination::Normal => "normal-p3",
+                    FeatureCombination::InternalTestCodeRunner => {
+                        "normal-p3,internal-test-code-runner"
+                    }
                     FeatureCombination::Full => "full-p3",
                     FeatureCombination::FullNoLogging => "full-no-logging-p3",
                     FeatureCombination::Golem => "normal-p3,golem",

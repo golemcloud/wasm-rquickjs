@@ -3,7 +3,7 @@ use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Promise, Value,
     async_with,
 };
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -84,6 +84,19 @@ impl ProcessServices {
             .as_ref()
             .map(|state| state.cwd.clone())
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
+    }
+
+    /// Resolve a guest path without mutating the component-wide process cwd.
+    ///
+    /// Owned runtimes can execute concurrently, so relative filesystem paths
+    /// must be anchored in this runtime's process state rather than delegated
+    /// to `std::fs` (which would use shared ambient state).
+    pub(crate) fn resolve_path(&self, path: &Path) -> std::io::Result<PathBuf> {
+        if path.is_absolute() {
+            normalize_absolute_path(path)
+        } else {
+            normalize_absolute_path(&self.cwd().join(path))
+        }
     }
 
     pub(crate) fn chdir(&self, path: &Path) -> std::io::Result<()> {
@@ -269,52 +282,113 @@ impl OwnedJsRuntime {
 /// Its native bridge and fixture are removed once runner tests cover these same
 /// cross-runtime invariants.
 pub(crate) async fn owned_runtime_isolation_probe() -> Result<String, String> {
-    let left = run_owned_runtime_probe("left", 8, "/");
-    let right = run_owned_runtime_probe("right", 1, "/test");
+    let left_cwd = PathBuf::from("/tmp/wasm-rquickjs-owned-left");
+    let right_cwd = PathBuf::from("/tmp/wasm-rquickjs-owned-right");
+    prepare_owned_runtime_probe_dir(&left_cwd, "left")?;
+    prepare_owned_runtime_probe_dir(&right_cwd, "right")?;
+
+    let active = Rc::new(Cell::new(0));
+    let peak_active = Rc::new(Cell::new(0));
+    let left = run_owned_runtime_probe(
+        "left",
+        8,
+        left_cwd,
+        active.clone(),
+        peak_active.clone(),
+    );
+    let right = run_owned_runtime_probe(
+        "right",
+        1,
+        right_cwd,
+        active.clone(),
+        peak_active.clone(),
+    );
     let (left, right) = futures::future::join(left, right).await;
     let left = left?;
     let right = right?;
-    serde_json::to_string(&serde_json::json!({ "left": left, "right": right }))
-        .map_err(|error| error.to_string())
+    serde_json::to_string(&serde_json::json!({
+        "left": left,
+        "right": right,
+        "peakActive": peak_active.get(),
+    }))
+    .map_err(|error| error.to_string())
+}
+
+fn prepare_owned_runtime_probe_dir(cwd: &Path, label: &str) -> Result<(), String> {
+    std::fs::create_dir_all(cwd).map_err(|error| error.to_string())?;
+    std::fs::write(
+        cwd.join("local.mjs"),
+        format!("export default {label:?};"),
+    )
+    .map_err(|error| error.to_string())
 }
 
 async fn run_owned_runtime_probe(
     label: &str,
     delay_ms: u32,
-    cwd: &str,
+    cwd: PathBuf,
+    active: Rc<Cell<usize>>,
+    peak_active: Rc<Cell<usize>>,
 ) -> Result<serde_json::Value, String> {
+    struct ActiveGuard(Rc<Cell<usize>>);
+
+    impl Drop for ActiveGuard {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() - 1);
+        }
+    }
+
     let runtime = OwnedJsRuntime::new().await;
     let output = Rc::new(BufferOutputSink::default());
     runtime
         .configure_process(
             vec!["node".to_string(), format!("/{label}.mjs")],
             HashMap::from([("RUNNER_LABEL".to_string(), label.to_string())]),
-            PathBuf::from(cwd),
+            cwd.clone(),
         )
         .await?;
     runtime.set_output_sink(output.clone()).await;
     runtime.initialize_node_builtins().await?;
 
+    active.set(active.get() + 1);
+    peak_active.set(peak_active.get().max(active.get()));
+    let _active_guard = ActiveGuard(active);
+
     let label_json = serde_json::to_string(label).map_err(|error| error.to_string())?;
+    let module_name = cwd.join("entry.mjs").to_string_lossy().into_owned();
     let source = format!(
         r#"
-        globalThis.__ownedRuntimeProbe = new Promise((resolve) => {{
+        import fs from 'node:fs';
+        import fsp from 'node:fs/promises';
+        globalThis.__ownedRuntimeProbe = (async () => {{
+            process.env.RUNTIME_MUTATION = {label_json} + ':mutated';
+            fs.writeFileSync('./data.txt', {label_json});
+            const syncFile = fs.readFileSync('./data.txt', 'utf8');
+            const asyncFile = await fsp.readFile('./data.txt', 'utf8');
+            const relativeModule = await import('./local.mjs');
             console.log({label_json} + ':start');
-            const timer = setTimeout(() => {{
-                console.log({label_json} + ':end');
-                resolve(JSON.stringify({{
+            process.stderr.write({label_json} + ':stderr\n');
+            return await new Promise((resolve) => {{
+                const timer = setTimeout(() => {{
+                    console.log({label_json} + ':end');
+                    resolve(JSON.stringify({{
                     label: process.env.RUNNER_LABEL,
+                    mutation: process.env.RUNTIME_MUTATION,
                     argv: process.argv,
                     cwd: process.cwd(),
                     timerId: Number(timer),
-                }}));
-            }}, {delay_ms});
-        }});
+                    syncFile,
+                    asyncFile,
+                    relativeModule: relativeModule.default,
+                    }}));
+                }}, {delay_ms});
+            }});
+        }})();
         "#
     );
 
     let result = async_with!(runtime.ctx => |ctx| {
-        Module::evaluate(ctx.clone(), "__owned_runtime_probe", source)
+        Module::evaluate(ctx.clone(), module_name, source)
             .catch(&ctx)
             .map_err(|error| super::format_caught_error(error))?
             .finish::<()>()
@@ -329,7 +403,14 @@ async fn run_owned_runtime_probe(
             .await
             .map_err(|error| format!("probe promise failed: {error:?}"))
     })
-    .await?;
+    .await
+    .map_err(|error| {
+        format!(
+            "{error}; captured stdout: {:?}; captured stderr: {:?}",
+            output.stdout(),
+            output.stderr()
+        )
+    })?;
     runtime.rt.idle().await;
 
     let value: serde_json::Value =

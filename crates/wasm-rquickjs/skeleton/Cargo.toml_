@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["p2", "normal"]
+internal-test-code-runner = []
 
 # WASI generation target (mutually exclusive; select exactly one). `p2` is the historical
 # Preview 2 path (synchronous exports, full Node.js builtins, wstd/wasip2, Wizer). `p3` is the
