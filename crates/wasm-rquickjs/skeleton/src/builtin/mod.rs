@@ -109,8 +109,11 @@ mod sqlite {
     pub use super::sqlite_disabled::*;
 }
 
-pub(crate) fn realpath_for_module_resolution(path: &str) -> Option<String> {
-    fs::realpath_for_module_resolution(path)
+pub(crate) fn realpath_for_module_resolution(
+    ctx: &rquickjs::Ctx<'_>,
+    path: &str,
+) -> Option<String> {
+    fs::realpath_for_module_resolution(ctx, path)
 }
 
 pub fn add_module_resolvers(

@@ -27,6 +27,13 @@ async fn owned_runtime_isolation(
         anyhow::bail!("expected JSON string result, got {result:?}");
     };
     let report: serde_json::Value = serde_json::from_str(&json)?;
+    for side in ["left", "right"] {
+        assert!(
+            report[side]["value"].get("probeError").is_none(),
+            "{side} owned-runtime probe failed: {}",
+            report[side]["value"]["probeError"]
+        );
+    }
     assert_eq!(report["peakActive"], 2, "owned runtimes did not overlap");
     for side in ["left", "right"] {
         let cwd = format!("/tmp/wasm-rquickjs-owned-{side}");
@@ -37,6 +44,17 @@ async fn owned_runtime_isolation(
         assert_eq!(report[side]["value"]["timerId"], 0);
         assert_eq!(report[side]["value"]["syncFile"], side);
         assert_eq!(report[side]["value"]["asyncFile"], side);
+        assert_eq!(report[side]["value"]["fd"], 13);
+        assert_eq!(
+            report[side]["value"]["mode"],
+            if side == "left" { 0o600 } else { 0o640 }
+        );
+        assert_eq!(report[side]["value"]["linkTarget"], "./target.txt");
+        assert_eq!(report[side]["value"]["linkValue"], format!("{side}:target"));
+        assert_eq!(
+            report[side]["value"]["linkParentValue"],
+            format!("{side}:sibling")
+        );
         assert_eq!(report[side]["value"]["relativeModule"], side);
         assert_eq!(
             report[side]["stdout"],
@@ -44,5 +62,11 @@ async fn owned_runtime_isolation(
         );
         assert_eq!(report[side]["stderr"], format!("{side}:stderr\n"));
     }
+    assert_eq!(report["left"]["value"]["secondFd"], 14);
+    assert_eq!(
+        report["right"]["value"]["secondFd"],
+        serde_json::Value::Null
+    );
+    assert_eq!(report["right"]["value"]["foreignFdError"], "EBADF");
     Ok(())
 }

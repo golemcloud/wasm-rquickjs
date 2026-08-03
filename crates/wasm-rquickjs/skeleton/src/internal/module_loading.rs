@@ -3208,7 +3208,7 @@ impl Resolver for FileUrlResolver {
         if let Some((path, suffix)) = Self::file_url_to_path_parts(name) {
             let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
             let url = NodeFileResolver::module_url_for_file_specifier(name);
-            if NodeFileResolver::module_resolution_is_dir(&normalized) {
+            if NodeFileResolver::module_resolution_is_dir(ctx, &normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3221,7 +3221,7 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            if !NodeFileResolver::module_resolution_is_file(&normalized) {
+            if !NodeFileResolver::module_resolution_is_file(ctx, &normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3233,6 +3233,7 @@ impl Resolver for FileUrlResolver {
             let preserve_symlinks =
                 NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
             let identity = NodeFileResolver::module_identity_path_for_existing_file(
+                ctx,
                 &normalized,
                 preserve_symlinks,
             );
@@ -3327,7 +3328,7 @@ impl Loader for StaticRegisteredFileUrlLoader {
             return Err(Error::new_loading(path));
         };
         let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
-        let source_path = crate::builtin::realpath_for_module_resolution(&fs_path)
+        let source_path = crate::builtin::realpath_for_module_resolution(ctx, &fs_path)
             .unwrap_or_else(|| fs_path.clone());
         declare_esm_file_module(
             ctx,
@@ -3531,6 +3532,7 @@ impl Resolver for CjsEvalResolver {
 
         let module_dir = std::path::Path::new(&dir_str);
         NodeFileResolver::resolve_candidate_with_extensions(
+            ctx,
             module_dir.join(name),
             "",
             true,
@@ -3634,36 +3636,38 @@ impl NodeFileResolver {
         false
     }
 
-    fn module_identity_path_for_existing_file(normalized: &str, preserve_symlinks: bool) -> String {
+    fn module_identity_path_for_existing_file(ctx: &Ctx<'_>, normalized: &str, preserve_symlinks: bool) -> String {
         if preserve_symlinks {
             return normalized.to_string();
         }
-        let realpath_input = crate::builtin::realpath_for_module_resolution(normalized)
+        let realpath_input = crate::builtin::realpath_for_module_resolution(ctx, normalized)
             .unwrap_or_else(|| normalized.to_string());
         std::fs::canonicalize(&realpath_input)
             .map(|path| CjsEvalResolver::normalize_path(&path))
             .unwrap_or(realpath_input)
     }
 
-    fn module_resolution_path(normalized: &str) -> String {
-        crate::builtin::realpath_for_module_resolution(normalized)
+    fn module_resolution_path(ctx: &Ctx<'_>, normalized: &str) -> String {
+        crate::builtin::realpath_for_module_resolution(ctx, normalized)
             .unwrap_or_else(|| normalized.to_string())
     }
 
-    fn module_resolution_is_file(normalized: &str) -> bool {
-        std::path::Path::new(&Self::module_resolution_path(normalized)).is_file()
+    fn module_resolution_is_file(ctx: &Ctx<'_>, normalized: &str) -> bool {
+        std::path::Path::new(&Self::module_resolution_path(ctx, normalized)).is_file()
     }
 
-    fn module_resolution_is_dir(normalized: &str) -> bool {
-        std::path::Path::new(&Self::module_resolution_path(normalized)).is_dir()
+    fn module_resolution_is_dir(ctx: &Ctx<'_>, normalized: &str) -> bool {
+        std::path::Path::new(&Self::module_resolution_path(ctx, normalized)).is_dir()
     }
 
     fn resolve_candidate(
+        ctx: &Ctx<'_>,
         candidate: std::path::PathBuf,
         suffix: &str,
         preserve_symlinks: bool,
     ) -> Option<String> {
         Self::resolve_candidate_with_extensions(
+            ctx,
             candidate,
             suffix,
             preserve_symlinks,
@@ -3673,6 +3677,7 @@ impl NodeFileResolver {
     }
 
     fn resolve_candidate_with_extensions(
+        ctx: &Ctx<'_>,
         candidate: std::path::PathBuf,
         suffix: &str,
         preserve_symlinks: bool,
@@ -3680,17 +3685,17 @@ impl NodeFileResolver {
         semantics: FileCandidateSemantics,
     ) -> Option<String> {
         let normalized = CjsEvalResolver::normalize_path(&candidate);
-        if Self::candidate_is_file(&normalized, semantics) {
-            let identity = Self::candidate_identity(&normalized, preserve_symlinks, semantics);
+        if Self::candidate_is_file(ctx, &normalized, semantics) {
+            let identity = Self::candidate_identity(ctx, &normalized, preserve_symlinks, semantics);
             return Some(format!("{identity}{suffix}"));
         }
 
         if std::path::Path::new(&normalized).extension().is_none() {
             for ext in extensions {
                 let with_ext = format!("{}.{}", normalized, ext);
-                if Self::candidate_is_file(&with_ext, semantics) {
+                if Self::candidate_is_file(ctx, &with_ext, semantics) {
                     let identity =
-                        Self::candidate_identity(&with_ext, preserve_symlinks, semantics);
+                        Self::candidate_identity(ctx, &with_ext, preserve_symlinks, semantics);
                     return Some(format!("{identity}{suffix}"));
                 }
             }
@@ -3699,21 +3704,22 @@ impl NodeFileResolver {
         None
     }
 
-    fn candidate_is_file(normalized: &str, semantics: FileCandidateSemantics) -> bool {
+    fn candidate_is_file(ctx: &Ctx<'_>, normalized: &str, semantics: FileCandidateSemantics) -> bool {
         match semantics {
-            FileCandidateSemantics::ModuleResolution => Self::module_resolution_is_file(normalized),
+            FileCandidateSemantics::ModuleResolution => Self::module_resolution_is_file(ctx, normalized),
             FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
         }
     }
 
     fn candidate_identity(
+        ctx: &Ctx<'_>,
         normalized: &str,
         preserve_symlinks: bool,
         semantics: FileCandidateSemantics,
     ) -> String {
         match semantics {
             FileCandidateSemantics::ModuleResolution => {
-                Self::module_identity_path_for_existing_file(normalized, preserve_symlinks)
+                Self::module_identity_path_for_existing_file(ctx, normalized, preserve_symlinks)
             }
             FileCandidateSemantics::DirectFilesystem => normalized.to_string(),
         }
@@ -3881,7 +3887,7 @@ impl Resolver for NodeFileResolver {
 
         let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
         let preserve_symlinks = Self::has_exec_argv_flag(ctx, "--preserve-symlinks");
-        if let Some(resolved) = Self::resolve_candidate(candidate, &suffix, preserve_symlinks) {
+        if let Some(resolved) = Self::resolve_candidate(ctx, candidate, &suffix, preserve_symlinks) {
             transfer_import_type_rewrite_token(name, &resolved);
             return Ok(resolved);
         }
@@ -4200,9 +4206,7 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         if let Some(cached) = self.file_probe_cache.get(normalized) {
             return *cached;
         }
-        let fs_path = crate::builtin::realpath_for_module_resolution(normalized)
-            .unwrap_or_else(|| normalized.to_string());
-        let is_file = std::path::Path::new(&fs_path).is_file();
+        let is_file = std::path::Path::new(normalized).is_file();
         self.file_probe_cache
             .insert(normalized.to_string(), is_file);
         is_file
@@ -4215,9 +4219,7 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
 
     fn is_dir(&self, path: &std::path::Path) -> bool {
         let normalized = CjsEvalResolver::normalize_path(path);
-        let fs_path = crate::builtin::realpath_for_module_resolution(&normalized)
-            .unwrap_or(normalized);
-        std::path::Path::new(&fs_path).is_dir()
+        std::path::Path::new(&normalized).is_dir()
     }
 
     fn with_mode<T>(
@@ -4258,9 +4260,7 @@ enum CjsAnalysisProbe {
 impl NodeModulesResolver {
     fn module_resolution_path(path: &std::path::Path) -> std::path::PathBuf {
         let normalized = CjsEvalResolver::normalize_path(path);
-        crate::builtin::realpath_for_module_resolution(&normalized)
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| path.to_path_buf())
+        std::path::PathBuf::from(normalized)
     }
 
     fn try_resolve_with_context(
@@ -5965,7 +5965,7 @@ fn try_resolve_package_with_conditions<'js>(
 
 fn esm_package_identity_path(ctx: &Ctx<'_>, resolved: &str) -> String {
     let preserve_symlinks = NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
-    NodeFileResolver::module_identity_path_for_existing_file(resolved, preserve_symlinks)
+    NodeFileResolver::module_identity_path_for_existing_file(ctx, resolved, preserve_symlinks)
 }
 
 fn import_meta_resolve_package(
@@ -8514,7 +8514,7 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
 }
 
 fn canonical_cjs_analysis_path(path: &str) -> String {
-    crate::builtin::realpath_for_module_resolution(path).unwrap_or_else(|| path.to_string())
+    path.to_string()
 }
 
 fn analyze_cjs_reexport_specifier_names(
@@ -9182,7 +9182,7 @@ fn module_filesystem_path(path: &str) -> &str {
 
 fn module_source_filesystem_path(path: &str) -> String {
     let fs_path = module_filesystem_path(path);
-    crate::builtin::realpath_for_module_resolution(fs_path).unwrap_or_else(|| fs_path.to_string())
+    fs_path.to_string()
 }
 
 fn read_module_source_or_throw<'js>(

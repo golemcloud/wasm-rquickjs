@@ -456,7 +456,8 @@ function validateMkdtempPrefix(prefix) {
 function pathToString(path) {
     if (typeof path === 'string') {
         if (path.length > 0 && path.charAt(0) !== '/') {
-            return require('path').resolve(path);
+            const cwd = process.cwd();
+            return (cwd.endsWith('/') ? cwd : cwd + '/') + path;
         }
         return path;
     }

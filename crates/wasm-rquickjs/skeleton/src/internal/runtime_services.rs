@@ -19,6 +19,7 @@ pub(crate) struct RuntimeServices {
     pub(crate) timers: TimerServices,
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub(crate) process: ProcessServices,
+    pub(crate) fs: RefCell<FsServices>,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
 }
 
@@ -28,8 +29,40 @@ impl Default for RuntimeServices {
             timers: TimerServices::default(),
             node_package_deprecation_warnings: RefCell::default(),
             process: ProcessServices::default(),
+            fs: RefCell::new(FsServices::default()),
             output: RefCell::new(Rc::new(ComponentOutputSink)),
         }
+    }
+}
+
+pub(crate) struct FsServices {
+    pub(crate) files: HashMap<i32, std::fs::File>,
+    pub(crate) next_fd: i32,
+    pub(crate) path_mode_overrides: HashMap<String, u32>,
+    pub(crate) fd_mode_overrides: HashMap<i32, u32>,
+    pub(crate) fd_paths: HashMap<i32, String>,
+    pub(crate) emulated_symlinks: HashMap<String, String>,
+}
+
+impl Default for FsServices {
+    fn default() -> Self {
+        Self {
+            files: HashMap::new(),
+            next_fd: 10,
+            path_mode_overrides: HashMap::new(),
+            fd_mode_overrides: HashMap::new(),
+            fd_paths: HashMap::new(),
+            emulated_symlinks: HashMap::new(),
+        }
+    }
+}
+
+impl FsServices {
+    pub(crate) fn insert_file(&mut self, file: std::fs::File) -> i32 {
+        let fd = self.next_fd;
+        self.next_fd += 1;
+        self.files.insert(fd, file);
+        fd
     }
 }
 
@@ -92,11 +125,26 @@ impl ProcessServices {
     /// must be anchored in this runtime's process state rather than delegated
     /// to `std::fs` (which would use shared ambient state).
     pub(crate) fn resolve_path(&self, path: &Path) -> std::io::Result<PathBuf> {
-        if path.is_absolute() {
-            normalize_absolute_path(path)
+        let anchored = if path.is_absolute() {
+            path.to_path_buf()
         } else {
-            normalize_absolute_path(&self.cwd().join(path))
+            self.cwd().join(path)
+        };
+        let mut normalized = PathBuf::from("/");
+        for component in anchored.components() {
+            match component {
+                Component::RootDir | Component::CurDir => {}
+                Component::ParentDir => normalized.push(".."),
+                Component::Normal(part) => normalized.push(part),
+                Component::Prefix(_) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "unsupported path prefix",
+                    ));
+                }
+            }
         }
+        Ok(normalized)
     }
 
     pub(crate) fn chdir(&self, path: &Path) -> std::io::Result<()> {
@@ -292,29 +340,35 @@ pub(crate) async fn owned_runtime_isolation_probe() -> Result<String, String> {
     let left = run_owned_runtime_probe(
         "left",
         8,
-        left_cwd,
+        left_cwd.clone(),
         active.clone(),
         peak_active.clone(),
     );
     let right = run_owned_runtime_probe(
         "right",
         1,
-        right_cwd,
+        right_cwd.clone(),
         active.clone(),
         peak_active.clone(),
     );
     let (left, right) = futures::future::join(left, right).await;
     let left = left?;
     let right = right?;
-    serde_json::to_string(&serde_json::json!({
+    let report = serde_json::to_string(&serde_json::json!({
         "left": left,
         "right": right,
         "peakActive": peak_active.get(),
     }))
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    std::fs::remove_dir_all(&left_cwd).map_err(|error| error.to_string())?;
+    std::fs::remove_dir_all(&right_cwd).map_err(|error| error.to_string())?;
+    Ok(report)
 }
 
 fn prepare_owned_runtime_probe_dir(cwd: &Path, label: &str) -> Result<(), String> {
+    if cwd.exists() {
+        std::fs::remove_dir_all(cwd).map_err(|error| error.to_string())?;
+    }
     std::fs::create_dir_all(cwd).map_err(|error| error.to_string())?;
     std::fs::write(
         cwd.join("local.mjs"),
@@ -361,10 +415,36 @@ async fn run_owned_runtime_probe(
         import fs from 'node:fs';
         import fsp from 'node:fs/promises';
         globalThis.__ownedRuntimeProbe = (async () => {{
+            let probeStage = 'process-state';
+            try {{
             process.env.RUNTIME_MUTATION = {label_json} + ':mutated';
+            probeStage = 'write-data';
             fs.writeFileSync('./data.txt', {label_json});
             const syncFile = fs.readFileSync('./data.txt', 'utf8');
             const asyncFile = await fsp.readFile('./data.txt', 'utf8');
+            probeStage = 'open-fds';
+            const fd = fs.openSync('./data.txt', 'r');
+            const secondFd = {label_json} === 'left' ? fs.openSync('./data.txt', 'r') : null;
+            let foreignFdError = null;
+            if ({label_json} === 'right') {{
+                try {{ fs.fstatSync(14); }} catch (error) {{ foreignFdError = error.code; }}
+            }}
+            probeStage = 'mode';
+            fs.chmodSync('./data.txt', {label_json} === 'left' ? 0o600 : 0o640);
+            const mode = fs.statSync('./data.txt').mode & 0o7777;
+            probeStage = 'file-symlink';
+            fs.writeFileSync('./target.txt', {label_json} + ':target');
+            fs.symlinkSync('./target.txt', './link.txt');
+            const linkTarget = fs.readlinkSync('./link.txt');
+            const linkValue = fs.readFileSync('./link.txt', 'utf8');
+            probeStage = 'link-parent';
+            fs.mkdirSync('./real/sub', {{ recursive: true }});
+            fs.writeFileSync('./real/sibling.txt', {label_json} + ':sibling');
+            fs.symlinkSync('./real/sub', './dir-link');
+            const linkParentValue = fs.readFileSync('./dir-link/../sibling.txt', 'utf8');
+            fs.closeSync(fd);
+            if (secondFd !== null) fs.closeSync(secondFd);
+            probeStage = 'relative-import';
             const relativeModule = await import('./local.mjs');
             console.log({label_json} + ':start');
             process.stderr.write({label_json} + ':stderr\n');
@@ -379,10 +459,28 @@ async fn run_owned_runtime_probe(
                     timerId: Number(timer),
                     syncFile,
                     asyncFile,
+                    fd,
+                    secondFd,
+                    foreignFdError,
+                    mode,
+                    linkTarget,
+                    linkValue,
+                    linkParentValue,
                     relativeModule: relativeModule.default,
                     }}));
                 }}, {delay_ms});
             }});
+            }} catch (error) {{
+                return JSON.stringify({{
+                    probeError: {{
+                        stage: probeStage,
+                        name: error?.name ?? null,
+                        code: error?.code ?? null,
+                        message: error?.message ?? String(error),
+                        stack: error?.stack ?? null,
+                    }},
+                }});
+            }}
         }})();
         "#
     );

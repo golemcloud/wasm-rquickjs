@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // The bulk of this module performs filesystem I/O through `std::fs`, which is backed by the
@@ -148,50 +146,19 @@ fn set_path_times(
     }
 }
 
-struct FdTable {
-    files: HashMap<i32, std::fs::File>,
-    next_fd: i32,
-}
-
-impl FdTable {
-    fn new() -> Self {
-        Self {
-            files: HashMap::new(),
-            next_fd: 10,
-        }
-    }
-
-    fn insert(&mut self, file: std::fs::File) -> i32 {
-        let fd = self.next_fd;
-        self.next_fd += 1;
-        self.files.insert(fd, file);
-        fd
-    }
-
-    fn get_mut(&mut self, fd: i32) -> Option<&mut std::fs::File> {
-        self.files.get_mut(&fd)
-    }
-
-    fn remove(&mut self, fd: i32) -> Option<std::fs::File> {
-        self.files.remove(&fd)
-    }
-}
-
-static FD_TABLE: LazyLock<Mutex<FdTable>> = LazyLock::new(|| Mutex::new(FdTable::new()));
-
 const MODE_PERMISSION_MASK: u32 = 0o7777;
 
-static PATH_MODE_OVERRIDES: LazyLock<Mutex<HashMap<String, u32>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+fn with_fs<R>(ctx: &rquickjs::Ctx<'_>, f: impl FnOnce(&crate::internal::runtime_services::FsServices) -> R) -> R {
+    let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    f(&services.fs.borrow())
+}
 
-static FD_MODE_OVERRIDES: LazyLock<Mutex<HashMap<i32, u32>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-static FD_PATHS: LazyLock<Mutex<HashMap<i32, String>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-static EMULATED_SYMLINKS: LazyLock<Mutex<HashMap<String, String>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+fn with_fs_mut<R>(ctx: &rquickjs::Ctx<'_>, f: impl FnOnce(&mut crate::internal::runtime_services::FsServices) -> R) -> R {
+    let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    f(&mut services.fs.borrow_mut())
+}
 
 fn normalize_mode_override(mode: u32) -> u32 {
     mode & MODE_PERMISSION_MASK
@@ -208,96 +175,73 @@ fn apply_mode_override_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>, mode_o
     }
 }
 
-fn set_mode_override_for_path(path: &str, mode: u32) {
-    PATH_MODE_OVERRIDES
-        .lock()
-        .unwrap()
-        .insert(path.to_string(), normalize_mode_override(mode));
+fn set_mode_override_for_path(ctx: &rquickjs::Ctx<'_>, path: &str, mode: u32) {
+    with_fs_mut(ctx, |fs| { fs.path_mode_overrides.insert(path.to_string(), normalize_mode_override(mode)); });
 }
 
-fn get_mode_override_for_path(path: &str) -> Option<u32> {
-    PATH_MODE_OVERRIDES.lock().unwrap().get(path).copied()
+fn get_mode_override_for_path(ctx: &rquickjs::Ctx<'_>, path: &str) -> Option<u32> {
+    with_fs(ctx, |fs| fs.path_mode_overrides.get(path).copied())
 }
 
-fn remove_mode_override_for_path(path: &str) {
-    PATH_MODE_OVERRIDES.lock().unwrap().remove(path);
+fn remove_mode_override_for_path(ctx: &rquickjs::Ctx<'_>, path: &str) {
+    with_fs_mut(ctx, |fs| { fs.path_mode_overrides.remove(path); });
 }
 
-fn move_mode_override_for_path(old_path: &str, new_path: &str) {
-    let mut overrides = PATH_MODE_OVERRIDES.lock().unwrap();
-    if let Some(mode_override) = overrides.remove(old_path) {
-        overrides.insert(new_path.to_string(), mode_override);
-    }
+fn move_mode_override_for_path(ctx: &rquickjs::Ctx<'_>, old_path: &str, new_path: &str) {
+    with_fs_mut(ctx, |fs| if let Some(mode) = fs.path_mode_overrides.remove(old_path) {
+        fs.path_mode_overrides.insert(new_path.to_string(), mode);
+    });
 }
 
-fn set_mode_override_for_fd(fd: i32, mode: u32) {
-    FD_MODE_OVERRIDES
-        .lock()
-        .unwrap()
-        .insert(fd, normalize_mode_override(mode));
+fn set_mode_override_for_fd(ctx: &rquickjs::Ctx<'_>, fd: i32, mode: u32) {
+    with_fs_mut(ctx, |fs| { fs.fd_mode_overrides.insert(fd, normalize_mode_override(mode)); });
 }
 
-fn get_mode_override_for_fd(fd: i32) -> Option<u32> {
-    FD_MODE_OVERRIDES.lock().unwrap().get(&fd).copied()
+fn remove_mode_override_for_fd(ctx: &rquickjs::Ctx<'_>, fd: i32) {
+    with_fs_mut(ctx, |fs| { fs.fd_mode_overrides.remove(&fd); });
 }
 
-fn remove_mode_override_for_fd(fd: i32) {
-    FD_MODE_OVERRIDES.lock().unwrap().remove(&fd);
+fn remember_fd_path(ctx: &rquickjs::Ctx<'_>, fd: i32, path: &str) {
+    with_fs_mut(ctx, |fs| { fs.fd_paths.insert(fd, path.to_string()); });
 }
 
-fn remember_fd_path(fd: i32, path: &str) {
-    FD_PATHS.lock().unwrap().insert(fd, path.to_string());
+fn forget_fd_path(ctx: &rquickjs::Ctx<'_>, fd: i32) {
+    with_fs_mut(ctx, |fs| { fs.fd_paths.remove(&fd); });
 }
 
-fn get_fd_path(fd: i32) -> Option<String> {
-    FD_PATHS.lock().unwrap().get(&fd).cloned()
-}
-
-fn forget_fd_path(fd: i32) {
-    FD_PATHS.lock().unwrap().remove(&fd);
-}
-
-fn rename_fd_path(old_path: &str, new_path: &str) {
-    let mut fd_paths = FD_PATHS.lock().unwrap();
-    for path in fd_paths.values_mut() {
+fn rename_fd_path(ctx: &rquickjs::Ctx<'_>, old_path: &str, new_path: &str) {
+    with_fs_mut(ctx, |fs| for path in fs.fd_paths.values_mut() {
         if path == old_path {
             *path = new_path.to_string();
         }
-    }
+    });
 }
 
-fn set_emulated_symlink(path: &str, target: &str) {
-    EMULATED_SYMLINKS
-        .lock()
-        .unwrap()
-        .insert(path.to_string(), target.to_string());
+fn set_emulated_symlink(ctx: &rquickjs::Ctx<'_>, path: &str, target: &str) {
+    with_fs_mut(ctx, |fs| { fs.emulated_symlinks.insert(path.to_string(), target.to_string()); });
 }
 
-fn get_emulated_symlink_target(path: &str) -> Option<String> {
-    EMULATED_SYMLINKS.lock().unwrap().get(path).cloned()
+fn get_emulated_symlink_target(ctx: &rquickjs::Ctx<'_>, path: &str) -> Option<String> {
+    with_fs(ctx, |fs| fs.emulated_symlinks.get(path).cloned())
 }
 
-fn remove_emulated_symlink(path: &str) {
-    EMULATED_SYMLINKS.lock().unwrap().remove(path);
+fn remove_emulated_symlink(ctx: &rquickjs::Ctx<'_>, path: &str) {
+    with_fs_mut(ctx, |fs| { fs.emulated_symlinks.remove(path); });
 }
 
-fn remove_emulated_symlinks_under(dir: &str) {
+fn remove_emulated_symlinks_under(ctx: &rquickjs::Ctx<'_>, dir: &str) {
     let prefix = if dir.ends_with('/') {
         dir.to_string()
     } else {
         format!("{dir}/")
     };
-    EMULATED_SYMLINKS
-        .lock()
-        .unwrap()
-        .retain(|k, _| !k.starts_with(&prefix));
+    with_fs_mut(ctx, |fs| fs.emulated_symlinks.retain(|k, _| !k.starts_with(&prefix)));
 }
 
-fn move_emulated_symlink(old_path: &str, new_path: &str) {
-    let mut symlinks = EMULATED_SYMLINKS.lock().unwrap();
-    if let Some(target) = symlinks.remove(old_path) {
-        symlinks.insert(new_path.to_string(), target);
-    }
+fn move_emulated_symlink(ctx: &rquickjs::Ctx<'_>, old_path: &str, new_path: &str) {
+    with_fs_mut(ctx, |fs| if let Some(target) = fs.emulated_symlinks.remove(old_path) {
+        fs.emulated_symlinks.insert(new_path.to_string(), target);
+    });
 }
 
 fn apply_emulated_symlink_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>) {
@@ -308,8 +252,8 @@ fn apply_emulated_symlink_to_stat_obj<'js>(stat_obj: &rquickjs::Object<'js>) {
 
 /// Resolve emulated symlinks in a path by walking each component and following
 /// symlink chains. Returns an ELOOP error if too many symlinks are followed.
-fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
-    if EMULATED_SYMLINKS.lock().unwrap().is_empty() {
+fn resolve_emulated_symlinks_checked(ctx: &rquickjs::Ctx<'_>, path: &str) -> std::io::Result<String> {
+    if with_fs(ctx, |fs| fs.emulated_symlinks.is_empty()) {
         return Ok(path.to_string());
     }
 
@@ -317,13 +261,13 @@ fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
     let mut symlink_count = 0;
 
     // Build absolute path
-    let abs_path = if path.starts_with('/') {
-        path.to_string()
-    } else if let Ok(cwd) = std::env::current_dir() {
-        format!("{}/{}", cwd.to_string_lossy(), path)
-    } else {
-        path.to_string()
-    };
+    if !path.starts_with('/') {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "emulated symlink resolution requires an absolute path",
+        ));
+    }
+    let abs_path = path.to_string();
 
     // Split into segments to process
     let mut todo: Vec<String> = abs_path
@@ -351,7 +295,7 @@ fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
         resolved.push(seg);
         let current = format!("/{}", resolved.join("/"));
 
-        if let Some(target) = get_emulated_symlink_target(&current) {
+        if let Some(target) = get_emulated_symlink_target(ctx, &current) {
             symlink_count += 1;
             if symlink_count > MAX_SYMLINK_FOLLOWS {
                 return Err(std::io::Error::other("too many levels of symbolic links"));
@@ -394,12 +338,12 @@ fn resolve_emulated_symlinks_checked(path: &str) -> std::io::Result<String> {
 }
 
 /// Resolve emulated symlinks in a path. Falls back to the original path on error.
-fn resolve_emulated_symlinks(path: &str) -> String {
-    resolve_emulated_symlinks_checked(path).unwrap_or_else(|_| path.to_string())
+fn resolve_emulated_symlinks(ctx: &rquickjs::Ctx<'_>, path: &str) -> String {
+    resolve_emulated_symlinks_checked(ctx, path).unwrap_or_else(|_| path.to_string())
 }
 
-pub(super) fn realpath_for_module_resolution(path: &str) -> Option<String> {
-    let resolved_path = resolve_emulated_symlinks_checked(path).ok()?;
+pub(super) fn realpath_for_module_resolution(ctx: &rquickjs::Ctx<'_>, path: &str) -> Option<String> {
+    let resolved_path = resolve_emulated_symlinks_checked(ctx, path).ok()?;
     std::fs::symlink_metadata(&resolved_path)
         .ok()
         .map(|_| resolved_path)
@@ -775,8 +719,8 @@ pub mod native_module {
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::remove_file(Path::new(&fs_path)) {
             Ok(_) => {
-                super::remove_mode_override_for_path(&fs_path);
-                super::remove_emulated_symlink(&fs_path);
+                super::remove_mode_override_for_path(&ctx, &fs_path);
+                super::remove_emulated_symlink(&ctx, &fs_path);
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "unlink", Some(&path))),
@@ -789,9 +733,9 @@ pub mod native_module {
         let new_fs_path = runtime_path(&ctx, &new_path);
         match std::fs::rename(Path::new(&old_fs_path), Path::new(&new_fs_path)) {
             Ok(_) => {
-                super::move_mode_override_for_path(&old_fs_path, &new_fs_path);
-                super::rename_fd_path(&old_fs_path, &new_fs_path);
-                super::move_emulated_symlink(&old_fs_path, &new_fs_path);
+                super::move_mode_override_for_path(&ctx, &old_fs_path, &new_fs_path);
+                super::rename_fd_path(&ctx, &old_fs_path, &new_fs_path);
+                super::move_emulated_symlink(&ctx, &old_fs_path, &new_fs_path);
                 None
             }
             Err(err) => Some(super::make_fs_error_with_dest(
@@ -835,7 +779,7 @@ pub mod native_module {
             return result;
         }
 
-        let fs_path = super::resolve_emulated_symlinks(&runtime_path(&ctx, &path));
+        let fs_path = super::resolve_emulated_symlinks(&ctx, &runtime_path(&ctx, &path));
 
         let mut opts = OpenOptions::new();
 
@@ -865,13 +809,13 @@ pub mod native_module {
                 if flags & 1024 != 0 {
                     let _ = file.seek(SeekFrom::End(0));
                 }
-                let fd = super::FD_TABLE.lock().unwrap().insert(file);
-                super::remember_fd_path(fd, &fs_path);
+                let fd = super::with_fs_mut(&ctx, |fs| fs.insert_file(file));
+                super::remember_fd_path(&ctx, fd, &fs_path);
                 if creating {
-                    super::set_mode_override_for_path(&fs_path, mode as u32);
-                    super::set_mode_override_for_fd(fd, mode as u32);
-                } else if let Some(mode_override) = super::get_mode_override_for_path(&fs_path) {
-                    super::set_mode_override_for_fd(fd, mode_override);
+                    super::set_mode_override_for_path(&ctx, &fs_path, mode as u32);
+                    super::set_mode_override_for_fd(&ctx, fd, mode as u32);
+                } else if let Some(mode_override) = super::get_mode_override_for_path(&ctx, &fs_path) {
+                    super::set_mode_override_for_fd(&ctx, fd, mode_override);
                 }
                 result.set("fd", fd).unwrap();
             }
@@ -889,10 +833,10 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_close(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
-        let removed = super::FD_TABLE.lock().unwrap().remove(fd);
+        let removed = super::with_fs_mut(&ctx, |fs| fs.files.remove(&fd));
         if removed.is_some() {
-            super::forget_fd_path(fd);
-            super::remove_mode_override_for_fd(fd);
+            super::forget_fd_path(&ctx, fd);
+            super::remove_mode_override_for_fd(&ctx, fd);
             None
         } else {
             Some(super::make_badf_error(&ctx, "close"))
@@ -909,9 +853,10 @@ pub mod native_module {
         use std::io::{Read, Seek, SeekFrom};
 
         let result = Object::new(ctx.clone()).unwrap();
-        let mut table = super::FD_TABLE.lock().unwrap();
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
 
-        match table.get_mut(fd) {
+        match table.files.get_mut(&fd) {
             Some(file) => {
                 if !position.is_null()
                     && !position.is_undefined()
@@ -982,8 +927,9 @@ pub mod native_module {
         let end = (offset + length).min(bytes.len());
         let data = &bytes[offset..end];
 
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(file) => {
                 if !position.is_null()
                     && !position.is_undefined()
@@ -1027,9 +973,10 @@ pub mod native_module {
         use std::io::{Seek, SeekFrom, Write};
 
         let result = Object::new(ctx.clone()).unwrap();
-        let mut table = super::FD_TABLE.lock().unwrap();
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
 
-        match table.get_mut(fd) {
+        match table.files.get_mut(&fd) {
             Some(file) => {
                 if !position.is_null()
                     && !position.is_undefined()
@@ -1066,8 +1013,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_ftruncate(ctx: Ctx<'_>, fd: i32, len: f64) -> Option<Object<'_>> {
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(file) => {
                 if let Err(err) = file.set_len(len as u64) {
                     Some(super::make_fs_error(&ctx, &err, "ftruncate", None))
@@ -1081,8 +1029,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fsync(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(file) => {
                 if let Err(err) = file.sync_all() {
                     Some(super::make_fs_error(&ctx, &err, "fsync", None))
@@ -1096,8 +1045,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fdatasync(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(file) => {
                 if let Err(err) = file.sync_data() {
                     Some(super::make_fs_error(&ctx, &err, "fdatasync", None))
@@ -1126,12 +1076,12 @@ pub mod native_module {
             return result;
         }
 
-        let fs_path = super::resolve_emulated_symlinks(&runtime_path(&ctx, &path));
+        let fs_path = super::resolve_emulated_symlinks(&ctx, &runtime_path(&ctx, &path));
 
         match std::fs::metadata(&fs_path) {
             Ok(meta) => {
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
-                if let Some(mode_override) = super::get_mode_override_for_path(&fs_path) {
+                if let Some(mode_override) = super::get_mode_override_for_path(&ctx, &fs_path) {
                     super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
                 }
                 result.set("stat", stat_obj).unwrap();
@@ -1169,19 +1119,19 @@ pub mod native_module {
         // original path (we'll mark it as symlink below). Otherwise resolve
         // intermediate symlinks so paths through symlinks work.
         let absolute_path = runtime_path(&ctx, &path);
-        let fs_path = if super::get_emulated_symlink_target(&absolute_path).is_some() {
+        let fs_path = if super::get_emulated_symlink_target(&ctx, &absolute_path).is_some() {
             absolute_path.clone()
         } else {
-            super::resolve_emulated_symlinks(&absolute_path)
+            super::resolve_emulated_symlinks(&ctx, &absolute_path)
         };
 
         match std::fs::symlink_metadata(&fs_path) {
             Ok(meta) => {
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
-                if let Some(mode_override) = super::get_mode_override_for_path(&absolute_path) {
+                if let Some(mode_override) = super::get_mode_override_for_path(&ctx, &absolute_path) {
                     super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
                 }
-                if super::get_emulated_symlink_target(&absolute_path).is_some() {
+                if super::get_emulated_symlink_target(&ctx, &absolute_path).is_some() {
                     super::apply_emulated_symlink_to_stat_obj(&stat_obj);
                 }
                 result.set("stat", stat_obj).unwrap();
@@ -1209,14 +1159,15 @@ pub mod native_module {
             return result;
         }
 
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(file) => match file.metadata() {
                 Ok(meta) => {
                     let stat_obj = super::metadata_to_obj(&ctx, &meta);
-                    let mode_override = super::get_mode_override_for_fd(fd).or_else(|| {
-                        super::get_fd_path(fd)
-                            .and_then(|path| super::get_mode_override_for_path(&path))
+                    let mode_override = table.fd_mode_overrides.get(&fd).copied().or_else(|| {
+                        table.fd_paths.get(&fd)
+                            .and_then(|path| table.path_mode_overrides.get(path).copied())
                     });
                     if let Some(mode_override) = mode_override {
                         super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
@@ -1257,7 +1208,7 @@ pub mod native_module {
             return result;
         }
 
-        let fs_path = super::resolve_emulated_symlinks(&runtime_path(&ctx, &path));
+        let fs_path = super::resolve_emulated_symlinks(&ctx, &runtime_path(&ctx, &path));
 
         match std::fs::read_dir(&fs_path) {
             Ok(entries) => {
@@ -1308,7 +1259,7 @@ pub mod native_module {
             return Some(super::wizer_enoent_obj(&ctx, "access", Some(&path)));
         }
 
-        let fs_path = super::resolve_emulated_symlinks(&runtime_path(&ctx, &path));
+        let fs_path = super::resolve_emulated_symlinks(&ctx, &runtime_path(&ctx, &path));
 
         // For WASI, just check if the path exists (and is accessible)
         match std::fs::metadata(&fs_path) {
@@ -1338,7 +1289,7 @@ pub mod native_module {
 
         // Use chain-resolving emulated symlink resolution
         let absolute_path = runtime_path(&ctx, &path);
-        match super::resolve_emulated_symlinks_checked(&absolute_path) {
+        match super::resolve_emulated_symlinks_checked(&ctx, &absolute_path) {
             Ok(resolved_path) => {
                 // Verify the final resolved path exists
                 match std::fs::symlink_metadata(&resolved_path) {
@@ -1435,7 +1386,7 @@ pub mod native_module {
             .open(&fs_path)
         {
             Ok(_) => {
-                super::set_emulated_symlink(&fs_path, &target);
+                super::set_emulated_symlink(&ctx, &fs_path, &target);
                 None
             }
             Err(err) => Some(super::make_fs_error_with_dest(
@@ -1453,7 +1404,7 @@ pub mod native_module {
         let result = Object::new(ctx.clone()).unwrap();
         let fs_path = runtime_path(&ctx, &path);
 
-        if let Some(target) = super::get_emulated_symlink_target(&fs_path) {
+        if let Some(target) = super::get_emulated_symlink_target(&ctx, &fs_path) {
             result.set("result", target).unwrap();
             return result;
         }
@@ -1492,7 +1443,7 @@ pub mod native_module {
         // chmod is not supported on WASI; verify path exists
         match std::fs::metadata(&fs_path) {
             Ok(_) => {
-                super::set_mode_override_for_path(&fs_path, mode);
+                super::set_mode_override_for_path(&ctx, &fs_path, mode);
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "chmod", Some(&path))),
@@ -1501,13 +1452,14 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fchmod(ctx: Ctx<'_>, fd: i32, mode: u32) -> Option<Object<'_>> {
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(_) => {
                 // fchmod is not supported on WASI; emulate it in stat/fstat.
-                super::set_mode_override_for_fd(fd, mode);
-                if let Some(path) = super::get_fd_path(fd) {
-                    super::set_mode_override_for_path(&path, mode);
+                table.fd_mode_overrides.insert(fd, super::normalize_mode_override(mode));
+                if let Some(path) = table.fd_paths.get(&fd).cloned() {
+                    table.path_mode_overrides.insert(path, super::normalize_mode_override(mode));
                 }
                 None
             }
@@ -1527,8 +1479,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fchown(ctx: Ctx<'_>, fd: i32, _uid: u32, _gid: u32) -> Option<Object<'_>> {
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(_) => None,
             None => Some(super::make_badf_error(&ctx, "fchown")),
         }
@@ -1578,8 +1531,9 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
-        let mut table = super::FD_TABLE.lock().unwrap();
-        match table.get_mut(fd) {
+        let services = ctx.userdata::<crate::internal::runtime_services::RuntimeServices>().unwrap();
+        let mut table = services.fs.borrow_mut();
+        match table.files.get_mut(&fd) {
             Some(file) => match super::set_file_times(file, atime_secs, mtime_secs) {
                 Ok(_) => None,
                 Err(err) => Some(super::make_fs_error(&ctx, &err, "futime", None)),
@@ -1605,7 +1559,7 @@ pub mod native_module {
         match result {
             Ok(_) => {
                 if !recursive || !existed_before {
-                    super::set_mode_override_for_path(&fs_path, mode);
+                    super::set_mode_override_for_path(&ctx, &fs_path, mode);
                 }
                 None
             }
@@ -1618,7 +1572,7 @@ pub mod native_module {
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::remove_dir(&fs_path) {
             Ok(_) => {
-                super::remove_mode_override_for_path(&fs_path);
+                super::remove_mode_override_for_path(&ctx, &fs_path);
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "rmdir", Some(&path))),
@@ -1639,8 +1593,8 @@ pub mod native_module {
                     };
                     match result {
                         Ok(_) => {
-                            super::remove_mode_override_for_path(&fs_path);
-                            super::remove_emulated_symlinks_under(&fs_path);
+                            super::remove_mode_override_for_path(&ctx, &fs_path);
+                            super::remove_emulated_symlinks_under(&ctx, &fs_path);
                             None
                         }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
@@ -1648,8 +1602,8 @@ pub mod native_module {
                 } else {
                     match std::fs::remove_file(&fs_path) {
                         Ok(_) => {
-                            super::remove_mode_override_for_path(&fs_path);
-                            super::remove_emulated_symlink(&fs_path);
+                            super::remove_mode_override_for_path(&ctx, &fs_path);
+                            super::remove_emulated_symlink(&ctx, &fs_path);
                             None
                         }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
@@ -1757,7 +1711,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_exists(ctx: Ctx<'_>, path: String) -> bool {
-        let fs_path = super::resolve_emulated_symlinks(&runtime_path(&ctx, &path));
+        let fs_path = super::resolve_emulated_symlinks(&ctx, &runtime_path(&ctx, &path));
 
         std::path::Path::new(&fs_path).exists()
     }
