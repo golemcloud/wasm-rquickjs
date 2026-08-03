@@ -3,7 +3,6 @@
 pub mod native_module {
     use rquickjs::Ctx;
     use std::collections::HashMap;
-    use std::io::Write;
     use std::path::PathBuf;
     use std::time::Instant;
 
@@ -22,15 +21,21 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn write_stdout(data: String) {
-        let _ = std::io::stdout().write_all(data.as_bytes());
-        let _ = std::io::stdout().flush();
+    pub fn write_stdout(ctx: Ctx<'_>, data: String) {
+        let sink = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .output_sink();
+        sink.write_stdout(data.as_bytes());
     }
 
     #[rquickjs::function]
-    pub fn write_stderr(data: String) {
-        let _ = std::io::stderr().write_all(data.as_bytes());
-        let _ = std::io::stderr().flush();
+    pub fn write_stderr(ctx: Ctx<'_>, data: String) {
+        let sink = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .output_sink();
+        sink.write_stderr(data.as_bytes());
     }
 
     #[rquickjs::function]

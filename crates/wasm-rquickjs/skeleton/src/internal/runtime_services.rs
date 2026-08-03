@@ -2,6 +2,8 @@ use futures::future::AbortHandle;
 use rquickjs::{AsyncContext, AsyncRuntime, Function, JsLifetime, Value, async_with};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
+use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
 
 /// Mutable services owned by one QuickJS runtime.
@@ -9,10 +11,49 @@ use std::sync::atomic::AtomicUsize;
 /// These live in rquickjs runtime userdata rather than the component-global
 /// `JsState`, so additional runtimes can use built-ins without reaching into
 /// the main component runtime.
-#[derive(Default)]
 pub(crate) struct RuntimeServices {
     pub(crate) timers: TimerServices,
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
+    output: RefCell<Rc<dyn RuntimeOutputSink>>,
+}
+
+impl Default for RuntimeServices {
+    fn default() -> Self {
+        Self {
+            timers: TimerServices::default(),
+            node_package_deprecation_warnings: RefCell::default(),
+            output: RefCell::new(Rc::new(ComponentOutputSink)),
+        }
+    }
+}
+
+pub(crate) trait RuntimeOutputSink {
+    fn write_stdout(&self, data: &[u8]);
+    fn write_stderr(&self, data: &[u8]);
+}
+
+struct ComponentOutputSink;
+
+impl RuntimeOutputSink for ComponentOutputSink {
+    fn write_stdout(&self, data: &[u8]) {
+        let _ = std::io::stdout().write_all(data);
+        let _ = std::io::stdout().flush();
+    }
+
+    fn write_stderr(&self, data: &[u8]) {
+        let _ = std::io::stderr().write_all(data);
+        let _ = std::io::stderr().flush();
+    }
+}
+
+impl RuntimeServices {
+    pub(crate) fn output_sink(&self) -> Rc<dyn RuntimeOutputSink> {
+        self.output.borrow().clone()
+    }
+
+    pub(crate) fn set_output_sink(&self, output: Rc<dyn RuntimeOutputSink>) {
+        *self.output.borrow_mut() = output;
+    }
 }
 
 /// A standalone QuickJS runtime with all context-local native services installed.
