@@ -234,12 +234,7 @@ fn require_esm_impl<'js>(
                 ignore_unhandled_rejection(&ctx, eval_value.clone());
                 let _ = promise.result::<Value<'js>>();
                 let rejected = ctx.catch();
-                ignore_require_esm_rejection(
-                    &ctx,
-                    eval_value,
-                    rejected.clone(),
-                    rejection_scope,
-                );
+                ignore_require_esm_rejection(&ctx, eval_value, rejected.clone(), rejection_scope);
                 leave_require_esm(&globals, filename, &file_url)?;
                 return Err(ctx.throw(rejected));
             }

@@ -136,21 +136,7 @@ impl ProcessServices {
         } else {
             self.cwd().join(path)
         };
-        let mut normalized = PathBuf::from("/");
-        for component in anchored.components() {
-            match component {
-                Component::RootDir | Component::CurDir => {}
-                Component::ParentDir => normalized.push(".."),
-                Component::Normal(part) => normalized.push(part),
-                Component::Prefix(_) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "unsupported path prefix",
-                    ));
-                }
-            }
-        }
-        Ok(normalized)
+        normalize_absolute_path(&anchored)
     }
 
     pub(crate) fn chdir(&self, path: &Path) -> std::io::Result<()> {
@@ -174,7 +160,7 @@ impl ProcessServices {
     }
 }
 
-fn normalize_absolute_path(path: &Path) -> std::io::Result<PathBuf> {
+pub(crate) fn normalize_absolute_path(path: &Path) -> std::io::Result<PathBuf> {
     if !path.is_absolute() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -201,47 +187,60 @@ fn normalize_absolute_path(path: &Path) -> std::io::Result<PathBuf> {
 }
 
 pub(crate) trait RuntimeOutputSink {
-    fn write_stdout(&self, data: &[u8]);
-    fn write_stderr(&self, data: &[u8]);
-}
+    fn write_stdout(&self, data: &str);
+    fn write_stderr(&self, data: &str);
 
-#[derive(Default)]
-pub(crate) struct BufferOutputSink {
-    stdout: RefCell<Vec<u8>>,
-    stderr: RefCell<Vec<u8>>,
-}
-
-impl BufferOutputSink {
-    pub(crate) fn stdout(&self) -> String {
-        String::from_utf8_lossy(&self.stdout.borrow()).into_owned()
-    }
-
-    pub(crate) fn stderr(&self) -> String {
-        String::from_utf8_lossy(&self.stderr.borrow()).into_owned()
-    }
-}
-
-impl RuntimeOutputSink for BufferOutputSink {
-    fn write_stdout(&self, data: &[u8]) {
-        self.stdout.borrow_mut().extend_from_slice(data);
-    }
-
-    fn write_stderr(&self, data: &[u8]) {
-        self.stderr.borrow_mut().extend_from_slice(data);
+    fn is_component_output(&self) -> bool {
+        false
     }
 }
 
 struct ComponentOutputSink;
 
 impl RuntimeOutputSink for ComponentOutputSink {
-    fn write_stdout(&self, data: &[u8]) {
-        let _ = std::io::stdout().write_all(data);
+    fn write_stdout(&self, data: &str) {
+        let _ = std::io::stdout().write_all(data.as_bytes());
         let _ = std::io::stdout().flush();
     }
 
-    fn write_stderr(&self, data: &[u8]) {
-        let _ = std::io::stderr().write_all(data);
+    fn write_stderr(&self, data: &str) {
+        let _ = std::io::stderr().write_all(data.as_bytes());
         let _ = std::io::stderr().flush();
+    }
+
+    fn is_component_output(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(feature = "internal-test-code-runner")]
+#[derive(Default)]
+#[allow(dead_code)]
+struct BufferOutputSink {
+    stdout: RefCell<String>,
+    stderr: RefCell<String>,
+}
+
+#[cfg(feature = "internal-test-code-runner")]
+#[allow(dead_code)]
+impl BufferOutputSink {
+    fn stdout(&self) -> String {
+        self.stdout.borrow().clone()
+    }
+
+    fn stderr(&self) -> String {
+        self.stderr.borrow().clone()
+    }
+}
+
+#[cfg(feature = "internal-test-code-runner")]
+impl RuntimeOutputSink for BufferOutputSink {
+    fn write_stdout(&self, data: &str) {
+        self.stdout.borrow_mut().push_str(data);
+    }
+
+    fn write_stderr(&self, data: &str) {
+        self.stderr.borrow_mut().push_str(data);
     }
 }
 
@@ -345,6 +344,8 @@ impl OwnedJsRuntime {
 /// Temporary integration probe used while the public runner lifecycle is built.
 /// Its native bridge and fixture are removed once runner tests cover these same
 /// cross-runtime invariants.
+#[cfg(feature = "internal-test-code-runner")]
+#[allow(dead_code)]
 pub(crate) async fn owned_runtime_isolation_probe() -> Result<String, String> {
     let left_cwd = PathBuf::from("/tmp/wasm-rquickjs-owned-left");
     let right_cwd = PathBuf::from("/tmp/wasm-rquickjs-owned-right");
@@ -381,18 +382,19 @@ pub(crate) async fn owned_runtime_isolation_probe() -> Result<String, String> {
     Ok(report)
 }
 
+#[cfg(feature = "internal-test-code-runner")]
+#[allow(dead_code)]
 fn prepare_owned_runtime_probe_dir(cwd: &Path, label: &str) -> Result<(), String> {
     if cwd.exists() {
         std::fs::remove_dir_all(cwd).map_err(|error| error.to_string())?;
     }
     std::fs::create_dir_all(cwd).map_err(|error| error.to_string())?;
-    std::fs::write(
-        cwd.join("local.mjs"),
-        format!("export default {label:?};"),
-    )
-    .map_err(|error| error.to_string())
+    std::fs::write(cwd.join("local.mjs"), format!("export default {label:?};"))
+        .map_err(|error| error.to_string())
 }
 
+#[cfg(feature = "internal-test-code-runner")]
+#[allow(dead_code)]
 async fn run_owned_runtime_probe(
     label: &str,
     delay_ms: u32,

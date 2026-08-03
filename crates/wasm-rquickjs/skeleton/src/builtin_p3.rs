@@ -346,9 +346,6 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/code_runner_native")
         .with_module("golem:code-runner");
 
-    #[cfg(feature = "internal-test-code-runner")]
-    let resolver = resolver.with_module("golem:code-runner-test");
-
     #[cfg(feature = "golem")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
@@ -601,12 +598,6 @@ pub fn module_loader() -> (
 
     let builtin_loader =
         builtin_loader.with_module("golem:code-runner", code_runner::CODE_RUNNER_JS);
-
-    #[cfg(feature = "internal-test-code-runner")]
-    let builtin_loader = builtin_loader.with_module(
-        "golem:code-runner-test",
-        code_runner::CODE_RUNNER_TEST_JS,
-    );
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

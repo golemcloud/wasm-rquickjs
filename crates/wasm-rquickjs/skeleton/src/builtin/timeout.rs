@@ -58,7 +58,11 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        services.timers.unrefed_timers.borrow_mut().remove(&timeout_id);
+        services
+            .timers
+            .unrefed_timers
+            .borrow_mut()
+            .remove(&timeout_id);
         let mut abort_handles = services.timers.abort_handles.borrow_mut();
         if let Some(handle) = abort_handles.remove(&timeout_id) {
             handle.abort();
@@ -70,7 +74,11 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        services.timers.unrefed_timers.borrow_mut().insert(timeout_id);
+        services
+            .timers
+            .unrefed_timers
+            .borrow_mut()
+            .insert(timeout_id);
     }
 
     #[rquickjs::function]
@@ -78,7 +86,11 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        services.timers.unrefed_timers.borrow_mut().remove(&timeout_id);
+        services
+            .timers
+            .unrefed_timers
+            .borrow_mut()
+            .remove(&timeout_id);
     }
 
     #[rquickjs::function]
@@ -145,7 +157,12 @@ async fn scheduled_task(
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        if !services.timers.abort_handles.borrow().contains_key(&timer_key) {
+        if !services
+            .timers
+            .abort_handles
+            .borrow()
+            .contains_key(&timer_key)
+        {
             break;
         }
     }

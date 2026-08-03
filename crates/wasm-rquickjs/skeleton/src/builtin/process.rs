@@ -26,7 +26,7 @@ pub mod native_module {
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .expect("runtime services not initialized")
             .output_sink();
-        sink.write_stdout(data.as_bytes());
+        sink.write_stdout(&data);
     }
 
     #[rquickjs::function]
@@ -35,7 +35,7 @@ pub mod native_module {
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .expect("runtime services not initialized")
             .output_sink();
-        sink.write_stderr(data.as_bytes());
+        sink.write_stderr(&data);
     }
 
     #[rquickjs::function]
