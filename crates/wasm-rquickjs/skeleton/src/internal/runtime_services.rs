@@ -462,15 +462,19 @@ async fn run_owned_runtime_probe(
             fs.symlinkSync('./json-target.json', './json-link.json');
             fs.writeFileSync('./json-consumer.mjs',
                 'import value from "./json-link.json" with {{ type: "json" }}; export default value;');
-            fs.writeFileSync('./cjs-base.cjs',
+            fs.mkdirSync('./cjs-physical', {{ recursive: true }});
+            fs.mkdirSync('./cjs-logical', {{ recursive: true }});
+            fs.writeFileSync('./cjs-physical/dep.cjs',
+                'exports.physicalOnly = "wrong";');
+            fs.writeFileSync('./cjs-logical/dep.cjs',
                 'exports.reexported = "' + {label_json} + ':cjs";');
-            fs.writeFileSync('./cjs-reexport-target.cjs',
-                'module.exports = require("./cjs-base.cjs");');
-            fs.symlinkSync('./cjs-reexport-target.cjs', './cjs-reexport-link.cjs');
+            fs.writeFileSync('./cjs-physical/target.cjs',
+                'module.exports = require("./dep.cjs");');
+            fs.symlinkSync('../cjs-physical/target.cjs', './cjs-logical/link.cjs');
             const packageModule = await import('linked-pkg');
             const esmModule = await import('./esm-link.mjs');
             const jsonModule = await import('./json-consumer.mjs');
-            const cjsModule = await import('./cjs-reexport-link.cjs');
+            const cjsModule = await import('./cjs-logical/link.cjs');
             probeStage = 'relative-import';
             const relativeModule = await import('./local.mjs');
             console.log({label_json} + ':start');

@@ -8569,13 +8569,22 @@ fn analyze_cjs_reexport_specifier_names(
 ) -> Vec<String> {
     let mut names = Vec::new();
     for reexport in reexport_specifiers {
-        if let Some(resolved_path) = resolve_cjs_reexport_path(ctx, filename, &reexport, conditions)
-            && let path = canonical_cjs_analysis_path(ctx, &resolved_path)
-            && !seen.contains(&path)
-            && is_cjs_analysis_source_path(&path)
-            && let Ok(source) = std::fs::read_to_string(&path)
+        if let Some(logical_path) = resolve_cjs_reexport_path(ctx, filename, &reexport, conditions)
+            && let physical_path = canonical_cjs_analysis_path(ctx, &logical_path)
+            && !seen.contains(&physical_path)
+            && is_cjs_analysis_source_path(&physical_path)
+            && let Ok(source) = std::fs::read_to_string(&physical_path)
         {
-            let child = analyze_cjs_exports_for_file(ctx, &path, &source, seen, conditions);
+            let child_filename = if NodeFileResolver::has_exec_argv_flag(
+                ctx,
+                "--preserve-symlinks",
+            ) {
+                logical_path
+            } else {
+                physical_path
+            };
+            let child =
+                analyze_cjs_exports_for_file(ctx, &child_filename, &source, seen, conditions);
             for name in child.exports {
                 add_unique(&mut names, name);
             }
