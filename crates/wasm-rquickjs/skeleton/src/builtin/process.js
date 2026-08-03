@@ -1072,22 +1072,25 @@ globalThis.__wasm_rquickjs_end_require_esm_rejection_scope = function(id) {
     _takeRequireEsmRejectionScope(id);
 };
 
-globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPromise, id) {
+globalThis.__wasm_rquickjs_ignore_require_esm_rejection = function(evaluationPromise, rejectedReason, id) {
     const scope = _takeRequireEsmRejectionScope(id);
-    let modulePromise = _pendingRejections.has(evaluationPromise)
-        ? evaluationPromise
-        : undefined;
-    if (modulePromise === undefined && scope !== undefined) {
-        for (let i = scope.promises.length - 1; i >= 0; i--) {
-            if (_pendingRejections.has(scope.promises[i])) {
-                modulePromise = scope.promises[i];
-                break;
+    _ignoredUnhandledRejections.add(evaluationPromise);
+    _pendingRejections.delete(evaluationPromise);
+
+    if (scope !== undefined) {
+        // QuickJS reports the internal module-evaluation promise immediately
+        // before the outward promise returned by JS_EvalFunction. Suppress only
+        // that pair. Searching backward for any still-pending promise can select
+        // an unrelated rejection created by user module code.
+        const evaluationIndex = scope.promises.length - 1;
+        if (evaluationIndex > 0 && scope.promises[evaluationIndex] === evaluationPromise) {
+            const modulePromise = scope.promises[evaluationIndex - 1];
+            const moduleEntry = _pendingRejections.get(modulePromise);
+            if (moduleEntry !== undefined && moduleEntry.reason === rejectedReason) {
+                _ignoredUnhandledRejections.add(modulePromise);
+                _pendingRejections.delete(modulePromise);
             }
         }
-    }
-    if (modulePromise !== undefined) {
-        _ignoredUnhandledRejections.add(modulePromise);
-        _pendingRejections.delete(modulePromise);
     }
 };
 

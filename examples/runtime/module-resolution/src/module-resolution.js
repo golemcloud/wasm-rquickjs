@@ -8555,7 +8555,7 @@ export const testRequireEsmRejectionTracking = async () => {
             'export const value = 1;',
         ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/throw-with-unhandled.mjs', [
-            'Promise.reject(new Error("side rejection"));',
+            'globalThis.__requireEsmSidePromise = Promise.reject(new Error("side rejection"));',
             'throw new Error("module failure");',
         ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/shared-reason.mjs', [
@@ -8593,7 +8593,10 @@ export const testRequireEsmRejectionTracking = async () => {
         }
 
         const unhandled = [];
-        const onUnhandled = (reason) => unhandled.push(reason && reason.message);
+        const onUnhandled = (reason, promise) => unhandled.push({
+            reason: reason && reason.message,
+            promise,
+        });
         process.on('unhandledRejection', onUnhandled);
         try {
             globalThis.__requireEsmPreexistingReason = new Error('preexisting reason');
@@ -8604,9 +8607,20 @@ export const testRequireEsmRejectionTracking = async () => {
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
-            assert.throws(() => require('/require-esm-rejection-app/throw-with-unhandled.mjs'), {
-                message: 'module failure',
+            const originalLastIndexOf = Object.getOwnPropertyDescriptor(Array.prototype, 'lastIndexOf');
+            Object.defineProperty(Array.prototype, 'lastIndexOf', {
+                configurable: true,
+                value() {
+                    throw new Error('poisoned Array.prototype.lastIndexOf');
+                },
             });
+            try {
+                assert.throws(() => require('/require-esm-rejection-app/throw-with-unhandled.mjs'), {
+                    message: 'module failure',
+                });
+            } finally {
+                Object.defineProperty(Array.prototype, 'lastIndexOf', originalLastIndexOf);
+            }
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
@@ -8635,13 +8649,14 @@ export const testRequireEsmRejectionTracking = async () => {
         } finally {
             process.removeListener('unhandledRejection', onUnhandled);
         }
-        assert.deepStrictEqual(unhandled, [
+        assert.deepStrictEqual(unhandled.map(({ reason }) => reason), [
             'preexisting reason',
             'side rejection',
             'shared reason',
             'queued shared reason',
             'saved reason',
         ]);
+        assert.strictEqual(unhandled[1].promise, globalThis.__requireEsmSidePromise);
 
         return true;
     } catch (error) {
