@@ -4069,6 +4069,24 @@ struct PackageJson {
     package_type: Option<String>,
 }
 
+/// Parsed package metadata owned by one QuickJS runtime.
+///
+/// Node keeps successful package.json parses stable for the lifetime of a
+/// runtime. Keeping this handle in `RuntimeServices` preserves that behavior
+/// without leaking cached package state between sibling runner runtimes.
+#[derive(Clone, Default)]
+pub(crate) struct PackageJsonCache(Rc<RefCell<HashMap<String, Rc<PackageJson>>>>);
+
+impl PackageJsonCache {
+    fn get(&self, key: &str) -> Option<Rc<PackageJson>> {
+        self.0.borrow().get(key).cloned()
+    }
+
+    fn insert(&self, key: String, package: Rc<PackageJson>) {
+        self.0.borrow_mut().insert(key, package);
+    }
+}
+
 struct NodePackageWarning {
     message: String,
     code: &'static str,
@@ -4194,6 +4212,7 @@ struct NodePackageResolutionContext<'a, 'w> {
     warnings: &'w mut Vec<NodePackageWarning>,
     file_probe_cache: HashMap<String, bool>,
     emulated_symlinks: HashMap<String, String>,
+    package_json_cache: PackageJsonCache,
 }
 
 impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
@@ -4210,12 +4229,18 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
             .borrow()
             .emulated_symlinks
             .clone();
+        let package_json_cache = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .package_json_cache
+            .clone();
         Self {
             mode,
             conditions,
             warnings,
             file_probe_cache: HashMap::new(),
             emulated_symlinks,
+            package_json_cache,
         }
     }
 
@@ -4429,15 +4454,24 @@ impl NodeModulesResolver {
         pkg_path: &std::path::Path,
         resolution: &NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
+        let cache_key = CjsEvalResolver::normalize_path(pkg_path);
+        if let Some(cached) = resolution.package_json_cache.get(&cache_key) {
+            return Ok(Some(cached));
+        }
         let read_path = Self::module_resolution_path(pkg_path, resolution);
         match std::fs::read_to_string(&read_path) {
-            Ok(pkg_content) => serde_json::from_str::<PackageJson>(&pkg_content)
-                .map(Rc::new)
-                .map(Some)
-                .map_err(|_| NodePackageResolveError::InvalidPackageConfig {
-                    path: pkg_path.to_string_lossy().into_owned(),
-                    reason: None,
-                }),
+            Ok(pkg_content) => {
+                let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(
+                    |_| NodePackageResolveError::InvalidPackageConfig {
+                        path: pkg_path.to_string_lossy().into_owned(),
+                        reason: None,
+                    },
+                )?);
+                resolution
+                    .package_json_cache
+                    .insert(cache_key, package.clone());
+                Ok(Some(package))
+            }
             Err(_) => Ok(None),
         }
     }

@@ -19,6 +19,7 @@ use std::sync::atomic::AtomicUsize;
 pub(crate) struct RuntimeServices {
     pub(crate) timers: TimerServices,
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
+    pub(crate) package_json_cache: super::module_loading::PackageJsonCache,
     pub(crate) process: ProcessServices,
     pub(crate) fs: RefCell<FsServices>,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
@@ -32,6 +33,7 @@ impl Default for RuntimeServices {
         Self {
             timers: TimerServices::default(),
             node_package_deprecation_warnings: RefCell::default(),
+            package_json_cache: Default::default(),
             process: ProcessServices::default(),
             fs: RefCell::new(FsServices::default()),
             output: RefCell::new(Rc::new(ComponentOutputSink)),

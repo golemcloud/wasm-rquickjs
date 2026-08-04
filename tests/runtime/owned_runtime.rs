@@ -45,6 +45,8 @@ async fn owned_runtime_isolation(
     assert_eq!(report["left"]["stdout"], "left\n");
     assert_eq!(report["right"]["value"], "right");
     assert_eq!(report["right"]["stdout"], "right\n");
+    assert_eq!(report["packageCacheFirst"]["value"], "first");
+    assert_eq!(report["packageCacheSecond"]["value"], "second");
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
     assert_eq!(report["timeoutError"], "runner job timed out");
     assert_eq!(report["tightLoopTimeoutError"], "runner job timed out");
@@ -55,7 +57,7 @@ async fn owned_runtime_isolation(
     assert!(
         report["cpuBeforeSuspendElapsedMs"]
             .as_u64()
-            .is_some_and(|elapsed| elapsed < 650),
+            .is_some_and(|elapsed| (300..650).contains(&elapsed)),
         "timeout budget restarted after child suspension: {} ms",
         report["cpuBeforeSuspendElapsedMs"]
     );

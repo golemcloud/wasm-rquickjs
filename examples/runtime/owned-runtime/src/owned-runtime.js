@@ -7,6 +7,7 @@ export async function run() {
         fs.mkdirSync('/tmp/runner-other', { recursive: true });
         fs.mkdirSync('/tmp/runner-isolation-left', { recursive: true });
         fs.mkdirSync('/tmp/runner-isolation-right', { recursive: true });
+        fs.mkdirSync('/tmp/runner-cache/node_modules/cache-pkg', { recursive: true });
         fs.writeFileSync('/tmp/runner-shared-mode.txt', 'shared');
         for (const path of ['/tmp/runner-ready-left', '/tmp/runner-ready-right']) {
             try { fs.rmSync(path, { force: true, recursive: true }); } catch {}
@@ -21,6 +22,13 @@ export async function run() {
             'export default "package";');
         fs.writeFileSync('/tmp/runner-app/entry.mjs',
             'export function run() { return { kind: "entry", argv: process.argv }; }');
+        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/package.json', JSON.stringify({
+            name: 'cache-pkg', type: 'module', exports: './first.mjs',
+        }));
+        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/first.mjs',
+            'export default "first";');
+        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/second.mjs',
+            'export default "second";');
     ` });
 
     let firstChunkResolve;
@@ -58,6 +66,19 @@ export async function run() {
         runJavaScript({ source: `console.log(process.env.LABEL); return process.env.LABEL;`, env: { LABEL: 'right' } }),
     ]);
 
+    const packageCacheFirst = await runJavaScript({
+        cwd: '/tmp/runner-cache', source: `return (await import('cache-pkg')).default;`,
+    });
+    await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/package.json', JSON.stringify({
+            name: 'cache-pkg', type: 'module', exports: './second.mjs',
+        }));
+    ` });
+    const packageCacheSecond = await runJavaScript({
+        cwd: '/tmp/runner-cache', source: `return (await import('cache-pkg')).default;`,
+    });
+
     const timeoutSuccess = await runJavaScript({ source: `return 'quick';`, timeoutMs: 1000 });
     let timeoutError;
     try {
@@ -71,14 +92,26 @@ export async function run() {
     } catch (error) {
         tightLoopTimeoutError = error.message;
     }
-    const cpuBeforeSuspendStarted = Date.now();
+    const cpuBeforeSuspend = spawnJavaScript({ source: `
+        console.log('burn:start:' + Date.now());
+        const burnStarted = Date.now();
+        while (Date.now() - burnStarted < 300) {}
+        await new Promise(() => {});
+    `, timeoutMs: 400 });
+    cpuBeforeSuspend.stdout.setEncoding('utf8');
+    const cpuBeforeSuspendStarted = await new Promise((resolve, reject) => {
+        cpuBeforeSuspend.stdout.once('data', chunk => {
+            const match = /^burn:start:(\d+)\n$/.exec(chunk);
+            if (match === null) {
+                reject(new Error(`unexpected burn sentinel: ${chunk}`));
+                return;
+            }
+            resolve(Number(match[1]));
+        });
+    });
     let cpuBeforeSuspendTimeoutError;
     try {
-        await runJavaScript({ source: `
-            const burnStarted = Date.now();
-            while (Date.now() - burnStarted < 300) {}
-            await new Promise(() => {});
-        `, timeoutMs: 400 });
+        await cpuBeforeSuspend.result;
     } catch (error) {
         cpuBeforeSuspendTimeoutError = error.message;
     }
@@ -242,7 +275,8 @@ export async function run() {
 
     return JSON.stringify({
         liveStdout, liveStderr, liveResult, ordering, streamedBeforeResult, parentProgress,
-        left, right, timeoutSuccess, timeoutError, tightLoopTimeoutError,
+        left, right, packageCacheFirst, packageCacheSecond,
+        timeoutSuccess, timeoutError, tightLoopTimeoutError,
         cpuBeforeSuspendTimeoutError, cpuBeforeSuspendElapsedMs,
         zeroTimeoutCode, hugeTimeoutCode, invalidProgramOptions,
         overflowError, truncated, entry, imports,
