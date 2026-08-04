@@ -17,8 +17,7 @@ pub mod native_module {
                     crate::internal::typescript::TypeScriptErrorKind::Error => "Error",
                     crate::internal::typescript::TypeScriptErrorKind::SyntaxError => "SyntaxError",
                 };
-                let constructor: rquickjs::Function<'_> =
-                    ctx.globals().get(constructor_name)?;
+                let constructor: rquickjs::Function<'_> = ctx.globals().get(constructor_name)?;
                 let object: rquickjs::Object<'_> = constructor.call((error.message,))?;
                 object.set("code", error.code)?;
                 return Err(ctx.throw(object.into_value()));
@@ -56,13 +55,7 @@ pub mod native_module {
             };
             serialize_transform_result(
                 &ctx,
-                crate::internal::typescript::transform(
-                source,
-                &filename,
-                mode,
-                source_map,
-                module,
-                ),
+                crate::internal::typescript::transform(source, &filename, mode, source_map, module),
             )
         }
         #[cfg(not(feature = "typescript-runtime"))]
@@ -86,9 +79,7 @@ pub mod native_module {
         {
             serialize_transform_result(
                 &ctx,
-                crate::internal::typescript::transform_module(
-                    source, &filename, false, module,
-                ),
+                crate::internal::typescript::transform_module(source, &filename, false, module),
             )
         }
         #[cfg(not(feature = "typescript-runtime"))]

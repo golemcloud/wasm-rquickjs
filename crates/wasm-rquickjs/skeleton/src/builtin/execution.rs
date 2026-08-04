@@ -169,10 +169,11 @@ pub mod native_module {
                 "exactly one of entry or source is required",
             ));
         }
-        if options
-            .source
-            .as_ref()
-            .is_some_and(|source| source.len() > MAX_SOURCE_BYTES)
+        if options.language == ExecutionLanguage::Typescript
+            && options
+                .source
+                .as_ref()
+                .is_some_and(|source| source.len() > MAX_SOURCE_BYTES)
         {
             return Err(rquickjs::Exception::throw_range(
                 &ctx,
@@ -232,10 +233,9 @@ pub mod native_module {
             jobs.get(&id).cloned()
         }
         .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown execution job"))?;
-        let options =
-            job.options.borrow_mut().take().ok_or_else(|| {
-                rquickjs::Exception::throw_range(&ctx, "execution job already started")
-            })?;
+        let options = job.options.borrow_mut().take().ok_or_else(|| {
+            rquickjs::Exception::throw_range(&ctx, "execution job already started")
+        })?;
         run_job(options, job).await;
         Ok(())
     }
@@ -263,7 +263,10 @@ pub mod native_module {
         })
         .await;
         if job.forgotten.load(Ordering::Relaxed) {
-            return Err(rquickjs::Exception::throw_range(&ctx, "unknown execution job"));
+            return Err(rquickjs::Exception::throw_range(
+                &ctx,
+                "unknown execution job",
+            ));
         }
         let completion = job.completion.borrow();
         let (done, value, error) = match completion.as_ref() {
@@ -426,7 +429,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         "__wasm_rquickjs_execution_inline.mjs"
     });
     let name = wrapper_name.to_string_lossy().into_owned();
-    let mut source = if let Some(entry) = entry {
+    let source = if let Some(entry) = entry {
         let specifier =
             serde_json::to_string(&entry.to_string_lossy()).expect("path string is serializable");
         format!(
@@ -443,6 +446,8 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             options.source.unwrap_or_default()
         )
     };
+    #[cfg(feature = "typescript-runtime")]
+    let mut source = source;
     if options.language == ExecutionLanguage::Typescript {
         if job.cancel.load(Ordering::Relaxed) {
             job.complete(Err("execution job cancelled".to_string()));
@@ -474,14 +479,17 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             job.complete(Err("TypeScript runtime support is not enabled".to_string()));
             return;
         }
-        if job.cancel.load(Ordering::Relaxed) {
-            job.complete(Err("execution job cancelled".to_string()));
-            return;
-        }
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            job.timed_out.store(true, Ordering::Relaxed);
-            job.complete(Err("execution job timed out".to_string()));
-            return;
+        #[cfg(feature = "typescript-runtime")]
+        {
+            if job.cancel.load(Ordering::Relaxed) {
+                job.complete(Err("execution job cancelled".to_string()));
+                return;
+            }
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                job.timed_out.store(true, Ordering::Relaxed);
+                job.complete(Err("execution job timed out".to_string()));
+                return;
+            }
         }
     }
     let execution = async {

@@ -223,7 +223,7 @@ process.features = {
     tls: false,
     cached_builtins: true,
     require_module: true,
-    typescript: typescriptRuntimeMode === null ? false : typescriptRuntimeMode,
+    typescript: typescriptRuntimeMode ?? false,
 };
 process.execPath = '/usr/local/bin/node';
 let _title = 'wasm-rquickjs';

@@ -35,7 +35,8 @@ function normalize(options) {
     throw new TypeError('language must be javascript or typescript');
   if (hasEntry && options.language !== undefined)
     throw new TypeError('language is only supported with source');
-  if (hasSource && Buffer.byteLength(options.source, 'utf8') > MAX_SOURCE_BYTES)
+  if (hasSource && language === 'typescript' &&
+      Buffer.byteLength(options.source, 'utf8') > MAX_SOURCE_BYTES)
     throw outOfRange('source', `at most ${MAX_SOURCE_BYTES} UTF-8 bytes`, options.source.length);
   const cwd = options.cwd ?? process.cwd();
   if (typeof cwd !== 'string') throw invalidType('cwd', 'a string', cwd);

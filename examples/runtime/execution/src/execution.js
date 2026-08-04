@@ -1,4 +1,5 @@
 import { runJavaScript, startJavaScript } from 'wasm-rquickjs:execution';
+import { stripTypeScriptTypes } from 'node:module';
 
 export async function run() {
     await runJavaScript({ source: `
@@ -148,6 +149,18 @@ export async function run() {
 
     const entry = await runJavaScript({ entry: './entry.mjs', cwd: '/tmp/execution-app' });
     const defaultArgv = await runJavaScript({ source: `return process.argv;` });
+    const largeJavaScript = await runJavaScript({
+        source: `${' '.repeat(256 * 1024)}return 'large-javascript';`,
+    });
+    let disabledStripError;
+    try { stripTypeScriptTypes('const value: number = 1;'); }
+    catch (error) { disabledStripError = error.message; }
+    let disabledExecutionError;
+    try {
+        await runJavaScript({ source: 'return 1 as number;', language: 'typescript' });
+    } catch (error) {
+        disabledExecutionError = error.message;
+    }
     const imports = await runJavaScript({ cwd: '/tmp/execution-app', source: `
         const local = await import('./local.mjs');
         const pkg = await import('execution-pkg');
@@ -287,7 +300,9 @@ export async function run() {
         timeoutSuccess, timeoutError, tightLoopTimeoutError,
         cpuBeforeSuspendTimeoutError, cpuBeforeSuspendElapsedMs,
         zeroTimeoutCode, hugeTimeoutCode, invalidProgramOptions,
-        overflowError, truncated, entry, defaultArgv, imports,
+        overflowError, truncated, entry, defaultArgv, largeJavaScript,
+        typescriptDisabled: process.features.typescript === false,
+        disabledStripError, disabledExecutionError, imports,
         privateImport, removedAliases, cloneChecks, resourceError, pathAliases,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },

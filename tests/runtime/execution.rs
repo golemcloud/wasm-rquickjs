@@ -95,6 +95,22 @@ async fn execution_isolation(
         report["defaultArgv"]["value"],
         serde_json::json!(["wasm-rquickjs-execution"])
     );
+    assert_eq!(report["largeJavaScript"]["value"], "large-javascript");
+    assert_eq!(report["typescriptDisabled"], true);
+    assert!(
+        report["disabledStripError"]
+            .as_str()
+            .is_some_and(|message| message.contains("TypeScript runtime support is not enabled")),
+        "unexpected disabled strip error: {}",
+        report["disabledStripError"]
+    );
+    assert!(
+        report["disabledExecutionError"]
+            .as_str()
+            .is_some_and(|message| message.contains("TypeScript runtime support is not enabled")),
+        "unexpected disabled execution error: {}",
+        report["disabledExecutionError"]
+    );
     assert_eq!(report["imports"]["value"]["local"], "local");
     assert_eq!(report["imports"]["value"]["package"], "package");
     assert_eq!(report["imports"]["value"]["json"], "json");

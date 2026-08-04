@@ -131,5 +131,6 @@ async fn typescript_transform_runtime_is_immutable(
     let report: serde_json::Value = serde_json::from_str(&json)?;
     assert_eq!(report["processFeature"], "transform");
     assert_eq!(report["transformedModule"], 1);
+    assert_eq!(report["executionEntry"], 1);
     Ok(())
 }
