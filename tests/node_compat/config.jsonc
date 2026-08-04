@@ -6136,11 +6136,11 @@
     "es-module/test-loaders-unknown-builtin-module.mjs": { "category": "runnable" },
     "es-module/test-loaders-workers-spawned.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-require-as-esm-interop.mjs": { "category": "runnable" },
-    "es-module/test-typescript-commonjs.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
-    "es-module/test-typescript-eval.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
-    "es-module/test-typescript-module.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
-    "es-module/test-typescript-transform.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
-    "es-module/test-typescript.mjs": { "category": "known-gap", "reason": "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR" },
+    "es-module/test-typescript-commonjs.mjs": { "category": "known-gap", "reason": "requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling" },
+    "es-module/test-typescript-eval.mjs": { "category": "known-gap", "reason": "requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture" },
+    "es-module/test-typescript-module.mjs": { "category": "known-gap", "reason": "requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling" },
+    "es-module/test-typescript-transform.mjs": { "category": "known-gap", "reason": "requires isolated process.execPath --experimental-transform-types execution and CLI source-map configuration" },
+    "es-module/test-typescript.mjs": { "category": "known-gap", "reason": "requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component" },
     "parallel/test-abortcontroller-internal.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/event_target (kWeakHandler)" },
     "parallel/test-accessor-properties.js": {
       "category": "node-internals",
@@ -7011,8 +7011,7 @@
     },
     "parallel/test-module-stat.js": { "category": "runnable" },
     "parallel/test-module-strip-types.js": {
-      "category": "known-gap",
-      "reason": "stripTypeScriptTypes requires Amaro support, which is not implemented",
+      "category": "runnable",
       "split": true,
       "subtests": {
         "test_00_striptypescripttypes": {},

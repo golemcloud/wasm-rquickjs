@@ -46,6 +46,7 @@ mod structured_clone;
 mod test_server_handle;
 mod timeout;
 mod toplevel_timer;
+mod typescript_runtime;
 mod url;
 mod v8_stack_trace;
 mod variant_list_roundtrip;

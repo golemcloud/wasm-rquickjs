@@ -1800,6 +1800,13 @@ fn determine_data_url_format(specifier: &str) -> Option<&'static str> {
     } else if module_filesystem_path(specifier).ends_with(".js")
         || module_filesystem_path(specifier).ends_with(".mjs")
         || module_filesystem_path(specifier).ends_with(".cjs")
+        || cfg!(feature = "typescript-runtime")
+            && matches!(
+                std::path::Path::new(module_filesystem_path(specifier))
+                    .extension()
+                    .and_then(|extension| extension.to_str()),
+                Some("ts" | "mts" | "cts")
+            )
     {
         return Some("module");
     }
@@ -1980,10 +1987,12 @@ fn cjs_named_import_error_module_source(
         ctx,
         NodePackageResolveMode::CjsAnalysis.condition_mode(),
     );
-    find_cjs_named_import_error(ctx, filename, source, &esm_conditions, &cjs_conditions).map(|message| {
-        let escaped = DataUrlLoader::js_string_escape(&message);
-        format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
-    })
+    find_cjs_named_import_error(ctx, filename, source, &esm_conditions, &cjs_conditions).map(
+        |message| {
+            let escaped = DataUrlLoader::js_string_escape(&message);
+            format!("await Promise.reject(new SyntaxError('{escaped}'));\n")
+        },
+    )
 }
 
 fn find_cjs_named_import_error(
@@ -2025,8 +2034,9 @@ fn cjs_named_import_error_message(
     if named_imports.is_empty() || !could_resolve_to_cjs_for_named_import_error(specifier) {
         return None;
     }
-    let resolved = resolve_esm_named_import_candidate_path(ctx, filename, specifier, esm_conditions)
-        .or_else(|| resolve_cjs_reexport_path(ctx, filename, specifier, cjs_conditions))?;
+    let resolved =
+        resolve_esm_named_import_candidate_path(ctx, filename, specifier, esm_conditions)
+            .or_else(|| resolve_cjs_reexport_path(ctx, filename, specifier, cjs_conditions))?;
     if !resolved.ends_with(".cjs") && !is_cjs_js_file_for_named_import_error(ctx, &resolved) {
         return None;
     }
@@ -3642,7 +3652,11 @@ impl NodeFileResolver {
         false
     }
 
-    fn module_identity_path_for_existing_file(ctx: &Ctx<'_>, normalized: &str, preserve_symlinks: bool) -> String {
+    fn module_identity_path_for_existing_file(
+        ctx: &Ctx<'_>,
+        normalized: &str,
+        preserve_symlinks: bool,
+    ) -> String {
         if preserve_symlinks {
             return normalized.to_string();
         }
@@ -3710,9 +3724,15 @@ impl NodeFileResolver {
         None
     }
 
-    fn candidate_is_file(ctx: &Ctx<'_>, normalized: &str, semantics: FileCandidateSemantics) -> bool {
+    fn candidate_is_file(
+        ctx: &Ctx<'_>,
+        normalized: &str,
+        semantics: FileCandidateSemantics,
+    ) -> bool {
         match semantics {
-            FileCandidateSemantics::ModuleResolution => Self::module_resolution_is_file(ctx, normalized),
+            FileCandidateSemantics::ModuleResolution => {
+                Self::module_resolution_is_file(ctx, normalized)
+            }
             FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
         }
     }
@@ -3794,12 +3814,10 @@ impl NodeFileResolver {
             let mut warnings = Vec::new();
             let mut resolution = esm_import_resolution_context(ctx, &conditions, &mut warnings);
             let package_json_path = std::path::Path::new(normalized_dir).join("package.json");
-            if let Ok(Some(package)) =
-                NodeModulesResolver::read_package_json_optional_with_context(
-                    &package_json_path,
-                    &resolution,
-                )
-                && let Some(main) = package.main.as_deref()
+            if let Ok(Some(package)) = NodeModulesResolver::read_package_json_optional_with_context(
+                &package_json_path,
+                &resolution,
+            ) && let Some(main) = package.main.as_deref()
             {
                 if let Some((suggestion, _)) = NodeModulesResolver::resolve_package_legacy_main(
                     std::path::Path::new(normalized_dir),
@@ -3898,7 +3916,8 @@ impl Resolver for NodeFileResolver {
 
         let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
         let preserve_symlinks = Self::has_exec_argv_flag(ctx, "--preserve-symlinks");
-        if let Some(resolved) = Self::resolve_candidate(ctx, candidate, &suffix, preserve_symlinks) {
+        if let Some(resolved) = Self::resolve_candidate(ctx, candidate, &suffix, preserve_symlinks)
+        {
             transfer_import_type_rewrite_token(name, &resolved);
             return Ok(resolved);
         }
@@ -3921,12 +3940,7 @@ struct NodeModuleErrorResolver;
 struct NodeBuiltinNamespaceGuard;
 
 impl Resolver for NodeBuiltinNamespaceGuard {
-    fn resolve<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        base: &str,
-        name: &str,
-    ) -> rquickjs::Result<String> {
+    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
         if !name.starts_with("node:") {
             return Err(Error::new_resolving(base, name));
         }
@@ -4652,7 +4666,9 @@ impl NodeModulesResolver {
             }
 
             let pkg_path = dir.join("package.json");
-            if let Some(package) = Self::read_package_json_optional_with_context(&pkg_path, resolution)? {
+            if let Some(package) =
+                Self::read_package_json_optional_with_context(&pkg_path, resolution)?
+            {
                 let Some(imports) = package.imports.as_ref() else {
                     return Err(NodePackageResolveError::PackageImportNotDefined {
                         specifier: name.to_string(),
@@ -4693,7 +4709,9 @@ impl NodeModulesResolver {
             }
 
             let pkg_path = dir.join("package.json");
-            if let Some(package) = Self::read_package_json_optional_with_context(&pkg_path, resolution)? {
+            if let Some(package) =
+                Self::read_package_json_optional_with_context(&pkg_path, resolution)?
+            {
                 if package.name.as_deref() == Some(package_name)
                     && let Some(exports_field) = package
                         .exports
@@ -4942,7 +4960,8 @@ impl NodeModulesResolver {
         resolution: &mut NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<(String, String)>, NodePackageResolveError> {
         let nested_pkg_path = candidate.join("package.json");
-        if let Some(package) = Self::read_package_json_optional_with_context(&nested_pkg_path, resolution)?
+        if let Some(package) =
+            Self::read_package_json_optional_with_context(&nested_pkg_path, resolution)?
             && let Some(main) = package.main.as_ref()
             && let Some(resolved) =
                 Self::resolve_runtime_cjs_file_or_index(candidate, main, extensions, resolution)
@@ -5439,7 +5458,9 @@ impl NodeModulesResolver {
                             .join("package.json")
                             .to_string_lossy()
                             .into_owned(),
-                        reason: Some("\"exports\" cannot contain numeric property keys.".to_string()),
+                        reason: Some(
+                            "\"exports\" cannot contain numeric property keys.".to_string(),
+                        ),
                     });
                 }
                 for (condition, value) in map {
@@ -6151,7 +6172,12 @@ fn cjs_analysis_resolution_context<'a, 'w>(
     conditions: &'a [String],
     warnings: &'w mut Vec<NodePackageWarning>,
 ) -> NodePackageResolutionContext<'a, 'w> {
-    NodePackageResolutionContext::new(ctx, NodePackageResolveMode::CjsAnalysis, conditions, warnings)
+    NodePackageResolutionContext::new(
+        ctx,
+        NodePackageResolveMode::CjsAnalysis,
+        conditions,
+        warnings,
+    )
 }
 
 fn esm_import_resolution_context<'a, 'w>(
@@ -6487,7 +6513,11 @@ fn import_meta_trailing_slash_package_has_exports(
         let package_path = dir.join("node_modules").join(package_name);
         if NodeModulesResolver::module_resolution_path(&package_path, &resolution).is_dir() {
             let pkg_path = package_path.join("package.json");
-            return NodeModulesResolver::read_package_json_optional_with_context(&pkg_path, &mut resolution).map(|package| {
+            return NodeModulesResolver::read_package_json_optional_with_context(
+                &pkg_path,
+                &mut resolution,
+            )
+            .map(|package| {
                 package.is_some_and(|package| {
                     package.exports.as_ref().is_some_and(|exports| {
                         NodeModulesResolver::is_active_package_exports(exports)
@@ -6555,6 +6585,49 @@ impl Resolver for NodeModulesResolver {
 /// Loader that wraps CommonJS sources in ESM-compatible wrappers when loaded via `import()`.
 /// This enables ESM modules to import CJS packages from `node_modules`.
 struct CjsCompatLoader;
+
+#[cfg(feature = "typescript-runtime")]
+fn is_typescript_module_path(path: &str) -> bool {
+    matches!(
+        std::path::Path::new(module_filesystem_path(path))
+            .extension()
+            .and_then(|extension| extension.to_str()),
+        Some("ts" | "mts" | "cts")
+    )
+}
+
+#[cfg(feature = "typescript-runtime")]
+fn transform_typescript_module_source<'js>(
+    ctx: &Ctx<'js>,
+    fs_path: &str,
+    source: String,
+) -> rquickjs::Result<String> {
+    match crate::internal::typescript::transform_module(
+        source,
+        fs_path,
+        false,
+        match std::path::Path::new(fs_path)
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
+            Some("mts") => Some(true),
+            Some("cts") => Some(false),
+            _ => None,
+        },
+    ) {
+        Ok(output) => Ok(output.code),
+        Err(error) => {
+            let constructor_name = match error.kind {
+                crate::internal::typescript::TypeScriptErrorKind::Error => "Error",
+                crate::internal::typescript::TypeScriptErrorKind::SyntaxError => "SyntaxError",
+            };
+            let constructor: rquickjs::Function<'_> = ctx.globals().get(constructor_name)?;
+            let object: rquickjs::Object<'_> = constructor.call((error.message,))?;
+            object.set("code", error.code)?;
+            Err(ctx.throw(object.into_value()))
+        }
+    }
+}
 
 #[derive(Default)]
 struct CjsExportAnalysis {
@@ -8609,10 +8682,29 @@ fn analyze_cjs_reexport_specifier_names(
             && is_cjs_analysis_source_path(&physical_path)
             && let Ok(source) = std::fs::read_to_string(&physical_path)
         {
-            let child_filename = if NodeFileResolver::has_exec_argv_flag(
-                ctx,
-                "--preserve-symlinks",
-            ) {
+            #[cfg(feature = "typescript-runtime")]
+            let source = if is_typescript_module_path(&physical_path) {
+                let Ok(output) = crate::internal::typescript::transform_module(
+                    source,
+                    &physical_path,
+                    false,
+                    match std::path::Path::new(&physical_path)
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                    {
+                        Some("mts") => Some(true),
+                        Some("cts") => Some(false),
+                        _ => None,
+                    },
+                ) else {
+                    continue;
+                };
+                output.code
+            } else {
+                source
+            };
+            let child_filename = if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks")
+            {
                 logical_path
             } else {
                 physical_path
@@ -8657,7 +8749,10 @@ fn package_scope_type(ctx: &Ctx<'_>, filename: &str) -> Option<String> {
         .and_then(|scope| scope.package_type)
 }
 
-fn package_scope_info(ctx: &Ctx<'_>, filename: &str) -> Result<Option<PackageScopeInfo>, NodePackageResolveError> {
+fn package_scope_info(
+    ctx: &Ctx<'_>,
+    filename: &str,
+) -> Result<Option<PackageScopeInfo>, NodePackageResolveError> {
     let Some(parent) = std::path::Path::new(filename).parent() else {
         return Ok(None);
     };
@@ -8669,10 +8764,9 @@ fn package_scope_info(ctx: &Ctx<'_>, filename: &str) -> Result<Option<PackageSco
             return Ok(None);
         }
         let pkg_path = dir.join("package.json");
-        if let Some(package) = NodeModulesResolver::read_package_json_optional_with_context(
-            &pkg_path,
-            &resolution,
-        )? {
+        if let Some(package) =
+            NodeModulesResolver::read_package_json_optional_with_context(&pkg_path, &resolution)?
+        {
             return Ok(Some(PackageScopeInfo {
                 package_type: package.package_type.clone(),
                 is_node_modules_package: is_node_modules_package_scope(&dir),
@@ -8864,8 +8958,13 @@ fn build_loader_cjs_facade(
         &ctx,
         NodePackageResolveMode::CjsAnalysis.condition_mode(),
     );
-    let analysis =
-        analyze_cjs_exports_for_file(&ctx, &filename, &source, &mut HashSet::new(), &cjs_conditions);
+    let analysis = analyze_cjs_exports_for_file(
+        &ctx,
+        &filename,
+        &source,
+        &mut HashSet::new(),
+        &cjs_conditions,
+    );
     let default_member_expression = format!(
         "__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
         escape_js_string(&filename),
@@ -8888,7 +8987,11 @@ impl Loader for CjsCompatLoader {
         let fs_path = module_filesystem_path(path);
         let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
         let is_cjs_ext = fs_path.ends_with(".cjs");
-        if !fs_path.ends_with(".js") && !is_cjs_ext && !is_extensionless {
+        #[cfg(feature = "typescript-runtime")]
+        let is_typescript = is_typescript_module_path(fs_path);
+        #[cfg(not(feature = "typescript-runtime"))]
+        let is_typescript = false;
+        if !fs_path.ends_with(".js") && !is_cjs_ext && !is_extensionless && !is_typescript {
             return Err(Error::new_loading(path));
         }
         if import_attr_type_from_path(path).as_deref() == Some("json") {
@@ -8897,16 +9000,23 @@ impl Loader for CjsCompatLoader {
 
         let source_path = module_source_filesystem_path(ctx, path);
         let source = read_module_source_or_throw(ctx, path, &source_path)?;
+        #[cfg(feature = "typescript-runtime")]
+        let source = if is_typescript {
+            transform_typescript_module_source(ctx, fs_path, source)?
+        } else {
+            source
+        };
 
         let fs_abs_path = ensure_absolute_path(fs_path);
         let url = path_to_file_url(path);
         let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
 
-        let package_scope = if fs_abs_path.ends_with(".js") || is_extensionless {
-            package_scope_info_or_throw(ctx, &fs_abs_path)?
-        } else {
-            None
-        };
+        let package_scope =
+            if fs_abs_path.ends_with(".js") || fs_abs_path.ends_with(".ts") || is_extensionless {
+                package_scope_info_or_throw(ctx, &fs_abs_path)?
+            } else {
+                None
+            };
         let package_type = package_scope
             .as_ref()
             .and_then(|scope| scope.package_type.clone());
@@ -8922,8 +9032,10 @@ impl Loader for CjsCompatLoader {
             || has_cjs_wrapper_lexical_redeclaration(&source);
         // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
-        let is_cjs =
-            is_cjs_ext || is_commonjs_package_js || (!is_module_package_js && !has_esm_syntax);
+        let is_cjs = fs_path.ends_with(".cts")
+            || is_cjs_ext
+            || (!fs_path.ends_with(".mts")
+                && (is_commonjs_package_js || (!is_module_package_js && !has_esm_syntax)));
         if !is_cjs {
             let preflight_mode = if fs_path.ends_with(".js") && is_module_package_js {
                 EsmFilePreflightMode::PackageTypeModuleJs

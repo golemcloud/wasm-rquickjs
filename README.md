@@ -637,7 +637,10 @@ Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(opti
 `runJavaScript(options)` returns bounded captured output with the structured result. Options accept
 exactly one of `entry` or inline `source`, plus `cwd`, `argv`, `env`, `timeoutMs`, `maxBytes`
 (1 MiB per stream by default, 64 MiB maximum), and `overflow` (`terminate` by default or
-`truncate`). Output and completion wake the parent without periodic polling. CPU deadlines start
+`truncate`). With the generated crate's `typescript-runtime` feature enabled, inline jobs can set
+`language: "typescript"` (JavaScript remains the default); inline source is limited to 256 KiB of
+UTF-8 input. TypeScript entry files are selected by their `.ts`, `.mts`, or `.cts` extension.
+Output and completion wake the parent without periodic polling. CPU deadlines start
 after child-runtime initialization and are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
 `default` function (or `run` function when there is no default function) is invoked and awaited.
 Relative entry paths and imports resolve from `cwd`. Inline `source` is an async function body:
@@ -678,7 +681,15 @@ Compatibility stubs — no V8 inspector in WASM.
 <summary><strong><code>node:module</code></strong></summary>
 
 - `require`, `require.resolve`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
+- `stripTypeScriptTypes(code[, options])` with Node-compatible strip and transform modes when the
+  generated crate enables `typescript-runtime`
 - Package resolution supports `package.json` `main`, `exports` root/subpath maps, wildcard `exports` patterns, `imports` maps, and wildcard `imports` patterns. CJS resolution recognizes `golem`, `node`, `require`, `module-sync`, and `default` conditions; ESM resolution recognizes `golem`, `node`, `import`, `module-sync`, and `default`. Package `imports` can target relative files, external packages, and `node:` builtins.
+- With `typescript-runtime`, `.mts` is always ESM, `.cts` is always CommonJS, and `.ts` follows the
+  nearest package type and Node-style syntax classification. ESM imports require explicit file
+  extensions. Type stripping inside `node_modules` is rejected, matching Node's built-in support.
+  The runtime does not type-check, read `tsconfig.json`, or support `.tsx`; enable
+  `typescript-transform-runtime` instead of `typescript-runtime` for enums, runtime namespaces,
+  and other transform-required file syntax.
 
 </details>
 

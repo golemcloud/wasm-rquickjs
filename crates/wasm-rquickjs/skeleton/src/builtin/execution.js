@@ -3,9 +3,11 @@ import { PassThrough } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { resolve } from 'node:path';
 import { deserializeFromTransport } from '__wasm_rquickjs_builtin/structured_clone';
+import { Buffer } from 'node:buffer';
 
 const MAX_TIMEOUT_MS = 18_446_744_073_709;
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+const MAX_SOURCE_BYTES = 256 * 1024;
 
 function invalidType(name, expected, value) {
   const error = new TypeError(`The "${name}" option must be ${expected}. Received ${String(value)}`);
@@ -28,6 +30,13 @@ function normalize(options) {
     throw invalidType('entry', 'a string', options.entry);
   if (hasSource && typeof options.source !== 'string')
     throw invalidType('source', 'a string', options.source);
+  const language = options.language ?? 'javascript';
+  if (language !== 'javascript' && language !== 'typescript')
+    throw new TypeError('language must be javascript or typescript');
+  if (hasEntry && options.language !== undefined)
+    throw new TypeError('language is only supported with source');
+  if (hasSource && Buffer.byteLength(options.source, 'utf8') > MAX_SOURCE_BYTES)
+    throw outOfRange('source', `at most ${MAX_SOURCE_BYTES} UTF-8 bytes`, options.source.length);
   const cwd = options.cwd ?? process.cwd();
   if (typeof cwd !== 'string') throw invalidType('cwd', 'a string', cwd);
   const argv = options.argv ?? [];
@@ -49,7 +58,7 @@ function normalize(options) {
   const overflow = options.overflow ?? 'terminate';
   if (overflow !== 'terminate' && overflow !== 'truncate') throw new TypeError('overflow must be terminate or truncate');
   return {
-    entry: options.entry, source: options.source, cwd: resolve(cwd),
+    entry: options.entry, source: options.source, language, cwd: resolve(cwd),
     argv, env, timeoutMs, maxBytes, overflow,
   };
 }

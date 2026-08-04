@@ -79,6 +79,10 @@ crypto-full = [
 
 sqlite = ["dep:rusqlite"]
 timezone = ["dep:chrono-tz"]
+typescript-runtime = [
+  "dep:swc_common", "dep:swc_ts_fast_strip"
+]
+typescript-transform-runtime = ["typescript-runtime"]
 
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]
@@ -160,6 +164,8 @@ wit-bindgen-p3 = { package = "wit-bindgen", version = "0.58.0", default-features
 # This matches the validation the Preview 2 path gets from `golem-wasi-http` (which re-exports the
 # same `http` crate) without depending on `golem-wasi-http` itself.
 http = { version = "1", optional = true }
+swc_common = { version = "24", optional = true }
+swc_ts_fast_strip = { version = "56", optional = true }
 
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 chrono-tz = { version = "0.10", default-features = false, optional = true }

@@ -1,0 +1,135 @@
+use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output};
+use camino::Utf8Path;
+use test_r::{test, test_dep};
+use wasmtime::component::Val;
+
+#[test_dep(tagged_as = "typescript_runtime", scope = Cloneable)]
+async fn compiled_typescript_runtime() -> CompiledTest {
+    CompiledTest::new_with_features(
+        Utf8Path::new("examples/runtime/typescript-runtime"),
+        true,
+        FeatureCombination::TypeScriptRuntime,
+    )
+    .await
+    .expect("Failed to compile typescript-runtime")
+}
+
+#[test_dep(tagged_as = "typescript_transform_runtime", scope = Cloneable)]
+async fn compiled_typescript_transform_runtime() -> CompiledTest {
+    CompiledTest::new_with_features(
+        Utf8Path::new("examples/runtime/typescript-transform-runtime"),
+        true,
+        FeatureCombination::TypeScriptTransformRuntime,
+    )
+    .await
+    .expect("Failed to compile typescript-transform-runtime")
+}
+
+#[test]
+async fn strip_typescript_types_matches_node_contract(
+    #[tagged_as("typescript_runtime")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
+    assert!(output.is_empty(), "unexpected output: {output}");
+    let Some(Val::String(json)) = result? else {
+        anyhow::bail!("expected TypeScript result JSON");
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    assert_eq!(report["stripped"], "const value         = 1;");
+    assert!(
+        report["transformed"]
+            .as_str()
+            .is_some_and(|output| output.contains("MathUtil")
+                && output.contains("sourceMappingURL=data:application/json;base64,")
+                && output.ends_with("//# sourceURL=input.ts"))
+    );
+    assert_eq!(
+        report["sourceMap"],
+        serde_json::json!({
+            "version": 3,
+            "sources": ["input.ts"],
+            "names": [],
+            "mappings": "UACY;aACK,MAAM,CAAC,GAAW,IAAc,IAAI;AACnD,GAFU,aAAA",
+        })
+    );
+    assert_eq!(
+        report["validationCodes"],
+        serde_json::json!([
+            "ERR_INVALID_ARG_TYPE",
+            "ERR_INVALID_ARG_TYPE",
+            "ERR_INVALID_ARG_VALUE",
+            "ERR_INVALID_ARG_VALUE",
+        ])
+    );
+    assert_eq!(report["moduleTs"], 42);
+    assert_eq!(report["moduleMts"], 42);
+    assert_eq!(report["commonJsCts"], 42);
+    assert_eq!(report["extensionlessCommonJsTsError"], "MODULE_NOT_FOUND");
+    assert_eq!(report["extensionlessEsmError"], "ERR_MODULE_NOT_FOUND");
+    assert_eq!(
+        report["loaderUnsupportedCode"],
+        "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"
+    );
+    assert_eq!(report["loaderUnsupportedName"], "SyntaxError");
+    assert_eq!(
+        report["commonJsUnsupportedCode"],
+        "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"
+    );
+    assert_eq!(report["commonJsUnsupportedName"], "SyntaxError");
+    assert_eq!(report["processFeatureStrip"], "strip");
+    assert_eq!(report["processFeatureAfterMutation"], "strip");
+    assert_eq!(report["esmImportsCts"], 42);
+    assert_eq!(report["typeOnlyImport"], 42);
+    assert_eq!(report["invalidSyntaxCode"], "ERR_INVALID_TYPESCRIPT_SYNTAX");
+    assert_eq!(report["invalidSyntaxName"], "SyntaxError");
+    assert_eq!(
+        report["nodeModulesError"],
+        "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"
+    );
+    assert_eq!(report["nodeModulesErrorName"], "Error");
+    assert_eq!(
+        report["commonJsNodeModulesError"],
+        "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"
+    );
+    assert_eq!(report["commonJsNodeModulesErrorName"], "Error");
+    assert_eq!(report["inlineRunner"], 1);
+    assert_eq!(report["entryRunner"], 42);
+    assert_eq!(report["boundaryRunner"], 42);
+    assert_eq!(
+        report["sourceLimitCodes"],
+        serde_json::json!(["ERR_OUT_OF_RANGE", "ERR_OUT_OF_RANGE"])
+    );
+    let boundary_transform_ms = report["boundaryTransformMs"]
+        .as_u64()
+        .expect("boundary transform timing must be numeric");
+    eprintln!("256 KiB inline TypeScript runner latency: {boundary_transform_ms}ms");
+    assert!(
+        boundary_transform_ms < 750,
+        "256 KiB inline TypeScript blocked the runner for {boundary_transform_ms}ms"
+    );
+    assert!(
+        report["unsupported"]
+            .as_str()
+            .is_some_and(|message| message.contains("TypeScript enum is not supported"))
+    );
+    assert_eq!(
+        report["unsupportedCode"],
+        "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"
+    );
+    Ok(())
+}
+
+#[test]
+async fn typescript_transform_runtime_is_immutable(
+    #[tagged_as("typescript_transform_runtime")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
+    assert!(output.is_empty(), "unexpected output: {output}");
+    let Some(Val::String(json)) = result? else {
+        anyhow::bail!("expected TypeScript transform result JSON");
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    assert_eq!(report["processFeature"], "transform");
+    assert_eq!(report["transformedModule"], 1);
+    Ok(())
+}

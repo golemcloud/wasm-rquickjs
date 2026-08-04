@@ -17,6 +17,9 @@ use std::time::{Duration, Instant};
 const MAX_ACTIVE_JOBS: usize = 8;
 const MAX_TIMEOUT_MS: u64 = u64::MAX / 1_000_000;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
+// Native SWC work cannot be interrupted while Rust is executing. Keep inline
+// jobs tightly bounded; worst-case sibling-job latency is tracked by GOL-347.
+const MAX_SOURCE_BYTES: usize = 256 * 1024;
 
 pub const EXECUTION_JS: &str = include_str!("execution.js");
 
@@ -25,6 +28,7 @@ pub const EXECUTION_JS: &str = include_str!("execution.js");
 struct ExecutionOptions {
     entry: Option<String>,
     source: Option<String>,
+    language: ExecutionLanguage,
     cwd: String,
     argv: Vec<String>,
     env: HashMap<String, String>,
@@ -39,6 +43,13 @@ struct ExecutionOptions {
 enum OverflowPolicy {
     Terminate,
     Truncate,
+}
+
+#[derive(Deserialize, Copy, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum ExecutionLanguage {
+    Javascript,
+    Typescript,
 }
 
 pub(crate) struct ExecutionJob {
@@ -156,6 +167,16 @@ pub mod native_module {
             return Err(rquickjs::Exception::throw_type(
                 &ctx,
                 "exactly one of entry or source is required",
+            ));
+        }
+        if options
+            .source
+            .as_ref()
+            .is_some_and(|source| source.len() > MAX_SOURCE_BYTES)
+        {
+            return Err(rquickjs::Exception::throw_range(
+                &ctx,
+                "source exceeds the supported UTF-8 byte limit",
             ));
         }
         if options.max_bytes == 0 || options.max_bytes > MAX_OUTPUT_BYTES {
@@ -405,7 +426,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         "__wasm_rquickjs_execution_inline.mjs"
     });
     let name = wrapper_name.to_string_lossy().into_owned();
-    let source = if let Some(entry) = entry {
+    let mut source = if let Some(entry) = entry {
         let specifier =
             serde_json::to_string(&entry.to_string_lossy()).expect("path string is serializable");
         format!(
@@ -422,6 +443,47 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             options.source.unwrap_or_default()
         )
     };
+    if options.language == ExecutionLanguage::Typescript {
+        if job.cancel.load(Ordering::Relaxed) {
+            job.complete(Err("execution job cancelled".to_string()));
+            return;
+        }
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            job.timed_out.store(true, Ordering::Relaxed);
+            job.complete(Err("execution job timed out".to_string()));
+            return;
+        }
+        #[cfg(feature = "typescript-runtime")]
+        {
+            match crate::internal::typescript::transform(
+                source,
+                &name,
+                crate::internal::typescript::TypeScriptMode::Transform,
+                false,
+                Some(true),
+            ) {
+                Ok(output) => source = output.code,
+                Err(error) => {
+                    job.complete(Err(error.message));
+                    return;
+                }
+            }
+        }
+        #[cfg(not(feature = "typescript-runtime"))]
+        {
+            job.complete(Err("TypeScript runtime support is not enabled".to_string()));
+            return;
+        }
+        if job.cancel.load(Ordering::Relaxed) {
+            job.complete(Err("execution job cancelled".to_string()));
+            return;
+        }
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            job.timed_out.store(true, Ordering::Relaxed);
+            job.complete(Err("execution job timed out".to_string()));
+            return;
+        }
+    }
     let execution = async {
         async_with!(runtime.ctx => |ctx| {
             Module::evaluate(ctx.clone(), name, source).catch(&ctx)

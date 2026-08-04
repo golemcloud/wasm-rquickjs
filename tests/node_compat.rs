@@ -35,7 +35,7 @@ async fn compiled_node_compat_full() -> CompiledTest {
     CompiledTest::new_with_features(
         path,
         true,
-        common::FeatureCombination::FullNoLoggingWithGolem,
+        common::FeatureCombination::FullNoLoggingWithGolemAndTypeScript,
     )
     .await
     .expect("Failed to compile node-compat-runner")
