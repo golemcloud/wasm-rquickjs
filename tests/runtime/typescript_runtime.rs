@@ -92,7 +92,13 @@ async fn strip_typescript_types_matches_node_contract(
         "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"
     );
     assert_eq!(report["commonJsNodeModulesErrorName"], "Error");
-    assert_eq!(report["inlineRunner"], 1);
+    assert!(
+        report["inlineRunnerUnsupported"]
+            .as_str()
+            .is_some_and(|message| message.contains("TypeScript enum")),
+        "unexpected strip-only inline execution result: {}",
+        report["inlineRunnerUnsupported"]
+    );
     assert_eq!(report["entryRunner"], 42);
     assert_eq!(report["boundaryRunner"], 42);
     assert_eq!(
@@ -132,5 +138,6 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["processFeature"], "transform");
     assert_eq!(report["transformedModule"], 1);
     assert_eq!(report["executionEntry"], 1);
+    assert_eq!(report["executionInline"], 1);
     Ok(())
 }

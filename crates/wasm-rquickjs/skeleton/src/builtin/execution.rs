@@ -463,7 +463,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             match crate::internal::typescript::transform(
                 source,
                 &name,
-                crate::internal::typescript::TypeScriptMode::Transform,
+                crate::internal::typescript::runtime_mode(),
                 false,
                 Some(true),
             ) {

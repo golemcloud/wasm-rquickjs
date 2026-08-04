@@ -1802,7 +1802,7 @@ function rustModuleSourceAnalysis(source) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_module_source(source);
 }
 
-function isEsmGraphFile(filename, source, analysis) {
+function isEsmGraphFile(filename, analysis) {
     const packageScope = (filename.endsWith('.js') || filename.endsWith('.ts'))
         ? getPackageScopeInfo(filename)
         : null;
@@ -1812,8 +1812,6 @@ function isEsmGraphFile(filename, source, analysis) {
     if (filename.endsWith('.mjs') || filename.endsWith('.mts') ||
         ((filename.endsWith('.js') || filename.endsWith('.ts')) && explicitPackageType === 'module')) return true;
     if (filename.endsWith('.cjs') || filename.endsWith('.cts') || isCommonJsPackage) return false;
-    source = transpileTypeScriptModule(filename, source, true);
-    analysis = analysis || rustModuleSourceAnalysis(source);
     return analysis.looksLikeEsm || analysis.hasCjsWrapperLexicalRedeclaration;
 }
 
@@ -1830,7 +1828,7 @@ function readEsmGraphFileInfo(filename, cache) {
     const info = {
         source: preparedSource,
         analysis,
-        isEsm: isEsmGraphFile(filename, source, analysis),
+        isEsm: isEsmGraphFile(filename, analysis),
     };
     cache[filename] = info;
     return info;

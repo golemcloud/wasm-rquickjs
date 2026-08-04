@@ -21,9 +21,14 @@ export async function run() {
         cwd: '/typescript-transform-runtime',
         entry: './entry.mts',
     });
+    const executionInline = await runJavaScript({
+        language: 'typescript',
+        source: 'enum Direction { Up, Down } return Direction.Down;',
+    });
     return JSON.stringify({
         processFeature: process.features.typescript,
         transformedModule,
         executionEntry: executionEntry.value,
+        executionInline: executionInline.value,
     });
 }

@@ -139,10 +139,15 @@ export async function run() {
         commonJsNodeModulesErrorName = error.name;
     }
 
-    const inlineRunner = await runJavaScript({
-        language: 'typescript',
-        source: 'enum Direction { Up, Down } return Direction.Down;',
-    });
+    let inlineRunnerUnsupported;
+    try {
+        await runJavaScript({
+            language: 'typescript',
+            source: 'enum Direction { Up, Down } return Direction.Down;',
+        });
+    } catch (error) {
+        inlineRunnerUnsupported = error.message;
+    }
     fs.writeFileSync(
         '/typescript-runtime/runner-entry.mts',
         'export function run(): number { return 42; }',
@@ -198,7 +203,7 @@ export async function run() {
         nodeModulesErrorName,
         commonJsNodeModulesError,
         commonJsNodeModulesErrorName,
-        inlineRunner: inlineRunner.value,
+        inlineRunnerUnsupported,
         entryRunner: entryRunner.value,
         boundaryRunner: boundaryRunner.value,
         boundaryTransformMs,
