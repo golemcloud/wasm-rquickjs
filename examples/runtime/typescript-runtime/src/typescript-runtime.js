@@ -148,6 +148,10 @@ export async function run() {
     } catch (error) {
         inlineRunnerUnsupported = error.message;
     }
+    const inlineRunnerStripped = await runJavaScript({
+        language: 'typescript',
+        source: 'const value: number = 42; return value;',
+    });
     fs.writeFileSync(
         '/typescript-runtime/runner-entry.mts',
         'export function run(): number { return 42; }',
@@ -204,6 +208,7 @@ export async function run() {
         commonJsNodeModulesError,
         commonJsNodeModulesErrorName,
         inlineRunnerUnsupported,
+        inlineRunnerStripped: inlineRunnerStripped.value,
         entryRunner: entryRunner.value,
         boundaryRunner: boundaryRunner.value,
         boundaryTransformMs,

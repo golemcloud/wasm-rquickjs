@@ -689,7 +689,8 @@ Compatibility stubs — no V8 inspector in WASM.
   extensions. Type stripping inside `node_modules` is rejected, matching Node's built-in support.
   The runtime does not type-check, read `tsconfig.json`, or support `.tsx`; enable
   `typescript-transform-runtime` instead of `typescript-runtime` for enums, runtime namespaces,
-  and other transform-required file syntax.
+  and other transform-required syntax in module files or inline `language: "typescript"`
+  execution source.
 
 </details>
 

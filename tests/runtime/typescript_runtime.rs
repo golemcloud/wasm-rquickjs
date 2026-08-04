@@ -99,6 +99,7 @@ async fn strip_typescript_types_matches_node_contract(
         "unexpected strip-only inline execution result: {}",
         report["inlineRunnerUnsupported"]
     );
+    assert_eq!(report["inlineRunnerStripped"], 42);
     assert_eq!(report["entryRunner"], 42);
     assert_eq!(report["boundaryRunner"], 42);
     assert_eq!(
@@ -139,5 +140,13 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["transformedModule"], 1);
     assert_eq!(report["executionEntry"], 1);
     assert_eq!(report["executionInline"], 1);
+    assert_eq!(report["executionBoundary"], 1);
+    assert!(
+        report["boundaryTransformMs"]
+            .as_u64()
+            .is_some_and(|elapsed| elapsed < 750),
+        "256 KiB transform-mode inline execution took too long: {} ms",
+        report["boundaryTransformMs"]
+    );
     Ok(())
 }

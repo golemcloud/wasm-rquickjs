@@ -25,10 +25,24 @@ export async function run() {
         language: 'typescript',
         source: 'enum Direction { Up, Down } return Direction.Down;',
     });
+    const boundaryPrefix = 'enum Direction { Up, Down } return Direction.Down;/*';
+    const boundarySuffix = '*/';
+    const boundarySource = boundaryPrefix +
+        'x'.repeat(256 * 1024 - boundaryPrefix.length - boundarySuffix.length) +
+        boundarySuffix;
+    const boundaryStartedAt = Date.now();
+    const executionBoundary = await runJavaScript({
+        language: 'typescript',
+        source: boundarySource,
+        timeoutMs: 2000,
+    });
+    const boundaryTransformMs = Date.now() - boundaryStartedAt;
     return JSON.stringify({
         processFeature: process.features.typescript,
         transformedModule,
         executionEntry: executionEntry.value,
         executionInline: executionInline.value,
+        executionBoundary: executionBoundary.value,
+        boundaryTransformMs,
     });
 }
