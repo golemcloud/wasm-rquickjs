@@ -14,7 +14,7 @@ use rquickjs::{
     IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -24,7 +24,9 @@ use wit_bindgen_p3::rt::async_support::{
     FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
 };
 
-use super::module_loading::initialize_module_loading;
+use super::runtime_services::{
+    OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
+};
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
@@ -47,10 +49,6 @@ pub struct JsState {
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
-    pub abort_handles: RefCell<HashMap<usize, AbortHandle>>,
-    pub last_abort_id: AtomicUsize,
-    pub unrefed_timers: RefCell<HashSet<usize>>,
-    pub node_package_deprecation_warnings: RefCell<HashSet<String>>,
     /// Monotonic id allocator for exported resource instances (starts at 1; 0 is never used).
     pub last_resource_id: AtomicUsize,
     /// Ids of exported resource instances whose host handle has been dropped. Populated
@@ -74,39 +72,13 @@ impl JsState {
     /// Create the runtime, context, resolvers and loaders. Does NOT evaluate any
     /// JavaScript, so it is safe to publish to `STATE` before `finish_init`.
     async fn new_base() -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
-        // Raise the GC threshold to reduce the chance of triggering a QuickJS-ng
-        // shape refcount bug during heavy async/promise workloads.
-        rt.set_gc_threshold(256 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
-
-        initialize_module_loading(&rt, &ctx).await;
-
-        // `process.js` publishes `__wasm_rquickjs_rejection_tracker` to surface unhandled
-        // promise rejections as `process` events. Mirrors the Preview 2 path.
-        rt.set_host_promise_rejection_tracker(Some(Box::new(
-            |ctx, promise, reason, is_handled| {
-                if let Ok(handler) = ctx
-                    .globals()
-                    .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
-                {
-                    let _ = handler.call::<_, Value>((promise, reason, is_handled));
-                }
-            },
-        )))
-        .await;
+        let OwnedJsRuntime { rt, ctx } = OwnedJsRuntime::new().await;
 
         Self {
             rt,
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
             variant_case_tag_cache: RefCell::new(HashMap::new()),
-            abort_handles: RefCell::new(HashMap::new()),
-            last_abort_id: AtomicUsize::new(0),
-            unrefed_timers: RefCell::new(HashSet::new()),
-            node_package_deprecation_warnings: RefCell::new(HashSet::new()),
             last_resource_id: AtomicUsize::new(1),
             pending_resource_drops: RefCell::new(Vec::new()),
             export_result_writer_group: RefCell::new(None),
@@ -117,29 +89,10 @@ impl JsState {
     /// Must run before user module code so bundled CJS-in-ESM shims see
     /// `globalThis.require`, `Buffer`, `process`, timers, and related globals.
     async fn init_engine(&self) {
+        initialize_dispose_symbols(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
         async_with!(self.ctx => |ctx| {
-            // Resource classes generated for imported WIT resources wire `[Symbol.dispose]` onto
-            // their prototype via the global `DISPOSE_SYMBOL`, so it must be defined before the
-            // user module (which triggers resource-class registration) is imported.
-            Module::evaluate(
-                ctx.clone(),
-                "dispose",
-                format!(
-                    r#"
-                    const dispose = Symbol.for("dispose");
-                    globalThis.{DISPOSE_SYMBOL} = dispose;
-                    Symbol.dispose = dispose;
-                    const asyncDispose = Symbol.for("asyncDispose");
-                    Symbol.asyncDispose = asyncDispose;
-                    "#
-                ),
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate dispose module initialization:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish dispose module initialization:\n{}", format_caught_error(e)));
-
             // Table holding live exported resource instances (see `RESOURCE_TABLE_NAME`). Must exist
             // before any exported resource is constructed or any resource handle is lowered to JS.
             ctx.globals()
@@ -203,19 +156,11 @@ impl JsState {
             .catch(&ctx)
             .unwrap_or_else(|e| panic!("Failed to finish async-value helpers:\n{}", format_caught_error(e)));
 
-            let wiring = crate::builtin::wire_builtins();
-            Module::evaluate(
-                ctx.clone(),
-                "__wasm_rquickjs_init_wiring",
-                wiring,
-            )
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate built-in wiring:\n{}", format_caught_error(e)))
-            .finish::<()>()
-            .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish built-in wiring:\n{}", format_caught_error(e)));
         })
         .await;
+        initialize_builtin_wiring(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
         // `idle()` from ever returning. Mirrors the Preview 2 init path.
@@ -577,21 +522,6 @@ fn spawn_drive_guard(rt: &AsyncRuntime) -> DriveGuard {
     DriveGuard(handle)
 }
 
-/// Aborts every currently-unref'd timer so a pending [`AsyncRuntime::idle`] can return. Mirrors the
-/// Preview 2 helper of the same name in `internal/p2.rs`: the immutable count borrows taken by the
-/// caller are dropped before this runs, so taking the mutable borrows here is safe.
-fn abort_unrefed_timers(js_state: &JsState) {
-    let unrefed = js_state.unrefed_timers.borrow().clone();
-    let mut abort_handles = js_state.abort_handles.borrow_mut();
-    let mut unrefed_mut = js_state.unrefed_timers.borrow_mut();
-    for id in unrefed.iter() {
-        if let Some(handle) = abort_handles.remove(id) {
-            handle.abort();
-        }
-        unrefed_mut.remove(id);
-    }
-}
-
 /// Drains the JavaScript event loop before an exported call returns.
 ///
 /// After the export produces its result (a direct value or an awaited Promise) the P3 wrapper would
@@ -607,7 +537,16 @@ fn abort_unrefed_timers(js_state: &JsState) {
 /// scheduler task started by the parked JS promise (`future<T>`/`stream<T>` writers) keeps being
 /// polled too.
 async fn drain_and_idle(js_state: &JsState) {
-    if js_state.unrefed_timers.borrow().is_empty() {
+    let has_unrefed_timers = async_with!(js_state.ctx => |ctx| {
+        !ctx.userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .timers
+            .unrefed_timers
+            .borrow()
+            .is_empty()
+    })
+    .await;
+    if !has_unrefed_timers {
         js_state.rt.idle().await;
         return;
     }
@@ -615,16 +554,19 @@ async fn drain_and_idle(js_state: &JsState) {
     // can return. The sentinel is itself a spawned job (not tracked in `abort_handles`), so it does
     // not perturb the `abort_count == unref_count` comparison below.
     async_with!(js_state.ctx => |ctx| {
-        ctx.spawn(async {
+        let task_ctx = ctx.clone();
+        ctx.spawn(async move {
             loop {
                 // 1ms poll interval (`wait_for` takes nanoseconds).
                 wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
-                let state = get_js_state();
-                let abort_count = state.abort_handles.borrow().len();
-                let unref_count = state.unrefed_timers.borrow().len();
+                let services = task_ctx
+                    .userdata::<RuntimeServices>()
+                    .expect("runtime services not initialized");
+                let abort_count = services.timers.abort_handles.borrow().len();
+                let unref_count = services.timers.unrefed_timers.borrow().len();
                 // Once the only remaining timers are unref'd, abort them so the loop can drain.
                 if abort_count > 0 && abort_count == unref_count {
-                    abort_unrefed_timers(state);
+                    services.timers.abort_unrefed();
                     break;
                 }
                 if unref_count == 0 {
@@ -877,14 +819,14 @@ pub async fn wizer_initialize() {
     .await;
     drain_and_idle(state).await;
 
-    assert!(
-        state.abort_handles.borrow().is_empty(),
-        "pending timers/tasks at snapshot time"
-    );
-    assert!(
-        state.unrefed_timers.borrow().is_empty(),
-        "unrefed timers still tracked at snapshot time"
-    );
+    let timers_empty = async_with!(state.ctx => |ctx| {
+        ctx.userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .timers
+            .is_empty()
+    })
+    .await;
+    assert!(timers_empty, "pending timers/tasks at snapshot time");
 
     unsafe {
         INIT = InitState::WizerPreInitialized;

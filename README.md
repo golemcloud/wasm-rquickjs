@@ -630,6 +630,42 @@ Compatibility stubs — HTTP/2 is not supported.
 </details>
 
 <details>
+<summary><strong><code>wasm-rquickjs:execution</code></strong></summary>
+
+Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(options)` returns live
+`stdout`/`stderr` readable streams, a structured-clone `result` promise, and `cancel()`;
+`runJavaScript(options)` returns bounded captured output with the structured result. Options accept
+exactly one of `entry` or inline `source`, plus `cwd`, `argv`, `env`, `timeoutMs`, `maxBytes`
+(1 MiB per stream by default, 64 MiB maximum), and `overflow` (`terminate` by default or
+`truncate`). Output and completion wake the parent without periodic polling. CPU deadlines start
+after child-runtime initialization and are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
+`default` function (or `run` function when there is no default function) is invoked and awaited.
+Relative entry paths and imports resolve from `cwd`. Inline `source` is an async function body:
+top-level `await` and `return` are supported, while static `import`/`export` declarations are not.
+`env` defaults to an empty environment. When `argv` is omitted, entry jobs receive
+`["wasm-rquickjs-execution", resolvedEntryPath]` and inline jobs receive
+`["wasm-rquickjs-execution"]`.
+Cancellation is cooperative for queued or yielding code and cannot preempt a tight loop already
+running on the same thread; use a positive `timeoutMs` when that guarantee is required. A job that
+never settles must be cancelled or given a timeout before the enclosing component invocation can
+finish. A runtime accepts at
+most eight active jobs, and child executions cannot recursively create more execution jobs.
+Fresh-runtime execution means fresh JavaScript globals, process state, timers, module caches, and
+other mutable QuickJS runtime state. Results cross the runtime boundary through structured clone.
+It is not a security sandbox: execution code inherits the component's filesystem, network, clocks,
+randomness, and other available host capabilities, and `cwd` is only a resolution base—not a
+filesystem boundary. Failed jobs are
+currently returned as parent-realm `Error` messages rather than structured-cloned thrown values.
+
+This API is distinct from `node:vm`. The `node:vm` module provides synchronous Node-compatible
+contexts within one QuickJS runtime, including live-object behavior required by its API.
+`wasm-rquickjs:execution` provides asynchronous jobs in fresh runtimes with structured-clone
+results. Neither API is a security sandbox, and both share the enclosing component's capabilities
+and filesystem access.
+
+</details>
+
+<details>
 <summary><strong><code>node:inspector</code></strong> (stub)</summary>
 
 Compatibility stubs — no V8 inspector in WASM.
@@ -849,6 +885,10 @@ Partial compatibility API to unblock modules that inspect tracing state.
 - `runInNewContext`, `runInContext`, `runInThisContext`, `createContext`, `isContext`, `compileFunction`
 - `Script`, `createScript`
 - `SourceTextModule` (experimental, limited `export const`/`export let`/`export var` support)
+
+These contexts are synchronous compatibility contexts within one QuickJS runtime. For asynchronous
+jobs in fresh runtimes with structured-clone results, use `wasm-rquickjs:execution`. Neither API is
+a security sandbox; both share the enclosing component's capabilities and filesystem access.
 
 </details>
 

@@ -5,6 +5,7 @@ use quote::ToTokens;
 
 const MODULE_JS: &str = include_str!("../../skeleton/src/builtin/module.js");
 const MODULE_LOADING_RS: &str = include_str!("../../skeleton/src/internal/module_loading.rs");
+const RUNTIME_SERVICES_RS: &str = include_str!("../../skeleton/src/internal/runtime_services.rs");
 const P2_RS: &str = include_str!("../../skeleton/src/internal/p2.rs");
 const P3_RS: &str = include_str!("../../skeleton/src/internal/p3.rs");
 
@@ -656,10 +657,14 @@ fn module_loader_architecture() {
     }
     for (target, source) in [("p2", P2_RS), ("p3", P3_RS)] {
         assert!(
-            rust_identifiers(source).contains("initialize_module_loading"),
-            "{target} must use the shared module loader initialization"
+            rust_identifiers(source).contains("OwnedJsRuntime"),
+            "{target} must construct the shared owned runtime"
         );
     }
+    assert!(
+        rust_identifiers(RUNTIME_SERVICES_RS).contains("initialize_module_loading"),
+        "OwnedJsRuntime must use the shared module loader initialization"
+    );
     for forbidden in ["wasip2", "wstd"] {
         assert!(
             !rust_identifiers(P3_RS).contains(forbidden),

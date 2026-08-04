@@ -25,6 +25,7 @@ compile_error!(
 );
 
 pub(crate) mod module_loading;
+pub(crate) mod runtime_services;
 pub(crate) use module_loading::{
     mark_node_package_deprecation_warning_seen, node_package_deprecation_warning_seen,
 };

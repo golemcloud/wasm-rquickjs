@@ -57,6 +57,8 @@ mod dns;
 mod domain;
 #[path = "builtin/encoding.rs"]
 mod encoding;
+#[path = "builtin/execution.rs"]
+pub(crate) mod execution;
 #[path = "builtin/events.rs"]
 mod events;
 #[path = "builtin/formdata_node.rs"]
@@ -171,8 +173,18 @@ mod zlib {
 #[path = "builtin/websocket.rs"]
 mod websocket;
 
-pub(crate) fn realpath_for_module_resolution(path: &str) -> Option<String> {
-    fs::realpath_for_module_resolution(path)
+pub(crate) fn realpath_for_module_resolution(
+    ctx: &rquickjs::Ctx<'_>,
+    path: &str,
+) -> Option<String> {
+    fs::realpath_for_module_resolution(ctx, path)
+}
+
+pub(crate) fn realpath_for_module_resolution_with_symlinks(
+    emulated_symlinks: &std::collections::HashMap<String, String>,
+    path: &str,
+) -> Option<String> {
+    fs::realpath_for_module_resolution_with_symlinks(emulated_symlinks, path)
 }
 
 /// Registers builtin native and JavaScript module names with the resolver.
@@ -330,6 +342,10 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/sqlite_native")
         .with_module("node:sqlite");
 
+    let resolver = resolver
+        .with_module("__wasm_rquickjs_builtin/execution_native")
+        .with_module("wasm-rquickjs:execution");
+
     #[cfg(feature = "golem")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
@@ -414,6 +430,11 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/sqlite_native",
             sqlite::js_native_module,
         );
+
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/execution_native",
+        execution::js_native_module,
+    );
 
     #[cfg(feature = "golem")]
     let native_loader = native_loader.with_module(
@@ -574,6 +595,9 @@ pub fn module_loader() -> (
         .with_module("node:zlib", zlib::ZLIB_JS)
         .with_module("zlib", zlib::REEXPORT_JS)
         .with_module("node:sqlite", sqlite::SQLITE_JS);
+
+    let builtin_loader =
+        builtin_loader.with_module("wasm-rquickjs:execution", execution::EXECUTION_JS);
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

@@ -8555,13 +8555,17 @@ export const testRequireEsmRejectionTracking = async () => {
             'export const value = 1;',
         ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/throw-with-unhandled.mjs', [
-            'Promise.reject(new Error("side rejection"));',
+            'globalThis.__requireEsmSidePromise = Promise.reject(new Error("side rejection"));',
             'throw new Error("module failure");',
         ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/shared-reason.mjs', [
             'const shared = new Error("shared reason");',
             'Promise.reject(shared);',
             'throw shared;',
+        ].join('\n'));
+        fs.writeFileSync('/require-esm-rejection-app/nan-reason.mjs', [
+            'globalThis.__requireEsmNaNPromise = Promise.reject(NaN);',
+            'throw NaN;',
         ].join('\n'));
         fs.writeFileSync('/require-esm-rejection-app/saved-reason.mjs', [
             'throw globalThis.__requireEsmSavedReason;',
@@ -8593,7 +8597,10 @@ export const testRequireEsmRejectionTracking = async () => {
         }
 
         const unhandled = [];
-        const onUnhandled = (reason) => unhandled.push(reason && reason.message);
+        const onUnhandled = (reason, promise) => unhandled.push({
+            reason: reason && reason.message,
+            promise,
+        });
         process.on('unhandledRejection', onUnhandled);
         try {
             globalThis.__requireEsmPreexistingReason = new Error('preexisting reason');
@@ -8604,15 +8611,37 @@ export const testRequireEsmRejectionTracking = async () => {
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
-            assert.throws(() => require('/require-esm-rejection-app/throw-with-unhandled.mjs'), {
-                message: 'module failure',
+            const originalLastIndexOf = Object.getOwnPropertyDescriptor(Array.prototype, 'lastIndexOf');
+            Object.defineProperty(Array.prototype, 'lastIndexOf', {
+                configurable: true,
+                value() {
+                    throw new Error('poisoned Array.prototype.lastIndexOf');
+                },
             });
+            try {
+                assert.throws(() => require('/require-esm-rejection-app/throw-with-unhandled.mjs'), {
+                    message: 'module failure',
+                });
+            } finally {
+                Object.defineProperty(Array.prototype, 'lastIndexOf', originalLastIndexOf);
+            }
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
             assert.throws(() => require('/require-esm-rejection-app/shared-reason.mjs'), {
                 message: 'shared reason',
             });
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            let nanThrown = false;
+            try {
+                require('/require-esm-rejection-app/nan-reason.mjs');
+            } catch (error) {
+                nanThrown = true;
+                assert.strictEqual(Object.is(error, NaN), true);
+            }
+            assert.strictEqual(nanThrown, true);
             await Promise.resolve();
             await Promise.resolve();
             await Promise.resolve();
@@ -8635,13 +8664,16 @@ export const testRequireEsmRejectionTracking = async () => {
         } finally {
             process.removeListener('unhandledRejection', onUnhandled);
         }
-        assert.deepStrictEqual(unhandled, [
+        assert.deepStrictEqual(unhandled.map(({ reason }) => reason), [
             'preexisting reason',
             'side rejection',
             'shared reason',
+            NaN,
             'queued shared reason',
             'saved reason',
         ]);
+        assert.strictEqual(unhandled[1].promise, globalThis.__requireEsmSidePromise);
+        assert.strictEqual(unhandled[3].promise, globalThis.__requireEsmNaNPromise);
 
         return true;
     } catch (error) {

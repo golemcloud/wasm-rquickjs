@@ -234,7 +234,7 @@ fn require_esm_impl<'js>(
                 ignore_unhandled_rejection(&ctx, eval_value.clone());
                 let _ = promise.result::<Value<'js>>();
                 let rejected = ctx.catch();
-                ignore_require_esm_rejection(&ctx, eval_value, rejection_scope);
+                ignore_require_esm_rejection(&ctx, eval_value, rejected.clone(), rejection_scope);
                 leave_require_esm(&globals, filename, &file_url)?;
                 return Err(ctx.throw(rejected));
             }
@@ -297,12 +297,17 @@ fn end_require_esm_rejection_scope(ctx: &rquickjs::Ctx<'_>, scope: i64) {
     }
 }
 
-fn ignore_require_esm_rejection<'js>(ctx: &rquickjs::Ctx<'js>, promise: Value<'js>, scope: i64) {
+fn ignore_require_esm_rejection<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    promise: Value<'js>,
+    reason: Value<'js>,
+    scope: i64,
+) {
     if let Ok(handler) = ctx
         .globals()
         .get::<_, rquickjs::Function>("__wasm_rquickjs_ignore_require_esm_rejection")
     {
-        let _ = handler.call::<_, ()>((promise, scope));
+        let _ = handler.call::<_, ()>((promise, reason, scope));
     }
 }
 

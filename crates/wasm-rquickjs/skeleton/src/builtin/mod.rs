@@ -15,6 +15,7 @@ mod diagnostics_channel;
 mod dns;
 mod domain;
 mod encoding;
+pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
@@ -107,8 +108,18 @@ mod sqlite {
     pub use super::sqlite_disabled::*;
 }
 
-pub(crate) fn realpath_for_module_resolution(path: &str) -> Option<String> {
-    fs::realpath_for_module_resolution(path)
+pub(crate) fn realpath_for_module_resolution(
+    ctx: &rquickjs::Ctx<'_>,
+    path: &str,
+) -> Option<String> {
+    fs::realpath_for_module_resolution(ctx, path)
+}
+
+pub(crate) fn realpath_for_module_resolution_with_symlinks(
+    emulated_symlinks: &std::collections::HashMap<String, String>,
+    path: &str,
+) -> Option<String> {
+    fs::realpath_for_module_resolution_with_symlinks(emulated_symlinks, path)
 }
 
 pub fn add_module_resolvers(
@@ -265,6 +276,10 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/sqlite_native")
         .with_module("node:sqlite");
 
+    let resolver = resolver
+        .with_module("__wasm_rquickjs_builtin/execution_native")
+        .with_module("wasm-rquickjs:execution");
+
     #[cfg(feature = "golem")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
@@ -347,6 +362,11 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/string_decoder_native",
             string_decoder::js_native_module,
         );
+
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/execution_native",
+        execution::js_native_module,
+    );
 
     #[cfg(feature = "golem")]
     let native_loader = native_loader.with_module(
@@ -507,6 +527,9 @@ pub fn module_loader() -> (
         .with_module("node:zlib", zlib::ZLIB_JS)
         .with_module("zlib", zlib::REEXPORT_JS)
         .with_module("node:sqlite", sqlite::SQLITE_JS);
+
+    let builtin_loader =
+        builtin_loader.with_module("wasm-rquickjs:execution", execution::EXECUTION_JS);
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(
