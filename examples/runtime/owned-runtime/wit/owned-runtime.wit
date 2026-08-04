@@ -1,5 +1,0 @@
-package quickjs:owned-runtime;
-
-world owned-runtime {
-  export run: func() -> string;
-}

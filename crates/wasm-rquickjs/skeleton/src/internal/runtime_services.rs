@@ -1,6 +1,4 @@
 use futures::future::AbortHandle;
-#[cfg(feature = "internal-test-code-runner")]
-use rquickjs::Promise;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
 };
@@ -23,9 +21,9 @@ pub(crate) struct RuntimeServices {
     pub(crate) process: ProcessServices,
     pub(crate) fs: RefCell<FsServices>,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
-    pub(crate) runner_jobs: RefCell<HashMap<usize, Rc<crate::builtin::code_runner::RunnerJob>>>,
-    pub(crate) next_runner_job_id: Cell<usize>,
-    pub(crate) runner_enabled: Cell<bool>,
+    pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
+    pub(crate) next_execution_job_id: Cell<usize>,
+    pub(crate) execution_enabled: Cell<bool>,
 }
 
 impl Default for RuntimeServices {
@@ -37,9 +35,9 @@ impl Default for RuntimeServices {
             process: ProcessServices::default(),
             fs: RefCell::new(FsServices::default()),
             output: RefCell::new(Rc::new(ComponentOutputSink)),
-            runner_jobs: RefCell::default(),
-            next_runner_job_id: Cell::new(1),
-            runner_enabled: Cell::new(true),
+            execution_jobs: RefCell::default(),
+            next_execution_job_id: Cell::new(1),
+            execution_enabled: Cell::new(true),
         }
     }
 }
@@ -97,7 +95,7 @@ impl ProcessServices {
         if !cwd.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "runner cwd is not a directory",
+                "process cwd is not a directory",
             ));
         }
         *self.isolated.borrow_mut() = Some(IsolatedProcessState { argv, env, cwd });
@@ -216,37 +214,6 @@ impl RuntimeOutputSink for ComponentOutputSink {
     }
 }
 
-#[cfg(feature = "internal-test-code-runner")]
-#[derive(Default)]
-#[allow(dead_code)]
-struct BufferOutputSink {
-    stdout: RefCell<String>,
-    stderr: RefCell<String>,
-}
-
-#[cfg(feature = "internal-test-code-runner")]
-#[allow(dead_code)]
-impl BufferOutputSink {
-    fn stdout(&self) -> String {
-        self.stdout.borrow().clone()
-    }
-
-    fn stderr(&self) -> String {
-        self.stderr.borrow().clone()
-    }
-}
-
-#[cfg(feature = "internal-test-code-runner")]
-impl RuntimeOutputSink for BufferOutputSink {
-    fn write_stdout(&self, data: &str) {
-        self.stdout.borrow_mut().push_str(data);
-    }
-
-    fn write_stderr(&self, data: &str) {
-        self.stderr.borrow_mut().push_str(data);
-    }
-}
-
 impl RuntimeServices {
     pub(crate) fn output_sink(&self) -> Rc<dyn RuntimeOutputSink> {
         self.output.borrow().clone()
@@ -261,7 +228,7 @@ impl RuntimeServices {
 ///
 /// It deliberately does not initialize component resource bridges, builtin JS
 /// wiring, or the generated component user module. Those are explicit policies
-/// layered on top by the main component runtime and by future runner jobs.
+/// layered on top by the main component runtime and by future execution jobs.
 pub(crate) struct OwnedJsRuntime {
     pub(crate) rt: AsyncRuntime,
     pub(crate) ctx: AsyncContext,
@@ -333,247 +300,15 @@ impl OwnedJsRuntime {
         .await;
     }
 
-    pub(crate) async fn disable_runner(&self) {
+    pub(crate) async fn disable_execution(&self) {
         async_with!(self.ctx => |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
-                .runner_enabled
+                .execution_enabled
                 .set(false);
         })
         .await;
     }
-}
-
-/// Temporary integration probe used while the public runner lifecycle is built.
-/// Its native bridge and fixture are removed once runner tests cover these same
-/// cross-runtime invariants.
-#[cfg(feature = "internal-test-code-runner")]
-#[allow(dead_code)]
-pub(crate) async fn owned_runtime_isolation_probe() -> Result<String, String> {
-    let left_cwd = PathBuf::from("/tmp/wasm-rquickjs-owned-left");
-    let right_cwd = PathBuf::from("/tmp/wasm-rquickjs-owned-right");
-    prepare_owned_runtime_probe_dir(&left_cwd, "left")?;
-    prepare_owned_runtime_probe_dir(&right_cwd, "right")?;
-
-    let active = Rc::new(Cell::new(0));
-    let peak_active = Rc::new(Cell::new(0));
-    let left = run_owned_runtime_probe(
-        "left",
-        8,
-        left_cwd.clone(),
-        active.clone(),
-        peak_active.clone(),
-    );
-    let right = run_owned_runtime_probe(
-        "right",
-        1,
-        right_cwd.clone(),
-        active.clone(),
-        peak_active.clone(),
-    );
-    let (left, right) = futures::future::join(left, right).await;
-    let left = left?;
-    let right = right?;
-    let report = serde_json::to_string(&serde_json::json!({
-        "left": left,
-        "right": right,
-        "peakActive": peak_active.get(),
-    }))
-    .map_err(|error| error.to_string())?;
-    std::fs::remove_dir_all(&left_cwd).map_err(|error| error.to_string())?;
-    std::fs::remove_dir_all(&right_cwd).map_err(|error| error.to_string())?;
-    Ok(report)
-}
-
-#[cfg(feature = "internal-test-code-runner")]
-#[allow(dead_code)]
-fn prepare_owned_runtime_probe_dir(cwd: &Path, label: &str) -> Result<(), String> {
-    if cwd.exists() {
-        std::fs::remove_dir_all(cwd).map_err(|error| error.to_string())?;
-    }
-    std::fs::create_dir_all(cwd).map_err(|error| error.to_string())?;
-    std::fs::write(cwd.join("local.mjs"), format!("export default {label:?};"))
-        .map_err(|error| error.to_string())
-}
-
-#[cfg(feature = "internal-test-code-runner")]
-#[allow(dead_code)]
-async fn run_owned_runtime_probe(
-    label: &str,
-    delay_ms: u32,
-    cwd: PathBuf,
-    active: Rc<Cell<usize>>,
-    peak_active: Rc<Cell<usize>>,
-) -> Result<serde_json::Value, String> {
-    struct ActiveGuard(Rc<Cell<usize>>);
-
-    impl Drop for ActiveGuard {
-        fn drop(&mut self) {
-            self.0.set(self.0.get() - 1);
-        }
-    }
-
-    let runtime = OwnedJsRuntime::new().await;
-    let output = Rc::new(BufferOutputSink::default());
-    runtime
-        .configure_process(
-            vec!["node".to_string(), format!("/{label}.mjs")],
-            HashMap::from([("RUNNER_LABEL".to_string(), label.to_string())]),
-            cwd.clone(),
-        )
-        .await?;
-    runtime.set_output_sink(output.clone()).await;
-    runtime.initialize_node_builtins().await?;
-
-    active.set(active.get() + 1);
-    peak_active.set(peak_active.get().max(active.get()));
-    let _active_guard = ActiveGuard(active);
-
-    let label_json = serde_json::to_string(label).map_err(|error| error.to_string())?;
-    let module_name = cwd.join("entry.mjs").to_string_lossy().into_owned();
-    let source = format!(
-        r#"
-        import fs from 'node:fs';
-        import fsp from 'node:fs/promises';
-        globalThis.__ownedRuntimeProbe = (async () => {{
-            let probeStage = 'process-state';
-            try {{
-            process.env.RUNTIME_MUTATION = {label_json} + ':mutated';
-            probeStage = 'write-data';
-            fs.writeFileSync('./data.txt', {label_json});
-            const syncFile = fs.readFileSync('./data.txt', 'utf8');
-            const asyncFile = await fsp.readFile('./data.txt', 'utf8');
-            probeStage = 'open-fds';
-            const fd = fs.openSync('./data.txt', 'r');
-            const secondFd = {label_json} === 'left' ? fs.openSync('./data.txt', 'r') : null;
-            let foreignFdError = null;
-            if ({label_json} === 'right') {{
-                try {{ fs.fstatSync(14); }} catch (error) {{ foreignFdError = error.code; }}
-            }}
-            probeStage = 'mode';
-            fs.chmodSync('./data.txt', {label_json} === 'left' ? 0o600 : 0o640);
-            const mode = fs.statSync('./data.txt').mode & 0o7777;
-            probeStage = 'file-symlink';
-            fs.writeFileSync('./target.txt', {label_json} + ':target');
-            fs.symlinkSync('./target.txt', './link.txt');
-            const linkTarget = fs.readlinkSync('./link.txt');
-            const linkValue = fs.readFileSync('./link.txt', 'utf8');
-            probeStage = 'link-parent';
-            fs.mkdirSync('./real/sub', {{ recursive: true }});
-            fs.writeFileSync('./real/sibling.txt', {label_json} + ':sibling');
-            fs.symlinkSync('./real/sub', './dir-link');
-            const linkParentValue = fs.readFileSync('./dir-link/../sibling.txt', 'utf8');
-            fs.closeSync(fd);
-            if (secondFd !== null) fs.closeSync(secondFd);
-            probeStage = 'symlinked-modules';
-            process.execArgv.push('--preserve-symlinks');
-            fs.mkdirSync('./node_modules/real-pkg', {{ recursive: true }});
-            fs.writeFileSync('./node_modules/real-pkg/package.json', JSON.stringify({{
-                name: 'linked-pkg',
-                type: 'module',
-                exports: './index.mjs',
-            }}));
-            fs.writeFileSync('./node_modules/real-pkg/index.mjs',
-                'export default "' + {label_json} + ':package";');
-            fs.symlinkSync('./real-pkg', './node_modules/linked-pkg');
-            fs.writeFileSync('./esm-target.mjs',
-                'export default "' + {label_json} + ':esm";');
-            fs.symlinkSync('./esm-target.mjs', './esm-link.mjs');
-            fs.writeFileSync('./json-target.json', JSON.stringify({{ value: {label_json} + ':json' }}));
-            fs.symlinkSync('./json-target.json', './json-link.json');
-            fs.writeFileSync('./json-consumer.mjs',
-                'import value from "./json-link.json" with {{ type: "json" }}; export default value;');
-            fs.mkdirSync('./cjs-physical', {{ recursive: true }});
-            fs.mkdirSync('./cjs-logical', {{ recursive: true }});
-            fs.writeFileSync('./cjs-physical/dep.cjs',
-                'exports.physicalOnly = "wrong";');
-            fs.writeFileSync('./cjs-logical/dep.cjs',
-                'exports.reexported = "' + {label_json} + ':cjs";');
-            fs.writeFileSync('./cjs-physical/target.cjs',
-                'module.exports = require("./dep.cjs");');
-            fs.symlinkSync('../cjs-physical/target.cjs', './cjs-logical/link.cjs');
-            const packageModule = await import('linked-pkg');
-            const esmModule = await import('./esm-link.mjs');
-            const jsonModule = await import('./json-consumer.mjs');
-            const cjsModule = await import('./cjs-logical/link.cjs');
-            probeStage = 'relative-import';
-            const relativeModule = await import('./local.mjs');
-            console.log({label_json} + ':start');
-            process.stderr.write({label_json} + ':stderr\n');
-            return await new Promise((resolve) => {{
-                const timer = setTimeout(() => {{
-                    console.log({label_json} + ':end');
-                    resolve(JSON.stringify({{
-                    label: process.env.RUNNER_LABEL,
-                    mutation: process.env.RUNTIME_MUTATION,
-                    argv: process.argv,
-                    cwd: process.cwd(),
-                    timerId: Number(timer),
-                    syncFile,
-                    asyncFile,
-                    fd,
-                    secondFd,
-                    foreignFdError,
-                    mode,
-                    linkTarget,
-                    linkValue,
-                    linkParentValue,
-                    packageValue: packageModule.default,
-                    esmValue: esmModule.default,
-                    jsonValue: jsonModule.default.value,
-                    cjsReexportValue: cjsModule.reexported,
-                    relativeModule: relativeModule.default,
-                    }}));
-                }}, {delay_ms});
-            }});
-            }} catch (error) {{
-                return JSON.stringify({{
-                    probeError: {{
-                        stage: probeStage,
-                        name: error?.name ?? null,
-                        code: error?.code ?? null,
-                        message: error?.message ?? String(error),
-                        stack: error?.stack ?? null,
-                    }},
-                }});
-            }}
-        }})();
-        "#
-    );
-
-    let result = async_with!(runtime.ctx => |ctx| {
-        Module::evaluate(ctx.clone(), module_name, source)
-            .catch(&ctx)
-            .map_err(|error| super::format_caught_error(error))?
-            .finish::<()>()
-            .catch(&ctx)
-            .map_err(|error| super::format_caught_error(error))?;
-        let promise: Promise = ctx
-            .globals()
-            .get("__ownedRuntimeProbe")
-            .map_err(|error| format!("probe promise unavailable: {error:?}"))?;
-        promise
-            .into_future::<String>()
-            .await
-            .map_err(|error| format!("probe promise failed: {error:?}"))
-    })
-    .await
-    .map_err(|error| {
-        format!(
-            "{error}; captured stdout: {:?}; captured stderr: {:?}",
-            output.stdout(),
-            output.stderr()
-        )
-    })?;
-    runtime.rt.idle().await;
-
-    let value: serde_json::Value =
-        serde_json::from_str(&result).map_err(|error| error.to_string())?;
-    Ok(serde_json::json!({
-        "value": value,
-        "stdout": output.stdout(),
-        "stderr": output.stderr(),
-    }))
 }
 
 pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(), String> {

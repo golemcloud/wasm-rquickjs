@@ -1,3 +1,3 @@
-declare module 'owned-runtime' {
+declare module 'execution' {
   export function run(): Promise<string>;
 }

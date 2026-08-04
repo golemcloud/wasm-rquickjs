@@ -18,11 +18,11 @@ const MAX_ACTIVE_JOBS: usize = 8;
 const MAX_TIMEOUT_MS: u64 = u64::MAX / 1_000_000;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 
-pub const CODE_RUNNER_JS: &str = include_str!("code_runner.js");
+pub const EXECUTION_JS: &str = include_str!("execution.js");
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RunnerOptions {
+struct ExecutionOptions {
     entry: Option<String>,
     source: Option<String>,
     cwd: String,
@@ -41,8 +41,8 @@ enum OverflowPolicy {
     Truncate,
 }
 
-pub(crate) struct RunnerJob {
-    options: RefCell<Option<RunnerOptions>>,
+pub(crate) struct ExecutionJob {
+    options: RefCell<Option<ExecutionOptions>>,
     stdout: RefCell<VecDeque<String>>,
     stderr: RefCell<VecDeque<String>>,
     stdout_bytes: Cell<usize>,
@@ -58,8 +58,8 @@ pub(crate) struct RunnerJob {
     control_waker: AtomicWaker,
 }
 
-impl RunnerJob {
-    fn new(options: RunnerOptions) -> Self {
+impl ExecutionJob {
+    fn new(options: ExecutionOptions) -> Self {
         Self {
             max_bytes: options.max_bytes,
             overflow: options.overflow,
@@ -122,7 +122,7 @@ impl RunnerJob {
     }
 }
 
-impl RuntimeOutputSink for RunnerJob {
+impl RuntimeOutputSink for ExecutionJob {
     fn write_stdout(&self, data: &str) {
         self.push(true, data);
     }
@@ -150,7 +150,7 @@ pub mod native_module {
     pub fn create_job(ctx: Ctx<'_>, options_json: String) -> rquickjs::Result<usize> {
         // The public JS wrapper owns option validation and defaults. These
         // checks defend the private native protocol against direct callers.
-        let options: RunnerOptions = serde_json::from_str(&options_json)
+        let options: ExecutionOptions = serde_json::from_str(&options_json)
             .map_err(|error| rquickjs::Exception::throw_type(&ctx, &error.to_string()))?;
         if options.entry.is_some() == options.source.is_some() {
             return Err(rquickjs::Exception::throw_type(
@@ -179,22 +179,22 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        if !services.runner_enabled.get() {
+        if !services.execution_enabled.get() {
             return Err(rquickjs::Exception::throw_message(
                 &ctx,
-                "nested code-runner jobs are not supported",
+                "nested execution jobs are not supported",
             ));
         }
-        if services.runner_jobs.borrow().len() >= MAX_ACTIVE_JOBS {
+        if services.execution_jobs.borrow().len() >= MAX_ACTIVE_JOBS {
             return Err(rquickjs::Exception::throw_range(
                 &ctx,
-                &format!("code-runner supports at most {MAX_ACTIVE_JOBS} active jobs per runtime"),
+                &format!("execution supports at most {MAX_ACTIVE_JOBS} active jobs per runtime"),
             ));
         }
-        let id = services.next_runner_job_id.get();
-        services.next_runner_job_id.set(id.wrapping_add(1));
-        let job = Rc::new(RunnerJob::new(options));
-        services.runner_jobs.borrow_mut().insert(id, job.clone());
+        let id = services.next_execution_job_id.get();
+        services.next_execution_job_id.set(id.wrapping_add(1));
+        let job = Rc::new(ExecutionJob::new(options));
+        services.execution_jobs.borrow_mut().insert(id, job.clone());
         Ok(id)
     }
 
@@ -207,13 +207,13 @@ pub mod native_module {
             let services = ctx
                 .userdata::<RuntimeServices>()
                 .expect("runtime services not initialized");
-            let jobs = services.runner_jobs.borrow();
+            let jobs = services.execution_jobs.borrow();
             jobs.get(&id).cloned()
         }
-        .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown runner job"))?;
+        .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown execution job"))?;
         let options =
             job.options.borrow_mut().take().ok_or_else(|| {
-                rquickjs::Exception::throw_range(&ctx, "runner job already started")
+                rquickjs::Exception::throw_range(&ctx, "execution job already started")
             })?;
         run_job(options, job).await;
         Ok(())
@@ -225,10 +225,10 @@ pub mod native_module {
             let services = ctx
                 .userdata::<RuntimeServices>()
                 .expect("runtime services not initialized");
-            let jobs = services.runner_jobs.borrow();
+            let jobs = services.execution_jobs.borrow();
             jobs.get(&id).cloned()
         }
-        .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown runner job"))?;
+        .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown execution job"))?;
         poll_fn(|cx| {
             if job.has_event() || job.forgotten.load(Ordering::Relaxed) {
                 return Poll::Ready(());
@@ -242,7 +242,7 @@ pub mod native_module {
         })
         .await;
         if job.forgotten.load(Ordering::Relaxed) {
-            return Err(rquickjs::Exception::throw_range(&ctx, "unknown runner job"));
+            return Err(rquickjs::Exception::throw_range(&ctx, "unknown execution job"));
         }
         let completion = job.completion.borrow();
         let (done, value, error) = match completion.as_ref() {
@@ -266,7 +266,7 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        let Some(job) = services.runner_jobs.borrow().get(&id).cloned() else {
+        let Some(job) = services.execution_jobs.borrow().get(&id).cloned() else {
             return false;
         };
         job.cancel.store(true, Ordering::Relaxed);
@@ -280,7 +280,7 @@ pub mod native_module {
         let job = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized")
-            .runner_jobs
+            .execution_jobs
             .borrow_mut()
             .remove(&id);
         if let Some(job) = job {
@@ -291,13 +291,13 @@ pub mod native_module {
     }
 }
 
-async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
+async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     if job.cancel.load(Ordering::Relaxed) {
-        job.complete(Err("runner job cancelled".to_string()));
+        job.complete(Err("execution job cancelled".to_string()));
         return;
     }
     let runtime = OwnedJsRuntime::new().await;
-    runtime.disable_runner().await;
+    runtime.disable_execution().await;
     let cancelled = job.cancel.clone();
     runtime
         .rt
@@ -330,7 +330,7 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
     };
     let mut argv = options.argv;
     if argv.is_empty() {
-        argv.push("golem-code-runner".to_string());
+        argv.push("wasm-rquickjs-execution".to_string());
         if let Some(entry) = &entry {
             argv.push(entry.to_string_lossy().into_owned());
         }
@@ -350,10 +350,10 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
     let transport_wiring = async_with!(runtime.ctx => |ctx| {
         Module::evaluate(
             ctx.clone(),
-            "__golem_code_runner_transport",
+            "__wasm_rquickjs_execution_transport",
             r#"
             import { serializeForTransport } from '__wasm_rquickjs_builtin/structured_clone';
-            Object.defineProperty(globalThis, '__golemSerializeRunnerResult', {
+            Object.defineProperty(globalThis, '__wasmRquickjsSerializeExecutionResult', {
                 configurable: false,
                 enumerable: false,
                 writable: false,
@@ -373,7 +373,7 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
         return;
     }
     if job.cancel.load(Ordering::Relaxed) {
-        job.complete(Err("runner job cancelled".to_string()));
+        job.complete(Err("execution job cancelled".to_string()));
         return;
     }
 
@@ -400,25 +400,25 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
         .await;
 
     let wrapper_name = cwd.join(if entry.is_some() {
-        "__golem_code_runner_entry.mjs"
+        "__wasm_rquickjs_execution_entry.mjs"
     } else {
-        "__golem_code_runner_inline.mjs"
+        "__wasm_rquickjs_execution_inline.mjs"
     });
     let name = wrapper_name.to_string_lossy().into_owned();
     let source = if let Some(entry) = entry {
         let specifier =
             serde_json::to_string(&entry.to_string_lossy()).expect("path string is serializable");
         format!(
-            "globalThis.__golemCodeRunnerResult = (async () => {{
+            "globalThis.__wasmRquickjsExecutionResult = (async () => {{
                const module = await import({specifier});
                const entrypoint = typeof module.default === 'function' ? module.default : module.run;
                const value = typeof entrypoint === 'function' ? await entrypoint() : module.default;
-               return __golemSerializeRunnerResult(value);
+               return __wasmRquickjsSerializeExecutionResult(value);
              }})();"
         )
     } else {
         format!(
-            "globalThis.__golemCodeRunnerResult = (async () => __golemSerializeRunnerResult(await (async () => {{ {}\n}})()))();",
+            "globalThis.__wasmRquickjsExecutionResult = (async () => __wasmRquickjsSerializeExecutionResult(await (async () => {{ {}\n}})()))();",
             options.source.unwrap_or_default()
         )
     };
@@ -427,8 +427,8 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
             Module::evaluate(ctx.clone(), name, source).catch(&ctx)
                 .map_err(|e| crate::internal::format_caught_error(e))?.finish::<()>().catch(&ctx)
                 .map_err(|e| crate::internal::format_caught_error(e))?;
-            let promise: Promise = ctx.globals().get("__golemCodeRunnerResult")
-                .map_err(|e| format!("runner result unavailable: {e:?}"))?;
+            let promise: Promise = ctx.globals().get("__wasmRquickjsExecutionResult")
+                .map_err(|e| format!("execution result unavailable: {e:?}"))?;
             promise
                 .into_future::<String>()
                 .await
@@ -439,16 +439,16 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
     };
     let cancellation = poll_fn(|cx| {
         if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
-            return Poll::Ready(Err("runner output exceeded maxBytes".to_string()));
+            return Poll::Ready(Err("execution output exceeded maxBytes".to_string()));
         }
         if job.cancel.load(Ordering::Relaxed) {
-            return Poll::Ready(Err("runner job cancelled".to_string()));
+            return Poll::Ready(Err("execution job cancelled".to_string()));
         }
         job.control_waker.register(cx.waker());
         if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
-            Poll::Ready(Err("runner output exceeded maxBytes".to_string()))
+            Poll::Ready(Err("execution output exceeded maxBytes".to_string()))
         } else if job.cancel.load(Ordering::Relaxed) {
-            Poll::Ready(Err("runner job cancelled".to_string()))
+            Poll::Ready(Err("execution job cancelled".to_string()))
         } else {
             Poll::Pending
         }
@@ -456,9 +456,9 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
     let timeout = async {
         match deadline {
             Some(deadline) => {
-                sleep_until_runner_deadline(deadline).await;
+                sleep_until_execution_deadline(deadline).await;
                 job.timed_out.store(true, Ordering::Relaxed);
-                Err("runner job timed out".to_string())
+                Err("execution job timed out".to_string())
             }
             None => pending().await,
         }
@@ -472,28 +472,28 @@ async fn run_job(options: RunnerOptions, job: Rc<RunnerJob>) {
         Either::Right((Either::Right((result, _)), _)) => result,
     };
     let result = if job.timed_out.load(Ordering::Relaxed) {
-        Err("runner job timed out".to_string())
+        Err("execution job timed out".to_string())
     } else if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
-        Err("runner output exceeded maxBytes".to_string())
+        Err("execution output exceeded maxBytes".to_string())
     } else if job.cancel.load(Ordering::Relaxed) {
-        Err("runner job cancelled".to_string())
+        Err("execution job cancelled".to_string())
     } else {
         result
     };
     job.complete(result);
 }
 
-async fn sleep_until_runner_deadline(deadline: Instant) {
+async fn sleep_until_execution_deadline(deadline: Instant) {
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             return;
         }
-        sleep_for_runner_timeout(remaining).await;
+        sleep_for_execution_timeout(remaining).await;
     }
 }
 
-async fn sleep_for_runner_timeout(duration: Duration) {
+async fn sleep_for_execution_timeout(duration: Duration) {
     #[cfg(feature = "p2")]
     wstd::task::sleep(duration.into()).await;
 

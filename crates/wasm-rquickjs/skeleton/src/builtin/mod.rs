@@ -8,7 +8,6 @@ mod base64;
 mod buffer;
 mod child_process;
 mod cluster;
-pub(crate) mod code_runner;
 mod console;
 mod constants;
 mod dgram;
@@ -16,6 +15,7 @@ mod diagnostics_channel;
 mod dns;
 mod domain;
 mod encoding;
+pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
@@ -277,8 +277,8 @@ pub fn add_module_resolvers(
         .with_module("node:sqlite");
 
     let resolver = resolver
-        .with_module("__wasm_rquickjs_builtin/code_runner_native")
-        .with_module("golem:code-runner");
+        .with_module("__wasm_rquickjs_builtin/execution_native")
+        .with_module("wasm-rquickjs:execution");
 
     #[cfg(feature = "golem")]
     let resolver = resolver
@@ -364,8 +364,8 @@ pub fn module_loader() -> (
         );
 
     let native_loader = native_loader.with_module(
-        "__wasm_rquickjs_builtin/code_runner_native",
-        code_runner::js_native_module,
+        "__wasm_rquickjs_builtin/execution_native",
+        execution::js_native_module,
     );
 
     #[cfg(feature = "golem")]
@@ -529,7 +529,7 @@ pub fn module_loader() -> (
         .with_module("node:sqlite", sqlite::SQLITE_JS);
 
     let builtin_loader =
-        builtin_loader.with_module("golem:code-runner", code_runner::CODE_RUNNER_JS);
+        builtin_loader.with_module("wasm-rquickjs:execution", execution::EXECUTION_JS);
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

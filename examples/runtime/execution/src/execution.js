@@ -1,33 +1,33 @@
-import { runJavaScript, spawnJavaScript } from 'golem:code-runner';
+import { runJavaScript, startJavaScript } from 'wasm-rquickjs:execution';
 
 export async function run() {
     await runJavaScript({ source: `
         const fs = await import('node:fs');
-        fs.mkdirSync('/tmp/runner-app/node_modules/runner-pkg', { recursive: true });
-        fs.mkdirSync('/tmp/runner-other', { recursive: true });
-        fs.mkdirSync('/tmp/runner-isolation-left', { recursive: true });
-        fs.mkdirSync('/tmp/runner-isolation-right', { recursive: true });
-        fs.mkdirSync('/tmp/runner-cache/node_modules/cache-pkg', { recursive: true });
-        fs.writeFileSync('/tmp/runner-shared-mode.txt', 'shared');
-        for (const path of ['/tmp/runner-ready-left', '/tmp/runner-ready-right']) {
+        fs.mkdirSync('/tmp/execution-app/node_modules/execution-pkg', { recursive: true });
+        fs.mkdirSync('/tmp/execution-other', { recursive: true });
+        fs.mkdirSync('/tmp/execution-isolation-left', { recursive: true });
+        fs.mkdirSync('/tmp/execution-isolation-right', { recursive: true });
+        fs.mkdirSync('/tmp/execution-cache/node_modules/cache-pkg', { recursive: true });
+        fs.writeFileSync('/tmp/execution-shared-mode.txt', 'shared');
+        for (const path of ['/tmp/execution-ready-left', '/tmp/execution-ready-right']) {
             try { fs.rmSync(path, { force: true, recursive: true }); } catch {}
         }
-        fs.writeFileSync('/tmp/runner-app/local.mjs', 'export default "local";');
-        fs.writeFileSync('/tmp/runner-app/local.cjs', 'module.exports = "cjs";');
-        fs.writeFileSync('/tmp/runner-app/value.json', JSON.stringify({ value: 'json' }));
-        fs.writeFileSync('/tmp/runner-app/node_modules/runner-pkg/package.json', JSON.stringify({
-            name: 'runner-pkg', type: 'module', exports: './index.mjs',
+        fs.writeFileSync('/tmp/execution-app/local.mjs', 'export default "local";');
+        fs.writeFileSync('/tmp/execution-app/local.cjs', 'module.exports = "cjs";');
+        fs.writeFileSync('/tmp/execution-app/value.json', JSON.stringify({ value: 'json' }));
+        fs.writeFileSync('/tmp/execution-app/node_modules/execution-pkg/package.json', JSON.stringify({
+            name: 'execution-pkg', type: 'module', exports: './index.mjs',
         }));
-        fs.writeFileSync('/tmp/runner-app/node_modules/runner-pkg/index.mjs',
+        fs.writeFileSync('/tmp/execution-app/node_modules/execution-pkg/index.mjs',
             'export default "package";');
-        fs.writeFileSync('/tmp/runner-app/entry.mjs',
+        fs.writeFileSync('/tmp/execution-app/entry.mjs',
             'export function run() { return { kind: "entry", argv: process.argv }; }');
-        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/package.json', JSON.stringify({
+        fs.writeFileSync('/tmp/execution-cache/node_modules/cache-pkg/package.json', JSON.stringify({
             name: 'cache-pkg', type: 'module', exports: './first.mjs',
         }));
-        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/first.mjs',
+        fs.writeFileSync('/tmp/execution-cache/node_modules/cache-pkg/first.mjs',
             'export default "first";');
-        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/second.mjs',
+        fs.writeFileSync('/tmp/execution-cache/node_modules/cache-pkg/second.mjs',
             'export default "second";');
     ` });
 
@@ -37,14 +37,14 @@ export async function run() {
     let liveStdout = '';
     let liveStderr = '';
     const ordering = [];
-    const live = spawnJavaScript({ source: `
+    const live = startJavaScript({ source: `
         console.log('live:first');
         await new Promise(resolve => setTimeout(resolve, 20));
         console.warn('live:warn');
         console.error('live:error');
         console.log('live:last');
         return { label: process.env.LABEL, argv: process.argv };
-    `, env: { LABEL: 'live' }, argv: ['runner', 'live'] });
+    `, env: { LABEL: 'live' }, argv: ['execution', 'live'] });
     live.result.finally(() => { resultSettled = true; });
     live.stdout.setEncoding('utf8');
     live.stderr.setEncoding('utf8');
@@ -67,16 +67,16 @@ export async function run() {
     ]);
 
     const packageCacheFirst = await runJavaScript({
-        cwd: '/tmp/runner-cache', source: `return (await import('cache-pkg')).default;`,
+        cwd: '/tmp/execution-cache', source: `return (await import('cache-pkg')).default;`,
     });
     await runJavaScript({ source: `
         const fs = await import('node:fs');
-        fs.writeFileSync('/tmp/runner-cache/node_modules/cache-pkg/package.json', JSON.stringify({
+        fs.writeFileSync('/tmp/execution-cache/node_modules/cache-pkg/package.json', JSON.stringify({
             name: 'cache-pkg', type: 'module', exports: './second.mjs',
         }));
     ` });
     const packageCacheSecond = await runJavaScript({
-        cwd: '/tmp/runner-cache', source: `return (await import('cache-pkg')).default;`,
+        cwd: '/tmp/execution-cache', source: `return (await import('cache-pkg')).default;`,
     });
 
     const timeoutSuccess = await runJavaScript({ source: `return 'quick';`, timeoutMs: 1000 });
@@ -92,7 +92,7 @@ export async function run() {
     } catch (error) {
         tightLoopTimeoutError = error.message;
     }
-    const cpuBeforeSuspend = spawnJavaScript({ source: `
+    const cpuBeforeSuspend = startJavaScript({ source: `
         console.log('burn:start:' + Date.now());
         const burnStarted = Date.now();
         while (Date.now() - burnStarted < 300) {}
@@ -117,10 +117,10 @@ export async function run() {
     }
     const cpuBeforeSuspendElapsedMs = Date.now() - cpuBeforeSuspendStarted;
     let zeroTimeoutCode;
-    try { spawnJavaScript({ source: `return 1;`, timeoutMs: 0 }); }
+    try { startJavaScript({ source: `return 1;`, timeoutMs: 0 }); }
     catch (error) { zeroTimeoutCode = error.code; }
     let hugeTimeoutCode;
-    try { spawnJavaScript({ source: `return 1;`, timeoutMs: Number.MAX_SAFE_INTEGER }); }
+    try { startJavaScript({ source: `return 1;`, timeoutMs: Number.MAX_SAFE_INTEGER }); }
     catch (error) { hugeTimeoutCode = error.code; }
     const invalidProgramOptions = {};
     for (const [name, options] of Object.entries({
@@ -130,7 +130,7 @@ export async function run() {
         invalidSourceWithEntry: { entry: './entry.mjs', source: 42 },
         both: { entry: './entry.mjs', source: `return 1;` },
     })) {
-        try { spawnJavaScript(options); }
+        try { startJavaScript(options); }
         catch (error) { invalidProgramOptions[name] = error.code ?? error.message; }
     }
 
@@ -146,23 +146,31 @@ export async function run() {
         source: `process.stderr.write('ééé'); return 'ok';`, maxBytes: 5, overflow: 'truncate',
     });
 
-    const entry = await runJavaScript({ entry: './entry.mjs', cwd: '/tmp/runner-app' });
-    const imports = await runJavaScript({ cwd: '/tmp/runner-app', source: `
+    const entry = await runJavaScript({ entry: './entry.mjs', cwd: '/tmp/execution-app' });
+    const defaultArgv = await runJavaScript({ source: `return process.argv;` });
+    const imports = await runJavaScript({ cwd: '/tmp/execution-app', source: `
         const local = await import('./local.mjs');
-        const pkg = await import('runner-pkg');
+        const pkg = await import('execution-pkg');
         const { createRequire } = await import('node:module');
-        const require = createRequire(process.cwd() + '/__golem_code_runner_inline.mjs');
+        const require = createRequire(process.cwd() + '/__wasm_rquickjs_execution_inline.mjs');
         const json = require('./value.json');
         const cjs = require('./local.cjs');
-        process.chdir('/tmp/runner-other');
+        process.chdir('/tmp/execution-other');
         const afterChdir = await import('./local.mjs');
         return { local: local.default, package: pkg.default, json: json.value,
             cjs, afterChdir: afterChdir.default, cwd: process.cwd() };
     ` });
-    const privateImport = await runJavaScript({ cwd: '/tmp/runner-app', source: `
-        try { await import('__wasm_rquickjs_builtin/code_runner_native'); }
+    const privateImport = await runJavaScript({ cwd: '/tmp/execution-app', source: `
+        try { await import('__wasm_rquickjs_builtin/execution_native'); }
         catch (error) { return error.code; }
         return 'unexpected-success';
+    ` });
+    const removedAliases = await runJavaScript({ source: `
+        let legacySpecifier;
+        try { await import('golem:code-runner'); }
+        catch (error) { legacySpecifier = error.code; }
+        const execution = await import('wasm-rquickjs:execution');
+        return { legacySpecifier, spawnJavaScript: typeof execution.spawnJavaScript };
     ` });
 
     const clone = await runJavaScript({ source: `
@@ -222,7 +230,7 @@ export async function run() {
         if (label === 'right') {
             try { fs.fstatSync(fd + 1); } catch (error) { foreignFdError = error.code; }
         }
-        fs.chmodSync('/tmp/runner-shared-mode.txt', expectedMode);
+        fs.chmodSync('/tmp/execution-shared-mode.txt', expectedMode);
         fs.writeFileSync('./target.txt', label + ':target');
         fs.symlinkSync('./target.txt', './link.txt');
         fs.mkdirSync('./node_modules/isolation-pkg', { recursive: true });
@@ -231,11 +239,11 @@ export async function run() {
         }));
         fs.writeFileSync('./node_modules/isolation-pkg/index.mjs',
             'export default process.env.LABEL + ":package";');
-        fs.writeFileSync('/tmp/runner-ready-' + label, 'ready');
-        while (!fs.existsSync('/tmp/runner-ready-' + other)) {
+        fs.writeFileSync('/tmp/execution-ready-' + label, 'ready');
+        while (!fs.existsSync('/tmp/execution-ready-' + other)) {
             await new Promise(resolve => setTimeout(resolve, 1));
         }
-        const mode = fs.statSync('/tmp/runner-shared-mode.txt').mode & 0o7777;
+        const mode = fs.statSync('/tmp/execution-shared-mode.txt').mode & 0o7777;
         const linkTarget = fs.readlinkSync('./link.txt');
         const linkValue = fs.readFileSync('./link.txt', 'utf8');
         const packageModule = await import('isolation-pkg');
@@ -247,27 +255,27 @@ export async function run() {
             mode, linkTarget, linkValue, packageValue: packageModule.default };
     `;
     const [isolationLeft, isolationRight] = await Promise.all([
-        runJavaScript({ cwd: '/tmp/runner-isolation-left', source: isolationSource,
+        runJavaScript({ cwd: '/tmp/execution-isolation-left', source: isolationSource,
             env: { LABEL: 'left' }, timeoutMs: 2000 }),
-        runJavaScript({ cwd: '/tmp/runner-isolation-right', source: isolationSource,
+        runJavaScript({ cwd: '/tmp/execution-isolation-right', source: isolationSource,
             env: { LABEL: 'right' }, timeoutMs: 2000 }),
     ]);
 
-    const cancelledJob = spawnJavaScript({ source: `await new Promise(() => {});` });
+    const cancelledJob = startJavaScript({ source: `await new Promise(() => {});` });
     setTimeout(() => cancelledJob.cancel(), 1);
     let cancellationError;
     try { await cancelledJob.result; }
     catch (error) { cancellationError = error.message; }
     const nested = await runJavaScript({ source: `
-        const { spawnJavaScript } = await import('golem:code-runner');
-        try { spawnJavaScript({ source: "return 'nested';" }); }
+        const { startJavaScript } = await import('wasm-rquickjs:execution');
+        try { startJavaScript({ source: "return 'nested';" }); }
         catch (error) { return error.message; }
     ` });
-    const heldJobs = Array.from({ length: 8 }, () => spawnJavaScript({
+    const heldJobs = Array.from({ length: 8 }, () => startJavaScript({
         source: `await new Promise(() => {});`,
     }));
     let capacityError;
-    try { spawnJavaScript({ source: `return 'ninth';` }); }
+    try { startJavaScript({ source: `return 'ninth';` }); }
     catch (error) { capacityError = error.message; }
     for (const job of heldJobs) job.cancel();
     await Promise.allSettled(heldJobs.map(job => job.result));
@@ -279,8 +287,8 @@ export async function run() {
         timeoutSuccess, timeoutError, tightLoopTimeoutError,
         cpuBeforeSuspendTimeoutError, cpuBeforeSuspendElapsedMs,
         zeroTimeoutCode, hugeTimeoutCode, invalidProgramOptions,
-        overflowError, truncated, entry, imports,
-        privateImport, cloneChecks, resourceError, pathAliases,
+        overflowError, truncated, entry, defaultArgv, imports,
+        privateImport, removedAliases, cloneChecks, resourceError, pathAliases,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },
     });

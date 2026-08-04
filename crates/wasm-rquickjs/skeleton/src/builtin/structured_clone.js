@@ -71,7 +71,7 @@ const serializer = (strict, json, rejectCustom, $, _) => {
 
     if (value && (typeof value === 'object' || typeof value === 'function') && typeof value[customCloneSymbol] === 'function') {
       if (rejectCustom)
-        throw new TypeError('runner results cannot contain resources');
+        throw new TypeError('execution results cannot contain resources');
       return as([CUSTOM, value[customCloneSymbol]()], value);
     }
 

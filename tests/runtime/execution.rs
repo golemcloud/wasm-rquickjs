@@ -2,20 +2,20 @@ use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output}
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 
-#[test_dep(tagged_as = "owned_runtime", scope = Cloneable)]
-async fn compiled_owned_runtime() -> CompiledTest {
+#[test_dep(tagged_as = "execution", scope = Cloneable)]
+async fn compiled_execution() -> CompiledTest {
     CompiledTest::new_with_features(
-        Utf8Path::new("examples/runtime/owned-runtime"),
+        Utf8Path::new("examples/runtime/execution"),
         true,
         FeatureCombination::Normal,
     )
     .await
-    .expect("Failed to compile owned-runtime")
+    .expect("Failed to compile execution")
 }
 
 #[test]
-async fn owned_runtime_isolation(
-    #[tagged_as("owned_runtime")] compiled: &CompiledTest,
+async fn execution_isolation(
+    #[tagged_as("execution")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (result, output) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
     let result = result?;
@@ -48,11 +48,11 @@ async fn owned_runtime_isolation(
     assert_eq!(report["packageCacheFirst"]["value"], "first");
     assert_eq!(report["packageCacheSecond"]["value"], "second");
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
-    assert_eq!(report["timeoutError"], "runner job timed out");
-    assert_eq!(report["tightLoopTimeoutError"], "runner job timed out");
+    assert_eq!(report["timeoutError"], "execution job timed out");
+    assert_eq!(report["tightLoopTimeoutError"], "execution job timed out");
     assert_eq!(
         report["cpuBeforeSuspendTimeoutError"],
-        "runner job timed out"
+        "execution job timed out"
     );
     assert!(
         report["cpuBeforeSuspendElapsedMs"]
@@ -75,22 +75,41 @@ async fn owned_runtime_isolation(
             "unexpected exclusivity result for {name}"
         );
     }
-    assert_eq!(report["overflowError"], "runner output exceeded maxBytes");
+    assert_eq!(
+        report["overflowError"],
+        "execution output exceeded maxBytes"
+    );
     assert_eq!(report["truncated"]["value"], "ok");
     assert_eq!(report["truncated"]["stderr"], "éé");
     assert_eq!(report["truncated"]["overflowed"], true);
     assert_eq!(report["entry"]["value"]["kind"], "entry");
     assert_eq!(
+        report["entry"]["value"]["argv"][0],
+        "wasm-rquickjs-execution"
+    );
+    assert_eq!(
         report["entry"]["value"]["argv"][1],
-        "/tmp/runner-app/entry.mjs"
+        "/tmp/execution-app/entry.mjs"
+    );
+    assert_eq!(
+        report["defaultArgv"]["value"],
+        serde_json::json!(["wasm-rquickjs-execution"])
     );
     assert_eq!(report["imports"]["value"]["local"], "local");
     assert_eq!(report["imports"]["value"]["package"], "package");
     assert_eq!(report["imports"]["value"]["json"], "json");
     assert_eq!(report["imports"]["value"]["cjs"], "cjs");
     assert_eq!(report["imports"]["value"]["afterChdir"], "local");
-    assert_eq!(report["imports"]["value"]["cwd"], "/tmp/runner-other");
+    assert_eq!(report["imports"]["value"]["cwd"], "/tmp/execution-other");
     assert_eq!(report["privateImport"]["value"], "ERR_MODULE_NOT_FOUND");
+    assert_eq!(
+        report["removedAliases"]["value"]["legacySpecifier"],
+        "ERR_MODULE_NOT_FOUND"
+    );
+    assert_eq!(
+        report["removedAliases"]["value"]["spawnJavaScript"],
+        "undefined"
+    );
     for check in [
         "hasUndefined",
         "nan",
@@ -108,7 +127,7 @@ async fn owned_runtime_isolation(
     assert!(
         report["resourceError"]
             .as_str()
-            .is_some_and(|message| message.contains("runner results cannot contain resources")),
+            .is_some_and(|message| message.contains("execution results cannot contain resources")),
         "unexpected resource error: {}",
         report["resourceError"]
     );
@@ -119,14 +138,14 @@ async fn owned_runtime_isolation(
         "/tmp/alias/file.txt"
     );
     assert_eq!(report["pathAliases"]["value"]["renamed"], "before");
-    assert_eq!(report["cancellationError"], "runner job cancelled");
+    assert_eq!(report["cancellationError"], "execution job cancelled");
     assert_eq!(
         report["nested"]["value"],
-        "nested code-runner jobs are not supported"
+        "nested execution jobs are not supported"
     );
     assert_eq!(
         report["capacityError"],
-        "code-runner supports at most 8 active jobs per runtime"
+        "execution supports at most 8 active jobs per runtime"
     );
     assert_eq!(report["reclaimed"]["value"], "reclaimed");
     assert_eq!(
@@ -136,7 +155,7 @@ async fn owned_runtime_isolation(
     for side in ["left", "right"] {
         let probe = &report["isolation"][side]["value"];
         assert_eq!(probe["mode"], if side == "left" { 0o600 } else { 0o640 });
-        assert_eq!(probe["cwd"], format!("/tmp/runner-isolation-{side}"));
+        assert_eq!(probe["cwd"], format!("/tmp/execution-isolation-{side}"));
         assert_eq!(probe["linkTarget"], "./target.txt");
         assert_eq!(probe["linkValue"], format!("{side}:target"));
         assert_eq!(probe["packageValue"], format!("{side}:package"));

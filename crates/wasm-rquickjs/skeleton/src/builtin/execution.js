@@ -1,4 +1,4 @@
-import { create_job, start_job, wait_job_event, cancel_job, forget_job } from '__wasm_rquickjs_builtin/code_runner_native';
+import { create_job, start_job, wait_job_event, cancel_job, forget_job } from '__wasm_rquickjs_builtin/execution_native';
 import { PassThrough } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { resolve } from 'node:path';
@@ -54,7 +54,7 @@ function normalize(options) {
   };
 }
 
-export function spawnJavaScript(options) {
+export function startJavaScript(options) {
   const optionsJson = JSON.stringify(normalize(options));
   const id = create_job(optionsJson);
   const stdout = new PassThrough();
@@ -96,7 +96,7 @@ export function spawnJavaScript(options) {
 }
 
 export async function runJavaScript(options) {
-  const job = spawnJavaScript(options);
+  const job = startJavaScript(options);
   let stdout = '';
   let stderr = '';
   job.stdout.setEncoding('utf8'); job.stderr.setEncoding('utf8');
@@ -106,4 +106,4 @@ export async function runJavaScript(options) {
   return { stdout, stderr, ...structured };
 }
 
-export default { spawnJavaScript, runJavaScript };
+export default { startJavaScript, runJavaScript };

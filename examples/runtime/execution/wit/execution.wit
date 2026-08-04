@@ -1,0 +1,5 @@
+package quickjs:execution;
+
+world execution {
+  export run: func() -> string;
+}
