@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3237/4425 (73.2%)
+**Primary compatibility (CI-enforced):** 3236/4425 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3237 | 73.2% | 56.3% | 47.1% |
-| 🧩 known gap | 1188 | 26.8% | 20.7% | 17.3% |
+| ✅ passing (runnable) | 3236 | 73.1% | 56.3% | 47.1% |
+| 🧩 known gap | 1189 | 26.9% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3237/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3236/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -79,7 +79,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| util | 174 | 89 | 8 | 0 | 0 | 0 | 77 | 91.8% | 91.8% |
+| util | 174 | 88 | 9 | 0 | 0 | 0 | 77 | 90.7% | 90.7% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
@@ -580,7 +580,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-util-callbackify.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-deprecate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-format.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
-| `test-util-getcallsites.js` | 13 | 13 | 0 | 0 | 0 | 0 | 0 |
+| `test-util-getcallsites.js` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |
 | `test-util-inspect-getters-accessing-this.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-inspect.js` | 99 | 48 | 2 | 0 | 0 | 0 | 49 |
 | `test-util-isDeepStrictEqual.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1188)
+### known gap (1189)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -958,6 +958,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | SourceTextModule evaluation timeout does not interrupt an infinite loop | 1 | `parallel/test-vm-module-basic.js#block_02_statement_02` |
 | SourceTextModule identifiers are not incremented per VM context like Node | 1 | `parallel/test-vm-module-basic.js#block_03_check_the_generated_identifier_for_each_module` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
+| TypeScript transform source maps are not applied to QuickJS stack call-site locations | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | URL inspect output uses the URL string instead of Node's structured URL representation | 1 | `parallel/test-whatwg-url-custom-inspect.js` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
