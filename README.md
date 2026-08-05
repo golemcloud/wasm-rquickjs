@@ -633,21 +633,30 @@ Compatibility stubs — HTTP/2 is not supported.
 <summary><strong><code>wasm-rquickjs:execution</code></strong></summary>
 
 Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(options)` returns live
-`stdout`/`stderr` readable streams, a structured-clone `result` promise, and `cancel()`;
-`runJavaScript(options)` returns bounded captured output with the structured result. Options accept
-exactly one of `entry` or inline `source`, plus `cwd`, `argv`, `env`, `timeoutMs`, `maxBytes`
-(1 MiB per stream by default, 64 MiB maximum), and `overflow` (`terminate` by default or
-`truncate`). With the generated crate's `typescript-runtime` feature enabled, inline jobs can set
-`language: "typescript"` (JavaScript remains the default); inline source is limited to 256 KiB of
-UTF-8 input. TypeScript entry files are selected by their `.ts`, `.mts`, or `.cts` extension.
+`stdout`/`stderr` readable streams, a `result` promise resolving to `{ value, overflowed }`, and
+`cancel()`. `runJavaScript(options)` collects the streams and resolves to
+`{ value, overflowed, stdout, stderr }`. `value` crosses the runtime boundary through structured
+clone.
+
+Options accept exactly one of `entry: string` or inline `source: string`, plus `cwd`, `argv`,
+`env`, `timeoutMs`, `maxBytes` (1 MiB per stream by default, 64 MiB maximum), and `overflow`
+(`terminate` by default or `truncate`). `language: "javascript" | "typescript"` applies only to
+inline `source` and defaults to JavaScript. With the generated crate's `typescript-runtime`
+feature enabled, TypeScript entry files are selected by their `.ts`, `.mts`, or `.cts` extension,
+and inline jobs can select `language: "typescript"`; inline TypeScript source is limited to 256
+KiB of UTF-8 input.
 Output and completion wake the parent without periodic polling. CPU deadlines start
 after child-runtime initialization and are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
 `default` function (or `run` function when there is no default function) is invoked and awaited.
 Relative entry paths and imports resolve from `cwd`. Inline `source` is an async function body:
 top-level `await` and `return` are supported, while static `import`/`export` declarations are not.
-`env` defaults to an empty environment. When `argv` is omitted, entry jobs receive
+`env` is an explicit allowlist and defaults to an empty environment; jobs never merge or inherit
+the enclosing component's environment variables. When `argv` is omitted, entry jobs receive
 `["wasm-rquickjs-execution", resolvedEntryPath]` and inline jobs receive
 `["wasm-rquickjs-execution"]`.
+With `overflow: "terminate"`, exceeding either stream's bound rejects the job. With
+`overflow: "truncate"`, execution continues, captured output is bounded, and `overflowed` is
+`true` when either stream exceeded the bound.
 Cancellation is cooperative for queued or yielding code and cannot preempt a tight loop already
 running on the same thread; use a positive `timeoutMs` when that guarantee is required. A job that
 never settles must be cancelled or given a timeout before the enclosing component invocation can

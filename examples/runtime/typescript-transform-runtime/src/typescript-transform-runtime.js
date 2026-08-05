@@ -21,6 +21,33 @@ export async function run() {
         cwd: '/typescript-transform-runtime',
         entry: './entry.mts',
     });
+    fs.mkdirSync('/typescript-transform-runtime/project/node_modules/prepared-dependency', {
+        recursive: true,
+    });
+    fs.writeFileSync(
+        '/typescript-transform-runtime/project/package.json',
+        JSON.stringify({ type: 'module' }),
+    );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/project/node_modules/prepared-dependency/package.json',
+        JSON.stringify({ name: 'prepared-dependency', type: 'module', exports: './index.js' }),
+    );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/project/node_modules/prepared-dependency/index.js',
+        'export const base = 40;',
+    );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/project/entry.ts',
+        `import { base } from 'prepared-dependency';
+         enum Offset { Answer = 2 }
+         export default function run(): { answer: number; runtime: string } {
+             return { answer: base + Offset.Answer, runtime: 'typescript' };
+         }`,
+    );
+    const filesystemProject = await runJavaScript({
+        cwd: '/typescript-transform-runtime/project',
+        entry: './entry.ts',
+    });
     const executionInline = await runJavaScript({
         language: 'typescript',
         source: 'enum Direction { Up, Down } return Direction.Down;',
@@ -41,6 +68,7 @@ export async function run() {
         processFeature: process.features.typescript,
         transformedModule,
         executionEntry: executionEntry.value,
+        filesystemProject: filesystemProject.value,
         executionInline: executionInline.value,
         executionBoundary: executionBoundary.value,
         boundaryTransformMs,

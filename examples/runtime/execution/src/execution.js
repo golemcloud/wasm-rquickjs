@@ -66,6 +66,19 @@ export async function run() {
         runJavaScript({ source: `console.log(process.env.LABEL); return process.env.LABEL;`, env: { LABEL: 'left' } }),
         runJavaScript({ source: `console.log(process.env.LABEL); return process.env.LABEL;`, env: { LABEL: 'right' } }),
     ]);
+    process.env.EXECUTION_PARENT_SECRET = 'must-not-cross-runtime-boundary';
+    const defaultEnvironment = await runJavaScript({ source: `
+        return {
+            keys: Object.keys(process.env).sort(),
+            parentSecret: process.env.EXECUTION_PARENT_SECRET,
+        };
+    ` });
+    const explicitEnvironment = await runJavaScript({
+        source: `return { keys: Object.keys(process.env).sort(), allowed: process.env.ALLOWED,
+            parentSecret: process.env.EXECUTION_PARENT_SECRET };`,
+        env: { ALLOWED: 'visible' },
+    });
+    delete process.env.EXECUTION_PARENT_SECRET;
 
     const packageCacheFirst = await runJavaScript({
         cwd: '/tmp/execution-cache', source: `return (await import('cache-pkg')).default;`,
@@ -296,7 +309,8 @@ export async function run() {
 
     return JSON.stringify({
         liveStdout, liveStderr, liveResult, ordering, streamedBeforeResult, parentProgress,
-        left, right, packageCacheFirst, packageCacheSecond,
+        left, right, defaultEnvironment, explicitEnvironment,
+        packageCacheFirst, packageCacheSecond,
         timeoutSuccess, timeoutError, tightLoopTimeoutError,
         cpuBeforeSuspendTimeoutError, cpuBeforeSuspendElapsedMs,
         zeroTimeoutCode, hugeTimeoutCode, invalidProgramOptions,

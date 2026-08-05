@@ -139,6 +139,8 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["processFeature"], "transform");
     assert_eq!(report["transformedModule"], 1);
     assert_eq!(report["executionEntry"], 1);
+    assert_eq!(report["filesystemProject"]["answer"], 42);
+    assert_eq!(report["filesystemProject"]["runtime"], "typescript");
     assert_eq!(report["executionInline"], 1);
     assert_eq!(report["executionBoundary"], 1);
     assert!(

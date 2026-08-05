@@ -45,6 +45,23 @@ async fn execution_isolation(
     assert_eq!(report["left"]["stdout"], "left\n");
     assert_eq!(report["right"]["value"], "right");
     assert_eq!(report["right"]["stdout"], "right\n");
+    assert_eq!(
+        report["defaultEnvironment"]["value"]["keys"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        report["defaultEnvironment"]["value"]["parentSecret"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        report["explicitEnvironment"]["value"]["keys"],
+        serde_json::json!(["ALLOWED"])
+    );
+    assert_eq!(report["explicitEnvironment"]["value"]["allowed"], "visible");
+    assert_eq!(
+        report["explicitEnvironment"]["value"]["parentSecret"],
+        serde_json::Value::Null
+    );
     assert_eq!(report["packageCacheFirst"]["value"], "first");
     assert_eq!(report["packageCacheSecond"]["value"], "second");
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
