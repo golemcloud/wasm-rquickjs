@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { runJavaScript } from 'wasm-rquickjs:execution';
 
 export async function run() {
@@ -20,6 +21,15 @@ export async function run() {
     const executionEntry = await runJavaScript({
         cwd: '/typescript-transform-runtime',
         entry: './entry.mts',
+    });
+    fs.writeFileSync(
+        '/typescript-transform-runtime/entry.cts',
+        `enum Offset { Answer = 2 }
+         exports.run = function run(): number { return 40 + Offset.Answer; };`,
+    );
+    const commonJsExecutionEntry = await runJavaScript({
+        cwd: '/typescript-transform-runtime',
+        entry: './entry.cts',
     });
     fs.mkdirSync('/typescript-transform-runtime/project/node_modules/prepared-dependency', {
         recursive: true,
@@ -48,6 +58,31 @@ export async function run() {
         cwd: '/typescript-transform-runtime/project',
         entry: './entry.ts',
     });
+    fs.writeFileSync(
+        '/typescript-transform-runtime/project/node_modules/prepared-dependency/index.ts',
+        'export default 42;',
+    );
+    let nodeModulesTypeScriptError;
+    let nodeModulesTypeScriptErrorName;
+    try {
+        await import('/typescript-transform-runtime/project/node_modules/prepared-dependency/index.ts');
+    } catch (error) {
+        nodeModulesTypeScriptError = error.code;
+        nodeModulesTypeScriptErrorName = error.name;
+    }
+    fs.writeFileSync(
+        '/typescript-transform-runtime/project/node_modules/prepared-dependency/index.cts',
+        'module.exports = 42;',
+    );
+    const require = createRequire('/typescript-transform-runtime/project/entry.cjs');
+    let commonJsNodeModulesTypeScriptError;
+    let commonJsNodeModulesTypeScriptErrorName;
+    try {
+        require('/typescript-transform-runtime/project/node_modules/prepared-dependency/index.cts');
+    } catch (error) {
+        commonJsNodeModulesTypeScriptError = error.code;
+        commonJsNodeModulesTypeScriptErrorName = error.name;
+    }
     const executionInline = await runJavaScript({
         language: 'typescript',
         source: 'enum Direction { Up, Down } return Direction.Down;',
@@ -68,7 +103,12 @@ export async function run() {
         processFeature: process.features.typescript,
         transformedModule,
         executionEntry: executionEntry.value,
+        commonJsExecutionEntry: commonJsExecutionEntry.value,
         filesystemProject: filesystemProject.value,
+        nodeModulesTypeScriptError,
+        nodeModulesTypeScriptErrorName,
+        commonJsNodeModulesTypeScriptError,
+        commonJsNodeModulesTypeScriptErrorName,
         executionInline: executionInline.value,
         executionBoundary: executionBoundary.value,
         boundaryTransformMs,

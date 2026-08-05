@@ -160,6 +160,14 @@ export async function run() {
         cwd: '/typescript-runtime',
         entry: './runner-entry.mts',
     });
+    fs.writeFileSync(
+        '/typescript-runtime/runner-entry.cts',
+        'exports.run = function run(): number { return 42; };',
+    );
+    const commonJsEntryRunner = await runJavaScript({
+        cwd: '/typescript-runtime',
+        entry: './runner-entry.cts',
+    });
     const boundaryPrefix = 'return 42;/*';
     const boundarySuffix = '*/';
     const boundarySource = boundaryPrefix +
@@ -210,6 +218,7 @@ export async function run() {
         inlineRunnerUnsupported,
         inlineRunnerStripped: inlineRunnerStripped.value,
         entryRunner: entryRunner.value,
+        commonJsEntryRunner: commonJsEntryRunner.value,
         boundaryRunner: boundaryRunner.value,
         boundaryTransformMs,
         sourceLimitCodes,

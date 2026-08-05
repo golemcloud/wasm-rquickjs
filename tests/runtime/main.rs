@@ -103,6 +103,7 @@ tag_suite!(node_http, group8);
 tag_suite!(intl, group8);
 tag_suite!(example1, group8);
 tag_suite!(example2, group8);
+tag_suite!(typescript_runtime, group8);
 
 tag_suite!(node_modules_apps, group9);
 

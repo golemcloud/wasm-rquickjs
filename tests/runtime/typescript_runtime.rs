@@ -101,6 +101,7 @@ async fn strip_typescript_types_matches_node_contract(
     );
     assert_eq!(report["inlineRunnerStripped"], 42);
     assert_eq!(report["entryRunner"], 42);
+    assert_eq!(report["commonJsEntryRunner"], 42);
     assert_eq!(report["boundaryRunner"], 42);
     assert_eq!(
         report["sourceLimitCodes"],
@@ -139,8 +140,19 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["processFeature"], "transform");
     assert_eq!(report["transformedModule"], 1);
     assert_eq!(report["executionEntry"], 1);
+    assert_eq!(report["commonJsExecutionEntry"], 42);
     assert_eq!(report["filesystemProject"]["answer"], 42);
     assert_eq!(report["filesystemProject"]["runtime"], "typescript");
+    assert_eq!(
+        report["nodeModulesTypeScriptError"],
+        "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"
+    );
+    assert_eq!(report["nodeModulesTypeScriptErrorName"], "Error");
+    assert_eq!(
+        report["commonJsNodeModulesTypeScriptError"],
+        "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"
+    );
+    assert_eq!(report["commonJsNodeModulesTypeScriptErrorName"], "Error");
     assert_eq!(report["executionInline"], 1);
     assert_eq!(report["executionBoundary"], 1);
     assert!(
