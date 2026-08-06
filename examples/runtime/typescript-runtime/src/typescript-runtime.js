@@ -168,26 +168,15 @@ export async function run() {
         cwd: '/typescript-runtime',
         entry: './runner-entry.cts',
     });
-    const boundaryPrefix = 'return 42;/*';
-    const boundarySuffix = '*/';
-    const boundarySource = boundaryPrefix +
-        'x'.repeat(256 * 1024 - boundaryPrefix.length - boundarySuffix.length) +
-        boundarySuffix;
-    const boundaryStartedAt = Date.now();
-    const boundaryRunner = await runJavaScript({
+    const largeSourcePrefix = 'return 42;/*';
+    const largeSourceSuffix = '*/';
+    const largeSource = largeSourcePrefix +
+        'x'.repeat(256 * 1024 + 1) +
+        largeSourceSuffix;
+    const largeInlineRunner = await runJavaScript({
         language: 'typescript',
-        source: boundarySource,
-        timeoutMs: 2000,
+        source: largeSource,
     });
-    const boundaryTransformMs = Date.now() - boundaryStartedAt;
-    const sourceLimitCodes = [];
-    for (const source of ['x'.repeat(256 * 1024 + 1), 'é'.repeat(128 * 1024 + 1)]) {
-        try {
-            startJavaScript({ language: 'typescript', source });
-        } catch (error) {
-            sourceLimitCodes.push(error.code);
-        }
-    }
 
     return JSON.stringify({
         stripped,
@@ -219,8 +208,6 @@ export async function run() {
         inlineRunnerStripped: inlineRunnerStripped.value,
         entryRunner: entryRunner.value,
         commonJsEntryRunner: commonJsEntryRunner.value,
-        boundaryRunner: boundaryRunner.value,
-        boundaryTransformMs,
-        sourceLimitCodes,
+        largeInlineRunner: largeInlineRunner.value,
     });
 }

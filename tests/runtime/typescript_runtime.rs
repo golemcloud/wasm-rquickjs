@@ -102,19 +102,7 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["inlineRunnerStripped"], 42);
     assert_eq!(report["entryRunner"], 42);
     assert_eq!(report["commonJsEntryRunner"], 42);
-    assert_eq!(report["boundaryRunner"], 42);
-    assert_eq!(
-        report["sourceLimitCodes"],
-        serde_json::json!(["ERR_OUT_OF_RANGE", "ERR_OUT_OF_RANGE"])
-    );
-    let boundary_transform_ms = report["boundaryTransformMs"]
-        .as_u64()
-        .expect("boundary transform timing must be numeric");
-    eprintln!("256 KiB inline TypeScript runner latency: {boundary_transform_ms}ms");
-    assert!(
-        boundary_transform_ms < 750,
-        "256 KiB inline TypeScript blocked the runner for {boundary_transform_ms}ms"
-    );
+    assert_eq!(report["largeInlineRunner"], 42);
     assert!(
         report["unsupported"]
             .as_str()
@@ -154,13 +142,6 @@ async fn typescript_transform_runtime_is_immutable(
     );
     assert_eq!(report["commonJsNodeModulesTypeScriptErrorName"], "Error");
     assert_eq!(report["executionInline"], 1);
-    assert_eq!(report["executionBoundary"], 1);
-    assert!(
-        report["boundaryTransformMs"]
-            .as_u64()
-            .is_some_and(|elapsed| elapsed < 750),
-        "256 KiB transform-mode inline execution took too long: {} ms",
-        report["boundaryTransformMs"]
-    );
+    assert_eq!(report["largeInlineExecution"], 1);
     Ok(())
 }

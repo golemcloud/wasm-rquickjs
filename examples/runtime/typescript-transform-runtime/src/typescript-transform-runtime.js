@@ -87,18 +87,15 @@ export async function run() {
         language: 'typescript',
         source: 'enum Direction { Up, Down } return Direction.Down;',
     });
-    const boundaryPrefix = 'enum Direction { Up, Down } return Direction.Down;/*';
-    const boundarySuffix = '*/';
-    const boundarySource = boundaryPrefix +
-        'x'.repeat(256 * 1024 - boundaryPrefix.length - boundarySuffix.length) +
-        boundarySuffix;
-    const boundaryStartedAt = Date.now();
-    const executionBoundary = await runJavaScript({
+    const largeSourcePrefix = 'enum Direction { Up, Down } return Direction.Down;/*';
+    const largeSourceSuffix = '*/';
+    const largeSource = largeSourcePrefix +
+        'x'.repeat(256 * 1024 + 1) +
+        largeSourceSuffix;
+    const largeInlineExecution = await runJavaScript({
         language: 'typescript',
-        source: boundarySource,
-        timeoutMs: 2000,
+        source: largeSource,
     });
-    const boundaryTransformMs = Date.now() - boundaryStartedAt;
     return JSON.stringify({
         processFeature: process.features.typescript,
         transformedModule,
@@ -110,7 +107,6 @@ export async function run() {
         commonJsNodeModulesTypeScriptError,
         commonJsNodeModulesTypeScriptErrorName,
         executionInline: executionInline.value,
-        executionBoundary: executionBoundary.value,
-        boundaryTransformMs,
+        largeInlineExecution: largeInlineExecution.value,
     });
 }

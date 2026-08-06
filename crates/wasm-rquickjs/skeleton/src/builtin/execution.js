@@ -3,11 +3,9 @@ import { PassThrough } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { resolve } from 'node:path';
 import { deserializeFromTransport } from '__wasm_rquickjs_builtin/structured_clone';
-import { Buffer } from 'node:buffer';
 
 const MAX_TIMEOUT_MS = 18_446_744_073_709;
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
-const MAX_SOURCE_BYTES = 256 * 1024;
 
 function invalidType(name, expected, value) {
   const error = new TypeError(`The "${name}" option must be ${expected}. Received ${String(value)}`);
@@ -35,9 +33,6 @@ function normalize(options) {
     throw new TypeError('language must be javascript or typescript');
   if (hasEntry && options.language !== undefined)
     throw new TypeError('language is only supported with source');
-  if (hasSource && language === 'typescript' &&
-      Buffer.byteLength(options.source, 'utf8') > MAX_SOURCE_BYTES)
-    throw outOfRange('source', `at most ${MAX_SOURCE_BYTES} UTF-8 bytes`, options.source.length);
   const cwd = options.cwd ?? process.cwd();
   if (typeof cwd !== 'string') throw invalidType('cwd', 'a string', cwd);
   const argv = options.argv ?? [];

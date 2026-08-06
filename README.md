@@ -643,8 +643,7 @@ Options accept exactly one of `entry: string` or inline `source: string`, plus `
 (`terminate` by default or `truncate`). `language: "javascript" | "typescript"` applies only to
 inline `source` and defaults to JavaScript. With the generated crate's `typescript-runtime`
 feature enabled, TypeScript entry files are selected by their `.ts`, `.mts`, or `.cts` extension,
-and inline jobs can select `language: "typescript"`; inline TypeScript source is limited to 256
-KiB of UTF-8 input.
+and inline jobs can select `language: "typescript"`.
 Output and completion wake the parent without periodic polling. CPU deadlines start
 after child-runtime initialization and are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
 `default` function (or `run` function when there is no default function) is invoked and awaited.
