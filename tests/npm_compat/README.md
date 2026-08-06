@@ -69,7 +69,7 @@ or external executables work.
 | Pure ESM, no scripts | Constrained | Covered from both `file:` and deterministic registry sources and imported in a later fresh job. |
 | Pure CommonJS and mixed ESM/CommonJS | Constrained | Local installed fixtures are loaded in a later fresh job through CommonJS, ESM, and conditional export-map branches. Registry variants are not yet covered. |
 | JavaScript-only lifecycle scripts | Constrained | A dependency postinstall consisting of one `node <script>` command is covered with cwd and npm environment assertions. |
-| TypeScript entry points | Constrained | A workspace `.ts` entry with transform-required syntax imports and runs an npm-installed JavaScript dependency in a fresh execution job. Raw TypeScript below `node_modules` retains Node's `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` boundary. |
+| TypeScript entry points | Constrained | With the `typescript-transform-runtime` feature, a workspace `.ts` entry with transform-required syntax imports and runs an npm-installed JavaScript dependency in a fresh execution job. Raw TypeScript below `node_modules` retains Node's `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` boundary. |
 | Packages invoking shell operators or external executables | Unsupported | General shells and host processes are unavailable; the tested shell-operator lifecycle fails with `ENOSYS` and performs no partial work. |
 | Platform and optional dependencies | Constrained | Optional inclusion/omission is covered; OS/CPU filtering and tolerated optional installation failures remain planned. |
 | Native addons and `node-gyp` | Unsupported | Components cannot load host `.node` files or spawn host compiler toolchains. |
@@ -82,11 +82,11 @@ or external executables work.
 
 The P2 and P3 baseline covers CLI startup, config inspection, local and registry
 installation, ci, offline cache restoration, fresh-job loading, JavaScript
-lifecycle/run scripts, a workspace TypeScript entry consuming an installed
-JavaScript dependency, tree inspection and mutation, init, pack dry-run, and
-the actual npm exec/npx failure boundary. Separate component instances also
-perform different installs concurrently, and one then repeats a clean install
-without workspace state crossing between them.
+lifecycle/run scripts, a `typescript-transform-runtime` workspace entry
+consuming an installed JavaScript dependency, tree inspection and mutation,
+init, pack dry-run, and the actual npm exec/npx failure boundary. Separate
+component instances also perform different installs concurrently, and one then
+repeats a clean install without workspace state crossing between them.
 
 Next coverage should add peer-resolution and platform-filtering flags, network
 error redaction, and public-registry smoke tests outside deterministic CI.

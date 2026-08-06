@@ -494,6 +494,10 @@ async fn npm_installed_javascript_loads_from_typescript(
         typescript_report["rawTypeScriptDependencyError"]["name"],
         "Error"
     );
+    assert_eq!(
+        typescript_report["rawTypeScriptDependencyError"]["message"],
+        "Stripping types is currently unsupported for files under node_modules, for \"/workspace/node_modules/fixture-dependency/raw-typescript.ts\""
+    );
     Ok(())
 }
 
