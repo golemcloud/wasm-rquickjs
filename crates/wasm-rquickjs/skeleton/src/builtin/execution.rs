@@ -1,6 +1,8 @@
 use crate::internal::runtime_services::{
     OwnedJsRuntime, RuntimeOutputSink, RuntimeServices, normalize_absolute_path,
 };
+
+const EXECUTION_HEAP_SIZE_LIMIT: usize = 512 * 1024 * 1024;
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
 use rquickjs::{CatchResultExt, Ctx, Module, Promise, async_with};
@@ -335,7 +337,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         job.complete(Err("execution job cancelled".to_string()));
         return;
     }
-    let runtime = OwnedJsRuntime::new().await;
+    let runtime = OwnedJsRuntime::new_with_memory_limit(EXECUTION_HEAP_SIZE_LIMIT).await;
     runtime.disable_execution().await;
     let cancelled = job.cancel.clone();
     runtime

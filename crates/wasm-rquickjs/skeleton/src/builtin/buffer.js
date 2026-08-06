@@ -1363,6 +1363,18 @@ function utf16leSlice (buf, start, end) {
     return res
 }
 
+Buffer.prototype.subarray = function subarray (start, end) {
+    // Calling TypedArray.prototype.subarray directly on a Buffer consults the
+    // Buffer constructor through TypedArray species construction. In QuickJS
+    // that reaches the deprecated public Buffer() constructor and emits
+    // DEP0005. Build the view from a plain Uint8Array so normal Buffer view
+    // operations never invoke the deprecated constructor.
+    const bytes = new Uint8Array(this.buffer, this.byteOffset, this.byteLength)
+    const view = Uint8Array.prototype.subarray.call(bytes, start, end)
+    Object.setPrototypeOf(view, Buffer.prototype)
+    return view
+}
+
 Buffer.prototype.slice = function slice (start, end) {
     const len = this.length
     start = ~~start

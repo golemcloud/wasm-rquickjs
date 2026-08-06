@@ -1073,3 +1073,27 @@ export async function httpPipelinedMaxRequests() {
         });
     });
 }
+
+export async function httpCustomConnectionRejected() {
+    return await new Promise((resolve) => {
+        let hookCalled = false;
+        let responseReceived = false;
+        let errorCode = null;
+        const req = http.request({
+            hostname: 'example.invalid',
+            createConnection() {
+                hookCalled = true;
+                throw new Error('custom connection hook must not run');
+            },
+        }, () => {
+            responseReceived = true;
+        });
+        req.on('error', (error) => {
+            errorCode = error.code;
+        });
+        req.on('close', () => {
+            resolve(errorCode === 'ENOSYS' && !hookCalled && !responseReceived);
+        });
+        req.end();
+    });
+}

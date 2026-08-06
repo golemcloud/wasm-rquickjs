@@ -1863,53 +1863,16 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     _initializeCustomConnection(options) {
-        let createConnection;
-        if (typeof options.createConnection === 'function') {
-            createConnection = options.createConnection;
-        } else if (this.agent && this.agent !== false && typeof this.agent.createConnection === 'function') {
-            createConnection = this.agent.createConnection.bind(this.agent);
-        }
+        if (typeof options.createConnection !== 'function') return;
 
-        if (!createConnection) {
-            return;
-        }
-
-        let oncreateCalled = false;
-        const oncreate = (error, socket) => {
-            if (oncreateCalled) {
-                return;
-            }
-            oncreateCalled = true;
-
-            if (error) {
-                this._connectionFailed = true;
-                process.nextTick(() => {
-                    this._emitRequestError(error);
-                });
-                return;
-            }
-
-            if (!socket) {
-                return;
-            }
-
-            this.socket = socket;
-            this._useSocketTransport = true;
-            if (typeof socket.once === 'function') {
-                socket.once('error', (socketError) => {
-                    this._emitRequestError(socketError);
-                });
-            }
-        };
-
-        try {
-            const maybeSocket = createConnection(options, oncreate);
-            if (maybeSocket) {
-                oncreate(null, maybeSocket);
-            }
-        } catch (error) {
-            oncreate(error);
-        }
+        // An explicit per-request custom socket must never bypass wasi:http.
+        // Agent objects remain metadata/scheduling inputs because npm's normal
+        // registry stack uses Agent subclasses even without selecting a custom
+        // component transport. Fail asynchronously so callers can attach their
+        // normal ClientRequest error/close listeners.
+        const error = new Error('Custom node:http createConnection transports are not supported; outbound requests use wasi:http');
+        error.code = 'ENOSYS';
+        this.destroy(error);
     }
 
     _mergeHeader(name, value) {
@@ -2395,13 +2358,7 @@ export class ClientRequest extends OutgoingMessage {
 
             const nativeRes = this._nativeReq.getResponse();
 
-            // When createConnection failed, suppress the response event —
-            // only the error event (emitted by oncreate) should fire.
-            if (this._connectionFailed && nativeRes) {
-                if (typeof nativeRes.discardBody === 'function') {
-                    nativeRes.discardBody();
-                }
-            } else if (nativeRes) {
+            if (nativeRes) {
                 const res = new IncomingMessage(nativeRes, { joinDuplicateHeaders: this._joinDuplicateHeaders });
 
                 // Link response to the request's mock socket

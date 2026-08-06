@@ -1,0 +1,14 @@
+{
+  "name": "npm-compat-local-install",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "verify": "node scripts/verify.mjs",
+    "unsupported-shell": "node scripts/verify.mjs && node scripts/verify.mjs"
+  },
+  "dependencies": {
+    "fixture-commonjs-dependency": "file:packages/fixture-commonjs-dependency",
+    "fixture-dual-dependency": "file:packages/fixture-dual-dependency",
+    "fixture-dependency": "file:packages/fixture-dependency"
+  }
+}

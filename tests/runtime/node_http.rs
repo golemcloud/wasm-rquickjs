@@ -333,3 +333,19 @@ async fn node_http_pipelined_max_requests(
     assert_eq!(r?, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn node_http_custom_connection_rejected(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-custom-connection-rejected",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}

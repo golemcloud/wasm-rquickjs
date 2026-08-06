@@ -1,0 +1,12 @@
+{
+  "name": "fixture-dependency",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/postinstall.cjs"
+  },
+  "bin": {
+    "fixture-bin": "bin/fixture-bin.cjs"
+  },
+  "exports": "./index.js"
+}

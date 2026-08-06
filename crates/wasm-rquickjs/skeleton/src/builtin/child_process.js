@@ -17,6 +17,7 @@ const FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode 
 function createNotSupportedError(method) {
     const err = new Error(method + ' is not supported in WebAssembly environment');
     err.code = 'ENOSYS';
+    err.errno = -38;
     return err;
 }
 
@@ -1367,6 +1368,62 @@ function runExecCommand(command, options) {
     return spawnSync(tokens[0], tokens.slice(1), resolvedOptions);
 }
 
+function resolveNodeShebangCommand(command, env) {
+    if (command.indexOf('/') !== -1) {
+        return null;
+    }
+    const pathValue = env && typeof env.PATH === 'string' ? env.PATH : '';
+    const searchPaths = pathValue.split(':').filter(Boolean);
+    let fs;
+    try {
+        fs = moduleExports.require('node:fs');
+    } catch (_) {
+        return null;
+    }
+    for (let i = 0; i < searchPaths.length; i++) {
+        const candidate = path.resolve(searchPaths[i], command);
+        try {
+            const source = fs.readFileSync(candidate, 'utf8');
+            const firstLineEnd = source.indexOf('\n');
+            const firstLine = firstLineEnd === -1 ? source : source.slice(0, firstLineEnd);
+            if (/^#!.*(?:\/|\s)node(?:\s|$)/.test(firstLine)) {
+                return fs.realpathSync(candidate);
+            }
+        } catch (_) {
+            // Continue through PATH just like executable lookup.
+        }
+    }
+    return null;
+}
+
+function resolveJavaScriptShellCommand(command, args, env) {
+    if (String(command) !== 'sh' || !Array.isArray(args) || args.length !== 2 || args[0] !== '-c') {
+        return null;
+    }
+    const expanded = expandTemplateEnvRefs(args[1], env);
+    if (/[|;&<>]/.test(expanded)) {
+        return null;
+    }
+    const tokens = splitCommandTokens(expanded);
+    if (!tokens || tokens.length === 0) {
+        return null;
+    }
+    if (tokens[0] === 'node' || tokens[0] === process.execPath) {
+        return {
+            command: process.execPath,
+            args: tokens.slice(1),
+        };
+    }
+    const nodeBin = resolveNodeShebangCommand(tokens[0], env);
+    if (nodeBin === null) {
+        return null;
+    }
+    return {
+        command: process.execPath,
+        args: [nodeBin].concat(tokens.slice(1)),
+    };
+}
+
 function createExecError(command, result) {
     if (!result) {
         return createNotSupportedError('exec');
@@ -1690,17 +1747,34 @@ export function spawn(command, args, options) {
         }
         spawnOpts.encoding = 'buffer';
 
-        const result = spawnSync(String(command), args || [], spawnOpts);
-        const exitCode = typeof result.status === 'number' ? result.status : 1;
+        const shellCommand = resolveJavaScriptShellCommand(
+            String(command),
+            args || [],
+            options && options.env ? options.env : process.env,
+        );
+        const resolvedCommand = shellCommand ? shellCommand.command : String(command);
+        const resolvedArgs = shellCommand ? shellCommand.args : (args || []);
+        const result = spawnSync(resolvedCommand, resolvedArgs, spawnOpts);
+        const exitCode = typeof result.status === 'number' ? result.status : null;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
 
         child.stdout._emitData(result.stdout);
         child.stderr._emitData(result.stderr);
+        if (options && options.stdio === 'inherit') {
+            if (result.stdout && result.stdout.length > 0) process.stdout.write(result.stdout);
+            if (result.stderr && result.stderr.length > 0) process.stderr.write(result.stderr);
+        }
+        if (result.error) child.emit('error', result.error);
         child.stdout.emit('end');
         child.stderr.emit('end');
-        child.emit('exit', exitCode, child.signalCode);
-        child.emit('close', exitCode, child.signalCode);
+        if (result.error) {
+            // Node does not emit `exit` when the process could not be spawned.
+            child.emit('close', typeof result.error.errno === 'number' ? result.error.errno : null, null);
+        } else {
+            child.emit('exit', exitCode, child.signalCode);
+            child.emit('close', exitCode, child.signalCode);
+        }
     }, 0);
 
     return child;

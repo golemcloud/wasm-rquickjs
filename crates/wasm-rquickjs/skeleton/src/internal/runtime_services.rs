@@ -24,6 +24,7 @@ pub(crate) struct RuntimeServices {
     pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
     pub(crate) next_execution_job_id: Cell<usize>,
     pub(crate) execution_enabled: Cell<bool>,
+    pub(crate) heap_size_limit: usize,
 }
 
 impl Default for RuntimeServices {
@@ -38,6 +39,7 @@ impl Default for RuntimeServices {
             execution_jobs: RefCell::default(),
             next_execution_job_id: Cell::new(1),
             execution_enabled: Cell::new(true),
+            heap_size_limit: 0,
         }
     }
 }
@@ -236,14 +238,23 @@ pub(crate) struct OwnedJsRuntime {
 
 impl OwnedJsRuntime {
     pub(crate) async fn new() -> Self {
+        Self::new_with_memory_limit(0).await
+    }
+
+    pub(crate) async fn new_with_memory_limit(heap_size_limit: usize) -> Self {
         let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+        rt.set_memory_limit(heap_size_limit).await;
         rt.set_gc_threshold(256 * 1024 * 1024).await;
         let ctx = AsyncContext::full(&rt)
             .await
             .expect("Failed to create AsyncContext");
 
         async_with!(ctx => |ctx| {
-            ctx.store_userdata(RuntimeServices::default())
+            let services = RuntimeServices {
+                heap_size_limit,
+                ..RuntimeServices::default()
+            };
+            ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
         })
         .await;

@@ -1,0 +1,9 @@
+{
+  "name": "fixture-dual-dependency",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "import": "./index.js",
+    "require": "./index.cjs"
+  }
+}
