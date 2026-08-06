@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3236/4411 (73.4%)
+**Primary compatibility (CI-enforced):** 3234/4409 (73.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3236 | 73.4% | 56.3% | 47.1% |
-| 🧩 known gap | 1175 | 26.6% | 20.4% | 17.1% |
-| 🚫 WASI-impossible (excluded) | 1171 | — | 20.4% | 17.0% |
+| ✅ passing (runnable) | 3234 | 73.3% | 56.2% | 47.1% |
+| 🧩 known gap | 1175 | 26.7% | 20.4% | 17.1% |
+| 🚫 WASI-impossible (excluded) | 1173 | — | 20.4% | 17.1% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3236/5750 (56.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3234/5750 (56.2%)**.
 
 ## Inventory by Module
 
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 246 | 289 | 281 | 2 | 0 | 80 | 46.0% | 30.1% |
+| http | 898 | 244 | 289 | 283 | 2 | 0 | 80 | 45.8% | 29.8% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 129 | 25 | 7 | 1 | 0 | 12 | 83.8% | 79.6% |
@@ -298,7 +298,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-http-generic-streams.js` | 5 | 0 | 0 | 5 | 0 | 0 | 0 |
 | `test-http-head-throw-on-response-body-write.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-insecure-parser-per-stream.js` | 5 | 3 | 2 | 0 | 0 | 0 | 0 |
-| `test-http-max-header-size-per-stream.js` | 4 | 2 | 2 | 0 | 0 | 0 | 0 |
+| `test-http-max-header-size-per-stream.js` | 4 | 0 | 2 | 2 | 0 | 0 | 0 |
 | `test-http-missing-header-separator-cr.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-http-missing-header-separator-lf.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-http-outgoing-destroyed.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
@@ -1337,7 +1337,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1171)
+### WASI-impossible (1173)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1389,6 +1389,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires Unix domain sockets (`socketPath`/`common.PIPE`), unavailable in WASI Preview 2 | 2 | `parallel/test-http-unix-socket-keep-alive.js`, `parallel/test-http-unix-socket.js` |
 | requires custom Agent.createConnection transport over a Unix socket, which wasi:http cannot represent | 2 | `parallel/test-http-client-abort-keep-alive-queued-unix-socket.js`, `parallel/test-http-client-abort-unix-socket.js` |
 | requires detached child_process with inherited listening socket fd | 2 | `parallel/test-listen-fd-detached-inherit.js`, `parallel/test-listen-fd-detached.js` |
+| requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http | 2 | `parallel/test-http-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`, `parallel/test-http-max-header-size-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_` |
 | requires https.createServer (TLS server), unsupported by WASI transport | 2 | `parallel/test-https-abortcontroller.js`, `parallel/test-https-agent-abort-controller.js` |
 | requires inspector/CPU profiling | 2 | `sequential/test-diagnostic-dir-cpu-prof.js#block_00_block_00`, `sequential/test-diagnostic-dir-cpu-prof.js#block_01_block_01` |
 | requires inspector/heap profiling | 2 | `sequential/test-diagnostic-dir-heap-prof.js#block_00_test_diagnostic_dir_changes_the_default_for_cpu_prof`, `sequential/test-diagnostic-dir-heap-prof.js#block_01_test_heap_prof_dir_overwrites_diagnostic_dir` |

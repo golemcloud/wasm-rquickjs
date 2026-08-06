@@ -5085,8 +5085,8 @@
     "parallel/test-http-max-header-size-per-stream.js": {
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
         "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": { "category": "known-gap", "reason": "server option maxHeaderSize is ignored for incoming oversized headers" },
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "category": "known-gap", "reason": "without maxHeaderSize override, oversized headers do not follow the expected clientError path" }
       }
