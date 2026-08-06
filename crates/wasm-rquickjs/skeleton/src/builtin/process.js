@@ -6,7 +6,9 @@ import {
     write_stdout,
     write_stderr,
     hrtime_ns,
-    memory_usage as _native_memory_usage
+    memory_usage as _native_memory_usage,
+    has_typescript_runtime,
+    typescript_runtime_mode
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
@@ -202,11 +204,14 @@ process.config = {
         asan: 0,
         openssl_quic: 0,
         node_module_version: 127,
+        node_use_amaro: has_typescript_runtime(),
     },
 };
 Object.freeze(process.config.target_defaults);
 Object.freeze(process.config.variables);
 Object.freeze(process.config);
+process.execArgv = [];
+const typescriptRuntimeMode = typescript_runtime_mode();
 process.features = {
     inspector: false,
     debug: false,
@@ -218,9 +223,8 @@ process.features = {
     tls: false,
     cached_builtins: true,
     require_module: true,
-    typescript: false,
+    typescript: typescriptRuntimeMode ?? false,
 };
-process.execArgv = [];
 process.execPath = '/usr/local/bin/node';
 let _title = 'wasm-rquickjs';
 Object.defineProperty(process, 'title', {

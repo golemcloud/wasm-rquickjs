@@ -80,6 +80,10 @@ crypto-full = [
 sqlite = ["dep:rusqlite"]
 timezone = ["dep:chrono-tz"]
 
+# TypeScript
+typescript-runtime = ["dep:swc_common", "dep:swc_ts_fast_strip"]
+typescript-transform-runtime = ["typescript-runtime"]
+
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]
 
@@ -164,6 +168,10 @@ http = { version = "1", optional = true }
 chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 chrono-tz = { version = "0.10", default-features = false, optional = true }
 unicode-segmentation = "1.12"
+
+# TypeScript
+swc_common = { version = "24.0.0", optional = true }
+swc_ts_fast_strip = { version = "56.0.0", optional = true }
 
 # HTTP
 golem-wasi-http = { version = "0.2.0", features = ["async"], optional = true }

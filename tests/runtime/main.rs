@@ -46,6 +46,7 @@ mod structured_clone;
 mod test_server_handle;
 mod timeout;
 mod toplevel_timer;
+mod typescript_runtime;
 mod url;
 mod v8_stack_trace;
 mod variant_list_roundtrip;
@@ -102,6 +103,7 @@ tag_suite!(node_http, group8);
 tag_suite!(intl, group8);
 tag_suite!(example1, group8);
 tag_suite!(example2, group8);
+tag_suite!(typescript_runtime, group8);
 
 tag_suite!(node_modules_apps, group9);
 

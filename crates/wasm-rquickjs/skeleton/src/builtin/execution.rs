@@ -25,6 +25,7 @@ pub const EXECUTION_JS: &str = include_str!("execution.js");
 struct ExecutionOptions {
     entry: Option<String>,
     source: Option<String>,
+    language: ExecutionLanguage,
     cwd: String,
     argv: Vec<String>,
     env: HashMap<String, String>,
@@ -39,6 +40,13 @@ struct ExecutionOptions {
 enum OverflowPolicy {
     Terminate,
     Truncate,
+}
+
+#[derive(Deserialize, Copy, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum ExecutionLanguage {
+    Javascript,
+    Typescript,
 }
 
 pub(crate) struct ExecutionJob {
@@ -131,6 +139,35 @@ impl RuntimeOutputSink for ExecutionJob {
     }
 }
 
+fn execution_control_error(job: &ExecutionJob, deadline: Option<Instant>) -> Option<&'static str> {
+    if job.cancel.load(Ordering::Relaxed) {
+        return Some("execution job cancelled");
+    }
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        job.timed_out.store(true, Ordering::Relaxed);
+        return Some("execution job timed out");
+    }
+    None
+}
+
+#[cfg(feature = "typescript-runtime")]
+fn transform_typescript_execution_source(source: String, name: &str) -> Result<String, String> {
+    crate::internal::typescript::transform(
+        source,
+        name,
+        crate::internal::typescript::runtime_mode(),
+        false,
+        Some(true),
+    )
+    .map(|output| output.code)
+    .map_err(|error| error.message)
+}
+
+#[cfg(not(feature = "typescript-runtime"))]
+fn transform_typescript_execution_source(_source: String, _name: &str) -> Result<String, String> {
+    Err("TypeScript runtime support is not enabled".to_string())
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PollResult {
@@ -211,10 +248,9 @@ pub mod native_module {
             jobs.get(&id).cloned()
         }
         .ok_or_else(|| rquickjs::Exception::throw_range(&ctx, "unknown execution job"))?;
-        let options =
-            job.options.borrow_mut().take().ok_or_else(|| {
-                rquickjs::Exception::throw_range(&ctx, "execution job already started")
-            })?;
+        let options = job.options.borrow_mut().take().ok_or_else(|| {
+            rquickjs::Exception::throw_range(&ctx, "execution job already started")
+        })?;
         run_job(options, job).await;
         Ok(())
     }
@@ -242,7 +278,10 @@ pub mod native_module {
         })
         .await;
         if job.forgotten.load(Ordering::Relaxed) {
-            return Err(rquickjs::Exception::throw_range(&ctx, "unknown execution job"));
+            return Err(rquickjs::Exception::throw_range(
+                &ctx,
+                "unknown execution job",
+            ));
         }
         let completion = job.completion.borrow();
         let (done, value, error) = match completion.as_ref() {
@@ -405,7 +444,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         "__wasm_rquickjs_execution_inline.mjs"
     });
     let name = wrapper_name.to_string_lossy().into_owned();
-    let source = if let Some(entry) = entry {
+    let mut source = if let Some(entry) = entry {
         let specifier =
             serde_json::to_string(&entry.to_string_lossy()).expect("path string is serializable");
         format!(
@@ -422,6 +461,23 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             options.source.unwrap_or_default()
         )
     };
+    if options.language == ExecutionLanguage::Typescript {
+        if let Some(error) = execution_control_error(&job, deadline) {
+            job.complete(Err(error.to_string()));
+            return;
+        }
+        source = match transform_typescript_execution_source(source, &name) {
+            Ok(source) => source,
+            Err(error) => {
+                job.complete(Err(error));
+                return;
+            }
+        };
+        if let Some(error) = execution_control_error(&job, deadline) {
+            job.complete(Err(error.to_string()));
+            return;
+        }
+    }
     let execution = async {
         async_with!(runtime.ctx => |ctx| {
             Module::evaluate(ctx.clone(), name, source).catch(&ctx)

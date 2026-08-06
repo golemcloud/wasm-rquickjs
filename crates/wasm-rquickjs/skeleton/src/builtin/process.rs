@@ -89,6 +89,22 @@ pub mod native_module {
         let origin = ORIGIN.get_or_init(Instant::now);
         origin.elapsed().as_nanos() as u64
     }
+
+    #[rquickjs::function]
+    pub fn has_typescript_runtime() -> bool {
+        cfg!(feature = "typescript-runtime")
+    }
+
+    #[rquickjs::function]
+    pub fn typescript_runtime_mode() -> Option<&'static str> {
+        if cfg!(feature = "typescript-transform-runtime") {
+            Some("transform")
+        } else if cfg!(feature = "typescript-runtime") {
+            Some("strip")
+        } else {
+            None
+        }
+    }
 }
 
 // JS functions for the process implementation

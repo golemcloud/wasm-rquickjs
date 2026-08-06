@@ -2129,10 +2129,7 @@ pub trait FuturePayloadBridge: 'static {
 
     fn wrap(value: Self::Component) -> Self::Js;
     fn unwrap(value: Self::Js) -> Self::Component;
-    fn channel() -> (
-        FutureWriter<Self::Component>,
-        FutureReader<Self::Component>,
-    );
+    fn channel() -> (FutureWriter<Self::Component>, FutureReader<Self::Component>);
 }
 
 pub struct FutureReaderWrapper<B: FuturePayloadBridge> {
@@ -2173,10 +2170,7 @@ pub trait StreamPayloadBridge: 'static {
 
     fn wrap(value: Self::Component) -> Self::Js;
     fn unwrap(value: Self::Js) -> Self::Component;
-    fn channel() -> (
-        StreamWriter<Self::Component>,
-        StreamReader<Self::Component>,
-    );
+    fn channel() -> (StreamWriter<Self::Component>, StreamReader<Self::Component>);
 }
 
 pub struct StreamReaderWrapper<B: StreamPayloadBridge> {

@@ -135,6 +135,8 @@ mod tls;
 mod trace_events;
 #[path = "builtin/tty.rs"]
 mod tty;
+#[path = "builtin/typescript.rs"]
+mod typescript;
 #[path = "builtin/url.rs"]
 mod url;
 #[path = "builtin/util.rs"]
@@ -344,7 +346,8 @@ pub fn add_module_resolvers(
 
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/execution_native")
-        .with_module("wasm-rquickjs:execution");
+        .with_module("wasm-rquickjs:execution")
+        .with_module("__wasm_rquickjs_builtin/typescript_native");
 
     #[cfg(feature = "golem")]
     let resolver = resolver
@@ -434,6 +437,10 @@ pub fn module_loader() -> (
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/execution_native",
         execution::js_native_module,
+    );
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/typescript_native",
+        typescript::js_native_module,
     );
 
     #[cfg(feature = "golem")]

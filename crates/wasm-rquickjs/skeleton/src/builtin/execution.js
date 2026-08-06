@@ -28,6 +28,11 @@ function normalize(options) {
     throw invalidType('entry', 'a string', options.entry);
   if (hasSource && typeof options.source !== 'string')
     throw invalidType('source', 'a string', options.source);
+  const language = options.language ?? 'javascript';
+  if (language !== 'javascript' && language !== 'typescript')
+    throw new TypeError('language must be javascript or typescript');
+  if (hasEntry && options.language !== undefined)
+    throw new TypeError('language is only supported with source');
   const cwd = options.cwd ?? process.cwd();
   if (typeof cwd !== 'string') throw invalidType('cwd', 'a string', cwd);
   const argv = options.argv ?? [];
@@ -49,7 +54,7 @@ function normalize(options) {
   const overflow = options.overflow ?? 'terminate';
   if (overflow !== 'terminate' && overflow !== 'truncate') throw new TypeError('overflow must be terminate or truncate');
   return {
-    entry: options.entry, source: options.source, cwd: resolve(cwd),
+    entry: options.entry, source: options.source, language, cwd: resolve(cwd),
     argv, env, timeoutMs, maxBytes, overflow,
   };
 }

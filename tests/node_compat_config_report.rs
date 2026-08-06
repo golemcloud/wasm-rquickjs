@@ -265,7 +265,10 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
         "programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode",
         "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
         "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes",
-        "requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR",
+        "requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture",
+        "requires isolated process.execPath --experimental-transform-types execution and CLI source-map configuration",
+        "requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling",
+        "requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component",
         "requires child_process execFileSync with copied process.execPath and Node global module path layout",
         "requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module",
         "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR",
@@ -279,7 +282,6 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
         "same-process ESM invalid package config diagnostics are covered by module-resolution runtime tests; vendored fixture asserts stderr/status through spawned process.execPath ESM entry-point emulation",
         "same-process dynamic import cache behavior is covered by runner_dynamic_import_cache_survives_removed_file; full Node test also requires spawned process.execPath --input-type=module support",
         "same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes",
-        "stripTypeScriptTypes requires Amaro support, which is not implemented",
     ];
 
     reason.is_some_and(|reason| ACCEPTED_REASONS.contains(&reason))

@@ -1484,11 +1484,15 @@ pub enum FeatureCombination {
     None,
     Lite,
     Normal,
+    InternalTestExecution,
+    TypeScriptRuntime,
+    TypeScriptTransformRuntime,
     Full,
     FullNoLogging,
     Golem,
     FullWithGolem,
     FullNoLoggingWithGolem,
+    FullNoLoggingWithGolemAndTypeScript,
 }
 
 impl FeatureCombination {
@@ -1501,11 +1505,15 @@ impl FeatureCombination {
             Self::None => "none",
             Self::Lite => "lite",
             Self::Normal => "normal",
+            Self::InternalTestExecution => "internal-test-execution",
+            Self::TypeScriptRuntime => "typescript-runtime",
+            Self::TypeScriptTransformRuntime => "typescript-transform-runtime",
             Self::Full => "full",
             Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
             Self::FullWithGolem => "full-golem",
             Self::FullNoLoggingWithGolem => "full-no-logging-golem",
+            Self::FullNoLoggingWithGolemAndTypeScript => "full-no-logging-golem-typescript",
         }
     }
 
@@ -1518,6 +1526,13 @@ impl FeatureCombination {
                 vec!["--no-default-features", "--features", "lite"]
             }
             FeatureCombination::Normal => vec![],
+            FeatureCombination::InternalTestExecution => {
+                vec!["--features", "internal-test-execution"]
+            }
+            FeatureCombination::TypeScriptRuntime => vec!["--features", "typescript-runtime"],
+            FeatureCombination::TypeScriptTransformRuntime => {
+                vec!["--features", "typescript-transform-runtime"]
+            }
             FeatureCombination::Full => {
                 vec!["--no-default-features", "--features", "full"]
             }
@@ -1533,6 +1548,13 @@ impl FeatureCombination {
                     "--no-default-features",
                     "--features",
                     "full-no-logging,golem",
+                ]
+            }
+            FeatureCombination::FullNoLoggingWithGolemAndTypeScript => {
+                vec![
+                    "--no-default-features",
+                    "--features",
+                    "full-no-logging,golem,typescript-runtime",
                 ]
             }
         }
@@ -1555,11 +1577,21 @@ impl FeatureCombination {
                 let features = match self {
                     FeatureCombination::None | FeatureCombination::Lite => "p3",
                     FeatureCombination::Normal => "normal-p3",
+                    FeatureCombination::InternalTestExecution => {
+                        "normal-p3,internal-test-execution"
+                    }
+                    FeatureCombination::TypeScriptRuntime => "normal-p3,typescript-runtime",
+                    FeatureCombination::TypeScriptTransformRuntime => {
+                        "normal-p3,typescript-transform-runtime"
+                    }
                     FeatureCombination::Full => "full-p3",
                     FeatureCombination::FullNoLogging => "full-no-logging-p3",
                     FeatureCombination::Golem => "normal-p3,golem",
                     FeatureCombination::FullWithGolem => "full-p3,golem",
                     FeatureCombination::FullNoLoggingWithGolem => "full-no-logging-p3,golem",
+                    FeatureCombination::FullNoLoggingWithGolemAndTypeScript => {
+                        "full-no-logging-p3,golem,typescript-runtime"
+                    }
                 };
                 vec!["--no-default-features", "--features", features]
             }
@@ -1573,6 +1605,7 @@ impl FeatureCombination {
                 | FeatureCombination::FullNoLogging
                 | FeatureCombination::FullWithGolem
                 | FeatureCombination::FullNoLoggingWithGolem
+                | FeatureCombination::FullNoLoggingWithGolemAndTypeScript
         )
     }
 }

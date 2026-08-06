@@ -45,6 +45,23 @@ async fn execution_isolation(
     assert_eq!(report["left"]["stdout"], "left\n");
     assert_eq!(report["right"]["value"], "right");
     assert_eq!(report["right"]["stdout"], "right\n");
+    assert_eq!(
+        report["defaultEnvironment"]["value"]["keys"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        report["defaultEnvironment"]["value"]["parentSecret"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        report["explicitEnvironment"]["value"]["keys"],
+        serde_json::json!(["ALLOWED"])
+    );
+    assert_eq!(report["explicitEnvironment"]["value"]["allowed"], "visible");
+    assert_eq!(
+        report["explicitEnvironment"]["value"]["parentSecret"],
+        serde_json::Value::Null
+    );
     assert_eq!(report["packageCacheFirst"]["value"], "first");
     assert_eq!(report["packageCacheSecond"]["value"], "second");
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
@@ -94,6 +111,22 @@ async fn execution_isolation(
     assert_eq!(
         report["defaultArgv"]["value"],
         serde_json::json!(["wasm-rquickjs-execution"])
+    );
+    assert_eq!(report["largeJavaScript"]["value"], "large-javascript");
+    assert_eq!(report["typescriptDisabled"], true);
+    assert!(
+        report["disabledStripError"]
+            .as_str()
+            .is_some_and(|message| message.contains("TypeScript runtime support is not enabled")),
+        "unexpected disabled strip error: {}",
+        report["disabledStripError"]
+    );
+    assert!(
+        report["disabledExecutionError"]
+            .as_str()
+            .is_some_and(|message| message.contains("TypeScript runtime support is not enabled")),
+        "unexpected disabled execution error: {}",
+        report["disabledExecutionError"]
     );
     assert_eq!(report["imports"]["value"]["local"], "local");
     assert_eq!(report["imports"]["value"]["package"], "package");

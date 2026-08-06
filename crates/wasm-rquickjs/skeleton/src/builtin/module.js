@@ -50,7 +50,7 @@ import * as worker_threads from 'node:worker_threads';
 import * as zlib from 'node:zlib';
 import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
-import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
@@ -61,6 +61,10 @@ import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
+import {
+    transform_typescript as transformTypeScriptNative,
+    transform_typescript_module as transformTypeScriptModuleNative,
+} from '__wasm_rquickjs_builtin/typescript_native';
 
 const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
 const objectDefineProperty = Object.defineProperty.bind(Object);
@@ -350,7 +354,7 @@ function _detectMockModuleKind(canonicalKey) {
     if (canonicalKey.startsWith('builtin:')) return 'cjs';
     if (!canonicalKey.startsWith('path:')) return 'esm';
     const filename = canonicalKey.slice(5);
-    if (filename.endsWith('.mjs')) return 'esm';
+    if (filename.endsWith('.mjs') || filename.endsWith('.mts')) return 'esm';
     // Default to CJS for .js, .cjs, and everything else
     return 'cjs';
 }
@@ -756,7 +760,11 @@ const defaultNodeExtensionHandler = function _defaultNode(mod, filename) { /* bu
 requireExtensions['.js'] = defaultJsExtensionHandler;
 requireExtensions['.json'] = defaultJsonExtensionHandler;
 requireExtensions['.node'] = defaultNodeExtensionHandler;
-const _defaultExtHandlers = setFromArray([defaultJsExtensionHandler, defaultJsonExtensionHandler, defaultNodeExtensionHandler]);
+const _defaultExtHandlers = setFromArray([
+    defaultJsExtensionHandler,
+    defaultJsonExtensionHandler,
+    defaultNodeExtensionHandler,
+]);
 
 function cjsPathCacheObject() {
     return moduleExports._pathCache;
@@ -1586,67 +1594,61 @@ function registerSourceMapForCjs(filename, source, moduleObject) {
     }
 }
 
-function countMatches(text, charCode) {
-    let count = 0;
-    for (let i = 0; i < text.length; i++) {
-        if (text.charCodeAt(i) === charCode) {
-            count += 1;
-        }
-    }
-    return count;
+function isTypeScriptFilename(filename) {
+    return filename.endsWith('.ts') || filename.endsWith('.cts') || filename.endsWith('.mts');
 }
 
-function transpileTypeScriptModule(filename, source) {
-    if (!isExperimentalTransformTypesEnabled() || !filename.endsWith('.ts')) {
+function transpileTypeScriptModule(filename, source, module = undefined) {
+    if (!isTypeScriptFilename(filename)) {
         return source;
     }
+    // Rust owns the transform semantics. This adapter only applies CommonJS
+    // loader policy; the Rust filesystem loader applies the same service for ESM.
+    return JSON.parse(transformTypeScriptModuleNative(
+        String(source), filename, module
+    )).code;
+}
 
-    const lines = String(source).split('\n');
-    const transformedLines = [];
-    const generatedLineToOriginalLine = Object.create(null);
-    let insideInterface = false;
-    let interfaceDepth = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        if (insideInterface) {
-            interfaceDepth += countMatches(line, 123) - countMatches(line, 125);
-            if (interfaceDepth <= 0) {
-                insideInterface = false;
-                interfaceDepth = 0;
-            }
-            continue;
-        }
-
-        const trimmed = line.trim();
-        if (/^interface\s+[A-Za-z_$][A-Za-z0-9_$]*\b/.test(trimmed)) {
-            interfaceDepth = countMatches(line, 123) - countMatches(line, 125);
-            if (interfaceDepth > 0) {
-                insideInterface = true;
-            }
-            continue;
-        }
-
-        if (trimmed.length === 0) {
-            continue;
-        }
-
-        transformedLines.push(line);
-        generatedLineToOriginalLine[transformedLines.length] = i + 1;
+export function stripTypeScriptTypes(code, options = undefined) {
+    if (typeof code !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('code', 'string', code);
+    }
+    if (options !== undefined &&
+        (options === null || typeof options !== 'object' || Array.isArray(options))) {
+        throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
+    }
+    const normalized = options === undefined ? {} : options;
+    const mode = normalized.mode === undefined ? 'strip' : normalized.mode;
+    if (mode !== 'strip' && mode !== 'transform') {
+        throw new ERR_INVALID_ARG_VALUE('options.mode', mode, "must be 'strip' or 'transform'");
+    }
+    const sourceMap = normalized.sourceMap === undefined ? false : normalized.sourceMap;
+    if (typeof sourceMap !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.sourceMap', 'boolean', sourceMap);
+    }
+    const sourceUrl = normalized.sourceUrl;
+    if (sourceUrl !== undefined && typeof sourceUrl !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('options.sourceUrl', 'string', sourceUrl);
+    }
+    if (mode === 'strip' && sourceMap) {
+        throw new ERR_INVALID_ARG_VALUE(
+            'options.sourceMap', sourceMap, "cannot be used when mode is 'strip'"
+        );
     }
 
-    const transformed = transformedLines.join('\n');
-    const sourceMapRegistry = getSimpleSourceMapRegistry();
-    if (isSourceMapsEnabled()) {
-        sourceMapRegistry[filename] = {
-            generatedLineToOriginalLine,
-        };
-    } else {
-        delete sourceMapRegistry[filename];
+    internalUtil.emitExperimentalWarning('stripTypeScriptTypes');
+    const transformed = JSON.parse(transformTypeScriptNative(
+        code, sourceUrl === undefined ? '' : sourceUrl, mode, sourceMap, undefined
+    ));
+    let result = transformed.code;
+    if (sourceMap) {
+        const encoded = buffer.Buffer.from(transformed.sourceMap, 'utf8').toString('base64');
+        result += `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
     }
-
-    return transformed;
+    if (sourceUrl !== undefined) {
+        result += `\n\n//# sourceURL=${sourceUrl}`;
+    }
+    return result;
 }
 
 function getArrowMessagePrivateSymbol() {
@@ -1800,15 +1802,16 @@ function rustModuleSourceAnalysis(source) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_module_source(source);
 }
 
-function isEsmGraphFile(filename, source, analysis) {
-    const packageScope = filename.endsWith('.js') ? getPackageScopeInfo(filename) : null;
+function isEsmGraphFile(filename, analysis) {
+    const packageScope = (filename.endsWith('.js') || filename.endsWith('.ts'))
+        ? getPackageScopeInfo(filename)
+        : null;
     const explicitPackageType = packageScope ? packageScope.packageType : null;
     const isCommonJsPackage = explicitPackageType === 'commonjs' ||
         (explicitPackageType === null && packageScope !== null && packageScope.isNodeModulesPackage);
-    if (filename.endsWith('.mjs') ||
-        (filename.endsWith('.js') && explicitPackageType === 'module')) return true;
-    if (filename.endsWith('.cjs') || isCommonJsPackage) return false;
-    analysis = analysis || rustModuleSourceAnalysis(source);
+    if (filename.endsWith('.mjs') || filename.endsWith('.mts') ||
+        ((filename.endsWith('.js') || filename.endsWith('.ts')) && explicitPackageType === 'module')) return true;
+    if (filename.endsWith('.cjs') || filename.endsWith('.cts') || isCommonJsPackage) return false;
     return analysis.looksLikeEsm || analysis.hasCjsWrapperLexicalRedeclaration;
 }
 
@@ -1820,11 +1823,12 @@ function readEsmGraphFileInfo(filename, cache) {
     if (source === null) {
         return { source: null, isEsm: false };
     }
-    const analysis = rustModuleSourceAnalysis(source);
+    const preparedSource = transpileTypeScriptModule(filename, source, true);
+    const analysis = rustModuleSourceAnalysis(preparedSource);
     const info = {
-        source,
+        source: preparedSource,
         analysis,
-        isEsm: isEsmGraphFile(filename, source, analysis),
+        isEsm: isEsmGraphFile(filename, analysis),
     };
     cache[filename] = info;
     return info;
@@ -2128,7 +2132,7 @@ function compileCjs(filename, source) {
         source = '//' + source;
     }
 
-    source = transpileTypeScriptModule(filename, source);
+    source = transpileTypeScriptModule(filename, source, false);
     source = stripV8OptimizationIntrinsics(source);
     const strippedImportAttributes = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_prepare_cjs_source(
         source,
@@ -2244,8 +2248,8 @@ function rustClassifiesPathSpecifier(specifier) {
 
 function defaultLoaderFormatForFilename(filename) {
     if (filename.endsWith('.json')) return 'json';
-    if (filename.endsWith('.mjs')) return 'module';
-    if (filename.endsWith('.cjs')) return 'commonjs';
+    if (filename.endsWith('.mjs') || filename.endsWith('.mts')) return 'module';
+    if (filename.endsWith('.cjs') || filename.endsWith('.cts')) return 'commonjs';
     return undefined;
 }
 
@@ -2766,12 +2770,14 @@ function loadCommonJsTransaction(descriptor) {
             throw err;
         }
     } else {
-        const packageScope = filename.endsWith('.js') ? getPackageScopeInfo(filename) : null;
+        const packageScope = (filename.endsWith('.js') || filename.endsWith('.ts'))
+            ? getPackageScopeInfo(filename)
+            : null;
         const explicitPackageType = packageScope ? packageScope.packageType : null;
         const isCommonJsPackage = explicitPackageType === 'commonjs' ||
             (explicitPackageType === null && packageScope !== null && packageScope.isNodeModulesPackage);
-        const isEsm = filename.endsWith('.mjs') ||
-            (filename.endsWith('.js') && explicitPackageType === 'module');
+        const isEsm = filename.endsWith('.mjs') || filename.endsWith('.mts') ||
+            ((filename.endsWith('.js') || filename.endsWith('.ts')) && explicitPackageType === 'module');
         if (isEsm && rustHasExecArgvFlag('--no-experimental-require-module')) {
             discardCjsModuleLoad(cacheKey, parentModule, mod);
             const esmErr = new Error(
@@ -2801,7 +2807,8 @@ function loadCommonJsTransaction(descriptor) {
             const childRequire = makeRequire(dirname, mod);
             let compiledFn;
             let cjsSyntaxError = null;
-            const shouldFallbackToEsm = canFallbackToEsm && !filename.endsWith('.cjs') && !isCommonJsPackage;
+            const shouldFallbackToEsm = canFallbackToEsm &&
+                !filename.endsWith('.cjs') && !filename.endsWith('.cts') && !isCommonJsPackage;
             let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
             try {
@@ -4433,6 +4440,7 @@ const moduleExports = Object.assign(Module, {
     _stat: _stat,
     globalPaths: globalPaths,
     setSourceMapsSupport,
+    stripTypeScriptTypes,
 });
 moduleExportsInitialized = true;
 Object.defineProperties(moduleExports, {

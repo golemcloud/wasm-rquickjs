@@ -1,0 +1,5 @@
+package quickjs:typescript-runtime;
+
+world typescript-runtime {
+  export run: func() -> string;
+}

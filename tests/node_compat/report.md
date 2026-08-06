@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3228/4425 (72.9%)
+**Primary compatibility (CI-enforced):** 3236/4425 (73.1%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3228 | 72.9% | 56.1% | 47.0% |
-| 🧩 known gap | 1197 | 27.1% | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3236 | 73.1% | 56.3% | 47.1% |
+| 🧩 known gap | 1189 | 26.9% | 20.7% | 17.3% |
 | 🚫 WASI-impossible (excluded) | 1157 | — | 20.1% | 16.8% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3228/5750 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3236/5750 (56.3%)**.
 
 ## Inventory by Module
 
@@ -53,7 +53,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | http | 898 | 246 | 303 | 267 | 2 | 0 | 80 | 44.8% | 30.1% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 174 | 120 | 34 | 7 | 1 | 0 | 12 | 77.9% | 74.1% |
+| module | 174 | 129 | 25 | 7 | 1 | 0 | 12 | 83.8% | 79.6% |
 | net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
@@ -79,7 +79,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| util | 174 | 89 | 8 | 0 | 0 | 0 | 77 | 91.8% | 91.8% |
+| util | 174 | 88 | 9 | 0 | 0 | 0 | 77 | 90.7% | 90.7% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
@@ -363,7 +363,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-module-create-require-multibyte.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-module-multi-extensions.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
 | `test-module-setsourcemapssupport.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-module-strip-types.js` | 9 | 0 | 9 | 0 | 0 | 0 | 0 |
+| `test-module-strip-types.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-allow-half-open.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-autoselectfamily-default.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-autoselectfamily.js` | 4 | 3 | 1 | 0 | 0 | 0 | 0 |
@@ -580,7 +580,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-util-callbackify.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-deprecate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-format.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
-| `test-util-getcallsites.js` | 13 | 13 | 0 | 0 | 0 | 0 | 0 |
+| `test-util-getcallsites.js` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |
 | `test-util-inspect-getters-accessing-this.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-inspect.js` | 99 | 48 | 2 | 0 | 0 | 0 | 49 |
 | `test-util-isDeepStrictEqual.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1197)
+### known gap (1189)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -705,7 +705,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks not fully implemented | 9 | `parallel/test-async-hooks-destroy-on-gc.js`, `parallel/test-async-hooks-disable-during-promise.js`, `parallel/test-async-hooks-disable-gc-tracking.js`, ... (+6) |
 | spawn() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 9 | `parallel/test-child-process-spawn-controller.js#block_00_block_00`, `parallel/test-child-process-spawn-controller.js#block_01_block_01`, `parallel/test-child-process-spawn-controller.js#block_02_block_02`, ... (+6) |
 | spawnSync() returns ENOSYS for non-execPath commands; Node expects ENOENT after option validation | 9 | `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`, `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`, `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`, ... (+6) |
-| stripTypeScriptTypes requires Amaro support, which is not implemented | 9 | `parallel/test-module-strip-types.js#test_00_striptypescripttypes`, `parallel/test-module-strip-types.js#test_01_striptypescripttypes_explicit`, `parallel/test-module-strip-types.js#test_02_striptypescripttypes_code_is_not_a_string`, ... (+6) |
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source | 7 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_04_should_be_importable`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_05_should_be_importable_from_a_module_scope_under_node_modules`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_09_should_run_on_import`, ... (+4) |
@@ -723,7 +722,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:readline createInterface/async iterator API is not implemented | 5 | `parallel/test-readline-async-iterators-backpressure.js`, `parallel/test-readline-async-iterators-destroy.js`, `parallel/test-readline-async-iterators.js`, ... (+2) |
 | node_compat common shim is missing ../common/wpt harness | 5 | `parallel/test-whatwg-events-event-constructors.js`, `parallel/test-whatwg-events-eventtarget-this-of-listener.js`, `parallel/test-whatwg-url-custom-searchparams-sort.js`, ... (+2) |
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
-| requires Node TypeScript stripping/Amaro support, which is out of scope for this module PR | 5 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-eval.mjs`, `es-module/test-typescript-module.mjs`, ... (+2) |
 | util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
@@ -803,6 +801,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.report.writeReport and permission-model integration are missing | 2 | `parallel/test-permission-fs-write-report.js#block_00_block_00`, `parallel/test-permission-fs-write-report.js#block_01_block_01` |
 | promisified exec()/execFile() rejection errors miss stdout/stderr fields | 2 | `parallel/test-child-process-promisified.js#block_04_block_04`, `parallel/test-child-process-promisified.js#block_05_block_05` |
 | requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_async_resolve_hook_registered` |
+| requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 2 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-module.mjs` |
 | requires spawned process.execPath entry-point execution for extensionless ESM files | 2 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_00_should_run_as_the_entry_point`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_06_should_run_as_the_entry_point` |
 | spawn() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01` |
 | strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message | 2 | `parallel/test-vm-global-non-writable-properties.js`, `parallel/test-vm-strict-assign.js` |
@@ -959,6 +958,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | SourceTextModule evaluation timeout does not interrupt an infinite loop | 1 | `parallel/test-vm-module-basic.js#block_02_statement_02` |
 | SourceTextModule identifiers are not incremented per VM context like Node | 1 | `parallel/test-vm-module-basic.js#block_03_check_the_generated_identifier_for_each_module` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
+| TypeScript transform source maps are not applied to QuickJS stack call-site locations | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | URL inspect output uses the URL string instead of Node's structured URL representation | 1 | `parallel/test-whatwg-url-custom-inspect.js` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
@@ -1223,6 +1223,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
+| requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 1 | `es-module/test-typescript-eval.mjs` |
+| requires isolated process.execPath --experimental-transform-types execution and CLI source-map configuration | 1 | `es-module/test-typescript-transform.mjs` |
+| requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 1 | `es-module/test-typescript.mjs` |
 | requires net.createServer with pauseOnConnect and socket.localPort; wasi:http does not expose socket-level properties | 1 | `parallel/test-http-agent-reuse-drained-socket-only.js` |
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |
 | requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them | 1 | `parallel/test-http-multi-line-headers.js` |
