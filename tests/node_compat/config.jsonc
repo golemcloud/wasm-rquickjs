@@ -3808,7 +3808,7 @@
     "parallel/test-async-hooks-prevent-double-destroy.js": { "category": "known-gap", "reason": "async_hooks not fully implemented" },
     "parallel/test-async-wrap-promise-after-enabled.js": { "category": "known-gap", "reason": "async_hooks not fully implemented" },
     "parallel/test-async-wrap-uncaughtexception.js": { "category": "known-gap", "reason": "async_hooks not fully implemented" },
-    "parallel/test-client-request-destroy.js": {},
+    "parallel/test-client-request-destroy.js": { "category": "known-gap", "reason": "ClientRequest rejects unsupported custom createConnection during construction, so destroyed is true before connection use" },
     "parallel/test-console-async-write-error.js": {},
     "parallel/test-console-sync-write-error.js": {},
     "parallel/test-diagnostics-channel-safe-subscriber-errors.js": { "category": "known-gap", "reason": "diagnostics_channel subscriber-throw path does not surface uncaughtException handling like Node.js" },
@@ -4519,7 +4519,7 @@
     "parallel/test-http-highwatermark.js": {},
     "parallel/test-http-host-header-ipv6-fail.js": { "category": "known-gap", "reason": "http.request host header formatting for IPv6 literals is incorrect (missing [::1]:port form)" },
     "parallel/test-http-host-headers.js": { "category": "known-gap", "reason": "Host header generation/handling in node:http is not fully Node-compatible" },
-    "parallel/test-http-incoming-message-options.js": {},
+    "parallel/test-http-incoming-message-options.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) with a custom node:net transport; node:http outbound requests always use wasi:http" },
     "parallel/test-http-information-processing.js": { "category": "known-gap", "reason": "wasi:http client does not surface informational 1xx responses as 'information' events" },
     "parallel/test-http-insecure-parser.js": { "category": "known-gap", "reason": "http edge case not yet handled" },
     "parallel/test-http-invalid-te.js": { "category": "known-gap", "reason": "clientError does not expose Node-compatible parse error details (missing code HPE_INVALID_TRANSFER_ENCODING)" },
@@ -5071,8 +5071,8 @@
     "parallel/test-http-insecure-parser-per-stream.js": {
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": {},
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_00_test_1_the_server_sends_an_invalid_header": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
         "block_02_test_3_the_client_sends_an_invalid_header": { "category": "known-gap", "reason": "server option insecureHTTPParser:true is ignored for incoming invalid headers" },
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "category": "known-gap", "reason": "without insecureHTTPParser, invalid headers do not follow the expected clientError path" },
         "block_04_test_5_invalid_argument_type": {}
