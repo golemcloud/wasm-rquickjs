@@ -109,6 +109,28 @@ export async function runInstalled() {
     return JSON.stringify(result);
 }
 
+export async function runInstalledTypescript() {
+    const project = await runJavaScript({
+        cwd: '/workspace',
+        entry: './typescript-app.ts',
+    });
+    const rawTypeScriptDependency = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            try {
+                await import('fixture-dependency/raw-typescript');
+                return { loaded: true };
+            } catch (error) {
+                return { code: error.code, name: error.name, message: error.message };
+            }
+        `,
+    });
+    return JSON.stringify({
+        project,
+        rawTypeScriptDependencyError: rawTypeScriptDependency.value,
+    });
+}
+
 export async function runRegistryInstalled() {
     const result = await runJavaScript({
         cwd: '/workspace',

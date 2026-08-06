@@ -8,5 +8,8 @@
   "bin": {
     "fixture-bin": "bin/fixture-bin.cjs"
   },
-  "exports": "./index.js"
+  "exports": {
+    ".": "./index.js",
+    "./raw-typescript": "./raw-typescript.ts"
+  }
 }

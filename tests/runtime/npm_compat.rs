@@ -25,6 +25,17 @@ async fn compiled_npm_compat() -> CompiledTest {
     .expect("Failed to compile npm-compat")
 }
 
+#[test_dep(tagged_as = "npm_typescript_compat", scope = Cloneable)]
+async fn compiled_npm_typescript_compat() -> CompiledTest {
+    CompiledTest::new_with_features(
+        Utf8Path::new("examples/runtime/npm-compat"),
+        false,
+        FeatureCombination::TypeScriptTransformRuntime,
+    )
+    .await
+    .expect("Failed to compile TypeScript npm-compat")
+}
+
 fn command_stdout(command: &mut Command) -> anyhow::Result<String> {
     let output = command.output()?;
     anyhow::ensure!(
@@ -425,6 +436,63 @@ async fn npm_install_local_pure_javascript(
     assert_eq!(
         installed_report["value"]["loadedFrom"],
         "file:///workspace/node_modules/fixture-dependency/index.js"
+    );
+
+    Ok(())
+}
+
+#[test]
+async fn npm_installed_javascript_loads_from_typescript(
+    #[tagged_as("npm_typescript_compat")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = prepare_instance(compiled, Some("local-install")).await?;
+    let install = instance
+        .invoke(
+            None,
+            "run",
+            &[string_list(&[
+                "install",
+                "--ignore-scripts",
+                "--no-audit",
+                "--no-fund",
+                "--install-links",
+            ])],
+        )
+        .await?;
+    let Some(Val::String(install_json)) = install else {
+        anyhow::bail!("expected npm execution JSON result")
+    };
+    let install_report: serde_json::Value = serde_json::from_str(&install_json)?;
+    assert_eq!(
+        install_report["value"]["exitCode"],
+        0,
+        "{install_report:#}\n[npm debug logs]\n{}",
+        npm_debug_logs(&instance)
+    );
+
+    let typescript = instance
+        .invoke(None, "run-installed-typescript", &[])
+        .await?;
+    let Some(Val::String(typescript_json)) = typescript else {
+        anyhow::bail!("expected installed TypeScript execution JSON result")
+    };
+    let typescript_report: serde_json::Value = serde_json::from_str(&typescript_json)?;
+    assert_eq!(typescript_report["project"]["value"]["answer"], 42);
+    assert_eq!(
+        typescript_report["project"]["value"]["runtime"],
+        "typescript"
+    );
+    assert_eq!(
+        typescript_report["project"]["value"]["dependencyKind"],
+        "pure-javascript"
+    );
+    assert_eq!(
+        typescript_report["rawTypeScriptDependencyError"]["code"],
+        "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING"
+    );
+    assert_eq!(
+        typescript_report["rawTypeScriptDependencyError"]["name"],
+        "Error"
     );
     Ok(())
 }
