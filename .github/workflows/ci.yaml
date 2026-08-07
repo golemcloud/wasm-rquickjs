@@ -97,7 +97,13 @@ jobs:
         with:
           node-version: "22.14.0"
       - name: Runtime tests (group ${{ matrix.group }}/9)
+        if: matrix.group != 9
         run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
+      - name: Runtime tests (group 9/9)
+        if: matrix.group == 9
+        run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- --test-threads 4 --report-time --format ctrf --logfile target/ctrf.json ':tag:group9'
         env:
           NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report
@@ -208,7 +214,13 @@ jobs:
       # and the P3 host support in tests/common/mod.rs is gated to non-fork builds. So this lane
       # deliberately does NOT run enable-wasmtime-fork.sh or pass --features use-golem-wasmtime.
       - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/9)
+        if: matrix.group != 9
         run: cargo test --test runtime -- --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
+        env:
+          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
+      - name: Runtime tests on WASI Preview 3 (group 9/9)
+        if: matrix.group == 9
+        run: cargo test --test runtime -- --test-threads 4 --report-time --format ctrf --logfile target/ctrf.json ':tag:group9'
         env:
           NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
       - name: Publish Test Report

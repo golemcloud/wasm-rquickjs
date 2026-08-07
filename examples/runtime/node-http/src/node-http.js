@@ -1088,11 +1088,17 @@ export async function httpCustomConnectionRejected() {
         }, () => {
             responseReceived = true;
         });
+        const initiallyDestroyed = req.destroyed;
         req.on('error', (error) => {
             errorCode = error.code;
         });
         req.on('close', () => {
-            resolve(errorCode === 'ENOSYS' && !hookCalled && !responseReceived);
+            resolve(
+                !initiallyDestroyed &&
+                errorCode === 'ENOSYS' &&
+                !hookCalled &&
+                !responseReceived
+            );
         });
         req.end();
     });

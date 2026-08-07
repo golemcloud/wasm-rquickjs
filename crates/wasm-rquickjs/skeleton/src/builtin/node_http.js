@@ -1777,6 +1777,7 @@ export class ClientRequest extends OutgoingMessage {
         this._needDrain = false;
         this._flushPromise = Promise.resolve();
         this._nativeStarted = false;
+        this._customConnectionRejected = false;
 
         this.aborted = false;
         this.socket = null;
@@ -1870,9 +1871,14 @@ export class ClientRequest extends OutgoingMessage {
         // registry stack uses Agent subclasses even without selecting a custom
         // component transport. Fail asynchronously so callers can attach their
         // normal ClientRequest error/close listeners.
+        this._customConnectionRejected = true;
         const error = new Error('Custom node:http createConnection transports are not supported; outbound requests use wasi:http');
         error.code = 'ENOSYS';
-        this.destroy(error);
+        process.nextTick(() => {
+            if (!this.destroyed && !this.aborted) {
+                this.destroy(error);
+            }
+        });
     }
 
     _mergeHeader(name, value) {
@@ -2088,7 +2094,7 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     async _flushLoop() {
-        if (this.destroyed || this.aborted) return;
+        if (this.destroyed || this.aborted || this._customConnectionRejected) return;
 
         // Don't start the native request until end() has been called.
         // Starting early would lock headers before _applyDefaultBodyHeaders
@@ -2292,6 +2298,8 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     async _doSend() {
+        if (this._customConnectionRejected) return;
+
         if (this._useSocketTransport) {
             return this._doSendViaSocket();
         }

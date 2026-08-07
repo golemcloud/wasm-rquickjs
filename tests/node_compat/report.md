@@ -8,19 +8,19 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3230/4406 (73.3%)
+**Primary compatibility (CI-enforced):** 3217/4391 (73.3%)
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3230 | 73.3% | 56.2% | 47.0% |
-| 🧩 known gap | 1176 | 26.7% | 20.5% | 17.1% |
-| 🚫 WASI-impossible (excluded) | 1176 | — | 20.5% | 17.1% |
+| ✅ passing (runnable) | 3217 | 73.3% | 55.9% | 46.8% |
+| 🧩 known gap | 1174 | 26.7% | 20.4% | 17.1% |
+| 🚫 WASI-impossible (excluded) | 1191 | — | 20.7% | 17.3% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3230/5750 (56.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3217/5750 (55.9%)**.
 
 ## Inventory by Module
 
@@ -31,8 +31,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks | 38 | 4 | 28 | 4 | 0 | 0 | 2 | 12.5% | 11.1% |
 | blob | 24 | 2 | 0 | 0 | 0 | 0 | 22 | 100.0% | 100.0% |
 | buffer | 180 | 172 | 0 | 1 | 1 | 0 | 6 | 100.0% | 98.9% |
-| child_process | 208 | 42 | 58 | 93 | 0 | 0 | 15 | 42.0% | 21.8% |
-| cli | 32 | 8 | 22 | 0 | 0 | 0 | 2 | 26.7% | 26.7% |
+| child_process | 208 | 40 | 58 | 95 | 0 | 0 | 15 | 40.8% | 20.7% |
+| cli | 32 | 9 | 21 | 0 | 0 | 0 | 2 | 30.0% | 30.0% |
 | cluster | 87 | 0 | 0 | 85 | 0 | 0 | 2 | 0.0% | 0.0% |
 | common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
 | compile | 15 | 0 | 0 | 0 | 15 | 0 | 0 | 0.0% | 0.0% |
@@ -50,7 +50,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 241 | 289 | 286 | 2 | 0 | 80 | 45.5% | 29.5% |
+| http | 898 | 231 | 288 | 297 | 2 | 0 | 80 | 44.5% | 28.2% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 129 | 25 | 7 | 1 | 0 | 12 | 83.8% | 79.6% |
@@ -70,7 +70,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | signal | 5 | 1 | 0 | 3 | 0 | 0 | 1 | 100.0% | 25.0% |
 | snapshot | 57 | 0 | 0 | 0 | 57 | 0 | 0 | 0.0% | 0.0% |
 | sqlite | 39 | 36 | 3 | 0 | 0 | 0 | 0 | 92.3% | 92.3% |
-| stdio | 23 | 14 | 7 | 1 | 0 | 0 | 1 | 66.7% | 63.6% |
+| stdio | 23 | 12 | 7 | 3 | 0 | 0 | 1 | 63.2% | 54.5% |
 | stream | 753 | 713 | 31 | 2 | 0 | 0 | 7 | 95.8% | 95.6% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | test_runner | 157 | 93 | 34 | 21 | 1 | 0 | 8 | 73.2% | 62.4% |
@@ -289,7 +289,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-http-agent-timeout.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-chunk-extensions-limit.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-client-abort-destroy.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
-| `test-http-client-abort3.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-client-abort3.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-http-client-aborted-event.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-http-client-defaults.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-client-res-destroyed.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -348,8 +348,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-http2-util-update-options-buffer.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-https-agent-create-connection.js` | 7 | 0 | 0 | 7 | 0 | 0 | 0 |
 | `test-https-argument-of-creating.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
-| `test-https-insecure-parse-per-stream.js` | 5 | 3 | 0 | 2 | 0 | 0 | 0 |
-| `test-https-max-header-size-per-stream.js` | 4 | 2 | 0 | 2 | 0 | 0 | 0 |
+| `test-https-insecure-parse-per-stream.js` | 5 | 1 | 0 | 4 | 0 | 0 | 0 |
+| `test-https-max-header-size-per-stream.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-icu-data-dir.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-icu-transcode.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
 | `test-internal-error-original-names.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -684,7 +684,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1176)
+### known gap (1174)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -821,7 +821,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | --trace-exit stack diagnostics are incomplete in execPath emulation | 1 | `parallel/test-trace-exit-stack-limit.js` |
 | --trace-exit warning behavior across process/worker variants is incomplete | 1 | `parallel/test-trace-exit.js` |
 | --trace-sync-io diagnostics are not implemented in execPath emulation | 1 | `parallel/test-sync-io-option.js` |
-| 100-continue flow with synchronous socket write errors does not match Node | 1 | `parallel/test-http-sync-write-error-during-continue.js` |
 | Agent free-socket bookkeeping and destroyed-socket reuse handling is incomplete | 1 | `parallel/test-http-agent-destroyed-socket.js` |
 | Agent keep-alive queue/socket bookkeeping across concurrent requests is not Node-compatible | 1 | `parallel/test-http-keep-alive.js` |
 | Agent queued-request abort cleanup is incomplete | 1 | `parallel/test-http-abort-queued.js` |
@@ -845,11 +844,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | ClientRequest abort/request completion lifecycle can hang | 1 | `parallel/test-http-client-abort.js` |
 | ClientRequest default header generation is not Node-compatible (Connection/Content-Length defaults differ by method) | 1 | `parallel/test-http-client-default-headers-exist.js` |
 | ClientRequest destroyed state/lifecycle on response close with keep-alive Agent is not Node-compatible | 1 | `parallel/test-http-client-agent-end-close-event.js` |
-| ClientRequest rejects unsupported custom createConnection during construction, so destroyed is true before connection use | 1 | `parallel/test-client-request-destroy.js` |
 | ClientRequest timeout-event + end/destroy sequencing is not Node-compatible | 1 | `parallel/test-http-client-timeout-event.js` |
 | ClientRequest.flushHeaders() does not reliably complete request/response lifecycle | 1 | `parallel/test-http-flush-headers.js` |
 | ClientRequest.setTimeout and socket-timeout interaction is incomplete | 1 | `parallel/test-http-client-set-timeout.js` |
 | ClientRequest.setTimeout callback path does not reliably destroy/close the request | 1 | `parallel/test-http-client-timeout.js` |
+| ClientRequest.setTimeout() does not emit Node's synchronous TimeoutOverflowWarning for oversized durations | 1 | `parallel/test-http-timeout-client-warning.js` |
 | ClientRequest.shouldKeepAlive handling for HTTP/1.0 and Connection headers is not fully Node-compatible | 1 | `parallel/test-http-should-keep-alive.js` |
 | Custom lookup error path is incomplete (request error events are not emitted correctly) | 1 | `parallel/test-http-client-req-error-dont-double-fire.js` |
 | Date does not react to process.env.TZ changes with full regional timezone-name data | 1 | `parallel/test-datetime-change-notify.js` |
@@ -1124,7 +1123,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | http.IncomingMessage internal _addHeaderLines helper is not implemented | 1 | `parallel/test-set-incoming-message-header.js#block_02_addheaderlines_function_set_a_header_correctly` |
 | http.Server({ ServerResponse }) custom response class option is not fully supported | 1 | `parallel/test-http-server-options-server-response.js` |
 | http.createServer({ IncomingMessage }) custom request class option is not fully supported | 1 | `parallel/test-http-server-options-incoming-message.js` |
-| http.request host header formatting for IPv6 literals is incorrect (missing [::1]:port form) | 1 | `parallel/test-http-host-header-ipv6-fail.js` |
 | https socket lifecycle/unref semantics over wasi:http are incomplete | 1 | `parallel/test-https-agent-unref-socket.js` |
 | importing scrypt-encrypted PKCS#8 keys traps in the WASM crypto backend | 1 | `parallel/test-crypto-key-objects.js#block_05_block_05` |
 | inherited: Resolver#setLocalAddress validation/error behavior is not implemented | 1 | `parallel/test-dns-setlocaladdress.js#block_01_verify_that_setlocaladdress_throws_if_called_with_an_invalid` |
@@ -1338,7 +1336,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1176)
+### WASI-impossible (1191)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1374,6 +1372,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: Windows UNC path behavior is not applicable to the WASI runtime | 4 | `parallel/test-permission-fs-windows-path.js#block_00_block_00`, `parallel/test-permission-fs-windows-path.js#block_01_block_01`, `parallel/test-permission-fs-windows-path.js#block_02_block_02`, ... (+1) |
 | inherited: requires worker_threads.BroadcastChannel, unavailable without threads in WASM | 4 | `parallel/test-broadcastchannel-custom-inspect.js#block_00_block_00`, `parallel/test-broadcastchannel-custom-inspect.js#block_01_block_01`, `parallel/test-broadcastchannel-custom-inspect.js#block_02_block_02`, ... (+1) |
 | requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http | 4 | `parallel/test-http-insecure-parser-per-stream.js#block_00_test_1_the_server_sends_an_invalid_header`, `parallel/test-http-insecure-parser-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`, `parallel/test-http-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`, ... (+1) |
+| requires https.request({ createConnection }) with an arbitrary Duplex transport; outbound requests always use wasi:http | 4 | `parallel/test-https-insecure-parse-per-stream.js#block_00_test_1_the_server_sends_an_invalid_header`, `parallel/test-https-insecure-parse-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`, `parallel/test-https-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`, ... (+1) |
 | inherited: inspector/heap profiler is not available in WASM | 3 | `parallel/test-heap-prof-invalid-args.js#block_00_tests_heap_prof_name_without_heap_prof`, `parallel/test-heap-prof-invalid-args.js#block_01_tests_heap_prof_dir_without_heap_prof`, `parallel/test-heap-prof-invalid-args.js#block_02_tests_heap_prof_interval_without_heap_prof` |
 | requires HTTPS server TLS session behavior, unsupported by WASI transport | 3 | `parallel/test-https-agent-disable-session-reuse.js`, `parallel/test-https-agent-session-injection.js`, `parallel/test-https-agent-session-reuse.js` |
 | Linux abstract UNIX sockets are not available in WASI | 2 | `parallel/test-pipe-abstract-socket-http.js`, `parallel/test-pipe-abstract-socket.js` |
@@ -1474,13 +1473,20 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires cluster.fork/process forking for shared-port behavior | 1 | `sequential/test-net-listen-shared-ports.js` |
 | requires cluster/process forking, not available in WASM | 1 | `parallel/test-dgram-exclusive-implicit-bind.js` |
 | requires creating a path longer than the WASI filesystem path limit | 1 | `parallel/test-fs-existssync-false.js` |
+| requires custom Agent.createConnection to inject a node:net socket error; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-read-in-error.js` |
+| requires custom Agent.createConnection to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-readable.js` |
+| requires custom Agent.createConnection to surface errors from a raw socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort3.js#block_01_block_01` |
 | requires execSync/ps subprocess behavior not available in WASM | 1 | `parallel/test-setproctitle.js` |
 | requires external OpenSSL CLI via child_process.exec | 1 | `parallel/test-crypto-sign-verify.js#block_13_early_if_no_openssl_binary_is_found` |
 | requires external shell pipeline and cat subprocess via child_process | 1 | `parallel/test-http-chunk-problem.js` |
 | requires external shell pipeline tooling (e.g. head), unavailable in WASM | 1 | `parallel/test-pipe-head.js` |
 | requires external touch/date commands via child_process.spawnSync | 1 | `parallel/test-fs-utimes-y2K38.js` |
 | requires full-duplex HTTP request/response streaming semantics not provided by wasi:http | 1 | `parallel/test-stream-pipeline.js#block_08_block_08` |
+| requires http.get({ createConnection }) to create and abort a raw node:net socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort-no-agent.js` |
+| requires http.get({ createConnection }) to redirect requests through a custom node:net socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-host-header-ipv6-fail.js` |
 | requires http.get({ createConnection }) to replace the client transport with a raw socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-createConnection.js` |
+| requires http.get({ createConnection }) to surface errors from a custom raw socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort3.js#block_00_block_00` |
+| requires http.request({ createConnection }) to exercise synchronous writes on an arbitrary Duplex; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-sync-write-error-during-continue.js` |
 | requires http.request({ createConnection }) to parse responses from an arbitrary Duplex; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-parser-multiple-execute.js` |
 | requires http.request({ createConnection }) to select a raw TCP or Unix-socket transport; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-with-create-connection.js` |
 | requires http.request({ createConnection }) with a custom node:net transport; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-incoming-message-options.js` |
@@ -1493,9 +1499,13 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires real child_process for fork/event-loop-exit semantics | 1 | `parallel/test-pipe-unref.js` |
 | requires real child_process.spawn concurrency for server/client subprocesses | 1 | `sequential/test-net-GH-5504.js` |
 | requires real worker_threads execution (HAS_STARTED_WORKER round-trip) which is not available in single-threaded WASM | 1 | `parallel/test-crypto-key-objects-messageport.js` |
+| requires spawning a shell process with closed inherited stdio, which is unavailable in WASM | 1 | `parallel/test-stdio-closed.js` |
+| requires spawning an external Python process with inherited stdio, which is unavailable in WASM | 1 | `parallel/test-child-process-set-blocking.js` |
 | requires spawning an interactive Node REPL subprocess (--interactive) and driving it via stdin | 1 | `parallel/test-cwd-enoent-repl.js` |
+| requires spawning and signaling an external process, which is unavailable in WASM | 1 | `parallel/test-child-process-kill.js` |
 | requires spawning node subprocesses to run package scripts | 1 | `parallel/test-node-run.js` |
 | requires spawning node subprocesses to validate CLI CA flags | 1 | `parallel/test-openssl-ca-options.js` |
+| requires spawning the Node executable and piping a script through child stdin, which is unavailable in WASM | 1 | `parallel/test-stdin-script-child.js` |
 | requires tls APIs that are unsupported in WASM | 1 | `parallel/test-crypto.js` |
 | requires tls server/client APIs, which are unsupported in WASM | 1 | `parallel/test-crypto-verify-failure.js` |
 | requires tls.Server/TLS socket APIs, unsupported in WebAssembly environment | 1 | `parallel/test-https-eof-for-eom.js` |
