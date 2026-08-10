@@ -1075,7 +1075,7 @@ export async function httpPipelinedMaxRequests() {
 }
 
 export async function httpCustomConnectionRejected() {
-    return await new Promise((resolve) => {
+    const rejectsAsynchronously = await new Promise((resolve) => {
         let hookCalled = false;
         let responseReceived = false;
         let errorCode = null;
@@ -1102,4 +1102,25 @@ export async function httpCustomConnectionRejected() {
         });
         req.end();
     });
+
+    const destroyBeforeRejection = await new Promise((resolve) => {
+        let hookCalled = false;
+        let errorReceived = false;
+        const req = new http.ClientRequest({
+            createConnection() {
+                hookCalled = true;
+            },
+        });
+        req.on('error', () => {
+            errorReceived = true;
+        });
+        req.on('close', () => {
+            resolve(!hookCalled && !errorReceived);
+        });
+        if (req.destroy() !== req) {
+            resolve(false);
+        }
+    });
+
+    return rejectsAsynchronously && destroyBeforeRejection;
 }

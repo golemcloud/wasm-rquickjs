@@ -1792,7 +1792,7 @@ export class ClientRequest extends OutgoingMessage {
 
         this._initializeCustomConnection(options);
 
-        if (this.method === 'CONNECT' && !this._useSocketTransport) {
+        if (this.method === 'CONNECT' && !this._useSocketTransport && !this._customConnectionRejected) {
             const connectSocket = _netConnect(this.port, this.hostname);
             this.socket = connectSocket;
             this._useSocketTransport = true;
@@ -2552,7 +2552,7 @@ export class ClientRequest extends OutgoingMessage {
         this.destroyed = true;
 
         this._abortNativeRequest();
-        if (!error && !this._response) {
+        if (!error && !this._response && !this._customConnectionRejected) {
             // Request destroyed before receiving a response — emit ECONNRESET
             // matching Node.js behavior for destroyed pending requests.
             error = new Error('socket hang up');
