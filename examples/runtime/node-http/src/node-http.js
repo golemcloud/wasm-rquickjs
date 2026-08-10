@@ -1122,5 +1122,24 @@ export async function httpCustomConnectionRejected() {
         }
     });
 
-    return rejectsAsynchronously && destroyBeforeRejection;
+    const connectDoesNotOpenSocket = await new Promise((resolve) => {
+        let hookCalled = false;
+        let errorReceived = false;
+        const req = new http.ClientRequest({
+            method: 'CONNECT',
+            createConnection() {
+                hookCalled = true;
+            },
+        });
+        const initiallySocketless = req.socket === null;
+        req.on('error', () => {
+            errorReceived = true;
+        });
+        req.on('close', () => {
+            resolve(initiallySocketless && req.socket === null && !hookCalled && !errorReceived);
+        });
+        req.destroy();
+    });
+
+    return rejectsAsynchronously && destroyBeforeRejection && connectDoesNotOpenSocket;
 }

@@ -1870,7 +1870,9 @@ export class ClientRequest extends OutgoingMessage {
         // Agent objects remain metadata/scheduling inputs because npm's normal
         // registry stack uses Agent subclasses even without selecting a custom
         // component transport. Fail asynchronously so callers can attach their
-        // normal ClientRequest error/close listeners.
+        // normal ClientRequest error/close listeners. Rejected requests always
+        // terminate with close, including when callers destroy them before this
+        // rejection tick and suppress the ENOSYS error.
         this._customConnectionRejected = true;
         const error = new Error('Custom node:http createConnection transports are not supported; outbound requests use wasi:http');
         error.code = 'ENOSYS';
