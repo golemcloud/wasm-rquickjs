@@ -116,11 +116,8 @@ pub(crate) fn realpath_for_module_resolution(
     fs::realpath_for_module_resolution(ctx, path)
 }
 
-pub(crate) fn realpath_for_module_resolution_with_symlinks(
-    emulated_symlinks: &std::collections::HashMap<String, String>,
-    path: &str,
-) -> Option<String> {
-    fs::realpath_for_module_resolution_with_symlinks(emulated_symlinks, path)
+pub(crate) fn realpath_for_module_resolution_path(path: &str) -> Option<String> {
+    fs::realpath_for_module_resolution_path(path)
 }
 
 pub fn add_module_resolvers(

@@ -251,6 +251,7 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
         "WASM child emulation does not support --permission/--experimental-test-module-mocks flags",
         "WebAssembly global is missing in current runtime",
         "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source",
+        "WASI symlink-at rejects the rooted symlink targets required by this vendored test; persistent relative symlinks are covered by runtime tests",
         "child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs",
         "child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output",
         "child_process execPath emulation does not implement --trace-require-module warning output",

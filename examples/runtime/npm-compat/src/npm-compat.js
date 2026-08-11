@@ -17,6 +17,7 @@ async function executeNpm(args, timeoutMs) {
                 NPM_CONFIG_FETCH_RETRIES: '0',
                 NPM_CONFIG_PREFIX: '/prefix',
                 NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+                PATH: '',
             },
             maxBytes: 4 * 1024 * 1024,
             timeoutMs,
@@ -52,7 +53,7 @@ async function executeNpm(args, timeoutMs) {
 }
 
 export async function run(args) {
-    return executeNpm(args, 30_000);
+    return executeNpm(args, 60_000);
 }
 
 export async function runWithTimeout(args, timeoutMs) {
@@ -72,9 +73,10 @@ export async function runNpx(args) {
             NPM_CONFIG_FUND: 'false',
             NPM_CONFIG_PREFIX: '/prefix',
             NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+            PATH: '',
         },
         maxBytes: 4 * 1024 * 1024,
-        timeoutMs: 30_000,
+        timeoutMs: 60_000,
         source: `
             const originalExit = process.exit;
             process.exit = code => {
@@ -199,6 +201,45 @@ export async function runBinDirect() {
                 });
             });
             return { ...state, stdout, stderr, error, events, probe };
+        `,
+    });
+    return JSON.stringify(result);
+}
+
+export async function probeLinkedLayouts() {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const fs = await import('node:fs');
+            const { createRequire } = await import('node:module');
+            const require = createRequire('/workspace/probe.cjs');
+            const workspaceLinked = require('workspace-package');
+            const workspaceReal = require('/workspace/packages/workspace-package');
+            const npmLinked = require('linked-package');
+            const npmReal = require('/workspace/linked-package');
+
+            const pnpmStore = '/workspace/node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package';
+            fs.mkdirSync(pnpmStore, { recursive: true });
+            fs.writeFileSync(pnpmStore + '/package.json', JSON.stringify({
+                name: 'pnpm-package', version: '1.0.0', main: 'index.cjs',
+            }));
+            fs.writeFileSync(pnpmStore + '/index.cjs', 'module.exports = { identity: {} };');
+            fs.symlinkSync('.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package',
+                '/workspace/node_modules/pnpm-package', 'dir');
+            const pnpmLinked = require('pnpm-package');
+            const pnpmReal = require(pnpmStore);
+
+            return {
+                workspaceIdentity: workspaceLinked === workspaceReal,
+                workspaceTarget: fs.readlinkSync('/workspace/node_modules/workspace-package'),
+                workspaceRealpath: fs.realpathSync('/workspace/node_modules/workspace-package'),
+                npmLinkIdentity: npmLinked === npmReal,
+                npmLinkTarget: fs.readlinkSync('/workspace/node_modules/linked-package'),
+                npmLinkRealpath: fs.realpathSync('/workspace/node_modules/linked-package'),
+                pnpmIdentity: pnpmLinked === pnpmReal,
+                pnpmTarget: fs.readlinkSync('/workspace/node_modules/pnpm-package'),
+                pnpmRealpath: fs.realpathSync('/workspace/node_modules/pnpm-package'),
+            };
         `,
     });
     return JSON.stringify(result);

@@ -135,7 +135,7 @@ export const testRequireDirectory = () => {
             assert.throws(() => appRequire.resolve('./b'), TypeError, 'primitive path cache fails when resolution writes through it');
 
             fs.writeFileSync('/path-cache-app/real-link-target.js', 'module.exports = { link: true };');
-            fs.symlinkSync('/path-cache-app/real-link-target.js', '/path-cache-app/link-target.js');
+            fs.symlinkSync('real-link-target.js', '/path-cache-app/link-target.js');
             Module._pathCache = Object.create(null);
             assert.deepStrictEqual(appRequire('./link-target.js'), { link: true });
             const relativeSymlinkResolved = appRequire.resolve('./link-target.js');
@@ -154,7 +154,7 @@ export const testRequireDirectory = () => {
 
             fs.mkdirSync('/path-cache-app/packages/real-pkg', { recursive: true });
             fs.writeFileSync('/path-cache-app/packages/real-pkg/index.js', 'module.exports = { symlink: true };');
-            fs.symlinkSync('/path-cache-app/packages/real-pkg', '/path-cache-app/node_modules/symlink-pkg', 'dir');
+            fs.symlinkSync('../packages/real-pkg', '/path-cache-app/node_modules/symlink-pkg', 'dir');
             Module._pathCache = Object.create(null);
             assert.deepStrictEqual(appRequire('symlink-pkg'), { symlink: true });
             const symlinkResolved = appRequire.resolve('symlink-pkg');

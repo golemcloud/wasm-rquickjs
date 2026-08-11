@@ -171,6 +171,54 @@ async fn execution_isolation(
         "/tmp/alias/file.txt"
     );
     assert_eq!(report["pathAliases"]["value"]["renamed"], "before");
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["absoluteError"],
+        "EINVAL"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["absoluteExists"],
+        false
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["target"],
+        "target.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["value"],
+        "persistent"
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["realpath"],
+        "/tmp/persistent-link/target.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["isSymbolicLink"],
+        true
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["brokenExists"],
+        false
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["brokenIsSymbolicLink"],
+        true
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["brokenTarget"],
+        "missing.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["cycleError"],
+        "ELOOP"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["movedTarget"],
+        "target.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["movedExistsAfterUnlink"],
+        false
+    );
     assert_eq!(report["cancellationError"], "execution job cancelled");
     assert_eq!(
         report["nested"]["value"],

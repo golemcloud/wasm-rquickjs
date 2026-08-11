@@ -244,6 +244,49 @@ export async function run() {
         return { mode, link, real, renamed };
     ` });
 
+    const persistentSymlinkCreated = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        fs.mkdirSync('/tmp/persistent-link', { recursive: true });
+        fs.writeFileSync('/tmp/persistent-link/target.txt', 'persistent');
+        fs.symlinkSync('target.txt', '/tmp/persistent-link/link.txt');
+        let absoluteError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/absolute.txt');
+        } catch (error) {
+            absoluteError = error.code;
+        }
+        return { absoluteError, absoluteExists: fs.existsSync('/tmp/persistent-link/absolute.txt') };
+    ` });
+    const persistentSymlinkRead = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        return {
+            target: fs.readlinkSync('/tmp/persistent-link/link.txt'),
+            value: fs.readFileSync('/tmp/persistent-link/link.txt', 'utf8'),
+            realpath: fs.realpathSync('/tmp/persistent-link/link.txt'),
+            isSymbolicLink: fs.lstatSync('/tmp/persistent-link/link.txt').isSymbolicLink(),
+        };
+    ` });
+    const persistentSymlinkEdges = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        fs.symlinkSync('missing.txt', '/tmp/persistent-link/broken.txt');
+        fs.symlinkSync('cycle-b.txt', '/tmp/persistent-link/cycle-a.txt');
+        fs.symlinkSync('cycle-a.txt', '/tmp/persistent-link/cycle-b.txt');
+        let cycleError;
+        try { fs.realpathSync('/tmp/persistent-link/cycle-a.txt'); }
+        catch (error) { cycleError = error.code; }
+        fs.renameSync('/tmp/persistent-link/link.txt', '/tmp/persistent-link/moved.txt');
+        const movedTarget = fs.readlinkSync('/tmp/persistent-link/moved.txt');
+        fs.unlinkSync('/tmp/persistent-link/moved.txt');
+        return {
+            brokenExists: fs.existsSync('/tmp/persistent-link/broken.txt'),
+            brokenIsSymbolicLink: fs.lstatSync('/tmp/persistent-link/broken.txt').isSymbolicLink(),
+            brokenTarget: fs.readlinkSync('/tmp/persistent-link/broken.txt'),
+            cycleError,
+            movedTarget,
+            movedExistsAfterUnlink: fs.existsSync('/tmp/persistent-link/moved.txt'),
+        };
+    ` });
+
     const isolationSource = `
         const fs = await import('node:fs');
         const label = process.env.LABEL;
@@ -318,6 +361,7 @@ export async function run() {
         typescriptDisabled: process.features.typescript === false,
         disabledStripError, disabledExecutionError, imports,
         privateImport, removedAliases, cloneChecks, resourceError, pathAliases,
+        persistentSymlinkCreated, persistentSymlinkRead, persistentSymlinkEdges,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },
     });

@@ -1,5 +1,6 @@
 use crate::common::test_server::TestServerHandle;
 use crate::common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive};
+use anyhow::Context;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{StatusCode, header};
@@ -152,6 +153,7 @@ async fn start_registry_server(tarball: Vec<u8>) -> anyhow::Result<(u16, TestSer
                 "version": "1.0.0",
                 "type": "module",
                 "exports": "./index.js",
+                "bin": { "fixture-registry-bin": "bin/fixture-registry-bin.js" },
                 "dist": { "tarball": tarball_url }
             }
         }
@@ -240,7 +242,8 @@ async fn prepare_instance(
         &workspace_dir,
         &instance.temp_dir_path().join("home/npm"),
         &instance.temp_dir_path().join("cache/npm"),
-        &instance.temp_dir_path().join("prefix"),
+        &instance.temp_dir_path().join("prefix/lib/node_modules"),
+        &instance.temp_dir_path().join("prefix/bin"),
     ] {
         fs::create_dir_all(path)?;
     }
@@ -722,6 +725,41 @@ async fn npm_install_registry_pure_javascript(
     let view_report: serde_json::Value = serde_json::from_str(&view_json)?;
     assert_eq!(view_report["value"]["exitCode"], 0, "{view_report:#}");
     assert_eq!(view_report["stdout"], "1.0.0\n", "{view_report:#}");
+
+    let exec_args = [
+        "exec",
+        "--yes",
+        "--package=fixture-registry-dependency",
+        registry.as_str(),
+        "--",
+        "fixture-registry-bin",
+        "acquired",
+    ];
+    let execution = instance
+        .invoke(None, "run", &[string_list(&exec_args)])
+        .await?;
+    let Some(Val::String(exec_json)) = execution else {
+        anyhow::bail!("expected registry npm exec JSON result")
+    };
+    let exec_report: serde_json::Value = serde_json::from_str(&exec_json)?;
+    assert_eq!(
+        exec_report["value"]["exitCode"],
+        0,
+        "{exec_report:#}\n[npm debug logs]\n{}",
+        npm_debug_logs(&instance)
+    );
+    assert_eq!(exec_report["stdout"], "npm-registry-exec:ok\n");
+    assert_eq!(exec_report["stderr"], "");
+    let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(
+        instance
+            .temp_dir_path()
+            .join("workspace/npm-registry-exec-result.json"),
+    )?)?;
+    assert_eq!(exec_result["cwd"], "/workspace");
+    assert_eq!(
+        exec_result["argv"].as_array().and_then(|args| args.last()),
+        Some(&serde_json::json!("acquired"))
+    );
 
     let args = [
         "install",
@@ -1349,10 +1387,12 @@ async fn npm_run_shell_operator_reports_unsupported(
 }
 
 #[test]
-async fn npm_exec_local_bin_reports_persistent_bin_metadata_gap(
+async fn npm_exec_runs_persistent_local_bin(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    let mut instance = prepare_instance(compiled, Some("local-install")).await?;
+    let mut instance = prepare_instance(compiled, Some("local-install"))
+        .await
+        .context("preparing npm exec instance")?;
     let ci = instance
         .invoke(
             None,
@@ -1365,13 +1405,56 @@ async fn npm_exec_local_bin_reports_persistent_bin_metadata_gap(
                 "--install-links",
             ])],
         )
-        .await?;
+        .await
+        .context("running npm ci before npm exec")?;
     let Some(Val::String(ci_json)) = ci else {
         anyhow::bail!("expected npm ci JSON result")
     };
     let ci_report: serde_json::Value = serde_json::from_str(&ci_json)?;
     assert_eq!(ci_report["value"]["exitCode"], 0, "{ci_report:#}");
-    assert_persistent_bin_metadata_gap(&mut instance).await?;
+    let bin_path = instance
+        .temp_dir_path()
+        .join("workspace/node_modules/.bin/fixture-bin");
+    anyhow::ensure!(
+        bin_path.exists(),
+        "npm ci did not create the local package bin"
+    );
+    let direct = instance
+        .invoke(None, "run-bin-direct", &[])
+        .await
+        .context("running the installed bin directly")?;
+    let Some(Val::String(direct_json)) = direct else {
+        anyhow::bail!("expected direct bin execution JSON result")
+    };
+    let direct_report: serde_json::Value = serde_json::from_str(&direct_json)?;
+    assert_eq!(direct_report["value"]["code"], 0, "{direct_report:#}");
+    assert_eq!(
+        direct_report["value"]["events"],
+        serde_json::json!(["exit", "close"]),
+        "{direct_report:#}"
+    );
+    assert_eq!(direct_report["value"]["error"], serde_json::Value::Null);
+    assert_eq!(direct_report["value"]["stdout"], "npm-exec:ok\n");
+    assert_eq!(
+        direct_report["value"]["probe"]["link"],
+        "../fixture-dependency/bin/fixture-bin.cjs"
+    );
+    assert_eq!(
+        direct_report["value"]["probe"]["realpath"],
+        "/workspace/node_modules/fixture-dependency/bin/fixture-bin.cjs"
+    );
+    let result_file = instance
+        .temp_dir_path()
+        .join("workspace/npm-exec-result.json");
+    let direct_result: serde_json::Value = serde_json::from_slice(&fs::read(&result_file)?)?;
+    assert_eq!(direct_result["cwd"], "/workspace");
+    assert_eq!(
+        direct_result["argv"]
+            .as_array()
+            .and_then(|args| args.last()),
+        Some(&serde_json::json!("direct"))
+    );
+    fs::remove_file(&result_file)?;
 
     let execution = instance
         .invoke(
@@ -1385,30 +1468,26 @@ async fn npm_exec_local_bin_reports_persistent_bin_metadata_gap(
                 "forwarded",
             ])],
         )
-        .await?;
+        .await
+        .context("running npm exec")?;
     let Some(Val::String(exec_json)) = execution else {
         anyhow::bail!("expected npm exec JSON result")
     };
     let report: serde_json::Value = serde_json::from_str(&exec_json)?;
-    assert_eq!(report["value"]["exitCode"], -38, "{report:#}");
-    assert!(
-        report["stderr"]
-            .as_str()
-            .is_some_and(|value| value.contains("spawnSync(sh) is not supported")),
-        "{report:#}\n[npm debug logs]\n{}",
-        npm_debug_logs(&instance)
-    );
-    assert!(
-        !instance
-            .temp_dir_path()
-            .join("workspace/npm-exec-result.json")
-            .exists()
+    assert_eq!(report["value"]["exitCode"], 0, "{report:#}");
+    assert_eq!(report["stderr"], "", "{report:#}");
+    assert_eq!(report["stdout"], "npm-exec:ok\n", "{report:#}");
+    let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(&result_file)?)?;
+    assert_eq!(exec_result["cwd"], "/workspace");
+    assert_eq!(
+        exec_result["argv"].as_array().and_then(|args| args.last()),
+        Some(&serde_json::json!("forwarded"))
     );
     Ok(())
 }
 
 #[test]
-async fn npx_local_bin_reports_persistent_bin_metadata_gap(
+async fn npx_runs_persistent_local_bin(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let mut instance = prepare_instance(compiled, Some("local-install")).await?;
@@ -1443,13 +1522,72 @@ async fn npx_local_bin_reports_persistent_bin_metadata_gap(
         anyhow::bail!("expected npx execution JSON result")
     };
     let report: serde_json::Value = serde_json::from_str(&npx_json)?;
-    assert_eq!(report["value"]["exitCode"], -38, "{report:#}");
-    assert!(
-        report["stderr"]
-            .as_str()
-            .is_some_and(|value| value.contains("spawnSync(sh) is not supported")),
-        "{report:#}\n[npm debug logs]\n{}",
-        npm_debug_logs(&instance)
+    assert_eq!(report["value"]["exitCode"], 0, "{report:#}");
+    assert_eq!(report["stderr"], "", "{report:#}");
+    assert_eq!(report["stdout"], "npm-exec:ok\n", "{report:#}");
+    let result_file = instance
+        .temp_dir_path()
+        .join("workspace/npm-exec-result.json");
+    let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(result_file)?)?;
+    assert_eq!(exec_result["cwd"], "/workspace");
+    assert_eq!(
+        exec_result["argv"].as_array().and_then(|args| args.last()),
+        Some(&serde_json::json!("forwarded"))
+    );
+    Ok(())
+}
+
+#[test]
+async fn npm_workspaces_link_and_pnpm_layout_preserve_package_identity(
+    #[tagged_as("npm_compat")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = prepare_instance(compiled, Some("linked-workflows")).await?;
+    for args in [
+        ["install", "--ignore-scripts", "--no-audit", "--no-fund"].as_slice(),
+        [
+            "link",
+            "./linked-package",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+        ]
+        .as_slice(),
+    ] {
+        let execution = instance
+            .invoke(None, "run", &[string_list(args)])
+            .await
+            .with_context(|| format!("running npm {args:?}"))?;
+        let Some(Val::String(json)) = execution else {
+            anyhow::bail!("expected npm execution JSON result for {args:?}")
+        };
+        let report: serde_json::Value = serde_json::from_str(&json)?;
+        assert_eq!(
+            report["value"]["exitCode"],
+            0,
+            "{report:#}\n[npm debug logs]\n{}",
+            npm_debug_logs(&instance)
+        );
+    }
+
+    let probe = instance.invoke(None, "probe-linked-layouts", &[]).await?;
+    let Some(Val::String(json)) = probe else {
+        anyhow::bail!("expected linked-layout probe JSON result")
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    for identity in ["workspaceIdentity", "npmLinkIdentity", "pnpmIdentity"] {
+        assert_eq!(report["value"][identity], true, "{identity}: {report:#}");
+    }
+    assert_eq!(
+        report["value"]["workspaceRealpath"],
+        "/workspace/packages/workspace-package"
+    );
+    assert_eq!(
+        report["value"]["npmLinkRealpath"],
+        "/workspace/linked-package"
+    );
+    assert_eq!(
+        report["value"]["pnpmRealpath"],
+        "/workspace/node_modules/.pnpm/pnpm-package@1.0.0/node_modules/pnpm-package"
     );
     Ok(())
 }

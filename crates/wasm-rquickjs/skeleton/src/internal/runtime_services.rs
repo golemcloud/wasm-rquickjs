@@ -48,7 +48,6 @@ pub(crate) struct FsServices {
     pub(crate) path_mode_overrides: HashMap<String, u32>,
     pub(crate) fd_mode_overrides: HashMap<i32, u32>,
     pub(crate) fd_paths: HashMap<i32, String>,
-    pub(crate) emulated_symlinks: HashMap<String, String>,
 }
 
 impl Default for FsServices {
@@ -59,7 +58,6 @@ impl Default for FsServices {
             path_mode_overrides: HashMap::new(),
             fd_mode_overrides: HashMap::new(),
             fd_paths: HashMap::new(),
-            emulated_symlinks: HashMap::new(),
         }
     }
 }
