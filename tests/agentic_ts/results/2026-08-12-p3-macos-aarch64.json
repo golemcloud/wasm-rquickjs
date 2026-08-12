@@ -1,0 +1,461 @@
+{
+  "component": {
+    "buildMs": 35348.374084,
+    "bytes": 150044994,
+    "instantiateMs": 18979.366375,
+    "path": "tmp/rt-target-p3/wasm32-wasip2/debug/agentic_ts.optimized.wasm"
+  },
+  "environment": {
+    "arch": "aarch64",
+    "artifactCache": null,
+    "commit": "149437f2c3b97a44d444e572f09d17c1a1b0cc10",
+    "dirty": true,
+    "iterations": 5,
+    "node": "22.14.0",
+    "npm": "10.9.2",
+    "os": "macos",
+    "preparedComponentCache": null,
+    "typescript": "5.8.2",
+    "unoptimized": null,
+    "wasmtimeCache": null
+  },
+  "nodeBaseline": {
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "",
+    "wallMs": 563.0749579999999
+  },
+  "notes": [
+    "manual local measurement; no CI threshold",
+    "fresh QuickJS execution job per compiler/run operation",
+    "workspace and .tsbuildinfo persist within the component instance"
+  ],
+  "schemaVersion": 1,
+  "sourceFiles": {
+    "Cargo.toml": "0a56617f400128bd21db25b94078e424e75a9c11",
+    "Cargo.lock": "a93d55b217746bd6e39ab397ce389108fd22c881",
+    "crates/wasm-rquickjs/Cargo.toml": "b51ff0920526002a3b23efeccd3f654f9b0ad3ba",
+    "crates/wasm-rquickjs/skeleton/Cargo.lock": "e9c0fb142f9da1392734bc78bb1a6c64bea064e8",
+    "crates/wasm-rquickjs/skeleton/Cargo.toml_": "2303ddccf6b6480bd00c6a5a2c0d7d3880ef554b",
+    "examples/runtime/agentic-ts/src/agentic-ts.js": "41f2bf1f1626ea38b58624f02a81db472cf610b5",
+    "examples/runtime/agentic-ts/wit/agentic-ts.wit": "7ae629038868734225c78becc3e58f6283b62e5b",
+    "tests/agentic_ts.rs": "33d2febf023dd64732d3bf7fb0651f68519ba97c",
+    "tests/agentic_ts/package-lock.json": "4ca05cc6efb6916d0c86f11c273c01f2dcba7a40",
+    "tests/agentic_ts/package.json": "8899dd5fb1ab6dd80117b69d34553ac365603256",
+    "tests/agentic_ts/projects/app/src/index.ts": "c7693b7ef928799357e834a6a34e97f8a199ea4a",
+    "tests/agentic_ts/projects/app/tsconfig.json": "dc00a960720102d3c98e7536ff2bc2083175a51f",
+    "tests/agentic_ts/projects/core/src/index.ts": "dd19d5d7a340da6b6725da70e346c9216122c4eb",
+    "tests/agentic_ts/projects/core/tsconfig.json": "1bba46a40581f48558b5b27aa6a46e246642be3e",
+    "tests/agentic_ts/projects/direct.ts": "85b9896a3332ddc161bf07daf03c9ade41bb8030",
+    "tests/agentic_ts/run.sh": "6e4147d969760f2ecdcc3e5ab6b04d18536b2173",
+    "tests/agentic_ts/tsconfig.json": "1a2c41c3d8bd419309fe23de611b123447fbf5e7",
+    "tests/common/mod.rs": "5f480807ac156703ab3173bde465f9197974d8f7"
+  },
+  "runtimeSourceState": "88ab7248e732e2ad0b6ac292e3f5d343f1a3c3b6",
+  "target": "p3",
+  "wasmLinearMemoryHighWaterBytes": 155648000,
+  "workloads": {
+    "cancellation": {
+      "hostOverheadMs": null,
+      "linearMemoryHighWaterBytes": 155648000,
+      "result": {
+        "cancelled": true,
+        "latencyMs": 9.05350000000908,
+        "message": "execution job cancelled",
+        "name": "Error"
+      },
+      "wallMs": 198.79666600000002
+    },
+    "coldNoEmit": {
+      "hostOverheadMs": 420.4235830000034,
+      "linearMemoryHighWaterBytes": 152764416,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "toolAndCompilerMs": 18433.691375
+        }
+      },
+      "wallMs": 18854.114958000002
+    },
+    "concurrent": {
+      "contended": {
+        "hostOverheadMs": null,
+        "linearMemoryHighWaterBytes": 155648000,
+        "result": {
+          "compiler": {
+            "completedMs": 12530.337916999995,
+            "result": {
+              "overflowed": false,
+              "stderr": "",
+              "stdout": "",
+              "value": {
+                "exitCode": 0
+              }
+            },
+            "startedMs": 0.007874999981140718,
+            "wallMs": 12530.330042000016
+          },
+          "cpu": {
+            "completedMs": 12530.550749999997,
+            "result": {
+              "overflowed": false,
+              "stderr": "",
+              "stdout": "",
+              "value": 21
+            },
+            "startedMs": 0.3950419999891892,
+            "wallMs": 12530.155708000006
+          },
+          "elapsedMs": 12530.574124999985,
+          "io": {
+            "completedMs": 12530.557208999991,
+            "result": {
+              "overflowed": false,
+              "stderr": "",
+              "stdout": "",
+              "value": {
+                "bytes": 273,
+                "files": [
+                  "app",
+                  "core",
+                  "direct.ts"
+                ]
+              }
+            },
+            "startedMs": 0.6454999999841675,
+            "wallMs": 12529.911709000007
+          }
+        },
+        "wallMs": 12530.955
+      },
+      "cpuBaseline": {
+        "hostOverheadMs": null,
+        "linearMemoryHighWaterBytes": 155648000,
+        "result": {
+          "overflowed": false,
+          "stderr": "",
+          "stdout": "",
+          "value": 21
+        },
+        "wallMs": 457.22816700000004
+      },
+      "interpretation": "all jobs were submitted together; compare sibling completion with isolated baselines to identify overlap or serialization",
+      "ioBaseline": {
+        "hostOverheadMs": null,
+        "linearMemoryHighWaterBytes": 155648000,
+        "result": {
+          "overflowed": false,
+          "stderr": "",
+          "stdout": "",
+          "value": {
+            "bytes": 273,
+            "files": [
+              "app",
+              "core",
+              "direct.ts"
+            ]
+          }
+        },
+        "wallMs": 183.634542
+      }
+    },
+    "directTypeScript": {
+      "hostOverheadMs": null,
+      "linearMemoryHighWaterBytes": 155648000,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "answer": 42,
+          "state": "ready"
+        }
+      },
+      "wallMs": 197.052792
+    },
+    "emitDirect": {
+      "hostOverheadMs": 485.2208329999885,
+      "linearMemoryHighWaterBytes": 155648000,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "toolAndCompilerMs": 18623.22791700001
+        }
+      },
+      "wallMs": 19108.44875
+    },
+    "generatedJavaScript": {
+      "hostOverheadMs": null,
+      "linearMemoryHighWaterBytes": 155648000,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "default": {
+            "answer": 42,
+            "state": "ready"
+          }
+        }
+      },
+      "wallMs": 294.717542
+    },
+    "incrementalCold": {
+      "hostOverheadMs": 868.8802079999914,
+      "linearMemoryHighWaterBytes": 152895488,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "toolAndCompilerMs": 22792.82645800001
+        }
+      },
+      "wallMs": 23661.706666000002
+    },
+    "incrementalFreshJobs": {
+      "iterations": 5,
+      "medianMs": 12091.041334,
+      "p95Ms": 25962.508374999998,
+      "samples": [
+        {
+          "hostOverheadMs": 610.0561249999992,
+          "linearMemoryHighWaterBytes": 152895488,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 25352.45225
+            }
+          },
+          "wallMs": 25962.508374999998
+        },
+        {
+          "hostOverheadMs": 385.39812499999425,
+          "linearMemoryHighWaterBytes": 152895488,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 12499.131917000006
+            }
+          },
+          "wallMs": 12884.530042
+        },
+        {
+          "hostOverheadMs": 295.99587600001905,
+          "linearMemoryHighWaterBytes": 152895488,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11795.04545799998
+            }
+          },
+          "wallMs": 12091.041334
+        },
+        {
+          "hostOverheadMs": 294.46745899999405,
+          "linearMemoryHighWaterBytes": 152895488,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11478.381208000006
+            }
+          },
+          "wallMs": 11772.848667
+        },
+        {
+          "hostOverheadMs": 287.17708400001356,
+          "linearMemoryHighWaterBytes": 152895488,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11506.942290999985
+            }
+          },
+          "wallMs": 11794.119374999998
+        }
+      ],
+      "throughputPerSecond": 0.06710954691139419
+    },
+    "invalidThenValid": {
+      "invalid": {
+        "hostOverheadMs": 292.71658399999615,
+        "linearMemoryHighWaterBytes": 152895488,
+        "result": {
+          "overflowed": false,
+          "stderr": "",
+          "stdout": "projects/core/src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
+          "value": {
+            "exitCode": 2,
+            "toolAndCompilerMs": 11658.892208000005
+          }
+        },
+        "wallMs": 11951.608792
+      },
+      "valid": {
+        "hostOverheadMs": 292.7913750000007,
+        "linearMemoryHighWaterBytes": 152895488,
+        "result": {
+          "overflowed": false,
+          "stderr": "",
+          "stdout": "",
+          "value": {
+            "exitCode": 0,
+            "toolAndCompilerMs": 12058.313374999998
+          }
+        },
+        "wallMs": 12351.104749999999
+      }
+    },
+    "memoryPlateau": {
+      "allowedGrowthBytes": 65536,
+      "unchangedCompilerJobs": {
+        "growthBytes": 0,
+        "maximumBytes": 152764416,
+        "minimumBytes": 152764416,
+        "samples": [
+          152764416,
+          152764416,
+          152764416,
+          152764416,
+          152764416
+        ]
+      },
+      "warmedIncrementalCompilerJobs": {
+        "growthBytes": 0,
+        "maximumBytes": 152895488,
+        "minimumBytes": 152895488,
+        "samples": [
+          152895488,
+          152895488,
+          152895488,
+          152895488,
+          152895488
+        ]
+      }
+    },
+    "projectReferences": {
+      "hostOverheadMs": 419.892584000012,
+      "linearMemoryHighWaterBytes": 155648000,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "toolAndCompilerMs": 18692.18512499999
+        }
+      },
+      "wallMs": 19112.077709
+    },
+    "timeout": {
+      "hostOverheadMs": null,
+      "linearMemoryHighWaterBytes": 155648000,
+      "result": {
+        "message": "execution job timed out",
+        "name": "Error",
+        "timedOut": true
+      },
+      "wallMs": 207.874375
+    },
+    "unchangedFreshJobs": {
+      "iterations": 5,
+      "medianMs": 11857.825416000001,
+      "p95Ms": 13039.300333,
+      "samples": [
+        {
+          "hostOverheadMs": 295.0477499999997,
+          "linearMemoryHighWaterBytes": 152764416,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11553.4215
+            }
+          },
+          "wallMs": 11848.46925
+        },
+        {
+          "hostOverheadMs": 287.3266669999939,
+          "linearMemoryHighWaterBytes": 152764416,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11858.269416000005
+            }
+          },
+          "wallMs": 12145.596082999999
+        },
+        {
+          "hostOverheadMs": 288.8449990000008,
+          "linearMemoryHighWaterBytes": 152764416,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11568.980417
+            }
+          },
+          "wallMs": 11857.825416000001
+        },
+        {
+          "hostOverheadMs": 288.9382080000087,
+          "linearMemoryHighWaterBytes": 152764416,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 11498.964124999991
+            }
+          },
+          "wallMs": 11787.902333
+        },
+        {
+          "hostOverheadMs": 307.43654100001004,
+          "linearMemoryHighWaterBytes": 152764416,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "toolAndCompilerMs": 12731.86379199999
+            }
+          },
+          "wallMs": 13039.300333
+        }
+      ],
+      "throughputPerSecond": 0.08240070374492427
+    }
+  }
+}

@@ -98,6 +98,10 @@ name = "glue_benchmark"
 harness = false
 
 [[test]]
+name = "agentic_ts"
+harness = false
+
+[[test]]
 name = "migrate_config_split"
 harness = false
 
