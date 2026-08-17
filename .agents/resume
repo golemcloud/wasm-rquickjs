@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Use the same environment that new non-interactive login shells receive.
+# shellcheck disable=SC1091
+source "$HOME/.config/wasm-rquickjs/orb-env.sh"
+
+required_commands=(cargo cargo-component clang cmake node rustc rustup wasmtime)
+for command_name in "${required_commands[@]}"; do
+  command -v "$command_name" >/dev/null || {
+    echo "missing orb prerequisite: $command_name; rerun .agents/setup" >&2
+    exit 1
+  }
+done
+
+[[ "$(node --version)" == "v22.14.0" ]] || {
+  echo "unexpected Node.js version; rerun .agents/setup" >&2
+  exit 1
+}
+wasmtime --version | grep -q '^wasmtime 46\.0\.1 ' || {
+  echo "unexpected Wasmtime version; rerun .agents/setup" >&2
+  exit 1
+}
+[[ "$(head -1 /opt/wasi-sdk/VERSION 2>/dev/null || true)" == "25.0" ]] || {
+  echo "unexpected WASI SDK version; rerun .agents/setup" >&2
+  exit 1
+}
+for target in wasm32-wasip1 wasm32-wasip2; do
+  rustup target list --installed --toolchain stable | grep -qx "$target" || {
+    echo "missing Rust target $target; rerun .agents/setup" >&2
+    exit 1
+  }
+done
+
+git submodule status --recursive | grep -q '^-' && {
+  echo "uninitialized submodule detected; rerun .agents/setup" >&2
+  exit 1
+}
+
+available_kb="$(df -Pk . | awk 'NR == 2 { print $4 }')"
+if ((available_kb < 20 * 1024 * 1024)); then
+  echo "warning: less than 20 GiB is free; clean completed target/tmp caches before heavy CI lanes" >&2
+fi

@@ -34,6 +34,33 @@ The `skeleton` crate (`crates/wasm-rquickjs/skeleton/`) is a **separate project*
 cargo build --release
 ```
 
+## Amp Orb Environment
+
+Fresh Amp orbs are prepared by `.agents/setup`, which installs the CI toolchain,
+initializes submodules, and persists the pinned Node.js, Wasmtime, Cargo, and WASI
+SDK paths for non-interactive login shells. `.agents/resume` performs only fast
+validation when an existing orb wakes. Keep both scripts idempotent and executable.
+
+The orb root disk is limited to 64 GiB, while a complete P2 run can retain roughly
+47 GiB in `target/` and `tmp/`. Do not retain P2 and P3 build artifacts together
+when reproducing the full CI workflow. Use separate worktrees so
+`enable-wasmtime-fork.sh` cannot affect stock-P3 tests, then run the lanes in this
+order:
+
+1. Run fork-enabled P2 build, test-other, runtime, and node-compat lanes.
+2. Preserve test logs/results outside the P2 worktree, then remove that worktree's
+   generated `target/`, `tmp/`, and `tests/node_compat/suite/` directories.
+3. Run stock-P3 runtime and node-compat lanes.
+4. Remove the P3 worktree's generated `tmp/` directory before running the dedicated
+   `p3_generation`, `p3_exported_resource`, and `p3_async_values` tests. Those tests
+   build isolated crates concurrently under `/tmp` and need substantial transient
+   free space.
+
+Use the repository-supported artifact and Wasmtime caches while a lane is active,
+but never reuse stores, component instances, WASI state, wasm memory, QuickJS state,
+or test temp directories. After an interrupted run, remove a generated cache lock
+only after confirming that no process owns it.
+
 ### Run tests
 ```bash
 cargo test
