@@ -25,7 +25,7 @@ rustup default stable
 rustup target add --toolchain stable wasm32-wasip1 wasm32-wasip2
 rustup component add --toolchain stable rustfmt clippy
 
-if ! cargo component --version 2>/dev/null | grep -q '0\.21\.1'; then
+if [[ "$(cargo component --version 2>/dev/null | awk '{ print $NF }')" != "0.21.1" ]]; then
   cargo install --locked --version 0.21.1 cargo-component
 fi
 
@@ -52,7 +52,7 @@ if [[ ! -x "$node_dir/bin/node" ]] || \
 fi
 
 if [[ ! -x "$HOME/.wasmtime/bin/wasmtime" ]] || \
-  ! "$HOME/.wasmtime/bin/wasmtime" --version 2>/dev/null | grep -q "wasmtime ${WASMTIME_VERSION}"; then
+  [[ "$("$HOME/.wasmtime/bin/wasmtime" --version 2>/dev/null | awk '{ print $2 }')" != "$WASMTIME_VERSION" ]]; then
   curl -sSf https://wasmtime.dev/install.sh | bash -s -- --version "v${WASMTIME_VERSION}"
 fi
 

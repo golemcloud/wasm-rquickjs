@@ -5,7 +5,7 @@ set -euo pipefail
 # shellcheck disable=SC1091
 source "$HOME/.config/wasm-rquickjs/orb-env.sh"
 
-required_commands=(cargo cargo-component clang cmake node rustc rustup wasmtime)
+required_commands=(cargo cargo-component clang cmake node npm rustc rustfmt rustup wasmtime)
 for command_name in "${required_commands[@]}"; do
   command -v "$command_name" >/dev/null || {
     echo "missing orb prerequisite: $command_name; rerun .agents/setup" >&2
@@ -13,16 +13,29 @@ for command_name in "${required_commands[@]}"; do
   }
 done
 
-[[ "$(node --version)" == "v22.14.0" ]] || {
+expected_node_version="$(tr -d '[:space:]' < .nvmrc)"
+[[ "$(node --version)" == "v${expected_node_version}" ]] || {
   echo "unexpected Node.js version; rerun .agents/setup" >&2
   exit 1
 }
-wasmtime --version | grep -q '^wasmtime 46\.0\.1 ' || {
+[[ "$(cargo component --version 2>/dev/null | awk '{ print $NF }')" == "0.21.1" ]] || {
+  echo "unexpected cargo-component version; rerun .agents/setup" >&2
+  exit 1
+}
+cargo clippy --version >/dev/null || {
+  echo "missing Rust clippy component; rerun .agents/setup" >&2
+  exit 1
+}
+[[ "$(wasmtime --version | awk '{ print $2 }')" == "46.0.1" ]] || {
   echo "unexpected Wasmtime version; rerun .agents/setup" >&2
   exit 1
 }
 [[ "$(head -1 /opt/wasi-sdk/VERSION 2>/dev/null || true)" == "25.0" ]] || {
   echo "unexpected WASI SDK version; rerun .agents/setup" >&2
+  exit 1
+}
+[[ -x "$WASI_SDK_PATH/bin/clang" ]] || {
+  echo "missing WASI SDK clang; rerun .agents/setup" >&2
   exit 1
 }
 for target in wasm32-wasip1 wasm32-wasip2; do
