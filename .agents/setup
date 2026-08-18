@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WASI_SDK_VERSION=25
+NODE_VERSION="$(tr -d '[:space:]' < .nvmrc)"
+WASMTIME_VERSION=46.0.1
+
+missing_packages=()
+for package in build-essential ca-certificates clang cmake curl git pkg-config xz-utils; do
+  dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q 'ok installed' || missing_packages+=("$package")
+done
+if ((${#missing_packages[@]})); then
+  sudo apt-get update
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+fi
+
+if ! command -v rustup >/dev/null 2>&1; then
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --profile minimal --default-toolchain stable
+fi
+# shellcheck disable=SC1091
+source "$HOME/.cargo/env"
+rustup toolchain install stable --profile minimal
+rustup default stable
+rustup target add --toolchain stable wasm32-wasip1 wasm32-wasip2
+rustup component add --toolchain stable rustfmt clippy
+
+if [[ "$(cargo component --version 2>/dev/null | awk '{ print $NF }')" != "0.21.1" ]]; then
+  cargo install --locked --version 0.21.1 cargo-component
+fi
+
+if [[ ! -x /opt/wasi-sdk/bin/clang ]] || \
+  [[ "$(head -1 /opt/wasi-sdk/VERSION 2>/dev/null || true)" != "${WASI_SDK_VERSION}.0" ]]; then
+  archive="$(mktemp --suffix=.tar.gz)"
+  curl -sSfL \
+    "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz" \
+    -o "$archive"
+  sudo rm -rf /opt/wasi-sdk "/opt/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux"
+  sudo tar xzf "$archive" -C /opt
+  sudo mv "/opt/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" /opt/wasi-sdk
+  rm "$archive"
+fi
+
+node_dir="/opt/node-v${NODE_VERSION}-linux-x64"
+if [[ ! -x "$node_dir/bin/node" ]] || \
+  [[ "$($node_dir/bin/node --version 2>/dev/null)" != "v${NODE_VERSION}" ]]; then
+  archive="$(mktemp --suffix=.tar.xz)"
+  curl -sSfL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o "$archive"
+  sudo rm -rf "$node_dir"
+  sudo tar xJf "$archive" -C /opt
+  rm "$archive"
+fi
+
+if [[ ! -x "$HOME/.wasmtime/bin/wasmtime" ]] || \
+  [[ "$("$HOME/.wasmtime/bin/wasmtime" --version 2>/dev/null | awk '{ print $2 }')" != "$WASMTIME_VERSION" ]]; then
+  curl -sSf https://wasmtime.dev/install.sh | bash -s -- --version "v${WASMTIME_VERSION}"
+fi
+
+git submodule update --init --recursive
+
+mkdir -p "$HOME/.config/wasm-rquickjs"
+cat > "$HOME/.config/wasm-rquickjs/orb-env.sh" <<EOF
+export PATH="\$HOME/.wasmtime/bin:${node_dir}/bin:\$HOME/.cargo/bin:\$PATH"
+export WASI_SDK_VERSION="${WASI_SDK_VERSION}"
+export WASI_SDK_PATH="/opt/wasi-sdk"
+EOF
+
+profile_marker='# wasm-rquickjs orb environment'
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+# wasm-rquickjs orb environment
+if [[ -f "$HOME/.config/wasm-rquickjs/orb-env.sh" ]]; then
+  source "$HOME/.config/wasm-rquickjs/orb-env.sh"
+fi
+EOF
+fi
+
+echo "wasm-rquickjs orb prerequisites are ready"
