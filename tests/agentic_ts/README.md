@@ -57,11 +57,16 @@ workspace. Every TypeScript/compiler operation inside it uses a fresh execution
 job. Therefore QuickJS mutable state is fresh while `.tsbuildinfo`, emitted
 files, and other workspace artifacts intentionally persist.
 
-The Wasmtime host records the highest requested linear-memory size without
-limiting growth. Compiler jobs also record QuickJS heap use before loading
-TypeScript and immediately before each fresh runtime is dropped. The former
-detects state carried into a supposedly fresh runtime; the latter checks that
-equivalent jobs end with comparable live heaps. Linear memory is not expected
-to shrink, but successful, failed, timed-out, and cancelled job series should
-approach a stable high-water mark. A successful job after every exceptional
-series verifies that execution capacity was reclaimed.
+The Wasmtime host records the highest requested guest linear-memory size
+without limiting growth. With Golem's Wasmtime fork it explicitly excludes
+internal GC-heap callbacks, matching stock Wasmtime's guest-linear-memory-only
+callback. Compiler jobs also record QuickJS heap use before loading TypeScript
+and immediately before each fresh runtime is dropped. The former detects state
+carried into a supposedly fresh runtime; the latter checks that equivalent jobs
+end with comparable live heaps. Linear memory is not expected to shrink, but
+successful, failed, timed-out, and cancelled job series should approach a
+stable high-water mark. Because that high-water is monotone across the whole
+component instance, a series detects only growth beyond an earlier peak; it
+cannot reveal allocations that fit inside memory already reserved by a prior
+workload. A successful job after every exceptional series verifies that
+execution capacity was reclaimed.

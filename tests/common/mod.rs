@@ -2543,9 +2543,13 @@ impl wasmtime::ResourceLimiter for Host {
         current: usize,
         desired: usize,
         _maximum: Option<usize>,
-        #[cfg(feature = "use-golem-wasmtime")] _kind: wasmtime::MemoryKind,
+        #[cfg(feature = "use-golem-wasmtime")] kind: wasmtime::MemoryKind,
     ) -> wasmtime::Result<bool> {
-        if let Some(high_water) = &self.linear_memory_high_water {
+        #[cfg(feature = "use-golem-wasmtime")]
+        let is_linear_memory = kind == wasmtime::MemoryKind::LinearMemory;
+        #[cfg(not(feature = "use-golem-wasmtime"))]
+        let is_linear_memory = true;
+        if is_linear_memory && let Some(high_water) = &self.linear_memory_high_water {
             high_water.fetch_max(current.max(desired), Ordering::Relaxed);
         }
         Ok(true)
@@ -2601,7 +2605,8 @@ impl WasiHttpView for Host {
 // WASI Preview 3 (Component Model async) host support.
 //
 // Works on both stock wasmtime and the Golem wasmtime fork (`use-golem-wasmtime`). The shared
-// `Host` handles the fork's extra `IoCtx` view field and memory-kind limiter argument.
+// `Host` handles the fork's extra `IoCtx` view field and excludes its GC-heap callbacks from the
+// guest linear-memory high-water metric.
 // ---------------------------------------------------------------------------------------------
 
 /// Preview 3 engine: same stack/epoch configuration as the P2 host, plus Component Model async

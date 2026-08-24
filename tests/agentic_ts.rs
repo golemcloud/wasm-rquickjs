@@ -20,6 +20,8 @@ use wasmtime::component::Val;
 const SUITE_DIR: &str = "tests/agentic_ts";
 const EXAMPLE_DIR: &str = "examples/runtime/agentic-ts";
 const INPUT_HASH_ALGORITHM: &str = "blake3-composite-v1";
+const ALLOWED_LINEAR_MEMORY_GROWTH_BYTES: u64 = 65_536;
+const ALLOWED_QUICKJS_HEAP_VARIATION_BYTES: u64 = 1_048_576;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -287,6 +289,7 @@ async fn main() -> anyhow::Result<()> {
 
 fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()> {
     validate_composite_hash_contract()?;
+    validate_report_path_contract()?;
     let tracker = fs::read_to_string(Utf8Path::new(SUITE_DIR).join("TRACKER.md"))?;
     let mut reports_to_check = reports_to_check()?;
     let current_input_hashes = if reports_to_check.is_empty() {
@@ -309,7 +312,7 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
         validate_report_metadata(&path, &report)?;
         validate_report(&report)?;
         validate_regression_guards(&report)?;
-        if reports_to_check.remove(&filename) {
+        if reports_to_check.remove(&path) {
             validate_current_inputs(&path, &report, current_input_hashes.as_ref().unwrap())?;
         }
         anyhow::ensure!(
@@ -333,29 +336,49 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
         let p3 = reports
             .get(&p3_filename)
             .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
-        for field in [
-            "/inputs/algorithm",
-            "/inputs/buildHash",
-            "/inputs/benchmarkHash",
-            "/environment/commitHint",
-            "/environment/dirty",
-            "/environment/iterations",
-            "/environment/node",
-            "/environment/npm",
-            "/environment/typescript",
-            "/environment/rustc",
-            "/environment/cargo",
-        ] {
-            anyhow::ensure!(
-                p2.pointer(field) == p3.pointer(field),
-                "paired reports {filename} and {p3_filename} disagree at {field}"
-            );
-        }
+        validate_report_pair(filename, &p3_filename, p2, p3)?;
+        let mut duplicate_component = p3.clone();
+        duplicate_component["component"]["blake3"] = p2["component"]["blake3"].clone();
+        anyhow::ensure!(
+            validate_report_pair(filename, &p3_filename, p2, &duplicate_component).is_err(),
+            "paired-report guard accepted an identical P2/P3 component digest"
+        );
         paired += 2;
     }
     anyhow::ensure!(
         paired == reports.len(),
         "every checked-in report must belong to a P2/P3 pair"
+    );
+    Ok(())
+}
+
+fn validate_report_pair(
+    p2_filename: &str,
+    p3_filename: &str,
+    p2: &Value,
+    p3: &Value,
+) -> anyhow::Result<()> {
+    for field in [
+        "/inputs/algorithm",
+        "/inputs/buildHash",
+        "/inputs/benchmarkHash",
+        "/environment/commitHint",
+        "/environment/dirty",
+        "/environment/iterations",
+        "/environment/node",
+        "/environment/npm",
+        "/environment/typescript",
+        "/environment/rustc",
+        "/environment/cargo",
+    ] {
+        anyhow::ensure!(
+            p2.pointer(field) == p3.pointer(field),
+            "paired reports {p2_filename} and {p3_filename} disagree at {field}"
+        );
+    }
+    anyhow::ensure!(
+        p2.pointer("/component/blake3") != p3.pointer("/component/blake3"),
+        "paired reports {p2_filename} and {p3_filename} use the same component digest"
     );
     Ok(())
 }
@@ -404,18 +427,78 @@ fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<(
     Ok(())
 }
 
-fn reports_to_check() -> anyhow::Result<BTreeSet<String>> {
+fn reports_to_check() -> anyhow::Result<BTreeSet<camino::Utf8PathBuf>> {
+    let results_directory = Utf8Path::new(SUITE_DIR).join("results");
+    let current_directory = camino::Utf8PathBuf::from_path_buf(std::env::current_dir()?)
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 current directory: {}", path.display()))?;
+    let configured_source_root = camino::Utf8PathBuf::from(
+        std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string()),
+    );
+    let source_root = if configured_source_root == Utf8Path::new(".") {
+        current_directory
+    } else if configured_source_root.is_absolute() {
+        configured_source_root
+    } else {
+        current_directory.join(configured_source_root)
+    };
     std::env::var("AGENTIC_TS_REPORTS_TO_CHECK")
         .unwrap_or_default()
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| {
-            Utf8Path::new(line.trim())
-                .file_name()
-                .map(str::to_owned)
-                .ok_or_else(|| anyhow::anyhow!("invalid report path to check: {line}"))
-        })
+        .map(|line| normalize_report_path(line.trim(), &source_root, &results_directory))
         .collect()
+}
+
+fn normalize_report_path(
+    value: &str,
+    source_root: &Utf8Path,
+    results_directory: &Utf8Path,
+) -> anyhow::Result<camino::Utf8PathBuf> {
+    let path = Utf8Path::new(value);
+    let path = if path.is_absolute() {
+        path.strip_prefix(source_root).map_err(|_| {
+            anyhow::anyhow!("report path to check is outside {source_root}: {value}")
+        })?
+    } else {
+        path
+    };
+    anyhow::ensure!(
+        path.parent() == Some(results_directory)
+            && path.extension() == Some("json")
+            && !path
+                .components()
+                .any(|component| component.as_str() == ".."),
+        "report path to check is outside {results_directory}: {value}"
+    );
+    Ok(path.to_path_buf())
+}
+
+fn validate_report_path_contract() -> anyhow::Result<()> {
+    let root = camino_tempfile::Utf8TempDir::new()?;
+    let results_directory = Utf8Path::new(SUITE_DIR).join("results");
+    let relative = results_directory.join("report.json");
+    anyhow::ensure!(
+        normalize_report_path(relative.as_str(), root.path(), &results_directory)? == relative,
+        "relative report paths are not preserved"
+    );
+    anyhow::ensure!(
+        normalize_report_path(
+            root.path().join(&relative).as_str(),
+            root.path(),
+            &results_directory,
+        )? == relative,
+        "absolute report paths are not normalized"
+    );
+    anyhow::ensure!(
+        normalize_report_path(
+            "tests/agentic_ts/other/report.json",
+            root.path(),
+            &results_directory
+        )
+        .is_err(),
+        "out-of-directory report path was accepted"
+    );
+    Ok(())
 }
 
 fn validate_current_inputs(
@@ -549,15 +632,16 @@ fn memory_plateau(
 
     Ok(json!({
         "wasmLinearMemory": {
-            "allowedGrowthBytes": 65_536,
+            "allowedGrowthBytes": ALLOWED_LINEAR_MEMORY_GROWTH_BYTES,
             "unchangedCompilerJobs": linear_memory_series(unchanged)?,
             "warmedIncrementalCompilerJobs": linear_memory_series(incremental)?,
             "failedCompilerJobs": linear_memory_series(failed)?,
             "timedOutJobs": linear_memory_series(timeouts)?,
             "cancelledJobs": linear_memory_series(cancellations)?,
+            "interpretation": "the instance-wide monotone high-water detects growth beyond earlier peaks; it cannot identify allocations that remain within already-reserved linear memory",
         },
         "quickJsHeap": {
-            "allowedVariationBytes": 1_048_576,
+            "allowedVariationBytes": ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
             "unchangedCompilerJobs": quickjs_heap_series(unchanged)?,
             "warmedIncrementalCompilerJobs": quickjs_heap_series(incremental)?,
             "failedCompilerJobs": quickjs_heap_series(failed)?,
@@ -928,9 +1012,10 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
     )?;
 
     let memory = &report["workloads"]["memoryPlateau"];
-    let allowed = memory["wasmLinearMemory"]["allowedGrowthBytes"]
-        .as_u64()
-        .unwrap_or(0);
+    anyhow::ensure!(
+        memory["wasmLinearMemory"]["allowedGrowthBytes"] == ALLOWED_LINEAR_MEMORY_GROWTH_BYTES,
+        "report changed the Wasm linear-memory growth limit"
+    );
     for group in [
         "unchangedCompilerJobs",
         "warmedIncrementalCompilerJobs",
@@ -942,13 +1027,14 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
             memory["wasmLinearMemory"][group]["growthBytes"]
                 .as_u64()
                 .unwrap_or(u64::MAX)
-                <= allowed,
+                <= ALLOWED_LINEAR_MEMORY_GROWTH_BYTES,
             "Wasm linear-memory growth did not plateau for {group}"
         );
     }
-    let allowed_heap_variation = memory["quickJsHeap"]["allowedVariationBytes"]
-        .as_u64()
-        .unwrap_or(0);
+    anyhow::ensure!(
+        memory["quickJsHeap"]["allowedVariationBytes"] == ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
+        "report changed the QuickJS heap-variation limit"
+    );
     for group in [
         "unchangedCompilerJobs",
         "warmedIncrementalCompilerJobs",
@@ -962,7 +1048,7 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
                     && memory["quickJsHeap"][group][point]["variationBytes"]
                         .as_u64()
                         .unwrap_or(u64::MAX)
-                        <= allowed_heap_variation,
+                        <= ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
                 "fresh-job QuickJS heap samples varied unexpectedly for {group}/{point}"
             );
         }
@@ -1038,6 +1124,20 @@ fn validate_regression_guards(report: &Value) -> anyhow::Result<()> {
     anyhow::ensure!(
         validate_report(&leaked_heap).is_err(),
         "validation guard accepted unbounded fresh-job heap variation"
+    );
+    let mut relaxed_linear_memory = report.clone();
+    relaxed_linear_memory["workloads"]["memoryPlateau"]["wasmLinearMemory"]["allowedGrowthBytes"] =
+        json!(u64::MAX);
+    anyhow::ensure!(
+        validate_report(&relaxed_linear_memory).is_err(),
+        "validation guard accepted a report-controlled linear-memory limit"
+    );
+    let mut relaxed_quickjs_heap = report.clone();
+    relaxed_quickjs_heap["workloads"]["memoryPlateau"]["quickJsHeap"]["allowedVariationBytes"] =
+        json!(u64::MAX);
+    anyhow::ensure!(
+        validate_report(&relaxed_quickjs_heap).is_err(),
+        "validation guard accepted a report-controlled QuickJS heap limit"
     );
     Ok(())
 }
