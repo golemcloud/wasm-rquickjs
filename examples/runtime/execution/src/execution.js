@@ -255,7 +255,50 @@ export async function run() {
         } catch (error) {
             absoluteError = error.code;
         }
-        return { absoluteError, absoluteExists: fs.existsSync('/tmp/persistent-link/absolute.txt') };
+        fs.writeFileSync('/tmp/persistent-link/existing.txt', 'preserved');
+        let existingError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/existing.txt');
+        } catch (error) {
+            existingError = error.code;
+        }
+        let missingParentError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/missing/link.txt');
+        } catch (error) {
+            missingParentError = error.code;
+        }
+        fs.writeFileSync('/tmp/persistent-link/parent-file', 'parent');
+        let parentFileError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/parent-file/link.txt');
+        } catch (error) {
+            parentFileError = error.code;
+        }
+        let relativeParentFileError;
+        try {
+            fs.symlinkSync('target.txt', '/tmp/persistent-link/parent-file/relative-link.txt');
+        } catch (error) {
+            relativeParentFileError = error.code;
+        }
+        process.chdir('/tmp/persistent-link');
+        let bareDestinationError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', 'bare.txt');
+        } catch (error) {
+            bareDestinationError = error.code;
+        }
+        return {
+            absoluteError,
+            absoluteExists: fs.existsSync('/tmp/persistent-link/absolute.txt'),
+            existingError,
+            existingValue: fs.readFileSync('/tmp/persistent-link/existing.txt', 'utf8'),
+            missingParentError,
+            parentFileError,
+            relativeParentFileError,
+            bareDestinationError,
+            bareDestinationExists: fs.existsSync('bare.txt'),
+        };
     ` });
     const persistentSymlinkRead = await runJavaScript({ source: `
         const fs = await import('node:fs');
@@ -274,6 +317,9 @@ export async function run() {
         let cycleError;
         try { fs.realpathSync('/tmp/persistent-link/cycle-a.txt'); }
         catch (error) { cycleError = error.code; }
+        let cycleDestinationError;
+        try { fs.symlinkSync('target.txt', '/tmp/persistent-link/cycle-a.txt/child.txt'); }
+        catch (error) { cycleDestinationError = error.code; }
         fs.renameSync('/tmp/persistent-link/link.txt', '/tmp/persistent-link/moved.txt');
         const movedTarget = fs.readlinkSync('/tmp/persistent-link/moved.txt');
         fs.unlinkSync('/tmp/persistent-link/moved.txt');
@@ -282,6 +328,7 @@ export async function run() {
             brokenIsSymbolicLink: fs.lstatSync('/tmp/persistent-link/broken.txt').isSymbolicLink(),
             brokenTarget: fs.readlinkSync('/tmp/persistent-link/broken.txt'),
             cycleError,
+            cycleDestinationError,
             movedTarget,
             movedExistsAfterUnlink: fs.existsSync('/tmp/persistent-link/moved.txt'),
         };

@@ -180,6 +180,34 @@ async fn execution_isolation(
         false
     );
     assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["existingError"],
+        "EEXIST"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["existingValue"],
+        "preserved"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["missingParentError"],
+        "ENOENT"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["parentFileError"],
+        "ENOTDIR"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["relativeParentFileError"],
+        "ENOTDIR"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["bareDestinationError"],
+        "EINVAL"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["bareDestinationExists"],
+        false
+    );
+    assert_eq!(
         report["persistentSymlinkRead"]["value"]["target"],
         "target.txt"
     );
@@ -209,6 +237,10 @@ async fn execution_isolation(
     );
     assert_eq!(
         report["persistentSymlinkEdges"]["value"]["cycleError"],
+        "ELOOP"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["cycleDestinationError"],
         "ELOOP"
     );
     assert_eq!(

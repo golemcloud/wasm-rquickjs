@@ -78,6 +78,10 @@ fn wasi_fs_error_to_io(e: &wasi_fs_types::ErrorCode) -> std::io::Error {
             std::io::Error::new(std::io::ErrorKind::PermissionDenied, e.to_string())
         }
         ErrorCode::Exist => std::io::Error::new(std::io::ErrorKind::AlreadyExists, e.to_string()),
+        ErrorCode::NotDirectory => {
+            std::io::Error::new(std::io::ErrorKind::NotADirectory, e.to_string())
+        }
+        ErrorCode::Loop => std::io::Error::other("too many levels of symbolic links"),
         ErrorCode::BadDescriptor => {
             std::io::Error::from_raw_os_error(8) // EBADF on WASI
         }
@@ -155,6 +159,32 @@ fn set_path_times(
 
 fn symlink_at_path(target: &str, path: &str) -> std::io::Result<()> {
     if std::path::Path::new(target).is_absolute() {
+        match std::fs::symlink_metadata(path) {
+            Ok(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "file already exists",
+                ));
+            }
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+            Err(_) => {}
+        }
+
+        let parent = std::path::Path::new(path)
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        match std::fs::metadata(parent) {
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotADirectory,
+                    "not a directory",
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => return Err(error),
+        }
+
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "WASI symbolic link targets must be relative",
@@ -286,17 +316,7 @@ pub(super) fn realpath_for_module_resolution_path(path: &str) -> Option<String> 
 fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
     match std::fs::canonicalize(path) {
         Ok(resolved) => Ok(resolved.to_string_lossy().to_string()),
-        Err(original_error) => match canonicalize_guest_path_fallback(path) {
-            Ok(resolved) => Ok(resolved),
-            Err(fallback_error)
-                if fallback_error
-                    .to_string()
-                    .contains("too many levels of symbolic links") =>
-            {
-                Err(fallback_error)
-            }
-            Err(_) => Err(original_error),
-        },
+        Err(_) => canonicalize_guest_path_fallback(path),
     }
 }
 
@@ -372,6 +392,7 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
         std::io::ErrorKind::AlreadyExists => ("EEXIST", -17, "file already exists"),
         std::io::ErrorKind::PermissionDenied => ("EACCES", -13, "permission denied"),
         std::io::ErrorKind::InvalidInput => ("EINVAL", -22, "invalid argument"),
+        std::io::ErrorKind::NotADirectory => ("ENOTDIR", -20, "not a directory"),
         _ => {
             let err_text = err.to_string().to_lowercase();
             if err_text.contains("too many levels of symbolic links") || err_text.contains("eloop")

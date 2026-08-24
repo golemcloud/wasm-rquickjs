@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3215/4387 (73.3%)
+**Primary compatibility (CI-enforced):** 3174/4387 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3215 | 73.3% | 55.9% | 46.8% |
-| 🧩 known gap | 1172 | 26.7% | 20.4% | 17.1% |
+| ✅ passing (runnable) | 3174 | 72.4% | 55.2% | 46.2% |
+| 🧩 known gap | 1213 | 27.6% | 21.1% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3215/5750 (55.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3174/5750 (55.2%)**.
 
 ## Inventory by Module
 
@@ -49,13 +49,13 @@ Secondary full-public compatibility, including public tests that are currently e
 | eslint | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 0.0% | 0.0% |
 | events | 93 | 59 | 2 | 0 | 0 | 0 | 32 | 96.7% | 96.7% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
+| fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
 | http | 898 | 229 | 286 | 301 | 2 | 0 | 80 | 44.5% | 28.0% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 174 | 129 | 25 | 7 | 1 | 0 | 12 | 83.8% | 79.6% |
+| module | 174 | 122 | 32 | 7 | 1 | 0 | 12 | 79.2% | 75.3% |
 | net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
@@ -241,8 +241,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-fs-mkdir.js` | 21 | 21 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-mkdtemp.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-opendir.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-options-immutable.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-promises.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-options-immutable.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
+| `test-fs-promises.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-fs-promisified.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-read-stream-double-close.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-read-stream-inherit.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
@@ -255,7 +255,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-fs-rmdir-recursive-throws-not-found.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-rmdir-recursive-throws-on-file.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-rmdir-recursive.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
-| `test-fs-stat-bigint.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-stat-bigint.js` | 9 | 0 | 9 | 0 | 0 | 0 | 0 |
 | `test-fs-stat.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-statfs.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-stream-construct-compat-graceful-fs.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -671,8 +671,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-diagnostic-dir-cpu-prof.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-diagnostic-dir-heap-prof.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-error-serdes.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
-| `test-fs-opendir-recursive.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-readdir-recursive.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-opendir-recursive.js` | 7 | 0 | 7 | 0 | 0 | 0 | 0 |
+| `test-fs-readdir-recursive.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-fs-watch.js` | 6 | 3 | 3 | 0 | 0 | 0 | 0 |
 | `test-heapdump.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
 | `test-init.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1172)
+### known gap (1213)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -696,8 +696,10 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
+| the shared fixture creates rooted symlink targets; WASI supports persistent relative symlinks only | 13 | `sequential/test-fs-opendir-recursive.js#block_00_block_00`, `sequential/test-fs-opendir-recursive.js#block_01_block_01`, `sequential/test-fs-opendir-recursive.js#block_02_block_02`, ... (+10) |
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
+| WASI symlink-at rejects the rooted symlink targets required by this vendored test; persistent relative symlinks are covered by runtime tests | 11 | `es-module/test-esm-preserve-symlinks-main.js`, `es-module/test-esm-preserve-symlinks.js`, `es-module/test-esm-symlink-main.js`, ... (+8) |
 | inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 11 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+8) |
 | inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility | 11 | `parallel/test-whatwg-encoding-custom-textdecoder.js#block_00_test_textdecoder_utf_8_fatal_false_ignorebom_false`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_01_test_textdecoder_utf_8_fatal_false_ignorebom_true`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_02_invalid_encoders`, ... (+8) |
 | net.js TCP implementation incomplete - needs event handling and API fixes | 11 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+8) |
@@ -707,6 +709,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks not fully implemented | 9 | `parallel/test-async-hooks-destroy-on-gc.js`, `parallel/test-async-hooks-disable-during-promise.js`, `parallel/test-async-hooks-disable-gc-tracking.js`, ... (+6) |
 | spawn() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 9 | `parallel/test-child-process-spawn-controller.js#block_00_block_00`, `parallel/test-child-process-spawn-controller.js#block_01_block_01`, `parallel/test-child-process-spawn-controller.js#block_02_block_02`, ... (+6) |
 | spawnSync() returns ENOSYS for non-execPath commands; Node expects ENOENT after option validation | 9 | `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`, `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`, `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`, ... (+6) |
+| the split fixture creates rooted symlink targets before the isolated stat subtests; WASI supports persistent relative symlinks only | 9 | `parallel/test-fs-stat-bigint.js#block_00_block_00`, `parallel/test-fs-stat-bigint.js#block_01_block_01`, `parallel/test-fs-stat-bigint.js#block_02_block_02`, ... (+6) |
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source | 7 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_04_should_be_importable`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_05_should_be_importable_from_a_module_scope_under_node_modules`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_09_should_run_on_import`, ... (+4) |
@@ -717,6 +720,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |
 | inherited: perf_hooks createHistogram/monitorEventLoopDelay are not implemented | 6 | `parallel/test-perf-hooks-histogram.js#block_00_block_00`, `parallel/test-perf-hooks-histogram.js#block_01_block_01`, `parallel/test-perf-hooks-histogram.js#block_02_block_02`, ... (+3) |
 | inherited: performance.timerify function entries are not implemented | 6 | `parallel/test-performance-function.js#block_00_block_00`, `parallel/test-performance-function.js#block_01_block_01`, `parallel/test-performance-function.js#block_02_block_02`, ... (+3) |
+| the test's meaningful body requires rooted symlink targets; common.canCreateSymLink skips it under the supported relative-only WASI boundary | 6 | `parallel/test-fs-options-immutable.js#block_00_block_00`, `parallel/test-fs-options-immutable.js#block_01_block_01`, `parallel/test-fs-options-immutable.js#block_02_block_02`, ... (+3) |
 | IPv6 sockets are not available in this runtime (common.hasIPv6=false) | 5 | `parallel/test-dgram-ipv6only.js`, `parallel/test-dgram-udp6-link-local-address.js`, `parallel/test-dgram-udp6-send-default-host.js`, ... (+2) |
 | inherited: buffer.transcode and ICU transcoding are not implemented | 5 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+2) |
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
@@ -739,11 +743,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http client does not surface 103 Early Hints as 'information' events | 4 | `parallel/test-http-early-hints.js#block_00_block_00`, `parallel/test-http-early-hints.js#block_01_block_01`, `parallel/test-http-early-hints.js#block_03_block_03`, ... (+1) |
 | DOMException options bag ({ name, cause }) is not implemented | 3 | `parallel/test-domexception-cause.js#block_01_block_01`, `parallel/test-domexception-cause.js#block_02_block_02`, `parallel/test-domexception-cause.js#block_03_block_03` |
 | MessagePort close callback, close-state checks, and closed-port errors are incomplete | 3 | `parallel/test-worker-message-port-close.js#block_00_block_00`, `parallel/test-worker-message-port-close.js#block_01_block_01`, `parallel/test-worker-message-port-close.js#block_02_block_02` |
+| WASI supports persistent relative symlinks, but this vendored test requires rooted targets; common.canCreateSymLink remains false | 3 | `parallel/test-fs-symlink-buffer-path.js`, `parallel/test-fs-symlink-dir.js`, `parallel/test-fs-symlink.js` |
 | WASM child emulation does not support Node.js --test TAP filtering behavior | 3 | `parallel/test-runner-no-isolation-filtering.js#test_00_works_with_test_only`, `parallel/test-runner-no-isolation-filtering.js#test_01_works_with_test_name_pattern`, `parallel/test-runner-no-isolation-filtering.js#test_02_works_with_test_skip_pattern` |
 | WASM child emulation does not support Node.js --test reporter destination flushing | 3 | `parallel/test-runner-force-exit-flush.js#test_00_junit_reporter`, `parallel/test-runner-force-exit-flush.js#test_01_spec_reporter`, `parallel/test-runner-force-exit-flush.js#test_02_tap_reporter` |
 | child_process spawn() stdio stream compatibility (e.g. pipe) is incomplete in execPath emulation | 3 | `parallel/test-cwd-enoent-preload.js`, `parallel/test-cwd-enoent.js`, `parallel/test-preload.js` |
 | child_process.spawn pipe mode does not provide functional child.stdin | 3 | `parallel/test-stdin-pipe-large.js`, `parallel/test-stdin-pipe-resume.js`, `parallel/test-stdin-script-child-option.js` |
-| common.canCreateSymLink shim always returns false, so symlink tests are skipped | 3 | `parallel/test-fs-symlink-buffer-path.js`, `parallel/test-fs-symlink-dir.js`, `parallel/test-fs-symlink.js` |
 | common/gc async_hooks-based GC tracking is not implemented in the WASM test shim | 3 | `sequential/test-gc-http-client-onerror.js`, `sequential/test-gc-http-client-timeout.js`, `sequential/test-gc-http-client.js` |
 | crypto.X509Certificate API is not implemented | 3 | `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`, `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`, `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field` |
 | dgram send() callback overload path has JS/native argument conversion bugs | 3 | `parallel/test-dgram-send-callback-buffer-length-empty-address.js`, `parallel/test-dgram-send-callback-buffer-length.js`, `parallel/test-dgram-send-callback-buffer.js` |
@@ -954,6 +958,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | TypeScript transform source maps are not applied to QuickJS stack call-site locations | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | URL inspect output uses the URL string instead of Node's structured URL representation | 1 | `parallel/test-whatwg-url-custom-inspect.js` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
+| WASI symlink-at rejects the rooted symlink target used by this subtest | 1 | `parallel/test-fs-promises.js#block_01_block_01` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
 | WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags | 1 | `parallel/test-runner-module-mocking.js#test_16_wrong_import_syntax_should_throw_error_after_module_mocking` |
 | WASM child emulation does not support --no-experimental-sqlite CLI flag | 1 | `parallel/test-sqlite.js#test_00_accessing_the_node_sqlite_module` |
@@ -1281,6 +1286,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream/web compression constructor error codes are not Node-compatible yet | 1 | `parallel/test-whatwg-webstreams-compression.js` |
 | subtle.digest unsupported-algorithm error semantics do not match Node | 1 | `parallel/test-webcrypto-digest.js` |
 | the client never observes a reused keep-alive socket, so the corked-response reuse loop does not terminate | 1 | `parallel/test-http-outgoing-end-cork.js` |
+| the vendored test requires rooted symlink targets; relative realpath and symlink chains are covered by runtime tests | 1 | `parallel/test-fs-realpath.js` |
 | timeout option does not reliably emit request timeout before close | 1 | `parallel/test-http-client-timeout-option.js` |
 | timers/promises scheduler constructor and error-code semantics are not fully Node-compatible | 1 | `parallel/test-timers-promises-scheduler.js` |
 | tls.checkServerIdentity() is a stub that throws instead of performing hostname/certificate matching | 1 | `parallel/test-tls-check-server-identity.js` |

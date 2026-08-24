@@ -699,6 +699,8 @@
     },
     "parallel/test-fs-operations-with-surrogate-pairs.js": {},
     "parallel/test-fs-options-immutable.js": {
+      "category": "known-gap",
+      "reason": "the test's meaningful body requires rooted symlink targets; common.canCreateSymLink skips it under the supported relative-only WASI boundary",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -738,7 +740,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": {}
+        "block_01_block_01": { "category": "known-gap", "reason": "WASI symlink-at rejects the rooted symlink target used by this subtest" }
       }
     },
     "parallel/test-fs-promisified.js": {
@@ -870,7 +872,7 @@
     "parallel/test-fs-realpath-native.js": {},
     "parallel/test-fs-realpath-on-substed-drive.js": { "category": "wasi-impossible", "reason": "Windows subst-drive behavior is not applicable in WASI" },
     "parallel/test-fs-realpath-pipe.js": {},
-    "parallel/test-fs-realpath.js": {},
+    "parallel/test-fs-realpath.js": { "category": "known-gap", "reason": "the vendored test requires rooted symlink targets; relative realpath and symlink chains are covered by runtime tests" },
     "parallel/test-fs-rename-type-check.js": {},
     "parallel/test-fs-rm.js": {
       "category": "node-internals",
@@ -925,6 +927,8 @@
       }
     },
     "parallel/test-fs-stat-bigint.js": {
+      "category": "known-gap",
+      "reason": "the split fixture creates rooted symlink targets before the isolated stat subtests; WASI supports persistent relative symlinks only",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -10374,6 +10378,8 @@
       }
     },
     "sequential/test-fs-opendir-recursive.js": {
+      "category": "known-gap",
+      "reason": "the shared fixture creates rooted symlink targets; WASI supports persistent relative symlinks only",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -10386,6 +10392,8 @@
       }
     },
     "sequential/test-fs-readdir-recursive.js": {
+      "category": "known-gap",
+      "reason": "the shared fixture creates rooted symlink targets; WASI supports persistent relative symlinks only",
       "split": true,
       "subtests": {
         "block_00_readdirsync_recursive": {},

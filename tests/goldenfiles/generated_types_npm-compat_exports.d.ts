@@ -7,6 +7,7 @@ declare module 'npm-compat' {
   export function runRegistryInstalled(): Promise<string>;
   export function runPackageFormats(): Promise<string>;
   export function runBinDirect(): Promise<string>;
+  export function probeLinkedLayouts(): Promise<string>;
   export function probeRuntime(): Promise<string>;
   export function probePrimitives(): Promise<string>;
 }
