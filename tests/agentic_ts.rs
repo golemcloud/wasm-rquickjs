@@ -1,6 +1,6 @@
-//! Manual agentic TypeScript compatibility and performance suite.
+//! Agentic TypeScript compatibility and performance suite.
 //!
-//! Use `tests/agentic_ts/run.sh`; this target is intentionally not part of CI.
+//! Use `tests/agentic_ts/run.sh` for manual measurements. CI runs only the report-contract path.
 
 #![allow(dead_code)]
 
@@ -10,20 +10,21 @@ mod common;
 use camino::Utf8Path;
 use common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive, test_target};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::Write as _;
-use std::process::{Command, Stdio};
+use std::io::Read as _;
+use std::process::Command;
 use std::time::{Duration, Instant};
 use wasmtime::component::Val;
 
 const SUITE_DIR: &str = "tests/agentic_ts";
 const EXAMPLE_DIR: &str = "examples/runtime/agentic-ts";
+const INPUT_HASH_ALGORITHM: &str = "blake3-composite-v1";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    if let Ok(path) = std::env::var("AGENTIC_TS_REPORT_TO_CHECK") {
-        return check_report(Utf8Path::new(&path));
+    if std::env::var_os("AGENTIC_TS_VALIDATE_REPORTS").is_some() {
+        return validate_checked_reports(Utf8Path::new(SUITE_DIR).join("results"));
     }
     verify_toolchain()?;
     let iterations = std::env::var("AGENTIC_TS_ITERATIONS")
@@ -118,18 +119,26 @@ async fn main() -> anyhow::Result<()> {
     let broken_path = instance
         .temp_dir_path()
         .join("workspace/projects/core/src/broken.ts");
-    fs::write(&broken_path, "export const broken: number = 'wrong';\n")?;
-    let invalid = timed_invoke(
-        &mut instance,
-        "run-tsc",
-        &[
-            string_list(&["--noEmit", "-p", "projects/core/tsconfig.json"]),
-            Val::U64(300_000),
-        ],
-    )
-    .await?;
+    let mut failed_type_checks = Vec::with_capacity(iterations);
+    for attempt in 0..iterations {
+        fs::write(
+            &broken_path,
+            format!("export const broken: number = 'wrong-{attempt}';\n"),
+        )?;
+        failed_type_checks.push(
+            timed_invoke(
+                &mut instance,
+                "run-tsc",
+                &[
+                    string_list(&["--noEmit", "-p", "projects/core/tsconfig.json"]),
+                    Val::U64(300_000),
+                ],
+            )
+            .await?,
+        );
+    }
     fs::write(&broken_path, "export const fixed: number = 42;\n")?;
-    let valid = timed_invoke(
+    let failed_recovery = timed_invoke(
         &mut instance,
         "run-tsc",
         &[
@@ -187,19 +196,49 @@ async fn main() -> anyhow::Result<()> {
         "contended": timed_invoke(&mut instance, "run-concurrent", &[]).await?,
         "interpretation": "all jobs were submitted together; compare sibling completion with isolated baselines to identify overlap or serialization",
     });
-    let timeout = timed_invoke(&mut instance, "probe-timeout", &[]).await?;
-    let cancellation = timed_invoke(&mut instance, "probe-cancellation", &[]).await?;
-    let memory_plateau = memory_plateau(&unchanged, &incremental)?;
+    let mut timeouts = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        timeouts.push(timed_invoke(&mut instance, "probe-timeout", &[]).await?);
+    }
+    let timeout_recovery = timed_invoke(
+        &mut instance,
+        "run-entry",
+        &[Val::String("./projects/direct.ts".to_string())],
+    )
+    .await?;
+    let mut cancellations = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        cancellations.push(timed_invoke(&mut instance, "probe-cancellation", &[]).await?);
+    }
+    let cancellation_recovery = timed_invoke(
+        &mut instance,
+        "run-entry",
+        &[Val::String("./projects/direct.ts".to_string())],
+    )
+    .await?;
+    let memory_plateau = memory_plateau(
+        &unchanged,
+        &incremental,
+        &failed_type_checks,
+        &timeouts,
+        &cancellations,
+    )?;
 
+    let environment = environment(iterations)?;
+    let input_hashes = input_hashes()?;
     let report = json!({
-        "schemaVersion": 1,
-        "environment": environment(iterations)?,
-        "sourceFiles": source_files()?,
-        "runtimeSourceState": runtime_source_state()?,
+        "schemaVersion": 3,
+        "environment": environment,
+        "inputs": {
+            "algorithm": INPUT_HASH_ALGORITHM,
+            "buildHash": input_hashes.build,
+            "benchmarkHash": input_hashes.benchmark,
+        },
         "target": format!("{:?}", test_target()).to_lowercase(),
         "component": {
             "path": compiled.wasm_path().as_str(),
             "bytes": component_size,
+            "blake3": hash_file(compiled.wasm_path())?,
             "buildMs": millis(build_elapsed),
             "instantiateMs": millis(instantiate_elapsed),
         },
@@ -209,14 +248,23 @@ async fn main() -> anyhow::Result<()> {
             "unchangedFreshJobs": summarize(&unchanged),
             "incrementalCold": incremental_cold,
             "incrementalFreshJobs": summarize(&incremental),
-            "invalidThenValid": { "invalid": invalid, "valid": valid },
+            "invalidThenValid": {
+                "failedChecks": summarize(&failed_type_checks),
+                "recovery": failed_recovery,
+            },
             "projectReferences": project_build,
             "directTypeScript": direct_ts,
             "emitDirect": emit_direct,
             "generatedJavaScript": generated_js,
             "concurrent": concurrent,
-            "timeout": timeout,
-            "cancellation": cancellation,
+            "timeouts": {
+                "attempts": summarize(&timeouts),
+                "recovery": timeout_recovery,
+            },
+            "cancellations": {
+                "attempts": summarize(&cancellations),
+                "recovery": cancellation_recovery,
+            },
             "memoryPlateau": memory_plateau,
         },
         "wasmLinearMemoryHighWaterBytes": instance.linear_memory_high_water_bytes(),
@@ -237,48 +285,166 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn check_report(path: &Utf8Path) -> anyhow::Result<()> {
-    let report: Value = serde_json::from_slice(&fs::read(path)?)?;
+fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()> {
+    validate_composite_hash_contract()?;
+    let tracker = fs::read_to_string(Utf8Path::new(SUITE_DIR).join("TRACKER.md"))?;
+    let mut reports_to_check = reports_to_check()?;
+    let current_input_hashes = if reports_to_check.is_empty() {
+        None
+    } else {
+        Some(input_hashes()?)
+    };
+    let mut reports = BTreeMap::new();
+    for entry in fs::read_dir(&directory)? {
+        let path = camino::Utf8PathBuf::from_path_buf(entry?.path())
+            .map_err(|path| anyhow::anyhow!("non-UTF-8 report path: {}", path.display()))?;
+        if path.extension() != Some("json") {
+            continue;
+        }
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("report has no filename: {path}"))?
+            .to_string();
+        let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        validate_report_metadata(&path, &report)?;
+        validate_report(&report)?;
+        validate_regression_guards(&report)?;
+        if reports_to_check.remove(&filename) {
+            validate_current_inputs(&path, &report, current_input_hashes.as_ref().unwrap())?;
+        }
+        anyhow::ensure!(
+            tracker.contains(&filename),
+            "TRACKER.md does not reference {filename}"
+        );
+        reports.insert(filename, report);
+    }
+    anyhow::ensure!(!reports.is_empty(), "no checked-in reports found");
     anyhow::ensure!(
-        report["sourceFiles"] == serde_json::to_value(source_files()?)?,
-        "{} was generated from different suite sources",
-        path
+        reports_to_check.is_empty(),
+        "reports requested for currentness checking were not found: {reports_to_check:?}"
     );
-    let current_runtime_source_state = runtime_source_state()?;
+
+    let mut paired = 0;
+    for (filename, p2) in reports
+        .iter()
+        .filter(|(filename, _)| filename.contains("-p2-"))
+    {
+        let p3_filename = filename.replacen("-p2-", "-p3-", 1);
+        let p3 = reports
+            .get(&p3_filename)
+            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        for field in [
+            "/inputs/algorithm",
+            "/inputs/buildHash",
+            "/inputs/benchmarkHash",
+            "/environment/commitHint",
+            "/environment/dirty",
+            "/environment/iterations",
+            "/environment/node",
+            "/environment/npm",
+            "/environment/typescript",
+            "/environment/rustc",
+            "/environment/cargo",
+        ] {
+            anyhow::ensure!(
+                p2.pointer(field) == p3.pointer(field),
+                "paired reports {filename} and {p3_filename} disagree at {field}"
+            );
+        }
+        paired += 2;
+    }
     anyhow::ensure!(
-        report["runtimeSourceState"] == current_runtime_source_state,
-        "{} runtime source state is stale: report={}, current={}",
-        path,
-        report["runtimeSourceState"],
-        current_runtime_source_state
+        paired == reports.len(),
+        "every checked-in report must belong to a P2/P3 pair"
     );
+    Ok(())
+}
+
+fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
+    anyhow::ensure!(report["schemaVersion"] == 3, "{path} uses an old schema");
     anyhow::ensure!(
         report["environment"]["node"] == "22.14.0"
             && report["environment"]["npm"] == "10.9.2"
             && report["environment"]["typescript"] == "5.8.2"
             && report["environment"]["iterations"].as_u64().unwrap_or(0) >= 5,
-        "{} does not use the pinned baseline settings",
-        path
+        "{path} does not use the pinned baseline settings"
     );
-    let expected_target = if path.as_str().contains("-p2-") {
-        "p2"
-    } else if path.as_str().contains("-p3-") {
-        "p3"
-    } else {
-        anyhow::bail!("{} does not identify a P2 or P3 report", path)
-    };
+    let target = report["target"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no target"))?;
+    let os = report["environment"]["os"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no OS"))?;
+    let arch = report["environment"]["arch"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no architecture"))?;
+    let filename = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no filename"))?;
     anyhow::ensure!(
-        report["target"] == expected_target,
-        "{} has the wrong target",
-        path
+        filename.ends_with(&format!("-{target}-{os}-{arch}.json")),
+        "{path} filename does not match its target and host metadata"
     );
     anyhow::ensure!(
-        report["environment"]["os"] == std::env::consts::OS
-            && report["environment"]["arch"] == std::env::consts::ARCH,
-        "{} was produced for a different platform or architecture",
-        path
+        report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
+            && is_blake3_hash(&report["inputs"]["buildHash"])
+            && is_blake3_hash(&report["inputs"]["benchmarkHash"])
+            && is_blake3_hash(&report["component"]["blake3"])
+            && report["environment"]["commitHint"]
+                .as_str()
+                .is_some_and(|commit| !commit.is_empty())
+            && report["environment"]["rustc"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty())
+            && report["environment"]["cargo"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty()),
+        "{path} has incomplete source fingerprints"
     );
-    validate_report(&report)
+    Ok(())
+}
+
+fn reports_to_check() -> anyhow::Result<BTreeSet<String>> {
+    std::env::var("AGENTIC_TS_REPORTS_TO_CHECK")
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            Utf8Path::new(line.trim())
+                .file_name()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow::anyhow!("invalid report path to check: {line}"))
+        })
+        .collect()
+}
+
+fn validate_current_inputs(
+    path: &Utf8Path,
+    report: &Value,
+    current: &InputHashes,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["inputs"]["buildHash"] == current.build,
+        "{path} build inputs are stale: report={}, current={}",
+        report["inputs"]["buildHash"],
+        current.build,
+    );
+    anyhow::ensure!(
+        report["inputs"]["benchmarkHash"] == current.benchmark,
+        "{path} benchmark inputs are stale: report={}, current={}",
+        report["inputs"]["benchmarkHash"],
+        current.benchmark,
+    );
+    Ok(())
+}
+
+fn is_blake3_hash(value: &Value) -> bool {
+    value.as_str().is_some_and(|hash| {
+        hash.len() == 64
+            && hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
 }
 
 async fn timed_invoke(
@@ -325,8 +491,14 @@ fn summarize(samples: &[Value]) -> Value {
     })
 }
 
-fn memory_plateau(unchanged: &[Value], incremental: &[Value]) -> anyhow::Result<Value> {
-    fn series(samples: &[Value]) -> anyhow::Result<Value> {
+fn memory_plateau(
+    unchanged: &[Value],
+    incremental: &[Value],
+    failed: &[Value],
+    timeouts: &[Value],
+    cancellations: &[Value],
+) -> anyhow::Result<Value> {
+    fn linear_memory_series(samples: &[Value]) -> anyhow::Result<Value> {
         let values = samples
             .iter()
             .map(|sample| {
@@ -345,90 +517,246 @@ fn memory_plateau(unchanged: &[Value], incremental: &[Value]) -> anyhow::Result<
         }))
     }
 
+    fn quickjs_heap_series(samples: &[Value]) -> anyhow::Result<Value> {
+        fn values_at(samples: &[Value], point: &str) -> anyhow::Result<Vec<u64>> {
+            samples
+                .iter()
+                .map(|sample| {
+                    sample
+                        .pointer(&format!("/result/value/quickJsMemory/{point}/heapUsed"))
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| anyhow::anyhow!("missing QuickJS heap sample at {point}"))
+                })
+                .collect()
+        }
+
+        fn summarize_values(values: Vec<u64>) -> Value {
+            let minimum = values.iter().copied().min().unwrap_or(0);
+            let maximum = values.iter().copied().max().unwrap_or(0);
+            json!({
+                "samples": values,
+                "minimumBytes": minimum,
+                "maximumBytes": maximum,
+                "variationBytes": maximum - minimum,
+            })
+        }
+
+        Ok(json!({
+            "beforeToolLoad": summarize_values(values_at(samples, "beforeToolLoad")?),
+            "afterCompiler": summarize_values(values_at(samples, "afterCompiler")?),
+        }))
+    }
+
     Ok(json!({
-        "allowedGrowthBytes": 65_536,
-        "unchangedCompilerJobs": series(unchanged)?,
-        "warmedIncrementalCompilerJobs": series(incremental)?,
+        "wasmLinearMemory": {
+            "allowedGrowthBytes": 65_536,
+            "unchangedCompilerJobs": linear_memory_series(unchanged)?,
+            "warmedIncrementalCompilerJobs": linear_memory_series(incremental)?,
+            "failedCompilerJobs": linear_memory_series(failed)?,
+            "timedOutJobs": linear_memory_series(timeouts)?,
+            "cancelledJobs": linear_memory_series(cancellations)?,
+        },
+        "quickJsHeap": {
+            "allowedVariationBytes": 1_048_576,
+            "unchangedCompilerJobs": quickjs_heap_series(unchanged)?,
+            "warmedIncrementalCompilerJobs": quickjs_heap_series(incremental)?,
+            "failedCompilerJobs": quickjs_heap_series(failed)?,
+            "interpretation": "before-tool-load samples compare fresh runtimes; after-compiler samples describe heap usage immediately before each runtime is dropped",
+        },
     }))
 }
 
-fn source_files() -> anyhow::Result<BTreeMap<String, String>> {
-    let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-    let mut files = vec![
-        Utf8Path::new("Cargo.toml").to_path_buf(),
-        Utf8Path::new("Cargo.lock").to_path_buf(),
-        Utf8Path::new("crates/wasm-rquickjs/Cargo.toml").to_path_buf(),
-        Utf8Path::new("crates/wasm-rquickjs/skeleton/Cargo.toml_").to_path_buf(),
-        Utf8Path::new("crates/wasm-rquickjs/skeleton/Cargo.lock").to_path_buf(),
-        Utf8Path::new("tests/common/mod.rs").to_path_buf(),
-        Utf8Path::new("tests/agentic_ts.rs").to_path_buf(),
-        Utf8Path::new("tests/agentic_ts/package.json").to_path_buf(),
-        Utf8Path::new("tests/agentic_ts/package-lock.json").to_path_buf(),
-        Utf8Path::new("tests/agentic_ts/tsconfig.json").to_path_buf(),
-        Utf8Path::new("tests/agentic_ts/run.sh").to_path_buf(),
-    ];
-    collect_files(Utf8Path::new("examples/runtime/agentic-ts"), &mut files)?;
-    collect_files(Utf8Path::new("tests/agentic_ts/projects"), &mut files)?;
-    files.sort();
+struct InputHashes {
+    build: String,
+    benchmark: String,
+}
 
-    files
-        .into_iter()
-        .map(|path| {
-            let source_path = Utf8Path::new(&source_root).join(&path);
-            let hash =
-                command_text(Command::new("git").args(["hash-object", source_path.as_str()]))?;
-            Ok((path.into_string(), hash))
-        })
+fn input_hashes() -> anyhow::Result<InputHashes> {
+    let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
+    let source_root = Utf8Path::new(&source_root);
+
+    let mut build_files = input_files(&[
+        "Cargo.toml",
+        "Cargo.lock",
+        ".github/scripts/enable-wasmtime-fork.sh",
+        "crates/golem-context/Cargo.toml",
+        "crates/golem-websocket/Cargo.toml",
+        "crates/wasi-logging/Cargo.toml",
+        "crates/wasm-rquickjs/Cargo.toml",
+        "crates/wasm-rquickjs/skeleton/Cargo.toml_",
+        "crates/wasm-rquickjs/skeleton/Cargo.lock",
+    ]);
+    for directory in [
+        "crates/wasi-logging/src",
+        "crates/wasm-rquickjs/src",
+        "crates/wasm-rquickjs/skeleton/src",
+        EXAMPLE_DIR,
+    ] {
+        collect_input_files(source_root, Utf8Path::new(directory), &mut build_files)?;
+    }
+
+    let mut benchmark_files = input_files(&[
+        "tests/agentic_ts.rs",
+        "tests/agentic_ts/package.json",
+        "tests/agentic_ts/package-lock.json",
+        "tests/agentic_ts/tsconfig.json",
+        "tests/agentic_ts/run.sh",
+        "tools/dev-test.sh",
+    ]);
+    collect_input_files(
+        source_root,
+        Utf8Path::new("tests/agentic_ts/projects"),
+        &mut benchmark_files,
+    )?;
+    for directory in [
+        "tests/common",
+        "crates/golem-websocket/wit",
+        "crates/golem-websocket/wit-p3",
+    ] {
+        collect_input_files(source_root, Utf8Path::new(directory), &mut benchmark_files)?;
+    }
+    for required in [
+        "tests/common/js_subtest_parser.rs",
+        "tests/common/test_server.rs",
+        "crates/golem-websocket/wit/golem-websocket.wit",
+        "crates/golem-websocket/wit-p3/golem-websocket.wit",
+    ] {
+        anyhow::ensure!(
+            benchmark_files.contains(Utf8Path::new(required)),
+            "required benchmark input is not covered: {required}"
+        );
+    }
+
+    Ok(InputHashes {
+        build: composite_hash(source_root, "build", &build_files)?,
+        benchmark: composite_hash(source_root, "benchmark", &benchmark_files)?,
+    })
+}
+
+fn input_files(paths: &[&str]) -> BTreeSet<camino::Utf8PathBuf> {
+    paths
+        .iter()
+        .map(|path| Utf8Path::new(path).to_path_buf())
         .collect()
 }
 
-fn runtime_source_state() -> anyhow::Result<String> {
-    let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
-    let mut files = Vec::new();
-    for directory in [
-        "src",
-        "crates/wasm-rquickjs/src",
-        "crates/wasm-rquickjs/skeleton/src",
-    ] {
-        collect_files(&Utf8Path::new(&source_root).join(directory), &mut files)?;
-    }
-    files.sort();
-    let mut manifest = String::new();
-    for path in files {
-        let hash = command_text(Command::new("git").args(["hash-object", path.as_str()]))?;
-        manifest.push_str(&hash);
-        manifest.push(' ');
-        manifest.push_str(path.strip_prefix(&source_root).unwrap_or(&path).as_str());
-        manifest.push('\n');
-    }
-    let mut child = Command::new("git")
-        .args(["hash-object", "--stdin"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("git hash-object stdin unavailable"))?
-        .write_all(manifest.as_bytes())?;
-    let output = child.wait_with_output()?;
-    anyhow::ensure!(
-        output.status.success(),
-        "failed to hash runtime source state"
-    );
-    Ok(String::from_utf8(output.stdout)?.trim().to_string())
-}
-
-fn collect_files(directory: &Utf8Path, files: &mut Vec<camino::Utf8PathBuf>) -> anyhow::Result<()> {
-    for entry in fs::read_dir(directory)? {
-        let path = camino::Utf8PathBuf::from_path_buf(entry?.path())
-            .map_err(|path| anyhow::anyhow!("non-UTF-8 path: {}", path.display()))?;
-        if path.is_dir() {
-            collect_files(&path, files)?;
+fn collect_input_files(
+    source_root: &Utf8Path,
+    directory: &Utf8Path,
+    files: &mut BTreeSet<camino::Utf8PathBuf>,
+) -> anyhow::Result<()> {
+    for entry in fs::read_dir(source_root.join(directory))? {
+        let entry = entry?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|name| anyhow::anyhow!("non-UTF-8 input name: {}", name.to_string_lossy()))?;
+        let path = directory.join(name);
+        let metadata = fs::symlink_metadata(source_root.join(&path))?;
+        anyhow::ensure!(
+            !metadata.file_type().is_symlink(),
+            "input symlinks are unsupported: {path}"
+        );
+        if metadata.is_dir() {
+            collect_input_files(source_root, &path, files)?;
         } else {
-            files.push(path);
+            anyhow::ensure!(metadata.is_file(), "unsupported input type: {path}");
+            files.insert(path);
         }
     }
+    Ok(())
+}
+
+fn composite_hash(
+    source_root: &Utf8Path,
+    domain: &str,
+    files: &BTreeSet<camino::Utf8PathBuf>,
+) -> anyhow::Result<String> {
+    anyhow::ensure!(!files.is_empty(), "{domain} input set is empty");
+    let mut hasher = blake3::Hasher::new();
+    hash_part(&mut hasher, INPUT_HASH_ALGORITHM.as_bytes());
+    hash_part(&mut hasher, domain.as_bytes());
+    for path in files {
+        anyhow::ensure!(
+            path.is_relative()
+                && !path
+                    .components()
+                    .any(|component| component.as_str() == ".."),
+            "input path escapes the source root: {path}"
+        );
+        let metadata = fs::symlink_metadata(source_root.join(path))?;
+        anyhow::ensure!(
+            metadata.is_file() && !metadata.file_type().is_symlink(),
+            "input is not a regular file: {path}"
+        );
+        let components = path.components().collect::<Vec<_>>();
+        hasher.update(&(components.len() as u64).to_le_bytes());
+        for component in components {
+            hash_part(&mut hasher, component.as_str().as_bytes());
+        }
+        hash_part(&mut hasher, &fs::read(source_root.join(path))?);
+    }
+    Ok(hasher.finalize().to_hex().to_string())
+}
+
+fn hash_part(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+    hasher.update(&(bytes.len() as u64).to_le_bytes());
+    hasher.update(bytes);
+}
+
+fn hash_file(path: &Utf8Path) -> anyhow::Result<String> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hasher.finalize().to_hex().to_string())
+}
+
+fn validate_composite_hash_contract() -> anyhow::Result<()> {
+    let root = camino_tempfile::Utf8TempDir::new()?;
+    fs::create_dir(root.path().join("inputs"))?;
+    fs::write(root.path().join("inputs/a.txt"), b"alpha")?;
+
+    let mut files = BTreeSet::new();
+    collect_input_files(root.path(), Utf8Path::new("inputs"), &mut files)?;
+    let original = composite_hash(root.path(), "test", &files)?;
+    anyhow::ensure!(
+        original == composite_hash(root.path(), "test", &files)?,
+        "composite input hashes are not deterministic"
+    );
+
+    fs::write(root.path().join("unrelated.txt"), b"ignored")?;
+    anyhow::ensure!(
+        original == composite_hash(root.path(), "test", &files)?,
+        "an out-of-scope file changed the composite hash"
+    );
+
+    fs::write(root.path().join("inputs/a.txt"), b"changed")?;
+    anyhow::ensure!(
+        original != composite_hash(root.path(), "test", &files)?,
+        "an input content change did not change the composite hash"
+    );
+
+    fs::write(root.path().join("inputs/b.txt"), b"beta")?;
+    let mut added_files = BTreeSet::new();
+    collect_input_files(root.path(), Utf8Path::new("inputs"), &mut added_files)?;
+    anyhow::ensure!(
+        files.len() + 1 == added_files.len()
+            && composite_hash(root.path(), "test", &files)?
+                != composite_hash(root.path(), "test", &added_files)?,
+        "an added input file did not change the composite hash"
+    );
+    anyhow::ensure!(
+        composite_hash(root.path(), "test", &added_files)?
+            != composite_hash(root.path(), "different-domain", &added_files)?,
+        "the composite hash does not separate input domains"
+    );
     Ok(())
 }
 
@@ -474,10 +802,12 @@ fn prepare_workspace(instance: &TestInstance) -> anyhow::Result<()> {
 
 fn environment(iterations: usize) -> anyhow::Result<Value> {
     Ok(json!({
-        "commit": command_text(Command::new("git").args(["rev-parse", "HEAD"]))?,
+        "commitHint": command_text(Command::new("git").args(["rev-parse", "HEAD"]))?,
         "dirty": !command_text(Command::new("git").args(["status", "--porcelain"]))?.is_empty(),
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
+        "rustc": command_text(Command::new("rustc").arg("--version"))?,
+        "cargo": command_text(Command::new("cargo").arg("--version"))?,
         "node": command_text(Command::new("node").args(["-p", "process.versions.node"]))?,
         "npm": command_text(Command::new("npm").arg("--version"))?,
         "typescript": command_text(Command::new("node").args(["-p", "require('./tests/agentic_ts/node_modules/typescript/package.json').version"]))?,
@@ -504,12 +834,6 @@ fn verify_toolchain() -> anyhow::Result<()> {
 }
 
 fn validate_report(report: &Value) -> anyhow::Result<()> {
-    fn successful_result(value: &Value) -> bool {
-        value["overflowed"] == false
-            && value.get("runnerError").is_none()
-            && value.get("value").is_some()
-    }
-
     anyhow::ensure!(
         report["nodeBaseline"]["exitCode"] == 0,
         "Node baseline failed"
@@ -517,7 +841,7 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
     for path in [
         "/workloads/coldNoEmit/result/value/exitCode",
         "/workloads/incrementalCold/result/value/exitCode",
-        "/workloads/invalidThenValid/valid/result/value/exitCode",
+        "/workloads/invalidThenValid/recovery/result/value/exitCode",
         "/workloads/projectReferences/result/value/exitCode",
         "/workloads/emitDirect/result/value/exitCode",
     ] {
@@ -544,17 +868,20 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
             );
         }
     }
+    let failed_checks = report["workloads"]["invalidThenValid"]["failedChecks"]["samples"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("missing repeated failed type checks"))?;
     anyhow::ensure!(
-        report.pointer("/workloads/invalidThenValid/invalid/result/value/exitCode")
-            == Some(&json!(2))
-            && report["workloads"]["invalidThenValid"]["invalid"]["result"]["stdout"]
-                .as_str()
-                .is_some_and(|stdout| stdout.contains("error TS2322"))
-            && report["workloads"]["invalidThenValid"]["invalid"]["result"]["overflowed"] == false
-            && report["workloads"]["invalidThenValid"]["invalid"]["result"]
-                .get("runnerError")
-                .is_none(),
-        "invalid TypeScript unexpectedly passed"
+        failed_checks.len() >= 5
+            && failed_checks.iter().all(|sample| {
+                sample.pointer("/result/value/exitCode") == Some(&json!(2))
+                    && sample["result"]["stdout"]
+                        .as_str()
+                        .is_some_and(|stdout| stdout.contains("error TS2322"))
+                    && sample["result"]["overflowed"] == false
+                    && sample["result"].get("runnerError").is_none()
+            }),
+        "a repeated invalid TypeScript check unexpectedly passed or failed incorrectly"
     );
     anyhow::ensure!(
         successful_result(&report["workloads"]["directTypeScript"]["result"])
@@ -589,38 +916,90 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
                 == Some(&json!(273)),
         "concurrency workload result was incorrect"
     );
-    anyhow::ensure!(
-        report.pointer("/workloads/timeout/result/timedOut") == Some(&json!(true))
-            && report.pointer("/workloads/timeout/result/message")
-                == Some(&json!("execution job timed out"))
-            && report["workloads"]["timeout"]["wallMs"]
-                .as_f64()
-                .unwrap_or(f64::INFINITY)
-                < 1_000.0,
-        "timeout probe failed"
-    );
-    anyhow::ensure!(
-        report.pointer("/workloads/cancellation/result/cancelled") == Some(&json!(true))
-            && report.pointer("/workloads/cancellation/result/message")
-                == Some(&json!("execution job cancelled"))
-            && report["workloads"]["cancellation"]["wallMs"]
-                .as_f64()
-                .unwrap_or(f64::INFINITY)
-                < 1_000.0,
-        "cancellation probe failed"
-    );
-    let allowed = report["workloads"]["memoryPlateau"]["allowedGrowthBytes"]
+    validate_termination_series(
+        &report["workloads"]["timeouts"],
+        "timedOut",
+        "execution job timed out",
+    )?;
+    validate_termination_series(
+        &report["workloads"]["cancellations"],
+        "cancelled",
+        "execution job cancelled",
+    )?;
+
+    let memory = &report["workloads"]["memoryPlateau"];
+    let allowed = memory["wasmLinearMemory"]["allowedGrowthBytes"]
         .as_u64()
         .unwrap_or(0);
-    for group in ["unchangedCompilerJobs", "warmedIncrementalCompilerJobs"] {
+    for group in [
+        "unchangedCompilerJobs",
+        "warmedIncrementalCompilerJobs",
+        "failedCompilerJobs",
+        "timedOutJobs",
+        "cancelledJobs",
+    ] {
         anyhow::ensure!(
-            report["workloads"]["memoryPlateau"][group]["growthBytes"]
+            memory["wasmLinearMemory"][group]["growthBytes"]
                 .as_u64()
                 .unwrap_or(u64::MAX)
                 <= allowed,
-            "linear memory did not plateau for {group}"
+            "Wasm linear-memory growth did not plateau for {group}"
         );
     }
+    let allowed_heap_variation = memory["quickJsHeap"]["allowedVariationBytes"]
+        .as_u64()
+        .unwrap_or(0);
+    for group in [
+        "unchangedCompilerJobs",
+        "warmedIncrementalCompilerJobs",
+        "failedCompilerJobs",
+    ] {
+        for point in ["beforeToolLoad", "afterCompiler"] {
+            anyhow::ensure!(
+                memory["quickJsHeap"][group][point]["samples"]
+                    .as_array()
+                    .is_some_and(|samples| samples.len() >= 5)
+                    && memory["quickJsHeap"][group][point]["variationBytes"]
+                        .as_u64()
+                        .unwrap_or(u64::MAX)
+                        <= allowed_heap_variation,
+                "fresh-job QuickJS heap samples varied unexpectedly for {group}/{point}"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn successful_result(value: &Value) -> bool {
+    value["overflowed"] == false
+        && value.get("runnerError").is_none()
+        && value.get("value").is_some()
+}
+
+fn validate_termination_series(
+    series: &Value,
+    outcome: &str,
+    expected_message: &str,
+) -> anyhow::Result<()> {
+    let samples = series["attempts"]["samples"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("missing repeated {outcome} samples"))?;
+    anyhow::ensure!(
+        samples.len() >= 5
+            && samples.iter().all(|sample| {
+                sample["result"][outcome] == true
+                    && sample["result"]["message"] == expected_message
+                    && sample["wallMs"]
+                        .as_f64()
+                        .is_some_and(|wall_ms| wall_ms < 1_000.0)
+            }),
+        "repeated {outcome} probe failed"
+    );
+    anyhow::ensure!(
+        successful_result(&series["recovery"]["result"])
+            && series["recovery"].pointer("/result/value/answer") == Some(&json!(42)),
+        "execution capacity was not recovered after repeated {outcome} jobs"
+    );
     Ok(())
 }
 
@@ -634,13 +1013,14 @@ fn validate_regression_guards(report: &Value) -> anyhow::Result<()> {
     );
 
     let mut false_timeout = report.clone();
-    false_timeout["workloads"]["timeout"]["result"]["message"] = json!("unrelated error");
+    false_timeout["workloads"]["timeouts"]["attempts"]["samples"][0]["result"]["message"] =
+        json!("unrelated error");
     anyhow::ensure!(
         validate_report(&false_timeout).is_err(),
         "validation guard accepted an unrelated timeout error"
     );
     let mut invalid_runner_error = report.clone();
-    invalid_runner_error["workloads"]["invalidThenValid"]["invalid"]["result"] =
+    invalid_runner_error["workloads"]["invalidThenValid"]["failedChecks"]["samples"][0]["result"] =
         json!({ "runnerError": { "message": "broken" } });
     anyhow::ensure!(
         validate_report(&invalid_runner_error).is_err(),
@@ -651,6 +1031,13 @@ fn validate_regression_guards(report: &Value) -> anyhow::Result<()> {
     anyhow::ensure!(
         validate_report(&overflowed).is_err(),
         "validation guard accepted an overflowed successful workload"
+    );
+    let mut leaked_heap = report.clone();
+    leaked_heap["workloads"]["memoryPlateau"]["quickJsHeap"]["unchangedCompilerJobs"]["beforeToolLoad"]
+        ["variationBytes"] = json!(u64::MAX);
+    anyhow::ensure!(
+        validate_report(&leaked_heap).is_err(),
+        "validation guard accepted unbounded fresh-job heap variation"
     );
     Ok(())
 }

@@ -49,6 +49,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 2
       - uses: ./.github/actions/setup
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
@@ -60,6 +61,16 @@ jobs:
         run: cargo test --test js_subtest_parser $CI_WASMTIME_FORK_FEATURES -- --report-time
       - name: Module loader architecture contracts
         run: cargo test -p wasm-rquickjs --lib $CI_WASMTIME_FORK_FEATURES -- module_loader_architecture
+      - name: Agentic TypeScript report contracts
+        shell: bash
+        run: |
+          reports_to_check=""
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            reports_to_check=$(git diff --name-only --diff-filter=ACMR HEAD^1 HEAD -- 'tests/agentic_ts/results/*.json')
+          fi
+          AGENTIC_TS_VALIDATE_REPORTS=1 \
+          AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
+            cargo test --test agentic_ts $CI_WASMTIME_FORK_FEATURES
       - name: Publish Test Report
         uses: ctrf-io/github-test-reporter@v1
         if: always()

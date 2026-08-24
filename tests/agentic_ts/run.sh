@@ -6,6 +6,33 @@ suite_dir="$repo_root/tests/agentic_ts"
 results_dir="$suite_dir/results"
 iterations=${AGENTIC_TS_ITERATIONS:-5}
 
+if [ "${1:-}" = "--check" ]; then
+    (
+        cd "$repo_root"
+        AGENTIC_TS_VALIDATE_REPORTS=1 \
+        AGENTIC_TS_SOURCE_ROOT="$repo_root" \
+        tools/dev-test.sh p2 standard agentic_ts ""
+    )
+    exit 0
+fi
+
+if [ "${1:-}" = "--check-current" ]; then
+    shift
+    if [ "$#" -eq 0 ]; then
+        echo "usage: tests/agentic_ts/run.sh --check-current <report>..." >&2
+        exit 2
+    fi
+    reports_to_check=$(printf '%s\n' "$@")
+    (
+        cd "$repo_root"
+        AGENTIC_TS_VALIDATE_REPORTS=1 \
+        AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
+        AGENTIC_TS_SOURCE_ROOT="$repo_root" \
+        tools/dev-test.sh p2 standard agentic_ts ""
+    )
+    exit 0
+fi
+
 platform=$(node -p 'process.platform')
 arch=$(node -p 'process.arch')
 case "$platform" in
@@ -24,25 +51,30 @@ if [ "$node_version" != "22.14.0" ] || [ "$npm_version" != "10.9.2" ]; then
     exit 1
 fi
 
-if [ ! -f "$suite_dir/node_modules/typescript/lib/tsc.js" ]; then
-    echo "run npm ci in tests/agentic_ts first" >&2
-    exit 1
-fi
+(
+    cd "$suite_dir"
+    npm ci --ignore-scripts --no-audit --no-fund
+)
 
 mkdir -p "$results_dir"
+generated_reports=""
 for target in p2 p3; do
     report="$results_dir/$(date +%Y-%m-%d)-$target-$platform-$arch.json"
     (
         cd "$repo_root"
-        if [ "${1:-}" = "--check" ]; then
-            AGENTIC_TS_REPORT_TO_CHECK="$report" \
-            AGENTIC_TS_SOURCE_ROOT="$repo_root" \
-            tools/dev-test.sh "$target" standard agentic_ts ""
-        else
-            AGENTIC_TS_ITERATIONS="$iterations" \
-            AGENTIC_TS_REPORT="$report" \
-            AGENTIC_TS_SOURCE_ROOT="$repo_root" \
-            tools/dev-test.sh "$target" standard agentic_ts ""
-        fi
+        AGENTIC_TS_ITERATIONS="$iterations" \
+        AGENTIC_TS_REPORT="$report" \
+        AGENTIC_TS_SOURCE_ROOT="$repo_root" \
+        tools/dev-test.sh "$target" standard agentic_ts ""
     )
+    generated_reports="${generated_reports}${report}\n"
 done
+
+reports_to_check=$(printf '%b' "$generated_reports")
+(
+    cd "$repo_root"
+    AGENTIC_TS_VALIDATE_REPORTS=1 \
+    AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
+    AGENTIC_TS_SOURCE_ROOT="$repo_root" \
+    tools/dev-test.sh p2 standard agentic_ts ""
+)

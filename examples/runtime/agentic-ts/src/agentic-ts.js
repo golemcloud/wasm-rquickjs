@@ -16,6 +16,7 @@ export async function runTsc(args, timeoutMs) {
             timeoutMs: Number(timeoutMs),
             source: `
                 const started = performance.now();
+                const memoryBeforeToolLoad = process.memoryUsage();
                 const originalExit = process.exit;
                 process.exit = code => { process.exitCode = Number(code || 0); };
                 try {
@@ -23,6 +24,10 @@ export async function runTsc(args, timeoutMs) {
                     return {
                         exitCode: process.exitCode || 0,
                         toolAndCompilerMs: performance.now() - started,
+                        quickJsMemory: {
+                            beforeToolLoad: memoryBeforeToolLoad,
+                            afterCompiler: process.memoryUsage(),
+                        },
                     };
                 } finally {
                     process.exit = originalExit;
