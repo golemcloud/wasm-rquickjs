@@ -35,7 +35,7 @@ or external executables work.
 | `npm ls`, `npm explain` | Constrained | `npm ls --json` reconstructs a guest-created tree, but currently reports a local `file:` dependency as invalid with `ELSPROBLEMS`; correct link identity is gated by GOL-388. `npm explain` coverage is retained separately. |
 | `npm uninstall`, `npm update`, `npm dedupe` | Constrained | Local pure-JavaScript tree mutation with lifecycle scripts and bin links disabled. Revisiting a persisted `.bin` placeholder is gated by GOL-388; registry resolution and complex trees are not covered. |
 | `npm pack` | Constrained | JSON metadata and file selection for a local pure-JavaScript project are covered with `--dry-run --ignore-scripts`; archive creation is not covered yet. |
-| `npm run` | Constrained | Simple `node <script>` commands work with cwd, argv, npm environment, output, and exit status. Shell operators and external executables remain unsupported. Child scripts currently execute inline in the npm runtime rather than in a fresh runtime. |
+| `npm run` | Constrained | Simple `node <script>` commands work with cwd, argv, npm environment, output, and exit status. Shell operators, shell expansions, and external executables fail explicitly. Child scripts currently execute inline in the npm runtime rather than in a fresh runtime. |
 | `npm test`, `npm start`, `npm restart`, `npm stop` | Planned | These aliases use lifecycle execution but are not directly covered yet. |
 | `npm exec` | Deferred | GOL-388 must persist npm's emulated `.bin` symlink identity across fresh execution jobs. The current CLI fails explicitly with `ENOSYS` instead of invoking a wrong target. |
 | `npx` | Deferred | Uses the same package-bin execution path as `npm exec`; local and acquired binaries require the GOL-388 symlink fix first. |
@@ -55,7 +55,7 @@ or external executables work.
 | Dependency selection | `--omit`, `--include`, `--production` | Constrained | Required/dev/optional local fixtures verify repeated `--omit` and `--include`; the production alias and platform filtering remain planned. |
 | Tree resolution | `--install-links`, `--install-strategy`, `--legacy-peer-deps`, `--strict-peer-deps` | Constrained | Local `file:` installation with `--install-links` is covered; peer and alternate tree strategies are not. |
 | Lockfiles | `--package-lock`, `--package-lock-only` | Constrained | Install creates a lockfile, ci consumes it to replace the tree, and package-lock-only resolves local dependencies without materializing `node_modules`. |
-| Lifecycle | `--ignore-scripts`, `--foreground-scripts` | Constrained | Scripts-disabled installation and a foreground `node` postinstall are covered. Shell operators and external executables fail explicitly. |
+| Lifecycle | `--ignore-scripts`, `--foreground-scripts` | Constrained | Scripts-disabled installation and a foreground `node` postinstall are covered. Shell operators, shell expansions, and external executables fail explicitly. |
 | Links | `--bin-links`, `--install-links` | Deferred | File dependencies can be materialized, and mutation works with `--bin-links=false`; persistent symlink identity and `.bin` launchers require GOL-388. |
 | Network and cache | `--registry`, `--offline`, `--prefer-offline`, retry and proxy settings | Constrained | Registry metadata/tarballs go through `wasi:http`; fresh `npm ci --offline` restores from cache. A hanging request times out and releases execution capacity. Prefer-offline, proxies, and redacted failures remain planned. |
 | Workspaces | `--workspace`, `--workspaces`, `--include-workspace-root` | Deferred | Requires the GOL-388 workspace/link identity work. |
@@ -70,7 +70,7 @@ or external executables work.
 | Pure CommonJS and mixed ESM/CommonJS | Constrained | Local installed fixtures are loaded in a later fresh job through CommonJS, ESM, and conditional export-map branches. Registry variants are not yet covered. |
 | JavaScript-only lifecycle scripts | Constrained | A dependency postinstall consisting of one `node <script>` command is covered with cwd and npm environment assertions. |
 | TypeScript entry points | Constrained | With the `typescript-transform-runtime` feature, a workspace `.ts` entry with transform-required syntax imports and runs an npm-installed JavaScript dependency in a fresh execution job. Raw TypeScript below `node_modules` retains Node's `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` boundary. |
-| Packages invoking shell operators or external executables | Unsupported | General shells and host processes are unavailable; the tested shell-operator lifecycle fails with `ENOSYS` and performs no partial work. |
+| Packages invoking shell operators, shell expansions, or external executables | Unsupported | General shells and host processes are unavailable; tested operator, command-substitution, variable-expansion, and glob lifecycles fail with `ENOSYS` and perform no partial work. |
 | Platform and optional dependencies | Constrained | Optional inclusion/omission is covered; OS/CPU filtering and tolerated optional installation failures remain planned. |
 | Native addons and `node-gyp` | Unsupported | Components cannot load host `.node` files or spawn host compiler toolchains. |
 | Packages containing portable WASM | Planned | WASM loading/runtime APIs require separate compatibility evidence. |

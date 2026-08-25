@@ -1396,15 +1396,58 @@ function resolveNodeShebangCommand(command, env) {
     return null;
 }
 
+function hasUnsupportedJavaScriptShellSyntax(command) {
+    const text = String(command);
+    let quote = null;
+    let escaping = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+
+        if (escaping) {
+            escaping = false;
+            continue;
+        }
+        if (ch === '\\' && quote !== "'") {
+            escaping = true;
+            continue;
+        }
+        if (quote === "'") {
+            if (ch === "'") quote = null;
+            continue;
+        }
+        if (quote === '"') {
+            if (ch === '"') {
+                quote = null;
+            } else if (ch === '$' || ch === '`') {
+                return true;
+            }
+            continue;
+        }
+        if (ch === "'" || ch === '"') {
+            quote = ch;
+            continue;
+        }
+        if (ch === '\n' || ch === '\r' || "|;&<>$`(){}*?[]~#".includes(ch)) {
+            return true;
+        }
+    }
+
+    return escaping || quote !== null;
+}
+
 function resolveJavaScriptShellCommand(command, args, env) {
     if (String(command) !== 'sh' || !Array.isArray(args) || args.length !== 2 || args[0] !== '-c') {
         return null;
     }
-    const expanded = expandTemplateEnvRefs(args[1], env);
-    if (/[|;&<>]/.test(expanded)) {
+    // This is deliberately a data-only subset of shell parsing. Reject syntax
+    // that a real shell would expand or execute instead of passing it through
+    // as misleading literal arguments to the inline JavaScript runner.
+    const source = String(args[1]);
+    if (hasUnsupportedJavaScriptShellSyntax(source)) {
         return null;
     }
-    const tokens = splitCommandTokens(expanded);
+    const tokens = splitCommandTokens(source);
     if (!tokens || tokens.length === 0) {
         return null;
     }

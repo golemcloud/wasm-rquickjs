@@ -1179,7 +1179,7 @@ async fn npm_run_local_javascript(
     let result_file = instance
         .temp_dir_path()
         .join("workspace/npm-run-result.json");
-    let script_result: serde_json::Value = serde_json::from_slice(&fs::read(result_file)?)?;
+    let script_result: serde_json::Value = serde_json::from_slice(&fs::read(&result_file)?)?;
     assert_eq!(script_result["cwd"], "/workspace");
     assert_eq!(script_result["lifecycleEvent"], "verify");
     assert_eq!(
@@ -1187,6 +1187,24 @@ async fn npm_run_local_javascript(
             .as_array()
             .and_then(|args| args.last()),
         Some(&serde_json::json!("forwarded"))
+    );
+
+    let result = instance
+        .invoke(None, "run", &[string_list(&["run", "safe-shell-literals"])])
+        .await?;
+    let Some(Val::String(json)) = result else {
+        anyhow::bail!("expected safe shell literal JSON result")
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    assert_eq!(report["value"]["exitCode"], 0, "{report:#}");
+    let script_result: serde_json::Value = serde_json::from_slice(&fs::read(result_file)?)?;
+    let argv = script_result["argv"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("safe shell literal argv is not an array"))?;
+    anyhow::ensure!(argv.len() >= 6, "safe shell literal argv is too short");
+    assert_eq!(
+        serde_json::Value::Array(argv[argv.len() - 6..].to_vec()),
+        serde_json::json!(["$VAR", "*", ";", "$escaped", "*", ";"])
     );
     Ok(())
 }
@@ -1196,27 +1214,37 @@ async fn npm_run_shell_operator_reports_unsupported(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let mut instance = prepare_instance(compiled, Some("local-install")).await?;
-    let result = instance
-        .invoke(None, "run", &[string_list(&["run", "unsupported-shell"])])
-        .await?;
-    let Some(Val::String(json)) = result else {
-        anyhow::bail!("expected npm execution JSON result")
-    };
-    let report: serde_json::Value = serde_json::from_str(&json)?;
-    assert_eq!(report["value"]["exitCode"], -38, "{report:#}");
-    assert!(
-        report["stderr"]
-            .as_str()
-            .is_some_and(|value| value.contains("spawnSync(sh) is not supported")),
-        "{report:#}\n[npm debug logs]\n{}",
-        npm_debug_logs(&instance)
-    );
-    assert!(
-        !instance
-            .temp_dir_path()
-            .join("workspace/npm-run-result.json")
-            .exists()
-    );
+    for script in [
+        "unsupported-shell",
+        "unsupported-braced-variable",
+        "unsupported-comment",
+        "unsupported-command-substitution",
+        "unsupported-dollar-variable",
+        "unsupported-glob",
+    ] {
+        let result = instance
+            .invoke(None, "run", &[string_list(&["run", script])])
+            .await?;
+        let Some(Val::String(json)) = result else {
+            anyhow::bail!("expected npm execution JSON result for {script}")
+        };
+        let report: serde_json::Value = serde_json::from_str(&json)?;
+        assert_eq!(report["value"]["exitCode"], -38, "{script}: {report:#}");
+        assert!(
+            report["stderr"]
+                .as_str()
+                .is_some_and(|value| value.contains("spawnSync(sh) is not supported")),
+            "{script}: {report:#}\n[npm debug logs]\n{}",
+            npm_debug_logs(&instance)
+        );
+        assert!(
+            !instance
+                .temp_dir_path()
+                .join("workspace/npm-run-result.json")
+                .exists(),
+            "{script} performed partial work"
+        );
+    }
     Ok(())
 }
 

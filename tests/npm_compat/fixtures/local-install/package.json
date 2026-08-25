@@ -4,7 +4,13 @@
   "private": true,
   "scripts": {
     "verify": "node scripts/verify.mjs",
-    "unsupported-shell": "node scripts/verify.mjs && node scripts/verify.mjs"
+    "safe-shell-literals": "node scripts/verify.mjs '$VAR' '*' ';' \\$escaped \\* \\;",
+    "unsupported-shell": "node scripts/verify.mjs && node scripts/verify.mjs",
+    "unsupported-braced-variable": "node scripts/verify.mjs ${npm_package_version}",
+    "unsupported-comment": "node scripts/verify.mjs # ignored by a real shell",
+    "unsupported-command-substitution": "node scripts/verify.mjs $(node scripts/verify.mjs)",
+    "unsupported-dollar-variable": "node scripts/verify.mjs $npm_package_version",
+    "unsupported-glob": "node scripts/*.mjs"
   },
   "dependencies": {
     "fixture-commonjs-dependency": "file:packages/fixture-commonjs-dependency",

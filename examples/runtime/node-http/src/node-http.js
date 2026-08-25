@@ -1122,6 +1122,30 @@ export async function httpCustomConnectionRejected() {
         }
     });
 
+    const agentHookRejected = await new Promise((resolve) => {
+        let hookCalled = false;
+        let responseReceived = false;
+        let errorCode = null;
+        const agent = new http.Agent();
+        agent.createConnection = () => {
+            hookCalled = true;
+            throw new Error('agent custom connection hook must not run');
+        };
+        const req = http.request({
+            hostname: 'example.invalid',
+            agent,
+        }, () => {
+            responseReceived = true;
+        });
+        req.on('error', (error) => {
+            errorCode = error.code;
+        });
+        req.on('close', () => {
+            resolve(errorCode === 'ENOSYS' && !hookCalled && !responseReceived);
+        });
+        req.end();
+    });
+
     const connectDoesNotOpenSocket = await new Promise((resolve) => {
         let hookCalled = false;
         let errorReceived = false;
@@ -1141,5 +1165,5 @@ export async function httpCustomConnectionRejected() {
         req.destroy();
     });
 
-    return rejectsAsynchronously && destroyBeforeRejection && connectDoesNotOpenSocket;
+    return rejectsAsynchronously && agentHookRejected && destroyBeforeRejection && connectDoesNotOpenSocket;
 }

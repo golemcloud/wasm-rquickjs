@@ -245,8 +245,8 @@ Important rules:
 - Add app fixtures under `tests/node_modules_apps/apps/<app>/` with a `package.json`, `run-node.mjs`, and `test-*` files exporting `run()`.
 - Node modules app tests run `npm ci --install-links --ignore-scripts --no-audit --no-fund`, verify the raw test with host Node.js, then run it through wasm-rquickjs from `/app`.
 - Keep this suite focused on real `node_modules` module loading, CJS/ESM interop, package maps, filesystem-backed package behavior, and high-value smoke tests. Do not use it for native `.node`, WASM artifact loading, subprocess-heavy, or live-network scenarios.
-- CI runs node modules app tests as runtime `group9`; regular runtime tests use `group1` through `group8`.
-- Before running node modules app runtime tests after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- --test-threads 4 ':tag:group9'` for the CI-like group, `cargo test --test runtime --features use-golem-wasmtime -- node_modules_app --nocapture` for the full node modules app suite, or a narrower node modules app filter.
+- CI runs node modules app and in-component npm compatibility tests as runtime `group9`; regular runtime tests use `group1` through `group8`.
+- Before running group9 after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- --test-threads 4 ':tag:group9'` for the CI-like group, `cargo test --test runtime --features use-golem-wasmtime -- node_modules_app --nocapture` for the node modules app suite, `cargo test --test runtime --features use-golem-wasmtime -- npm_compat --nocapture` for the npm compatibility suite, or a narrower filter.
 
 ## Built-in Module Architecture
 
