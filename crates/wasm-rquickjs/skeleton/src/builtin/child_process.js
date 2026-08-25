@@ -1409,6 +1409,9 @@ function hasUnsupportedJavaScriptShellSyntax(command) {
             continue;
         }
         if (ch === '\\' && quote !== "'") {
+            if (text[i + 1] === '\n' || text[i + 1] === '\r') {
+                return true;
+            }
             escaping = true;
             continue;
         }

@@ -1221,6 +1221,7 @@ async fn npm_run_shell_operator_reports_unsupported(
         "unsupported-command-substitution",
         "unsupported-dollar-variable",
         "unsupported-glob",
+        "unsupported-line-continuation",
     ] {
         let result = instance
             .invoke(None, "run", &[string_list(&["run", script])])

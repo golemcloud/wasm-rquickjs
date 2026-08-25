@@ -10,7 +10,8 @@
     "unsupported-comment": "node scripts/verify.mjs # ignored by a real shell",
     "unsupported-command-substitution": "node scripts/verify.mjs $(node scripts/verify.mjs)",
     "unsupported-dollar-variable": "node scripts/verify.mjs $npm_package_version",
-    "unsupported-glob": "node scripts/*.mjs"
+    "unsupported-glob": "node scripts/*.mjs",
+    "unsupported-line-continuation": "node \\\nscripts/verify.mjs"
   },
   "dependencies": {
     "fixture-commonjs-dependency": "file:packages/fixture-commonjs-dependency",

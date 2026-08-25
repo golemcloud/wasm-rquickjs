@@ -1122,28 +1122,47 @@ export async function httpCustomConnectionRejected() {
         }
     });
 
-    const agentHookRejected = await new Promise((resolve) => {
-        let hookCalled = false;
-        let responseReceived = false;
-        let errorCode = null;
-        const agent = new http.Agent();
-        agent.createConnection = () => {
-            hookCalled = true;
-            throw new Error('agent custom connection hook must not run');
+    const agentHookIgnoredExplicitly = await new Promise((resolve) => {
+        let hookCalls = 0;
+        let warningCount = 0;
+        let closedCount = 0;
+        class CustomAgent extends http.Agent {
+            createConnection() {
+                hookCalls += 1;
+                throw new Error('agent custom connection hook must not run');
+            }
+        }
+        const ownHookAgent = new http.Agent();
+        ownHookAgent.createConnection = () => {
+            hookCalls += 1;
+            throw new Error('agent own custom connection hook must not run');
         };
-        const req = http.request({
-            hostname: 'example.invalid',
-            agent,
-        }, () => {
-            responseReceived = true;
-        });
-        req.on('error', (error) => {
-            errorCode = error.code;
-        });
-        req.on('close', () => {
-            resolve(errorCode === 'ENOSYS' && !hookCalled && !responseReceived);
-        });
-        req.end();
+        const onWarning = (warning) => {
+            if (
+                warning.code === 'WASM_RQUICKJS_HTTP_AGENT_TRANSPORT' &&
+                warning.message.includes('outbound requests use wasi:http')
+            ) {
+                warningCount += 1;
+            }
+        };
+        process.on('warning', onWarning);
+        for (const agent of [new CustomAgent(), ownHookAgent]) {
+            const req = http.request({
+                hostname: 'example.invalid',
+                agent,
+            });
+            req.on('error', () => {});
+            req.on('close', () => {
+                closedCount += 1;
+                if (closedCount === 2) {
+                    process.nextTick(() => {
+                        process.removeListener('warning', onWarning);
+                        resolve(hookCalls === 0 && warningCount === 1);
+                    });
+                }
+            });
+            req.destroy();
+        }
     });
 
     const connectDoesNotOpenSocket = await new Promise((resolve) => {
@@ -1165,5 +1184,5 @@ export async function httpCustomConnectionRejected() {
         req.destroy();
     });
 
-    return rejectsAsynchronously && agentHookRejected && destroyBeforeRejection && connectDoesNotOpenSocket;
+    return rejectsAsynchronously && agentHookIgnoredExplicitly && destroyBeforeRejection && connectDoesNotOpenSocket;
 }

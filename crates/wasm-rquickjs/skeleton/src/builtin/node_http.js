@@ -23,6 +23,7 @@ const onClientRequestCreated = channel('http.client.request.created');
 const onClientRequestStart = channel('http.client.request.start');
 const onClientRequestError = channel('http.client.request.error');
 const onClientResponseFinish = channel('http.client.response.finish');
+let customAgentTransportWarningEmitted = false;
 
 // ===== Static Data =====
 
@@ -1864,14 +1865,23 @@ export class ClientRequest extends OutgoingMessage {
     }
 
     _initializeCustomConnection(options) {
-        const hasPerRequestHook = typeof options.createConnection === 'function';
         const hasAgentHook = this.agent && typeof this.agent.createConnection === 'function';
-        if (!hasPerRequestHook && !hasAgentHook) return;
+        if (hasAgentHook && !customAgentTransportWarningEmitted) {
+            // Agent implementations commonly expose createConnection even when
+            // they are used only for request metadata and scheduling (including
+            // npm's direct registry agent). wasm-rquickjs cannot invoke that
+            // socket hook without bypassing wasi:http, so make the ignored
+            // transport explicit while retaining the Agent metadata contract.
+            customAgentTransportWarningEmitted = true;
+            process.emitWarning(
+                'Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http',
+                { code: 'WASM_RQUICKJS_HTTP_AGENT_TRANSPORT' },
+            );
+        }
+        if (typeof options.createConnection !== 'function') return;
 
-        // An explicit per-request or Agent-provided custom socket must never
-        // bypass wasi:http. Agent objects remain metadata/scheduling inputs
-        // when they do not select a custom component transport. Fail
-        // asynchronously so callers can attach their normal ClientRequest
+        // An explicit per-request custom socket must never bypass wasi:http.
+        // Fail asynchronously so callers can attach their normal ClientRequest
         // error/close listeners. Rejected requests always terminate with close,
         // including when callers destroy them before this rejection tick and
         // suppress the ENOSYS error.
