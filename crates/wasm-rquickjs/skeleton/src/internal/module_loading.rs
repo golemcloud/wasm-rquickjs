@@ -4296,16 +4296,6 @@ enum CjsAnalysisProbe {
 }
 
 impl NodeModulesResolver {
-    fn module_resolution_path(
-        path: &std::path::Path,
-        _resolution: &NodePackageResolutionContext<'_, '_>,
-    ) -> std::path::PathBuf {
-        let normalized = CjsEvalResolver::normalize_path(path);
-        crate::builtin::realpath_for_module_resolution_path(&normalized)
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| path.to_path_buf())
-    }
-
     fn try_resolve_with_context(
         &self,
         base: &str,
@@ -4343,7 +4333,7 @@ impl NodeModulesResolver {
                 && dir.file_name().is_some_and(|name| name == "node_modules");
             if !skip_nested_node_modules {
                 let package_path = dir.join("node_modules").join(package_name);
-                if Self::module_resolution_path(&package_path, resolution).is_dir() {
+                if package_path.is_dir() {
                     if let Some(resolved) = Self::try_resolve_package_directory(
                         base,
                         name,
@@ -4441,8 +4431,7 @@ impl NodeModulesResolver {
         if let Some(cached) = resolution.package_json_cache.get(&cache_key) {
             return Ok(Some(cached));
         }
-        let read_path = Self::module_resolution_path(pkg_path, resolution);
-        match std::fs::read_to_string(&read_path) {
+        match std::fs::read_to_string(pkg_path) {
             Ok(pkg_content) => {
                 let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(
                     |_| NodePackageResolveError::InvalidPackageConfig {
@@ -6480,7 +6469,7 @@ fn import_meta_trailing_slash_package_has_exports(
     let mut dir = base_dir.to_path_buf();
     loop {
         let package_path = dir.join("node_modules").join(package_name);
-        if NodeModulesResolver::module_resolution_path(&package_path, &resolution).is_dir() {
+        if package_path.is_dir() {
             let pkg_path = package_path.join("package.json");
             return NodeModulesResolver::read_package_json_optional_with_context(
                 &pkg_path,

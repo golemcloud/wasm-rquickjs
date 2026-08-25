@@ -314,6 +314,39 @@ export async function run() {
         fs.symlinkSync('missing.txt', '/tmp/persistent-link/broken.txt');
         fs.symlinkSync('cycle-b.txt', '/tmp/persistent-link/cycle-a.txt');
         fs.symlinkSync('cycle-a.txt', '/tmp/persistent-link/cycle-b.txt');
+        fs.mkdirSync('/tmp/persistent-link/tree/target', { recursive: true });
+        fs.writeFileSync('/tmp/persistent-link/tree/target/file.txt', 'tree');
+        fs.symlinkSync('target', '/tmp/persistent-link/tree/linked-target');
+        const recursiveNames = fs.readdirSync('/tmp/persistent-link/tree', { recursive: true }).sort();
+        const recursiveCallbackNames = await new Promise((resolve, reject) => {
+            fs.readdir('/tmp/persistent-link/tree', { recursive: true }, (error, entries) => {
+                if (error) reject(error);
+                else resolve(entries.sort());
+            });
+        });
+        const recursivePromiseNames = (
+            await fs.promises.readdir('/tmp/persistent-link/tree', { recursive: true })
+        ).sort();
+        fs.mkdirSync('/tmp/persistent-link/watch-tree/target', { recursive: true });
+        fs.writeFileSync('/tmp/persistent-link/watch-tree/target/file.txt', 'watch');
+        fs.symlinkSync('.', '/tmp/persistent-link/watch-tree/self');
+        const recursiveWatchEvents = [];
+        let targetCreatedEventCount = 0;
+        let resolveWatchPoll;
+        const watchPoll = new Promise((resolve) => { resolveWatchPoll = resolve; });
+        const watcher = fs.watch('/tmp/persistent-link/watch-tree', { recursive: true }, (event, filename) => {
+            if (filename == null) return;
+            const name = filename.toString();
+            recursiveWatchEvents.push([event, name]);
+            if (name === 'target/created.txt' && ++targetCreatedEventCount === 2) resolveWatchPoll();
+        });
+        const recursiveWatcherIsFsWatcher = watcher instanceof fs.FSWatcher;
+        fs.writeFileSync('/tmp/persistent-link/watch-tree/target/created.txt', 'created');
+        await Promise.race([
+            watchPoll,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('recursive watch poll timed out')), 2000)),
+        ]);
+        watcher.close();
         let cycleError;
         try { fs.realpathSync('/tmp/persistent-link/cycle-a.txt'); }
         catch (error) { cycleError = error.code; }
@@ -329,6 +362,11 @@ export async function run() {
             brokenTarget: fs.readlinkSync('/tmp/persistent-link/broken.txt'),
             cycleError,
             cycleDestinationError,
+            recursiveNames,
+            recursiveCallbackNames,
+            recursivePromiseNames,
+            recursiveWatcherIsFsWatcher,
+            recursiveWatchEvents,
             movedTarget,
             movedExistsAfterUnlink: fs.existsSync('/tmp/persistent-link/moved.txt'),
         };

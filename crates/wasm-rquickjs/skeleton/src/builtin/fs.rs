@@ -306,10 +306,6 @@ pub(super) fn realpath_for_module_resolution(
     _ctx: &rquickjs::Ctx<'_>,
     path: &str,
 ) -> Option<String> {
-    realpath_for_module_resolution_path(path)
-}
-
-pub(super) fn realpath_for_module_resolution_path(path: &str) -> Option<String> {
     canonicalize_guest_path(path).ok()
 }
 

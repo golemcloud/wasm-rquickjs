@@ -244,6 +244,47 @@ async fn execution_isolation(
         "ELOOP"
     );
     assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["recursiveNames"],
+        serde_json::json!([
+            "linked-target",
+            "linked-target/file.txt",
+            "target",
+            "target/file.txt"
+        ])
+    );
+    for api in ["recursiveCallbackNames", "recursivePromiseNames"] {
+        assert_eq!(
+            report["persistentSymlinkEdges"]["value"][api],
+            serde_json::json!([
+                "linked-target",
+                "linked-target/file.txt",
+                "target",
+                "target/file.txt"
+            ]),
+            "unexpected recursive entries for {api}"
+        );
+    }
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["recursiveWatcherIsFsWatcher"],
+        true
+    );
+    let recursive_watch_events = report["persistentSymlinkEdges"]["value"]["recursiveWatchEvents"]
+        .as_array()
+        .expect("recursive watch events should be an array");
+    assert!(
+        recursive_watch_events
+            .iter()
+            .any(|event| event == &serde_json::json!(["rename", "target/created.txt"])),
+        "recursive watcher should report the real nested path as a rename: {recursive_watch_events:?}"
+    );
+    assert!(
+        recursive_watch_events.iter().all(|event| !event
+            .get(1)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|event| event.starts_with("self/"))),
+        "recursive watcher should not follow the self symlink: {recursive_watch_events:?}"
+    );
+    assert_eq!(
         report["persistentSymlinkEdges"]["value"]["movedTarget"],
         "target.txt"
     );
