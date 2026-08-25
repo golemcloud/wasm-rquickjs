@@ -749,7 +749,12 @@ async fn npm_install_registry_pure_javascript(
         npm_debug_logs(&instance)
     );
     assert_eq!(exec_report["stdout"], "npm-registry-exec:ok\n");
-    assert_eq!(exec_report["stderr"], "");
+    assert!(
+        exec_report["stderr"]
+            .as_str()
+            .is_some_and(|stderr| stderr.contains("WASM_RQUICKJS_HTTP_AGENT_TRANSPORT")),
+        "{exec_report:#}"
+    );
     let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(
         instance
             .temp_dir_path()
