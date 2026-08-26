@@ -270,10 +270,34 @@ async fn npm_required_runtime_primitives(
     assert_eq!(report["value"]["constantsCjs"], true, "{report:#}");
     assert_eq!(
         report["value"]["heapSizeLimit"],
-        512 * 1024 * 1024,
-        "execution must report the exact memory limit enforced by its QuickJS runtime: {report:#}"
+        4_i64 * 1024 * 1024 * 1024,
+        "execution must report the effective wasm32 linear-memory ceiling without imposing a smaller QuickJS heap limit: {report:#}"
     );
     assert_eq!(report["value"]["bufferView"], true, "{report:#}");
+    assert_eq!(report["value"]["bufferSpecies"], true, "{report:#}");
+    assert_eq!(
+        report["value"]["bufferTypedArrayMethods"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        report["value"]["bufferOperationsAvoidDep0005"], true,
+        "{report:#}"
+    );
+    assert_eq!(report["value"]["bufferSubarrayEdges"], true, "{report:#}");
+    assert_eq!(
+        report["value"]["bufferSubarrayIgnoresSpecies"], true,
+        "{report:#}"
+    );
+    assert_eq!(report["value"]["shellNodeShebangs"], true, "{report:#}");
+    assert_eq!(
+        report["value"]["shellDirectNodeShebang"], true,
+        "{report:#}"
+    );
+    assert_eq!(report["value"]["shellSkipsPathMisses"], true, "{report:#}");
+    assert_eq!(
+        report["value"]["shellRejectsMisleadingShebang"], true,
+        "{report:#}"
+    );
     assert_eq!(report["value"]["zlibRoundTrip"], true, "{report:#}");
     assert_eq!(report["stderr"], "", "{report:#}");
     Ok(())

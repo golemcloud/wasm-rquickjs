@@ -219,17 +219,100 @@ export async function probePrimitives() {
             const constants = require('node:constants');
             const v8 = require('node:v8');
             const zlib = require('node:zlib');
+            const { spawnSync } = require('node:child_process');
             const original = Buffer.from([1, 2, 3]);
-            const view = original.subarray(1, 3);
-            view[0] = 9;
+            const species = Buffer[Symbol.species];
+            const hostile = Buffer.from([4, 5, 6]);
+            Object.defineProperty(hostile, 'constructor', {
+                value: { [Symbol.species]: class HostileSpecies extends Uint8Array {} },
+            });
+            let dep0005Emitted = false;
+            const originalEmitWarning = process.emitWarning;
+            process.emitWarning = (warning, typeOrOptions, code) => {
+                const warningCode = typeOrOptions && typeof typeOrOptions === 'object'
+                    ? typeOrOptions.code
+                    : code;
+                if (warningCode === 'DEP0005') dep0005Emitted = true;
+            };
+            let view;
+            let mapped;
+            let filtered;
+            let hostileView;
+            let rejectsBigIntOffset = false;
+            try {
+                view = original.subarray(1, 3);
+                view[0] = 9;
+                mapped = original.map(value => value + 1);
+                filtered = original.filter(value => value > 1);
+                hostileView = hostile.subarray(1);
+                try {
+                    original.subarray(1n);
+                } catch (error) {
+                    rejectsBigIntOffset = error instanceof TypeError;
+                }
+            } finally {
+                process.emitWarning = originalEmitWarning;
+            }
+
+            const shebangDir = '/workspace/shebang-bin';
+            const missDir = '/workspace/shebang-missing';
+            const runShebang = (command, pathValue = shebangDir) => spawnSync(
+                'sh',
+                ['-c', command],
+                { cwd: '/workspace', env: { PATH: pathValue } },
+            );
+            const envNode = runShebang('env-node.cjs', missDir + ':' + shebangDir);
+            const notNode = runShebang('not-node.cjs');
             const compressed = zlib.gzipSync('npm');
             return {
                 constantsCjs: typeof constants.COPYFILE_EXCL === 'number',
                 heapSizeLimit: v8.getHeapStatistics().heap_size_limit,
                 bufferView: Buffer.isBuffer(view) && original[1] === 9,
+                bufferSpecies: species !== Buffer && species.prototype === Buffer.prototype &&
+                    Object.getPrototypeOf(species) === Uint8Array && Buffer.prototype.constructor === Buffer,
+                bufferTypedArrayMethods: Buffer.isBuffer(mapped) && Buffer.isBuffer(filtered),
+                bufferOperationsAvoidDep0005: !dep0005Emitted,
+                bufferSubarrayEdges: original.subarray(-Infinity).length === original.length &&
+                    original.subarray(Infinity).length === 0 &&
+                    original.subarray(NaN, 2).length === 2 && rejectsBigIntOffset,
+                bufferSubarrayIgnoresSpecies: Buffer.isBuffer(hostileView) && hostileView[0] === 5,
+                shellNodeShebangs: envNode.status === 0 &&
+                    envNode.stdout.toString().trim() === 'env-node:ok',
+                shellSkipsPathMisses: envNode.status === 0,
+                shellRejectsMisleadingShebang: notNode.status === null && notNode.error &&
+                    notNode.error.code === 'ENOSYS',
+                shellProbe: Object.fromEntries(Object.entries({ envNode, notNode }).map(
+                    ([name, result]) => [name, {
+                        status: result.status,
+                        error: result.error && result.error.code,
+                        stdout: result.stdout.toString(),
+                        stderr: result.stderr.toString(),
+                    }],
+                )),
                 zlibRoundTrip: zlib.gunzipSync(compressed).toString() === 'npm',
             };
         `,
     });
+    const directShebang = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const { createRequire } = await import('node:module');
+            const require = createRequire('/workspace/direct-shebang-probe.cjs');
+            const { spawnSync } = require('node:child_process');
+            const child = spawnSync('sh', ['-c', 'direct-node.cjs'], {
+                cwd: '/workspace',
+                env: { PATH: '/workspace/shebang-bin' },
+            });
+            return {
+                ok: child.status === 0 && child.stdout.toString().trim() === 'direct-node:ok',
+                status: child.status,
+                error: child.error && child.error.code,
+                stdout: child.stdout.toString(),
+                stderr: child.stderr.toString(),
+            };
+        `,
+    });
+    result.value.shellDirectNodeShebang = directShebang.value.ok;
+    result.value.directShellProbe = directShebang.value;
     return JSON.stringify(result);
 }

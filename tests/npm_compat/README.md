@@ -23,6 +23,11 @@ Command support and package support are independent. A working `npm install`
 command does not imply that lifecycle scripts, native addons, Git dependencies,
 or external executables work.
 
+The npm 10.9.2 registry-install fixture also exercises its bundled
+minizlib/node-tar stack. Supporting the private zlib handle shape used by that
+pinned stack is version-scoped npm compatibility, not a general guarantee for
+Node.js private zlib internals.
+
 ## Common workflows
 
 | Command or workflow | Status | Intended boundary |
