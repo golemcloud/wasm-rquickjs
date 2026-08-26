@@ -1675,30 +1675,34 @@ fn p3_rejects_methodless_exported_resource() -> anyhow::Result<()> {
 }
 
 #[test]
-fn p3_accepts_foreign_methodless_resource_alias_in_export() -> anyhow::Result<()> {
+fn p3_builds_with_foreign_resource_alias_in_async_export() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
         indoc! {r#"
             package bug:foreign-resource-alias;
 
-            interface resources {
-              resource r;
+            interface common {
+              resource context {
+                get-value: async func() -> string;
+              }
             }
 
             interface api {
-              use resources.{r};
-              run: func(value: borrow<r>);
+              use common.{context};
+              run: async func(ctx: own<context>);
             }
 
             world foreign-resource-alias {
+              import common;
               export api;
             }
         "#},
-        "export const api = { run(_value) {} };\n",
+        "export const api = { async run(_ctx) {} };\n",
     )?;
 
     generate_p3(temp.path())?;
+    let _wasm_path = build_p3(temp.path(), "foreign_resource_alias")?;
     Ok(())
 }
 

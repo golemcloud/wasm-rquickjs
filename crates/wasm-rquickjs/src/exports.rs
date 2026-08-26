@@ -246,11 +246,7 @@ fn generate_guest_impl(
             let Some(resource_type_id) = resolve_resource_type_id(context, *type_id)? else {
                 continue;
             };
-            let resource = context
-                .resolve
-                .types
-                .get(resource_type_id)
-                .ok_or_else(|| anyhow!("Unknown type id {resource_type_id:?}"))?;
+            let resource = context.typ(resource_type_id)?;
 
             if !matches!(
                 &resource.owner,
