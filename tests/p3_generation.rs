@@ -1663,41 +1663,46 @@ fn p3_rejects_methodless_exported_resource() -> anyhow::Result<()> {
         "export async function run() { return 1; }\n",
     )?;
 
+    let error = generate_p3(temp.path())
+        .expect_err("P3 generation must reject interface-owned methodless exported resources");
     assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject exported resources even when the resource has no functions"
+        format!("{error:#}").contains(
+            "Exported resources without any constructor, method, or static function are not supported by the WASI Preview 3 generation path (resource 'r')"
+        ),
+        "P3 generation must return an actionable error for an interface-owned methodless resource; got: {error:#}"
     );
     Ok(())
 }
 
 #[test]
-fn p3_rejects_methodless_exported_resource_alias() -> anyhow::Result<()> {
+fn p3_builds_with_foreign_resource_alias_in_async_export() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
         indoc! {r#"
-            package bug:methodless-resource-alias;
+            package bug:foreign-resource-alias;
 
-            interface resources {
-              resource r;
+            interface common {
+              resource context {
+                get-value: async func() -> string;
+              }
             }
 
             interface api {
-              use resources.{r};
+              use common.{context};
+              run: async func(ctx: own<context>);
             }
 
-            world methodless-resource-alias {
+            world foreign-resource-alias {
+              import common;
               export api;
-              export run: async func() -> u32;
             }
         "#},
-        "export async function run() { return 1; }\n",
+        "export const api = { async run(_ctx) {} };\n",
     )?;
 
-    assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject exported resources even when the exported interface re-exports the resource through a type alias"
-    );
+    generate_p3(temp.path())?;
+    let _wasm_path = build_p3(temp.path(), "foreign_resource_alias")?;
     Ok(())
 }
 

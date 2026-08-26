@@ -13,7 +13,8 @@ use quote::quote;
 use std::collections::BTreeMap;
 use syn::{Lit, LitStr};
 use wit_parser::{
-    Function, FunctionKind, Interface, InterfaceId, TypeDefKind, TypeId, WorldItem, WorldKey,
+    Function, FunctionKind, Interface, InterfaceId, TypeDefKind, TypeId, TypeOwner, WorldItem,
+    WorldKey,
 };
 
 /// Generates the `<output>/src/lib.rs` file for the wrapper crate, implementing the component exports
@@ -179,14 +180,14 @@ fn generate_guest_impls(context: &GeneratorContext<'_>) -> anyhow::Result<Vec<To
     Ok(result)
 }
 
-/// Returns whether `type_id` ultimately denotes a `resource`, following `use` re-exports and
-/// type aliases (`TypeDefKind::Type(Type::Id(..))`) to their target. A direct resource has its
-/// kind set to `Resource`, but an interface that re-exports a resource via `use other.{r};`
-/// stores it as an alias, so a naive `kind == Resource` check would miss it.
-fn type_resolves_to_resource(
+/// Returns the terminal resource type ID when `type_id` denotes a resource, following `use`
+/// re-exports and type aliases (`TypeDefKind::Type(Type::Id(..))`) to their target. A direct
+/// resource has its kind set to `Resource`, but an interface that re-exports a resource via
+/// `use other.{r};` stores it as an alias, so a naive `kind == Resource` check would miss it.
+fn resolve_resource_type_id(
     context: &GeneratorContext<'_>,
     type_id: TypeId,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<Option<TypeId>> {
     let mut current = type_id;
     loop {
         let typ = context
@@ -195,9 +196,9 @@ fn type_resolves_to_resource(
             .get(current)
             .ok_or_else(|| anyhow!("Unknown type id {current:?}"))?;
         match &typ.kind {
-            TypeDefKind::Resource => return Ok(true),
+            TypeDefKind::Resource => return Ok(Some(current)),
             TypeDefKind::Type(wit_parser::Type::Id(next)) => current = *next,
-            _ => return Ok(false),
+            _ => return Ok(None),
         }
     }
 }
@@ -226,7 +227,7 @@ fn generate_guest_impl(
     // `exports` (so no `GuestX` impl would be generated — the same limitation exists on the P2
     // path), which would surface as an obscure compile error. Reject such methodless exported
     // resources at the type level here with an actionable message.
-    if is_p3 && let Some((_, iface, _)) = interface {
+    if is_p3 && let Some((_, iface, interface_id)) = interface {
         let mut resource_ids_with_functions = std::collections::HashSet::new();
         for (_, function) in exports {
             match &function.kind {
@@ -242,15 +243,21 @@ fn generate_guest_impl(
         }
 
         for (_, type_id) in &iface.types {
-            if type_resolves_to_resource(context, *type_id)?
-                && !resource_ids_with_functions.contains(type_id)
+            let Some(resource_type_id) = resolve_resource_type_id(context, *type_id)? else {
+                continue;
+            };
+            let resource = context.typ(resource_type_id)?;
+
+            if !matches!(
+                &resource.owner,
+                TypeOwner::Interface(owner) if *owner == interface_id
+            ) {
+                continue;
+            }
+            if !resource_ids_with_functions.contains(type_id)
+                && !resource_ids_with_functions.contains(&resource_type_id)
             {
-                let typ = context
-                    .resolve
-                    .types
-                    .get(*type_id)
-                    .ok_or_else(|| anyhow!("Unknown type id {type_id:?}"))?;
-                let resource_name = typ.name.as_deref().unwrap_or("<anonymous>");
+                let resource_name = resource.name.as_deref().unwrap_or("<anonymous>");
                 return Err(anyhow!(
                     "Exported resources without any constructor, method, or static function are not supported by the WASI Preview 3 generation path (resource '{resource_name}')"
                 ));
