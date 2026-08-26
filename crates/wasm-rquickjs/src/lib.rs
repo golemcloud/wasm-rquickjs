@@ -63,6 +63,7 @@ impl GenerationTarget {
 }
 
 mod async_values;
+pub mod capability_scan;
 mod conversions;
 mod exports;
 mod imports;
@@ -76,7 +77,11 @@ mod types;
 mod typescript;
 mod wit;
 
-pub use inject::{SLOT_END_MAGIC, SLOT_MAGIC, create_marker_file, inject_js_into_component};
+pub use inject::{
+    CAPABILITY_GATES_END_MAGIC, CAPABILITY_GATES_MAGIC, SLOT_END_MAGIC, SLOT_MAGIC,
+    create_marker_file, inject_js_into_component, patch_capability_gates,
+    patch_capability_gates_in_bytes, read_capability_gates_from_bytes,
+};
 #[cfg(feature = "optimize")]
 pub use optimize::optimize_component;
 
