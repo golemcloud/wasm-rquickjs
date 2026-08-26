@@ -1847,6 +1847,9 @@ export function spawn(command, args, options) {
             if (options.env) {
                 spawnOpts.env = options.env;
             }
+            if (options.shell) {
+                spawnOpts.shell = options.shell;
+            }
         }
         spawnOpts.encoding = 'buffer';
 
@@ -1918,6 +1921,9 @@ export function execSync(command, options) {
 export function spawnSync(command, args, options) {
     const normalizedArgs = args || [];
     const normalizedOptions = options || {};
+    if (normalizedOptions.shell) {
+        return unsupportedSpawnSyncResult(String(command) + ' with shell option');
+    }
     const shellCommand = resolveJavaScriptShellCommand(
         String(command),
         normalizedArgs,

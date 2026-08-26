@@ -221,7 +221,7 @@ export async function probePrimitives() {
             const fs = require('node:fs');
             const v8 = require('node:v8');
             const zlib = require('node:zlib');
-            const { spawnSync } = require('node:child_process');
+            const { spawn, spawnSync } = require('node:child_process');
             const original = Buffer.from([1, 2, 3]);
             const species = Buffer[Symbol.species];
             const hostile = Buffer.from([4, 5, 6]);
@@ -270,6 +270,25 @@ export async function probePrimitives() {
             );
             const envNode = runShebang('env-node.cjs', missDir + ':' + shebangDir);
             const notNode = runShebang('not-node.cjs');
+            const shellSync = spawnSync(process.execPath, ['-e', 'process.stdout.write("bad")'], {
+                shell: true,
+            });
+            const shellAsync = await new Promise(resolve => {
+                const child = spawn(process.execPath, ['-e', 'process.stdout.write("bad")'], {
+                    shell: true,
+                });
+                let error = null;
+                const events = [];
+                child.on('error', value => {
+                    error = value;
+                    events.push('error');
+                });
+                child.on('exit', () => events.push('exit'));
+                child.on('close', code => {
+                    events.push('close');
+                    resolve({ code, error, events });
+                });
+            });
             const compressed = zlib.gzipSync('npm');
             return {
                 constantsCjs: typeof constants.COPYFILE_EXCL === 'number',
@@ -288,6 +307,11 @@ export async function probePrimitives() {
                 shellSkipsPathMisses: envNode.status === 0,
                 shellRejectsMisleadingShebang: notNode.status === null && notNode.error &&
                     notNode.error.code === 'ENOSYS',
+                shellOptionFailsExplicitly: shellSync.status === null &&
+                    shellSync.error && shellSync.error.code === 'ENOSYS' &&
+                    shellAsync.code === -38 && shellAsync.error &&
+                    shellAsync.error.code === 'ENOSYS' &&
+                    shellAsync.events.join(',') === 'error,close',
                 shellProbe: Object.fromEntries(Object.entries({ envNode, notNode }).map(
                     ([name, result]) => [name, {
                         status: result.status,
