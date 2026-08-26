@@ -1376,8 +1376,19 @@ function isPathLookupMiss(error) {
 }
 
 function readShebangLine(fs, candidate) {
+    const candidateStat = fs.statSync(candidate);
+    if (!candidateStat.isFile() || (candidateStat.mode & 0o111) === 0) {
+        return null;
+    }
+
     const fd = fs.openSync(candidate, 'r');
     try {
+        // Recheck the opened object so a replaced path cannot turn a validated
+        // script into a different regular file before the bounded read.
+        const openedStat = fs.fstatSync(fd);
+        if (!openedStat.isFile() || (openedStat.mode & 0o111) === 0) {
+            return null;
+        }
         const prefix = Buffer.allocUnsafe(MAX_SHEBANG_BYTES);
         const bytesRead = fs.readSync(fd, prefix, 0, prefix.length, 0);
         const newline = prefix.indexOf(0x0a, 0);

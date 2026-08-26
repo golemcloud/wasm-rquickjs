@@ -217,6 +217,7 @@ export async function probePrimitives() {
             const { createRequire } = await import('node:module');
             const require = createRequire('/workspace/probe.cjs');
             const constants = require('node:constants');
+            const fs = require('node:fs');
             const v8 = require('node:v8');
             const zlib = require('node:zlib');
             const { spawnSync } = require('node:child_process');
@@ -256,6 +257,11 @@ export async function probePrimitives() {
 
             const shebangDir = '/workspace/shebang-bin';
             const missDir = '/workspace/shebang-missing';
+            // WASI filesystem metadata does not expose host permission bits.
+            // npm establishes executable .bin modes with chmod, which our fs
+            // compatibility layer records and reports through stat/fstat.
+            fs.chmodSync(shebangDir + '/env-node.cjs', 0o755);
+            fs.chmodSync(shebangDir + '/not-node.cjs', 0o755);
             const runShebang = (command, pathValue = shebangDir) => spawnSync(
                 'sh',
                 ['-c', command],
@@ -293,12 +299,15 @@ export async function probePrimitives() {
             };
         `,
     });
-    const runDirectShebang = async (command, expectedOutput) => runJavaScript({
+    const runDirectShebang = async (command, expectedOutput, executable) => runJavaScript({
         cwd: '/workspace',
         source: `
             const { createRequire } = await import('node:module');
             const require = createRequire('/workspace/direct-shebang-probe.cjs');
             const { spawnSync } = require('node:child_process');
+            if (${JSON.stringify(executable)}) {
+                require('node:fs').chmodSync(${JSON.stringify(command)}, 0o755);
+            }
             const child = spawnSync('sh', ['-c', ${JSON.stringify(command)}], {
                 cwd: '/workspace',
                 env: { PATH: '/workspace/shebang-bin' },
@@ -315,24 +324,45 @@ export async function probePrimitives() {
     const relativeEnvShebang = await runDirectShebang(
         './shebang-bin/env-node.cjs',
         'env-node:ok',
+        true,
     );
     const absoluteNodeShebang = await runDirectShebang(
         '/workspace/shebang-bin/direct-node.cjs',
         'direct-node:ok',
+        true,
     );
     const directMisleadingShebang = await runDirectShebang(
         './shebang-bin/not-node.cjs',
         'not-node:bad',
+        true,
+    );
+    const nonExecutableShebang = await runDirectShebang(
+        './shebang-bin/not-executable.cjs',
+        'not-executable:bad',
+        false,
+    );
+    const nonRegularCandidate = await runDirectShebang(
+        './shebang-bin',
+        'directory:bad',
+        false,
     );
     result.value.shellDirectNodeShebang = relativeEnvShebang.value.ok &&
         absoluteNodeShebang.value.ok;
     result.value.shellRejectsDirectMisleadingShebang =
         directMisleadingShebang.value.status === null &&
         directMisleadingShebang.value.error === 'ENOSYS';
+    result.value.shellRejectsNonExecutableShebang =
+        nonExecutableShebang.value.status === null &&
+        nonExecutableShebang.value.error === 'ENOSYS';
+    result.value.shellRejectsNonRegularCandidate =
+        nonRegularCandidate.value.status === null &&
+        nonRegularCandidate.value.error === 'ENOSYS';
     result.value.directShellProbe = {
         relativeEnvShebang: relativeEnvShebang.value,
         absoluteNodeShebang: absoluteNodeShebang.value,
         directMisleadingShebang: directMisleadingShebang.value,
+        nonExecutableShebang: nonExecutableShebang.value,
+        nonRegularCandidate: nonRegularCandidate.value,
     };
     return JSON.stringify(result);
 }
