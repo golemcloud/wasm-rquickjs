@@ -1184,5 +1184,32 @@ export async function httpCustomConnectionRejected() {
         req.destroy();
     });
 
-    return rejectsAsynchronously && agentHookIgnoredExplicitly && destroyBeforeRejection && connectDoesNotOpenSocket;
+    const plainConnectRejected = await new Promise((resolve) => {
+        let connectReceived = false;
+        let rejectedAsUnsupported = false;
+        const req = new http.ClientRequest({
+            method: 'CONNECT',
+            hostname: 'example.invalid',
+        });
+        const initiallySocketless = req.socket === null;
+        req.on('connect', () => {
+            connectReceived = true;
+        });
+        req.on('error', (error) => {
+            rejectedAsUnsupported = error.code === 'ENOSYS' &&
+                error.message.includes('outbound requests use wasi:http');
+        });
+        req.on('close', () => {
+            resolve(
+                initiallySocketless &&
+                req.socket === null &&
+                !connectReceived &&
+                rejectedAsUnsupported
+            );
+        });
+        req.end();
+    });
+
+    return rejectsAsynchronously && agentHookIgnoredExplicitly && destroyBeforeRejection &&
+        connectDoesNotOpenSocket && plainConnectRejected;
 }
