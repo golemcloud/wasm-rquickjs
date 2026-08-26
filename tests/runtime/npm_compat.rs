@@ -341,6 +341,10 @@ async fn npm_required_runtime_primitives(
     );
     assert_eq!(report["value"]["execFailuresOmitExit"], true, "{report:#}");
     assert_eq!(
+        report["value"]["execExpandsPresentBracedEnv"], true,
+        "{report:#}"
+    );
+    assert_eq!(
         report["value"]["execRejectsShellSyntax"], true,
         "{report:#}"
     );

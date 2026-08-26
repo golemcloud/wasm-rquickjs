@@ -1186,8 +1186,8 @@ function normalizeExecFileParams(args, options, callback) {
     };
 }
 
-function expandEscapedTemplateRefs(command, env) {
-    return String(command).replace(/\$\{(ESCAPED_[0-9]+)\}/g, (placeholder, name) => {
+function expandTemplateEnvRefs(command, env) {
+    return String(command).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (placeholder, name) => {
         if (!env || !Object.prototype.hasOwnProperty.call(env, name)) {
             return placeholder;
         }
@@ -1281,7 +1281,7 @@ function splitCommandTokens(command) {
 function parseEchoPipeline(command) {
     const expandedCommand = String(command);
     const pipeIndex = expandedCommand.indexOf('|');
-    if (pipeIndex === -1) {
+    if (pipeIndex === -1 || pipeIndex !== expandedCommand.lastIndexOf('|')) {
         return null;
     }
 
@@ -1293,7 +1293,8 @@ function parseEchoPipeline(command) {
     }
 
     const rhsTokens = splitCommandTokens(rhs);
-    if (!rhsTokens || rhsTokens.length < 2 || String(rhsTokens[0]) !== String(process.execPath)) {
+    if (hasUnsupportedJavaScriptShellSyntax(rhs) ||
+        !rhsTokens || rhsTokens.length < 2 || String(rhsTokens[0]) !== String(process.execPath)) {
         return null;
     }
 
@@ -1303,6 +1304,9 @@ function parseEchoPipeline(command) {
         const part = parts[i].trim();
         if (part.length === 0) {
             continue;
+        }
+        if (hasUnsupportedJavaScriptShellSyntax(part)) {
+            return null;
         }
 
         const partTokens = splitCommandTokens(part);
@@ -1315,7 +1319,8 @@ function parseEchoPipeline(command) {
             continue;
         }
 
-        if (partTokens[0] === 'sleep') {
+        if (partTokens[0] === 'sleep' && partTokens.length === 2 &&
+            /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(partTokens[1])) {
             continue;
         }
 
@@ -1331,10 +1336,10 @@ function parseEchoPipeline(command) {
 
 function runExecCommand(command, options) {
     const env = options && typeof options.env === 'object' ? options.env : process.env;
-    // Node's own compatibility tests use this tagged-template convention to
-    // pass already-escaped values without asking this adapter to implement
-    // general shell expansion. All other `$` syntax remains fail-closed.
-    const source = expandEscapedTemplateRefs(command, env);
+    // Expand only the braced environment references that are present in the
+    // effective environment. `$NAME`, command substitution, and every other
+    // shell expansion remain fail-closed.
+    const source = expandTemplateEnvRefs(command, env);
     const resolvedOptions = cloneObject(options);
 
     if (resolvedOptions.encoding === undefined) {
@@ -1357,11 +1362,12 @@ function runExecCommand(command, options) {
     // begin, instead of being passed to JavaScript as a misleading literal arg.
     const redirectIndex = tokens.indexOf('<');
     if (redirectIndex !== -1) {
+        const shellMetacharacters = "|;&<>$`(){}*?[]~#\n\r";
         const hasSingleTrailingRedirect = redirectIndex > 0 &&
             redirectIndex === tokens.length - 2 &&
             tokens.lastIndexOf('<') === redirectIndex &&
-            tokens.slice(0, redirectIndex).every(token =>
-                !"|;&<>$`(){}*?[]~#\n\r".split('').some(ch => token.includes(ch)),
+            tokens.filter((_, index) => index !== redirectIndex).every(token =>
+                !Array.from(token).some(ch => shellMetacharacters.includes(ch)),
             );
         if (!hasSingleTrailingRedirect) {
             return unsupportedSpawnSyncResult('exec(shell syntax)');
@@ -1370,8 +1376,7 @@ function runExecCommand(command, options) {
             const fsForRedirect = moduleExports.require('node:fs');
             resolvedOptions.__wasmStdinData = fsForRedirect.readFileSync(tokens[redirectIndex + 1], 'utf8');
         } catch (_) {
-            // Let the inline target observe empty stdin when the file is absent,
-            // matching the existing constrained adapter behavior.
+            return unsupportedSpawnSyncResult('exec(stdin redirection)');
         }
         tokens.splice(redirectIndex, 2);
     } else if (hasUnsupportedJavaScriptShellSyntax(source)) {
