@@ -1368,29 +1368,57 @@ function runExecCommand(command, options) {
     return spawnSync(tokens[0], tokens.slice(1), resolvedOptions);
 }
 
+const MAX_SHEBANG_BYTES = 4096;
+const PATH_LOOKUP_MISS_CODES = new Set(['EACCES', 'EISDIR', 'ENOENT', 'ENOTDIR']);
+
+function isPathLookupMiss(error) {
+    return error && PATH_LOOKUP_MISS_CODES.has(error.code);
+}
+
+function readShebangLine(fs, candidate) {
+    const fd = fs.openSync(candidate, 'r');
+    try {
+        const prefix = Buffer.allocUnsafe(MAX_SHEBANG_BYTES);
+        const bytesRead = fs.readSync(fd, prefix, 0, prefix.length, 0);
+        const newline = prefix.indexOf(0x0a, 0);
+        if (newline === -1 && bytesRead === prefix.length) {
+            return null;
+        }
+        const end = newline === -1 || newline >= bytesRead ? bytesRead : newline;
+        const line = prefix.toString('utf8', 0, end);
+        return line.endsWith('\r') ? line.slice(0, -1) : line;
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+function hasSupportedNodeShebang(line) {
+    if (typeof line !== 'string') return false;
+    // This adapter does not emulate kernel shebang argument handling. Accept
+    // only an absolute `node` interpreter or the common `env node` form, with
+    // no interpreter flags. In particular, do not mistake `python node` for a
+    // JavaScript entry point merely because "node" appears later in the line.
+    return /^#![ \t]*\/(?:[^/\s]+\/)*node[ \t]*$/.test(line) ||
+        /^#![ \t]*\/(?:[^/\s]+\/)*env[ \t]+node[ \t]*$/.test(line);
+}
+
 function resolveNodeShebangCommand(command, env) {
     if (command.indexOf('/') !== -1) {
         return null;
     }
     const pathValue = env && typeof env.PATH === 'string' ? env.PATH : '';
-    const searchPaths = pathValue.split(':').filter(Boolean);
-    let fs;
-    try {
-        fs = moduleExports.require('node:fs');
-    } catch (_) {
-        return null;
-    }
+    const searchPaths = pathValue.split(path.delimiter).filter(Boolean);
+    const fs = moduleExports.require('node:fs');
     for (let i = 0; i < searchPaths.length; i++) {
         const candidate = path.resolve(searchPaths[i], command);
         try {
-            const source = fs.readFileSync(candidate, 'utf8');
-            const firstLineEnd = source.indexOf('\n');
-            const firstLine = firstLineEnd === -1 ? source : source.slice(0, firstLineEnd);
-            if (/^#!.*(?:\/|\s)node(?:\s|$)/.test(firstLine)) {
+            const shebang = readShebangLine(fs, candidate);
+            if (hasSupportedNodeShebang(shebang)) {
                 return fs.realpathSync(candidate);
             }
-        } catch (_) {
-            // Continue through PATH just like executable lookup.
+        } catch (error) {
+            if (!isPathLookupMiss(error)) throw error;
+            // Missing, unreadable, and non-file PATH entries are lookup misses.
         }
     }
     return null;
@@ -1793,14 +1821,7 @@ export function spawn(command, args, options) {
         }
         spawnOpts.encoding = 'buffer';
 
-        const shellCommand = resolveJavaScriptShellCommand(
-            String(command),
-            args || [],
-            options && options.env ? options.env : process.env,
-        );
-        const resolvedCommand = shellCommand ? shellCommand.command : String(command);
-        const resolvedArgs = shellCommand ? shellCommand.args : (args || []);
-        const result = spawnSync(resolvedCommand, resolvedArgs, spawnOpts);
+        const result = spawnSync(String(command), args || [], spawnOpts);
         const exitCode = typeof result.status === 'number' ? result.status : null;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
@@ -1866,12 +1887,20 @@ export function execSync(command, options) {
 }
 
 export function spawnSync(command, args, options) {
-    const cmd = String(command);
+    const normalizedArgs = args || [];
+    const normalizedOptions = options || {};
+    const shellCommand = resolveJavaScriptShellCommand(
+        String(command),
+        normalizedArgs,
+        normalizedOptions.env || process.env,
+    );
+    const cmd = shellCommand ? shellCommand.command : String(command);
+    const resolvedArgs = shellCommand ? shellCommand.args : normalizedArgs;
     if (cmd !== process.execPath) {
         return unsupportedSpawnSyncResult(cmd);
     }
 
-    return runInline(cmd, args || [], options || {});
+    return runInline(cmd, resolvedArgs, normalizedOptions);
 }
 
 export default {

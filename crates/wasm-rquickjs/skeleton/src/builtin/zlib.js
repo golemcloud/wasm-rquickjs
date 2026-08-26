@@ -563,8 +563,10 @@ class ZlibBase extends Transform {
     assertHandle(handle);
     this._nativeHandle = handle;
     const owner = this;
-    // minizlib/node-tar reaches through `_handle._handle.close()` to release
-    // native state early, so retain that consumer-visible shape.
+    // npm 10.9.2's bundled minizlib/node-tar reaches through
+    // `_handle._handle.close()` to release native state early. This private,
+    // version-scoped compatibility facade is not a general promise to expose
+    // Node's internal zlib handle API; `_nativeHandle` remains our sole owner.
     this._handle = {
       close() { owner._closeNativeHandle(); },
       reset() { owner.reset(); },
