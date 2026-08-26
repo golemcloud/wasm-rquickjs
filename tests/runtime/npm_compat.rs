@@ -339,6 +339,11 @@ async fn npm_required_runtime_primitives(
         report["value"]["shellOptionFailsExplicitly"], true,
         "{report:#}"
     );
+    assert_eq!(report["value"]["execFailuresOmitExit"], true, "{report:#}");
+    assert_eq!(
+        report["value"]["execRejectsShellSyntax"], true,
+        "{report:#}"
+    );
     assert_eq!(
         report["value"]["shellDirectNodeShebang"], true,
         "{report:#}"

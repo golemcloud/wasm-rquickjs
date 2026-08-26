@@ -221,7 +221,7 @@ export async function probePrimitives() {
             const fs = require('node:fs');
             const v8 = require('node:v8');
             const zlib = require('node:zlib');
-            const { spawn, spawnSync } = require('node:child_process');
+            const { exec, execFile, spawn, spawnSync } = require('node:child_process');
             const original = Buffer.from([1, 2, 3]);
             const species = Buffer[Symbol.species];
             const hostile = Buffer.from([4, 5, 6]);
@@ -289,6 +289,36 @@ export async function probePrimitives() {
                     resolve({ code, error, events });
                 });
             });
+            const probeExecFailure = launch => new Promise(resolve => {
+                const events = [];
+                let callbackError = null;
+                let emittedError = null;
+                const child = launch(error => {
+                    callbackError = error;
+                    events.push('callback');
+                });
+                child.on('error', error => {
+                    emittedError = error;
+                    events.push('error');
+                });
+                child.on('exit', () => events.push('exit'));
+                child.on('close', code => {
+                    events.push('close');
+                    resolve({ callbackError, emittedError, code, exitCode: child.exitCode, events });
+                });
+            });
+            const execFailure = await probeExecFailure(callback =>
+                exec('wasm-rquickjs-missing-command', callback));
+            const execFileFailure = await probeExecFailure(callback =>
+                execFile('wasm-rquickjs-missing-command', callback));
+            const rejectedShellCommands = await Promise.all([
+                process.execPath + ' -e "process.stdout.write(\\"partial\\")" && ' + process.execPath + ' -e "0"',
+                process.execPath + ' -e "0" $UNSUPPORTED',
+                process.execPath + ' -e "0" \${UNSUPPORTED}',
+                process.execPath + ' -e "0" $(echo unsupported)',
+                process.execPath + ' -e "0" > /workspace/partial-output',
+                process.execPath + ' -e "0" ' + '\\\\' + '\\n' + 'continued',
+            ].map(command => probeExecFailure(callback => exec(command, callback))));
             const compressed = zlib.gzipSync('npm');
             return {
                 constantsCjs: typeof constants.COPYFILE_EXCL === 'number',
@@ -312,6 +342,16 @@ export async function probePrimitives() {
                     shellAsync.code === -38 && shellAsync.error &&
                     shellAsync.error.code === 'ENOSYS' &&
                     shellAsync.events.join(',') === 'error,close',
+                execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>
+                    failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
+                    failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
+                    failure.code === -38 && failure.exitCode === -38 &&
+                    failure.events.join(',') === 'callback,error,close'),
+                execRejectsShellSyntax: rejectedShellCommands.every(failure =>
+                    failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
+                    failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
+                    failure.code === -38 && failure.exitCode === -38 &&
+                    failure.events.join(',') === 'callback,error,close'),
                 shellProbe: Object.fromEntries(Object.entries({ envNode, notNode }).map(
                     ([name, result]) => [name, {
                         status: result.status,

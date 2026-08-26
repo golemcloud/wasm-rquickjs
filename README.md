@@ -466,9 +466,13 @@ Context propagation works through `Promise.prototype.then/catch/finally` and `se
 </details>
 
 <details>
-<summary><strong><code>node:child_process</code></strong> (stub)</summary>
+<summary><strong><code>node:child_process</code></strong></summary>
 
-Compatibility stubs — all spawn/exec functions throw `ENOSYS` since WASI does not support process creation.
+WASI cannot create host processes. A constrained compatibility adapter runs `process.execPath`
+JavaScript targets inline with isolated argv, environment, and cwd views. It also recognizes npm's
+literal `sh -c` form for plain Node commands and executable Node shebang files. Unsupported shells,
+shell syntax, external executables, and unsupported shebangs fail explicitly with `ENOSYS`; inline
+execution is not a fresh runtime or an operating-system subprocess.
 
 - `ChildProcess`, `exec`, `execFile`, `fork`, `spawn`, `execSync`, `execFileSync`, `spawnSync`
 
@@ -616,7 +620,11 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `node:_http_common` — `_checkIsHttpToken`, `_checkInvalidHeaderChar`
 - Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, ordered pipelined responses, server-side 100/102/103 informational responses, per-socket request limits, idle connection cleanup
 
-**Not yet supported:** HTTP Upgrade, client-side 1xx informational events through `wasi:http`, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
+**Not yet supported:** HTTP Upgrade and CONNECT tunnels, client-side 1xx informational events
+through `wasi:http`, server-side timeout enforcement, `https.createServer()` / HTTPS server, client
+`lookup` / `autoSelectFamily` options, and custom per-request `createConnection` transports. Custom
+Agent `createConnection` hooks are ignored with a warning so Agent metadata and scheduling remain
+usable, but they cannot route or isolate traffic; every outbound request still uses `wasi:http`.
 
 </details>
 

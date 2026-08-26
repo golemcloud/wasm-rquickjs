@@ -1186,11 +1186,10 @@ function normalizeExecFileParams(args, options, callback) {
     };
 }
 
-function expandTemplateEnvRefs(command, env) {
-    const source = String(command);
-    return source.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => {
-        if (!env || env[name] === undefined || env[name] === null) {
-            return '';
+function expandEscapedTemplateRefs(command, env) {
+    return String(command).replace(/\$\{(ESCAPED_[0-9]+)\}/g, (placeholder, name) => {
+        if (!env || !Object.prototype.hasOwnProperty.call(env, name)) {
+            return placeholder;
         }
         return String(env[name]);
     });
@@ -1332,37 +1331,51 @@ function parseEchoPipeline(command) {
 
 function runExecCommand(command, options) {
     const env = options && typeof options.env === 'object' ? options.env : process.env;
-    const expanded = expandTemplateEnvRefs(command, env);
+    // Node's own compatibility tests use this tagged-template convention to
+    // pass already-escaped values without asking this adapter to implement
+    // general shell expansion. All other `$` syntax remains fail-closed.
+    const source = expandEscapedTemplateRefs(command, env);
     const resolvedOptions = cloneObject(options);
 
     if (resolvedOptions.encoding === undefined) {
         resolvedOptions.encoding = 'utf8';
     }
 
-    const pipeline = parseEchoPipeline(expanded);
+    const pipeline = parseEchoPipeline(source);
     if (pipeline) {
         resolvedOptions.__wasmStdinData = pipeline.stdinData;
         return spawnSync(pipeline.command, pipeline.args, resolvedOptions);
     }
 
-    const tokens = splitCommandTokens(expanded);
+    const tokens = splitCommandTokens(source);
     if (!tokens || tokens.length === 0) {
         return unsupportedSpawnSyncResult('exec(empty command)');
     }
 
-    // Handle stdin redirection: command ... < filename
-    for (let ri = 1; ri < tokens.length; ri++) {
-        if (tokens[ri] === '<' && ri + 1 < tokens.length) {
-            const stdinFile = tokens[ri + 1];
-            try {
-                const fsForRedirect = moduleExports.require('node:fs');
-                resolvedOptions.__wasmStdinData = fsForRedirect.readFileSync(stdinFile, 'utf8');
-            } catch (_) {
-                // ignore if file cannot be read
-            }
-            tokens.splice(ri, 2);
-            break;
+    // Preserve the one data-only redirection form required by the compatibility
+    // suite. Every other shell metacharacter is rejected before inline work can
+    // begin, instead of being passed to JavaScript as a misleading literal arg.
+    const redirectIndex = tokens.indexOf('<');
+    if (redirectIndex !== -1) {
+        const hasSingleTrailingRedirect = redirectIndex > 0 &&
+            redirectIndex === tokens.length - 2 &&
+            tokens.lastIndexOf('<') === redirectIndex &&
+            tokens.slice(0, redirectIndex).every(token =>
+                !"|;&<>$`(){}*?[]~#\n\r".split('').some(ch => token.includes(ch)),
+            );
+        if (!hasSingleTrailingRedirect) {
+            return unsupportedSpawnSyncResult('exec(shell syntax)');
         }
+        try {
+            const fsForRedirect = moduleExports.require('node:fs');
+            resolvedOptions.__wasmStdinData = fsForRedirect.readFileSync(tokens[redirectIndex + 1], 'utf8');
+        } catch (_) {
+            // Let the inline target observe empty stdin when the file is absent,
+            // matching the existing constrained adapter behavior.
+        }
+        tokens.splice(redirectIndex, 2);
+    } else if (hasUnsupportedJavaScriptShellSyntax(source)) {
+        return unsupportedSpawnSyncResult('exec(shell syntax)');
     }
 
     return spawnSync(tokens[0], tokens.slice(1), resolvedOptions);
@@ -1633,6 +1646,28 @@ function scheduleExecCallback(task) {
     setTimeout(task, 0);
 }
 
+function finishExecChild(child, callback, error, result) {
+    const spawnError = result && result.error ? result.error : null;
+    child.exitCode = spawnError && typeof spawnError.errno === 'number'
+        ? spawnError.errno
+        : (typeof result.status === 'number' ? result.status : null);
+    child.signalCode = result.signal;
+
+    scheduleExecCallback(function resolveExecChild() {
+        if (callback) {
+            callback(error, result.stdout, result.stderr);
+        }
+
+        if (spawnError) {
+            child.emit('error', spawnError);
+            child.emit('close', child.exitCode, child.signalCode);
+            return;
+        }
+        child.emit('exit', child.exitCode, child.signalCode);
+        child.emit('close', child.exitCode, child.signalCode);
+    });
+}
+
 // ChildProcess class stub
 export class ChildProcess {
     constructor() {
@@ -1706,22 +1741,7 @@ export function exec(command, options, callback) {
     const child = createExecChildProcess();
     const result = runExecCommand(command, normalized.options);
     const error = createExecError(command, result);
-    const spawnError = result && result.error ? result.error : null;
-
-    child.exitCode = typeof result.status === 'number' ? result.status : null;
-    child.signalCode = result.signal;
-
-    scheduleExecCallback(function resolveExec() {
-        if (normalized.callback) {
-            normalized.callback(error, result.stdout, result.stderr);
-        }
-
-        if (spawnError) {
-            child.emit('error', spawnError);
-        }
-        child.emit('exit', child.exitCode, child.signalCode);
-        child.emit('close', child.exitCode, child.signalCode);
-    });
+    finishExecChild(child, normalized.callback, error, result);
 
     return child;
 }
@@ -1737,24 +1757,9 @@ export function execFile(file, args, options, callback) {
 
     const result = spawnSync(String(file), normalized.args, resolvedOptions);
     const error = createExecFileError(file, normalized.args, result);
-    const spawnError = result && result.error ? result.error : null;
-
     child.spawnfile = String(file);
     child.spawnargs = [String(file)].concat(normalized.args);
-    child.exitCode = typeof result.status === 'number' ? result.status : null;
-    child.signalCode = result.signal;
-
-    scheduleExecCallback(function resolveExecFile() {
-        if (normalized.callback) {
-            normalized.callback(error, result.stdout, result.stderr);
-        }
-
-        if (spawnError) {
-            child.emit('error', spawnError);
-        }
-        child.emit('exit', child.exitCode, child.signalCode);
-        child.emit('close', child.exitCode, child.signalCode);
-    });
+    finishExecChild(child, normalized.callback, error, result);
 
     return child;
 }
