@@ -1663,20 +1663,24 @@ fn p3_rejects_methodless_exported_resource() -> anyhow::Result<()> {
         "export async function run() { return 1; }\n",
     )?;
 
+    let error = generate_p3(temp.path())
+        .expect_err("P3 generation must reject interface-owned methodless exported resources");
     assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject exported resources even when the resource has no functions"
+        format!("{error:#}").contains(
+            "Exported resources without any constructor, method, or static function are not supported by the WASI Preview 3 generation path (resource 'r')"
+        ),
+        "P3 generation must return an actionable error for an interface-owned methodless resource; got: {error:#}"
     );
     Ok(())
 }
 
 #[test]
-fn p3_rejects_methodless_exported_resource_alias() -> anyhow::Result<()> {
+fn p3_accepts_foreign_methodless_resource_alias_in_export() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
         indoc! {r#"
-            package bug:methodless-resource-alias;
+            package bug:foreign-resource-alias;
 
             interface resources {
               resource r;
@@ -1684,20 +1688,17 @@ fn p3_rejects_methodless_exported_resource_alias() -> anyhow::Result<()> {
 
             interface api {
               use resources.{r};
+              run: func(value: borrow<r>);
             }
 
-            world methodless-resource-alias {
+            world foreign-resource-alias {
               export api;
-              export run: async func() -> u32;
             }
         "#},
-        "export async function run() { return 1; }\n",
+        "export const api = { run(_value) {} };\n",
     )?;
 
-    assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject exported resources even when the exported interface re-exports the resource through a type alias"
-    );
+    generate_p3(temp.path())?;
     Ok(())
 }
 
