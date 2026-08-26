@@ -169,6 +169,7 @@ export async function runBinDirect() {
                 source: () => fs.readFileSync(binPath, 'utf8').split('\\n', 1)[0],
                 link: () => fs.readlinkSync(binPath),
                 realpath: () => fs.realpathSync(binPath),
+                mode: () => fs.statSync(binPath).mode & 0o777,
             })) {
                 try {
                     probe[name] = operation();

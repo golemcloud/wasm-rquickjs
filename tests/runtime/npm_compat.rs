@@ -1286,7 +1286,7 @@ async fn npm_run_shell_operator_reports_unsupported(
 }
 
 #[test]
-async fn npm_exec_local_bin_reports_persistent_symlink_gap(
+async fn npm_exec_local_bin_reports_persistent_bin_metadata_gap(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let mut instance = prepare_instance(compiled, Some("local-install")).await?;
@@ -1320,6 +1320,24 @@ async fn npm_exec_local_bin_reports_persistent_symlink_gap(
         anyhow::bail!("expected direct bin execution JSON result")
     };
     let direct_report: serde_json::Value = serde_json::from_str(&direct_json)?;
+    assert_eq!(
+        direct_report["value"]["probe"]["source"], "",
+        "{direct_report:#}"
+    );
+    assert_eq!(
+        direct_report["value"]["probe"]["realpath"], "/workspace/node_modules/.bin/fixture-bin",
+        "{direct_report:#}"
+    );
+    assert!(
+        direct_report["value"]["probe"]["link"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("EINVAL:")),
+        "{direct_report:#}"
+    );
+    assert_eq!(
+        direct_report["value"]["probe"]["mode"], 0o644,
+        "fresh execution must expose the second persistent .bin blocker: executable mode metadata is not retained: {direct_report:#}"
+    );
     assert_eq!(direct_report["value"]["code"], -38, "{direct_report:#}");
     assert_eq!(
         direct_report["value"]["events"],
@@ -1368,7 +1386,7 @@ async fn npm_exec_local_bin_reports_persistent_symlink_gap(
 }
 
 #[test]
-async fn npx_local_bin_reports_persistent_symlink_gap(
+async fn npx_local_bin_reports_persistent_bin_metadata_gap(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let mut instance = prepare_instance(compiled, Some("local-install")).await?;

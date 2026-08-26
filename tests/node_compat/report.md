@@ -8,19 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3217/4389 (73.3%)
+**Primary compatibility (CI-enforced):** 3215/4387 (73.3%)
+
+When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3217 | 73.3% | 55.9% | 46.8% |
+| ✅ passing (runnable) | 3215 | 73.3% | 55.9% | 46.8% |
 | 🧩 known gap | 1172 | 26.7% | 20.4% | 17.1% |
-| 🚫 WASI-impossible (excluded) | 1193 | — | 20.7% | 17.4% |
+| 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3217/5750 (55.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3215/5750 (55.9%)**.
 
 ## Inventory by Module
 
@@ -50,7 +52,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 373 | 12 | 21 | 5 | 0 | 71 | 96.9% | 90.8% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 231 | 286 | 299 | 2 | 0 | 80 | 44.7% | 28.2% |
+| http | 898 | 229 | 286 | 301 | 2 | 0 | 80 | 44.5% | 28.0% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 129 | 25 | 7 | 1 | 0 | 12 | 83.8% | 79.6% |
@@ -1334,7 +1336,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1193)
+### WASI-impossible (1195)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1441,6 +1443,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires FIPS-enabled OpenSSL build | 1 | `parallel/test-dsa-fips-invalid-key.js` |
 | requires HTTP CONNECT tunnel socket data forwarding; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-connect.js` |
 | requires HTTP CONNECT tunnel socket detachment; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-connect-req-res.js` |
+| requires HTTP CONNECT tunnel socket lifecycle semantics; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-after-connect.js` |
 | requires HTTP Upgrade socket takeover plus tls.TLSSocket, unavailable in WASI | 1 | `parallel/test-http-upgrade-reconsume-stream.js` |
 | requires HTTP/0.9 raw TCP responses (no headers), which wasi:http cannot represent | 1 | `parallel/test-http-response-no-headers.js` |
 | requires HTTPS server-side SNI behavior, unsupported by WASI transport | 1 | `parallel/test-https-agent-sni.js` |
@@ -1457,6 +1460,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires a custom Agent.createConnection raw-socket transport and queued socket reuse; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort-keep-alive-queued-tcp-socket.js` |
 | requires a custom Agent.createConnection raw-socket transport and socket reuse lifecycle; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort-keep-alive-destroy-res.js` |
 | requires a real subprocess with independent stack-size overflow handling | 1 | `parallel/test-stack-size-limit.js` |
+| requires an HTTP CONNECT tunnel socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-server-unconsume-consume.js` |
 | requires child_process IPC with inherited listening socket fd | 1 | `parallel/test-listen-fd-server.js` |
 | requires child_process.exec of external 'ab' binary | 1 | `parallel/test-http-full-response.js` |
 | requires child_process.exec subprocess behavior | 1 | `parallel/test-error-reporting.js` |

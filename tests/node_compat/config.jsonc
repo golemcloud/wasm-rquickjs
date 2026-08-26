@@ -4730,7 +4730,7 @@
         "block_06_block_06": {}
       }
     },
-    "parallel/test-http-server-unconsume-consume.js": {},
+    "parallel/test-http-server-unconsume-consume.js": { "category": "wasi-impossible", "reason": "requires an HTTP CONNECT tunnel socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-server-unconsume.js": {},
     "parallel/test-http-server-write-after-end.js": { "category": "known-gap", "reason": "ServerResponse.write() after end does not callback with ERR_STREAM_WRITE_AFTER_END" },
     "parallel/test-http-server-write-end-after-end.js": {},
@@ -4871,7 +4871,7 @@
     "parallel/test-process-warning.js": {},
 
     // Tests using ../common/countdown (HTTP server tests - skipped)
-    "parallel/test-http-after-connect.js": {},
+    "parallel/test-http-after-connect.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket lifecycle semantics; node:http outbound requests always use wasi:http" },
     "parallel/test-http-agent-maxsockets-respected.js": { "category": "known-gap", "reason": "http.Agent maxSockets enforcement and abort lifecycle can hang" },
     "parallel/test-http-agent-maxsockets.js": {},
     "parallel/test-http-agent-maxtotalsockets.js": { "category": "known-gap", "reason": "http.Agent maxTotalSockets bookkeeping is not Node-compatible" },
