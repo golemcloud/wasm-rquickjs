@@ -298,6 +298,10 @@ async fn npm_required_runtime_primitives(
         report["value"]["shellRejectsMisleadingShebang"], true,
         "{report:#}"
     );
+    assert_eq!(
+        report["value"]["shellRejectsDirectMisleadingShebang"], true,
+        "{report:#}"
+    );
     assert_eq!(report["value"]["zlibRoundTrip"], true, "{report:#}");
     assert_eq!(report["stderr"], "", "{report:#}");
     Ok(())

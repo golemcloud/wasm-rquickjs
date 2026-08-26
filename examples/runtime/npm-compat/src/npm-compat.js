@@ -293,18 +293,18 @@ export async function probePrimitives() {
             };
         `,
     });
-    const directShebang = await runJavaScript({
+    const runDirectShebang = async (command, expectedOutput) => runJavaScript({
         cwd: '/workspace',
         source: `
             const { createRequire } = await import('node:module');
             const require = createRequire('/workspace/direct-shebang-probe.cjs');
             const { spawnSync } = require('node:child_process');
-            const child = spawnSync('sh', ['-c', 'direct-node.cjs'], {
+            const child = spawnSync('sh', ['-c', ${JSON.stringify(command)}], {
                 cwd: '/workspace',
                 env: { PATH: '/workspace/shebang-bin' },
             });
             return {
-                ok: child.status === 0 && child.stdout.toString().trim() === 'direct-node:ok',
+                ok: child.status === 0 && child.stdout.toString().trim() === ${JSON.stringify(expectedOutput)},
                 status: child.status,
                 error: child.error && child.error.code,
                 stdout: child.stdout.toString(),
@@ -312,7 +312,27 @@ export async function probePrimitives() {
             };
         `,
     });
-    result.value.shellDirectNodeShebang = directShebang.value.ok;
-    result.value.directShellProbe = directShebang.value;
+    const relativeEnvShebang = await runDirectShebang(
+        './shebang-bin/env-node.cjs',
+        'env-node:ok',
+    );
+    const absoluteNodeShebang = await runDirectShebang(
+        '/workspace/shebang-bin/direct-node.cjs',
+        'direct-node:ok',
+    );
+    const directMisleadingShebang = await runDirectShebang(
+        './shebang-bin/not-node.cjs',
+        'not-node:bad',
+    );
+    result.value.shellDirectNodeShebang = relativeEnvShebang.value.ok &&
+        absoluteNodeShebang.value.ok;
+    result.value.shellRejectsDirectMisleadingShebang =
+        directMisleadingShebang.value.status === null &&
+        directMisleadingShebang.value.error === 'ENOSYS';
+    result.value.directShellProbe = {
+        relativeEnvShebang: relativeEnvShebang.value,
+        absoluteNodeShebang: absoluteNodeShebang.value,
+        directMisleadingShebang: directMisleadingShebang.value,
+    };
     return JSON.stringify(result);
 }

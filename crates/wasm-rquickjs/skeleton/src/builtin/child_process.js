@@ -1402,15 +1402,33 @@ function hasSupportedNodeShebang(line) {
         /^#![ \t]*\/(?:[^/\s]+\/)*env[ \t]+node[ \t]*$/.test(line);
 }
 
-function resolveNodeShebangCommand(command, env) {
+function resolveNodeShebangCommand(command, env, cwd) {
+    const workingDirectory = typeof cwd === 'string'
+        ? (path.isAbsolute(cwd) ? cwd : path.resolve(process.cwd(), cwd))
+        : process.cwd();
+    const fs = moduleExports.require('node:fs');
+
     if (command.indexOf('/') !== -1) {
-        return null;
+        const candidate = path.isAbsolute(command)
+            ? command
+            : path.resolve(workingDirectory, command);
+        try {
+            return hasSupportedNodeShebang(readShebangLine(fs, candidate))
+                ? fs.realpathSync(candidate)
+                : null;
+        } catch (error) {
+            if (!isPathLookupMiss(error)) throw error;
+            return null;
+        }
     }
+
     const pathValue = env && typeof env.PATH === 'string' ? env.PATH : '';
     const searchPaths = pathValue.split(path.delimiter).filter(Boolean);
-    const fs = moduleExports.require('node:fs');
     for (let i = 0; i < searchPaths.length; i++) {
-        const candidate = path.resolve(searchPaths[i], command);
+        const searchPath = path.isAbsolute(searchPaths[i])
+            ? searchPaths[i]
+            : path.resolve(workingDirectory, searchPaths[i]);
+        const candidate = path.resolve(searchPath, command);
         try {
             const shebang = readShebangLine(fs, candidate);
             if (hasSupportedNodeShebang(shebang)) {
@@ -1467,7 +1485,7 @@ function hasUnsupportedJavaScriptShellSyntax(command) {
     return escaping || quote !== null;
 }
 
-function resolveJavaScriptShellCommand(command, args, env) {
+function resolveJavaScriptShellCommand(command, args, env, cwd) {
     if (String(command) !== 'sh' || !Array.isArray(args) || args.length !== 2 || args[0] !== '-c') {
         return null;
     }
@@ -1488,7 +1506,7 @@ function resolveJavaScriptShellCommand(command, args, env) {
             args: tokens.slice(1),
         };
     }
-    const nodeBin = resolveNodeShebangCommand(tokens[0], env);
+    const nodeBin = resolveNodeShebangCommand(tokens[0], env, cwd);
     if (nodeBin === null) {
         return null;
     }
@@ -1893,6 +1911,7 @@ export function spawnSync(command, args, options) {
         String(command),
         normalizedArgs,
         normalizedOptions.env || process.env,
+        normalizedOptions.cwd,
     );
     const cmd = shellCommand ? shellCommand.command : String(command);
     const resolvedArgs = shellCommand ? shellCommand.args : normalizedArgs;
