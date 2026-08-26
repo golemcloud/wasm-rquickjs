@@ -345,6 +345,10 @@ async fn npm_required_runtime_primitives(
         "{report:#}"
     );
     assert_eq!(
+        report["value"]["execPreservesQuotedPipelineSyntax"], true,
+        "{report:#}"
+    );
+    assert_eq!(
         report["value"]["execRejectsShellSyntax"], true,
         "{report:#}"
     );

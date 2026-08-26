@@ -316,10 +316,20 @@ export async function probePrimitives() {
             const execFileFailure = await probeExecFailure(callback =>
                 execFile('wasm-rquickjs-missing-command', callback));
             const genericEnvCommand = process.execPath + ' -p "process.argv[1]" "' + '$' + '{EXEC_VALUE}"';
-            const genericEnvExpansion = await probeExecFailure(callback =>
-                exec(genericEnvCommand, { env: { EXEC_VALUE: 'generic-env' } }, callback));
-            const isEmptyOutput = value => value === '' ||
-                (Buffer.isBuffer(value) && value.length === 0);
+            const genericEnvValues = ['generic-env', 'a|b', 'a<b', 'a"b', 'a&&b', 'a$(b)'];
+            const genericEnvExpansions = await Promise.all(genericEnvValues.map(value =>
+                probeExecFailure(callback =>
+                    exec(genericEnvCommand, { env: { EXEC_VALUE: value } }, callback))));
+            const injectedEnvStructure = await probeExecFailure(callback =>
+                exec('$' + '{EXEC_COMMAND}', {
+                    env: { EXEC_COMMAND: 'echo ok | ' + process.execPath + ' -e "0"' },
+                }, callback));
+            const quotedPipePipeline = await probeExecFailure(callback =>
+                exec('echo ok | ' + process.execPath + ' -e "process.stdout.write(String(1|2))"', callback));
+            const redirectionProbe = '/workspace/redirection-probe.cjs';
+            const redirectionSideEffect = '/workspace/redirection-side-effect';
+            fs.writeFileSync(redirectionProbe,
+                'require("node:fs").writeFileSync("' + redirectionSideEffect + '", "partial")');
             const rejectedShellCommands = await Promise.all([
                 process.execPath + ' -e "process.stdout.write(\\"partial\\")" && ' + process.execPath + ' -e "0"',
                 process.execPath + ' -e "0" $UNSUPPORTED',
@@ -330,7 +340,7 @@ export async function probePrimitives() {
                 'echo ok | ' + process.execPath + ' -e "process.stdout.write(\\"partial\\")" && unsupported',
                 'echo ok | ' + process.execPath + ' -e "0" $UNSUPPORTED',
                 'echo ok | ' + process.execPath + ' -e "0" $(echo unsupported)',
-                process.execPath + ' -e "process.stdout.write(\\"partial\\")" < /workspace/missing-input',
+                process.execPath + ' ' + redirectionProbe + ' < /workspace/missing-input',
             ].map(command => probeExecFailure(callback => exec(command, callback))));
             const compressed = zlib.gzipSync('npm');
             return {
@@ -360,16 +370,25 @@ export async function probePrimitives() {
                     failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
                     failure.code === -38 && failure.exitCode === -38 &&
                     failure.events.join(',') === 'callback,error,close'),
-                execExpandsPresentBracedEnv: !genericEnvExpansion.callbackError &&
-                    genericEnvExpansion.stdout === 'generic-env\\n' &&
-                    genericEnvExpansion.stderr === '' &&
-                    genericEnvExpansion.events.join(',') === 'callback,exit,close',
+                execExpandsPresentBracedEnv: genericEnvExpansions.every((expansion, index) =>
+                    !expansion.callbackError &&
+                    expansion.stdout === genericEnvValues[index] + '\\n' &&
+                    expansion.stderr === '' &&
+                    expansion.events.join(',') === 'callback,exit,close') &&
+                    injectedEnvStructure.callbackError &&
+                    injectedEnvStructure.callbackError.code === 'ENOSYS' &&
+                    injectedEnvStructure.stdout === '',
+                execPreservesQuotedPipelineSyntax: !quotedPipePipeline.callbackError &&
+                    quotedPipePipeline.stdout === '3' &&
+                    quotedPipePipeline.stderr === '' &&
+                    quotedPipePipeline.events.join(',') === 'callback,exit,close',
                 execRejectsShellSyntax: rejectedShellCommands.every(failure =>
                     failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
                     failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
                     failure.code === -38 && failure.exitCode === -38 &&
-                    isEmptyOutput(failure.stdout) &&
-                    failure.events.join(',') === 'callback,error,close'),
+                    failure.stdout === '' && failure.stderr === '' &&
+                    failure.events.join(',') === 'callback,error,close') &&
+                    !fs.existsSync(redirectionSideEffect),
                 shellProbe: Object.fromEntries(Object.entries({ envNode, notNode }).map(
                     ([name, result]) => [name, {
                         status: result.status,

@@ -102,6 +102,18 @@ function convertOutputValue(output, encoding) {
     return output;
 }
 
+function convertSpawnResultEncoding(result, options) {
+    const encoding = getOutputEncoding(options);
+    if (!encoding || encoding === 'buffer') return result;
+
+    if (Buffer.isBuffer(result.stdout)) result.stdout = result.stdout.toString(encoding);
+    if (Buffer.isBuffer(result.stderr)) result.stderr = result.stderr.toString(encoding);
+    if (Array.isArray(result.output)) {
+        result.output = [result.output[0], result.stdout, result.stderr];
+    }
+    return result;
+}
+
 function buildOutputResult(capturedStdout, capturedStderr, status, encoding) {
     const rawStdout = Buffer.from(capturedStdout);
     const rawStderr = Buffer.from(capturedStderr);
@@ -1187,12 +1199,51 @@ function normalizeExecFileParams(args, options, callback) {
 }
 
 function expandTemplateEnvRefs(command, env) {
-    return String(command).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (placeholder, name) => {
-        if (!env || !Object.prototype.hasOwnProperty.call(env, name)) {
-            return placeholder;
+    const source = String(command);
+    let expanded = '';
+    let quote = null;
+
+    for (let i = 0; i < source.length; i++) {
+        const ch = source[i];
+        if (ch === '\\' && quote !== "'") {
+            expanded += ch;
+            if (i + 1 < source.length) expanded += source[++i];
+            continue;
         }
-        return String(env[name]);
-    });
+        if (ch === "'" && quote !== '"') {
+            quote = quote === "'" ? null : "'";
+            expanded += ch;
+            continue;
+        }
+        if (ch === '"' && quote !== "'") {
+            quote = quote === '"' ? null : '"';
+            expanded += ch;
+            continue;
+        }
+        if (ch !== '$' || quote === "'" || source[i + 1] !== '{') {
+            expanded += ch;
+            continue;
+        }
+
+        const match = /^\{([A-Za-z_][A-Za-z0-9_]*)\}/.exec(source.slice(i + 1));
+        if (!match || !env || !Object.prototype.hasOwnProperty.call(env, match[1])) {
+            expanded += ch;
+            continue;
+        }
+        const value = env[match[1]] === undefined ? '' : String(env[match[1]]);
+        if (quote === '"') {
+            expanded += value.replace(/[\\"$`]/g, '\\$&');
+        } else {
+            // Supporting general unquoted field splitting would require a real
+            // shell. Accept only values that cannot manufacture token or
+            // control structure when the constrained parser sees them.
+            if (!/^[A-Za-z0-9_./:@%+,=-]*$/.test(value)) return null;
+            expanded += value;
+        }
+        i += match[0].length;
+    }
+
+    return expanded;
 }
 
 function splitCommandTokens(command) {
@@ -1278,10 +1329,37 @@ function splitCommandTokens(command) {
     return tokens;
 }
 
+function findUnquotedPipe(command) {
+    const source = String(command);
+    let quote = null;
+    let escaping = false;
+    for (let i = 0; i < source.length; i++) {
+        const ch = source[i];
+        if (escaping) {
+            escaping = false;
+            continue;
+        }
+        if (ch === '\\' && quote !== "'") {
+            escaping = true;
+            continue;
+        }
+        if (ch === "'" && quote !== '"') {
+            quote = quote === "'" ? null : "'";
+            continue;
+        }
+        if (ch === '"' && quote !== "'") {
+            quote = quote === '"' ? null : '"';
+            continue;
+        }
+        if (ch === '|' && quote === null) return i;
+    }
+    return -1;
+}
+
 function parseEchoPipeline(command) {
     const expandedCommand = String(command);
-    const pipeIndex = expandedCommand.indexOf('|');
-    if (pipeIndex === -1 || pipeIndex !== expandedCommand.lastIndexOf('|')) {
+    const pipeIndex = findUnquotedPipe(expandedCommand);
+    if (pipeIndex === -1) {
         return null;
     }
 
@@ -1346,15 +1424,28 @@ function runExecCommand(command, options) {
         resolvedOptions.encoding = 'utf8';
     }
 
+    if (source === null) {
+        return convertSpawnResultEncoding(
+            unsupportedSpawnSyncResult('exec(environment expansion)'),
+            resolvedOptions,
+        );
+    }
+
     const pipeline = parseEchoPipeline(source);
     if (pipeline) {
         resolvedOptions.__wasmStdinData = pipeline.stdinData;
-        return spawnSync(pipeline.command, pipeline.args, resolvedOptions);
+        return convertSpawnResultEncoding(
+            spawnSync(pipeline.command, pipeline.args, resolvedOptions),
+            resolvedOptions,
+        );
     }
 
     const tokens = splitCommandTokens(source);
     if (!tokens || tokens.length === 0) {
-        return unsupportedSpawnSyncResult('exec(empty command)');
+        return convertSpawnResultEncoding(
+            unsupportedSpawnSyncResult('exec(empty command)'),
+            resolvedOptions,
+        );
     }
 
     // Preserve the one data-only redirection form required by the compatibility
@@ -1370,20 +1461,32 @@ function runExecCommand(command, options) {
                 !Array.from(token).some(ch => shellMetacharacters.includes(ch)),
             );
         if (!hasSingleTrailingRedirect) {
-            return unsupportedSpawnSyncResult('exec(shell syntax)');
+            return convertSpawnResultEncoding(
+                unsupportedSpawnSyncResult('exec(shell syntax)'),
+                resolvedOptions,
+            );
         }
         try {
             const fsForRedirect = moduleExports.require('node:fs');
             resolvedOptions.__wasmStdinData = fsForRedirect.readFileSync(tokens[redirectIndex + 1], 'utf8');
         } catch (_) {
-            return unsupportedSpawnSyncResult('exec(stdin redirection)');
+            return convertSpawnResultEncoding(
+                unsupportedSpawnSyncResult('exec(stdin redirection)'),
+                resolvedOptions,
+            );
         }
         tokens.splice(redirectIndex, 2);
     } else if (hasUnsupportedJavaScriptShellSyntax(source)) {
-        return unsupportedSpawnSyncResult('exec(shell syntax)');
+        return convertSpawnResultEncoding(
+            unsupportedSpawnSyncResult('exec(shell syntax)'),
+            resolvedOptions,
+        );
     }
 
-    return spawnSync(tokens[0], tokens.slice(1), resolvedOptions);
+    return convertSpawnResultEncoding(
+        spawnSync(tokens[0], tokens.slice(1), resolvedOptions),
+        resolvedOptions,
+    );
 }
 
 const MAX_SHEBANG_BYTES = 4096;
@@ -1760,7 +1863,10 @@ export function execFile(file, args, options, callback) {
         resolvedOptions.encoding = 'utf8';
     }
 
-    const result = spawnSync(String(file), normalized.args, resolvedOptions);
+    const result = convertSpawnResultEncoding(
+        spawnSync(String(file), normalized.args, resolvedOptions),
+        resolvedOptions,
+    );
     const error = createExecFileError(file, normalized.args, result);
     child.spawnfile = String(file);
     child.spawnargs = [String(file)].concat(normalized.args);
