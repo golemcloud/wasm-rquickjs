@@ -1,13 +1,14 @@
+// A wasm32 component can address at most 2^32 bytes of linear memory. This is
+// an effective component-wide ceiling, not a reservation or per-runtime quota.
+const WASM32_LINEAR_MEMORY_CEILING_BYTES: i64 = 1_i64 << 32;
+
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use crate::internal::runtime_services::RuntimeServices;
-    use rquickjs::Ctx;
+    use super::WASM32_LINEAR_MEMORY_CEILING_BYTES;
 
     #[rquickjs::function]
-    pub fn heap_size_limit(ctx: Ctx<'_>) -> i64 {
-        ctx.userdata::<RuntimeServices>()
-            .expect("runtime services not initialized")
-            .heap_size_limit as i64
+    pub fn heap_size_limit() -> i64 {
+        WASM32_LINEAR_MEMORY_CEILING_BYTES
     }
 }
 

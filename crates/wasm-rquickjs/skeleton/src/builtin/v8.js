@@ -9,6 +9,9 @@ export function getHeapStatistics() {
         total_physical_size: 0,
         total_available_size: 0,
         used_heap_size: 0,
+        // QuickJS itself is left unlimited. The native bridge reports the
+        // component-wide wasm32 address-space ceiling required by consumers
+        // such as npm Arborist; it is not guaranteed memory for this runtime.
         heap_size_limit: heapSizeLimit(),
         malloced_memory: 0,
         peak_malloced_memory: 0,
