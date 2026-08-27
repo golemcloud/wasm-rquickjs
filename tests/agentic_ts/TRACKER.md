@@ -25,5 +25,7 @@ Baseline: 2026-08-27, Apple arm64, Node 22.14.0/npm 10.9.2/TypeScript
 `results/2026-08-27-p3-macos-aarch64.json`. Node comparison currently covers the
 same cold core-project `--noEmit` command; cells marked `—` were not separately
 benchmarked on Node in this first report. These reports use dev-profile guest
-components; P2 uses Golem's Wasmtime fork and P3 uses stock Wasmtime, so the two
-columns do not isolate the preview-version variable.
+components and mirror the canonical runtime profiles: P2 with Golem's Wasmtime
+fork and P3 with stock Wasmtime. Each column is an independent regression
+baseline; comparing them does not isolate the preview level or Wasmtime
+distribution.

@@ -8,6 +8,11 @@ observations. QuickJS samples are snapshots before tool loading and after the
 compiler finishes; they complement, but do not replace, the outer linear-memory
 growth observation.
 
+The reports cover the repository's canonical runtime profiles: P2 with the
+Golem Wasmtime fork and P3 with stock Wasmtime. Each profile is an independent
+regression baseline. Differences between them cannot be attributed solely to
+the WASI preview level or to the Wasmtime distribution.
+
 Do not compare reports produced with different prepared-component, Wasmtime,
 artifact-cache, or unoptimized settings without calling out those differences.
 

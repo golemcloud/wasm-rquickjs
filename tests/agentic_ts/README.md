@@ -68,7 +68,9 @@ the component instance and cannot reveal allocations that fit inside memory
 reserved by an earlier workload. A successful job after every exceptional
 series verifies that execution capacity was reclaimed.
 
-The initial reports use dev-profile guest components. P2 also uses Golem's
-Wasmtime fork while P3 uses stock Wasmtime, so their columns are compatibility
-and local-regression baselines, not an isolated measurement of the preview
-version or a production performance comparison.
+The initial reports use dev-profile guest components and mirror the repository's
+canonical runtime profiles: P2 with Golem's Wasmtime fork and P3 with stock
+Wasmtime. Treat each profile as its own compatibility and local-regression
+baseline. A cross-profile comparison does not isolate either the WASI preview
+level or the Wasmtime distribution and is not a production performance
+comparison.

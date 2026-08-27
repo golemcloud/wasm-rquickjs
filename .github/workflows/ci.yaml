@@ -49,13 +49,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # The PR checkout is a synthetic merge commit. Its first parent is
+          # needed only to select changed reports; report currentness uses the
+          # reports' BLAKE3 content hashes rather than Git identity.
           fetch-depth: 2
       - uses: ./.github/actions/setup
       - name: Prepare pristine agentic TypeScript hash inputs
         run: git worktree add --detach "$RUNNER_TEMP/agentic-ts-source" HEAD
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
-      - name: Agentic TypeScript report contracts
+      # Validation mode checks committed report contracts and changed-report
+      # content hashes; the manual measurement workloads do not run in CI.
+      - name: Validate agentic TypeScript reports
         shell: bash
         env:
           AGENTIC_TS_SOURCE_ROOT: ${{ runner.temp }}/agentic-ts-source
