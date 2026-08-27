@@ -874,7 +874,8 @@ export async function readdir(path, options) {
             all.push(entry);
             const subPath = pathString + '/' + entry;
             try {
-                // Node's string-mode recursive readdir follows directory symlinks.
+                // Deliberately use stat: unlike withFileTypes mode, Node follows
+                // directory symlinks for recursive string results.
                 const st = native.fs_stat(subPath);
                 if (!st.error && st.stat.isDirectory) {
                     const subEntries = await readdir(subPath, { recursive: true });

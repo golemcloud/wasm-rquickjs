@@ -1277,7 +1277,8 @@ export let readdirSync = function readdirSync(path, options) {
             all.push(entry);
             const subPath = path + '/' + entry;
             try {
-                // Node's string-mode recursive readdir follows directory symlinks.
+                // Deliberately use stat: unlike withFileTypes mode, Node follows
+                // directory symlinks for recursive string results.
                 const st = native.fs_stat(subPath);
                 if (!st.error && st.stat.isDirectory) {
                     const subEntries = readdirSync(subPath, { recursive: true });
@@ -2234,7 +2235,8 @@ export let readdir = function readdir(path, optionsOrCallback, callback) {
                         for (const entry of result) {
                             const subPath = path + '/' + entry;
                             try {
-                                // Node's string-mode recursive readdir follows directory symlinks.
+                                // Deliberately use stat: unlike withFileTypes mode, Node follows
+                                // directory symlinks for recursive string results.
                                 const st = native.fs_stat(subPath);
                                 if (!st.error && st.stat.isDirectory) {
                                     pending++;
