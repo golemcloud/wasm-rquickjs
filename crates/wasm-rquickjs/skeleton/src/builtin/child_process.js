@@ -1584,7 +1584,13 @@ function isPathLookupMiss(error) {
 
 function readShebangLine(fs, candidate) {
     const candidateStat = fs.statSync(candidate);
-    if (!candidateStat.isFile() || (candidateStat.mode & 0o111) === 0) {
+    // WASI filesystem metadata has no executable permission bits. npm's
+    // portable bin representation is a symlink to a JavaScript entry point,
+    // so accept that link shape while retaining the executable-bit check for
+    // direct regular files.
+    const linkedLauncher = fs.lstatSync(candidate).isSymbolicLink();
+    if (!candidateStat.isFile() ||
+        (!linkedLauncher && (candidateStat.mode & 0o111) === 0)) {
         return null;
     }
 
@@ -1593,7 +1599,8 @@ function readShebangLine(fs, candidate) {
         // Recheck the opened object so a replaced path cannot turn a validated
         // script into a different regular file before the bounded read.
         const openedStat = fs.fstatSync(fd);
-        if (!openedStat.isFile() || (openedStat.mode & 0o111) === 0) {
+        if (!openedStat.isFile() ||
+            (!linkedLauncher && (openedStat.mode & 0o111) === 0)) {
             return null;
         }
         const prefix = Buffer.allocUnsafe(MAX_SHEBANG_BYTES);

@@ -92,52 +92,6 @@ fn npm_debug_logs(instance: &TestInstance) -> String {
         .join("\n")
 }
 
-async fn assert_persistent_bin_metadata_gap(instance: &mut TestInstance) -> anyhow::Result<()> {
-    let bin_path = instance
-        .temp_dir_path()
-        .join("workspace/node_modules/.bin/fixture-bin");
-    anyhow::ensure!(
-        bin_path.exists(),
-        "npm ci did not create the local package bin"
-    );
-    let direct = instance.invoke(None, "run-bin-direct", &[]).await?;
-    let Some(Val::String(direct_json)) = direct else {
-        anyhow::bail!("expected direct bin execution JSON result")
-    };
-    let direct_report: serde_json::Value = serde_json::from_str(&direct_json)?;
-    assert_eq!(
-        direct_report["value"]["probe"]["source"], "",
-        "{direct_report:#}"
-    );
-    assert_eq!(
-        direct_report["value"]["probe"]["realpath"], "/workspace/node_modules/.bin/fixture-bin",
-        "{direct_report:#}"
-    );
-    assert!(
-        direct_report["value"]["probe"]["link"]
-            .as_str()
-            .is_some_and(|value| value.starts_with("EINVAL:")),
-        "{direct_report:#}"
-    );
-    assert_eq!(
-        direct_report["value"]["probe"]["mode"], 0o644,
-        "fresh execution must expose the second persistent .bin blocker: executable mode metadata is not retained: {direct_report:#}"
-    );
-    assert_eq!(direct_report["value"]["code"], -38, "{direct_report:#}");
-    assert_eq!(
-        direct_report["value"]["events"],
-        serde_json::json!(["error", "close"]),
-        "{direct_report:#}"
-    );
-    assert!(
-        direct_report["value"]["error"]
-            .as_str()
-            .is_some_and(|value| value.contains("ENOSYS:spawnSync(sh)")),
-        "{direct_report:#}"
-    );
-    Ok(())
-}
-
 async fn start_registry_server(tarball: Vec<u8>) -> anyhow::Result<(u16, TestServerHandle)> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
@@ -1514,8 +1468,6 @@ async fn npx_runs_persistent_local_bin(
     };
     let ci_report: serde_json::Value = serde_json::from_str(&ci_json)?;
     assert_eq!(ci_report["value"]["exitCode"], 0, "{ci_report:#}");
-    assert_persistent_bin_metadata_gap(&mut instance).await?;
-
     let execution = instance
         .invoke(
             None,
