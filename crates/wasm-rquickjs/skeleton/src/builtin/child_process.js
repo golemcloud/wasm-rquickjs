@@ -1201,6 +1201,7 @@ function normalizeExecFileParams(args, options, callback) {
 const SHELL_METACHARACTERS = "|;&<>$`(){}*?[]~#\n";
 const DOUBLE_QUOTED_EXPANSION_MARKERS = '$`';
 const UNQUOTED_ENV_GLOB_CHARACTERS = '*?[';
+// Glob characters and newline are handled by earlier expansion branches.
 const UNQUOTED_ENV_ESCAPE_CHARACTERS = "\\'\"" + SHELL_METACHARACTERS;
 const DOUBLE_QUOTED_ENV_ESCAPE_CHARACTERS = '\\"$`';
 
@@ -1297,6 +1298,13 @@ function splitCommandTokenRecords(command) {
 
         if (escaping) {
             current += ch;
+            // A real shell removes a backslash-newline continuation. This
+            // constrained parser cannot reproduce that behavior, so retain
+            // provenance that makes every supported redirect shape fail closed.
+            if (ch === '\n') {
+                currentUnescapedShellCharacters.push(ch);
+                unescapedShellCharacters.push(ch);
+            }
             tokenActive = true;
             escaping = false;
             continue;

@@ -316,7 +316,10 @@ export async function probePrimitives() {
             const execFileFailure = await probeExecFailure(callback =>
                 execFile('wasm-rquickjs-missing-command', callback));
             const genericEnvCommand = process.execPath + ' -p "process.argv[1]" "' + '$' + '{EXEC_VALUE}"';
-            const genericEnvValues = ['generic-env', 'a|b', 'a<b', 'a"b', 'a&&b', 'a$(b)'];
+            const backtick = String.fromCharCode(96);
+            const genericEnvValues = [
+                'generic-env', 'a|b', 'a<b', 'a"b', 'a&&b', 'a$(b)', 'a' + backtick + 'b',
+            ];
             const genericEnvExpansions = await Promise.all(genericEnvValues.map(value =>
                 probeExecFailure(callback =>
                     exec(genericEnvCommand, { env: { EXEC_VALUE: value } }, callback))));
@@ -328,7 +331,7 @@ export async function probePrimitives() {
                     }, callback))));
             const unquotedEnvFields = [
                 'a;b', 'c|d', 'a"b', '$(x)', '<', '>',
-                'a' + String.fromCharCode(92) + 'b', '~',
+                'a' + backtick + 'b', 'a' + String.fromCharCode(92) + 'b', '~',
                 'a' + String.fromCharCode(13) + 'b',
             ];
             const unquotedEnvData = await Promise.all(unquotedEnvFields.map(value =>
@@ -349,11 +352,11 @@ export async function probePrimitives() {
             const derivedRedirectToken = await probeExecFailure(callback =>
                 exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE} ' +
                     envRedirectInput, { env: { EXEC_VALUE: '<' } }, callback));
-            const backtick = String.fromCharCode(96);
             const rejectedRedirectCommands = await Promise.all([
                 process.execPath + ' -e "$(x)" < ' + envRedirectInput,
                 process.execPath + ' -e "' + backtick + 'x' + backtick + '" < ' + envRedirectInput,
                 process.execPath + ' -e "\${MISSING}" < ' + envRedirectInput,
+                process.execPath + ' -e "0" ' + '\\\\' + '\\ncontinued < ' + envRedirectInput,
             ].map(command => probeExecFailure(callback => exec(command, callback))));
             const injectedEnvStructure = await probeExecFailure(callback =>
                 exec('$' + '{EXEC_COMMAND}', {
@@ -426,6 +429,7 @@ export async function probePrimitives() {
                     !derivedRedirectToken.callbackError &&
                     derivedRedirectToken.stdout === JSON.stringify(['<', envRedirectInput]) + '\\n' &&
                     derivedRedirectToken.stderr === '' &&
+                    derivedRedirectToken.events.join(',') === 'callback,exit,close' &&
                     rejectedRedirectCommands.every(expansion =>
                         expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
                         expansion.stdout === '' && expansion.stderr === '') &&
