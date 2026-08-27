@@ -320,10 +320,12 @@ export async function probePrimitives() {
             const genericEnvExpansions = await Promise.all(genericEnvValues.map(value =>
                 probeExecFailure(callback =>
                     exec(genericEnvCommand, { env: { EXEC_VALUE: value } }, callback))));
-            const splitEnvArguments = await probeExecFailure(callback =>
-                exec(process.execPath + ' \${EXEC_ARGS} 42', {
-                    env: { EXEC_ARGS: '-p -e' },
-                }, callback));
+            const splitEnvArgumentValues = ['-p -e', '-p\\t-e', '-p\\n-e'];
+            const splitEnvArguments = await Promise.all(splitEnvArgumentValues.map(value =>
+                probeExecFailure(callback =>
+                    exec(process.execPath + ' \${EXEC_ARGS} 42', {
+                        env: { EXEC_ARGS: value },
+                    }, callback))));
             const unquotedEnvFields = [
                 'a;b', 'c|d', 'a"b', '$(x)', '<', '>',
                 'a' + String.fromCharCode(92) + 'b', '~',
@@ -335,11 +337,24 @@ export async function probePrimitives() {
                         env: { EXEC_VALUE: value },
                     }, callback))));
             const rejectedEnvExpansions = await Promise.all([
+                // NUL currently fails closed with ENOSYS. Node-style
+                // synchronous validation across every spawn path is separate.
                 '*', '?', '[x]', 'a' + String.fromCharCode(0) + 'b',
             ].map(value => probeExecFailure(callback =>
                 exec(process.execPath + ' -p 42 \${EXEC_VALUE}', {
                     env: { EXEC_VALUE: value },
                 }, callback))));
+            const envRedirectInput = '/workspace/env-redirect-input';
+            fs.writeFileSync(envRedirectInput, 'must-not-be-consumed');
+            const derivedRedirectToken = await probeExecFailure(callback =>
+                exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE} ' +
+                    envRedirectInput, { env: { EXEC_VALUE: '<' } }, callback));
+            const backtick = String.fromCharCode(96);
+            const rejectedRedirectCommands = await Promise.all([
+                process.execPath + ' -e "$(x)" < ' + envRedirectInput,
+                process.execPath + ' -e "' + backtick + 'x' + backtick + '" < ' + envRedirectInput,
+                process.execPath + ' -e "\${MISSING}" < ' + envRedirectInput,
+            ].map(command => probeExecFailure(callback => exec(command, callback))));
             const injectedEnvStructure = await probeExecFailure(callback =>
                 exec('$' + '{EXEC_COMMAND}', {
                     env: { EXEC_COMMAND: 'echo ok | ' + process.execPath + ' -e "0"' },
@@ -395,10 +410,11 @@ export async function probePrimitives() {
                     expansion.stdout === genericEnvValues[index] + '\\n' &&
                     expansion.stderr === '' &&
                     expansion.events.join(',') === 'callback,exit,close') &&
-                    !splitEnvArguments.callbackError &&
-                    splitEnvArguments.stdout === '42\\n' &&
-                    splitEnvArguments.stderr === '' &&
-                    splitEnvArguments.events.join(',') === 'callback,exit,close' &&
+                    splitEnvArguments.every(expansion =>
+                        !expansion.callbackError &&
+                        expansion.stdout === '42\\n' &&
+                        expansion.stderr === '' &&
+                        expansion.events.join(',') === 'callback,exit,close') &&
                     unquotedEnvData.every((expansion, index) =>
                         !expansion.callbackError &&
                         expansion.stdout === JSON.stringify([unquotedEnvFields[index]]) + '\\n' &&
@@ -407,12 +423,22 @@ export async function probePrimitives() {
                     rejectedEnvExpansions.every(expansion =>
                         expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
                         expansion.stdout === '' && expansion.stderr === '') &&
+                    !derivedRedirectToken.callbackError &&
+                    derivedRedirectToken.stdout === JSON.stringify(['<', envRedirectInput]) + '\\n' &&
+                    derivedRedirectToken.stderr === '' &&
+                    rejectedRedirectCommands.every(expansion =>
+                        expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
+                        expansion.stdout === '' && expansion.stderr === '') &&
                     injectedEnvStructure.callbackError &&
                     injectedEnvStructure.callbackError.code === 'ENOSYS' &&
                     injectedEnvStructure.stdout === '',
                 execEnvProbe: Object.fromEntries(Object.entries({
-                    splitEnvArguments,
+                    derivedRedirectToken,
                     injectedEnvStructure,
+                    ...Object.fromEntries(splitEnvArguments.map(
+                        (expansion, index) => ['split' + index, expansion])),
+                    ...Object.fromEntries(rejectedRedirectCommands.map(
+                        (expansion, index) => ['redirectRejected' + index, expansion])),
                     ...Object.fromEntries(unquotedEnvData.map(
                         (expansion, index) => ['unquoted' + index, expansion])),
                     ...Object.fromEntries(rejectedEnvExpansions.map(

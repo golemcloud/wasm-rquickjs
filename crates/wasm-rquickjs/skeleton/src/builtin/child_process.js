@@ -1198,6 +1198,20 @@ function normalizeExecFileParams(args, options, callback) {
     };
 }
 
+const SHELL_METACHARACTERS = "|;&<>$`(){}*?[]~#\n";
+const DOUBLE_QUOTED_EXPANSION_MARKERS = '$`';
+const UNQUOTED_ENV_GLOB_CHARACTERS = '*?[';
+const UNQUOTED_ENV_ESCAPE_CHARACTERS = "\\'\"" + SHELL_METACHARACTERS;
+const DOUBLE_QUOTED_ENV_ESCAPE_CHARACTERS = '\\"$`';
+
+function escapeEnvValueCharacters(value, characters) {
+    let escaped = '';
+    for (const ch of value) {
+        escaped += characters.includes(ch) ? '\\' + ch : ch;
+    }
+    return escaped;
+}
+
 function expandTemplateEnvRefs(command, env) {
     const source = String(command);
     let expanded = '';
@@ -1233,7 +1247,7 @@ function expandTemplateEnvRefs(command, env) {
         const value = env[match[1]] === undefined ? '' : String(env[match[1]]);
         if (value.includes('\0')) return null;
         if (quote === '"') {
-            expanded += value.replace(/[\\"$`]/g, '\\$&');
+            expanded += escapeEnvValueCharacters(value, DOUBLE_QUOTED_ENV_ESCAPE_CHARACTERS);
         } else {
             // A POSIX shell applies field splitting to an unquoted expansion,
             // but does not parse characters produced by that expansion as new
@@ -1241,11 +1255,11 @@ function expandTemplateEnvRefs(command, env) {
             // parser using the default space/tab/newline IFS. Pathname
             // expansion is not implemented, so glob-shaped values fail closed.
             for (const valueChar of value) {
-                if ('*?['.includes(valueChar)) return null;
+                if (UNQUOTED_ENV_GLOB_CHARACTERS.includes(valueChar)) return null;
                 if (valueChar === ' ' || valueChar === '\t' ||
                     valueChar === '\n') {
                     expanded += ' ';
-                } else if ("\\'\"|;&<>$`(){}]~#".includes(valueChar)) {
+                } else if (UNQUOTED_ENV_ESCAPE_CHARACTERS.includes(valueChar)) {
                     expanded += '\\' + valueChar;
                 } else {
                     expanded += valueChar;
@@ -1257,8 +1271,6 @@ function expandTemplateEnvRefs(command, env) {
 
     return expanded;
 }
-
-const SHELL_METACHARACTERS = "|;&<>$`(){}*?[]~#\n";
 
 function splitCommandTokenRecords(command) {
     const text = String(command);
@@ -1344,6 +1356,10 @@ function splitCommandTokenRecords(command) {
         }
 
         current += ch;
+        if (DOUBLE_QUOTED_EXPANSION_MARKERS.includes(ch)) {
+            currentUnescapedShellCharacters.push(ch);
+            unescapedShellCharacters.push(ch);
+        }
         tokenActive = true;
     }
 
@@ -1363,11 +1379,11 @@ function splitCommandTokens(command) {
     return tokenization && tokenization.records.map(record => record.value);
 }
 
-function findUnquotedCharacter(command, target) {
+function findUnquotedCharacter(command, target, start = 0) {
     const source = String(command);
     let quote = null;
     let escaping = false;
-    for (let i = 0; i < source.length; i++) {
+    for (let i = start; i < source.length; i++) {
         const ch = source[i];
         if (escaping) {
             escaping = false;
@@ -1394,17 +1410,15 @@ function splitOnUnquotedCharacter(command, target) {
     const source = String(command);
     const parts = [];
     let offset = 0;
-    while (offset <= source.length) {
-        const relativeIndex = findUnquotedCharacter(source.slice(offset), target);
-        if (relativeIndex === -1) {
+    while (true) {
+        const index = findUnquotedCharacter(source, target, offset);
+        if (index === -1) {
             parts.push(source.slice(offset));
             return parts;
         }
-        const index = offset + relativeIndex;
         parts.push(source.slice(offset, index));
         offset = index + 1;
     }
-    return parts;
 }
 
 function parseEchoPipeline(command) {
@@ -1654,7 +1668,7 @@ function hasUnsupportedJavaScriptShellSyntax(command) {
         if (quote === '"') {
             if (ch === '"') {
                 quote = null;
-            } else if (ch === '$' || ch === '`') {
+            } else if (DOUBLE_QUOTED_EXPANSION_MARKERS.includes(ch)) {
                 return true;
             }
             continue;
@@ -1663,7 +1677,7 @@ function hasUnsupportedJavaScriptShellSyntax(command) {
             quote = ch;
             continue;
         }
-        if (ch === '\n' || "|;&<>$`(){}*?[]~#".includes(ch)) {
+        if (SHELL_METACHARACTERS.includes(ch)) {
             return true;
         }
     }
