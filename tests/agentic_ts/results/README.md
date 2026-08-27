@@ -12,8 +12,9 @@ Do not compare reports produced with different prepared-component, Wasmtime,
 artifact-cache, or unoptimized settings without calling out those differences.
 
 The checked-in macOS arm64 P2/P3 reports are the initial five-sample baseline
-for GOL-426. Each report records a commit hint, dirty state, BLAKE3 composite
-hashes for build and benchmark inputs, and the exact optimized component hash.
+for GOL-426, refreshed after review on 2026-08-27. Each report records a commit
+hint, dirty state, BLAKE3 composite hashes for build and benchmark inputs, and
+the exact optimized component hash.
 `run.sh --check` validates every historical report and requires each P2/P3 pair
 to share the input hashes without resolving Git history. `run.sh
 --check-current` additionally compares selected reports with the current

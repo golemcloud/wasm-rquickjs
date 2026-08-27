@@ -1,16 +1,16 @@
 {
   "component": {
-    "blake3": "9f485c9b3d3a3c26817a7d3defe08bc748d3c81fe7aca771c41f93f7bd11cabb",
-    "buildMs": 28594.859584,
-    "bytes": 150035728,
-    "instantiateMs": 14270.223209,
-    "path": "tmp/rt-target-p3/wasm32-wasip2/debug/agentic_ts.optimized.wasm"
+    "blake3": "dde6ee322b29c37d316c4c2d3596192465bc35e7c73afc182b6750027f1df261",
+    "buildMs": 70663.534958,
+    "bytes": 149964640,
+    "path": "tmp/rt-target-p3/wasm32-wasip2/debug/agentic_ts.optimized.wasm",
+    "prepareAndInstantiateMs": 14891.239084
   },
   "environment": {
     "arch": "aarch64",
     "artifactCache": null,
     "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
-    "commitHint": "c40bf8cc5f243cc7f8c0a19f52ef3b1bb127a2bd",
+    "commitHint": "390eea438e0655ef0769371b2257ad20b6f12000",
     "dirty": true,
     "iterations": 5,
     "node": "22.14.0",
@@ -24,91 +24,91 @@
   },
   "inputs": {
     "algorithm": "blake3-composite-v1",
-    "benchmarkHash": "b6349343d25aa92f47ac9a5ef7c7490bb3387d82a7e54ca94dd084788ab55acd",
-    "buildHash": "2151a2b35d4a576c70eb1a8ca8001cae77a24cd4262a395efaafdf5ae2244fbe"
+    "benchmarkHash": "e8621c1a9e1c67231d50f3623fb727313db67bc18ab49801c70ae6ffbbf2bc25",
+    "buildHash": "7191163f98b5a27fa77b1cd640f7db24d672f5d024088c67bc004c882a68e9e1"
   },
   "nodeBaseline": {
     "exitCode": 0,
     "stderr": "",
     "stdout": "",
-    "wallMs": 550.455875
+    "wallMs": 600.463542
   },
   "notes": [
     "manual local measurement; no CI threshold",
     "fresh QuickJS execution job per compiler/run operation",
     "workspace and .tsbuildinfo persist within the component instance"
   ],
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "target": "p3",
-  "wasmLinearMemoryHighWaterBytes": 155844608,
+  "wasmLinearMemoryHighWaterBytes": 155779072,
   "workloads": {
     "cancellations": {
       "attempts": {
         "iterations": 5,
-        "medianMs": 203.742583,
-        "p95Ms": 204.877917,
+        "medianMs": 192.027958,
+        "p95Ms": 193.653417,
         "samples": [
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 10.093499999959022,
+              "latencyMs": 8.57512500003213,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 199.026584
+            "wallMs": 193.653417
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 9.450167000002692,
+              "latencyMs": 8.109249999979511,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 203.742583
+            "wallMs": 190.003709
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 8.054082999995444,
+              "latencyMs": 9.642625000036787,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 202.155709
+            "wallMs": 192.492334
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 9.085415999987164,
+              "latencyMs": 8.529999999969732,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 204.142167
+            "wallMs": 192.027958
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 9.645250000001395,
+              "latencyMs": 8.780166999960784,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 204.877917
+            "wallMs": 190.634667
           }
         ],
-        "throughputPerSecond": 4.931234137206027
+        "throughputPerSecond": 5.214786169492221
       },
       "recovery": {
-        "hostOverheadMs": null,
-        "linearMemoryHighWaterBytes": 155844608,
+        "linearMemoryHighWaterBytes": 155779072,
+        "outerOverheadMs": null,
         "result": {
           "overflowed": false,
           "stderr": "",
@@ -118,12 +118,12 @@
             "state": "ready"
           }
         },
-        "wallMs": 195.243958
+        "wallMs": 188.422916
       }
     },
     "coldNoEmit": {
-      "hostOverheadMs": 452.38600000000224,
       "linearMemoryHighWaterBytes": 152764416,
+      "outerOverheadMs": 471.028709000002,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -133,31 +133,31 @@
           "quickJsMemory": {
             "afterCompiler": {
               "arrayBuffers": 0,
-              "external": 24858528,
-              "heapTotal": 81169079,
-              "heapUsed": 81169079,
-              "rss": 14122632
+              "external": 24859008,
+              "heapTotal": 81153325,
+              "heapUsed": 81153325,
+              "rss": 14123136
             },
             "beforeToolLoad": {
               "arrayBuffers": 0,
-              "external": 287376,
-              "heapTotal": 6020436,
-              "heapUsed": 6020436,
-              "rss": 407240
+              "external": 287856,
+              "heapTotal": 6004757,
+              "heapUsed": 6004757,
+              "rss": 407760
             }
           },
-          "toolAndCompilerMs": 17392.264583999997
+          "toolAndCompilerMs": 18225.937208
         }
       },
-      "wallMs": 17844.650584
+      "wallMs": 18696.965917
     },
     "concurrent": {
       "contended": {
-        "hostOverheadMs": null,
-        "linearMemoryHighWaterBytes": 155844608,
+        "linearMemoryHighWaterBytes": 155779072,
+        "outerOverheadMs": null,
         "result": {
           "compiler": {
-            "completedMs": 12510.013124999998,
+            "completedMs": 11902.965958000044,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -166,23 +166,23 @@
                 "exitCode": 0
               }
             },
-            "startedMs": 0.009125000011408702,
-            "wallMs": 12510.003999999986
+            "startedMs": 0.008250000013504177,
+            "wallMs": 11902.95770800003
           },
           "cpu": {
-            "completedMs": 12510.215375000029,
+            "completedMs": 11903.163333000031,
             "result": {
               "overflowed": false,
               "stderr": "",
               "stdout": "",
               "value": 21
             },
-            "startedMs": 0.7790000000095461,
-            "wallMs": 12509.43637500002
+            "startedMs": 0.38450000004377216,
+            "wallMs": 11902.77883299999
           },
-          "elapsedMs": 12510.237542000015,
+          "elapsedMs": 11903.184958000027,
           "io": {
-            "completedMs": 12510.221709000003,
+            "completedMs": 11903.169333000027,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -196,27 +196,27 @@
                 ]
               }
             },
-            "startedMs": 1.0694169999915175,
-            "wallMs": 12509.152292000012
+            "startedMs": 0.6437920000171289,
+            "wallMs": 11902.52554100001
           }
         },
-        "wallMs": 12510.655874999999
+        "wallMs": 11903.487000000001
       },
       "cpuBaseline": {
-        "hostOverheadMs": null,
-        "linearMemoryHighWaterBytes": 155844608,
+        "linearMemoryHighWaterBytes": 155779072,
+        "outerOverheadMs": null,
         "result": {
           "overflowed": false,
           "stderr": "",
           "stdout": "",
           "value": 21
         },
-        "wallMs": 435.078791
+        "wallMs": 441.029834
       },
       "interpretation": "all jobs were submitted together; compare sibling completion with isolated baselines to identify overlap or serialization",
       "ioBaseline": {
-        "hostOverheadMs": null,
-        "linearMemoryHighWaterBytes": 155844608,
+        "linearMemoryHighWaterBytes": 155779072,
+        "outerOverheadMs": null,
         "result": {
           "overflowed": false,
           "stderr": "",
@@ -230,12 +230,12 @@
             ]
           }
         },
-        "wallMs": 179.73025
+        "wallMs": 174.408916
       }
     },
     "directTypeScript": {
-      "hostOverheadMs": null,
-      "linearMemoryHighWaterBytes": 155844608,
+      "linearMemoryHighWaterBytes": 155779072,
+      "outerOverheadMs": null,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -245,11 +245,11 @@
           "state": "ready"
         }
       },
-      "wallMs": 196.81375
+      "wallMs": 183.386917
     },
     "emitDirect": {
-      "hostOverheadMs": 426.33895900000425,
-      "linearMemoryHighWaterBytes": 155844608,
+      "linearMemoryHighWaterBytes": 155779072,
+      "outerOverheadMs": 450.9459580000257,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -259,27 +259,27 @@
           "quickJsMemory": {
             "afterCompiler": {
               "arrayBuffers": 0,
-              "external": 24741888,
-              "heapTotal": 80572836,
-              "heapUsed": 80572836,
-              "rss": 14032760
+              "external": 24742368,
+              "heapTotal": 80557082,
+              "heapUsed": 80557082,
+              "rss": 14033264
             },
             "beforeToolLoad": {
               "arrayBuffers": 0,
-              "external": 287376,
-              "heapTotal": 6020714,
-              "heapUsed": 6020714,
-              "rss": 407288
+              "external": 287856,
+              "heapTotal": 6005035,
+              "heapUsed": 6005035,
+              "rss": 407808
             }
           },
-          "toolAndCompilerMs": 17466.130999999994
+          "toolAndCompilerMs": 17207.124124999973
         }
       },
-      "wallMs": 17892.469959
+      "wallMs": 17658.070083
     },
     "generatedJavaScript": {
-      "hostOverheadMs": null,
-      "linearMemoryHighWaterBytes": 155844608,
+      "linearMemoryHighWaterBytes": 155779072,
+      "outerOverheadMs": null,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -291,11 +291,11 @@
           }
         }
       },
-      "wallMs": 182.947292
+      "wallMs": 183.705333
     },
     "incrementalCold": {
-      "hostOverheadMs": 415.6868749999958,
       "linearMemoryHighWaterBytes": 152895488,
+      "outerOverheadMs": 418.83450000000084,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -305,32 +305,32 @@
           "quickJsMemory": {
             "afterCompiler": {
               "arrayBuffers": 0,
-              "external": 24858528,
-              "heapTotal": 81169526,
-              "heapUsed": 81169526,
-              "rss": 14122664
+              "external": 24859008,
+              "heapTotal": 81153772,
+              "heapUsed": 81153772,
+              "rss": 14123168
             },
             "beforeToolLoad": {
               "arrayBuffers": 0,
-              "external": 287376,
-              "heapTotal": 6020602,
-              "heapUsed": 6020602,
-              "rss": 407264
+              "external": 287856,
+              "heapTotal": 6004923,
+              "heapUsed": 6004923,
+              "rss": 407784
             }
           },
-          "toolAndCompilerMs": 17336.951167000007
+          "toolAndCompilerMs": 17413.059416999997
         }
       },
-      "wallMs": 17752.638042000002
+      "wallMs": 17831.893916999998
     },
     "incrementalFreshJobs": {
       "iterations": 5,
-      "medianMs": 12042.023958,
-      "p95Ms": 12120.678583,
+      "medianMs": 11229.136417,
+      "p95Ms": 11296.097791999999,
       "samples": [
         {
-          "hostOverheadMs": 282.11012500000106,
           "linearMemoryHighWaterBytes": 152895488,
+          "outerOverheadMs": 269.7628749999967,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -340,27 +340,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58331404,
-                  "heapUsed": 58331404,
-                  "rss": 6185224
+                  "external": 12125616,
+                  "heapTotal": 58315650,
+                  "heapUsed": 58315650,
+                  "rss": 6185728
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020602,
-                  "heapUsed": 6020602,
-                  "rss": 407264
+                  "external": 287856,
+                  "heapTotal": 6004923,
+                  "heapUsed": 6004923,
+                  "rss": 407784
                 }
               },
-              "toolAndCompilerMs": 10933.386459
+              "toolAndCompilerMs": 10932.841375000004
             }
           },
-          "wallMs": 11215.496584
+          "wallMs": 11202.60425
         },
         {
-          "hostOverheadMs": 295.2585410000029,
           "linearMemoryHighWaterBytes": 152895488,
+          "outerOverheadMs": 275.21454200001244,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -370,27 +370,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58331404,
-                  "heapUsed": 58331404,
-                  "rss": 6185224
+                  "external": 12125616,
+                  "heapTotal": 58315650,
+                  "heapUsed": 58315650,
+                  "rss": 6185728
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020602,
-                  "heapUsed": 6020602,
-                  "rss": 407264
+                  "external": 287856,
+                  "heapTotal": 6004923,
+                  "heapUsed": 6004923,
+                  "rss": 407784
                 }
               },
-              "toolAndCompilerMs": 11825.420041999998
+              "toolAndCompilerMs": 10873.960499999986
             }
           },
-          "wallMs": 12120.678583
+          "wallMs": 11149.175041999999
         },
         {
-          "hostOverheadMs": 291.8927080000085,
           "linearMemoryHighWaterBytes": 152895488,
+          "outerOverheadMs": 279.35991700000704,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -400,27 +400,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58331404,
-                  "heapUsed": 58331404,
-                  "rss": 6185224
+                  "external": 12125616,
+                  "heapTotal": 58315650,
+                  "heapUsed": 58315650,
+                  "rss": 6185728
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020602,
-                  "heapUsed": 6020602,
-                  "rss": 407264
+                  "external": 287856,
+                  "heapTotal": 6004923,
+                  "heapUsed": 6004923,
+                  "rss": 407784
                 }
               },
-              "toolAndCompilerMs": 11750.131249999991
+              "toolAndCompilerMs": 11016.737874999992
             }
           },
-          "wallMs": 12042.023958
+          "wallMs": 11296.097791999999
         },
         {
-          "hostOverheadMs": 302.680166000011,
           "linearMemoryHighWaterBytes": 152895488,
+          "outerOverheadMs": 279.01854100000673,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -430,27 +430,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58331404,
-                  "heapUsed": 58331404,
-                  "rss": 6185224
+                  "external": 12125616,
+                  "heapTotal": 58315650,
+                  "heapUsed": 58315650,
+                  "rss": 6185728
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020602,
-                  "heapUsed": 6020602,
-                  "rss": 407264
+                  "external": 287856,
+                  "heapTotal": 6004923,
+                  "heapUsed": 6004923,
+                  "rss": 407784
                 }
               },
-              "toolAndCompilerMs": 11785.631499999989
+              "toolAndCompilerMs": 10972.103208999994
             }
           },
-          "wallMs": 12088.311666
+          "wallMs": 11251.12175
         },
         {
-          "hostOverheadMs": 316.0607499999842,
           "linearMemoryHighWaterBytes": 152895488,
+          "outerOverheadMs": 289.3864169999997,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -460,36 +460,36 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58331404,
-                  "heapUsed": 58331404,
-                  "rss": 6185224
+                  "external": 12125616,
+                  "heapTotal": 58315650,
+                  "heapUsed": 58315650,
+                  "rss": 6185728
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020602,
-                  "heapUsed": 6020602,
-                  "rss": 407264
+                  "external": 287856,
+                  "heapTotal": 6004923,
+                  "heapUsed": 6004923,
+                  "rss": 407784
                 }
               },
-              "toolAndCompilerMs": 11502.490917000016
+              "toolAndCompilerMs": 10939.75
             }
           },
-          "wallMs": 11818.551667
+          "wallMs": 11229.136417
         }
       ],
-      "throughputPerSecond": 0.08433827667031991
+      "throughputPerSecond": 0.08908188340197741
     },
     "invalidThenValid": {
       "failedChecks": {
         "iterations": 5,
-        "medianMs": 11708.089125,
-        "p95Ms": 11866.487749999998,
+        "medianMs": 11357.717833,
+        "p95Ms": 11543.255000000001,
         "samples": [
           {
-            "hostOverheadMs": 330.67316700000265,
             "linearMemoryHighWaterBytes": 152895488,
+            "outerOverheadMs": 273.3130010000241,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -499,27 +499,27 @@
                 "quickJsMemory": {
                   "afterCompiler": {
                     "arrayBuffers": 0,
-                    "external": 12183456,
-                    "heapTotal": 58436288,
-                    "heapUsed": 58436288,
-                    "rss": 6224256
+                    "external": 12183936,
+                    "heapTotal": 58420534,
+                    "heapUsed": 58420534,
+                    "rss": 6224760
                   },
                   "beforeToolLoad": {
                     "arrayBuffers": 0,
-                    "external": 287376,
-                    "heapTotal": 6020436,
-                    "heapUsed": 6020436,
-                    "rss": 407240
+                    "external": 287856,
+                    "heapTotal": 6004757,
+                    "heapUsed": 6004757,
+                    "rss": 407760
                   }
                 },
-                "toolAndCompilerMs": 11377.415957999998
+                "toolAndCompilerMs": 10988.814082999976
               }
             },
-            "wallMs": 11708.089125
+            "wallMs": 11262.127084
           },
           {
-            "hostOverheadMs": 317.6035000000011,
             "linearMemoryHighWaterBytes": 152895488,
+            "outerOverheadMs": 283.71962400001576,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -529,27 +529,27 @@
                 "quickJsMemory": {
                   "afterCompiler": {
                     "arrayBuffers": 0,
-                    "external": 12185424,
-                    "heapTotal": 58445032,
-                    "heapUsed": 58445032,
-                    "rss": 6225176
+                    "external": 12185904,
+                    "heapTotal": 58429278,
+                    "heapUsed": 58429278,
+                    "rss": 6225680
                   },
                   "beforeToolLoad": {
                     "arrayBuffers": 0,
-                    "external": 287376,
-                    "heapTotal": 6020436,
-                    "heapUsed": 6020436,
-                    "rss": 407240
+                    "external": 287856,
+                    "heapTotal": 6004757,
+                    "heapUsed": 6004757,
+                    "rss": 407760
                   }
                 },
-                "toolAndCompilerMs": 11386.432916999998
+                "toolAndCompilerMs": 11073.998208999985
               }
             },
-            "wallMs": 11704.036417
+            "wallMs": 11357.717833
           },
           {
-            "hostOverheadMs": 321.3192919999983,
             "linearMemoryHighWaterBytes": 152895488,
+            "outerOverheadMs": 303.6389579999923,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -559,27 +559,27 @@
                 "quickJsMemory": {
                   "afterCompiler": {
                     "arrayBuffers": 0,
-                    "external": 12185424,
-                    "heapTotal": 58445032,
-                    "heapUsed": 58445032,
-                    "rss": 6225176
+                    "external": 12185904,
+                    "heapTotal": 58429278,
+                    "heapUsed": 58429278,
+                    "rss": 6225680
                   },
                   "beforeToolLoad": {
                     "arrayBuffers": 0,
-                    "external": 287376,
-                    "heapTotal": 6020436,
-                    "heapUsed": 6020436,
-                    "rss": 407240
+                    "external": 287856,
+                    "heapTotal": 6004757,
+                    "heapUsed": 6004757,
+                    "rss": 407760
                   }
                 },
-                "toolAndCompilerMs": 11545.168458
+                "toolAndCompilerMs": 11239.616042000009
               }
             },
-            "wallMs": 11866.487749999998
+            "wallMs": 11543.255000000001
           },
           {
-            "hostOverheadMs": 303.7786670000114,
             "linearMemoryHighWaterBytes": 152895488,
+            "outerOverheadMs": 283.200499999979,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -589,27 +589,27 @@
                 "quickJsMemory": {
                   "afterCompiler": {
                     "arrayBuffers": 0,
-                    "external": 12185424,
-                    "heapTotal": 58445032,
-                    "heapUsed": 58445032,
-                    "rss": 6225176
+                    "external": 12185904,
+                    "heapTotal": 58429278,
+                    "heapUsed": 58429278,
+                    "rss": 6225680
                   },
                   "beforeToolLoad": {
                     "arrayBuffers": 0,
-                    "external": 287376,
-                    "heapTotal": 6020436,
-                    "heapUsed": 6020436,
-                    "rss": 407240
+                    "external": 287856,
+                    "heapTotal": 6004757,
+                    "heapUsed": 6004757,
+                    "rss": 407760
                   }
                 },
-                "toolAndCompilerMs": 11396.319832999989
+                "toolAndCompilerMs": 11121.35270800002
               }
             },
-            "wallMs": 11700.0985
+            "wallMs": 11404.553208
           },
           {
-            "hostOverheadMs": 320.67091599999185,
             "linearMemoryHighWaterBytes": 152895488,
+            "outerOverheadMs": 277.09562500000175,
             "result": {
               "overflowed": false,
               "stderr": "",
@@ -619,30 +619,30 @@
                 "quickJsMemory": {
                   "afterCompiler": {
                     "arrayBuffers": 0,
-                    "external": 12185424,
-                    "heapTotal": 58445032,
-                    "heapUsed": 58445032,
-                    "rss": 6225176
+                    "external": 12185904,
+                    "heapTotal": 58429278,
+                    "heapUsed": 58429278,
+                    "rss": 6225680
                   },
                   "beforeToolLoad": {
                     "arrayBuffers": 0,
-                    "external": 287376,
-                    "heapTotal": 6020436,
-                    "heapUsed": 6020436,
-                    "rss": 407240
+                    "external": 287856,
+                    "heapTotal": 6004757,
+                    "heapUsed": 6004757,
+                    "rss": 407760
                   }
                 },
-                "toolAndCompilerMs": 11488.714084000008
+                "toolAndCompilerMs": 11015.472957999998
               }
             },
-            "wallMs": 11809.385
+            "wallMs": 11292.568583
           }
         ],
-        "throughputPerSecond": 0.08505123099478208
+        "throughputPerSecond": 0.08793493675907564
       },
       "recovery": {
-        "hostOverheadMs": 316.63579099998424,
         "linearMemoryHighWaterBytes": 152895488,
+        "outerOverheadMs": 290.66862500001116,
         "result": {
           "overflowed": false,
           "stderr": "",
@@ -652,23 +652,23 @@
             "quickJsMemory": {
               "afterCompiler": {
                 "arrayBuffers": 0,
-                "external": 12162384,
-                "heapTotal": 58407122,
-                "heapUsed": 58407122,
-                "rss": 6209024
+                "external": 12162864,
+                "heapTotal": 58391368,
+                "heapUsed": 58391368,
+                "rss": 6209528
               },
               "beforeToolLoad": {
                 "arrayBuffers": 0,
-                "external": 287376,
-                "heapTotal": 6020436,
-                "heapUsed": 6020436,
-                "rss": 407240
+                "external": 287856,
+                "heapTotal": 6004757,
+                "heapUsed": 6004757,
+                "rss": 407760
               }
             },
-            "toolAndCompilerMs": 11636.619334000015
+            "toolAndCompilerMs": 10973.25570899999
           }
         },
-        "wallMs": 11953.255125
+        "wallMs": 11263.924334000001
       }
     },
     "memoryPlateau": {
@@ -676,26 +676,26 @@
         "allowedVariationBytes": 1048576,
         "failedCompilerJobs": {
           "afterCompiler": {
-            "maximumBytes": 58445032,
-            "minimumBytes": 58436288,
+            "maximumBytes": 58429278,
+            "minimumBytes": 58420534,
             "samples": [
-              58436288,
-              58445032,
-              58445032,
-              58445032,
-              58445032
+              58420534,
+              58429278,
+              58429278,
+              58429278,
+              58429278
             ],
             "variationBytes": 8744
           },
           "beforeToolLoad": {
-            "maximumBytes": 6020436,
-            "minimumBytes": 6020436,
+            "maximumBytes": 6004757,
+            "minimumBytes": 6004757,
             "samples": [
-              6020436,
-              6020436,
-              6020436,
-              6020436,
-              6020436
+              6004757,
+              6004757,
+              6004757,
+              6004757,
+              6004757
             ],
             "variationBytes": 0
           }
@@ -703,69 +703,68 @@
         "interpretation": "before-tool-load samples compare fresh runtimes; after-compiler samples describe heap usage immediately before each runtime is dropped",
         "unchangedCompilerJobs": {
           "afterCompiler": {
-            "maximumBytes": 58330957,
-            "minimumBytes": 58330957,
+            "maximumBytes": 80939779,
+            "minimumBytes": 80939779,
             "samples": [
-              58330957,
-              58330957,
-              58330957,
-              58330957,
-              58330957
+              80939779,
+              80939779,
+              80939779,
+              80939779,
+              80939779
             ],
             "variationBytes": 0
           },
           "beforeToolLoad": {
-            "maximumBytes": 6020436,
-            "minimumBytes": 6020436,
+            "maximumBytes": 6004718,
+            "minimumBytes": 6004718,
             "samples": [
-              6020436,
-              6020436,
-              6020436,
-              6020436,
-              6020436
+              6004718,
+              6004718,
+              6004718,
+              6004718,
+              6004718
             ],
             "variationBytes": 0
           }
         },
         "warmedIncrementalCompilerJobs": {
           "afterCompiler": {
-            "maximumBytes": 58331404,
-            "minimumBytes": 58331404,
+            "maximumBytes": 58315650,
+            "minimumBytes": 58315650,
             "samples": [
-              58331404,
-              58331404,
-              58331404,
-              58331404,
-              58331404
+              58315650,
+              58315650,
+              58315650,
+              58315650,
+              58315650
             ],
             "variationBytes": 0
           },
           "beforeToolLoad": {
-            "maximumBytes": 6020602,
-            "minimumBytes": 6020602,
+            "maximumBytes": 6004923,
+            "minimumBytes": 6004923,
             "samples": [
-              6020602,
-              6020602,
-              6020602,
-              6020602,
-              6020602
+              6004923,
+              6004923,
+              6004923,
+              6004923,
+              6004923
             ],
             "variationBytes": 0
           }
         }
       },
       "wasmLinearMemory": {
-        "allowedGrowthBytes": 65536,
         "cancelledJobs": {
           "growthBytes": 0,
-          "maximumBytes": 155844608,
-          "minimumBytes": 155844608,
+          "maximumBytes": 155779072,
+          "minimumBytes": 155779072,
           "samples": [
-            155844608,
-            155844608,
-            155844608,
-            155844608,
-            155844608
+            155779072,
+            155779072,
+            155779072,
+            155779072,
+            155779072
           ]
         },
         "failedCompilerJobs": {
@@ -780,17 +779,67 @@
             152895488
           ]
         },
-        "interpretation": "the instance-wide monotone high-water detects growth beyond earlier peaks; it cannot identify allocations that remain within already-reserved linear memory",
+        "interpretation": "descriptive instance-wide monotone high-water observations; they show where the reserved peak grows but cannot identify allocations that remain within an earlier peak",
+        "otherWorkloadCheckpoints": [
+          {
+            "bytes": 152764416,
+            "label": "coldNoEmit"
+          },
+          {
+            "bytes": 152895488,
+            "label": "incrementalCold"
+          },
+          {
+            "bytes": 152895488,
+            "label": "invalidRecovery"
+          },
+          {
+            "bytes": 155779072,
+            "label": "projectReferences"
+          },
+          {
+            "bytes": 155779072,
+            "label": "directTypeScript"
+          },
+          {
+            "bytes": 155779072,
+            "label": "emitDirect"
+          },
+          {
+            "bytes": 155779072,
+            "label": "generatedJavaScript"
+          },
+          {
+            "bytes": 155779072,
+            "label": "cpuBaseline"
+          },
+          {
+            "bytes": 155779072,
+            "label": "ioBaseline"
+          },
+          {
+            "bytes": 155779072,
+            "label": "concurrent"
+          },
+          {
+            "bytes": 155779072,
+            "label": "timeoutRecovery"
+          },
+          {
+            "bytes": 155779072,
+            "label": "cancellationRecovery"
+          }
+        ],
         "timedOutJobs": {
           "growthBytes": 0,
-          "maximumBytes": 155844608,
-          "minimumBytes": 155844608,
+          "maximumBytes": 155779072,
+          "minimumBytes": 155779072,
           "samples": [
-            155844608,
-            155844608,
-            155844608,
-            155844608,
-            155844608
+            155779072,
+            155779072,
+            155779072,
+            155779072,
+            155779072
           ]
         },
         "unchangedCompilerJobs": {
@@ -820,8 +869,8 @@
       }
     },
     "projectReferences": {
-      "hostOverheadMs": 452.62537499998143,
-      "linearMemoryHighWaterBytes": 155844608,
+      "linearMemoryHighWaterBytes": 155779072,
+      "outerOverheadMs": 421.7546250000123,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -831,86 +880,86 @@
           "quickJsMemory": {
             "afterCompiler": {
               "arrayBuffers": 0,
-              "external": 25396464,
-              "heapTotal": 82713571,
-              "heapUsed": 82713571,
-              "rss": 14497712
+              "external": 25396944,
+              "heapTotal": 82697817,
+              "heapUsed": 82697817,
+              "rss": 14498216
             },
             "beforeToolLoad": {
               "arrayBuffers": 0,
-              "external": 287376,
-              "heapTotal": 6020382,
-              "heapUsed": 6020382,
-              "rss": 407232
+              "external": 287856,
+              "heapTotal": 6004703,
+              "heapUsed": 6004703,
+              "rss": 407752
             }
           },
-          "toolAndCompilerMs": 18251.26445800002
+          "toolAndCompilerMs": 17867.689416999987
         }
       },
-      "wallMs": 18703.889833
+      "wallMs": 18289.444042
     },
     "timeouts": {
       "attempts": {
         "iterations": 5,
-        "medianMs": 213.83558299999999,
-        "p95Ms": 216.167666,
+        "medianMs": 200.075334,
+        "p95Ms": 205.078917,
         "samples": [
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "message": "execution job timed out",
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 216.167666
+            "wallMs": 191.60575
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "message": "execution job timed out",
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 210.635083
+            "wallMs": 200.075334
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "message": "execution job timed out",
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 213.33225
+            "wallMs": 199.228167
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "message": "execution job timed out",
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 213.83558299999999
+            "wallMs": 202.5505
           },
           {
-            "hostOverheadMs": null,
-            "linearMemoryHighWaterBytes": 155844608,
+            "linearMemoryHighWaterBytes": 155779072,
+            "outerOverheadMs": null,
             "result": {
               "message": "execution job timed out",
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 214.276041
+            "wallMs": 205.078917
           }
         ],
-        "throughputPerSecond": 4.680567101591483
+        "throughputPerSecond": 5.007317353082214
       },
       "recovery": {
-        "hostOverheadMs": null,
-        "linearMemoryHighWaterBytes": 155844608,
+        "linearMemoryHighWaterBytes": 155779072,
+        "outerOverheadMs": null,
         "result": {
           "overflowed": false,
           "stderr": "",
@@ -920,17 +969,17 @@
             "state": "ready"
           }
         },
-        "wallMs": 194.997
+        "wallMs": 198.082542
       }
     },
     "unchangedFreshJobs": {
       "iterations": 5,
-      "medianMs": 11281.727916,
-      "p95Ms": 12020.276167,
+      "medianMs": 18119.743625000003,
+      "p95Ms": 19193.139208,
       "samples": [
         {
-          "hostOverheadMs": 290.5216249999994,
           "linearMemoryHighWaterBytes": 152764416,
+          "outerOverheadMs": 442.13945800000147,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -940,27 +989,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58330957,
-                  "heapUsed": 58330957,
-                  "rss": 6185192
+                  "external": 24818688,
+                  "heapTotal": 80939779,
+                  "heapUsed": 80939779,
+                  "rss": 14100824
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020436,
-                  "heapUsed": 6020436,
-                  "rss": 407240
+                  "external": 287856,
+                  "heapTotal": 6004718,
+                  "heapUsed": 6004718,
+                  "rss": 407752
                 }
               },
-              "toolAndCompilerMs": 11053.086292
+              "toolAndCompilerMs": 18025.37075
             }
           },
-          "wallMs": 11343.607917
+          "wallMs": 18467.510208
         },
         {
-          "hostOverheadMs": 281.72970899999564,
           "linearMemoryHighWaterBytes": 152764416,
+          "outerOverheadMs": 498.23225000000093,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -970,27 +1019,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58330957,
-                  "heapUsed": 58330957,
-                  "rss": 6185192
+                  "external": 24818688,
+                  "heapTotal": 80939779,
+                  "heapUsed": 80939779,
+                  "rss": 14100824
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020436,
-                  "heapUsed": 6020436,
-                  "rss": 407240
+                  "external": 287856,
+                  "heapTotal": 6004718,
+                  "heapUsed": 6004718,
+                  "rss": 407752
                 }
               },
-              "toolAndCompilerMs": 11738.546458000004
+              "toolAndCompilerMs": 18694.906958
             }
           },
-          "wallMs": 12020.276167
+          "wallMs": 19193.139208
         },
         {
-          "hostOverheadMs": 280.458290999999,
           "linearMemoryHighWaterBytes": 152764416,
+          "outerOverheadMs": 449.63175000000774,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -1000,27 +1049,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58330957,
-                  "heapUsed": 58330957,
-                  "rss": 6185192
+                  "external": 24818688,
+                  "heapTotal": 80939779,
+                  "heapUsed": 80939779,
+                  "rss": 14100824
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020436,
-                  "heapUsed": 6020436,
-                  "rss": 407240
+                  "external": 287856,
+                  "heapTotal": 6004718,
+                  "heapUsed": 6004718,
+                  "rss": 407752
                 }
               },
-              "toolAndCompilerMs": 11001.269625
+              "toolAndCompilerMs": 17670.111874999995
             }
           },
-          "wallMs": 11281.727916
+          "wallMs": 18119.743625000003
         },
         {
-          "hostOverheadMs": 280.755250000002,
           "linearMemoryHighWaterBytes": 152764416,
+          "outerOverheadMs": 433.4927920000082,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -1030,27 +1079,27 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58330957,
-                  "heapUsed": 58330957,
-                  "rss": 6185192
+                  "external": 24818688,
+                  "heapTotal": 80939779,
+                  "heapUsed": 80939779,
+                  "rss": 14100824
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020436,
-                  "heapUsed": 6020436,
-                  "rss": 407240
+                  "external": 287856,
+                  "heapTotal": 6004718,
+                  "heapUsed": 6004718,
+                  "rss": 407752
                 }
               },
-              "toolAndCompilerMs": 10980.918791999997
+              "toolAndCompilerMs": 17377.799499999994
             }
           },
-          "wallMs": 11261.674041999999
+          "wallMs": 17811.292292000002
         },
         {
-          "hostOverheadMs": 282.62716699999874,
           "linearMemoryHighWaterBytes": 152764416,
+          "outerOverheadMs": 415.44358400001147,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -1060,26 +1109,26 @@
               "quickJsMemory": {
                 "afterCompiler": {
                   "arrayBuffers": 0,
-                  "external": 12125136,
-                  "heapTotal": 58330957,
-                  "heapUsed": 58330957,
-                  "rss": 6185192
+                  "external": 24818688,
+                  "heapTotal": 80939779,
+                  "heapUsed": 80939779,
+                  "rss": 14100824
                 },
                 "beforeToolLoad": {
                   "arrayBuffers": 0,
-                  "external": 287376,
-                  "heapTotal": 6020436,
-                  "heapUsed": 6020436,
-                  "rss": 407240
+                  "external": 287856,
+                  "heapTotal": 6004718,
+                  "heapUsed": 6004718,
+                  "rss": 407752
                 }
               },
-              "toolAndCompilerMs": 10998.468875
+              "toolAndCompilerMs": 17163.067665999988
             }
           },
-          "wallMs": 11281.096042
+          "wallMs": 17578.51125
         }
       ],
-      "throughputPerSecond": 0.0874303454267311
+      "throughputPerSecond": 0.05484248348031227
     }
   }
 }

@@ -8,7 +8,6 @@ This manual suite measures TypeScript workflows performed from inside
 
 - Node.js 22.14.0 with npm 10.9.2
 - Rust and the repository's normal wasm32 component targets
-- `/usr/bin/time` for optional host peak-RSS collection
 
 The runner performs a clean, locked install before measuring. To prepare the
 same tools manually:
@@ -37,8 +36,8 @@ input hashes:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
-  tests/agentic_ts/results/2026-08-25-p2-macos-aarch64.json \
-  tests/agentic_ts/results/2026-08-25-p3-macos-aarch64.json
+  tests/agentic_ts/results/2026-08-27-p2-macos-aarch64.json \
+  tests/agentic_ts/results/2026-08-27-p3-macos-aarch64.json
 ```
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
@@ -63,10 +62,13 @@ internal GC-heap callbacks, matching stock Wasmtime's guest-linear-memory-only
 callback. Compiler jobs also record QuickJS heap use before loading TypeScript
 and immediately before each fresh runtime is dropped. The former detects state
 carried into a supposedly fresh runtime; the latter checks that equivalent jobs
-end with comparable live heaps. Linear memory is not expected to shrink, but
-successful, failed, timed-out, and cancelled job series should approach a
-stable high-water mark. Because that high-water is monotone across the whole
-component instance, a series detects only growth beyond an earlier peak; it
-cannot reveal allocations that fit inside memory already reserved by a prior
-workload. A successful job after every exceptional series verifies that
-execution capacity was reclaimed.
+end with comparable live heaps. Linear-memory high-water values are descriptive:
+the report includes every workload checkpoint, but the value is monotone across
+the component instance and cannot reveal allocations that fit inside memory
+reserved by an earlier workload. A successful job after every exceptional
+series verifies that execution capacity was reclaimed.
+
+The initial reports use dev-profile guest components. P2 also uses Golem's
+Wasmtime fork while P3 uses stock Wasmtime, so their columns are compatibility
+and local-regression baselines, not an isolated measurement of the preview
+version or a production performance comparison.

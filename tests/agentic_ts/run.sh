@@ -74,6 +74,7 @@ reports_to_check=$(printf '%b' "$generated_reports")
 (
     cd "$repo_root"
     AGENTIC_TS_VALIDATE_REPORTS=1 \
+    AGENTIC_TS_ALLOW_UNTRACKED_REPORTS=1 \
     AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
     AGENTIC_TS_SOURCE_ROOT="$repo_root" \
     tools/dev-test.sh p2 standard agentic_ts ""

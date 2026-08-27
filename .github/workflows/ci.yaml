@@ -51,6 +51,8 @@ jobs:
           submodules: true
           fetch-depth: 2
       - uses: ./.github/actions/setup
+      - name: Enable Golem wasmtime fork
+        run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Agentic TypeScript report contracts
         shell: bash
         env:
@@ -67,9 +69,7 @@ jobs:
           fi
           AGENTIC_TS_VALIDATE_REPORTS=1 \
           AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
-            cargo test --locked --test agentic_ts
-      - name: Enable Golem wasmtime fork
-        run: bash .github/scripts/enable-wasmtime-fork.sh
+            cargo test --test agentic_ts $CI_WASMTIME_FORK_FEATURES
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
       - name: Local test profile contracts
