@@ -1639,7 +1639,7 @@ function resolveNodeShebangCommand(command, env, cwd) {
             : path.resolve(workingDirectory, command);
         try {
             return hasSupportedNodeShebang(readShebangLine(fs, candidate))
-                ? fs.realpathSync(candidate)
+                ? candidate
                 : null;
         } catch (error) {
             if (!isPathLookupMiss(error)) throw error;
@@ -1657,7 +1657,7 @@ function resolveNodeShebangCommand(command, env, cwd) {
         try {
             const shebang = readShebangLine(fs, candidate);
             if (hasSupportedNodeShebang(shebang)) {
-                return fs.realpathSync(candidate);
+                return candidate;
             }
         } catch (error) {
             if (!isPathLookupMiss(error)) throw error;
@@ -1731,13 +1731,13 @@ function resolveJavaScriptShellCommand(command, args, env, cwd) {
             args: tokens.slice(1),
         };
     }
-    const nodeBin = resolveNodeShebangCommand(tokens[0], env, cwd);
-    if (nodeBin === null) {
+    const nodeEntry = resolveNodeShebangCommand(tokens[0], env, cwd);
+    if (nodeEntry === null) {
         return null;
     }
     return {
         command: process.execPath,
-        args: [nodeBin].concat(tokens.slice(1)),
+        args: [nodeEntry].concat(tokens.slice(1)),
     };
 }
 

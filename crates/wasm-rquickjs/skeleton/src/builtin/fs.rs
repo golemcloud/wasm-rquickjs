@@ -1,10 +1,10 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // The bulk of this module performs filesystem I/O through `std::fs`, which is backed by the
-// WASI filesystem on the `wasm32-wasip2` target for both generation paths. Only the
-// `utimes`/`lutimes` family needs the host `wasi:filesystem` bindings directly (to set times on
-// a path with symlink control). The *Preview 2* bindings are used on both generation paths:
-// Preview 3 replaced `set-times-at` with an async component-model call, and driving it to
+// WASI filesystem on the `wasm32-wasip2` target for both generation paths. Symlink creation and
+// the `utimes`/`lutimes` family use the host `wasi:filesystem` bindings directly. The *Preview 2*
+// bindings are used on both generation paths: symlink creation is synchronous, while Preview 3
+// replaced `set-times-at` with an async component-model call. Driving that call to
 // completion from inside a synchronous native function (which runs inside JS execution, i.e.
 // inside a poll of the exported call's wit-bindgen task) requires a nested `block_on`. That
 // nested `block_on` deadlocks: wit-bindgen's executor keeps spawned tasks in a crate-global
@@ -187,7 +187,7 @@ fn symlink_at_path(target: &str, path: &str) -> std::io::Result<()> {
 
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "WASI symbolic link targets must be relative",
+            "symbolic link targets must be relative within a WASI preopen",
         ));
     }
 
@@ -310,13 +310,6 @@ pub(super) fn realpath_for_module_resolution(
 }
 
 fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
-    match std::fs::canonicalize(path) {
-        Ok(resolved) => Ok(resolved.to_string_lossy().to_string()),
-        Err(_) => canonicalize_guest_path_fallback(path),
-    }
-}
-
-fn canonicalize_guest_path_fallback(path: &str) -> std::io::Result<String> {
     if !path.starts_with('/') {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,

@@ -585,11 +585,11 @@ Comprehensive filesystem API built on WASI filesystem.
 
 Symbolic links are persistent WASI filesystem objects, so linked package trees
 remain visible to later fresh execution runtimes. Link targets must be relative:
-WASI rejects rooted targets, and `symlink` fails with `EINVAL` without creating
-an object when given one. Production Golem and macOS/Linux local development
-support these links. Windows local development currently requires Developer
-Mode or an equivalent symlink privilege; non-link filesystem and npm workflows
-are unaffected.
+Rooted targets cannot be resolved within a WASI preopen, so `symlink` fails with
+`EINVAL` without creating an object when given one. Production Golem and
+macOS/Linux local development support these links. Windows local development
+currently requires Developer Mode or an equivalent symlink privilege; non-link
+filesystem and npm workflows are unaffected.
 
 - **Sync:** `readFileSync`, `writeFileSync`, `appendFileSync`, `openSync`, `closeSync`, `readSync`, `writeSync`, `ftruncateSync`, `fsyncSync`, `fdatasyncSync`, `statSync`, `lstatSync`, `fstatSync`, `statfsSync`, `readdirSync`, `accessSync`, `existsSync`, `realpathSync`, `truncateSync`, `copyFileSync`, `linkSync`, `symlinkSync`, `readlinkSync`, `chmodSync`, `fchmodSync`, `lchmodSync`, `chownSync`, `fchownSync`, `lchownSync`, `utimesSync`, `futimesSync`, `lutimesSync`, `unlinkSync`, `renameSync`, `mkdirSync`, `rmdirSync`, `rmSync`, `mkdtempSync`, `opendirSync`, `readvSync`, `writevSync`, `cpSync`
 - **Async (callback):** `readFile`, `writeFile`, `appendFile`, `open`, `close`, `read`, `write`, `stat`, `lstat`, `fstat`, `statfs`, `ftruncate`, `fsync`, `fdatasync`, `readdir`, `access`, `exists`, `realpath`, `truncate`, `copyFile`, `link`, `symlink`, `readlink`, `chmod`, `fchmod`, `lchmod`, `chown`, `fchown`, `lchown`, `utimes`, `futimes`, `lutimes`, `unlink`, `rename`, `mkdir`, `rmdir`, `rm`, `mkdtemp`, `opendir`, `watch`, `watchFile`, `unwatchFile`, `readv`, `writev`, `cp`, `openAsBlob`

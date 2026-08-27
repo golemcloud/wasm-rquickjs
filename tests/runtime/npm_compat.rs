@@ -715,10 +715,18 @@ async fn npm_install_registry_pure_javascript(
             .join("workspace/npm-registry-exec-result.json"),
     )?)?;
     assert_eq!(exec_result["cwd"], "/workspace");
-    assert_eq!(
-        exec_result["argv"].as_array().and_then(|args| args.last()),
-        Some(&serde_json::json!("acquired"))
+    let argv = exec_result["argv"]
+        .as_array()
+        .expect("registry bin argv should be an array");
+    assert_eq!(argv.len(), 3, "{exec_result:#}");
+    assert_eq!(argv[0], "/usr/local/bin/node", "{exec_result:#}");
+    assert!(
+        argv[1]
+            .as_str()
+            .is_some_and(|entry| entry.ends_with("/node_modules/.bin/fixture-registry-bin")),
+        "registry bin argv[1] must preserve the invoked .bin path: {exec_result:#}"
     );
+    assert_eq!(argv.last(), Some(&serde_json::json!("acquired")));
 
     let args = [
         "install",
@@ -1408,10 +1416,12 @@ async fn npm_exec_runs_persistent_local_bin(
     let direct_result: serde_json::Value = serde_json::from_slice(&fs::read(&result_file)?)?;
     assert_eq!(direct_result["cwd"], "/workspace");
     assert_eq!(
-        direct_result["argv"]
-            .as_array()
-            .and_then(|args| args.last()),
-        Some(&serde_json::json!("direct"))
+        direct_result["argv"],
+        serde_json::json!([
+            "/usr/local/bin/node",
+            "/workspace/node_modules/.bin/fixture-bin",
+            "direct"
+        ])
     );
     fs::remove_file(&result_file)?;
 
@@ -1439,8 +1449,12 @@ async fn npm_exec_runs_persistent_local_bin(
     let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(&result_file)?)?;
     assert_eq!(exec_result["cwd"], "/workspace");
     assert_eq!(
-        exec_result["argv"].as_array().and_then(|args| args.last()),
-        Some(&serde_json::json!("forwarded"))
+        exec_result["argv"],
+        serde_json::json!([
+            "/usr/local/bin/node",
+            "/workspace/node_modules/.bin/fixture-bin",
+            "forwarded"
+        ])
     );
     Ok(())
 }
@@ -1488,8 +1502,12 @@ async fn npx_runs_persistent_local_bin(
     let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(result_file)?)?;
     assert_eq!(exec_result["cwd"], "/workspace");
     assert_eq!(
-        exec_result["argv"].as_array().and_then(|args| args.last()),
-        Some(&serde_json::json!("forwarded"))
+        exec_result["argv"],
+        serde_json::json!([
+            "/usr/local/bin/node",
+            "/workspace/node_modules/.bin/fixture-bin",
+            "forwarded"
+        ])
     );
     Ok(())
 }

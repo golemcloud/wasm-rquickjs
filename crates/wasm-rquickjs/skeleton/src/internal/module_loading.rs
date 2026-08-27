@@ -3223,7 +3223,7 @@ impl Resolver for FileUrlResolver {
         if let Some((path, suffix)) = Self::file_url_to_path_parts(name) {
             let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
             let url = NodeFileResolver::module_url_for_file_specifier(name);
-            if NodeFileResolver::module_resolution_is_dir(ctx, &normalized) {
+            if NodeFileResolver::module_resolution_is_dir(&normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3237,7 +3237,7 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            if !NodeFileResolver::module_resolution_is_file(ctx, &normalized) {
+            if !NodeFileResolver::module_resolution_is_file(&normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3664,11 +3664,11 @@ impl NodeFileResolver {
             .unwrap_or_else(|| normalized.to_string())
     }
 
-    fn module_resolution_is_file(_ctx: &Ctx<'_>, normalized: &str) -> bool {
+    fn module_resolution_is_file(normalized: &str) -> bool {
         std::path::Path::new(normalized).is_file()
     }
 
-    fn module_resolution_is_dir(_ctx: &Ctx<'_>, normalized: &str) -> bool {
+    fn module_resolution_is_dir(normalized: &str) -> bool {
         std::path::Path::new(normalized).is_dir()
     }
 
@@ -3723,7 +3723,7 @@ impl NodeFileResolver {
     ) -> bool {
         match semantics {
             FileCandidateSemantics::ModuleResolution => {
-                Self::module_resolution_is_file(ctx, normalized)
+                Self::module_resolution_is_file(normalized)
             }
             FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
         }
