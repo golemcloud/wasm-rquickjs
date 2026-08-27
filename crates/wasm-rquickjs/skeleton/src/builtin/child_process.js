@@ -1234,11 +1234,22 @@ function expandTemplateEnvRefs(command, env) {
         if (quote === '"') {
             expanded += value.replace(/[\\"$`]/g, '\\$&');
         } else {
-            // Supporting general unquoted field splitting would require a real
-            // shell. Accept only values that cannot manufacture token or
-            // control structure when the constrained parser sees them.
-            if (!/^[A-Za-z0-9_./:@%+,=-]*$/.test(value)) return null;
-            expanded += value;
+            // A POSIX shell applies field splitting to an unquoted expansion,
+            // but does not parse characters produced by that expansion as new
+            // shell operators. Preserve that boundary in the constrained
+            // parser: whitespace separates arguments, while quotes,
+            // metacharacters, and expansion markers remain literal data.
+            for (const valueChar of value) {
+                if (valueChar === '\0') return null;
+                if (valueChar === ' ' || valueChar === '\t' ||
+                    valueChar === '\n' || valueChar === '\r') {
+                    expanded += ' ';
+                } else if ("\\'\"|;&<>$`(){}*?[]~#".includes(valueChar)) {
+                    expanded += '\\' + valueChar;
+                } else {
+                    expanded += valueChar;
+                }
+            }
         }
         i += match[0].length;
     }

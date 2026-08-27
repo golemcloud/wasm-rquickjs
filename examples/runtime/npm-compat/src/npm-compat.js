@@ -320,6 +320,15 @@ export async function probePrimitives() {
             const genericEnvExpansions = await Promise.all(genericEnvValues.map(value =>
                 probeExecFailure(callback =>
                     exec(genericEnvCommand, { env: { EXEC_VALUE: value } }, callback))));
+            const splitEnvArguments = await probeExecFailure(callback =>
+                exec(process.execPath + ' \${EXEC_ARGS} 42', {
+                    env: { EXEC_ARGS: '-p -e' },
+                }, callback));
+            const unquotedEnvFields = ['a;b', 'c|d', 'a"b', '$(x)'];
+            const unquotedEnvData = await probeExecFailure(callback =>
+                exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE}', {
+                    env: { EXEC_VALUE: unquotedEnvFields.join(' ') },
+                }, callback));
             const injectedEnvStructure = await probeExecFailure(callback =>
                 exec('$' + '{EXEC_COMMAND}', {
                     env: { EXEC_COMMAND: 'echo ok | ' + process.execPath + ' -e "0"' },
@@ -375,6 +384,14 @@ export async function probePrimitives() {
                     expansion.stdout === genericEnvValues[index] + '\\n' &&
                     expansion.stderr === '' &&
                     expansion.events.join(',') === 'callback,exit,close') &&
+                    !splitEnvArguments.callbackError &&
+                    splitEnvArguments.stdout === '42\\n' &&
+                    splitEnvArguments.stderr === '' &&
+                    splitEnvArguments.events.join(',') === 'callback,exit,close' &&
+                    !unquotedEnvData.callbackError &&
+                    unquotedEnvData.stdout === JSON.stringify(unquotedEnvFields) + '\\n' &&
+                    unquotedEnvData.stderr === '' &&
+                    unquotedEnvData.events.join(',') === 'callback,exit,close' &&
                     injectedEnvStructure.callbackError &&
                     injectedEnvStructure.callbackError.code === 'ENOSYS' &&
                     injectedEnvStructure.stdout === '',
