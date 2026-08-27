@@ -1231,20 +1231,21 @@ function expandTemplateEnvRefs(command, env) {
             continue;
         }
         const value = env[match[1]] === undefined ? '' : String(env[match[1]]);
+        if (value.includes('\0')) return null;
         if (quote === '"') {
             expanded += value.replace(/[\\"$`]/g, '\\$&');
         } else {
             // A POSIX shell applies field splitting to an unquoted expansion,
             // but does not parse characters produced by that expansion as new
             // shell operators. Preserve that boundary in the constrained
-            // parser: whitespace separates arguments, while quotes,
-            // metacharacters, and expansion markers remain literal data.
+            // parser using the default space/tab/newline IFS. Pathname
+            // expansion is not implemented, so glob-shaped values fail closed.
             for (const valueChar of value) {
-                if (valueChar === '\0') return null;
+                if ('*?['.includes(valueChar)) return null;
                 if (valueChar === ' ' || valueChar === '\t' ||
-                    valueChar === '\n' || valueChar === '\r') {
+                    valueChar === '\n') {
                     expanded += ' ';
-                } else if ("\\'\"|;&<>$`(){}*?[]~#".includes(valueChar)) {
+                } else if ("\\'\"|;&<>$`(){}]~#".includes(valueChar)) {
                     expanded += '\\' + valueChar;
                 } else {
                     expanded += valueChar;
@@ -1257,13 +1258,27 @@ function expandTemplateEnvRefs(command, env) {
     return expanded;
 }
 
-function splitCommandTokens(command) {
+const SHELL_METACHARACTERS = "|;&<>$`(){}*?[]~#\n";
+
+function splitCommandTokenRecords(command) {
     const text = String(command);
-    const tokens = [];
+    const records = [];
+    const unescapedShellCharacters = [];
     let current = '';
+    let currentUnescapedShellCharacters = [];
     let tokenActive = false;
     let quote = null;
     let escaping = false;
+
+    const pushCurrent = () => {
+        records.push({
+            value: current,
+            unescapedShellCharacters: currentUnescapedShellCharacters,
+        });
+        current = '';
+        currentUnescapedShellCharacters = [];
+        tokenActive = false;
+    };
 
     for (let i = 0; i < text.length; i++) {
         const ch = text[i];
@@ -1287,16 +1302,19 @@ function splitCommandTokens(command) {
                 continue;
             }
 
-            if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+            if (ch === ' ' || ch === '\t' || ch === '\n') {
+                if (ch === '\n') unescapedShellCharacters.push(ch);
                 if (tokenActive) {
-                    tokens.push(current);
-                    current = '';
-                    tokenActive = false;
+                    pushCurrent();
                 }
                 continue;
             }
 
             current += ch;
+            if (SHELL_METACHARACTERS.includes(ch)) {
+                currentUnescapedShellCharacters.push(ch);
+                unescapedShellCharacters.push(ch);
+            }
             tokenActive = true;
             continue;
         }
@@ -1334,13 +1352,18 @@ function splitCommandTokens(command) {
     }
 
     if (tokenActive) {
-        tokens.push(current);
+        pushCurrent();
     }
 
-    return tokens;
+    return { records, unescapedShellCharacters };
 }
 
-function findUnquotedPipe(command) {
+function splitCommandTokens(command) {
+    const tokenization = splitCommandTokenRecords(command);
+    return tokenization && tokenization.records.map(record => record.value);
+}
+
+function findUnquotedCharacter(command, target) {
     const source = String(command);
     let quote = null;
     let escaping = false;
@@ -1362,14 +1385,31 @@ function findUnquotedPipe(command) {
             quote = quote === '"' ? null : '"';
             continue;
         }
-        if (ch === '|' && quote === null) return i;
+        if (ch === target && quote === null) return i;
     }
     return -1;
 }
 
+function splitOnUnquotedCharacter(command, target) {
+    const source = String(command);
+    const parts = [];
+    let offset = 0;
+    while (offset <= source.length) {
+        const relativeIndex = findUnquotedCharacter(source.slice(offset), target);
+        if (relativeIndex === -1) {
+            parts.push(source.slice(offset));
+            return parts;
+        }
+        const index = offset + relativeIndex;
+        parts.push(source.slice(offset, index));
+        offset = index + 1;
+    }
+    return parts;
+}
+
 function parseEchoPipeline(command) {
     const expandedCommand = String(command);
-    const pipeIndex = findUnquotedPipe(expandedCommand);
+    const pipeIndex = findUnquotedCharacter(expandedCommand, '|');
     if (pipeIndex === -1) {
         return null;
     }
@@ -1387,7 +1427,7 @@ function parseEchoPipeline(command) {
         return null;
     }
 
-    const parts = lhs.split(';');
+    const parts = splitOnUnquotedCharacter(lhs, ';');
     const stdinLines = [];
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i].trim();
@@ -1451,7 +1491,9 @@ function runExecCommand(command, options) {
         );
     }
 
-    const tokens = splitCommandTokens(source);
+    const tokenization = splitCommandTokenRecords(source);
+    const tokenRecords = tokenization && tokenization.records;
+    const tokens = tokenRecords && tokenRecords.map(record => record.value);
     if (!tokens || tokens.length === 0) {
         return convertSpawnResultEncoding(
             unsupportedSpawnSyncResult('exec(empty command)'),
@@ -1462,15 +1504,16 @@ function runExecCommand(command, options) {
     // Preserve the one data-only redirection form required by the compatibility
     // suite. Every other shell metacharacter is rejected before inline work can
     // begin, instead of being passed to JavaScript as a misleading literal arg.
-    const redirectIndex = tokens.indexOf('<');
+    const redirectIndexes = tokenRecords
+        .map((record, index) => record.value === '<' &&
+            record.unescapedShellCharacters.length === 1 &&
+            record.unescapedShellCharacters[0] === '<' ? index : -1)
+        .filter(index => index !== -1);
+    const redirectIndex = redirectIndexes.length === 1 ? redirectIndexes[0] : -1;
     if (redirectIndex !== -1) {
-        const shellMetacharacters = "|;&<>$`(){}*?[]~#\n\r";
         const hasSingleTrailingRedirect = redirectIndex > 0 &&
             redirectIndex === tokens.length - 2 &&
-            tokens.lastIndexOf('<') === redirectIndex &&
-            tokens.filter((_, index) => index !== redirectIndex).every(token =>
-                !Array.from(token).some(ch => shellMetacharacters.includes(ch)),
-            );
+            tokenization.unescapedShellCharacters.length === 1;
         if (!hasSingleTrailingRedirect) {
             return convertSpawnResultEncoding(
                 unsupportedSpawnSyncResult('exec(shell syntax)'),
@@ -1598,7 +1641,7 @@ function hasUnsupportedJavaScriptShellSyntax(command) {
             continue;
         }
         if (ch === '\\' && quote !== "'") {
-            if (text[i + 1] === '\n' || text[i + 1] === '\r') {
+            if (text[i + 1] === '\n') {
                 return true;
             }
             escaping = true;
@@ -1620,7 +1663,7 @@ function hasUnsupportedJavaScriptShellSyntax(command) {
             quote = ch;
             continue;
         }
-        if (ch === '\n' || ch === '\r' || "|;&<>$`(){}*?[]~#".includes(ch)) {
+        if (ch === '\n' || "|;&<>$`(){}*?[]~#".includes(ch)) {
             return true;
         }
     }

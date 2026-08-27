@@ -324,11 +324,22 @@ export async function probePrimitives() {
                 exec(process.execPath + ' \${EXEC_ARGS} 42', {
                     env: { EXEC_ARGS: '-p -e' },
                 }, callback));
-            const unquotedEnvFields = ['a;b', 'c|d', 'a"b', '$(x)'];
-            const unquotedEnvData = await probeExecFailure(callback =>
-                exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE}', {
-                    env: { EXEC_VALUE: unquotedEnvFields.join(' ') },
-                }, callback));
+            const unquotedEnvFields = [
+                'a;b', 'c|d', 'a"b', '$(x)', '<', '>',
+                'a' + String.fromCharCode(92) + 'b', '~',
+                'a' + String.fromCharCode(13) + 'b',
+            ];
+            const unquotedEnvData = await Promise.all(unquotedEnvFields.map(value =>
+                probeExecFailure(callback =>
+                    exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE}', {
+                        env: { EXEC_VALUE: value },
+                    }, callback))));
+            const rejectedEnvExpansions = await Promise.all([
+                '*', '?', '[x]', 'a' + String.fromCharCode(0) + 'b',
+            ].map(value => probeExecFailure(callback =>
+                exec(process.execPath + ' -p 42 \${EXEC_VALUE}', {
+                    env: { EXEC_VALUE: value },
+                }, callback))));
             const injectedEnvStructure = await probeExecFailure(callback =>
                 exec('$' + '{EXEC_COMMAND}', {
                     env: { EXEC_COMMAND: 'echo ok | ' + process.execPath + ' -e "0"' },
@@ -388,13 +399,30 @@ export async function probePrimitives() {
                     splitEnvArguments.stdout === '42\\n' &&
                     splitEnvArguments.stderr === '' &&
                     splitEnvArguments.events.join(',') === 'callback,exit,close' &&
-                    !unquotedEnvData.callbackError &&
-                    unquotedEnvData.stdout === JSON.stringify(unquotedEnvFields) + '\\n' &&
-                    unquotedEnvData.stderr === '' &&
-                    unquotedEnvData.events.join(',') === 'callback,exit,close' &&
+                    unquotedEnvData.every((expansion, index) =>
+                        !expansion.callbackError &&
+                        expansion.stdout === JSON.stringify([unquotedEnvFields[index]]) + '\\n' &&
+                        expansion.stderr === '' &&
+                        expansion.events.join(',') === 'callback,exit,close') &&
+                    rejectedEnvExpansions.every(expansion =>
+                        expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
+                        expansion.stdout === '' && expansion.stderr === '') &&
                     injectedEnvStructure.callbackError &&
                     injectedEnvStructure.callbackError.code === 'ENOSYS' &&
                     injectedEnvStructure.stdout === '',
+                execEnvProbe: Object.fromEntries(Object.entries({
+                    splitEnvArguments,
+                    injectedEnvStructure,
+                    ...Object.fromEntries(unquotedEnvData.map(
+                        (expansion, index) => ['unquoted' + index, expansion])),
+                    ...Object.fromEntries(rejectedEnvExpansions.map(
+                        (expansion, index) => ['rejected' + index, expansion])),
+                }).map(([name, result]) => [name, {
+                    error: result.callbackError && result.callbackError.code,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                    events: result.events,
+                }])),
                 execPreservesQuotedPipelineSyntax: !quotedPipePipeline.callbackError &&
                     quotedPipePipeline.stdout === '3' &&
                     quotedPipePipeline.stderr === '' &&
