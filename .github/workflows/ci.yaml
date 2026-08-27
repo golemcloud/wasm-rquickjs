@@ -51,11 +51,14 @@ jobs:
           submodules: true
           fetch-depth: 2
       - uses: ./.github/actions/setup
+      - name: Prepare pristine agentic TypeScript hash inputs
+        run: git worktree add --detach "$RUNNER_TEMP/agentic-ts-source" HEAD
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Agentic TypeScript report contracts
         shell: bash
         env:
+          AGENTIC_TS_SOURCE_ROOT: ${{ runner.temp }}/agentic-ts-source
           PUSH_BEFORE: ${{ github.event.before }}
         run: |
           reports_to_check=""

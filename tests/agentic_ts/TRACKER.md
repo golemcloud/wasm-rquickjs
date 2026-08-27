@@ -5,12 +5,12 @@
 | cold `tsc --noEmit` | 0.55–0.60 s | 18.05 s | 18.70 s | wall time |
 | repeated unchanged non-incremental checks | — | 18.25 s | 18.12 s | median, no `.tsbuildinfo`, 5 fresh jobs |
 | incremental `.tsbuildinfo` checks | — | 11.71 s | 11.23 s | warm median, persisted artifact, 5 fresh jobs |
-| repeated invalid checks then recovery | — | 12.16 s | 11.36 s | failure median, five nonzero exits followed by a successful check |
+| repeated invalid checks then recovery | — | 12.16 s | 11.36 s | warm incremental failure median, one changed file per iteration, then recovery |
 | project references/package graph | — | 20.18 s | 18.29 s | wall time, raw workspace fixture |
 | direct TypeScript execution | n/a | 0.449 s | 0.183 s | structured result and wall time |
 | TypeScript emit | n/a | 19.74 s | 17.66 s | emits the direct fixture to JavaScript; wall time |
 | generated JavaScript execution | n/a | 0.211 s | 0.184 s | structured result and wall time |
-| concurrent compiler/CPU/I/O jobs | n/a | 13.26 s | 11.90 s | contended sibling completion; isolated baselines in raw reports |
+| concurrent compiler/CPU/I/O jobs | n/a | 13.26 s | 11.90 s | warm incremental compiler plus CPU/I/O; isolated baselines in raw reports |
 | repeated timeout then recovery | n/a | 0.215 s | 0.200 s | termination median, five attempts followed by a successful job |
 | repeated cancellation then recovery | n/a | 0.202 s | 0.192 s | termination median, five attempts followed by a successful job |
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | max linear growth / max fresh-runtime heap variation |
