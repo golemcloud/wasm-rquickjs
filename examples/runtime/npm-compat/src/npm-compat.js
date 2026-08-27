@@ -357,6 +357,7 @@ export async function probePrimitives() {
                 process.execPath + ' -e "' + backtick + 'x' + backtick + '" < ' + envRedirectInput,
                 process.execPath + ' -e "\${MISSING}" < ' + envRedirectInput,
                 process.execPath + ' -e "0" ' + '\\\\' + '\\ncontinued < ' + envRedirectInput,
+                process.execPath + ' -e "0' + '\\\\' + '\\ncontinued" < ' + envRedirectInput,
             ].map(command => probeExecFailure(callback => exec(command, callback))));
             const injectedEnvStructure = await probeExecFailure(callback =>
                 exec('$' + '{EXEC_COMMAND}', {
@@ -429,10 +430,12 @@ export async function probePrimitives() {
                     !derivedRedirectToken.callbackError &&
                     derivedRedirectToken.stdout === JSON.stringify(['<', envRedirectInput]) + '\\n' &&
                     derivedRedirectToken.stderr === '' &&
-                    derivedRedirectToken.events.join(',') === 'callback,exit,close' &&
                     rejectedRedirectCommands.every(expansion =>
                         expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
-                        expansion.stdout === '' && expansion.stderr === '') &&
+                        expansion.emittedError && expansion.emittedError.code === 'ENOSYS' &&
+                        expansion.code === -38 && expansion.exitCode === -38 &&
+                        expansion.stdout === '' && expansion.stderr === '' &&
+                        expansion.events.join(',') === 'callback,error,close') &&
                     injectedEnvStructure.callbackError &&
                     injectedEnvStructure.callbackError.code === 'ENOSYS' &&
                     injectedEnvStructure.stdout === '',

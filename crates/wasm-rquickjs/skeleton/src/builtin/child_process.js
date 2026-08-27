@@ -1355,6 +1355,16 @@ function splitCommandTokenRecords(command) {
 
         if (ch === '\\' && i + 1 < text.length) {
             const next = text[i + 1];
+            if (next === '\n') {
+                // Preserve the original token only for diagnostics; recording
+                // the continuation makes the redirect path fail closed.
+                current += ch + next;
+                currentUnescapedShellCharacters.push(next);
+                unescapedShellCharacters.push(next);
+                tokenActive = true;
+                i += 1;
+                continue;
+            }
             if (next === '"' || next === '\\' || next === '$' || next === '`') {
                 current += next;
                 tokenActive = true;
