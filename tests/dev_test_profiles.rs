@@ -3,6 +3,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use camino_tempfile::Utf8TempDir;
 
 #[derive(Debug)]
@@ -163,4 +166,169 @@ fn wasmtime_fork_transform_supports_copied_manifests_and_new_patch_crates() {
     assert!(output.contains("wasmtime = { git = "));
     assert!(output.contains("wasmtime-component-util = { git = "));
     assert!(!output.contains("#wasmtime"));
+}
+
+#[cfg(unix)]
+fn skeleton_clippy_fixture() -> (Utf8TempDir, std::path::PathBuf, std::path::PathBuf) {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source_tests = fs::canonicalize(repo_root.join("tests"))
+        .expect("source tests directory should be available");
+    let source_root = source_tests
+        .parent()
+        .expect("source tests directory should have a repository parent");
+    let helper = source_root.join("tools/check-skeleton-clippy.sh");
+    let temp = Utf8TempDir::new().expect("temporary directory should be created");
+    let tools_dir = temp.path().join("tools");
+    let skeleton_dir = temp.path().join("crates/wasm-rquickjs/skeleton");
+    fs::create_dir_all(&tools_dir).expect("fixture tools directory should be created");
+    fs::create_dir_all(&skeleton_dir).expect("fixture skeleton directory should be created");
+    fs::copy(helper, tools_dir.join("check-skeleton-clippy.sh"))
+        .expect("Clippy helper should be copied");
+    fs::write(skeleton_dir.join("Cargo.toml_"), "[workspace]\n")
+        .expect("stored fixture manifest should be written");
+    fs::write(skeleton_dir.join("Cargo.lock"), "# fixture lockfile\n")
+        .expect("fixture lockfile should be written");
+    fs::create_dir_all(skeleton_dir.join("src"))
+        .expect("fixture source directory should be created");
+    fs::write(skeleton_dir.join("src/lib.rs"), "mod builtin;\n")
+        .expect("fixture lib.rs should be written");
+    fs::write(skeleton_dir.join("src/builtin_p3.rs"), "")
+        .expect("fixture P3 registry should be written");
+
+    let fake_cargo = temp.path().join("fake-cargo.sh");
+    fs::write(
+        &fake_cargo,
+        "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"$FAKE_SKELETON_TARGET\"\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\ncall=$(wc -l < \"$FAKE_CARGO_LOG\")\nif [[ -n \"${FAKE_CARGO_EXIT:-}\" && \"$call\" -eq \"${FAKE_CARGO_FAIL_ON_CALL:-1}\" ]]; then\n    exit \"$FAKE_CARGO_EXIT\"\nfi\n",
+    )
+    .expect("fake Cargo should be written");
+    let mut permissions = fs::metadata(&fake_cargo)
+        .expect("fake Cargo metadata should exist")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&fake_cargo, permissions).expect("fake Cargo should be executable");
+
+    (temp, skeleton_dir.into(), fake_cargo.into())
+}
+
+#[cfg(unix)]
+#[test]
+fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
+    let (temp, skeleton_dir, fake_cargo) = skeleton_clippy_fixture();
+    let log = temp.path().join("cargo.log");
+    let output = Command::new("bash")
+        .arg(temp.path().join("tools/check-skeleton-clippy.sh"))
+        .env("CARGO", &fake_cargo)
+        .env("FAKE_CARGO_LOG", &log)
+        .env("FAKE_SKELETON_TARGET", skeleton_dir.join("target"))
+        .output()
+        .expect("Clippy helper should run");
+
+    assert!(
+        output.status.success(),
+        "Clippy helper failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(skeleton_dir.join("Cargo.toml_").is_file());
+    assert!(!skeleton_dir.join("Cargo.toml").exists());
+    assert!(!skeleton_dir.join("target").exists());
+
+    let invocations = fs::read_to_string(log).expect("fake Cargo log should exist");
+    let invocations = invocations.lines().collect::<Vec<_>>();
+    assert_eq!(invocations.len(), 4);
+    assert!(invocations.iter().all(|args| {
+        args.contains("--locked")
+            && args.contains("--target wasm32-wasip2")
+            && args.contains("--all-targets")
+            && args.contains("-Dwarnings")
+    }));
+    assert!(invocations[0].contains("clippy --manifest-path"));
+    assert!(invocations[1].contains("--features full,golem,typescript-transform-runtime"));
+    assert!(invocations[2].contains("--features normal-p3"));
+    assert!(invocations[3].contains("--features full-p3,golem,typescript-transform-runtime"));
+}
+
+#[cfg(unix)]
+#[test]
+fn skeleton_clippy_helper_restores_the_manifest_after_a_lint_failure() {
+    let (temp, skeleton_dir, fake_cargo) = skeleton_clippy_fixture();
+    let log = temp.path().join("cargo.log");
+    let output = Command::new("bash")
+        .arg(temp.path().join("tools/check-skeleton-clippy.sh"))
+        .env("CARGO", &fake_cargo)
+        .env("FAKE_CARGO_EXIT", "23")
+        .env("FAKE_CARGO_LOG", &log)
+        .env("FAKE_SKELETON_TARGET", skeleton_dir.join("target"))
+        .output()
+        .expect("Clippy helper should run");
+
+    assert_eq!(output.status.code(), Some(23));
+    assert!(skeleton_dir.join("Cargo.toml_").is_file());
+    assert!(!skeleton_dir.join("Cargo.toml").exists());
+    assert!(!skeleton_dir.join("target").exists());
+    assert_eq!(
+        fs::read_to_string(log)
+            .expect("fake Cargo log should exist")
+            .lines()
+            .count(),
+        1
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn skeleton_clippy_helper_restores_the_manifest_before_late_failure_cleanup() {
+    let (temp, skeleton_dir, fake_cargo) = skeleton_clippy_fixture();
+    let log = temp.path().join("cargo.log");
+    let cleanup_log = temp.path().join("cleanup.log");
+    let fake_bin = temp.path().join("fake-bin");
+    fs::create_dir(&fake_bin).expect("fake binary directory should be created");
+    let fake_rm = fake_bin.join("rm");
+    fs::write(
+        &fake_rm,
+        "#!/usr/bin/env bash\nset -euo pipefail\nif [[ ! -f \"$FAKE_STORED_MANIFEST\" || -e \"$FAKE_LIVE_MANIFEST\" ]]; then\n    exit 41\nfi\nprintf 'manifest-restored %s\\n' \"$*\" >> \"$FAKE_CLEANUP_LOG\"\nexec /bin/rm \"$@\"\n",
+    )
+    .expect("fake rm should be written");
+    let mut permissions = fs::metadata(&fake_rm)
+        .expect("fake rm metadata should exist")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&fake_rm, permissions).expect("fake rm should be executable");
+
+    let path = format!(
+        "{}:{}",
+        fake_bin,
+        std::env::var("PATH").expect("PATH should be set")
+    );
+    let output = Command::new("bash")
+        .arg(temp.path().join("tools/check-skeleton-clippy.sh"))
+        .env("PATH", path)
+        .env("CARGO", &fake_cargo)
+        .env("FAKE_CARGO_EXIT", "23")
+        .env("FAKE_CARGO_FAIL_ON_CALL", "4")
+        .env("FAKE_CARGO_LOG", &log)
+        .env("FAKE_CLEANUP_LOG", &cleanup_log)
+        .env("FAKE_LIVE_MANIFEST", skeleton_dir.join("Cargo.toml"))
+        .env("FAKE_STORED_MANIFEST", skeleton_dir.join("Cargo.toml_"))
+        .env("FAKE_SKELETON_TARGET", skeleton_dir.join("target"))
+        .output()
+        .expect("Clippy helper should run");
+
+    assert_eq!(output.status.code(), Some(23));
+    assert!(skeleton_dir.join("Cargo.toml_").is_file());
+    assert!(!skeleton_dir.join("Cargo.toml").exists());
+    assert!(!skeleton_dir.join("target").exists());
+    assert_eq!(
+        fs::read_to_string(log)
+            .expect("fake Cargo log should exist")
+            .lines()
+            .count(),
+        4
+    );
+    assert_eq!(
+        fs::read_to_string(cleanup_log)
+            .expect("cleanup log should exist")
+            .lines()
+            .count(),
+        2
+    );
 }

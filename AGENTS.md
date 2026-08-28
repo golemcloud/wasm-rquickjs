@@ -176,6 +176,16 @@ To fix common issues automatically:
 cargo clippy --fix -- -Dwarnings
 ```
 
+The embedded skeleton is a separate Cargo project. Run its complete P2/P3 and
+default/maximal feature matrix with the failure-safe repository helper:
+
+```bash
+tools/check-skeleton-clippy.sh
+```
+
+The helper restores `Cargo.toml_` and removes skeleton-local build artifacts on
+both success and failure.
+
 ### Pre-commit Checks
 
 Run all quality checks before committing:

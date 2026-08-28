@@ -4,4 +4,5 @@ world websocket {
   export test-binary-send: func() -> bool;
   export test-websocket-stream-send: func() -> bool;
   export test-send-snapshot-and-close-order: func() -> bool;
+  export test-receive-close-reentrancy: func() -> bool;
 }
