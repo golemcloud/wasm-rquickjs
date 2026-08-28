@@ -9,6 +9,7 @@ world npm-compat {
   export run-registry-installed: func() -> string;
   export run-package-formats: func() -> string;
   export run-bin-direct: func() -> string;
+  export probe-linked-layouts: func() -> string;
   export probe-runtime: func() -> string;
   export probe-primitives: func() -> string;
 }

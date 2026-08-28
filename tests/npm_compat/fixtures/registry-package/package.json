@@ -2,5 +2,8 @@
   "name": "fixture-registry-dependency",
   "version": "1.0.0",
   "type": "module",
+  "bin": {
+    "fixture-registry-bin": "bin/fixture-registry-bin.js"
+  },
   "exports": "./index.js"
 }

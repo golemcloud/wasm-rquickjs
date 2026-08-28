@@ -182,13 +182,6 @@ pub(crate) fn realpath_for_module_resolution(
     fs::realpath_for_module_resolution(ctx, path)
 }
 
-pub(crate) fn realpath_for_module_resolution_with_symlinks(
-    emulated_symlinks: &std::collections::HashMap<String, String>,
-    path: &str,
-) -> Option<String> {
-    fs::realpath_for_module_resolution_with_symlinks(emulated_symlinks, path)
-}
-
 /// Registers builtin native and JavaScript module names with the resolver.
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,

@@ -442,7 +442,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.symlinkSync(
-            '/esm-package-map-edge-app/node_modules/exported-pkg/subdir',
+            'subdir',
             '/esm-package-map-edge-app/node_modules/exported-pkg/linked-subdir',
         );
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
@@ -8983,7 +8983,7 @@ export const testCjsEsmDefaultSnapshotTiming = async () => {
 
         fs.writeFileSync(`${root}/symlink-target.js`, 'module.exports = { value: 1 };');
         try {
-            fs.symlinkSync(`${root}/symlink-target.js`, `${root}/symlink-link.js`);
+            fs.symlinkSync('symlink-target.js', `${root}/symlink-link.js`);
         } catch (error) {
             if (!error || error.code !== 'EEXIST') {
                 throw error;
@@ -9043,8 +9043,8 @@ export const testCjsSymlinkCircularCache = async () => {
 
         fs.mkdirSync(`${moduleA}/node_modules`, { recursive: true });
         fs.mkdirSync(`${moduleB}/node_modules`, { recursive: true });
-        fs.symlinkSync(moduleA, moduleALink);
-        fs.symlinkSync(moduleB, moduleBLink);
+        fs.symlinkSync('../../moduleA', moduleALink);
+        fs.symlinkSync('../../moduleB', moduleBLink);
         fs.writeFileSync(`${root}/index.cjs`, 'module.exports = require("moduleA");');
         fs.writeFileSync(`${moduleA}/index.js`, 'module.exports = { b: require("moduleB") };');
         fs.writeFileSync(`${moduleB}/index.js`, 'module.exports = { a: require("moduleA") };');
@@ -9097,7 +9097,7 @@ export const testEsmSymlinkModuleIdentity = async () => {
         fs.writeFileSync(`${root}/packages/pkg/index.mjs`, 'export const url = import.meta.url; export default [];');
         fs.writeFileSync(`${root}/app/entry.mjs`, "export default await import('pkg');");
         try {
-            fs.symlinkSync(`${root}/packages/pkg`, `${root}/app/node_modules/pkg`, 'dir');
+            fs.symlinkSync('../../packages/pkg', `${root}/app/node_modules/pkg`, 'dir');
         } catch (error) {
             if (!error || error.code !== 'EEXIST') {
                 throw error;
@@ -9122,7 +9122,7 @@ export const testEsmSymlinkModuleIdentity = async () => {
         fs.writeFileSync(`${preserveRoot}/packages/preserve-pkg/child.mjs`, 'export default import.meta.url;');
         fs.writeFileSync(`${preserveRoot}/app/entry.mjs`, "export default await import('preserve-pkg');");
         try {
-            fs.symlinkSync(`${preserveRoot}/packages/preserve-pkg`, `${preserveRoot}/app/node_modules/preserve-pkg`, 'dir');
+            fs.symlinkSync('../../packages/preserve-pkg', `${preserveRoot}/app/node_modules/preserve-pkg`, 'dir');
         } catch (error) {
             if (!error || error.code !== 'EEXIST') {
                 throw error;

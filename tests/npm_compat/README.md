@@ -38,15 +38,15 @@ without reusing the stream; post-close private-handle reuse is not supported.
 | `npm config get` | Constrained | Effective cache and prefix values from isolated `npm_config_*` state are covered; config listing and mounted npmrc precedence are not covered yet. |
 | `npm install` | Constrained | Local `file:` and deterministic-registry pure-JavaScript dependencies work with scripts disabled; a simple local `node` postinstall is covered. Public registries, proxies, authentication, and complex resolution are not covered. |
 | `npm ci` | Constrained | A lockfile cleanly replaces `node_modules`, installs a local pure-JavaScript dependency, and leaves it loadable by a fresh execution job. |
-| `npm ls`, `npm explain` | Constrained | `npm ls --json` reconstructs a guest-created tree, but currently reports a local `file:` dependency as invalid with `ELSPROBLEMS`; correct link identity is gated by GOL-388. `npm explain` coverage is retained separately. |
-| `npm uninstall`, `npm update`, `npm dedupe` | Constrained | Local pure-JavaScript tree mutation with lifecycle scripts and bin links disabled. Revisiting a persisted `.bin` placeholder requires the GOL-388 identity work and persistent executable-mode metadata; registry resolution and complex trees are not covered. |
+| `npm ls`, `npm explain` | Constrained | `npm ls --json` reconstructs a guest-created tree, but still reports the materialized local `file:` dependency as invalid with `ELSPROBLEMS`; this is distinct from linked-package realpath identity. `npm explain` coverage is retained separately. |
+| `npm uninstall`, `npm update`, `npm dedupe` | Constrained | Local pure-JavaScript tree mutation with lifecycle scripts and bin links disabled. Registry resolution and complex linked trees are not covered. |
 | `npm pack` | Constrained | JSON metadata and file selection for a local pure-JavaScript project are covered with `--dry-run --ignore-scripts`; archive creation is not covered yet. |
 | `npm run` | Constrained | Simple `node <script>` commands dispatched by npm's literal `sh -c` form work with cwd, argv, npm environment, output, and exit status. `/bin/sh`, `shell: true`, shell operators, shell expansions, and external executables are not part of this data-only adapter and fail explicitly. Child scripts currently execute inline in the npm runtime rather than in a fresh runtime. |
 | `npm test`, `npm start`, `npm restart`, `npm stop` | Planned | These aliases use lifecycle execution but are not directly covered yet. |
-| `npm exec` | Deferred | Emulated `.bin` symlink identity (tracked by GOL-388) and executable-mode metadata must both persist across fresh execution jobs. The current CLI fails explicitly with `ENOSYS` instead of invoking a wrong target. |
-| `npx` | Deferred | Uses the same package-bin execution path as `npm exec`; local and acquired binaries require persistent symlink identity and executable-mode metadata. |
+| `npm exec` | Constrained | Local and deterministic-registry JavaScript bins execute through persistent `.bin` symlinks in fresh runtimes. WASI does not expose executable permission bits, so only linked launchers with a supported Node shebang receive this portable-bin treatment; direct regular scripts still require the emulated executable bit. Native binaries, arbitrary shells, and host executables remain unsupported. |
+| `npx` | Constrained | Local JavaScript bins use the same supported execution path as `npm exec`; package acquisition is covered through the equivalent `npm exec --package` frontend. |
 | `npm init` | Constrained | `npm init --yes` creates the default package manifest; interactive prompting and initializer packages are not covered. |
-| npm workspaces and `npm link` | Deferred | GOL-388 must establish correct symlink and package identity behavior. |
+| npm workspaces and `npm link` | Constrained | Local JavaScript workspace and `npm link` packages preserve realpath and single-module identity. Native executables and Windows hosts without symlink privilege remain outside this boundary. |
 | `npm view` | Constrained | Version lookup against the deterministic registry is covered; public registry metadata variants and authentication are not. |
 | `npm audit`, `npm search`, `npm outdated` | Planned | Additional registry endpoints and response formats are not part of the current deterministic fixture. |
 | publish, login, token, access, and ownership commands | Unsupported initially | Remote mutation and credential management are outside the first compatibility target. |
@@ -62,10 +62,10 @@ without reusing the stream; post-close private-handle reuse is not supported.
 | Tree resolution | `--install-links`, `--install-strategy`, `--legacy-peer-deps`, `--strict-peer-deps` | Constrained | Local `file:` installation with `--install-links` is covered; peer and alternate tree strategies are not. |
 | Lockfiles | `--package-lock`, `--package-lock-only` | Constrained | Install creates a lockfile, ci consumes it to replace the tree, and package-lock-only resolves local dependencies without materializing `node_modules`. |
 | Lifecycle | `--ignore-scripts`, `--foreground-scripts` | Constrained | Scripts-disabled installation and a foreground `node` postinstall are covered. Shell operators, shell expansions, and external executables fail explicitly. |
-| Links | `--bin-links`, `--install-links` | Deferred | File dependencies can be materialized, and mutation works with `--bin-links=false`; `.bin` launchers require persistent symlink identity (GOL-388) and executable-mode metadata. |
+| Links | `--bin-links`, `--install-links` | Constrained | Persistent `.bin`, workspace, `npm link`, and representative pnpm-style relative links preserve readlink, realpath, and module identity. Rooted targets cannot be resolved within a WASI preopen, so the adapter rejects them at creation. |
 | Network and cache | `--registry`, `--offline`, `--prefer-offline`, retry and proxy settings | Constrained | Registry metadata/tarballs go through `wasi:http`; Agent-provided socket hooks are ignored with a warning rather than bypassing the component transport. Proxy Agents are therefore not enforced and must not be relied on to route or isolate traffic. Fresh `npm ci --offline` restores from cache. A hanging request times out and releases execution capacity. Prefer-offline, proxy-aware fail-closed behavior, and redacted failures remain planned. |
-| Workspaces | `--workspace`, `--workspaces`, `--include-workspace-root` | Deferred | Requires the GOL-388 workspace/link identity work. |
-| npm exec and npx | `--package`, `--call`, `--yes`, `--` | Deferred | The actual frontends are covered through their explicit `.bin`/`ENOSYS` failure; success requires persistent symlink identity and executable-mode metadata across fresh jobs. |
+| Workspaces | `--workspace`, `--workspaces`, `--include-workspace-root` | Constrained | Default local workspace installation and linked package identity are covered; workspace-selection flags remain planned. |
+| npm exec and npx | `--package`, `--call`, `--yes`, `--` | Constrained | Local bins and deterministic-registry acquisition cover `--package`, `--yes`, and argument forwarding through `--`; `--call` remains planned. |
 | Global installation | `--global`, `--prefix` | Planned | The isolated prefix is observable, but global installation is not an initial supported workflow. |
 
 ## Package classes
@@ -80,9 +80,10 @@ without reusing the stream; post-close private-handle reuse is not supported.
 | Platform and optional dependencies | Constrained | Optional inclusion/omission is covered; OS/CPU filtering and tolerated optional installation failures remain planned. |
 | Native addons and `node-gyp` | Unsupported | Components cannot load host `.node` files or spawn host compiler toolchains. |
 | Packages containing portable WASM | Planned | WASM loading/runtime APIs require separate compatibility evidence. |
-| `file:` dependencies | Constrained | Materialization and execution work; link validity and workspaces remain gated by GOL-388, while `.bin` launchers additionally require persistent executable-mode metadata. |
+| `file:` dependencies | Constrained | Materialization, execution, `.bin`, workspace links, npm links, and later fresh-runtime identity are covered. |
 | Registry tarballs | Constrained | Deterministic metadata, download, cache reuse, offline ci, and later execution pass through `wasi:http`. |
-| Workspaces, `npm link`, linked Git dependencies | Deferred | Requires persistent symlink/package identity from GOL-388; Git also requires an unavailable external executable. |
+| Workspaces and `npm link` | Constrained | Local JavaScript packages preserve linked package identity. |
+| Linked Git dependencies | Unsupported | Git requires an unavailable external executable. |
 
 ## Remaining progression
 
@@ -90,13 +91,14 @@ The P2 and P3 baseline covers CLI startup, config inspection, local and registry
 installation, ci, offline cache restoration, fresh-job loading, JavaScript
 lifecycle/run scripts, a `typescript-transform-runtime` workspace entry
 consuming an installed JavaScript dependency, tree inspection and mutation,
-init, pack dry-run, and the actual npm exec/npx failure boundary. Separate
+init, pack dry-run, local npm exec/npx success, deterministic-registry bin
+acquisition, workspaces, npm link, and pnpm-style module identity. Separate
 component instances also perform different installs concurrently, and one then
 repeats a clean install without workspace state crossing between them.
 
 Next coverage should add peer-resolution and platform-filtering flags, network
 error redaction, and public-registry smoke tests outside deterministic CI.
-GOL-388 currently tracks persistent symlink identity for `.bin`, npm exec/npx,
-workspace, and link workflows. Successful launchers additionally require
-executable-mode metadata to persist across fresh execution jobs; that acceptance
-criterion must be added to GOL-388 or tracked as an explicit companion issue.
+Linked workflows require persistent relative WASI symlinks. Production Golem
+and macOS/Linux local development support them; Windows local development
+currently requires Developer Mode or an equivalent privilege. Rooted symlink
+targets are unsupported by WASI and fail atomically with `EINVAL`.

@@ -3223,7 +3223,7 @@ impl Resolver for FileUrlResolver {
         if let Some((path, suffix)) = Self::file_url_to_path_parts(name) {
             let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
             let url = NodeFileResolver::module_url_for_file_specifier(name);
-            if NodeFileResolver::module_resolution_is_dir(ctx, &normalized) {
+            if NodeFileResolver::module_resolution_is_dir(&normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3237,7 +3237,7 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            if !NodeFileResolver::module_resolution_is_file(ctx, &normalized) {
+            if !NodeFileResolver::module_resolution_is_file(&normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3660,24 +3660,16 @@ impl NodeFileResolver {
         if preserve_symlinks {
             return normalized.to_string();
         }
-        let realpath_input = crate::builtin::realpath_for_module_resolution(ctx, normalized)
-            .unwrap_or_else(|| normalized.to_string());
-        std::fs::canonicalize(&realpath_input)
-            .map(|path| CjsEvalResolver::normalize_path(&path))
-            .unwrap_or(realpath_input)
-    }
-
-    fn module_resolution_path(ctx: &Ctx<'_>, normalized: &str) -> String {
         crate::builtin::realpath_for_module_resolution(ctx, normalized)
             .unwrap_or_else(|| normalized.to_string())
     }
 
-    fn module_resolution_is_file(ctx: &Ctx<'_>, normalized: &str) -> bool {
-        std::path::Path::new(&Self::module_resolution_path(ctx, normalized)).is_file()
+    fn module_resolution_is_file(normalized: &str) -> bool {
+        std::path::Path::new(normalized).is_file()
     }
 
-    fn module_resolution_is_dir(ctx: &Ctx<'_>, normalized: &str) -> bool {
-        std::path::Path::new(&Self::module_resolution_path(ctx, normalized)).is_dir()
+    fn module_resolution_is_dir(normalized: &str) -> bool {
+        std::path::Path::new(normalized).is_dir()
     }
 
     fn resolve_candidate(
@@ -3731,7 +3723,7 @@ impl NodeFileResolver {
     ) -> bool {
         match semantics {
             FileCandidateSemantics::ModuleResolution => {
-                Self::module_resolution_is_file(ctx, normalized)
+                Self::module_resolution_is_file(normalized)
             }
             FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
         }
@@ -4225,7 +4217,6 @@ struct NodePackageResolutionContext<'a, 'w> {
     conditions: &'a [String],
     warnings: &'w mut Vec<NodePackageWarning>,
     file_probe_cache: HashMap<String, bool>,
-    emulated_symlinks: HashMap<String, String>,
     package_json_cache: PackageJsonCache,
 }
 
@@ -4236,13 +4227,6 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         conditions: &'a [String],
         warnings: &'w mut Vec<NodePackageWarning>,
     ) -> Self {
-        let emulated_symlinks = ctx
-            .userdata::<crate::internal::runtime_services::RuntimeServices>()
-            .expect("runtime services not initialized")
-            .fs
-            .borrow()
-            .emulated_symlinks
-            .clone();
         let package_json_cache = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .expect("runtime services not initialized")
@@ -4253,7 +4237,6 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
             conditions,
             warnings,
             file_probe_cache: HashMap::new(),
-            emulated_symlinks,
             package_json_cache,
         }
     }
@@ -4262,12 +4245,7 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         if let Some(cached) = self.file_probe_cache.get(normalized) {
             return *cached;
         }
-        let fs_path = crate::builtin::realpath_for_module_resolution_with_symlinks(
-            &self.emulated_symlinks,
-            normalized,
-        )
-        .unwrap_or_else(|| normalized.to_string());
-        let is_file = std::path::Path::new(&fs_path).is_file();
+        let is_file = std::path::Path::new(normalized).is_file();
         self.file_probe_cache
             .insert(normalized.to_string(), is_file);
         is_file
@@ -4279,13 +4257,7 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
     }
 
     fn is_dir(&self, path: &std::path::Path) -> bool {
-        let normalized = CjsEvalResolver::normalize_path(path);
-        let fs_path = crate::builtin::realpath_for_module_resolution_with_symlinks(
-            &self.emulated_symlinks,
-            &normalized,
-        )
-        .unwrap_or(normalized);
-        std::path::Path::new(&fs_path).is_dir()
+        path.is_dir()
     }
 
     fn with_mode<T>(
@@ -4324,19 +4296,6 @@ enum CjsAnalysisProbe {
 }
 
 impl NodeModulesResolver {
-    fn module_resolution_path(
-        path: &std::path::Path,
-        resolution: &NodePackageResolutionContext<'_, '_>,
-    ) -> std::path::PathBuf {
-        let normalized = CjsEvalResolver::normalize_path(path);
-        crate::builtin::realpath_for_module_resolution_with_symlinks(
-            &resolution.emulated_symlinks,
-            &normalized,
-        )
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| path.to_path_buf())
-    }
-
     fn try_resolve_with_context(
         &self,
         base: &str,
@@ -4374,7 +4333,7 @@ impl NodeModulesResolver {
                 && dir.file_name().is_some_and(|name| name == "node_modules");
             if !skip_nested_node_modules {
                 let package_path = dir.join("node_modules").join(package_name);
-                if Self::module_resolution_path(&package_path, resolution).is_dir() {
+                if package_path.is_dir() {
                     if let Some(resolved) = Self::try_resolve_package_directory(
                         base,
                         name,
@@ -4472,8 +4431,7 @@ impl NodeModulesResolver {
         if let Some(cached) = resolution.package_json_cache.get(&cache_key) {
             return Ok(Some(cached));
         }
-        let read_path = Self::module_resolution_path(pkg_path, resolution);
-        match std::fs::read_to_string(&read_path) {
+        match std::fs::read_to_string(pkg_path) {
             Ok(pkg_content) => {
                 let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(
                     |_| NodePackageResolveError::InvalidPackageConfig {
@@ -6511,7 +6469,7 @@ fn import_meta_trailing_slash_package_has_exports(
     let mut dir = base_dir.to_path_buf();
     loop {
         let package_path = dir.join("node_modules").join(package_name);
-        if NodeModulesResolver::module_resolution_path(&package_path, &resolution).is_dir() {
+        if package_path.is_dir() {
             let pkg_path = package_path.join("package.json");
             return NodeModulesResolver::read_package_json_optional_with_context(
                 &pkg_path,

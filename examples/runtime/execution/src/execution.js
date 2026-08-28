@@ -244,6 +244,134 @@ export async function run() {
         return { mode, link, real, renamed };
     ` });
 
+    const persistentSymlinkCreated = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        fs.mkdirSync('/tmp/persistent-link', { recursive: true });
+        fs.writeFileSync('/tmp/persistent-link/target.txt', 'persistent');
+        fs.symlinkSync('target.txt', '/tmp/persistent-link/link.txt');
+        let absoluteError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/absolute.txt');
+        } catch (error) {
+            absoluteError = error.code;
+        }
+        fs.writeFileSync('/tmp/persistent-link/existing.txt', 'preserved');
+        let existingError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/existing.txt');
+        } catch (error) {
+            existingError = error.code;
+        }
+        let missingParentError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/missing/link.txt');
+        } catch (error) {
+            missingParentError = error.code;
+        }
+        fs.writeFileSync('/tmp/persistent-link/parent-file', 'parent');
+        let parentFileError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', '/tmp/persistent-link/parent-file/link.txt');
+        } catch (error) {
+            parentFileError = error.code;
+        }
+        let relativeParentFileError;
+        try {
+            fs.symlinkSync('target.txt', '/tmp/persistent-link/parent-file/relative-link.txt');
+        } catch (error) {
+            relativeParentFileError = error.code;
+        }
+        process.chdir('/tmp/persistent-link');
+        let bareDestinationError;
+        try {
+            fs.symlinkSync('/tmp/persistent-link/target.txt', 'bare.txt');
+        } catch (error) {
+            bareDestinationError = error.code;
+        }
+        return {
+            absoluteError,
+            absoluteExists: fs.existsSync('/tmp/persistent-link/absolute.txt'),
+            existingError,
+            existingValue: fs.readFileSync('/tmp/persistent-link/existing.txt', 'utf8'),
+            missingParentError,
+            parentFileError,
+            relativeParentFileError,
+            bareDestinationError,
+            bareDestinationExists: fs.existsSync('bare.txt'),
+        };
+    ` });
+    const persistentSymlinkRead = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        return {
+            target: fs.readlinkSync('/tmp/persistent-link/link.txt'),
+            value: fs.readFileSync('/tmp/persistent-link/link.txt', 'utf8'),
+            realpath: fs.realpathSync('/tmp/persistent-link/link.txt'),
+            isSymbolicLink: fs.lstatSync('/tmp/persistent-link/link.txt').isSymbolicLink(),
+        };
+    ` });
+    const persistentSymlinkEdges = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        fs.symlinkSync('missing.txt', '/tmp/persistent-link/broken.txt');
+        fs.symlinkSync('cycle-b.txt', '/tmp/persistent-link/cycle-a.txt');
+        fs.symlinkSync('cycle-a.txt', '/tmp/persistent-link/cycle-b.txt');
+        fs.mkdirSync('/tmp/persistent-link/tree/target', { recursive: true });
+        fs.writeFileSync('/tmp/persistent-link/tree/target/file.txt', 'tree');
+        fs.symlinkSync('target', '/tmp/persistent-link/tree/linked-target');
+        const recursiveNames = fs.readdirSync('/tmp/persistent-link/tree', { recursive: true }).sort();
+        const recursiveCallbackNames = await new Promise((resolve, reject) => {
+            fs.readdir('/tmp/persistent-link/tree', { recursive: true }, (error, entries) => {
+                if (error) reject(error);
+                else resolve(entries.sort());
+            });
+        });
+        const recursivePromiseNames = (
+            await fs.promises.readdir('/tmp/persistent-link/tree', { recursive: true })
+        ).sort();
+        fs.mkdirSync('/tmp/persistent-link/watch-tree/target', { recursive: true });
+        fs.writeFileSync('/tmp/persistent-link/watch-tree/target/file.txt', 'watch');
+        fs.symlinkSync('.', '/tmp/persistent-link/watch-tree/self');
+        const recursiveWatchEvents = [];
+        let targetCreatedEventCount = 0;
+        let resolveWatchPoll;
+        const watchPoll = new Promise((resolve) => { resolveWatchPoll = resolve; });
+        const watcher = fs.watch('/tmp/persistent-link/watch-tree', { recursive: true }, (event, filename) => {
+            if (filename == null) return;
+            const name = filename.toString();
+            recursiveWatchEvents.push([event, name]);
+            if (name === 'target/created.txt' && ++targetCreatedEventCount === 2) resolveWatchPoll();
+        });
+        const recursiveWatcherIsFsWatcher = watcher instanceof fs.FSWatcher;
+        fs.writeFileSync('/tmp/persistent-link/watch-tree/target/created.txt', 'created');
+        await Promise.race([
+            watchPoll,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('recursive watch poll timed out')), 2000)),
+        ]);
+        watcher.close();
+        let cycleError;
+        try { fs.realpathSync('/tmp/persistent-link/cycle-a.txt'); }
+        catch (error) { cycleError = error.code; }
+        let cycleDestinationError;
+        try { fs.symlinkSync('target.txt', '/tmp/persistent-link/cycle-a.txt/child.txt'); }
+        catch (error) { cycleDestinationError = error.code; }
+        fs.renameSync('/tmp/persistent-link/link.txt', '/tmp/persistent-link/moved.txt');
+        const movedTarget = fs.readlinkSync('/tmp/persistent-link/moved.txt');
+        fs.unlinkSync('/tmp/persistent-link/moved.txt');
+        return {
+            brokenExists: fs.existsSync('/tmp/persistent-link/broken.txt'),
+            brokenIsSymbolicLink: fs.lstatSync('/tmp/persistent-link/broken.txt').isSymbolicLink(),
+            brokenTarget: fs.readlinkSync('/tmp/persistent-link/broken.txt'),
+            cycleError,
+            cycleDestinationError,
+            recursiveNames,
+            recursiveCallbackNames,
+            recursivePromiseNames,
+            recursiveWatcherIsFsWatcher,
+            recursiveWatchEvents,
+            movedTarget,
+            movedExistsAfterUnlink: fs.existsSync('/tmp/persistent-link/moved.txt'),
+        };
+    ` });
+
     const isolationSource = `
         const fs = await import('node:fs');
         const label = process.env.LABEL;
@@ -318,6 +446,7 @@ export async function run() {
         typescriptDisabled: process.features.typescript === false,
         disabledStripError, disabledExecutionError, imports,
         privateImport, removedAliases, cloneChecks, resourceError, pathAliases,
+        persistentSymlinkCreated, persistentSymlinkRead, persistentSymlinkEdges,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },
     });

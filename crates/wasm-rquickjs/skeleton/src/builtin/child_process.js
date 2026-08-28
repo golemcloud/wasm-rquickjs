@@ -1584,7 +1584,13 @@ function isPathLookupMiss(error) {
 
 function readShebangLine(fs, candidate) {
     const candidateStat = fs.statSync(candidate);
-    if (!candidateStat.isFile() || (candidateStat.mode & 0o111) === 0) {
+    // WASI filesystem metadata has no executable permission bits. npm's
+    // portable bin representation is a symlink to a JavaScript entry point,
+    // so accept that link shape while retaining the executable-bit check for
+    // direct regular files.
+    const linkedLauncher = fs.lstatSync(candidate).isSymbolicLink();
+    if (!candidateStat.isFile() ||
+        (!linkedLauncher && (candidateStat.mode & 0o111) === 0)) {
         return null;
     }
 
@@ -1593,7 +1599,8 @@ function readShebangLine(fs, candidate) {
         // Recheck the opened object so a replaced path cannot turn a validated
         // script into a different regular file before the bounded read.
         const openedStat = fs.fstatSync(fd);
-        if (!openedStat.isFile() || (openedStat.mode & 0o111) === 0) {
+        if (!openedStat.isFile() ||
+            (!linkedLauncher && (openedStat.mode & 0o111) === 0)) {
             return null;
         }
         const prefix = Buffer.allocUnsafe(MAX_SHEBANG_BYTES);
@@ -1632,7 +1639,7 @@ function resolveNodeShebangCommand(command, env, cwd) {
             : path.resolve(workingDirectory, command);
         try {
             return hasSupportedNodeShebang(readShebangLine(fs, candidate))
-                ? fs.realpathSync(candidate)
+                ? candidate
                 : null;
         } catch (error) {
             if (!isPathLookupMiss(error)) throw error;
@@ -1650,7 +1657,7 @@ function resolveNodeShebangCommand(command, env, cwd) {
         try {
             const shebang = readShebangLine(fs, candidate);
             if (hasSupportedNodeShebang(shebang)) {
-                return fs.realpathSync(candidate);
+                return candidate;
             }
         } catch (error) {
             if (!isPathLookupMiss(error)) throw error;
@@ -1724,13 +1731,13 @@ function resolveJavaScriptShellCommand(command, args, env, cwd) {
             args: tokens.slice(1),
         };
     }
-    const nodeBin = resolveNodeShebangCommand(tokens[0], env, cwd);
-    if (nodeBin === null) {
+    const nodeEntry = resolveNodeShebangCommand(tokens[0], env, cwd);
+    if (nodeEntry === null) {
         return null;
     }
     return {
         command: process.execPath,
-        args: [nodeBin].concat(tokens.slice(1)),
+        args: [nodeEntry].concat(tokens.slice(1)),
     };
 }
 
