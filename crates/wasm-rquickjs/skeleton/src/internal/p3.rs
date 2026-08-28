@@ -26,6 +26,7 @@ use wit_bindgen_p3::rt::async_support::{
 
 use super::runtime_services::{
     OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
+    run_process_turn_checkpoint,
 };
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
@@ -537,46 +538,63 @@ fn spawn_drive_guard(rt: &AsyncRuntime) -> DriveGuard {
 /// scheduler task started by the parked JS promise (`future<T>`/`stream<T>` writers) keeps being
 /// polled too.
 async fn drain_and_idle(js_state: &JsState) {
-    let has_unrefed_timers = async_with!(js_state.ctx => |ctx| {
-        !ctx.userdata::<RuntimeServices>()
-            .expect("runtime services not initialized")
-            .timers
-            .unrefed_timers
-            .borrow()
-            .is_empty()
-    })
-    .await;
-    if !has_unrefed_timers {
+    let mut drove_runtime = false;
+    loop {
+        let checkpoint_did_work = run_turn_checkpoint(js_state).await;
+        if drove_runtime && !checkpoint_did_work {
+            return;
+        }
+        drove_runtime = true;
+
+        let has_unrefed_timers = async_with!(js_state.ctx => |ctx| {
+            !ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .timers
+                .unrefed_timers
+                .borrow()
+                .is_empty()
+        })
+        .await;
+        if has_unrefed_timers {
+            // Spawn a sentinel that polls until only unref'd timers remain, then aborts them so
+            // `idle()` can return. The sentinel is itself a spawned job (not tracked in
+            // `abort_handles`), so it does not perturb the comparison below.
+            async_with!(js_state.ctx => |ctx| {
+                let task_ctx = ctx.clone();
+                ctx.spawn(async move {
+                    loop {
+                        // 1ms poll interval (`wait_for` takes nanoseconds).
+                        wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
+                        let services = task_ctx
+                            .userdata::<RuntimeServices>()
+                            .expect("runtime services not initialized");
+                        let abort_count = services.timers.abort_handles.borrow().len();
+                        let unref_count = services.timers.unrefed_timers.borrow().len();
+                        // Once the only remaining timers are unref'd, abort them so the loop can
+                        // drain.
+                        if abort_count > 0 && abort_count == unref_count {
+                            services.timers.abort_unrefed();
+                            break;
+                        }
+                        if unref_count == 0 {
+                            break;
+                        }
+                    }
+                });
+            })
+            .await;
+        }
         js_state.rt.idle().await;
-        return;
     }
-    // Spawn a sentinel that polls until only unref'd timers remain, then aborts them so `idle()`
-    // can return. The sentinel is itself a spawned job (not tracked in `abort_handles`), so it does
-    // not perturb the `abort_count == unref_count` comparison below.
+}
+
+async fn run_turn_checkpoint(js_state: &JsState) -> bool {
     async_with!(js_state.ctx => |ctx| {
-        let task_ctx = ctx.clone();
-        ctx.spawn(async move {
-            loop {
-                // 1ms poll interval (`wait_for` takes nanoseconds).
-                wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
-                let services = task_ctx
-                    .userdata::<RuntimeServices>()
-                    .expect("runtime services not initialized");
-                let abort_count = services.timers.abort_handles.borrow().len();
-                let unref_count = services.timers.unrefed_timers.borrow().len();
-                // Once the only remaining timers are unref'd, abort them so the loop can drain.
-                if abort_count > 0 && abort_count == unref_count {
-                    services.timers.abort_unrefed();
-                    break;
-                }
-                if unref_count == 0 {
-                    break;
-                }
-            }
-        });
+        run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
+            panic!("failed to run process turn checkpoint: {error}")
+        })
     })
-    .await;
-    js_state.rt.idle().await;
+    .await
 }
 
 pub async fn call_js_export<A, R>(
@@ -756,6 +774,8 @@ where
     })
     .await;
 
+    run_turn_checkpoint(js_state).await;
+
     // Run any timers / spawned jobs the export merely scheduled before returning (see
     // `drain_and_idle`). The `DriveGuard` above is still alive here, so the scheduler keeps being
     // polled while the drain waits.
@@ -891,7 +911,7 @@ where
 {
     let js_state = ensure_initialized().await;
 
-    async_with!(js_state.ctx => |ctx| {
+    let resource_id = async_with!(js_state.ctx => |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
@@ -933,7 +953,9 @@ where
             }
         }
     })
-    .await
+    .await;
+    run_turn_checkpoint(js_state).await;
+    resource_id
 }
 
 /// Invokes an `async` method on an exported resource instance and awaits its result. Used by
@@ -1161,6 +1183,8 @@ where
         }
     })
     .await;
+
+    run_turn_checkpoint(js_state).await;
 
     // Run any timers / spawned jobs the method merely scheduled before returning (see
     // `drain_and_idle`).
@@ -1510,7 +1534,7 @@ where
     // after this returns, so the guard only needs to cover the JS call itself.
     let _drive_guard = spawn_drive_guard(&js_state.rt);
 
-    async_with!(js_state.ctx => |ctx| {
+    let result = async_with!(js_state.ctx => |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -1529,7 +1553,9 @@ where
             }
         }
     })
-    .await
+    .await;
+    run_turn_checkpoint(js_state).await;
+    result
 }
 
 /// The future produced by [`spawn_future_writer`], factored out so it can also be composed with
@@ -1977,8 +2003,10 @@ pub async fn settle_import_promise<P>(
             Err(e) => panic!("Failed to convert an async import result to JavaScript: {e:?}"),
         }
         // Run the promise reaction jobs enqueued by resolve/reject (and any transitive
-        // continuations) so the JS `await` resumes and the root export's promise settles.
-        while ctx.execute_pending_job() {}
+        // continuations), including Node's end-of-turn rejection checkpoint.
+        run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
+            panic!("failed to run process turn checkpoint after async import: {error}")
+        });
     })
     .await;
 }

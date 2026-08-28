@@ -21,4 +21,6 @@ world async-values-import {
   export run: async func() -> string;
   export run-promise-stream-items: async func() -> string;
   export run-stored-future: async func() -> string;
+  export run-import-checkpoint-future: async func() -> future<u32>;
+  export read-import-checkpoint-count: async func() -> u32;
 }

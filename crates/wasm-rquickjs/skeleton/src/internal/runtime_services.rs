@@ -232,6 +232,53 @@ pub(crate) struct OwnedJsRuntime {
     pub(crate) ctx: AsyncContext,
 }
 
+fn drain_process_turn_queues(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<bool> {
+    let mut drained_any = false;
+    loop {
+        let drained_next_ticks = match ctx
+            .globals()
+            .get::<_, Function>("__wasm_rquickjs_drainNextTick")
+        {
+            Ok(drain) => drain.call::<_, usize>(())?,
+            Err(_) => 0,
+        };
+        let mut executed_jobs = 0usize;
+        while ctx.execute_pending_job() {
+            executed_jobs += 1;
+        }
+        if drained_next_ticks == 0 && executed_jobs == 0 {
+            return Ok(drained_any);
+        }
+        drained_any = true;
+    }
+}
+
+/// Runs the private Node-compatible end-of-turn promise rejection checkpoint.
+///
+/// QuickJS jobs are drained only after `process.nextTick`, and the rejection
+/// event is emitted only after both queues stabilize. Work scheduled by the
+/// event handlers is then drained before the next host callback is allowed to
+/// run. Rejection events and the work they create are processed to a fixpoint,
+/// matching Node's `processTicksAndRejections` loop.
+pub(crate) fn run_process_turn_checkpoint(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<bool> {
+    let checkpoint = ctx
+        .globals()
+        .get::<_, Function>("__wasm_rquickjs_unhandled_rejection_checkpoint")
+        .ok();
+    let mut did_work = false;
+    loop {
+        did_work |= drain_process_turn_queues(ctx)?;
+        let emitted = match &checkpoint {
+            Some(checkpoint) => checkpoint.call::<_, usize>(())?,
+            None => 0,
+        };
+        if emitted == 0 {
+            return Ok(did_work);
+        }
+        did_work = true;
+    }
+}
+
 impl OwnedJsRuntime {
     pub(crate) async fn new() -> Self {
         let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");

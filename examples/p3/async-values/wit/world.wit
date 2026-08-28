@@ -19,6 +19,8 @@ world async-values {
   use nested-types.{nested-values};
 
   export run-future: async func() -> future<u32>;
+  export run-checkpoint-future: async func() -> future<u32>;
+  export read-checkpoint-count: async func() -> u32;
   export run-stream: async func() -> stream<u8>;
   export run-nested: async func() -> result<nested-values, string>;
   export run-nested-error: async func() -> result<nested-values, string>;

@@ -1,5 +1,11 @@
 import * as host from 'test:async-values-import/host';
 
+const importCheckpointReason = new Error('async import checkpoint');
+let importCheckpointCount = 0;
+process.on('unhandledRejection', (reason) => {
+  if (reason === importCheckpointReason) importCheckpointCount += 1;
+});
+
 export async function run() {
   // Import returning a `future<u32>`, exposed to JS as a `Promise<u32>`.
   const a = await host.makeFuture(41);
@@ -44,4 +50,16 @@ export async function runStoredFuture() {
   release(99);
 
   return String(await host.readStoredFuture());
+}
+
+// The raw future export returns before this continuation runs. Resolving the imported future must
+// checkpoint the rejection created by the continuation before the host can call back into JS.
+export async function runImportCheckpointFuture() {
+  const value = await host.consumeFuture(Promise.resolve(9));
+  Promise.reject(importCheckpointReason);
+  return value;
+}
+
+export function readImportCheckpointCount() {
+  return importCheckpointCount;
 }

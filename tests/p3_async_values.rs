@@ -234,6 +234,7 @@ async fn run_export_world(
     String,
     u32,
     u32,
+    u32,
 )> {
     let engine = engine()?;
     let component = Component::from_file(&engine, component_path)?;
@@ -249,6 +250,23 @@ async fn run_export_world(
                 let (tx, rx) = oneshot::channel();
                 accessor.with(|access| reader.pipe(access, OneshotConsumer::new(tx)))?;
                 Ok(rx.await?)
+            })
+            .await??
+    };
+
+    // A direct future<T> return uses call_js_export_raw. Its host boundary must run the rejection
+    // checkpoint before the next exported call reads the listener's state.
+    let checkpoint_count = {
+        let mut store = new_store(&engine);
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| -> Result<u32> {
+                let reader: FutureReader<u32> =
+                    bindings.call_run_checkpoint_future(accessor).await?;
+                let (tx, rx) = oneshot::channel();
+                accessor.with(|access| reader.pipe(access, OneshotConsumer::new(tx)))?;
+                assert_eq!(rx.await?, 7, "checkpoint future should resolve to 7");
+                bindings.call_read_checkpoint_count(accessor).await
             })
             .await??
     };
@@ -355,6 +373,7 @@ async fn run_export_world(
         nested_error,
         take_future,
         take_stream,
+        checkpoint_count,
     ))
 }
 
@@ -404,6 +423,26 @@ async fn run_import_world_stored_future(component_path: &Utf8Path) -> Result<Str
         .run_concurrent(async move |accessor| bindings.call_run_stored_future(accessor).await)
         .await??;
     Ok(result)
+}
+
+async fn run_import_world_checkpoint(component_path: &Utf8Path) -> Result<u32> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = base_linker(&engine)?;
+    test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |h| h)?;
+
+    let mut store = new_store(&engine);
+    let bindings = AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+    store
+        .run_concurrent(async move |accessor| -> Result<u32> {
+            let reader: FutureReader<u32> =
+                bindings.call_run_import_checkpoint_future(accessor).await?;
+            let (tx, rx) = oneshot::channel();
+            accessor.with(|access| reader.pipe(access, OneshotConsumer::new(tx)))?;
+            assert_eq!(rx.await?, 9, "checkpoint import future should resolve to 9");
+            bindings.call_read_import_checkpoint_count(accessor).await
+        })
+        .await?
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -519,6 +558,7 @@ fn p3_async_values_export_boundaries_roundtrip() {
         nested_error,
         take_future,
         take_stream,
+        checkpoint_count,
     ) = block_on_with_timeout(120, run_export_world(&wasm));
 
     assert_eq!(run_future, 42, "run-future should return 42");
@@ -534,6 +574,10 @@ fn p3_async_values_export_boundaries_roundtrip() {
     assert_eq!(nested_error, "nested-error");
     assert_eq!(take_future, 42, "take-future(41) should return 42");
     assert_eq!(take_stream, 60, "take-stream([10,20,30]) should return 60");
+    assert_eq!(
+        checkpoint_count, 1,
+        "the raw future export should checkpoint before the next host call"
+    );
 }
 
 #[test]
@@ -569,6 +613,20 @@ fn p3_async_values_import_future_param_can_be_consumed_after_import_returns() {
     let result = block_on_with_timeout(120, run_import_world_stored_future(&wasm));
 
     assert_eq!(result, "99");
+}
+
+#[test]
+fn p3_async_values_import_settlement_runs_rejection_checkpoint() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+
+    let checkpoint_count = block_on_with_timeout(120, run_import_world_checkpoint(&wasm));
+
+    assert_eq!(
+        checkpoint_count, 1,
+        "async import settlement should checkpoint before the next host call"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
