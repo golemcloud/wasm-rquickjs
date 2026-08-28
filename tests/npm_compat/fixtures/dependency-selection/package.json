@@ -1,0 +1,14 @@
+{
+  "name": "npm-compat-dependency-selection",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "fixture-required": "file:packages/fixture-required"
+  },
+  "devDependencies": {
+    "fixture-dev": "file:packages/fixture-dev"
+  },
+  "optionalDependencies": {
+    "fixture-optional": "file:packages/fixture-optional"
+  }
+}

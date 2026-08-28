@@ -2425,7 +2425,7 @@
     "parallel/test-child-process-internal.js": { "category": "node-internals", "reason": "depends on ChildProcess internalMessage event semantics" },
     "parallel/test-child-process-ipc-next-tick.js": { "category": "wasi-impossible", "reason": "requires child_process IPC/fork which is not available in WASM" },
     "parallel/test-child-process-ipc.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
-    "parallel/test-child-process-kill.js": { "category": "runnable" },
+    "parallel/test-child-process-kill.js": { "category": "wasi-impossible", "reason": "requires spawning and signaling an external process, which is unavailable in WASM" },
     "parallel/test-child-process-net-reuseport.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-no-deprecation.js": { "category": "runnable" },
     "parallel/test-child-process-pipe-dataflow.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
@@ -2460,7 +2460,7 @@
     "parallel/test-child-process-send-type-error.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-send-utf8.js": { "category": "wasi-impossible", "reason": "requires child_process IPC/fork which is not available in WASM" },
     "parallel/test-child-process-server-close.js": { "category": "wasi-impossible", "reason": "requires child_process IPC/fork which is not available in WASM" },
-    "parallel/test-child-process-set-blocking.js": { "category": "runnable" },
+    "parallel/test-child-process-set-blocking.js": { "category": "wasi-impossible", "reason": "requires spawning an external Python process with inherited stdio, which is unavailable in WASM" },
     "parallel/test-child-process-silent.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-spawn-args.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-spawn-argv0.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
@@ -3851,7 +3851,7 @@
     "parallel/test-handle-wrap-close-abort.js": {},
     "parallel/test-http-agent-close.js": { "category": "known-gap", "reason": "http edge case not yet handled" },
     "parallel/test-http-agent-false.js": {},
-    "parallel/test-http-client-read-in-error.js": {},
+    "parallel/test-http-client-read-in-error.js": { "category": "wasi-impossible", "reason": "requires custom Agent.createConnection to inject a node:net socket error; node:http outbound requests always use wasi:http" },
     "parallel/test-http-server-keep-alive-timeout.js": {},
     "parallel/test-http-set-timeout-server.js": { "category": "known-gap", "reason": "server/request/response timeout semantics (including keep-alive/idle cases) are not fully Node-compatible" },
     "parallel/test-http2-compat-client-upload-reject.js": { "category": "wasi-impossible", "reason": "http2 is not implemented" },
@@ -4345,10 +4345,10 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-http-agent-abort-controller.js": { "category": "known-gap", "reason": "AbortSignal handling in Agent.createConnection/http.get is incomplete" },
+    "parallel/test-http-agent-abort-controller.js": { "category": "wasi-impossible", "reason": "requires Agent.createConnection to create and expose a raw client socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-agent-destroyed-socket.js": { "category": "known-gap", "reason": "Agent free-socket bookkeeping and destroyed-socket reuse handling is incomplete" },
     "parallel/test-http-agent-error-on-idle.js": {},
-    "parallel/test-http-agent-keepalive-delay.js": { "category": "known-gap", "reason": "requires createConnection to forward keepAlive/keepAliveInitialDelay options; wasi:http does not use Agent.createConnection for outbound requests" },
+    "parallel/test-http-agent-keepalive-delay.js": { "category": "wasi-impossible", "reason": "requires Agent.createConnection to create and configure a raw client socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-agent-keepalive.js": { "category": "known-gap", "reason": "requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle" },
     "parallel/test-http-agent-no-protocol.js": {},
     "parallel/test-http-agent-null.js": {},
@@ -4397,12 +4397,12 @@
       }
     },
     "parallel/test-http-client-abort-event.js": {},
-    "parallel/test-http-client-abort-keep-alive-destroy-res.js": { "category": "known-gap", "reason": "Agent.createConnection override and keep-alive socket reuse semantics are incomplete" },
-    "parallel/test-http-client-abort-keep-alive-queued-tcp-socket.js": { "category": "known-gap", "reason": "Agent.createConnection override path is incomplete (base Agent lacks createConnection), and queued keep-alive abort semantics diverge" },
-    "parallel/test-http-client-abort-keep-alive-queued-unix-socket.js": { "category": "known-gap", "reason": "Agent.createConnection override path is incomplete (base Agent lacks createConnection), so queued keep-alive abort flow fails" },
-    "parallel/test-http-client-abort-no-agent.js": {},
+    "parallel/test-http-client-abort-keep-alive-destroy-res.js": { "category": "wasi-impossible", "reason": "requires a custom Agent.createConnection raw-socket transport and socket reuse lifecycle; node:http outbound requests always use wasi:http" },
+    "parallel/test-http-client-abort-keep-alive-queued-tcp-socket.js": { "category": "wasi-impossible", "reason": "requires a custom Agent.createConnection raw-socket transport and queued socket reuse; node:http outbound requests always use wasi:http" },
+    "parallel/test-http-client-abort-keep-alive-queued-unix-socket.js": { "category": "wasi-impossible", "reason": "requires custom Agent.createConnection transport over a Unix socket, which wasi:http cannot represent" },
+    "parallel/test-http-client-abort-no-agent.js": { "category": "wasi-impossible", "reason": "requires http.get({ createConnection }) to create and abort a raw node:net socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-client-abort-response-event.js": {},
-    "parallel/test-http-client-abort-unix-socket.js": { "category": "known-gap", "reason": "Agent.createConnection override path is incomplete (base Agent lacks createConnection)" },
+    "parallel/test-http-client-abort-unix-socket.js": { "category": "wasi-impossible", "reason": "requires custom Agent.createConnection transport over a Unix socket, which wasi:http cannot represent" },
     "parallel/test-http-client-abort2.js": {},
     "parallel/test-http-client-agent-abort-close-event.js": {},
     "parallel/test-http-client-agent-end-close-event.js": { "category": "known-gap", "reason": "ClientRequest destroyed state/lifecycle on response close with keep-alive Agent is not Node-compatible" },
@@ -4441,12 +4441,12 @@
     "parallel/test-http-client-timeout.js": { "category": "known-gap", "reason": "ClientRequest.setTimeout callback path does not reliably destroy/close the request" },
     "parallel/test-http-client-upload-buf.js": {},
     "parallel/test-http-client-upload.js": {},
-    "parallel/test-http-client-with-create-connection.js": { "category": "known-gap", "reason": "ClientRequest createConnection option argument normalization is incompatible (missing/incorrect port/path for net.connect)" },
-    "parallel/test-http-connect-req-res.js": { "category": "known-gap", "reason": "HTTP CONNECT tunnel socket detachment/lifecycle semantics are incomplete" },
-    "parallel/test-http-connect.js": { "category": "known-gap", "reason": "HTTP CONNECT tunnel socket detachment/data-forwarding semantics are incomplete" },
+    "parallel/test-http-client-with-create-connection.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to select a raw TCP or Unix-socket transport; node:http outbound requests always use wasi:http" },
+    "parallel/test-http-connect-req-res.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket detachment; node:http outbound requests always use wasi:http" },
+    "parallel/test-http-connect.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket data forwarding; node:http outbound requests always use wasi:http" },
     "parallel/test-http-content-length-mismatch.js": {},
     "parallel/test-http-contentLength0.js": {},
-    "parallel/test-http-createConnection.js": { "category": "known-gap", "reason": "http.get({ createConnection }) callback/return-value and async error propagation semantics are incomplete" },
+    "parallel/test-http-createConnection.js": { "category": "wasi-impossible", "reason": "requires http.get({ createConnection }) to replace the client transport with a raw socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-date-header.js": {},
     "parallel/test-http-decoded-auth.js": {},
     "parallel/test-http-default-port.js": { "category": "known-gap", "reason": "Host header generation ignores globalAgent.defaultPort and incorrectly includes the port" },
@@ -4487,8 +4487,8 @@
     "parallel/test-http-flush-response-headers.js": {},
     "parallel/test-http-full-response.js": { "category": "wasi-impossible", "reason": "requires child_process.exec of external 'ab' binary" },
     "parallel/test-http-generic-streams.js": {
-      "category": "known-gap",
-      "reason": "http.request({ createConnection }) generic duplex stream semantics are incomplete (request dispatch, keep-alive, and clientError paths)",
+      "category": "wasi-impossible",
+      "reason": "requires http.request({ createConnection }) to use an arbitrary Duplex as its transport; node:http outbound requests always use wasi:http",
       "split": true,
       "subtests": {
         "block_00_test_1_simple_http_test_no_keep_alive": {},
@@ -4517,9 +4517,9 @@
     "parallel/test-http-header-read.js": {},
     "parallel/test-http-hex-write.js": {},
     "parallel/test-http-highwatermark.js": {},
-    "parallel/test-http-host-header-ipv6-fail.js": { "category": "known-gap", "reason": "http.request host header formatting for IPv6 literals is incorrect (missing [::1]:port form)" },
+    "parallel/test-http-host-header-ipv6-fail.js": { "category": "wasi-impossible", "reason": "requires http.get({ createConnection }) to redirect requests through a custom node:net socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-host-headers.js": { "category": "known-gap", "reason": "Host header generation/handling in node:http is not fully Node-compatible" },
-    "parallel/test-http-incoming-message-options.js": {},
+    "parallel/test-http-incoming-message-options.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) with a custom node:net transport; node:http outbound requests always use wasi:http" },
     "parallel/test-http-information-processing.js": { "category": "known-gap", "reason": "wasi:http client does not surface informational 1xx responses as 'information' events" },
     "parallel/test-http-insecure-parser.js": { "category": "known-gap", "reason": "http edge case not yet handled" },
     "parallel/test-http-invalid-te.js": { "category": "known-gap", "reason": "clientError does not expose Node-compatible parse error details (missing code HPE_INVALID_TRANSFER_ENCODING)" },
@@ -4730,7 +4730,7 @@
         "block_06_block_06": {}
       }
     },
-    "parallel/test-http-server-unconsume-consume.js": {},
+    "parallel/test-http-server-unconsume-consume.js": { "category": "wasi-impossible", "reason": "requires an HTTP CONNECT tunnel socket; node:http outbound requests always use wasi:http" },
     "parallel/test-http-server-unconsume.js": {},
     "parallel/test-http-server-write-after-end.js": { "category": "known-gap", "reason": "ServerResponse.write() after end does not callback with ERR_STREAM_WRITE_AFTER_END" },
     "parallel/test-http-server-write-end-after-end.js": {},
@@ -4740,7 +4740,7 @@
     "parallel/test-http-socket-encoding-error.js": { "category": "known-gap", "reason": "HTTP server socket.setEncoding('') error path (ERR_HTTP_SOCKET_ENCODING) is not Node-compatible" },
     "parallel/test-http-socket-error-listeners.js": { "category": "known-gap", "reason": "HTTP parser clientError/error-listener lifecycle for repeated invalid data is incomplete" },
     "parallel/test-http-status-message.js": {},
-    "parallel/test-http-timeout-client-warning.js": {},
+    "parallel/test-http-timeout-client-warning.js": { "category": "known-gap", "reason": "ClientRequest.setTimeout() does not emit Node's synchronous TimeoutOverflowWarning for oversized durations" },
     "parallel/test-http-timeout-overflow.js": {},
     "parallel/test-http-transfer-encoding-repeated-chunked.js": { "category": "known-gap", "reason": "invalid repeated Transfer-Encoding handling differs from Node" },
     "parallel/test-http-transfer-encoding-smuggling.js": {
@@ -4871,7 +4871,7 @@
     "parallel/test-process-warning.js": {},
 
     // Tests using ../common/countdown (HTTP server tests - skipped)
-    "parallel/test-http-after-connect.js": {},
+    "parallel/test-http-after-connect.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket lifecycle semantics; node:http outbound requests always use wasi:http" },
     "parallel/test-http-agent-maxsockets-respected.js": { "category": "known-gap", "reason": "http.Agent maxSockets enforcement and abort lifecycle can hang" },
     "parallel/test-http-agent-maxsockets.js": {},
     "parallel/test-http-agent-maxtotalsockets.js": { "category": "known-gap", "reason": "http.Agent maxTotalSockets bookkeeping is not Node-compatible" },
@@ -5028,8 +5028,8 @@
     "parallel/test-http-client-abort3.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {}
+        "block_00_block_00": { "category": "wasi-impossible", "reason": "requires http.get({ createConnection }) to surface errors from a custom raw socket; node:http outbound requests always use wasi:http" },
+        "block_01_block_01": { "category": "wasi-impossible", "reason": "requires custom Agent.createConnection to surface errors from a raw socket; node:http outbound requests always use wasi:http" }
       }
     },
     "parallel/test-http-client-aborted-event.js": {
@@ -5047,7 +5047,7 @@
     "parallel/test-http-client-insecure-http-parser-error.js": {},
     "parallel/test-http-client-invalid-path.js": {},
     "parallel/test-http-client-override-global-agent.js": { "category": "known-gap", "reason": "Overridden globalAgent socket bookkeeping (agent.sockets/close lifecycle) is not Node-compatible" },
-    "parallel/test-http-client-readable.js": {},
+    "parallel/test-http-client-readable.js": { "category": "wasi-impossible", "reason": "requires custom Agent.createConnection to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
     "parallel/test-http-client-reject-chunked-with-content-length.js": { "category": "known-gap", "reason": "wasi:http client does not surface HPE_INVALID_TRANSFER_ENCODING parse errors from raw TCP responses" },
     "parallel/test-http-client-reject-cr-no-lf.js": { "category": "known-gap", "reason": "wasi:http client does not surface HPE_LF_EXPECTED parse errors from raw TCP responses" },
     "parallel/test-http-client-req-error-dont-double-fire.js": { "category": "known-gap", "reason": "Custom lookup error path is incomplete (request error events are not emitted correctly)" },
@@ -5071,8 +5071,8 @@
     "parallel/test-http-insecure-parser-per-stream.js": {
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": {},
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_00_test_1_the_server_sends_an_invalid_header": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
         "block_02_test_3_the_client_sends_an_invalid_header": { "category": "known-gap", "reason": "server option insecureHTTPParser:true is ignored for incoming invalid headers" },
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "category": "known-gap", "reason": "without insecureHTTPParser, invalid headers do not follow the expected clientError path" },
         "block_04_test_5_invalid_argument_type": {}
@@ -5085,8 +5085,8 @@
     "parallel/test-http-max-header-size-per-stream.js": {
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": {},
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": {},
+        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
         "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": { "category": "known-gap", "reason": "server option maxHeaderSize is ignored for incoming oversized headers" },
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": { "category": "known-gap", "reason": "without maxHeaderSize override, oversized headers do not follow the expected clientError path" }
       }
@@ -5154,7 +5154,7 @@
     "parallel/test-http-parser-bad-ref.js": {},
     "parallel/test-http-parser-lazy-loaded.js": { "category": "node-internals", "reason": "monkey-patches internalBinding('http_parser') and uses _http_common internals" },
     "parallel/test-http-parser-memory-retention.js": { "category": "node-internals", "reason": "uses _http_common.HTTPParser and socket.parser internals" },
-    "parallel/test-http-parser-multiple-execute.js": { "category": "known-gap", "reason": "client does not emit information event for 100 Continue on custom createConnection streams" },
+    "parallel/test-http-parser-multiple-execute.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to parse responses from an arbitrary Duplex; node:http outbound requests always use wasi:http" },
     "parallel/test-http-parser-timeout-reset.js": { "category": "node-internals", "reason": "uses internal process.binding('http_parser') HTTPParser internals" },
     "parallel/test-http-parser.js": {
       "split": true,
@@ -5208,7 +5208,7 @@
     "parallel/test-http-server-options-server-response.js": { "category": "known-gap", "reason": "http.Server({ ServerResponse }) custom response class option is not fully supported" },
     "parallel/test-http-server.js": {},
     "parallel/test-http-set-max-idle-http-parser.js": { "category": "node-internals", "reason": "uses private `_http_common.parsers.max` internals" },
-    "parallel/test-http-sync-write-error-during-continue.js": { "category": "known-gap", "reason": "100-continue flow with synchronous socket write errors does not match Node" },
+    "parallel/test-http-sync-write-error-during-continue.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to exercise synchronous writes on an arbitrary Duplex; node:http outbound requests always use wasi:http" },
     "parallel/test-http-upgrade-agent.js": { "category": "wasi-impossible", "reason": "wasi:http does not support HTTP Upgrade/101 socket takeover for node:http clients" },
     "parallel/test-http-upgrade-binary.js": { "category": "wasi-impossible", "reason": "wasi:http does not support HTTP Upgrade/101 socket takeover for node:http clients" },
     "parallel/test-http-upgrade-server.js": {},
@@ -5726,8 +5726,8 @@
       "reason": "https is not supported in WebAssembly environment",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_an_invalid_header": { "category": "runnable" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "runnable" },
+        "block_00_test_1_the_server_sends_an_invalid_header": { "category": "wasi-impossible", "reason": "requires https.request({ createConnection }) with an arbitrary Duplex transport; outbound requests always use wasi:http" },
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "wasi-impossible", "reason": "requires https.request({ createConnection }) with an arbitrary Duplex transport; outbound requests always use wasi:http" },
         "block_02_test_3_the_client_sends_an_invalid_header": {},
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {},
         "block_04_test_5_invalid_argument_type": { "category": "runnable" }
@@ -5741,8 +5741,8 @@
       "reason": "https is not supported in WebAssembly environment",
       "split": true,
       "subtests": {
-        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": { "category": "runnable" },
-        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "runnable" },
+        "block_00_test_1_the_server_sends_larger_headers_than_what_would_other": { "category": "wasi-impossible", "reason": "requires https.request({ createConnection }) with an arbitrary Duplex transport; outbound requests always use wasi:http" },
+        "block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_": { "category": "wasi-impossible", "reason": "requires https.request({ createConnection }) with an arbitrary Duplex transport; outbound requests always use wasi:http" },
         "block_02_test_3_the_client_sends_larger_headers_than_what_would_other": {},
         "block_03_test_4_the_same_as_test_3_except_without_the_option_to_make_": {}
       }
@@ -8367,8 +8367,8 @@
     "parallel/test-stdin-pipe-large.js": { "category": "known-gap", "reason": "child_process.spawn pipe mode does not provide functional child.stdin" },
     "parallel/test-stdin-pipe-resume.js": { "category": "known-gap", "reason": "child_process.spawn pipe mode does not provide functional child.stdin" },
     "parallel/test-stdin-script-child-option.js": { "category": "known-gap", "reason": "child_process.spawn pipe mode does not provide functional child.stdin" },
-    "parallel/test-stdin-script-child.js": {},
-    "parallel/test-stdio-closed.js": {},
+    "parallel/test-stdin-script-child.js": { "category": "wasi-impossible", "reason": "requires spawning the Node executable and piping a script through child stdin, which is unavailable in WASM" },
+    "parallel/test-stdio-closed.js": { "category": "wasi-impossible", "reason": "requires spawning a shell process with closed inherited stdio, which is unavailable in WASM" },
     "parallel/test-stdio-pipe-access.js": {},
     "parallel/test-stdio-pipe-redirect.js": {},
     "parallel/test-stdio-undestroy.js": { "category": "known-gap", "reason": "child_process stdio pipe lifecycle/destroy semantics are incomplete" },

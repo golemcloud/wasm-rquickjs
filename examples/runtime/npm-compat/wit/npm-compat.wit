@@ -1,0 +1,14 @@
+package quickjs:npm-compat;
+
+world npm-compat {
+  export run: func(args: list<string>) -> string;
+  export run-with-timeout: func(args: list<string>, timeout-ms: u32) -> string;
+  export run-npx: func(args: list<string>) -> string;
+  export run-installed: func() -> string;
+  export run-installed-typescript: func() -> string;
+  export run-registry-installed: func() -> string;
+  export run-package-formats: func() -> string;
+  export run-bin-direct: func() -> string;
+  export probe-runtime: func() -> string;
+  export probe-primitives: func() -> string;
+}

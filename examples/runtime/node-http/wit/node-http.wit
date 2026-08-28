@@ -19,4 +19,5 @@ world node-http {
   export http-max-requests-closes-socket: func() -> bool;
   export net-writev-boundaries: func() -> bool;
   export http-pipelined-max-requests: func() -> bool;
+  export http-custom-connection-rejected: func() -> bool;
 }

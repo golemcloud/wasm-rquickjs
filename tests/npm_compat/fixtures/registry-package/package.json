@@ -1,0 +1,6 @@
+{
+  "name": "fixture-registry-dependency",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": "./index.js"
+}

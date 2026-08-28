@@ -33,6 +33,7 @@ mod intl;
 mod module_resolution;
 mod node_http;
 mod node_modules_apps;
+mod npm_compat;
 mod os;
 mod path;
 mod pollable;
@@ -106,6 +107,7 @@ tag_suite!(example2, group8);
 tag_suite!(typescript_runtime, group8);
 
 tag_suite!(node_modules_apps, group9);
+tag_suite!(npm_compat, group9);
 
 #[test_dep(tagged_as = "example3", scope = Cloneable)]
 async fn compiled_example3() -> CompiledTest {

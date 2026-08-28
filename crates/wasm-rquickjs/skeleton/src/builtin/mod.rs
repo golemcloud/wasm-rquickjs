@@ -268,6 +268,7 @@ pub fn add_module_resolvers(
         .with_module("tty")
         .with_module("node:v8")
         .with_module("v8")
+        .with_module("__wasm_rquickjs_builtin/v8_native")
         .with_module("node:worker_threads")
         .with_module("worker_threads")
         .with_module("__wasm_rquickjs_builtin/zlib_native")
@@ -342,6 +343,7 @@ pub fn module_loader() -> (
             web_crypto::js_native_module,
         )
         .with_module("__wasm_rquickjs_builtin/vm_native", vm::js_native_module)
+        .with_module("__wasm_rquickjs_builtin/v8_native", v8::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/zlib_native",
             zlib::js_native_module,

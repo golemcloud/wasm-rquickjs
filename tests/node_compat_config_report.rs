@@ -414,6 +414,11 @@ fn push_summary(report: &mut String, counts: CategoryCounts) {
         primary_total,
         pct(counts.runnable, primary_total)
     ));
+    report.push_str(
+        "When comparing revisions, read the runnable count and secondary full-public percentage \
+         alongside the primary percentage. Reclassifying a test into an excluded category can \
+         increase the primary percentage without increasing runnable coverage.\n\n",
+    );
 
     report.push_str("| Classification | Count | Primary % | Public inventory % | All listed % |\n");
     report.push_str("|----------------|-------|-----------|--------------------|--------------|\n");

@@ -1,0 +1,548 @@
+import { runJavaScript } from 'wasm-rquickjs:execution';
+
+const npmCli = '/tool/npm/lib/cli.js';
+
+async function executeNpm(args, timeoutMs) {
+    try {
+        const result = await runJavaScript({
+            cwd: '/workspace',
+            argv: ['node', '/tool/npm/bin/npm-cli.js', ...args],
+            env: {
+                HOME: '/home/npm',
+                NODE: process.execPath,
+                NPM: '/tool/npm/bin/npm-cli.js',
+                NPM_CONFIG_AUDIT: 'false',
+                NPM_CONFIG_CACHE: '/cache/npm',
+                NPM_CONFIG_FUND: 'false',
+                NPM_CONFIG_FETCH_RETRIES: '0',
+                NPM_CONFIG_PREFIX: '/prefix',
+                NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+            },
+            maxBytes: 4 * 1024 * 1024,
+            timeoutMs,
+            source: `
+            const cli = (await import(${JSON.stringify(npmCli)})).default;
+            const originalExit = process.exit;
+            process.exit = code => {
+                if (code !== undefined) process.exitCode = Number(code);
+                if (!process._exiting) {
+                    process._exiting = true;
+                    process.emit('exit', process.exitCode || 0);
+                }
+            };
+            try {
+                await cli(process);
+                await new Promise(resolve => setTimeout(resolve, 0));
+                return { exitCode: process.exitCode || 0 };
+            } finally {
+                process.exit = originalExit;
+            }
+            `,
+        });
+        return JSON.stringify(result);
+    } catch (error) {
+        return JSON.stringify({
+            runnerError: {
+                name: error && error.name,
+                message: error && error.message,
+                stack: error && error.stack,
+            },
+        });
+    }
+}
+
+export async function run(args) {
+    return executeNpm(args, 30_000);
+}
+
+export async function runWithTimeout(args, timeoutMs) {
+    return executeNpm(args, timeoutMs);
+}
+
+export async function runNpx(args) {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        argv: ['node', '/tool/npm/bin/npx-cli.js', ...args],
+        env: {
+            HOME: '/home/npm',
+            NODE: process.execPath,
+            NPM: '/tool/npm/bin/npm-cli.js',
+            NPM_CONFIG_AUDIT: 'false',
+            NPM_CONFIG_CACHE: '/cache/npm',
+            NPM_CONFIG_FUND: 'false',
+            NPM_CONFIG_PREFIX: '/prefix',
+            NPM_CONFIG_UPDATE_NOTIFIER: 'false',
+        },
+        maxBytes: 4 * 1024 * 1024,
+        timeoutMs: 30_000,
+        source: `
+            const originalExit = process.exit;
+            process.exit = code => {
+                if (code !== undefined) process.exitCode = Number(code);
+                if (!process._exiting) {
+                    process._exiting = true;
+                    process.emit('exit', process.exitCode || 0);
+                }
+            };
+            try {
+                await import('/tool/npm/bin/npx-cli.js');
+                for (let attempt = 0; attempt < 3_000 && !process._exiting; attempt++) {
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+                return { exitCode: process.exitCode || 0 };
+            } finally {
+                process.exit = originalExit;
+            }
+        `,
+    });
+    return JSON.stringify(result);
+}
+
+export async function runInstalled() {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const dependency = (await import('fixture-dependency')).default;
+            return dependency();
+        `,
+    });
+    return JSON.stringify(result);
+}
+
+export async function runInstalledTypescript() {
+    const project = await runJavaScript({
+        cwd: '/workspace',
+        entry: './typescript-app.ts',
+    });
+    const rawTypeScriptDependency = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            try {
+                await import('fixture-dependency/raw-typescript');
+                return { loaded: true };
+            } catch (error) {
+                return { code: error.code, name: error.name, message: error.message };
+            }
+        `,
+    });
+    return JSON.stringify({
+        project,
+        rawTypeScriptDependencyError: rawTypeScriptDependency.value,
+    });
+}
+
+export async function runRegistryInstalled() {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const dependency = (await import('fixture-registry-dependency')).default;
+            return dependency();
+        `,
+    });
+    return JSON.stringify(result);
+}
+
+export async function runPackageFormats() {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const { createRequire } = await import('node:module');
+            const require = createRequire('/workspace/format-probe.cjs');
+            const commonjs = require('fixture-commonjs-dependency');
+            const dualEsm = (await import('fixture-dual-dependency')).default;
+            const dualCommonjs = require('fixture-dual-dependency');
+            return { commonjs, dualEsm, dualCommonjs };
+        `,
+    });
+    return JSON.stringify(result);
+}
+
+export async function runBinDirect() {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const { spawn } = await import('node:child_process');
+            const fs = await import('node:fs');
+            const binPath = '/workspace/node_modules/.bin/fixture-bin';
+            const probe = {};
+            for (const [name, operation] of Object.entries({
+                source: () => fs.readFileSync(binPath, 'utf8').split('\\n', 1)[0],
+                link: () => fs.readlinkSync(binPath),
+                realpath: () => fs.realpathSync(binPath),
+                mode: () => fs.statSync(binPath).mode & 0o777,
+            })) {
+                try {
+                    probe[name] = operation();
+                } catch (error) {
+                    probe[name] = error.code + ':' + error.message;
+                }
+            }
+            const child = spawn('sh', ['-c', 'fixture-bin direct'], {
+                cwd: '/workspace',
+                env: { PATH: '/workspace/node_modules/.bin' },
+            });
+            let stdout = '';
+            let stderr = '';
+            let error = null;
+            const events = [];
+            child.stdout.on('data', chunk => { stdout += chunk.toString(); });
+            child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+            child.on('error', value => {
+                events.push('error');
+                error = value.code + ':' + value.message;
+            });
+            child.on('exit', () => { events.push('exit'); });
+            const state = await new Promise(resolve => {
+                child.on('close', (code, signal) => {
+                    events.push('close');
+                    resolve({ code, signal });
+                });
+            });
+            return { ...state, stdout, stderr, error, events, probe };
+        `,
+    });
+    return JSON.stringify(result);
+}
+
+export function probeRuntime() {
+    return JSON.stringify({
+        cwd: process.cwd(),
+        fileUrl: new URL('file:packages/fixture-dependency', 'file:///workspace/').pathname,
+    });
+}
+
+export async function probePrimitives() {
+    const result = await runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const { createRequire } = await import('node:module');
+            const require = createRequire('/workspace/probe.cjs');
+            const constants = require('node:constants');
+            const fs = require('node:fs');
+            const v8 = require('node:v8');
+            const zlib = require('node:zlib');
+            const { exec, execFile, spawn, spawnSync } = require('node:child_process');
+            const original = Buffer.from([1, 2, 3]);
+            const species = Buffer[Symbol.species];
+            const hostile = Buffer.from([4, 5, 6]);
+            Object.defineProperty(hostile, 'constructor', {
+                value: { [Symbol.species]: class HostileSpecies extends Uint8Array {} },
+            });
+            let dep0005Emitted = false;
+            const originalEmitWarning = process.emitWarning;
+            process.emitWarning = (warning, typeOrOptions, code) => {
+                const warningCode = typeOrOptions && typeof typeOrOptions === 'object'
+                    ? typeOrOptions.code
+                    : code;
+                if (warningCode === 'DEP0005') dep0005Emitted = true;
+            };
+            let view;
+            let mapped;
+            let filtered;
+            let hostileView;
+            let rejectsBigIntOffset = false;
+            try {
+                view = original.subarray(1, 3);
+                view[0] = 9;
+                mapped = original.map(value => value + 1);
+                filtered = original.filter(value => value > 1);
+                hostileView = hostile.subarray(1);
+                try {
+                    original.subarray(1n);
+                } catch (error) {
+                    rejectsBigIntOffset = error instanceof TypeError;
+                }
+            } finally {
+                process.emitWarning = originalEmitWarning;
+            }
+
+            const shebangDir = '/workspace/shebang-bin';
+            const missDir = '/workspace/shebang-missing';
+            // WASI filesystem metadata does not expose host permission bits.
+            // npm establishes executable .bin modes with chmod, which our fs
+            // compatibility layer records and reports through stat/fstat.
+            fs.chmodSync(shebangDir + '/env-node.cjs', 0o755);
+            fs.chmodSync(shebangDir + '/not-node.cjs', 0o755);
+            const runShebang = (command, pathValue = shebangDir) => spawnSync(
+                'sh',
+                ['-c', command],
+                { cwd: '/workspace', env: { PATH: pathValue } },
+            );
+            const envNode = runShebang('env-node.cjs', missDir + ':' + shebangDir);
+            const notNode = runShebang('not-node.cjs');
+            const shellSync = spawnSync(process.execPath, ['-e', 'process.stdout.write("bad")'], {
+                shell: true,
+            });
+            const shellAsync = await new Promise(resolve => {
+                const child = spawn(process.execPath, ['-e', 'process.stdout.write("bad")'], {
+                    shell: true,
+                });
+                let error = null;
+                const events = [];
+                child.on('error', value => {
+                    error = value;
+                    events.push('error');
+                });
+                child.on('exit', () => events.push('exit'));
+                child.on('close', code => {
+                    events.push('close');
+                    resolve({ code, error, events });
+                });
+            });
+            const probeExecFailure = launch => new Promise(resolve => {
+                const events = [];
+                let callbackError = null;
+                let emittedError = null;
+                let stdout = null;
+                let stderr = null;
+                const child = launch((error, output, errorOutput) => {
+                    callbackError = error;
+                    stdout = output;
+                    stderr = errorOutput;
+                    events.push('callback');
+                });
+                child.on('error', error => {
+                    emittedError = error;
+                    events.push('error');
+                });
+                child.on('exit', () => events.push('exit'));
+                child.on('close', code => {
+                    events.push('close');
+                    resolve({ callbackError, emittedError, code, exitCode: child.exitCode, stdout, stderr, events });
+                });
+            });
+            const execFailure = await probeExecFailure(callback =>
+                exec('wasm-rquickjs-missing-command', callback));
+            const execFileFailure = await probeExecFailure(callback =>
+                execFile('wasm-rquickjs-missing-command', callback));
+            const genericEnvCommand = process.execPath + ' -p "process.argv[1]" "' + '$' + '{EXEC_VALUE}"';
+            const backtick = String.fromCharCode(96);
+            const genericEnvValues = [
+                'generic-env', 'a|b', 'a<b', 'a"b', 'a&&b', 'a$(b)', 'a' + backtick + 'b',
+            ];
+            const genericEnvExpansions = await Promise.all(genericEnvValues.map(value =>
+                probeExecFailure(callback =>
+                    exec(genericEnvCommand, { env: { EXEC_VALUE: value } }, callback))));
+            const splitEnvArgumentValues = ['-p -e', '-p\\t-e', '-p\\n-e'];
+            const splitEnvArguments = await Promise.all(splitEnvArgumentValues.map(value =>
+                probeExecFailure(callback =>
+                    exec(process.execPath + ' \${EXEC_ARGS} 42', {
+                        env: { EXEC_ARGS: value },
+                    }, callback))));
+            const unquotedEnvFields = [
+                'a;b', 'c|d', 'a"b', '$(x)', '<', '>',
+                'a' + backtick + 'b', 'a' + String.fromCharCode(92) + 'b', '~',
+                'a' + String.fromCharCode(13) + 'b',
+            ];
+            const unquotedEnvData = await Promise.all(unquotedEnvFields.map(value =>
+                probeExecFailure(callback =>
+                    exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE}', {
+                        env: { EXEC_VALUE: value },
+                    }, callback))));
+            const rejectedEnvExpansions = await Promise.all([
+                // NUL currently fails closed with ENOSYS. Node-style
+                // synchronous validation across every spawn path is separate.
+                '*', '?', '[x]', 'a' + String.fromCharCode(0) + 'b',
+            ].map(value => probeExecFailure(callback =>
+                exec(process.execPath + ' -p 42 \${EXEC_VALUE}', {
+                    env: { EXEC_VALUE: value },
+                }, callback))));
+            const envRedirectInput = '/workspace/env-redirect-input';
+            fs.writeFileSync(envRedirectInput, 'must-not-be-consumed');
+            const derivedRedirectToken = await probeExecFailure(callback =>
+                exec(process.execPath + ' -p "JSON.stringify(process.argv.slice(1))" \${EXEC_VALUE} ' +
+                    envRedirectInput, { env: { EXEC_VALUE: '<' } }, callback));
+            const rejectedRedirectCommands = await Promise.all([
+                process.execPath + ' -e "$(x)" < ' + envRedirectInput,
+                process.execPath + ' -e "' + backtick + 'x' + backtick + '" < ' + envRedirectInput,
+                process.execPath + ' -e "\${MISSING}" < ' + envRedirectInput,
+                process.execPath + ' -e "0" ' + '\\\\' + '\\ncontinued < ' + envRedirectInput,
+                process.execPath + ' -e "0' + '\\\\' + '\\ncontinued" < ' + envRedirectInput,
+            ].map(command => probeExecFailure(callback => exec(command, callback))));
+            const injectedEnvStructure = await probeExecFailure(callback =>
+                exec('$' + '{EXEC_COMMAND}', {
+                    env: { EXEC_COMMAND: 'echo ok | ' + process.execPath + ' -e "0"' },
+                }, callback));
+            const quotedPipePipeline = await probeExecFailure(callback =>
+                exec('echo ok | ' + process.execPath + ' -e "process.stdout.write(String(1|2))"', callback));
+            const redirectionProbe = '/workspace/redirection-probe.cjs';
+            const redirectionSideEffect = '/workspace/redirection-side-effect';
+            fs.writeFileSync(redirectionProbe,
+                'require("node:fs").writeFileSync("' + redirectionSideEffect + '", "partial")');
+            const rejectedShellCommands = await Promise.all([
+                process.execPath + ' -e "process.stdout.write(\\"partial\\")" && ' + process.execPath + ' -e "0"',
+                process.execPath + ' -e "0" $UNSUPPORTED',
+                process.execPath + ' -e "0" \${UNSUPPORTED}',
+                process.execPath + ' -e "0" $(echo unsupported)',
+                process.execPath + ' -e "0" > /workspace/partial-output',
+                process.execPath + ' -e "0" ' + '\\\\' + '\\n' + 'continued',
+                'echo ok | ' + process.execPath + ' -e "process.stdout.write(\\"partial\\")" && unsupported',
+                'echo ok | ' + process.execPath + ' -e "0" $UNSUPPORTED',
+                'echo ok | ' + process.execPath + ' -e "0" $(echo unsupported)',
+                process.execPath + ' ' + redirectionProbe + ' < /workspace/missing-input',
+            ].map(command => probeExecFailure(callback => exec(command, callback))));
+            const compressed = zlib.gzipSync('npm');
+            return {
+                constantsCjs: typeof constants.COPYFILE_EXCL === 'number',
+                heapSizeLimit: v8.getHeapStatistics().heap_size_limit,
+                bufferView: Buffer.isBuffer(view) && original[1] === 9,
+                bufferSpecies: species !== Buffer && species.prototype === Buffer.prototype &&
+                    Object.getPrototypeOf(species) === Uint8Array && Buffer.prototype.constructor === Buffer,
+                bufferTypedArrayMethods: Buffer.isBuffer(mapped) && Buffer.isBuffer(filtered),
+                bufferOperationsAvoidDep0005: !dep0005Emitted,
+                bufferSubarrayEdges: original.subarray(-Infinity).length === original.length &&
+                    original.subarray(Infinity).length === 0 &&
+                    original.subarray(NaN, 2).length === 2 && rejectsBigIntOffset,
+                bufferSubarrayIgnoresSpecies: Buffer.isBuffer(hostileView) && hostileView[0] === 5,
+                shellNodeShebangs: envNode.status === 0 &&
+                    envNode.stdout.toString().trim() === 'env-node:ok',
+                shellSkipsPathMisses: envNode.status === 0,
+                shellRejectsMisleadingShebang: notNode.status === null && notNode.error &&
+                    notNode.error.code === 'ENOSYS',
+                shellOptionFailsExplicitly: shellSync.status === null &&
+                    shellSync.error && shellSync.error.code === 'ENOSYS' &&
+                    shellAsync.code === -38 && shellAsync.error &&
+                    shellAsync.error.code === 'ENOSYS' &&
+                    shellAsync.events.join(',') === 'error,close',
+                execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>
+                    failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
+                    failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
+                    failure.code === -38 && failure.exitCode === -38 &&
+                    failure.events.join(',') === 'callback,error,close'),
+                execExpandsPresentBracedEnv: genericEnvExpansions.every((expansion, index) =>
+                    !expansion.callbackError &&
+                    expansion.stdout === genericEnvValues[index] + '\\n' &&
+                    expansion.stderr === '' &&
+                    expansion.events.join(',') === 'callback,exit,close') &&
+                    splitEnvArguments.every(expansion =>
+                        !expansion.callbackError &&
+                        expansion.stdout === '42\\n' &&
+                        expansion.stderr === '' &&
+                        expansion.events.join(',') === 'callback,exit,close') &&
+                    unquotedEnvData.every((expansion, index) =>
+                        !expansion.callbackError &&
+                        expansion.stdout === JSON.stringify([unquotedEnvFields[index]]) + '\\n' &&
+                        expansion.stderr === '' &&
+                        expansion.events.join(',') === 'callback,exit,close') &&
+                    rejectedEnvExpansions.every(expansion =>
+                        expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
+                        expansion.stdout === '' && expansion.stderr === '') &&
+                    !derivedRedirectToken.callbackError &&
+                    derivedRedirectToken.stdout === JSON.stringify(['<', envRedirectInput]) + '\\n' &&
+                    derivedRedirectToken.stderr === '' &&
+                    rejectedRedirectCommands.every(expansion =>
+                        expansion.callbackError && expansion.callbackError.code === 'ENOSYS' &&
+                        expansion.emittedError && expansion.emittedError.code === 'ENOSYS' &&
+                        expansion.code === -38 && expansion.exitCode === -38 &&
+                        expansion.stdout === '' && expansion.stderr === '' &&
+                        expansion.events.join(',') === 'callback,error,close') &&
+                    injectedEnvStructure.callbackError &&
+                    injectedEnvStructure.callbackError.code === 'ENOSYS' &&
+                    injectedEnvStructure.stdout === '',
+                execEnvProbe: Object.fromEntries(Object.entries({
+                    derivedRedirectToken,
+                    injectedEnvStructure,
+                    ...Object.fromEntries(splitEnvArguments.map(
+                        (expansion, index) => ['split' + index, expansion])),
+                    ...Object.fromEntries(rejectedRedirectCommands.map(
+                        (expansion, index) => ['redirectRejected' + index, expansion])),
+                    ...Object.fromEntries(unquotedEnvData.map(
+                        (expansion, index) => ['unquoted' + index, expansion])),
+                    ...Object.fromEntries(rejectedEnvExpansions.map(
+                        (expansion, index) => ['rejected' + index, expansion])),
+                }).map(([name, result]) => [name, {
+                    error: result.callbackError && result.callbackError.code,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                    events: result.events,
+                }])),
+                execPreservesQuotedPipelineSyntax: !quotedPipePipeline.callbackError &&
+                    quotedPipePipeline.stdout === '3' &&
+                    quotedPipePipeline.stderr === '' &&
+                    quotedPipePipeline.events.join(',') === 'callback,exit,close',
+                execRejectsShellSyntax: rejectedShellCommands.every(failure =>
+                    failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
+                    failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
+                    failure.code === -38 && failure.exitCode === -38 &&
+                    failure.stdout === '' && failure.stderr === '' &&
+                    failure.events.join(',') === 'callback,error,close') &&
+                    !fs.existsSync(redirectionSideEffect),
+                shellProbe: Object.fromEntries(Object.entries({ envNode, notNode }).map(
+                    ([name, result]) => [name, {
+                        status: result.status,
+                        error: result.error && result.error.code,
+                        stdout: result.stdout.toString(),
+                        stderr: result.stderr.toString(),
+                    }],
+                )),
+                zlibRoundTrip: zlib.gunzipSync(compressed).toString() === 'npm',
+            };
+        `,
+    });
+    const runDirectShebang = async (command, expectedOutput, executable) => runJavaScript({
+        cwd: '/workspace',
+        source: `
+            const { createRequire } = await import('node:module');
+            const require = createRequire('/workspace/direct-shebang-probe.cjs');
+            const { spawnSync } = require('node:child_process');
+            if (${JSON.stringify(executable)}) {
+                require('node:fs').chmodSync(${JSON.stringify(command)}, 0o755);
+            }
+            const child = spawnSync('sh', ['-c', ${JSON.stringify(command)}], {
+                cwd: '/workspace',
+                env: { PATH: '/workspace/shebang-bin' },
+            });
+            return {
+                ok: child.status === 0 && child.stdout.toString().trim() === ${JSON.stringify(expectedOutput)},
+                status: child.status,
+                error: child.error && child.error.code,
+                stdout: child.stdout.toString(),
+                stderr: child.stderr.toString(),
+            };
+        `,
+    });
+    const relativeEnvShebang = await runDirectShebang(
+        './shebang-bin/env-node.cjs',
+        'env-node:ok',
+        true,
+    );
+    const absoluteNodeShebang = await runDirectShebang(
+        '/workspace/shebang-bin/direct-node.cjs',
+        'direct-node:ok',
+        true,
+    );
+    const directMisleadingShebang = await runDirectShebang(
+        './shebang-bin/not-node.cjs',
+        'not-node:bad',
+        true,
+    );
+    const nonExecutableShebang = await runDirectShebang(
+        './shebang-bin/not-executable.cjs',
+        'not-executable:bad',
+        false,
+    );
+    const nonRegularCandidate = await runDirectShebang(
+        './shebang-bin',
+        'directory:bad',
+        false,
+    );
+    result.value.shellDirectNodeShebang = relativeEnvShebang.value.ok &&
+        absoluteNodeShebang.value.ok;
+    result.value.shellRejectsDirectMisleadingShebang =
+        directMisleadingShebang.value.status === null &&
+        directMisleadingShebang.value.error === 'ENOSYS';
+    result.value.shellRejectsNonExecutableShebang =
+        nonExecutableShebang.value.status === null &&
+        nonExecutableShebang.value.error === 'ENOSYS';
+    result.value.shellRejectsNonRegularCandidate =
+        nonRegularCandidate.value.status === null &&
+        nonRegularCandidate.value.error === 'ENOSYS';
+    result.value.directShellProbe = {
+        relativeEnvShebang: relativeEnvShebang.value,
+        absoluteNodeShebang: absoluteNodeShebang.value,
+        directMisleadingShebang: directMisleadingShebang.value,
+        nonExecutableShebang: nonExecutableShebang.value,
+        nonRegularCandidate: nonRegularCandidate.value,
+    };
+    return JSON.stringify(result);
+}

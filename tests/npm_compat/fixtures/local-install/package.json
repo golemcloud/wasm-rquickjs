@@ -1,0 +1,21 @@
+{
+  "name": "npm-compat-local-install",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "verify": "node scripts/verify.mjs",
+    "safe-shell-literals": "node scripts/verify.mjs '$VAR' '*' ';' \\$escaped \\* \\;",
+    "unsupported-shell": "node scripts/verify.mjs && node scripts/verify.mjs",
+    "unsupported-braced-variable": "node scripts/verify.mjs ${npm_package_version}",
+    "unsupported-comment": "node scripts/verify.mjs # ignored by a real shell",
+    "unsupported-command-substitution": "node scripts/verify.mjs $(node scripts/verify.mjs)",
+    "unsupported-dollar-variable": "node scripts/verify.mjs $npm_package_version",
+    "unsupported-glob": "node scripts/*.mjs",
+    "unsupported-line-continuation": "node \\\nscripts/verify.mjs"
+  },
+  "dependencies": {
+    "fixture-commonjs-dependency": "file:packages/fixture-commonjs-dependency",
+    "fixture-dual-dependency": "file:packages/fixture-dual-dependency",
+    "fixture-dependency": "file:packages/fixture-dependency"
+  }
+}

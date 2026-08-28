@@ -17,4 +17,5 @@ declare module 'node-http' {
   export function httpMaxRequestsClosesSocket(): Promise<boolean>;
   export function netWritevBoundaries(): Promise<boolean>;
   export function httpPipelinedMaxRequests(): Promise<boolean>;
+  export function httpCustomConnectionRejected(): Promise<boolean>;
 }

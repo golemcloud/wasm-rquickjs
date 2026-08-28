@@ -1073,3 +1073,143 @@ export async function httpPipelinedMaxRequests() {
         });
     });
 }
+
+export async function httpCustomConnectionRejected() {
+    const rejectsAsynchronously = await new Promise((resolve) => {
+        let hookCalled = false;
+        let responseReceived = false;
+        let errorCode = null;
+        const req = http.request({
+            hostname: 'example.invalid',
+            createConnection() {
+                hookCalled = true;
+                throw new Error('custom connection hook must not run');
+            },
+        }, () => {
+            responseReceived = true;
+        });
+        const initiallyDestroyed = req.destroyed;
+        req.on('error', (error) => {
+            errorCode = error.code;
+        });
+        req.on('close', () => {
+            resolve(
+                !initiallyDestroyed &&
+                errorCode === 'ENOSYS' &&
+                !hookCalled &&
+                !responseReceived
+            );
+        });
+        req.end();
+    });
+
+    const destroyBeforeRejection = await new Promise((resolve) => {
+        let hookCalled = false;
+        let errorReceived = false;
+        const req = new http.ClientRequest({
+            createConnection() {
+                hookCalled = true;
+            },
+        });
+        req.on('error', () => {
+            errorReceived = true;
+        });
+        req.on('close', () => {
+            resolve(!hookCalled && !errorReceived);
+        });
+        if (req.destroy() !== req) {
+            resolve(false);
+        }
+    });
+
+    const agentHookIgnoredExplicitly = await new Promise((resolve) => {
+        let hookCalls = 0;
+        let warningCount = 0;
+        let closedCount = 0;
+        class CustomAgent extends http.Agent {
+            createConnection() {
+                hookCalls += 1;
+                throw new Error('agent custom connection hook must not run');
+            }
+        }
+        const ownHookAgent = new http.Agent();
+        ownHookAgent.createConnection = () => {
+            hookCalls += 1;
+            throw new Error('agent own custom connection hook must not run');
+        };
+        const onWarning = (warning) => {
+            if (
+                warning.code === 'WASM_RQUICKJS_HTTP_AGENT_TRANSPORT' &&
+                warning.message.includes('outbound requests use wasi:http')
+            ) {
+                warningCount += 1;
+            }
+        };
+        process.on('warning', onWarning);
+        for (const agent of [new CustomAgent(), ownHookAgent]) {
+            const req = http.request({
+                hostname: 'example.invalid',
+                agent,
+            });
+            req.on('error', () => {});
+            req.on('close', () => {
+                closedCount += 1;
+                if (closedCount === 2) {
+                    process.nextTick(() => {
+                        process.removeListener('warning', onWarning);
+                        resolve(hookCalls === 0 && warningCount === 1);
+                    });
+                }
+            });
+            req.destroy();
+        }
+    });
+
+    const connectDoesNotOpenSocket = await new Promise((resolve) => {
+        let hookCalled = false;
+        let errorReceived = false;
+        const req = new http.ClientRequest({
+            method: 'CONNECT',
+            createConnection() {
+                hookCalled = true;
+            },
+        });
+        const initiallySocketless = req.socket === null;
+        req.on('error', () => {
+            errorReceived = true;
+        });
+        req.on('close', () => {
+            resolve(initiallySocketless && req.socket === null && !hookCalled && !errorReceived);
+        });
+        req.destroy();
+    });
+
+    const plainConnectRejected = await new Promise((resolve) => {
+        let connectReceived = false;
+        let rejectedAsUnsupported = false;
+        const req = new http.ClientRequest({
+            method: 'CONNECT',
+            hostname: 'example.invalid',
+        });
+        const initiallySocketless = req.socket === null;
+        req.on('connect', () => {
+            connectReceived = true;
+        });
+        req.on('error', (error) => {
+            rejectedAsUnsupported = error.code === 'ENOSYS' &&
+                error.message.includes('outbound requests use wasi:http');
+        });
+        req.on('close', () => {
+            resolve(
+                initiallySocketless &&
+                req.socket === null &&
+                !connectReceived &&
+                rejectedAsUnsupported
+            );
+        });
+        req.end();
+    });
+
+    return rejectsAsynchronously && agentHookIgnoredExplicitly && destroyBeforeRejection &&
+        connectDoesNotOpenSocket && plainConnectRejected;
+}

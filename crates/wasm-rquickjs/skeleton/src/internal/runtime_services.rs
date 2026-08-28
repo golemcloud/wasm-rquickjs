@@ -237,6 +237,10 @@ pub(crate) struct OwnedJsRuntime {
 impl OwnedJsRuntime {
     pub(crate) async fn new() -> Self {
         let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+        // QuickJS defines zero as unlimited. The component's shared wasm32
+        // linear memory remains the outer bound, so do not impose a smaller
+        // per-runtime ceiling on execution jobs.
+        rt.set_memory_limit(0).await;
         rt.set_gc_threshold(256 * 1024 * 1024).await;
         let ctx = AsyncContext::full(&rt)
             .await
