@@ -529,14 +529,7 @@ fn aes_wrap_nopad_encrypt(key: &[u8], iv: [u8; 8], plaintext: &[u8]) -> Option<V
 
     let n = plaintext.len() / 8;
     let mut a = iv;
-    let mut r: Vec<[u8; 8]> = plaintext
-        .chunks_exact(8)
-        .map(|chunk| {
-            let mut block = [0u8; 8];
-            block.copy_from_slice(chunk);
-            block
-        })
-        .collect();
+    let mut r: Vec<[u8; 8]> = plaintext.as_chunks::<8>().0.to_vec();
 
     for j in 0..6 {
         for (i, ri) in r.iter_mut().enumerate() {
@@ -574,14 +567,7 @@ fn aes_wrap_nopad_unwrap_raw(key: &[u8], ciphertext: &[u8]) -> Option<([u8; 8], 
 
     let mut a = [0u8; 8];
     a.copy_from_slice(&ciphertext[..8]);
-    let mut r: Vec<[u8; 8]> = ciphertext[8..]
-        .chunks_exact(8)
-        .map(|chunk| {
-            let mut block = [0u8; 8];
-            block.copy_from_slice(chunk);
-            block
-        })
-        .collect();
+    let mut r: Vec<[u8; 8]> = ciphertext[8..].as_chunks::<8>().0.to_vec();
 
     for j in (0..6).rev() {
         for i in (0..n).rev() {
@@ -828,10 +814,8 @@ fn gcm_ghash(h: u128, aad: &[u8], ciphertext: &[u8]) -> [u8; 16] {
     input.extend_from_slice(&(ciphertext.len() as u64 * 8).to_be_bytes());
 
     let mut y = 0u128;
-    for block in input.chunks_exact(16) {
-        let mut b = [0u8; 16];
-        b.copy_from_slice(block);
-        y ^= u128::from_be_bytes(b);
+    for block in input.as_chunks::<16>().0 {
+        y ^= u128::from_be_bytes(*block);
         y = gcm_mul(y, h);
     }
     y.to_be_bytes()
@@ -854,10 +838,8 @@ fn gcm_compute_j0(h: u128, iv: &[u8]) -> [u8; 16] {
     input.extend_from_slice(&(iv.len() as u64 * 8).to_be_bytes());
 
     let mut y = 0u128;
-    for block in input.chunks_exact(16) {
-        let mut b = [0u8; 16];
-        b.copy_from_slice(block);
-        y ^= u128::from_be_bytes(b);
+    for block in input.as_chunks::<16>().0 {
+        y ^= u128::from_be_bytes(*block);
         y = gcm_mul(y, h);
     }
     y.to_be_bytes()
