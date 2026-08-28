@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./projects/core" },
+    { "path": "./projects/app" }
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".cache/root.tsbuildinfo"
+  }
+}

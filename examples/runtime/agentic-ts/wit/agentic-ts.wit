@@ -1,0 +1,12 @@
+package quickjs:agentic-ts;
+
+world agentic-ts {
+  export run-tsc: func(args: list<string>, timeout-ms: u64) -> string;
+  export run-entry: func(path: string) -> string;
+  export run-generated: func(path: string) -> string;
+  export run-cpu: func() -> string;
+  export run-io: func() -> string;
+  export run-concurrent: func() -> string;
+  export probe-timeout: func() -> string;
+  export probe-cancellation: func() -> string;
+}

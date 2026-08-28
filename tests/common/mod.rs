@@ -12,6 +12,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -1767,12 +1768,29 @@ impl TestInstance {
         Self::from_prepared(&prepared).await
     }
 
+    pub async fn new_with_memory_tracking(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
+        let prepared = if test_prepared_component_cache_enabled() {
+            prepared_component_for_path(wasm_path)?
+        } else {
+            Arc::new(PreparedComponent::new(wasm_path)?)
+        };
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            None,
+            true,
+        )
+        .await
+    }
+
     pub async fn from_prepared(prepared: &PreparedComponent) -> anyhow::Result<Self> {
         Self::from_parts(
             &prepared.engine,
             &prepared.linker,
             &prepared.component,
             None,
+            false,
         )
         .await
     }
@@ -1783,6 +1801,7 @@ impl TestInstance {
             &prepared.linker,
             &prepared.component,
             Some(Arc::new(Mutex::new(Vec::new()))),
+            false,
         )
         .await
     }
@@ -1792,6 +1811,7 @@ impl TestInstance {
         linker: &Linker<Host>,
         component: &Component,
         golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
+        track_linear_memory: bool,
     ) -> anyhow::Result<Self> {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
@@ -1827,9 +1847,13 @@ impl TestInstance {
             #[cfg(feature = "use-golem-wasmtime")]
             io_ctx: Arc::new(Mutex::new(io_ctx)),
             golem_spans: golem_spans.clone(),
+            linear_memory_high_water: track_linear_memory.then(|| Arc::new(AtomicUsize::new(0))),
         };
 
         let mut store = Store::new(engine, host);
+        if track_linear_memory {
+            store.limiter(|host| host);
+        }
         store.set_epoch_deadline(0);
         store.epoch_deadline_callback(|cx| {
             let data = cx.data();
@@ -1929,6 +1953,16 @@ impl TestInstance {
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
         self.temp_dir.path()
+    }
+
+    /// Highest requested Wasm linear-memory size observed by this test instance.
+    /// This is test-only instrumentation; it does not change the component API.
+    pub fn linear_memory_high_water_bytes(&self) -> usize {
+        self.store
+            .data()
+            .linear_memory_high_water
+            .as_ref()
+            .map_or(0, |value| value.load(Ordering::Relaxed))
     }
 
     pub fn golem_spans(&self) -> Option<Arc<Mutex<Vec<GolemSpan>>>> {
@@ -2500,6 +2534,35 @@ pub struct Host {
     #[cfg(feature = "use-golem-wasmtime")]
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
     pub golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
+    pub linear_memory_high_water: Option<Arc<AtomicUsize>>,
+}
+
+impl wasmtime::ResourceLimiter for Host {
+    fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+        #[cfg(feature = "use-golem-wasmtime")] kind: wasmtime::MemoryKind,
+    ) -> wasmtime::Result<bool> {
+        #[cfg(feature = "use-golem-wasmtime")]
+        let is_linear_memory = kind == wasmtime::MemoryKind::LinearMemory;
+        #[cfg(not(feature = "use-golem-wasmtime"))]
+        let is_linear_memory = true;
+        if is_linear_memory && let Some(high_water) = &self.linear_memory_high_water {
+            high_water.fetch_max(current.max(desired), Ordering::Relaxed);
+        }
+        Ok(true)
+    }
+
+    fn table_growing(
+        &mut self,
+        _current: usize,
+        _desired: usize,
+        _maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        Ok(true)
+    }
 }
 
 impl WasiView for Host {
@@ -2541,10 +2604,9 @@ impl WasiHttpView for Host {
 // ---------------------------------------------------------------------------------------------
 // WASI Preview 3 (Component Model async) host support.
 //
-// Works on both stock wasmtime and the Golem wasmtime fork (`use-golem-wasmtime`): the fork
-// supports Preview 3 just like upstream, and the only fork-specific difference (the extra `IoCtx`
-// returned by `WasiCtxBuilder::build()` / required by `WasiCtxView`) is handled on the shared
-// `Host` type above.
+// Works on both stock wasmtime and the Golem wasmtime fork (`use-golem-wasmtime`). The shared
+// `Host` handles the fork's extra `IoCtx` view field and excludes its GC-heap callbacks from the
+// guest linear-memory high-water metric.
 // ---------------------------------------------------------------------------------------------
 
 /// Preview 3 engine: same stack/epoch configuration as the P2 host, plus Component Model async

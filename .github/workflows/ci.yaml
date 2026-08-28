@@ -49,9 +49,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # The PR checkout is a synthetic merge commit. Its first parent is
+          # needed only to select changed reports; report currentness uses the
+          # reports' BLAKE3 content hashes rather than Git identity.
+          fetch-depth: 2
       - uses: ./.github/actions/setup
+      - name: Prepare pristine agentic TypeScript hash inputs
+        run: git worktree add --detach "$RUNNER_TEMP/agentic-ts-source" HEAD
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
+      # Validation mode checks committed report contracts and changed-report
+      # content hashes; the manual measurement workloads do not run in CI.
+      - name: Validate agentic TypeScript reports
+        shell: bash
+        env:
+          AGENTIC_TS_SOURCE_ROOT: ${{ runner.temp }}/agentic-ts-source
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          reports_to_check=""
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            reports_to_check=$(git diff --name-only --diff-filter=ACMR HEAD^1 HEAD -- 'tests/agentic_ts/results/*.json')
+          elif [[ -n "$PUSH_BEFORE" && ! "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            if ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$PUSH_BEFORE"
+            fi
+            reports_to_check=$(git diff --name-only --diff-filter=ACMR "$PUSH_BEFORE" HEAD -- 'tests/agentic_ts/results/*.json')
+          fi
+          AGENTIC_TS_VALIDATE_REPORTS=1 \
+          AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
+            cargo test --test agentic_ts $CI_WASMTIME_FORK_FEATURES
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
       - name: Local test profile contracts

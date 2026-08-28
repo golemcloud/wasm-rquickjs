@@ -248,6 +248,10 @@ Important rules:
 - CI runs node modules app and in-component npm compatibility tests as runtime `group9`; regular runtime tests use `group1` through `group8`.
 - Before running group9 after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- --test-threads 4 ':tag:group9'` for the CI-like group, `cargo test --test runtime --features use-golem-wasmtime -- node_modules_app --nocapture` for the node modules app suite, `cargo test --test runtime --features use-golem-wasmtime -- npm_compat --nocapture` for the npm compatibility suite, or a narrower filter.
 
+## Agentic TypeScript Suite
+
+`tests/agentic_ts/` contains the manual compatibility, performance, and memory-observation suite for TypeScript workloads executed through `wasm-rquickjs:execution`. Follow `tests/agentic_ts/README.md` for pinned tooling and measurement commands. Do not run the measurement mode as part of ordinary test sweeps; CI uses `AGENTIC_TS_VALIDATE_REPORTS=1 cargo test --test agentic_ts` to validate checked-in report contracts without executing workloads.
+
 ## Built-in Module Architecture
 
 ### Hybrid Native + JS Pattern

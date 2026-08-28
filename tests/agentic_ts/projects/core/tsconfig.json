@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "../../dist/core",
+    "rootDir": "src",
+    "strict": true,
+    "target": "ES2022",
+    "tsBuildInfoFile": "../../.cache/core.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}
