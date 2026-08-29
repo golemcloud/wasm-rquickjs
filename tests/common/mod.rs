@@ -250,8 +250,11 @@ const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 static HOST_TRACE: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 const HOST_TRACE_CAP: usize = 256 * 1024;
 static NEXT_HTTP_TRACE_INVOCATION: AtomicUsize = AtomicUsize::new(1);
+static NEXT_HTTP_TRACE_REQUEST: AtomicUsize = AtomicUsize::new(1);
 static TEST_SERVER_HTTP_TRACE: OnceLock<HttpLifecycleTrace> = OnceLock::new();
 const HTTP_LIFECYCLE_CAP: usize = 256;
+const HTTP_LIFECYCLE_SEQUENCE_MASK: u64 = 0x00ff_ffff;
+const HTTP_LIFECYCLE_SEQUENCE_HALF: u64 = 0x0080_0000;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -283,6 +286,7 @@ enum HttpLifecyclePhase {
     ServerResponseError = 25,
     ServerResponseDrop = 26,
     TargetPath = 27,
+    ServerPort = 28,
 }
 
 impl HttpLifecyclePhase {
@@ -315,6 +319,7 @@ impl HttpLifecyclePhase {
             25 => "server-response-error",
             26 => "server-response-drop-before-terminal",
             27 => "target-path-hash",
+            28 => "server-port",
             _ => "unknown",
         }
     }
@@ -339,7 +344,8 @@ impl HttpLifecycleJournal {
     }
 
     fn publish(&self, sequence: usize, request: usize, phase: HttpLifecyclePhase, detail: u16) {
-        let packed = ((sequence as u64 & 0x00ff_ffff) << 40)
+        let encoded_sequence = sequence as u64 & HTTP_LIFECYCLE_SEQUENCE_MASK;
+        let packed = (encoded_sequence << 40)
             | ((request as u64 & 0xffff) << 24)
             | ((phase as u64) << 16)
             | u64::from(detail);
@@ -347,8 +353,12 @@ impl HttpLifecycleJournal {
         let mut current = slot.load(Ordering::Acquire);
         loop {
             let current_sequence = current >> 40;
-            if current_sequence >= (sequence as u64 & 0x00ff_ffff) {
-                return;
+            if current != 0 {
+                let advance =
+                    encoded_sequence.wrapping_sub(current_sequence) & HTTP_LIFECYCLE_SEQUENCE_MASK;
+                if advance == 0 || advance >= HTTP_LIFECYCLE_SEQUENCE_HALF {
+                    return;
+                }
             }
             match slot.compare_exchange_weak(current, packed, Ordering::Release, Ordering::Acquire)
             {
@@ -359,16 +369,31 @@ impl HttpLifecycleJournal {
     }
 
     fn snapshot(&self, invocation: usize) -> String {
+        let newest_full_sequence = self.next_event.load(Ordering::Acquire).saturating_sub(1);
+        let newest_encoded_sequence = newest_full_sequence as u64 & HTTP_LIFECYCLE_SEQUENCE_MASK;
         let mut events = self
             .slots
             .iter()
             .map(|slot| slot.load(Ordering::Acquire))
             .filter(|event| *event != 0)
             .collect::<Vec<_>>();
-        events.sort_unstable_by_key(|event| event >> 40);
+        events.retain(|event| {
+            let sequence = event >> 40;
+            let age = newest_encoded_sequence.wrapping_sub(sequence) & HTTP_LIFECYCLE_SEQUENCE_MASK;
+            age < HTTP_LIFECYCLE_SEQUENCE_HALF
+        });
+        events.sort_unstable_by_key(|event| {
+            let sequence = event >> 40;
+            std::cmp::Reverse(
+                newest_encoded_sequence.wrapping_sub(sequence) & HTTP_LIFECYCLE_SEQUENCE_MASK,
+            )
+        });
         let mut result = format!("invocation={invocation}\n");
         for event in events {
-            let sequence = event >> 40;
+            let encoded_sequence = event >> 40;
+            let age = newest_encoded_sequence.wrapping_sub(encoded_sequence)
+                & HTTP_LIFECYCLE_SEQUENCE_MASK;
+            let sequence = newest_full_sequence.saturating_sub(age as usize);
             let request = (event >> 24) & 0xffff;
             let phase = ((event >> 16) & 0xff) as u8;
             let detail = event & 0xffff;
@@ -392,7 +417,6 @@ impl HttpLifecycleJournal {
 #[derive(Clone)]
 struct HttpLifecycleTrace {
     invocation: usize,
-    next_request: Arc<AtomicUsize>,
     journal: Arc<HttpLifecycleJournal>,
 }
 
@@ -400,13 +424,12 @@ impl HttpLifecycleTrace {
     fn new() -> Self {
         Self {
             invocation: NEXT_HTTP_TRACE_INVOCATION.fetch_add(1, Ordering::Relaxed),
-            next_request: Arc::new(AtomicUsize::new(1)),
             journal: Arc::new(HttpLifecycleJournal::new()),
         }
     }
 
     fn next_request(&self) -> usize {
-        self.next_request.fetch_add(1, Ordering::Relaxed)
+        NEXT_HTTP_TRACE_REQUEST.fetch_add(1, Ordering::Relaxed)
     }
 
     fn record(&self, request: usize, phase: HttpLifecyclePhase, detail: u16) {
@@ -451,19 +474,35 @@ fn test_server_http_trace() -> &'static HttpLifecycleTrace {
     TEST_SERVER_HTTP_TRACE.get_or_init(HttpLifecycleTrace::new)
 }
 
-fn record_test_server_arrival(port: u16, uri: &http::Uri) {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    uri.path_and_query().hash(&mut hasher);
-    test_server_http_trace().record(
-        usize::from(port),
-        HttpLifecyclePhase::ServerArrival,
-        (hasher.finish() & 0xffff) as u16,
+fn attach_http_correlation<B>(request: &mut http::Request<B>, request_id: usize) {
+    request.headers_mut().insert(
+        http::HeaderName::from_static("x-wrq-http-trace-id"),
+        http::HeaderValue::try_from(request_id.to_string()).expect("numeric header is valid"),
     );
 }
 
-fn record_test_server_response_head(port: u16, status: http::StatusCode) {
+fn test_server_http_correlation(headers: &http::HeaderMap) -> usize {
+    headers
+        .get("x-wrq-http-trace-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_default()
+}
+
+fn record_test_server_arrival(request_id: usize, port: u16, uri: &http::Uri) {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    uri.path_and_query().hash(&mut hasher);
     test_server_http_trace().record(
-        usize::from(port),
+        request_id,
+        HttpLifecyclePhase::ServerArrival,
+        (hasher.finish() & 0xffff) as u16,
+    );
+    test_server_http_trace().record(request_id, HttpLifecyclePhase::ServerPort, port);
+}
+
+fn record_test_server_response_head(request_id: usize, status: http::StatusCode) {
+    test_server_http_trace().record(
+        request_id,
         HttpLifecyclePhase::ServerResponseHead,
         status.as_u16(),
     );
@@ -471,15 +510,10 @@ fn record_test_server_response_head(port: u16, status: http::StatusCode) {
 
 fn traced_test_server_body<B: HttpBody>(
     body: B,
-    port: u16,
+    request_id: usize,
     side: &'static str,
 ) -> TracedHttpBody<B> {
-    TracedHttpBody::new(
-        body,
-        test_server_http_trace().clone(),
-        usize::from(port),
-        side,
-    )
+    TracedHttpBody::new(body, test_server_http_trace().clone(), request_id, side)
 }
 
 /// A transparent body observer. It never polls ahead or adds an await: every host poll is
@@ -623,16 +657,30 @@ fn p2_method_expects_body(method: &http::Method) -> bool {
     method == http::Method::POST || method == http::Method::PUT || method == http::Method::PATCH
 }
 
+#[cfg(feature = "use-golem-wasmtime")]
+fn p2_body_completion_for_dispatch(
+    method: &http::Method,
+    body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
+) -> Option<wasmtime_wasi_http::p2::BodyCompletionReceiver> {
+    if p2_method_expects_body(method) {
+        drop(body_completion);
+        None
+    } else {
+        body_completion
+    }
+}
+
 impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
     #[cfg(not(feature = "use-golem-wasmtime"))]
     fn send_request(
         &mut self,
-        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        mut request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
         config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
     ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
     {
         let trace = self.0.clone();
         let request_id = trace.next_request();
+        attach_http_correlation(&mut request, request_id);
         trace.record_submit(request_id, request.method(), request.uri());
 
         let (parts, body) = request.into_parts();
@@ -651,16 +699,17 @@ impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
     #[cfg(feature = "use-golem-wasmtime")]
     fn send_request(
         &mut self,
-        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        mut request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
         config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
         body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
     ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
     {
         let trace = self.0.clone();
         let request_id = trace.next_request();
+        attach_http_correlation(&mut request, request_id);
         trace.record_submit(request_id, request.method(), request.uri());
-        let collect_before_send =
-            !p2_method_expects_body(request.method()) && body_completion.is_some();
+        let body_completion = p2_body_completion_for_dispatch(request.method(), body_completion);
+        let collect_before_send = body_completion.is_some();
         let (parts, body) = request.into_parts();
         let request = http::Request::from_parts(
             parts,
@@ -706,7 +755,7 @@ struct P3HttpTraceHooks(HttpLifecycleTrace);
 impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
     fn send_request(
         &mut self,
-        request: http::Request<
+        mut request: http::Request<
             http_body_util::combinators::UnsyncBoxBody<
                 bytes::Bytes,
                 wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
@@ -750,6 +799,7 @@ impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
 
         let trace = self.0.clone();
         let request_id = trace.next_request();
+        attach_http_correlation(&mut request, request_id);
         trace.record_submit(request_id, request.method(), request.uri());
         let (parts, body) = request.into_parts();
         let request = http::Request::from_parts(
@@ -1173,6 +1223,29 @@ mod tests {
     }
 
     #[test]
+    fn http_lifecycle_ring_accepts_encoded_sequence_rollover() {
+        let journal = HttpLifecycleJournal::new();
+        let before_rollover = HTTP_LIFECYCLE_SEQUENCE_MASK as usize;
+        journal.publish(
+            before_rollover - (HTTP_LIFECYCLE_CAP - 1),
+            1,
+            HttpLifecyclePhase::Submit,
+            0,
+        );
+        journal.publish(
+            before_rollover + 1,
+            2,
+            HttpLifecyclePhase::ResponseHead,
+            200,
+        );
+
+        let retained =
+            journal.slots[(before_rollover + 1) % HTTP_LIFECYCLE_CAP].load(Ordering::Acquire);
+        assert_eq!(retained >> 40, 0);
+        assert_eq!((retained >> 24) & 0xffff, 2);
+    }
+
+    #[test]
     fn http_lifecycle_ring_remains_valid_during_concurrent_snapshots() {
         let journal = Arc::new(HttpLifecycleJournal::new());
         let writers = (0..8)
@@ -1230,6 +1303,45 @@ mod tests {
         assert!(result.is_err());
         let snapshot = trace.snapshot();
         assert!(snapshot.contains("request=7 phase=send-error"));
+    }
+
+    #[test]
+    fn http_lifecycle_correlation_distinguishes_same_path_requests() {
+        let mut first = http::Request::get("http://127.0.0.1:1234/same")
+            .body(())
+            .unwrap();
+        let mut second = http::Request::get("http://127.0.0.1:1234/same")
+            .body(())
+            .unwrap();
+        attach_http_correlation(&mut first, 41);
+        attach_http_correlation(&mut second, 42);
+
+        assert_eq!(test_server_http_correlation(first.headers()), 41);
+        assert_eq!(test_server_http_correlation(second.headers()), 42);
+
+        let uri = Arc::new(first.uri().clone());
+        let arrivals = [41, 42].map(|request_id| {
+            let uri = uri.clone();
+            thread::spawn(move || record_test_server_arrival(request_id, 1234, &uri))
+        });
+        for arrival in arrivals {
+            arrival.join().unwrap();
+        }
+        let snapshot = test_server_http_trace().snapshot();
+        assert!(snapshot.contains("request=41 phase=server-arrival"));
+        assert!(snapshot.contains("request=42 phase=server-arrival"));
+    }
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    #[test]
+    fn p2_body_method_drops_unused_completion_before_dispatch() {
+        let (sender, receiver) = tokio::sync::oneshot::channel::<
+            Result<(), wasmtime_wasi_http::p2::bindings::http::types::ErrorCode>,
+        >();
+        let retained = p2_body_completion_for_dispatch(&http::Method::POST, Some(receiver));
+
+        assert!(retained.is_none());
+        assert!(sender.is_closed());
     }
 
     #[test]

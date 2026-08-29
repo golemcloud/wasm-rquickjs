@@ -33,20 +33,25 @@ impl Drop for TestServerHandle {
 fn trace_http_lifecycle(router: Router, port: u16) -> Router {
     router.layer(axum::middleware::from_fn(
         move |request: Request, next: Next| async move {
-            super::record_test_server_arrival(port, request.uri());
+            let request_id = super::test_server_http_correlation(request.headers());
+            super::record_test_server_arrival(request_id, port, request.uri());
             let (parts, body) = request.into_parts();
             let request = Request::from_parts(
                 parts,
-                Body::new(super::traced_test_server_body(body, port, "server-request")),
+                Body::new(super::traced_test_server_body(
+                    body,
+                    request_id,
+                    "server-request",
+                )),
             );
             let response = next.run(request).await;
-            super::record_test_server_response_head(port, response.status());
+            super::record_test_server_response_head(request_id, response.status());
             let (parts, body) = response.into_parts();
             axum::response::Response::from_parts(
                 parts,
                 Body::new(super::traced_test_server_body(
                     body,
-                    port,
+                    request_id,
                     "server-response",
                 )),
             )
