@@ -1027,9 +1027,9 @@ async fn fetch_abort_pending_response_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (port, _server, mut released) = start_response_body_abort_test_server().await;
-    for test_case in 0..4u8 {
+    for test_case in 0..7u8 {
         let wasm_path = compiled.wasm_path().to_path_buf();
-        let invocation = tokio::spawn(async move {
+        let mut invocation = tokio::spawn(async move {
             invoke_and_capture_output(
                 &wasm_path,
                 None,
@@ -1052,6 +1052,21 @@ async fn fetch_abort_pending_response_body(
                 .expect("pending response fixture stopped before sending the response head"),
             ResponseBodyServerEvent::HeadSent,
         );
+        let release = tokio::time::timeout(std::time::Duration::from_secs(5), released.recv());
+        tokio::pin!(release);
+        tokio::select! {
+            event = &mut release => assert_eq!(
+                event
+                    .unwrap_or_else(|_| panic!(
+                        "server did not observe release for response body case {test_case}"
+                    ))
+                    .expect("response body test server stopped before observing release"),
+                ResponseBodyServerEvent::Released,
+            ),
+            result = &mut invocation => panic!(
+                "response body case {test_case} completed before releasing its native body: {result:?}"
+            ),
+        }
         let (result, output) = tokio::time::timeout(std::time::Duration::from_secs(10), invocation)
             .await
             .unwrap_or_else(|_| {
@@ -1060,16 +1075,7 @@ async fn fetch_abort_pending_response_body(
         assert_eq!(
             result?,
             Some(Val::Bool(true)),
-            "response body case {test_case} must reject with AbortError. Output:\n{output}"
-        );
-        assert_eq!(
-            tokio::time::timeout(std::time::Duration::from_secs(5), released.recv())
-                .await
-                .unwrap_or_else(|_| panic!(
-                    "server did not observe release for response body case {test_case}"
-                ))
-                .expect("response body test server stopped before observing release"),
-            ResponseBodyServerEvent::Released,
+            "response body case {test_case} must satisfy the abort/GC contract. Output:\n{output}"
         );
     }
     Ok(())

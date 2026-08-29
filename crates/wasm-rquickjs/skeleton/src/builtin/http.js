@@ -453,8 +453,8 @@ async function streamingRequest(
     }
 }
 
-function responseAbortError() {
-    return new DOMException('The operation was aborted.', 'AbortError');
+function responseAbortReason(signal) {
+    return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
 }
 
 export class Response {
@@ -472,8 +472,12 @@ export class Response {
             if (signal?.aborted) {
                 this.nativeResponse.discardBody();
             } else if (signal) {
+                const responseRef = new WeakRef(this);
                 this._abortBodyListener = () => {
-                    if (!this.bodyUsed) this.nativeResponse.discardBody();
+                    const response = responseRef.deref();
+                    // Rust owns cancellation once consumption starts. This hook only releases an
+                    // unread body, which otherwise has no active native future to cancel.
+                    if (response && !response.bodyUsed) response.nativeResponse.discardBody();
                 };
                 signal.addEventListener('abort', this._abortBodyListener, {once: true});
             }
@@ -530,10 +534,10 @@ export class Response {
                     return "bytes";
                 },
                 async pull(controller) {
-                    if (response._signal?.aborted) throw responseAbortError();
+                    response.bodyUsed = true;
+                    if (response._signal?.aborted) throw responseAbortReason(response._signal);
                     if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
                         nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
-                        response.bodyUsed = true;
                     }
 
                     let next;
@@ -541,7 +545,7 @@ export class Response {
                     try {
                         [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull(response._signal);
                     } catch (error) {
-                        if (response._signal?.aborted) throw responseAbortError();
+                        response._detachAbortBodyListener();
                         throw error;
                     }
                     if (err !== undefined) {
@@ -724,17 +728,13 @@ export class Response {
 
     async arrayBuffer() {
         if (this._isNative) {
-            if (this._signal?.aborted) throw responseAbortError();
-            let result;
-            try {
-                result = await this.nativeResponse.arrayBuffer(this._signal);
-            } catch (error) {
-                if (this._signal?.aborted) throw responseAbortError();
-                throw error;
-            }
             this.bodyUsed = true;
-            this._detachAbortBodyListener();
-            return result;
+            if (this._signal?.aborted) throw responseAbortReason(this._signal);
+            try {
+                return await this.nativeResponse.arrayBuffer(this._signal);
+            } finally {
+                this._detachAbortBodyListener();
+            }
         }
         this.bodyUsed = true;
         if (this._body === null) {
@@ -789,17 +789,13 @@ export class Response {
 
     async text() {
         if (this._isNative) {
-            if (this._signal?.aborted) throw responseAbortError();
-            let result;
-            try {
-                result = await this.nativeResponse.text(this._signal);
-            } catch (error) {
-                if (this._signal?.aborted) throw responseAbortError();
-                throw error;
-            }
             this.bodyUsed = true;
-            this._detachAbortBodyListener();
-            return result;
+            if (this._signal?.aborted) throw responseAbortReason(this._signal);
+            try {
+                return await this.nativeResponse.text(this._signal);
+            } finally {
+                this._detachAbortBodyListener();
+            }
         }
         this.bodyUsed = true;
         if (this._body === null) {

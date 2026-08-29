@@ -19,10 +19,11 @@ use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
+use std::task::{Poll, Waker};
 use wstd::runtime::AsyncPollable;
 
-use super::abort_signal::with_abort_signal;
+use super::abort_signal::{ensure_not_aborted, with_abort_signal};
 
 /// Request mode - defines the cross-origin behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
@@ -757,8 +758,13 @@ impl HttpResponse {
         match source {
             ResponseBodySource::Native(response) => discard_native_response(*response),
             ResponseBodySource::Shared(shared) => {
-                if let Some(response) = shared.borrow_mut().response.take() {
-                    discard_native_response(response);
+                let mut shared = shared.borrow_mut();
+                if let Some(native) = shared.native.take() {
+                    discard_shared_native_response(native);
+                }
+                shared.finished = true;
+                for waiter in shared.waiters.drain(..) {
+                    waiter.wake();
                 }
             }
             ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
@@ -811,7 +817,7 @@ impl HttpResponse {
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<ArrayBuffer<'js>> {
-        with_abort_signal(&ctx, signal.clone(), async { Ok(()) }).await?;
+        ensure_not_aborted(&ctx, signal.as_ref())?;
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         let bytes = match source {
             ResponseBodySource::Bytes(body_bytes) => body_bytes,
@@ -829,35 +835,7 @@ impl HttpResponse {
                 .await?
             }
             ResponseBodySource::Shared(shared) => {
-                let response = shared.borrow_mut().response.take();
-                if let Some(response) = response {
-                    // Native response was not read yet, read it now
-                    let error_ctx = ctx.clone();
-                    let result = with_abort_signal(&ctx, signal, async move {
-                        response
-                            .bytes()
-                            .await
-                            .map(|bytes| bytes.to_vec())
-                            .map_err(|_| {
-                                Exception::throw_message(&error_ctx, "failed to read response body")
-                            })
-                    })
-                    .await;
-                    let bytes = match result {
-                        Ok(bytes) => bytes,
-                        Err(error) => {
-                            shared.borrow_mut().finished = true;
-                            return Err(error);
-                        }
-                    };
-                    let mut shared = shared.borrow_mut();
-                    shared.buffer = bytes.clone();
-                    shared.finished = true;
-                    bytes
-                } else {
-                    // Response already read and buffered
-                    shared.borrow().buffer.clone()
-                }
+                collect_shared_response_body(&ctx, signal, shared).await?
             }
             ResponseBodySource::Consumed => {
                 return Err(Exception::throw_message(
@@ -893,50 +871,12 @@ impl HttpResponse {
                     }),
                 })
             }
-            ResponseBodySource::Shared(rc_shared) => {
-                let mut shared = rc_shared.borrow_mut();
-                if let Some(mut response) = shared.response.take() {
-                    let (stream, body) = response.get_raw_input_stream();
-
-                    let shared_stream = SharedStream {
-                        stream,
-                        body,
-                        response,
-                        shared: Rc::downgrade(&rc_shared),
-                    };
-
-                    // Read the body into the buffer as it is consumed
-                    Ok(ResponseBodyStream {
-                        stream: Some(BodySource::SharedNative {
-                            shared_stream: Rc::new(RefCell::new(shared_stream)),
-                            position: 0,
-                        }),
-                    })
-                } else if let Some(stream) = &shared.stream {
-                    if shared.finished {
-                        // Response was streaming but now finished
-                        Ok(ResponseBodyStream {
-                            stream: Some(BodySource::Bytes(std::io::Cursor::new(
-                                shared.buffer.clone(),
-                            ))),
-                        })
-                    } else {
-                        // Response is still streaming
-                        Ok(ResponseBodyStream {
-                            stream: Some(BodySource::SharedNative {
-                                shared_stream: stream.clone(),
-                                position: 0,
-                            }),
-                        })
-                    }
-                } else {
-                    Ok(ResponseBodyStream {
-                        stream: Some(BodySource::Bytes(std::io::Cursor::new(
-                            shared.buffer.clone(),
-                        ))),
-                    })
-                }
-            }
+            ResponseBodySource::Shared(shared) => Ok(ResponseBodyStream {
+                stream: Some(BodySource::Shared {
+                    shared,
+                    position: 0,
+                }),
+            }),
             ResponseBodySource::Consumed => Err(Exception::throw_message(
                 &ctx,
                 "The response has already been consumed",
@@ -949,7 +889,7 @@ impl HttpResponse {
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<String> {
-        with_abort_signal(&ctx, signal.clone(), async { Ok(()) }).await?;
+        ensure_not_aborted(&ctx, signal.as_ref())?;
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Bytes(body_bytes) => {
@@ -965,29 +905,8 @@ impl HttpResponse {
                 .await
             }
             ResponseBodySource::Shared(shared) => {
-                let response = shared.borrow_mut().response.take();
-                if let Some(response) = response {
-                    let error_ctx = ctx.clone();
-                    let result = with_abort_signal(&ctx, signal, async move {
-                        response.text().await.map_err(|_| {
-                            Exception::throw_message(&error_ctx, "failed to read response body")
-                        })
-                    })
-                    .await;
-                    let text = match result {
-                        Ok(text) => text,
-                        Err(error) => {
-                            shared.borrow_mut().finished = true;
-                            return Err(error);
-                        }
-                    };
-                    let mut shared = shared.borrow_mut();
-                    shared.buffer = text.clone().into_bytes();
-                    shared.finished = true;
-                    Ok(text)
-                } else {
-                    Ok(String::from_utf8_lossy(&shared.borrow().buffer).to_string())
-                }
+                let bytes = collect_shared_response_body(&ctx, signal, shared).await?;
+                Ok(String::from_utf8_lossy(&bytes).to_string())
             }
             ResponseBodySource::Consumed => Err(Exception::throw_message(
                 &ctx,
@@ -1056,12 +975,18 @@ impl HttpResponse {
                 ResponseBodySource::Bytes(bytes.clone()),
                 ResponseBodySource::Bytes(bytes),
             ),
-            ResponseBodySource::Native(response) => {
+            ResponseBodySource::Native(mut response) => {
+                let (stream, body) = response.get_raw_input_stream();
                 let shared = Rc::new(RefCell::new(SharedResponse {
-                    response: Some(*response),
-                    stream: None,
+                    native: Some(SharedNativeResponse {
+                        stream,
+                        body,
+                        response: *response,
+                    }),
                     buffer: Vec::new(),
                     finished: false,
+                    error: None,
+                    waiters: Vec::new(),
                 }));
                 (
                     ResponseBodySource::Shared(shared.clone()),
@@ -1094,19 +1019,143 @@ fn discard_native_response(mut response: golem_wasi_http::Response) {
     drop(response);
 }
 
-pub struct SharedResponse {
-    response: Option<golem_wasi_http::Response>,
-    stream: Option<Rc<RefCell<SharedStream>>>,
-    buffer: Vec<u8>,
-    finished: bool,
+fn discard_shared_native_response(native: SharedNativeResponse) {
+    drop(native.stream);
+    drop(wasip2::http::types::IncomingBody::finish(native.body));
+    drop(native.response);
 }
 
-#[allow(dead_code)]
-pub struct SharedStream {
+async fn collect_shared_response_body<'js>(
+    ctx: &Ctx<'js>,
+    signal: Option<Value<'js>>,
+    shared: Rc<RefCell<SharedResponse>>,
+) -> rquickjs::Result<Vec<u8>> {
+    let read = async {
+        let mut position = 0;
+        let mut bytes = Vec::new();
+        while let Some(chunk) =
+            read_shared_response_body_chunk(ctx, None, &shared, position).await?
+        {
+            position += chunk.len();
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
+    };
+    with_abort_signal(ctx, signal, read).await
+}
+
+async fn read_shared_response_body_chunk<'js>(
+    ctx: &Ctx<'js>,
+    signal: Option<Value<'js>>,
+    shared: &Rc<RefCell<SharedResponse>>,
+    position: usize,
+) -> rquickjs::Result<Option<Vec<u8>>> {
+    loop {
+        {
+            let state = shared.borrow();
+            if position < state.buffer.len() {
+                let end = (position + 16 * 1024).min(state.buffer.len());
+                return Ok(Some(state.buffer[position..end].to_vec()));
+            }
+            if let Some(error) = &state.error {
+                return Err(Exception::throw_message(ctx, error));
+            }
+            if state.finished {
+                return Ok(None);
+            }
+        }
+
+        let native = shared.borrow_mut().native.take();
+        let Some(native) = native else {
+            let wait = std::future::poll_fn(|cx| {
+                let mut state = shared.borrow_mut();
+                if position < state.buffer.len()
+                    || state.error.is_some()
+                    || state.finished
+                    || state.native.is_some()
+                {
+                    Poll::Ready(())
+                } else {
+                    if !state
+                        .waiters
+                        .iter()
+                        .any(|waker| waker.will_wake(cx.waker()))
+                    {
+                        state.waiters.push(cx.waker().clone());
+                    }
+                    Poll::Pending
+                }
+            });
+            with_abort_signal(ctx, signal.clone(), async {
+                wait.await;
+                Ok(())
+            })
+            .await?;
+            continue;
+        };
+
+        let read = async move {
+            loop {
+                let pollable = native.stream.subscribe();
+                AsyncPollable::new(pollable).wait_for().await;
+                match native.stream.read(16 * 1024) {
+                    Ok(chunk) if chunk.is_empty() => continue,
+                    Ok(chunk) => return Ok((Some(native), Some(chunk.to_vec()))),
+                    Err(StreamError::Closed) => {
+                        discard_shared_native_response(native);
+                        return Ok((None, None));
+                    }
+                    Err(StreamError::LastOperationFailed(error)) => {
+                        let message =
+                            format!("Failed to read response body: {}", error.to_debug_string());
+                        discard_shared_native_response(native);
+                        return Err(message);
+                    }
+                }
+            }
+        };
+        let outcome = with_abort_signal(ctx, signal, async { Ok(read.await) }).await;
+        let mut state = shared.borrow_mut();
+        let result = match outcome {
+            Err(error) => {
+                state.finished = true;
+                Err(error)
+            }
+            Ok(Ok((native, Some(chunk)))) => {
+                state.buffer.extend_from_slice(&chunk);
+                state.native = native;
+                Ok(Some(chunk))
+            }
+            Ok(Ok((native, None))) => {
+                state.native = native;
+                state.finished = true;
+                Ok(None)
+            }
+            Ok(Err(error)) => {
+                state.error = Some(error.clone());
+                state.finished = true;
+                Err(Exception::throw_message(ctx, &error))
+            }
+        };
+        for waiter in state.waiters.drain(..) {
+            waiter.wake();
+        }
+        return result;
+    }
+}
+
+pub struct SharedResponse {
+    native: Option<SharedNativeResponse>,
+    buffer: Vec<u8>,
+    finished: bool,
+    error: Option<String>,
+    waiters: Vec<Waker>,
+}
+
+pub struct SharedNativeResponse {
     stream: golem_wasi_http::InputStream,
     body: golem_wasi_http::IncomingBody,
     response: golem_wasi_http::Response,
-    shared: Weak<RefCell<SharedResponse>>,
 }
 
 /// Represents the source of response body data
@@ -1127,8 +1176,8 @@ pub enum BodySource {
         body: golem_wasi_http::IncomingBody,
         response: Box<golem_wasi_http::Response>,
     },
-    SharedNative {
-        shared_stream: Rc<RefCell<SharedStream>>,
+    Shared {
+        shared: Rc<RefCell<SharedResponse>>,
         position: usize,
     },
     Bytes(std::io::Cursor<Vec<u8>>),
@@ -1162,7 +1211,6 @@ impl ResponseBodyStream {
         "bytes".to_string()
     }
 
-    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn pull<'js>(
         &mut self,
         ctx: Ctx<'js>,
@@ -1230,81 +1278,34 @@ impl ResponseBodyStream {
                         ),
                     }
                 }
-                Some(BodySource::SharedNative {
-                    shared_stream: rc_shared_stream,
-                    position,
-                }) => {
-                    let shared_stream = rc_shared_stream.borrow();
-                    let shared = shared_stream
-                        .shared
-                        .upgrade()
-                        .expect("Shared stream has been dropped");
-                    let mut shared = shared.borrow_mut();
-                    let buffer_len = shared.buffer.len();
-
-                    if position < buffer_len {
-                        let chunk = &shared.buffer[position..];
-                        let chunk_len = chunk.len();
-                        let chunk_array = TypedArray::new_copy(ctx.clone(), chunk).unwrap();
-                        (
-                            List((Some(chunk_array), None)),
-                            Some(BodySource::SharedNative {
-                                shared_stream: rc_shared_stream.clone(),
-                                position: position + chunk_len,
-                            }),
-                        )
-                    } else {
-                        if shared.finished {
-                            (List((None, None)), None)
-                        } else {
-                            const CHUNK_SIZE: u64 = 4096;
-                            let pollable = shared_stream.stream.subscribe();
-                            AsyncPollable::new(pollable).wait_for().await;
-
-                            match shared_stream.stream.read(CHUNK_SIZE) {
-                                Ok(chunk) => {
-                                    let chunk_len = chunk.len();
-                                    shared.buffer.extend_from_slice(&chunk);
-
-                                    match TypedArray::new_copy(ctx.clone(), chunk) {
-                                    Ok(js_array) => {
-                                        (List((Some(js_array), None)), Some(BodySource::SharedNative {
-                            shared_stream: rc_shared_stream.clone(),
-                            position: position + chunk_len,
-                        }))
-                                    },
-                                    Err(_) => (List((
+                Some(BodySource::Shared { shared, position }) => {
+                    match read_shared_response_body_chunk(&ctx, None, &shared, position).await? {
+                        Some(chunk) => {
+                            let chunk_len = chunk.len();
+                            match TypedArray::new_copy(ctx.clone(), &chunk) {
+                                Ok(js_array) => (
+                                    List((Some(js_array), None)),
+                                    Some(BodySource::Shared {
+                                        shared,
+                                        position: position + chunk_len,
+                                    }),
+                                ),
+                                Err(_) => (
+                                    List((
                                         None,
                                         Some(
                                             "Failed to create TypedArray from response body chunk"
                                                 .to_string(),
                                         ),
-                                    )), Some(BodySource::SharedNative {
-                            shared_stream: rc_shared_stream.clone(),
-                            position: position + chunk_len,
-                        })),
-                                }
-                                }
-                                Err(StreamError::Closed) => {
-                                    // No more data to read, close the stream
-                                    shared.finished = true;
-                                    (List((None, None)), None)
-                                }
-                                Err(StreamError::LastOperationFailed(err)) => (
-                                    List((
-                                        None,
-                                        Some(format!(
-                                            "Failed to read response body: {}",
-                                            err.to_debug_string()
-                                        )),
                                     )),
-                                    Some(BodySource::SharedNative {
-                                        shared_stream: rc_shared_stream.clone(),
-                                        position,
+                                    Some(BodySource::Shared {
+                                        shared,
+                                        position: position + chunk_len,
                                     }),
                                 ),
                             }
                         }
+                        None => (List((None, None)), None),
                     }
                 }
                 Some(BodySource::Bytes(mut cursor)) => {

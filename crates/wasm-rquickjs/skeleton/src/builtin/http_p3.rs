@@ -32,13 +32,14 @@ use rquickjs::convert::Coerced;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 
-use super::abort_signal::with_abort_signal;
+use super::abort_signal::{ensure_not_aborted, with_abort_signal};
 use super::http_body::ResponseBody as NativeResponseBody;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::task::{Poll, Waker};
 use url::Url;
 use wasip3::http::types::{ErrorCode, Fields, Method, Request, Response, Scheme, Trailers};
 use wasip3::wit_bindgen::{FutureWriter, StreamWriter};
@@ -870,6 +871,7 @@ impl WrappedRequestBodyWriter {
 
 enum ResponseBody {
     Bytes(Vec<u8>),
+    Native(NativeResponseBody),
     Shared(Rc<RefCell<SharedResponseBody>>),
     Consumed,
 }
@@ -879,6 +881,7 @@ struct SharedResponseBody {
     buffer: Vec<u8>,
     finished: bool,
     error: Option<String>,
+    waiters: Vec<Waker>,
 }
 
 #[derive(rquickjs::class::Trace, JsLifetime)]
@@ -886,11 +889,6 @@ struct SharedResponseBody {
 pub struct HttpResponse {
     #[qjs(skip_trace)]
     body: ResponseBody,
-    /// A response body that failed mid-transfer (e.g. a truncated response). It is deferred until
-    /// the body is consumed so that a discarded response (e.g. an intermediate redirect body) does
-    /// not surface a spurious error, matching the buffered path's redirect handling.
-    #[qjs(skip_trace)]
-    body_error: Option<String>,
     headers: Vec<Vec<String>>,
     status: u16,
     is_opaque: bool,
@@ -914,7 +912,6 @@ impl HttpResponse {
     pub fn new() -> Self {
         Self {
             body: ResponseBody::Consumed,
-            body_error: None,
             headers: Vec::new(),
             status: 200,
             is_opaque: false,
@@ -925,19 +922,8 @@ impl HttpResponse {
 
     #[qjs(skip)]
     pub fn from_parts(status: u16, headers: Vec<Vec<String>>, body: Vec<u8>) -> Self {
-        Self::from_parts_with_error(status, headers, body, None)
-    }
-
-    #[qjs(skip)]
-    pub fn from_parts_with_error(
-        status: u16,
-        headers: Vec<Vec<String>>,
-        body: Vec<u8>,
-        body_error: Option<String>,
-    ) -> Self {
         Self {
             body: ResponseBody::Bytes(body),
-            body_error,
             headers,
             status,
             is_opaque: false,
@@ -949,13 +935,7 @@ impl HttpResponse {
     #[qjs(skip)]
     fn from_response(status: u16, headers: Vec<Vec<String>>, response: Response) -> Self {
         Self {
-            body: ResponseBody::Shared(Rc::new(RefCell::new(SharedResponseBody {
-                native: Some(NativeResponseBody::new(response)),
-                buffer: Vec::new(),
-                finished: false,
-                error: None,
-            }))),
-            body_error: None,
+            body: ResponseBody::Native(NativeResponseBody::new(response)),
             headers,
             status,
             is_opaque: false,
@@ -971,12 +951,23 @@ impl HttpResponse {
         self.status = 200; // reported as 0 while opaque
         // Opaque responses never surface their body to JS, so a deferred body-transfer error is
         // not observable and must not fail the fetch.
-        self.body_error = None;
     }
 
     pub fn discard_body(&mut self) {
-        self.body = ResponseBody::Consumed;
-        self.body_error = None;
+        match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Native(mut native) => native.discard(),
+            ResponseBody::Shared(shared) => {
+                let mut shared = shared.borrow_mut();
+                if let Some(mut native) = shared.native.take() {
+                    native.discard();
+                }
+                shared.finished = true;
+                for waiter in shared.waiters.drain(..) {
+                    waiter.wake();
+                }
+            }
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
+        }
     }
 
     /// Turns this response into a `redirect: "manual"` opaque-redirect filtered response. Like
@@ -1067,6 +1058,10 @@ impl HttpResponse {
                 source: Some(ResponseBodyStreamSource::Bytes(bytes)),
                 position: 0,
             }),
+            ResponseBody::Native(native) => Ok(ResponseBodyStream {
+                source: Some(ResponseBodyStreamSource::Native(native)),
+                position: 0,
+            }),
             ResponseBody::Shared(shared) => Ok(ResponseBodyStream {
                 source: Some(ResponseBodyStreamSource::Shared(shared)),
                 position: 0,
@@ -1082,7 +1077,6 @@ impl HttpResponse {
     pub fn error() -> Self {
         Self {
             body: ResponseBody::Consumed,
-            body_error: None,
             headers: Vec::new(),
             status: 500,
             is_opaque: false,
@@ -1100,7 +1094,6 @@ impl HttpResponse {
             .unwrap_or(302);
         Self {
             body: ResponseBody::Consumed,
-            body_error: None,
             headers: vec![vec!["location".to_string(), url.0]],
             status: status_code,
             is_opaque: false,
@@ -1117,7 +1110,6 @@ impl HttpResponse {
             .unwrap_or(200);
         Self {
             body: ResponseBody::Bytes(data.as_bytes().map(|b| b.to_vec()).unwrap_or_default()),
-            body_error: None,
             headers: vec![vec![
                 "content-type".to_string(),
                 "application/json".to_string(),
@@ -1135,6 +1127,19 @@ impl HttpResponse {
                 ResponseBody::Bytes(bytes.clone()),
                 ResponseBody::Bytes(bytes),
             ),
+            ResponseBody::Native(native) => {
+                let shared = Rc::new(RefCell::new(SharedResponseBody {
+                    native: Some(native),
+                    buffer: Vec::new(),
+                    finished: false,
+                    error: None,
+                    waiters: Vec::new(),
+                }));
+                (
+                    ResponseBody::Shared(shared.clone()),
+                    ResponseBody::Shared(shared),
+                )
+            }
             ResponseBody::Shared(shared) => (
                 ResponseBody::Shared(shared.clone()),
                 ResponseBody::Shared(shared),
@@ -1144,7 +1149,6 @@ impl HttpResponse {
         self.body = kept;
         Self {
             body: cloned,
-            body_error: self.body_error.clone(),
             headers: self.headers.clone(),
             status: self.status,
             is_opaque: self.is_opaque,
@@ -1160,14 +1164,22 @@ impl HttpResponse {
         ctx: &Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<Vec<u8>> {
+        ensure_not_aborted(ctx, signal.as_ref())?;
         match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
-            ResponseBody::Bytes(bytes) => {
-                // A body that failed mid-transfer must reject when the caller actually consumes it
-                // instead of surfacing partial bytes.
-                if let Some(err) = self.body_error.take() {
-                    return Err(Exception::throw_message(ctx, &err));
-                }
-                Ok(bytes)
+            ResponseBody::Bytes(bytes) => Ok(bytes),
+            ResponseBody::Native(mut native) => {
+                let read = async move {
+                    let mut bytes = Vec::new();
+                    while let Some(chunk) = native
+                        .read_chunk()
+                        .await
+                        .map_err(|error| Exception::throw_message(ctx, &error))?
+                    {
+                        bytes.extend_from_slice(&chunk);
+                    }
+                    Ok(bytes)
+                };
+                with_abort_signal(ctx, signal, read).await
             }
             ResponseBody::Shared(shared) => collect_shared_body(ctx, signal, shared).await,
             ResponseBody::Consumed => Err(Exception::throw_message(
@@ -1183,13 +1195,16 @@ async fn collect_shared_body<'js>(
     signal: Option<Value<'js>>,
     shared: Rc<RefCell<SharedResponseBody>>,
 ) -> rquickjs::Result<Vec<u8>> {
-    let mut position = 0;
-    let mut bytes = Vec::new();
-    while let Some(chunk) = read_shared_body_chunk(ctx, signal.clone(), &shared, position).await? {
-        position += chunk.len();
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
+    let read = async {
+        let mut position = 0;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = read_shared_body_chunk(ctx, None, &shared, position).await? {
+            position += chunk.len();
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
+    };
+    with_abort_signal(ctx, signal, read).await
 }
 
 async fn read_shared_body_chunk<'js>(
@@ -1198,60 +1213,86 @@ async fn read_shared_body_chunk<'js>(
     shared: &Rc<RefCell<SharedResponseBody>>,
     position: usize,
 ) -> rquickjs::Result<Option<Vec<u8>>> {
-    {
-        let state = shared.borrow();
-        if position < state.buffer.len() {
-            let end = (position + 16 * 1024).min(state.buffer.len());
-            return Ok(Some(state.buffer[position..end].to_vec()));
+    loop {
+        {
+            let state = shared.borrow();
+            if position < state.buffer.len() {
+                let end = (position + 16 * 1024).min(state.buffer.len());
+                return Ok(Some(state.buffer[position..end].to_vec()));
+            }
+            if let Some(error) = &state.error {
+                return Err(Exception::throw_message(ctx, error));
+            }
+            if state.finished {
+                return Ok(None);
+            }
         }
-        if let Some(error) = &state.error {
-            return Err(Exception::throw_message(ctx, error));
-        }
-        if state.finished {
-            return Ok(None);
-        }
-    }
 
-    let Some(mut native) = shared.borrow_mut().native.take() else {
-        return Err(Exception::throw_message(
-            ctx,
-            "A cloned response body read is already in progress",
-        ));
-    };
+        let native = shared.borrow_mut().native.take();
+        let Some(mut native) = native else {
+            let wait = std::future::poll_fn(|cx| {
+                let mut state = shared.borrow_mut();
+                if position < state.buffer.len()
+                    || state.error.is_some()
+                    || state.finished
+                    || state.native.is_some()
+                {
+                    Poll::Ready(())
+                } else {
+                    if !state
+                        .waiters
+                        .iter()
+                        .any(|waker| waker.will_wake(cx.waker()))
+                    {
+                        state.waiters.push(cx.waker().clone());
+                    }
+                    Poll::Pending
+                }
+            });
+            with_abort_signal(ctx, signal.clone(), async {
+                wait.await;
+                Ok(())
+            })
+            .await?;
+            continue;
+        };
 
-    let read = async { Ok(native.read_chunk().await) };
-    let outcome = with_abort_signal(ctx, signal, read).await;
-    match outcome {
-        Err(error) => {
-            let mut state = shared.borrow_mut();
-            state.finished = true;
-            state.native = None;
-            Err(error)
+        let read = async { Ok(native.read_chunk().await) };
+        let outcome = with_abort_signal(ctx, signal, read).await;
+        let mut state = shared.borrow_mut();
+        let result = match outcome {
+            Err(error) => {
+                state.finished = true;
+                state.native = None;
+                Err(error)
+            }
+            Ok(Err(error)) => {
+                state.error = Some(error.clone());
+                state.finished = true;
+                state.native = None;
+                Err(Exception::throw_message(ctx, &error))
+            }
+            Ok(Ok(Some(chunk))) => {
+                state.buffer.extend_from_slice(&chunk);
+                state.native = Some(native);
+                Ok(Some(chunk))
+            }
+            Ok(Ok(None)) => {
+                state.finished = true;
+                state.native = None;
+                Ok(None)
+            }
+        };
+        for waiter in state.waiters.drain(..) {
+            waiter.wake();
         }
-        Ok(Err(error)) => {
-            let mut state = shared.borrow_mut();
-            state.error = Some(error.clone());
-            state.finished = true;
-            state.native = None;
-            Err(Exception::throw_message(ctx, &error))
-        }
-        Ok(Ok(Some(chunk))) => {
-            let mut state = shared.borrow_mut();
-            state.buffer.extend_from_slice(&chunk);
-            state.native = Some(native);
-            Ok(Some(chunk))
-        }
-        Ok(Ok(None)) => {
-            let mut state = shared.borrow_mut();
-            state.finished = true;
-            state.native = None;
-            Ok(None)
-        }
+        return result;
     }
 }
 
 enum ResponseBodyStreamSource {
     Bytes(Vec<u8>),
+    Native(NativeResponseBody),
     Shared(Rc<RefCell<SharedResponseBody>>),
 }
 
@@ -1281,7 +1322,7 @@ impl ResponseBodyStream {
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
-        let Some(source) = self.source.as_ref() else {
+        let Some(source) = self.source.take() else {
             return Ok(List((None, None)));
         };
         let chunk = match source {
@@ -1290,15 +1331,30 @@ impl ResponseBodyStream {
                     None
                 } else {
                     let end = (self.position + 16 * 1024).min(bytes.len());
-                    Some(bytes[self.position..end].to_vec())
+                    let chunk = bytes[self.position..end].to_vec();
+                    self.source = Some(ResponseBodyStreamSource::Bytes(bytes));
+                    Some(chunk)
                 }
             }
+            ResponseBodyStreamSource::Native(mut native) => {
+                let read = async { Ok(native.read_chunk().await) };
+                let chunk = with_abort_signal(&ctx, signal, read)
+                    .await?
+                    .map_err(|error| Exception::throw_message(&ctx, &error))?;
+                if chunk.is_some() {
+                    self.source = Some(ResponseBodyStreamSource::Native(native));
+                }
+                chunk
+            }
             ResponseBodyStreamSource::Shared(shared) => {
-                read_shared_body_chunk(&ctx, signal, shared, self.position).await?
+                let chunk = read_shared_body_chunk(&ctx, signal, &shared, self.position).await?;
+                if chunk.is_some() {
+                    self.source = Some(ResponseBodyStreamSource::Shared(shared));
+                }
+                chunk
             }
         };
         let Some(chunk) = chunk else {
-            self.source = None;
             return Ok(List((None, None)));
         };
         let array = TypedArray::new_copy(ctx.clone(), &chunk).map_err(|_| {

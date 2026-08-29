@@ -270,8 +270,7 @@ pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::Unbounde
     (port, TestServerHandle::new(handle), arrived_rx)
 }
 
-/// Starts an endpoint that sends its response head and one chunk, then leaves the body pending.
-/// Dropping the client-side body closes the raw connection and reports through `released_rx`.
+/// Lifecycle events emitted by the pending response-body fixture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResponseBodyServerEvent {
     Connected,
@@ -279,6 +278,8 @@ pub enum ResponseBodyServerEvent {
     Released,
 }
 
+/// Starts an endpoint that sends its response head and one chunk, then leaves the body pending.
+/// Dropping the client-side body closes the raw connection and reports through `released_rx`.
 pub async fn start_response_body_abort_test_server() -> (
     u16,
     TestServerHandle,
@@ -305,16 +306,23 @@ pub async fn start_response_body_abort_test_server() -> (
 
                 let _ = released_tx.send(ResponseBodyServerEvent::Connected);
 
-                socket
-                    .write_all(
-                        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\nfirst chunk",
-                    )
-                    .await
-                    .unwrap();
+                let truncated = request
+                    .windows(b"/truncated-response-body".len())
+                    .any(|window| window == b"/truncated-response-body");
+                let response = if truncated {
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial".as_slice()
+                } else {
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\nfirst chunk".as_slice()
+                };
+                socket.write_all(response).await.unwrap();
                 socket.flush().await.unwrap();
                 let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
 
-                while socket.read(&mut buf).await.unwrap_or(0) != 0 {}
+                if truncated {
+                    let _ = socket.shutdown().await;
+                } else {
+                    while socket.read(&mut buf).await.unwrap_or(0) != 0 {}
+                }
                 let _ = released_tx.send(ResponseBodyServerEvent::Released);
             });
         }
