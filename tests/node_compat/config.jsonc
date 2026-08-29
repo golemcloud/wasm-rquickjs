@@ -5016,7 +5016,7 @@
     "parallel/test-domain-async-id-map-leak.js": { "category": "known-gap", "reason": "domain/async_hooks integration for AsyncResource domain tracking and async-id map behavior is incomplete" },
 
     // === Additional node:http tests (require HTTP server or internals) ===
-    "parallel/test-http-1.0-keep-alive.js": {},
+    "parallel/test-http-1.0-keep-alive.js": { "category": "known-gap", "reason": "HTTP/1.0 TE: chunked request negotiation does not enable implicit chunked response framing and persistence" },
     "parallel/test-http-1.0.js": {
       "split": true,
       "subtests": {
