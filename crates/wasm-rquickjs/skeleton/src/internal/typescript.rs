@@ -7,8 +7,8 @@ use swc_common::{
     sync::Lrc,
 };
 use swc_ecma_ast::{
-    ArrowExpr, AwaitExpr, Decl, EsVersion, Function, MetaPropExpr, MetaPropKind, ModuleDecl,
-    ModuleItem,
+    ArrowExpr, AwaitExpr, Decl, EsVersion, ForOfStmt, Function, MetaPropExpr, MetaPropKind,
+    ModuleDecl, ModuleItem, ObjectPatProp, Pat, Stmt, UsingDecl, VarDeclKind,
 };
 use swc_ecma_parser::{Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 use swc_ecma_visit::{Visit, VisitWith};
@@ -52,10 +52,58 @@ pub(crate) fn source_uses_esm_format(source: &str, filename: &str) -> Result<boo
     if module.body.iter().any(module_item_has_runtime_module_decl) {
         return Ok(true);
     }
+    if module
+        .body
+        .iter()
+        .any(module_item_has_cjs_wrapper_lexical_declaration)
+    {
+        return Ok(true);
+    }
 
     let mut syntax = RuntimeModuleSyntax::default();
     module.visit_with(&mut syntax);
     Ok(syntax.found)
+}
+
+const CJS_WRAPPER_BINDINGS: [&str; 5] = ["require", "exports", "module", "__filename", "__dirname"];
+
+fn module_item_has_cjs_wrapper_lexical_declaration(item: &ModuleItem) -> bool {
+    let ModuleItem::Stmt(Stmt::Decl(decl)) = item else {
+        return false;
+    };
+    match decl {
+        Decl::Class(decl) => is_cjs_wrapper_binding(decl.ident.sym.as_ref()),
+        Decl::Var(decl) if matches!(decl.kind, VarDeclKind::Let | VarDeclKind::Const) => decl
+            .decls
+            .iter()
+            .any(|declarator| pattern_binds_cjs_wrapper(&declarator.name)),
+        _ => false,
+    }
+}
+
+fn pattern_binds_cjs_wrapper(pattern: &Pat) -> bool {
+    match pattern {
+        Pat::Ident(binding) => is_cjs_wrapper_binding(binding.id.sym.as_ref()),
+        Pat::Array(pattern) => pattern
+            .elems
+            .iter()
+            .flatten()
+            .any(pattern_binds_cjs_wrapper),
+        Pat::Rest(pattern) => pattern_binds_cjs_wrapper(&pattern.arg),
+        Pat::Object(pattern) => pattern.props.iter().any(|property| match property {
+            ObjectPatProp::KeyValue(property) => pattern_binds_cjs_wrapper(&property.value),
+            ObjectPatProp::Assign(property) => {
+                is_cjs_wrapper_binding(property.key.id.sym.as_ref())
+            }
+            ObjectPatProp::Rest(property) => pattern_binds_cjs_wrapper(&property.arg),
+        }),
+        Pat::Assign(pattern) => pattern_binds_cjs_wrapper(&pattern.left),
+        Pat::Invalid(_) | Pat::Expr(_) => false,
+    }
+}
+
+fn is_cjs_wrapper_binding(name: &str) -> bool {
+    CJS_WRAPPER_BINDINGS.contains(&name)
 }
 
 fn module_item_has_runtime_module_decl(item: &ModuleItem) -> bool {
@@ -106,6 +154,20 @@ impl Visit for RuntimeModuleSyntax {
             self.found = true;
         }
         expression.visit_children_with(self);
+    }
+
+    fn visit_for_of_stmt(&mut self, statement: &ForOfStmt) {
+        if self.function_depth == 0 && statement.is_await {
+            self.found = true;
+        }
+        statement.visit_children_with(self);
+    }
+
+    fn visit_using_decl(&mut self, declaration: &UsingDecl) {
+        if self.function_depth == 0 && declaration.is_await {
+            self.found = true;
+        }
+        declaration.visit_children_with(self);
     }
 
     fn visit_function(&mut self, function: &Function) {
@@ -260,6 +322,10 @@ mod tests {
             "import type { Missing } from './missing.mts'; export default 42;",
             "globalThis.url = import.meta.url;",
             "await Promise.resolve();",
+            "for await (const item of items) { consume(item); }",
+            "await using resource = acquire();",
+            "const { value: module } = input;",
+            "class exports {}",
         ] {
             assert_eq!(source_uses_esm_format(source, "input.ts"), Ok(true));
         }
@@ -270,6 +336,21 @@ mod tests {
             ),
             Ok(false)
         );
+        assert_eq!(
+            source_uses_esm_format(
+                "async function run() { for await (const item of items) { consume(item); } }",
+                "input.ts"
+            ),
+            Ok(false)
+        );
+        assert_eq!(
+            source_uses_esm_format(
+                "async function run() { await using resource = acquire(); }",
+                "input.ts"
+            ),
+            Ok(false)
+        );
+        assert_eq!(source_uses_esm_format("var require = load;", "input.ts"), Ok(false));
     }
 
     #[test]

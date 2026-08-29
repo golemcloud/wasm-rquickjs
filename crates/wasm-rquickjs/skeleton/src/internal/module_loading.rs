@@ -8923,10 +8923,16 @@ fn source_uses_esm_format(source: String) -> bool {
 
 #[cfg(feature = "typescript-runtime")]
 fn typescript_module_path_is_esm(filename: &str, source: &str, package_type: Option<&str>) -> bool {
-    if filename.ends_with(".mts") || package_type == Some("module") {
+    if filename.ends_with(".mts") {
         return true;
     }
-    if filename.ends_with(".cts") || package_type == Some("commonjs") {
+    if filename.ends_with(".cts") {
+        return false;
+    }
+    if package_type == Some("module") {
+        return true;
+    }
+    if package_type == Some("commonjs") {
         return false;
     }
     crate::internal::typescript::source_uses_esm_format(source, filename).unwrap_or(true)

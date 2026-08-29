@@ -230,6 +230,50 @@ export async function run() {
     const typeOnlyReexportValue = (await import('/typescript-runtime/type-only-reexport-parent.cts')).answer;
     const typeOnlyReexportTransformCount = getTransformCount();
 
+    fs.mkdirSync('/typescript-runtime/type-module-cts', { recursive: true });
+    fs.writeFileSync('/typescript-runtime/type-module-cts/package.json', '{"type":"module"}');
+    fs.writeFileSync(
+        '/typescript-runtime/type-module-cts/child.cts',
+        'type Answer = number; exports.answer = 42 as Answer;',
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/type-module-cts/parent.cts',
+        `const child = require('./child.cts');
+         Object.keys(child).forEach(function (key) {
+             if (key === 'default' || key === '__esModule') return;
+             Object.defineProperty(exports, key, {
+                 enumerable: true,
+                 get: function () { return child[key]; },
+             });
+         });`,
+    );
+    resetTransformCount();
+    const typeModuleCtsReexportValue = (await import('/typescript-runtime/type-module-cts/parent.cts')).answer;
+    const typeModuleCtsReexportTransformCount = getTransformCount();
+
+    fs.writeFileSync(
+        '/typescript-runtime/lexical-esm-reexport-child.ts',
+        `const { value: module } = { value: 1 };
+         export const answer: number = module + 41;`,
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/lexical-esm-reexport-parent.cts',
+        `if (false) {
+             const child = require('./lexical-esm-reexport-child.ts');
+             Object.keys(child).forEach(function (key) {
+                 if (key === 'default' || key === '__esModule') return;
+                 Object.defineProperty(exports, key, {
+                     enumerable: true,
+                     get: function () { return child[key]; },
+                 });
+             });
+         }
+         module.exports = 42;`,
+    );
+    resetTransformCount();
+    const lexicalEsmChildReexportValue = (await import('/typescript-runtime/lexical-esm-reexport-parent.cts')).default;
+    const lexicalEsmChildReexportTransformCount = getTransformCount();
+
     const recoverableFilename = '/typescript-runtime/recoverable-prepare.cts';
     fs.writeFileSync(
         '/typescript-runtime/recoverable-parent.cjs',
@@ -447,6 +491,10 @@ export async function run() {
         typeCommonJsTransformCount,
         typeOnlyReexportValue,
         typeOnlyReexportTransformCount,
+        typeModuleCtsReexportValue,
+        typeModuleCtsReexportTransformCount,
+        lexicalEsmChildReexportValue,
+        lexicalEsmChildReexportTransformCount,
         recoverablePrepareError: recoverableFailure.error,
         recoverableCachedAfterFailure: recoverableFailure.cached,
         recoverableChildrenBefore: recoverableFailure.before,

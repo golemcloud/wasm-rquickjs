@@ -100,6 +100,10 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["typeCommonJsTransformCount"], 1);
     assert_eq!(report["typeOnlyReexportValue"], 42);
     assert_eq!(report["typeOnlyReexportTransformCount"], 2);
+    assert_eq!(report["typeModuleCtsReexportValue"], 42);
+    assert_eq!(report["typeModuleCtsReexportTransformCount"], 2);
+    assert_eq!(report["lexicalEsmChildReexportValue"], 42);
+    assert_eq!(report["lexicalEsmChildReexportTransformCount"], 1);
     assert_eq!(
         report["recoverablePrepareError"],
         "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"
