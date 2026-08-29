@@ -7,13 +7,18 @@ use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use futures::FutureExt;
 use heck::ToSnakeCase;
+use http_body::{Body as HttpBody, Frame, SizeHint};
+use http_body_util::BodyExt;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
+use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
+use std::pin::Pin;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::task::{Context, Poll};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
@@ -31,7 +36,7 @@ use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
+use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
 
 pub mod ws_mock_p2 {
     wasmtime::component::bindgen!({
@@ -244,6 +249,397 @@ const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 /// The buffer is shared by all tests in the process and capped, keeping the most recent output.
 static HOST_TRACE: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 const HOST_TRACE_CAP: usize = 256 * 1024;
+static NEXT_HTTP_TRACE_INVOCATION: AtomicUsize = AtomicUsize::new(1);
+const HTTP_LIFECYCLE_CAP: usize = 256;
+
+#[repr(u8)]
+#[derive(Clone, Copy)]
+enum HttpLifecyclePhase {
+    Submit = 1,
+    Target = 2,
+    RequestFirstData = 3,
+    RequestFirstTrailers = 4,
+    RequestEof = 5,
+    RequestError = 6,
+    RequestDrop = 7,
+    ResponseHead = 8,
+    ResponseFirstData = 9,
+    ResponseFirstTrailers = 10,
+    ResponseEof = 11,
+    ResponseError = 12,
+    ResponseDrop = 13,
+    SendError = 14,
+    ResponseIoOk = 15,
+    ResponseIoError = 16,
+}
+
+impl HttpLifecyclePhase {
+    fn label(value: u8) -> &'static str {
+        match value {
+            1 => "submit",
+            2 => "target",
+            3 => "request-first-data",
+            4 => "request-first-trailers",
+            5 => "request-eof",
+            6 => "request-error",
+            7 => "request-drop-before-terminal",
+            8 => "response-head",
+            9 => "response-first-data",
+            10 => "response-first-trailers",
+            11 => "response-eof",
+            12 => "response-error",
+            13 => "response-drop-before-terminal",
+            14 => "send-error",
+            15 => "response-io-ok",
+            16 => "response-io-error",
+            _ => "unknown",
+        }
+    }
+}
+
+struct HttpLifecycleJournal {
+    next_event: AtomicUsize,
+    slots: [std::sync::atomic::AtomicU64; HTTP_LIFECYCLE_CAP],
+}
+
+impl HttpLifecycleJournal {
+    fn new() -> Self {
+        Self {
+            next_event: AtomicUsize::new(1),
+            slots: std::array::from_fn(|_| std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+
+    fn record(&self, request: usize, phase: HttpLifecyclePhase, detail: u16) {
+        let sequence = self.next_event.fetch_add(1, Ordering::Relaxed);
+        let packed = ((sequence as u64 & 0x00ff_ffff) << 40)
+            | ((request as u64 & 0xffff) << 24)
+            | ((phase as u64) << 16)
+            | u64::from(detail);
+        self.slots[sequence % HTTP_LIFECYCLE_CAP].store(packed, Ordering::Release);
+    }
+
+    fn snapshot(&self, invocation: usize) -> String {
+        let mut events = self
+            .slots
+            .iter()
+            .map(|slot| slot.load(Ordering::Acquire))
+            .filter(|event| *event != 0)
+            .collect::<Vec<_>>();
+        events.sort_unstable_by_key(|event| event >> 40);
+        let mut result = format!("invocation={invocation}\n");
+        for event in events {
+            let sequence = event >> 40;
+            let request = (event >> 24) & 0xffff;
+            let phase = ((event >> 16) & 0xff) as u8;
+            let detail = event & 0xffff;
+            use std::fmt::Write as _;
+            let _ = writeln!(
+                result,
+                "seq={sequence} request={request} phase={} detail={detail}",
+                HttpLifecyclePhase::label(phase)
+            );
+        }
+        result
+    }
+}
+
+/// Per-component correlation state for the test harness' outgoing HTTP lifecycle trace.
+///
+/// The trace is intentionally implemented in the host rather than the embedded skeleton: it is
+/// test-only, covers both P2 and P3, and can observe the Wasmtime transport boundary without
+/// changing a generated component. Events use a fixed atomic journal, so the hot path has no
+/// locks, allocation, clocks, or output; the journal is formatted only after an invocation fails.
+#[derive(Clone)]
+struct HttpLifecycleTrace {
+    invocation: usize,
+    next_request: Arc<AtomicUsize>,
+    journal: Arc<HttpLifecycleJournal>,
+}
+
+impl HttpLifecycleTrace {
+    fn new() -> Self {
+        Self {
+            invocation: NEXT_HTTP_TRACE_INVOCATION.fetch_add(1, Ordering::Relaxed),
+            next_request: Arc::new(AtomicUsize::new(1)),
+            journal: Arc::new(HttpLifecycleJournal::new()),
+        }
+    }
+
+    fn next_request(&self) -> usize {
+        self.next_request.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn record(&self, request: usize, phase: HttpLifecyclePhase, detail: u16) {
+        self.journal.record(request, phase, detail);
+    }
+
+    fn record_submit(&self, request: usize, method: &http::Method, uri: &http::Uri) {
+        let method = if method == http::Method::GET {
+            1
+        } else if method == http::Method::POST {
+            2
+        } else if method == http::Method::PUT {
+            3
+        } else if method == http::Method::DELETE {
+            4
+        } else if method == http::Method::HEAD {
+            5
+        } else {
+            0
+        };
+        self.record(request, HttpLifecyclePhase::Submit, method);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        uri.hash(&mut hasher);
+        self.record(
+            request,
+            HttpLifecyclePhase::Target,
+            (hasher.finish() & 0xffff) as u16,
+        );
+    }
+
+    fn snapshot(&self) -> String {
+        self.journal.snapshot(self.invocation)
+    }
+}
+
+/// A transparent body observer. It never polls ahead or adds an await: every host poll is
+/// delegated exactly once, with only the first frame and the terminal outcome recorded.
+struct TracedHttpBody<B> {
+    inner: Pin<Box<B>>,
+    trace: HttpLifecycleTrace,
+    request: usize,
+    side: &'static str,
+    saw_frame: bool,
+    terminal: bool,
+}
+
+impl<B> TracedHttpBody<B> {
+    fn new(inner: B, trace: HttpLifecycleTrace, request: usize, side: &'static str) -> Self {
+        Self {
+            inner: Box::pin(inner),
+            trace,
+            request,
+            side,
+            saw_frame: false,
+            terminal: false,
+        }
+    }
+
+    fn event(&self, outcome: &'static str) {
+        let phase = match (self.side, outcome) {
+            ("request", "first-data") => HttpLifecyclePhase::RequestFirstData,
+            ("request", "first-trailers") => HttpLifecyclePhase::RequestFirstTrailers,
+            ("request", "eof") => HttpLifecyclePhase::RequestEof,
+            ("request", "error") => HttpLifecyclePhase::RequestError,
+            ("request", "drop-before-terminal") => HttpLifecyclePhase::RequestDrop,
+            ("response", "first-data") => HttpLifecyclePhase::ResponseFirstData,
+            ("response", "first-trailers") => HttpLifecyclePhase::ResponseFirstTrailers,
+            ("response", "eof") => HttpLifecyclePhase::ResponseEof,
+            ("response", "error") => HttpLifecyclePhase::ResponseError,
+            ("response", "drop-before-terminal") => HttpLifecyclePhase::ResponseDrop,
+            _ => return,
+        };
+        self.trace.record(self.request, phase, 0);
+    }
+}
+
+impl<B: HttpBody> HttpBody for TracedHttpBody<B> {
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.get_mut();
+        match this.inner.as_mut().poll_frame(cx) {
+            Poll::Ready(Some(Ok(frame))) => {
+                if !this.saw_frame {
+                    this.saw_frame = true;
+                    this.event(if frame.is_data() {
+                        "first-data"
+                    } else {
+                        "first-trailers"
+                    });
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            Poll::Ready(Some(Err(error))) => {
+                this.terminal = true;
+                this.event("error");
+                Poll::Ready(Some(Err(error)))
+            }
+            Poll::Ready(None) => {
+                this.terminal = true;
+                this.event("eof");
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.as_ref().is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.inner.as_ref().size_hint()
+    }
+}
+
+impl<B> Drop for TracedHttpBody<B> {
+    fn drop(&mut self) {
+        if !self.terminal {
+            self.event("drop-before-terminal");
+        }
+    }
+}
+
+#[derive(Clone)]
+struct P2HttpTraceHooks(HttpLifecycleTrace);
+
+impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
+    #[cfg(not(feature = "use-golem-wasmtime"))]
+    fn send_request(
+        &mut self,
+        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
+    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
+    {
+        let trace = self.0.clone();
+        let request_id = trace.next_request();
+        trace.record_submit(request_id, request.method(), request.uri());
+
+        let (parts, body) = request.into_parts();
+        let request = http::Request::from_parts(
+            parts,
+            TracedHttpBody::new(body, trace.clone(), request_id, "request").boxed_unsync(),
+        );
+        Ok(wasmtime_wasi_http::p2::default_send_request(
+            request, config,
+        ))
+    }
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    fn send_request(
+        &mut self,
+        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
+        body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
+    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
+    {
+        let trace = self.0.clone();
+        let request_id = trace.next_request();
+        trace.record_submit(request_id, request.method(), request.uri());
+        let (parts, body) = request.into_parts();
+        let request = http::Request::from_parts(
+            parts,
+            TracedHttpBody::new(body, trace, request_id, "request").boxed_unsync(),
+        );
+        Ok(wasmtime_wasi_http::p2::default_send_request_with_pool(
+            request,
+            config,
+            body_completion,
+            None,
+        ))
+    }
+}
+
+#[derive(Clone)]
+struct P3HttpTraceHooks(HttpLifecycleTrace);
+
+impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
+    fn send_request(
+        &mut self,
+        request: http::Request<
+            http_body_util::combinators::UnsyncBoxBody<
+                bytes::Bytes,
+                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+            >,
+        >,
+        options: Option<wasmtime_wasi_http::p3::RequestOptions>,
+        response_processing: Box<
+            dyn Future<
+                    Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
+                > + Send,
+        >,
+    ) -> Box<
+        dyn Future<
+                Output = Result<
+                    (
+                        http::Response<
+                            http_body_util::combinators::UnsyncBoxBody<
+                                bytes::Bytes,
+                                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                            >,
+                        >,
+                        Box<
+                            dyn Future<
+                                    Output = Result<
+                                        (),
+                                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                                    >,
+                                > + Send,
+                        >,
+                    ),
+                    wasmtime_wasi::TrappableError<
+                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                    >,
+                >,
+            > + Send,
+    > {
+        // Match Wasmtime's default hook: response-processing is currently not wired into the
+        // default client. Keep that ownership behavior unchanged while tracing the returned I/O
+        // future, which is the transport's actual connection lifetime signal.
+        drop(response_processing);
+
+        let trace = self.0.clone();
+        let request_id = trace.next_request();
+        trace.record_submit(request_id, request.method(), request.uri());
+        let (parts, body) = request.into_parts();
+        let request = http::Request::from_parts(
+            parts,
+            TracedHttpBody::new(body, trace.clone(), request_id, "request").boxed_unsync(),
+        );
+
+        Box::new(async move {
+            let result = wasmtime_wasi_http::p3::default_send_request(request, options).await;
+            let (response, io) = match result {
+                Ok(value) => value,
+                Err(error) => {
+                    trace.record(request_id, HttpLifecyclePhase::SendError, 0);
+                    return Err(error.into());
+                }
+            };
+            trace.record(
+                request_id,
+                HttpLifecyclePhase::ResponseHead,
+                response.status().as_u16(),
+            );
+            let (parts, body) = response.into_parts();
+            let response = http::Response::from_parts(
+                parts,
+                TracedHttpBody::new(body, trace.clone(), request_id, "response").boxed_unsync(),
+            );
+            let io_trace = trace.clone();
+            let io = Box::new(async move {
+                let result = io.await;
+                io_trace.record(
+                    request_id,
+                    if result.is_ok() {
+                        HttpLifecyclePhase::ResponseIoOk
+                    } else {
+                        HttpLifecyclePhase::ResponseIoError
+                    },
+                    0,
+                );
+                result
+            }) as Box<dyn Future<Output = Result<_, _>> + Send>;
+            Ok((response, io))
+        })
+    }
+}
 
 #[derive(Clone, Copy)]
 struct HostTraceWriter;
@@ -1836,10 +2232,13 @@ impl TestInstance {
         #[cfg(not(feature = "use-golem-wasmtime"))]
         let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
+        let http_trace = HttpLifecycleTrace::new();
         let host = Host {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(Mutex::new(http_ctx)),
+            p2_http_hooks: P2HttpTraceHooks(http_trace.clone()),
+            p3_http_hooks: P3HttpTraceHooks(http_trace),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
@@ -1934,8 +2333,9 @@ impl TestInstance {
         // on CI).
         let results = results.map_err(|err| {
             let host_trace = host_trace();
+            let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
             err.context(format!(
-                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nhost trace:\n{host_trace}"
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nHTTP lifecycle:\n{http_lifecycle}\nhost trace:\n{host_trace}"
             ))
         });
 
@@ -2527,6 +2927,8 @@ pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<Mutex<WasiHttpCtx>>,
+    p2_http_hooks: P2HttpTraceHooks,
+    p3_http_hooks: P3HttpTraceHooks,
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
@@ -2596,7 +2998,7 @@ impl WasiHttpView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
-            hooks: default_hooks(),
+            hooks: &mut self.p2_http_hooks,
         }
     }
 }
@@ -2800,7 +3202,7 @@ fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> a
 impl wasmtime_wasi_http::p3::WasiHttpView for Host {
     fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
         wasmtime_wasi_http::p3::WasiHttpCtxView {
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: &mut self.p3_http_hooks,
             table: Arc::get_mut(&mut self.table)
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
