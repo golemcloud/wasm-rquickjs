@@ -1275,9 +1275,11 @@ fn validate_phase_profile(
         );
         let read_calls = counter("filesystem.readFile.calls")
             + counter("filesystem.readFileWithEncoding.calls")
+            + counter("filesystem.readFileNative.calls")
             + counter("filesystem.read.calls");
         let read_bytes = counter("filesystem.readFile.bytes")
             + counter("filesystem.readFileWithEncoding.bytes")
+            + counter("filesystem.readFileNative.bytes")
             + counter("filesystem.read.bytes");
         anyhow::ensure!(
             read_calls > 0 && read_bytes > 0,

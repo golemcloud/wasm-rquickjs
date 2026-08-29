@@ -733,6 +733,77 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
+    pub fn fs_read_file<'js>(
+        ctx: Ctx<'js>,
+        path: String,
+        max_length: f64,
+        decode_utf8: bool,
+    ) -> Object<'js> {
+        use std::io::Read;
+
+        let result = Object::new(ctx.clone()).unwrap();
+        if crate::internal::is_wizer_active() {
+            result
+                .set("error", super::wizer_enoent_obj(&ctx, "open", Some(&path)))
+                .unwrap();
+            return result;
+        }
+
+        let resolved_path = runtime_path(&ctx, &path);
+        let mut file = match std::fs::File::open(&resolved_path) {
+            Ok(file) => file,
+            Err(error) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs(&ctx, "readFileNative", Some(fs_error_outcome(&error)), 0);
+                result
+                    .set(
+                        "error",
+                        super::make_fs_error(&ctx, &error, "open", Some(&path)),
+                    )
+                    .unwrap();
+                return result;
+            }
+        };
+        if let Ok(metadata) = file.metadata()
+            && metadata.len() > max_length as u64
+        {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile_fs(&ctx, "readFileNative", Some("tooLarge"), 0);
+            result.set("sizeTooLarge", metadata.len() as f64).unwrap();
+            return result;
+        }
+
+        let mut bytes = Vec::new();
+        match file.read_to_end(&mut bytes) {
+            Ok(_) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs(&ctx, "readFileNative", Some("success"), bytes.len());
+                if decode_utf8 {
+                    result
+                        .set("text", String::from_utf8_lossy(&bytes).into_owned())
+                        .unwrap();
+                } else {
+                    let typed_array = TypedArray::new_copy(ctx.clone(), &bytes)
+                        .expect("Failed to create TypedArray");
+                    result.set("buffer", typed_array).unwrap();
+                }
+            }
+            Err(error) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs(&ctx, "readFileNative", Some(fs_error_outcome(&error)), 0);
+                result
+                    .set(
+                        "error",
+                        super::make_fs_error(&ctx, &error, "read", Some(&path)),
+                    )
+                    .unwrap();
+            }
+        }
+        result
+    }
+
+
+    #[rquickjs::function]
     pub fn write_file_with_encoding(
         ctx: Ctx<'_>,
         path: String,
