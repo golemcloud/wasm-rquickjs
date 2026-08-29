@@ -1422,9 +1422,9 @@ export async function abortPendingResponseBody(port, testCase) {
         const requiresPendingRace =
             typeof response.nativeResponse.makeOpaqueRedirect === 'function';
         const hasRecoveryTestHook =
-            typeof canceled.nativeResponse.pauseNextBodyReadAfterReadyForTest === 'function';
+            typeof canceled.pauseNextBodyReadAfterReadyForTest === 'function';
         const pauseArmed = hasRecoveryTestHook
-            ? canceled.nativeResponse.pauseNextBodyReadAfterReadyForTest()
+            ? canceled.pauseNextBodyReadAfterReadyForTest()
             : false;
         const reader = canceled.body.getReader();
         let pendingReadSettled = false;
@@ -1447,7 +1447,7 @@ export async function abortPendingResponseBody(port, testCase) {
         await new Promise(resolve => setTimeout(resolve, 0));
         const pendingAfterCanceledReadSettled = !cancelSettled;
         const recoveredBytes = hasRecoveryTestHook
-            ? response.nativeResponse.takeRecoveredBodyReadBytesForTest()
+            ? response.takeRecoveredBodyReadBytesForTest()
             : 0;
         const text = await response.text();
         await cancel;

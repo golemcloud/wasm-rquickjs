@@ -54,10 +54,38 @@ type SendFuture = Pin<Box<dyn Future<Output = Result<Response, ErrorCode>>>>;
 type TrailersWriter = FutureWriter<Result<Option<Trailers>, ErrorCode>>;
 
 /// Native module exposed to JavaScript as `__wasm_rquickjs_builtin/http_native`.
+#[cfg(not(feature = "internal-test-execution"))]
 #[rquickjs::module]
 pub mod native_module {
     pub use super::HttpRequest;
     pub use super::HttpResponse;
+}
+
+/// Test-instrumented variant of the native HTTP module. Keeping the hooks as module functions
+/// avoids adding test-only methods to the production `HttpResponse` JavaScript prototype.
+#[cfg(feature = "internal-test-execution")]
+#[rquickjs::module]
+pub mod native_module {
+    pub use super::HttpRequest;
+    pub use super::HttpResponse;
+
+    #[qjs(rename = "takeRecoveredBodyReadBytesForTest")]
+    #[rquickjs::function]
+    pub fn take_recovered_body_read_bytes_for_test<'js>(
+        response: rquickjs::Class<'js, super::HttpResponse>,
+    ) -> usize {
+        response.borrow().take_recovered_body_read_bytes_for_test()
+    }
+
+    #[qjs(rename = "pauseNextBodyReadAfterReadyForTest")]
+    #[rquickjs::function]
+    pub fn pause_next_body_read_after_ready_for_test<'js>(
+        response: rquickjs::Class<'js, super::HttpResponse>,
+    ) -> bool {
+        response
+            .borrow()
+            .pause_next_body_read_after_ready_for_test()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -976,24 +1004,6 @@ impl HttpResponse {
         }
     }
 
-    #[cfg(feature = "internal-test-execution")]
-    pub fn take_recovered_body_read_bytes_for_test(&self) -> usize {
-        match &self.body {
-            ResponseBody::Native(native) => native.take_recovered_read_bytes_for_test(),
-            ResponseBody::Shared(shared) => shared.take_recovered_read_bytes_for_test(),
-            ResponseBody::Bytes(_) | ResponseBody::Consumed => 0,
-        }
-    }
-
-    #[cfg(feature = "internal-test-execution")]
-    pub fn pause_next_body_read_after_ready_for_test(&self) -> bool {
-        match &self.body {
-            ResponseBody::Native(native) => native.pause_next_ready_read_for_test(),
-            ResponseBody::Shared(shared) => shared.pause_next_ready_read_for_test(),
-            ResponseBody::Bytes(_) | ResponseBody::Consumed => false,
-        }
-    }
-
     /// Turns this response into a `redirect: "manual"` opaque-redirect filtered response. Like
     /// [`make_opaque`], it hides status/headers/body, but it additionally reports a `type` of
     /// `opaqueredirect` (via [`is_opaque_redirect`]) so the public `Response.type` getter can tell
@@ -1171,6 +1181,24 @@ impl HttpResponse {
 }
 
 impl HttpResponse {
+    #[cfg(feature = "internal-test-execution")]
+    fn take_recovered_body_read_bytes_for_test(&self) -> usize {
+        match &self.body {
+            ResponseBody::Native(native) => native.take_recovered_read_bytes_for_test(),
+            ResponseBody::Shared(shared) => shared.take_recovered_read_bytes_for_test(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => 0,
+        }
+    }
+
+    #[cfg(feature = "internal-test-execution")]
+    fn pause_next_body_read_after_ready_for_test(&self) -> bool {
+        match &self.body {
+            ResponseBody::Native(native) => native.pause_next_ready_read_for_test(),
+            ResponseBody::Shared(shared) => shared.pause_next_ready_read_for_test(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => false,
+        }
+    }
+
     async fn take_body<'js>(
         &mut self,
         ctx: &Ctx<'js>,
