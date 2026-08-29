@@ -1027,7 +1027,7 @@ async fn fetch_abort_pending_response_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (port, _server, mut released) = start_response_body_abort_test_server().await;
-    for test_case in 0..15u8 {
+    for test_case in 0..19u8 {
         let wasm_path = compiled.wasm_path().to_path_buf();
         let mut invocation = tokio::spawn(async move {
             invoke_and_capture_output(
@@ -1064,7 +1064,7 @@ async fn fetch_abort_pending_response_body(
             );
         };
         tokio::pin!(release);
-        if matches!(test_case, 6 | 12 | 13 | 14) {
+        if matches!(test_case, 6 | 12 | 13 | 14 | 18) {
             // These fixtures close their own finite/truncated connection. Their Released event
             // validates server sequencing, but is not evidence that guest disposal caused release.
             release.await;

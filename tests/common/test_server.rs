@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{Mutex, mpsc, watch};
+use tokio::sync::{Mutex, Notify, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
@@ -288,11 +288,15 @@ pub async fn start_response_body_abort_test_server() -> (
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let (released_tx, released_rx) = mpsc::unbounded_channel();
+    let release_clone_race = Arc::new(Notify::new());
+    let clone_race_bytes_sent = Arc::new(Notify::new());
 
     let handle = tokio::spawn(async move {
         loop {
             let (mut socket, _) = listener.accept().await.unwrap();
             let released_tx = released_tx.clone();
+            let release_clone_race = release_clone_race.clone();
+            let clone_race_bytes_sent = clone_race_bytes_sent.clone();
             tokio::spawn(async move {
                 let mut request = Vec::new();
                 let mut buf = [0u8; 1024];
@@ -302,6 +306,22 @@ pub async fn start_response_body_abort_test_server() -> (
                         return;
                     }
                     request.extend_from_slice(&buf[..read]);
+                }
+
+                let clone_race_release = request
+                    .windows(b"/clone-race-release".len())
+                    .any(|window| window == b"/clone-race-release");
+                if clone_race_release {
+                    release_clone_race.notify_one();
+                    clone_race_bytes_sent.notified().await;
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .await
+                        .unwrap();
+                    let _ = socket.shutdown().await;
+                    return;
                 }
 
                 let _ = released_tx.send(ResponseBodyServerEvent::Connected);
@@ -315,7 +335,10 @@ pub async fn start_response_body_abort_test_server() -> (
                 let clone = request
                     .windows(b"/clone-response-body".len())
                     .any(|window| window == b"/clone-response-body");
-                if clone {
+                let clone_race = request
+                    .windows(b"/clone-race-response-body".len())
+                    .any(|window| window == b"/clone-race-response-body");
+                if clone || clone_race {
                     socket
                         .write_all(
                             b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 23\r\nConnection: close\r\n\r\n",
@@ -324,9 +347,16 @@ pub async fn start_response_body_abort_test_server() -> (
                         .unwrap();
                     socket.flush().await.unwrap();
                     let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
-                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    if clone_race {
+                        release_clone_race.notified().await;
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    }
                     socket.write_all(b"first chunk").await.unwrap();
                     socket.flush().await.unwrap();
+                    if clone_race {
+                        clone_race_bytes_sent.notify_one();
+                    }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     socket.write_all(b"second chunk").await.unwrap();
                     socket.flush().await.unwrap();

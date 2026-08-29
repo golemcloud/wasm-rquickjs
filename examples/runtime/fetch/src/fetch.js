@@ -1360,9 +1360,18 @@ export async function abortPendingResponseBody(port, testCase) {
     if (testCase === 13) {
         const response = await fetch(`http://localhost:${port}/clone-response-body`);
         const canceled = response.clone();
-        await canceled.body.cancel('cancel before pull');
+        let cancelSettled = false;
+        const cancel = canceled.body.cancel('cancel before pull').then(() => {
+            cancelSettled = true;
+        });
+        await Promise.resolve();
+        const pendingUntilSurvivorFinishes = !cancelSettled;
+        const text = await response.text();
+        await cancel;
         return finishPendingResponseBodyCase(
-            await response.text() === 'first chunksecond chunk',
+            pendingUntilSurvivorFinishes
+            && cancelSettled
+            && text === 'first chunksecond chunk',
         );
     }
 
@@ -1372,11 +1381,58 @@ export async function abortPendingResponseBody(port, testCase) {
         const reader = canceled.body.getReader();
         const pendingRead = reader.read();
         await Promise.resolve();
-        const survivingRead = response.text();
-        await reader.cancel('cancel in-flight clone read');
+        let cancelSettled = false;
+        const cancel = reader.cancel('cancel in-flight clone read').then(() => {
+            cancelSettled = true;
+        });
+        await Promise.resolve();
+        const pendingUntilSurvivorFinishes = !cancelSettled;
         await pendingRead.catch(() => undefined);
+        const text = await response.text();
+        await cancel;
         return finishPendingResponseBodyCase(
-            await survivingRead === 'first chunksecond chunk',
+            pendingUntilSurvivorFinishes
+            && cancelSettled
+            && text === 'first chunksecond chunk',
+        );
+    }
+
+    if (testCase >= 15 && testCase <= 17) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reason = testCase === 15 ? false : testCase === 16 ? 0 : '';
+        const read = response.text();
+        controller.abort(reason);
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                isAbortError(error) && response.bodyUsed && cloneThrows(response),
+            );
+        }
+    }
+
+    if (testCase === 18) {
+        const response = await fetch(`http://localhost:${port}/clone-race-response-body`);
+        const canceled = response.clone();
+        const reader = canceled.body.getReader();
+        let pendingReadSettled = false;
+        const pendingRead = reader.read().finally(() => {
+            pendingReadSettled = true;
+        });
+        await fetch(`http://localhost:${port}/clone-race-release`);
+        // Preview 3's cancel-safe native read is the race under test. Preview 2 may deliver the
+        // available chunk before this continuation, but must still preserve it for the survivor.
+        const requiresPendingRace =
+            typeof response.nativeResponse.makeOpaqueRedirect === 'function';
+        const exercisedTargetRace = !requiresPendingRace || !pendingReadSettled;
+        const cancel = reader.cancel('cancel after bytes became available');
+        await pendingRead.catch(() => undefined);
+        const text = await response.text();
+        await cancel;
+        return finishPendingResponseBodyCase(
+            exercisedTargetRace && text === 'first chunksecond chunk',
         );
     }
 

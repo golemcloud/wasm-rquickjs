@@ -454,11 +454,11 @@ async function streamingRequest(
 }
 
 function responseAbortReason(signal) {
-    return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    return signal?.reason || new DOMException('The operation was aborted.', 'AbortError');
 }
 
 export class Response {
-    constructor(bodyOrNative, initOrUrl, credentials, isError = false, signal = undefined) {
+    constructor(bodyOrNative, initOrUrl, credentials, isError = false, signal = undefined, nativeBodyGroup = undefined) {
         if (bodyOrNative instanceof httpNative.HttpResponse) {
             // Internal path: constructed from native HttpResponse
             this.nativeResponse = bodyOrNative;
@@ -471,8 +471,11 @@ export class Response {
             this._abortBodyListener = undefined;
             this._bodyStream = undefined;
             this._nativeBodyState = {source: undefined, controller: undefined};
+            this._nativeBodyGroup = nativeBodyGroup || {active: 1, cancelWaiters: []};
+            this._nativeBodyBranchFinished = false;
             if (signal?.aborted) {
                 this.nativeResponse.discardBody();
+                this._finishNativeBodyBranch();
             } else if (signal) {
                 const responseRef = new WeakRef(this);
                 this._abortBodyListener = () => {
@@ -485,6 +488,7 @@ export class Response {
                         response.nativeResponse.discardBody();
                     }
                     bodyState.controller?.error(responseAbortReason(signal));
+                    response._finishNativeBodyBranch();
                     response._detachAbortBodyListener();
                 };
                 signal.addEventListener('abort', this._abortBodyListener, {once: true});
@@ -513,6 +517,23 @@ export class Response {
             this._signal.removeEventListener('abort', this._abortBodyListener);
             this._abortBodyListener = undefined;
         }
+    }
+
+    _finishNativeBodyBranch() {
+        if (!this._isNative || this._nativeBodyBranchFinished) return;
+        this._nativeBodyBranchFinished = true;
+        const group = this._nativeBodyGroup;
+        group.active--;
+        if (group.active === 0) {
+            for (const resolve of group.cancelWaiters.splice(0)) resolve();
+        }
+    }
+
+    _cancelNativeBodyBranch() {
+        this._finishNativeBodyBranch();
+        const group = this._nativeBodyGroup;
+        if (group.active === 0) return Promise.resolve();
+        return new Promise(resolve => group.cancelWaiters.push(resolve));
     }
 
     get status() {
@@ -554,15 +575,18 @@ export class Response {
                         [next, err] = await bodyState.source.pull();
                     } catch (error) {
                         response._detachAbortBodyListener();
+                        response._finishNativeBodyBranch();
                         if (response._signal?.aborted) throw responseAbortReason(response._signal);
                         throw error;
                     }
                     if (err !== undefined) {
                         response._detachAbortBodyListener();
+                        response._finishNativeBodyBranch();
                         console.error("Error reading response body stream:", err);
                         controller.error(err);
                     } else if (next === undefined) {
                         response._detachAbortBodyListener();
+                        response._finishNativeBodyBranch();
                         controller.close();
                     } else {
                         controller.enqueue(next);
@@ -576,6 +600,7 @@ export class Response {
                         response.nativeResponse.discardBody();
                     }
                     response._detachAbortBodyListener();
+                    return response._cancelNativeBodyBranch();
                 }
             });
             return this._bodyStream;
@@ -704,12 +729,15 @@ export class Response {
         }
 
         if (this._isNative) {
+            const nativeClone = this.nativeResponse.clone();
+            this._nativeBodyGroup.active++;
             return new Response(
-                this.nativeResponse.clone(),
+                nativeClone,
                 this.url,
                 this._credentials,
                 this._isError,
                 this._signal,
+                this._nativeBodyGroup,
             );
         }
         let clonedBody = this._body;
@@ -756,6 +784,7 @@ export class Response {
                 throw error;
             } finally {
                 this._detachAbortBodyListener();
+                this._finishNativeBodyBranch();
             }
         }
         this.bodyUsed = true;
@@ -820,6 +849,7 @@ export class Response {
                 throw error;
             } finally {
                 this._detachAbortBodyListener();
+                this._finishNativeBodyBranch();
             }
         }
         this.bodyUsed = true;
