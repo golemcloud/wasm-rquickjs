@@ -1814,12 +1814,46 @@ mod tests {
         shutdowns: AtomicUsize,
     }
 
+    struct CountedBody {
+        frames: VecDeque<bytes::Bytes>,
+        polls: Arc<AtomicUsize>,
+        exact_size: Option<u64>,
+        end_when_empty: bool,
+    }
+
+    impl HttpBody for CountedBody {
+        type Data = bytes::Bytes;
+        type Error = std::convert::Infallible;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+            self.polls.fetch_add(1, Ordering::Relaxed);
+            Poll::Ready(self.frames.pop_front().map(|data| Ok(Frame::data(data))))
+        }
+
+        fn is_end_stream(&self) -> bool {
+            self.end_when_empty && self.frames.is_empty()
+        }
+
+        fn size_hint(&self) -> SizeHint {
+            let mut hint = SizeHint::new();
+            if let Some(exact_size) = self.exact_size {
+                hint.set_exact(exact_size);
+            }
+            hint
+        }
+    }
+
     struct ScriptedIo {
         calls: Arc<ScriptedIoCalls>,
         fail_write: bool,
         accepted_writes: VecDeque<usize>,
         flush_pending_once: bool,
         shutdown_pending_once: bool,
+        fail_flush: bool,
+        fail_shutdown: bool,
     }
 
     impl tokio::io::AsyncRead for ScriptedIo {
@@ -1880,6 +1914,9 @@ mod tests {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
+            if self.fail_flush {
+                return Poll::Ready(Err(std::io::Error::other("scripted flush failure")));
+            }
             Poll::Ready(Ok(()))
         }
 
@@ -1891,6 +1928,9 @@ mod tests {
             if std::mem::take(&mut self.shutdown_pending_once) {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
+            }
+            if self.fail_shutdown {
+                return Poll::Ready(Err(std::io::Error::other("scripted shutdown failure")));
             }
             Poll::Ready(Ok(()))
         }
@@ -1910,6 +1950,8 @@ mod tests {
                 accepted_writes: VecDeque::new(),
                 flush_pending_once: false,
                 shutdown_pending_once: false,
+                fail_flush: false,
+                fail_shutdown: false,
             },
             state,
         );
@@ -2115,6 +2157,8 @@ mod tests {
                 accepted_writes: VecDeque::new(),
                 flush_pending_once: false,
                 shutdown_pending_once: false,
+                fail_flush: false,
+                fail_shutdown: false,
             },
             state.clone(),
         );
@@ -2245,31 +2289,131 @@ mod tests {
     }
 
     #[test]
-    fn http_lifecycle_server_response_records_unknown_and_overflow_body_sizes() {
+    fn http_lifecycle_server_io_errors_snapshot_active_and_pending_responses() {
         let trace = HttpLifecycleTrace::new();
-        let unknown = http_body_util::StreamBody::new(futures::stream::iter([Ok::<
-            _,
-            std::convert::Infallible,
-        >(
-            Frame::data(bytes::Bytes::from_static(b"unknown")),
-        )]));
-        let mut unknown = Box::pin(TracedHttpBody::new(
-            unknown,
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        let (mut flush_io, _) = scripted_connection(trace.clone(), 21, false);
+        flush_io.state.arm_response(55);
+        assert!(matches!(
+            Pin::new(&mut flush_io).poll_write(&mut cx, b"four"),
+            Poll::Ready(Ok(4))
+        ));
+        flush_io.state.arm_response(56);
+        flush_io.inner.fail_flush = true;
+        assert!(matches!(
+            Pin::new(&mut flush_io).poll_flush(&mut cx),
+            Poll::Ready(Err(_))
+        ));
+        drop(flush_io);
+
+        let (mut shutdown_io, _) = scripted_connection(trace.clone(), 22, false);
+        shutdown_io.state.arm_response(57);
+        assert!(matches!(
+            Pin::new(&mut shutdown_io).poll_write(&mut cx, b"five!"),
+            Poll::Ready(Ok(5))
+        ));
+        shutdown_io.state.arm_response(58);
+        shutdown_io.inner.fail_shutdown = true;
+        assert!(matches!(
+            Pin::new(&mut shutdown_io).poll_shutdown(&mut cx),
+            Poll::Ready(Err(_))
+        ));
+        drop(shutdown_io);
+
+        let snapshot = trace.snapshot();
+        for (active, pending, connection, bytes, connection_phase) in [
+            (55, 56, 21, 4, "server-connection-flush-error"),
+            (57, 58, 22, 5, "server-connection-shutdown-error"),
+        ] {
+            assert_eq!(
+                snapshot
+                    .matches(&format!(
+                        "request={active} phase=server-response-write-error detail={connection}"
+                    ))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                snapshot
+                    .matches(&format!(
+                        "request={active} phase=server-response-terminal-bytes detail={bytes}"
+                    ))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                snapshot
+                    .matches(&format!(
+                        "request={pending} phase=server-response-write-error detail={connection}"
+                    ))
+                    .count(),
+                1
+            );
+            assert!(snapshot.contains(&format!("request={connection} phase={connection_phase}")));
+        }
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_body_counts_terminate_without_extra_poll() {
+        let trace = HttpLifecycleTrace::new();
+        let exact_polls = Arc::new(AtomicUsize::new(0));
+        let exact = CountedBody {
+            frames: VecDeque::from([
+                bytes::Bytes::from_static(b"abc"),
+                bytes::Bytes::from_static(b"defg"),
+            ]),
+            polls: exact_polls.clone(),
+            exact_size: Some(7),
+            end_when_empty: true,
+        };
+        let mut exact = Box::pin(TracedHttpBody::new(
+            exact,
             trace.clone(),
             47,
             "server-response",
             None,
         ));
+        let unknown_polls = Arc::new(AtomicUsize::new(0));
+        let unknown = CountedBody {
+            frames: VecDeque::from([
+                bytes::Bytes::from_static(b"un"),
+                bytes::Bytes::from_static(b"known"),
+            ]),
+            polls: unknown_polls.clone(),
+            exact_size: None,
+            end_when_empty: true,
+        };
+        let mut unknown = Box::pin(TracedHttpBody::new(
+            unknown,
+            trace.clone(),
+            48,
+            "server-response",
+            None,
+        ));
         let waker = futures::task::noop_waker();
         let mut cx = Context::from_waker(&waker);
-        assert!(unknown.as_mut().poll_frame(&mut cx).is_ready());
+        for body in [&mut exact, &mut unknown] {
+            assert!(matches!(
+                body.as_mut().poll_frame(&mut cx),
+                Poll::Ready(Some(Ok(_)))
+            ));
+            assert!(matches!(
+                body.as_mut().poll_frame(&mut cx),
+                Poll::Ready(Some(Ok(_)))
+            ));
+        }
+        assert_eq!(exact_polls.load(Ordering::Relaxed), 2);
+        assert_eq!(unknown_polls.load(Ordering::Relaxed), 2);
+        drop(exact);
         drop(unknown);
 
         let overflow = http_body_util::Full::new(bytes::Bytes::from(vec![0; 70_000]));
         let mut overflow = Box::pin(TracedHttpBody::new(
             overflow,
             trace.clone(),
-            48,
+            49,
             "server-response",
             None,
         ));
@@ -2277,17 +2421,23 @@ mod tests {
         drop(overflow);
 
         let snapshot = trace.snapshot();
-        assert!(snapshot.contains("request=47 phase=server-response-body-expected-unknown"));
+        assert!(snapshot.contains("request=47 phase=server-response-body-expected-bytes detail=7"));
         assert!(snapshot.contains("request=47 phase=server-response-body-polled-bytes detail=7"));
+        assert!(snapshot.contains("request=47 phase=server-response-eof"));
+        assert!(!snapshot.contains("request=47 phase=server-response-drop-before-terminal"));
+        assert!(snapshot.contains("request=48 phase=server-response-body-expected-unknown"));
+        assert!(snapshot.contains("request=48 phase=server-response-body-polled-bytes detail=7"));
+        assert!(snapshot.contains("request=48 phase=server-response-eof"));
+        assert!(!snapshot.contains("request=48 phase=server-response-drop-before-terminal"));
         assert!(
-            snapshot.contains("request=48 phase=server-response-body-expected-bytes detail=65535")
+            snapshot.contains("request=49 phase=server-response-body-expected-bytes detail=65535")
         );
         assert!(
-            snapshot.contains("request=48 phase=server-response-body-polled-bytes detail=65535")
+            snapshot.contains("request=49 phase=server-response-body-polled-bytes detail=65535")
         );
         assert_eq!(
             snapshot
-                .matches("request=48 phase=server-response-byte-count-overflow")
+                .matches("request=49 phase=server-response-byte-count-overflow")
                 .count(),
             2
         );
