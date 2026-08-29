@@ -1,6 +1,8 @@
 use crate::internal::runtime_services::{
     OwnedJsRuntime, RuntimeOutputSink, RuntimeServices, normalize_absolute_path,
 };
+#[cfg(feature = "typescript-compiler-profiling")]
+use crate::internal::runtime_services::{ExecutionProfile, ExecutionProfileSnapshot};
 
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
@@ -65,6 +67,10 @@ pub(crate) struct ExecutionJob {
     completion: RefCell<Option<Result<String, String>>>,
     event_waker: AtomicWaker,
     control_waker: AtomicWaker,
+    #[cfg(feature = "typescript-compiler-profiling")]
+    created_at: Instant,
+    #[cfg(feature = "typescript-compiler-profiling")]
+    profile: RefCell<Option<ExecutionProfileSnapshot>>,
 }
 
 impl ExecutionJob {
@@ -84,6 +90,10 @@ impl ExecutionJob {
             completion: RefCell::default(),
             event_waker: AtomicWaker::new(),
             control_waker: AtomicWaker::new(),
+            #[cfg(feature = "typescript-compiler-profiling")]
+            created_at: Instant::now(),
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile: RefCell::default(),
         }
     }
 
@@ -178,6 +188,9 @@ struct PollResult {
     value: Option<String>,
     error: Option<String>,
     overflowed: bool,
+    #[cfg(feature = "typescript-compiler-profiling")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    profile: Option<ExecutionProfileSnapshot>,
 }
 
 #[rquickjs::module(rename = "camelCase")]
@@ -297,6 +310,8 @@ pub mod native_module {
             value,
             error,
             overflowed: job.overflowed.load(Ordering::Relaxed),
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile: job.profile.borrow_mut().take(),
         })
         .map_err(|error| rquickjs::Exception::throw_message(&ctx, &error.to_string()))
     }
@@ -336,7 +351,37 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         job.complete(Err("execution job cancelled".to_string()));
         return;
     }
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let profile = {
+        let started = Instant::now();
+        let profile = Rc::new(ExecutionProfile::new(started));
+        profile.set_duration("queueDelay", started.saturating_duration_since(job.created_at));
+        profile
+    };
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let runtime = OwnedJsRuntime::new_profiled(profile.clone()).await;
+    #[cfg(not(feature = "typescript-compiler-profiling"))]
     let runtime = OwnedJsRuntime::new().await;
+
+    macro_rules! mark_profile {
+        ($name:literal) => {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile.mark($name);
+        };
+    }
+    macro_rules! complete_job {
+        ($result:expr) => {{
+            drop(runtime);
+            #[cfg(feature = "typescript-compiler-profiling")]
+            {
+                profile.mark("teardown");
+                *job.profile.borrow_mut() = Some(profile.snapshot());
+            }
+            job.complete($result);
+            return;
+        }};
+    }
+
     runtime.disable_execution().await;
     let cancelled = job.cancel.clone();
     runtime
@@ -346,8 +391,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     let cwd = match normalize_absolute_path(Path::new(&options.cwd)) {
         Ok(cwd) => cwd,
         Err(error) => {
-            job.complete(Err(error.to_string()));
-            return;
+            complete_job!(Err(error.to_string()));
         }
     };
     let entry = match options.entry {
@@ -361,8 +405,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             match normalize_absolute_path(&anchored) {
                 Ok(entry) => Some(entry),
                 Err(error) => {
-                    job.complete(Err(error.to_string()));
-                    return;
+                    complete_job!(Err(error.to_string()));
                 }
             }
         }
@@ -379,14 +422,14 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         .configure_process(argv, options.env, cwd.clone())
         .await
     {
-        job.complete(Err(error));
-        return;
+        complete_job!(Err(error));
     }
+    mark_profile!("processConfiguration");
     runtime.set_output_sink(job.clone()).await;
     if let Err(error) = runtime.initialize_node_builtins().await {
-        job.complete(Err(error));
-        return;
+        complete_job!(Err(error));
     }
+    mark_profile!("builtinInitialization");
     let transport_wiring = async_with!(runtime.ctx => |ctx| {
         Module::evaluate(
             ctx.clone(),
@@ -409,12 +452,11 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     })
     .await;
     if let Err(error) = transport_wiring {
-        job.complete(Err(error));
-        return;
+        complete_job!(Err(error));
     }
+    mark_profile!("transportWiring");
     if job.cancel.load(Ordering::Relaxed) {
-        job.complete(Err("execution job cancelled".to_string()));
-        return;
+        complete_job!(Err("execution job cancelled".to_string()));
     }
 
     // The public timeout budget starts when user code begins, after runtime and
@@ -462,82 +504,93 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             options.source.unwrap_or_default()
         )
     };
+    mark_profile!("wrapperPreparation");
     if options.language == ExecutionLanguage::Typescript {
         if let Some(error) = execution_control_error(&job, deadline) {
-            job.complete(Err(error.to_string()));
-            return;
+            complete_job!(Err(error.to_string()));
         }
         source = match transform_typescript_execution_source(source, &name) {
             Ok(source) => source,
             Err(error) => {
-                job.complete(Err(error));
-                return;
+                complete_job!(Err(error));
             }
         };
         if let Some(error) = execution_control_error(&job, deadline) {
-            job.complete(Err(error.to_string()));
-            return;
+            complete_job!(Err(error.to_string()));
         }
+        mark_profile!("typescriptTransform");
     }
-    let execution = async {
-        async_with!(runtime.ctx => |ctx| {
-            Module::evaluate(ctx.clone(), name, source).catch(&ctx)
-                .map_err(|e| crate::internal::format_caught_error(e))?.finish::<()>().catch(&ctx)
-                .map_err(|e| crate::internal::format_caught_error(e))?;
-            let promise: Promise = ctx.globals().get("__wasmRquickjsExecutionResult")
-                .map_err(|e| format!("execution result unavailable: {e:?}"))?;
-            promise
-                .into_future::<String>()
-                .await
-                .catch(&ctx)
-                .map_err(crate::internal::format_caught_error)
-        })
-        .await
-    };
-    let cancellation = poll_fn(|cx| {
-        if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
-            return Poll::Ready(Err("execution output exceeded maxBytes".to_string()));
-        }
-        if job.cancel.load(Ordering::Relaxed) {
-            return Poll::Ready(Err("execution job cancelled".to_string()));
-        }
-        job.control_waker.register(cx.waker());
-        if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
-            Poll::Ready(Err("execution output exceeded maxBytes".to_string()))
-        } else if job.cancel.load(Ordering::Relaxed) {
-            Poll::Ready(Err("execution job cancelled".to_string()))
-        } else {
-            Poll::Pending
-        }
-    });
-    let timeout = async {
-        match deadline {
-            Some(deadline) => {
-                sleep_until_execution_deadline(deadline).await;
-                job.timed_out.store(true, Ordering::Relaxed);
-                Err("execution job timed out".to_string())
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let execution_profile = profile.clone();
+    let result = {
+        let execution = async {
+            async_with!(runtime.ctx => |ctx| {
+                Module::evaluate(ctx.clone(), name, source).catch(&ctx)
+                    .map_err(|e| crate::internal::format_caught_error(e))?.finish::<()>().catch(&ctx)
+                    .map_err(|e| crate::internal::format_caught_error(e))?;
+                #[cfg(feature = "typescript-compiler-profiling")]
+                execution_profile.mark("initialEvaluation");
+                let promise: Promise = ctx.globals().get("__wasmRquickjsExecutionResult")
+                    .map_err(|e| format!("execution result unavailable: {e:?}"))?;
+                let result = promise
+                    .into_future::<String>()
+                    .await
+                    .catch(&ctx)
+                    .map_err(crate::internal::format_caught_error);
+                #[cfg(feature = "typescript-compiler-profiling")]
+                execution_profile.mark("userAwait");
+                result
+            })
+            .await
+        };
+        let cancellation = poll_fn(|cx| {
+            if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
+                return Poll::Ready(Err("execution output exceeded maxBytes".to_string()));
             }
-            None => pending().await,
+            if job.cancel.load(Ordering::Relaxed) {
+                return Poll::Ready(Err("execution job cancelled".to_string()));
+            }
+            job.control_waker.register(cx.waker());
+            if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
+                Poll::Ready(Err("execution output exceeded maxBytes".to_string()))
+            } else if job.cancel.load(Ordering::Relaxed) {
+                Poll::Ready(Err("execution job cancelled".to_string()))
+            } else {
+                Poll::Pending
+            }
+        });
+        let timeout = async {
+            match deadline {
+                Some(deadline) => {
+                    sleep_until_execution_deadline(deadline).await;
+                    job.timed_out.store(true, Ordering::Relaxed);
+                    Err("execution job timed out".to_string())
+                }
+                None => pending().await,
+            }
+        };
+        futures::pin_mut!(execution, cancellation, timeout);
+        let control = select(cancellation, timeout);
+        futures::pin_mut!(control);
+        let result = match select(execution, control).await {
+            Either::Left((result, _)) => result,
+            Either::Right((Either::Left((result, _)), _)) => result,
+            Either::Right((Either::Right((result, _)), _)) => result,
+        };
+        if job.timed_out.load(Ordering::Relaxed) {
+            Err("execution job timed out".to_string())
+        } else if job.overflowed.load(Ordering::Relaxed)
+            && job.overflow == OverflowPolicy::Terminate
+        {
+            Err("execution output exceeded maxBytes".to_string())
+        } else if job.cancel.load(Ordering::Relaxed) {
+            Err("execution job cancelled".to_string())
+        } else {
+            result
         }
     };
-    futures::pin_mut!(execution, cancellation, timeout);
-    let control = select(cancellation, timeout);
-    futures::pin_mut!(control);
-    let result = match select(execution, control).await {
-        Either::Left((result, _)) => result,
-        Either::Right((Either::Left((result, _)), _)) => result,
-        Either::Right((Either::Right((result, _)), _)) => result,
-    };
-    let result = if job.timed_out.load(Ordering::Relaxed) {
-        Err("execution job timed out".to_string())
-    } else if job.overflowed.load(Ordering::Relaxed) && job.overflow == OverflowPolicy::Terminate {
-        Err("execution output exceeded maxBytes".to_string())
-    } else if job.cancel.load(Ordering::Relaxed) {
-        Err("execution job cancelled".to_string())
-    } else {
-        result
-    };
-    job.complete(result);
+    mark_profile!("resultFormatting");
+    complete_job!(result);
 }
 
 async fn sleep_until_execution_deadline(deadline: Instant) {

@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     let compiled = CompiledTest::new_with_features(
         Utf8Path::new(EXAMPLE_DIR),
         true,
-        FeatureCombination::TypeScriptTransformRuntime,
+        FeatureCombination::TypeScriptCompilerProfiling,
     )
     .await?;
     let build_elapsed = build_started.elapsed();
@@ -53,7 +53,33 @@ async fn main() -> anyhow::Result<()> {
     let instantiate_elapsed = instantiate_started.elapsed();
     prepare_workspace(&instance)?;
 
+    if std::env::var_os("AGENTIC_TS_PROFILE_SMOKE").is_some() {
+        let mut node = Vec::with_capacity(iterations);
+        let mut wasm = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let sample = node_phase_profile()?;
+            validate_phase_profile(&sample, "Node", false)?;
+            node.push(sample);
+            let sample = timed_invoke(&mut instance, "profile-tsc", &[Val::U64(300_000)]).await?;
+            validate_phase_profile(&sample, "Wasm", true)?;
+            wasm.push(sample);
+        }
+        let formatted = serde_json::to_string_pretty(&json!({
+            "target": format!("{:?}", test_target()).to_lowercase(),
+            "node": summarize(&node),
+            "wasm": summarize(&wasm),
+        }))?;
+        if let Ok(path) = std::env::var("AGENTIC_TS_PROFILE_SMOKE_REPORT") {
+            fs::write(path, format!("{formatted}\n"))?;
+        }
+        println!("{formatted}");
+        return Ok(());
+    }
+
     let node_baseline = node_baseline()?;
+    let node_phase_profile = node_phase_profile()?;
+    let wasm_phase_profile =
+        timed_invoke(&mut instance, "profile-tsc", &[Val::U64(300_000)]).await?;
     let cold = timed_invoke(
         &mut instance,
         "run-tsc",
@@ -225,6 +251,7 @@ async fn main() -> anyhow::Result<()> {
         &cancellations,
         &[
             ("coldNoEmit", &cold),
+            ("phaseProfile", &wasm_phase_profile),
             ("incrementalCold", &incremental_cold),
             ("invalidRecovery", &failed_recovery),
             ("projectReferences", &project_build),
@@ -242,7 +269,7 @@ async fn main() -> anyhow::Result<()> {
     let environment = environment(iterations)?;
     let input_hashes = input_hashes()?;
     let report = json!({
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "environment": environment,
         "inputs": {
             "algorithm": INPUT_HASH_ALGORITHM,
@@ -258,6 +285,11 @@ async fn main() -> anyhow::Result<()> {
             "prepareAndInstantiateMs": millis(instantiate_elapsed),
         },
         "nodeBaseline": node_baseline,
+        "phaseProfiles": {
+            "node": node_phase_profile,
+            "wasm": wasm_phase_profile,
+            "interpretation": "the shared TypeScript API profiler runs a no-emit core-project check; compare phase proportions within a target because instrumentation overhead differs between Node and QuickJS",
+        },
         "workloads": {
             "coldNoEmit": cold,
             "unchangedFreshJobs": summarize(&unchanged),
@@ -399,7 +431,10 @@ fn validate_report_pair(
 }
 
 fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
-    anyhow::ensure!(report["schemaVersion"] == 4, "{path} uses an old schema");
+    anyhow::ensure!(
+        report["schemaVersion"] == 4 || report["schemaVersion"] == 5,
+        "{path} uses an unsupported schema"
+    );
     anyhow::ensure!(
         report["environment"]["node"] == "22.14.0"
             && report["environment"]["npm"] == "10.9.2"
@@ -561,6 +596,7 @@ async fn timed_invoke(
     let result = serde_json::from_str::<Value>(&encoded)?;
     let outer_overhead_ms = result
         .pointer("/value/toolAndCompilerMs")
+        .or_else(|| result.pointer("/value/phasesMs/measuredTotal"))
         .and_then(Value::as_f64)
         .map(|inner_ms| wall_ms - inner_ms);
     Ok(json!({
@@ -712,6 +748,7 @@ fn input_hashes() -> anyhow::Result<InputHashes> {
         "tests/agentic_ts.rs",
         "tests/agentic_ts/package.json",
         "tests/agentic_ts/package-lock.json",
+        "tests/agentic_ts/profile-typescript.mjs",
         "tests/agentic_ts/tsconfig.json",
         "tests/agentic_ts/run.sh",
         "tools/dev-test.sh",
@@ -895,11 +932,44 @@ fn node_baseline() -> anyhow::Result<Value> {
     }))
 }
 
+fn node_phase_profile() -> anyhow::Result<Value> {
+    let script = r#"
+        import { profileTypeScript } from './tests/agentic_ts/profile-typescript.mjs';
+        const value = await profileTypeScript({
+            typescriptPath: './node_modules/typescript/lib/typescript.js',
+            projectPath: './tests/agentic_ts/projects/core/tsconfig.json',
+        });
+        console.log(JSON.stringify(value));
+    "#;
+    let started = Instant::now();
+    let output = Command::new("node")
+        .args(["--input-type=module", "--eval", script])
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "Node phase profile failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    Ok(json!({
+        "wallMs": millis(started.elapsed()),
+        "outerOverheadMs": value["phasesMs"]["measuredTotal"]
+            .as_f64()
+            .map(|inner_ms| millis(started.elapsed()) - inner_ms),
+        "result": { "value": value, "stdout": "", "stderr": "", "overflowed": false },
+    }))
+}
+
 fn prepare_workspace(instance: &TestInstance) -> anyhow::Result<()> {
     let source = Utf8Path::new(SUITE_DIR);
     let workspace = instance.temp_dir_path().join("workspace");
     fs::create_dir_all(&workspace)?;
-    for file in ["package.json", "package-lock.json", "tsconfig.json"] {
+    for file in [
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "profile-typescript.mjs",
+    ] {
         fs::copy(source.join(file), workspace.join(file))?;
     }
     for directory in ["node_modules", "projects"] {
@@ -962,6 +1032,10 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
         report["nodeBaseline"]["exitCode"] == 0,
         "Node baseline failed"
     );
+    if report["schemaVersion"] == 5 {
+        validate_phase_profile(&report["phaseProfiles"]["node"], "Node", false)?;
+        validate_phase_profile(&report["phaseProfiles"]["wasm"], "Wasm", true)?;
+    }
     for path in [
         "/workloads/coldNoEmit/result/value/exitCode",
         "/workloads/incrementalCold/result/value/exitCode",
@@ -1062,7 +1136,9 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
     anyhow::ensure!(
         memory["wasmLinearMemory"]["otherWorkloadCheckpoints"]
             .as_array()
-            .is_some_and(|samples| samples.len() == 12),
+            .is_some_and(
+                |samples| samples.len() == if report["schemaVersion"] == 5 { 13 } else { 12 }
+            ),
         "Wasm linear-memory observations do not cover every non-series workload"
     );
     anyhow::ensure!(
@@ -1086,6 +1162,127 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
                 "fresh-job QuickJS heap samples varied unexpectedly for {group}/{point}"
             );
         }
+    }
+    Ok(())
+}
+
+fn validate_phase_profile(
+    profile: &Value,
+    label: &str,
+    require_execution_profile: bool,
+) -> anyhow::Result<()> {
+    let value = &profile["result"]["value"];
+    anyhow::ensure!(
+        successful_result(&profile["result"])
+            && value["exitCode"] == 0
+            && value["graph"]["rootFiles"]
+                .as_u64()
+                .is_some_and(|count| count > 0)
+            && value["graph"]["totalSourceFiles"]
+                .as_u64()
+                .is_some_and(|count| count > 0),
+        "{label} TypeScript phase profile failed"
+    );
+    for phase in [
+        "import",
+        "configRead",
+        "configParse",
+        "programCreate",
+        "diagnostics",
+        "measuredTotal",
+        "unclassified",
+    ] {
+        anyhow::ensure!(
+            value["phasesMs"][phase]
+                .as_f64()
+                .is_some_and(|duration| duration >= 0.0),
+            "{label} TypeScript phase profile has no valid {phase} duration"
+        );
+    }
+    for phase in ["configRead", "configParse", "programCreate", "diagnostics"] {
+        for operation in [
+            "fileExists",
+            "directoryExists",
+            "readFile",
+            "readDirectory",
+            "realpath",
+            "getSourceFile",
+        ] {
+            anyhow::ensure!(
+                value["io"][phase][operation]["calls"].as_u64().is_some(),
+                "{label} TypeScript phase profile has no {phase}/{operation} count"
+            );
+        }
+    }
+    if require_execution_profile {
+        let execution = &profile["result"]["profile"];
+        anyhow::ensure!(
+            execution["version"] == 1
+                && execution["totalMs"]
+                    .as_f64()
+                    .is_some_and(|duration| duration >= 0.0),
+            "{label} execution profile has no supported version or total"
+        );
+        let mut classified_ms = 0.0;
+        for phase in [
+            "runtimeCreation",
+            "loaderInitialization",
+            "processConfiguration",
+            "builtinInitialization",
+            "transportWiring",
+            "wrapperPreparation",
+            "initialEvaluation",
+            "userAwait",
+            "resultFormatting",
+            "teardown",
+        ] {
+            let duration = execution["phasesMs"][phase]
+                .as_f64()
+                .filter(|duration| duration.is_finite() && *duration >= 0.0)
+                .ok_or_else(|| anyhow::anyhow!("{label} execution profile has no {phase}"))?;
+            classified_ms += duration;
+        }
+        anyhow::ensure!(
+            execution["phasesMs"]["queueDelay"]
+                .as_f64()
+                .is_some_and(|duration| duration.is_finite() && duration >= 0.0)
+                && classified_ms <= execution["totalMs"].as_f64().unwrap() + 1.0,
+            "{label} execution profile phases exceed its total"
+        );
+        let counters = &execution["counters"];
+        let counter = |name: &str| counters[name].as_u64().unwrap_or_default();
+        anyhow::ensure!(
+            counter("modules.resolve.calls")
+                == counter("modules.resolve.success")
+                    + counter("modules.resolve.missing")
+                    + counter("modules.resolve.errors")
+                && counter("modules.resolve.calls") > 0,
+            "{label} module-resolution counters are incomplete"
+        );
+        anyhow::ensure!(
+            counter("modules.sourceRead.calls")
+                == counter("modules.sourceRead.success")
+                    + counter("modules.sourceRead.notFound")
+                    + counter("modules.sourceRead.errors")
+                && counter("modules.sourceRead.bytes") > 0,
+            "{label} module-source counters are incomplete"
+        );
+        anyhow::ensure!(
+            counter("modules.fileProbe.calls")
+                == counter("modules.fileProbe.found") + counter("modules.fileProbe.missing")
+                && counter("modules.fileProbe.cacheHits") <= counter("modules.fileProbe.calls"),
+            "{label} module file-probe counters are inconsistent"
+        );
+        let read_calls = counter("filesystem.readFile.calls")
+            + counter("filesystem.readFileWithEncoding.calls")
+            + counter("filesystem.read.calls");
+        let read_bytes = counter("filesystem.readFile.bytes")
+            + counter("filesystem.readFileWithEncoding.bytes")
+            + counter("filesystem.read.bytes");
+        anyhow::ensure!(
+            read_calls > 0 && read_bytes > 0,
+            "{label} native filesystem counters did not observe compiler reads"
+        );
     }
     Ok(())
 }
@@ -1173,6 +1370,22 @@ fn validate_regression_guards(report: &Value) -> anyhow::Result<()> {
         validate_report(&relaxed_quickjs_heap).is_err(),
         "validation guard accepted a report-controlled QuickJS heap limit"
     );
+    if report["schemaVersion"] == 5 {
+        let mut missing_phase = report.clone();
+        missing_phase["phaseProfiles"]["wasm"]["result"]["value"]["phasesMs"]["programCreate"] =
+            Value::Null;
+        anyhow::ensure!(
+            validate_report(&missing_phase).is_err(),
+            "validation guard accepted an incomplete TypeScript phase profile"
+        );
+        let mut inconsistent_counters = report.clone();
+        inconsistent_counters["phaseProfiles"]["wasm"]["result"]["profile"]["counters"]["modules.resolve.calls"] =
+            json!(u64::MAX);
+        anyhow::ensure!(
+            validate_report(&inconsistent_counters).is_err(),
+            "validation guard accepted inconsistent execution counters"
+        );
+    }
     Ok(())
 }
 

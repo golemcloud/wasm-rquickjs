@@ -75,7 +75,7 @@ run_clippy() {
 run_clippy p2-default "$manifest"
 run_clippy p2-maximal "$manifest" \
     --no-default-features \
-    --features full,golem,typescript-transform-runtime
+    --features full,golem,typescript-compiler-profiling
 
 # Generated P3 crates bind `mod builtin` to builtin_p3.rs. Lint a temporary copy
 # with the same binding so the P3 HTTP and socket ownership code is actually checked.
@@ -90,4 +90,4 @@ run_clippy p3-default "$p3_dir/Cargo.toml" \
     --features normal-p3
 run_clippy p3-maximal "$p3_dir/Cargo.toml" \
     --no-default-features \
-    --features full-p3,golem,typescript-transform-runtime
+    --features full-p3,golem,typescript-compiler-profiling

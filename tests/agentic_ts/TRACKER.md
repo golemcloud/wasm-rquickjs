@@ -14,6 +14,7 @@
 | repeated timeout then recovery | n/a | 0.215 s | 0.200 s | termination median, five attempts followed by a successful job |
 | repeated cancellation then recovery | n/a | 0.202 s | 0.192 s | termination median, five attempts followed by a successful job |
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | max linear growth / max fresh-runtime heap variation |
+| phase-attributed core check | pending schema-v5 report | pending schema-v5 report | pending schema-v5 report | shared compiler-API profiler; no mitigation selected yet |
 
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
