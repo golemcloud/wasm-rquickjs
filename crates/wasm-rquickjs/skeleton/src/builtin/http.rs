@@ -24,7 +24,7 @@ use std::rc::Rc;
 use wstd::runtime::AsyncPollable;
 
 use super::abort_signal::with_abort_signal;
-use super::shared_response_body::{self, NativeBody, SharedBody};
+use super::shared_response_body::{self, NativeBody, SharedBodyReader};
 
 /// Request mode - defines the cross-origin behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
@@ -758,7 +758,7 @@ impl HttpResponse {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Native(response) => discard_native_response(*response),
-            ResponseBodySource::Shared(shared) => SharedResponse::discard(&shared),
+            ResponseBodySource::Shared(shared) => shared.discard(),
             ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
         }
     }
@@ -965,18 +965,18 @@ impl HttpResponse {
             ),
             ResponseBodySource::Native(mut response) => {
                 let (stream, body) = response.get_raw_input_stream();
-                let shared = Rc::new(RefCell::new(SharedResponse::new(SharedNativeResponse {
+                let (kept, cloned) = SharedResponse::pair(SharedNativeResponse {
                     stream: Some(stream),
                     body: Some(body),
                     response: Some(*response),
-                })));
+                });
                 (
-                    ResponseBodySource::Shared(shared.clone()),
-                    ResponseBodySource::Shared(shared),
+                    ResponseBodySource::Shared(cloned),
+                    ResponseBodySource::Shared(kept),
                 )
             }
             ResponseBodySource::Shared(shared) => (
-                ResponseBodySource::Shared(shared.clone()),
+                ResponseBodySource::Shared(shared.branch()),
                 ResponseBodySource::Shared(shared),
             ),
             ResponseBodySource::Consumed => {
@@ -1004,7 +1004,7 @@ fn discard_native_response(mut response: golem_wasi_http::Response) {
 async fn collect_shared_response_body<'js>(
     ctx: &Ctx<'js>,
     signal: Option<Value<'js>>,
-    shared: Rc<RefCell<SharedResponse>>,
+    shared: SharedResponse,
 ) -> rquickjs::Result<Vec<u8>> {
     with_abort_signal(ctx, signal, async {
         shared_response_body::collect(ctx, shared).await
@@ -1012,7 +1012,7 @@ async fn collect_shared_response_body<'js>(
     .await
 }
 
-pub type SharedResponse = SharedBody<SharedNativeResponse>;
+pub type SharedResponse = SharedBodyReader<SharedNativeResponse>;
 
 pub struct SharedNativeResponse {
     stream: Option<golem_wasi_http::InputStream>,
@@ -1067,7 +1067,7 @@ pub enum ResponseBodySource {
     /// Response has been consumed
     Consumed,
     /// Shared response body with buffering
-    Shared(Rc<RefCell<SharedResponse>>),
+    Shared(SharedResponse),
 }
 
 pub enum BodySource {
@@ -1077,7 +1077,7 @@ pub enum BodySource {
         response: Box<golem_wasi_http::Response>,
     },
     Shared {
-        shared: Rc<RefCell<SharedResponse>>,
+        shared: SharedResponse,
         position: usize,
     },
     Bytes(std::io::Cursor<Vec<u8>>),

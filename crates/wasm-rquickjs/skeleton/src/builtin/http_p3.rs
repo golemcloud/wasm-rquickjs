@@ -34,7 +34,7 @@ use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArr
 
 use super::abort_signal::with_abort_signal;
 use super::http_body::ResponseBody as NativeResponseBody;
-use super::shared_response_body::{self, NativeBody, SharedBody};
+use super::shared_response_body::{self, NativeBody, SharedBodyReader};
 use futures::future::{AbortHandle, Abortable};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -873,11 +873,11 @@ impl WrappedRequestBodyWriter {
 enum ResponseBody {
     Bytes(Vec<u8>),
     Native(NativeResponseBody),
-    Shared(Rc<RefCell<SharedResponseBody>>),
+    Shared(SharedResponseBody),
     Consumed,
 }
 
-type SharedResponseBody = SharedBody<NativeResponseBody>;
+type SharedResponseBody = SharedBodyReader<NativeResponseBody>;
 
 impl NativeBody for NativeResponseBody {
     async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
@@ -961,7 +961,7 @@ impl HttpResponse {
     pub fn discard_body(&mut self) {
         match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
             ResponseBody::Native(native) => native.discard(),
-            ResponseBody::Shared(shared) => SharedResponseBody::discard(&shared),
+            ResponseBody::Shared(shared) => shared.discard(),
             ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
         }
     }
@@ -1121,14 +1121,14 @@ impl HttpResponse {
                 ResponseBody::Bytes(bytes),
             ),
             ResponseBody::Native(native) => {
-                let shared = Rc::new(RefCell::new(SharedResponseBody::new(native)));
+                let (kept, cloned) = SharedResponseBody::pair(native);
                 (
-                    ResponseBody::Shared(shared.clone()),
-                    ResponseBody::Shared(shared),
+                    ResponseBody::Shared(kept),
+                    ResponseBody::Shared(cloned),
                 )
             }
             ResponseBody::Shared(shared) => (
-                ResponseBody::Shared(shared.clone()),
+                ResponseBody::Shared(shared.branch()),
                 ResponseBody::Shared(shared),
             ),
             ResponseBody::Consumed => (ResponseBody::Consumed, ResponseBody::Consumed),
@@ -1179,7 +1179,7 @@ impl HttpResponse {
 async fn collect_shared_body<'js>(
     ctx: &Ctx<'js>,
     signal: Option<Value<'js>>,
-    shared: Rc<RefCell<SharedResponseBody>>,
+    shared: SharedResponseBody,
 ) -> rquickjs::Result<Vec<u8>> {
     with_abort_signal(ctx, signal, async {
         shared_response_body::collect(ctx, shared).await
@@ -1190,7 +1190,7 @@ async fn collect_shared_body<'js>(
 enum ResponseBodyStreamSource {
     Bytes(Vec<u8>),
     Native(NativeResponseBody),
-    Shared(Rc<RefCell<SharedResponseBody>>),
+    Shared(SharedResponseBody),
 }
 
 /// Response body reader backing `response.body` / `ReadableStream`.

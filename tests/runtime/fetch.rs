@@ -1027,7 +1027,7 @@ async fn fetch_abort_pending_response_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (port, _server, mut released) = start_response_body_abort_test_server().await;
-    for test_case in 0..13u8 {
+    for test_case in 0..15u8 {
         let wasm_path = compiled.wasm_path().to_path_buf();
         let mut invocation = tokio::spawn(async move {
             invoke_and_capture_output(
@@ -1052,20 +1052,29 @@ async fn fetch_abort_pending_response_body(
                 .expect("pending response fixture stopped before sending the response head"),
             ResponseBodyServerEvent::HeadSent,
         );
-        let release = tokio::time::timeout(std::time::Duration::from_secs(5), released.recv());
-        tokio::pin!(release);
-        tokio::select! {
-            event = &mut release => assert_eq!(
-                event
+        let release = async {
+            assert_eq!(
+                tokio::time::timeout(std::time::Duration::from_secs(5), released.recv())
+                    .await
                     .unwrap_or_else(|_| panic!(
                         "server did not observe release for response body case {test_case}"
                     ))
                     .expect("response body test server stopped before observing release"),
                 ResponseBodyServerEvent::Released,
-            ),
-            result = &mut invocation => panic!(
-                "response body case {test_case} completed before releasing its native body: {result:?}"
-            ),
+            );
+        };
+        tokio::pin!(release);
+        if matches!(test_case, 6 | 12 | 13 | 14) {
+            // These fixtures close their own finite/truncated connection. Their Released event
+            // validates server sequencing, but is not evidence that guest disposal caused release.
+            release.await;
+        } else {
+            tokio::select! {
+                () = &mut release => {}
+                result = &mut invocation => panic!(
+                    "response body case {test_case} completed before releasing its native body: {result:?}"
+                ),
+            }
         }
         let (result, output) = tokio::time::timeout(std::time::Duration::from_secs(10), invocation)
             .await

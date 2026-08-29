@@ -1277,7 +1277,7 @@ export async function abortPendingResponseBody(port, testCase) {
             return false;
         } catch (error) {
             return finishPendingResponseBodyCase(
-                error === null && response.bodyUsed && cloneThrows(response),
+                isAbortError(error) && response.bodyUsed && cloneThrows(response),
             );
         }
     }
@@ -1293,7 +1293,7 @@ export async function abortPendingResponseBody(port, testCase) {
             return false;
         } catch (error) {
             return finishPendingResponseBodyCase(
-                disturbedImmediately && response.bodyUsed && error === null,
+                disturbedImmediately && response.bodyUsed && isAbortError(error),
             );
         }
     }
@@ -1315,9 +1315,9 @@ export async function abortPendingResponseBody(port, testCase) {
             first.done === false
             && new TextDecoder().decode(first.value) === 'first chunk'
             && readerResult.status === 'rejected'
-            && readerResult.reason === null
+            && isAbortError(readerResult.reason)
             && cloneResult.status === 'rejected'
-            && cloneResult.reason === null,
+            && isAbortError(cloneResult.reason),
         );
     }
 
@@ -1354,6 +1354,29 @@ export async function abortPendingResponseBody(port, testCase) {
         const text = await response.text();
         return finishPendingResponseBodyCase(
             resolvedAtHead && text === '' && response.bodyUsed && cloneThrows(response),
+        );
+    }
+
+    if (testCase === 13) {
+        const response = await fetch(`http://localhost:${port}/clone-response-body`);
+        const canceled = response.clone();
+        await canceled.body.cancel('cancel before pull');
+        return finishPendingResponseBodyCase(
+            await response.text() === 'first chunksecond chunk',
+        );
+    }
+
+    if (testCase === 14) {
+        const response = await fetch(`http://localhost:${port}/clone-response-body`);
+        const canceled = response.clone();
+        const reader = canceled.body.getReader();
+        const pendingRead = reader.read();
+        await Promise.resolve();
+        const survivingRead = response.text();
+        await reader.cancel('cancel in-flight clone read');
+        await pendingRead.catch(() => undefined);
+        return finishPendingResponseBodyCase(
+            await survivingRead === 'first chunksecond chunk',
         );
     }
 

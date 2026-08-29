@@ -454,9 +454,7 @@ async function streamingRequest(
 }
 
 function responseAbortReason(signal) {
-    return signal?.aborted
-        ? signal.reason
-        : new DOMException('The operation was aborted.', 'AbortError');
+    return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
 }
 
 export class Response {
@@ -753,6 +751,9 @@ export class Response {
             if (this._signal?.aborted) throw responseAbortReason(this._signal);
             try {
                 return await this.nativeResponse.arrayBuffer(this._signal);
+            } catch (error) {
+                if (this._signal?.aborted) throw responseAbortReason(this._signal);
+                throw error;
             } finally {
                 this._detachAbortBodyListener();
             }
@@ -814,6 +815,9 @@ export class Response {
             if (this._signal?.aborted) throw responseAbortReason(this._signal);
             try {
                 return await this.nativeResponse.text(this._signal);
+            } catch (error) {
+                if (this._signal?.aborted) throw responseAbortReason(this._signal);
+                throw error;
             } finally {
                 this._detachAbortBodyListener();
             }

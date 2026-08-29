@@ -16,27 +16,73 @@ pub(crate) struct SharedBody<S> {
     finished: bool,
     error: Option<String>,
     waiters: Vec<Waker>,
+    readers: usize,
 }
 
 impl<S> SharedBody<S> {
-    pub(crate) fn new(native: S) -> Self {
+    fn new(native: S) -> Self {
         Self {
             native: Some(native),
             buffer: Vec::new(),
             finished: false,
             error: None,
             waiters: Vec::new(),
+            readers: 2,
+        }
+    }
+}
+
+pub(crate) struct SharedBodyReader<S: NativeBody> {
+    shared: Rc<RefCell<SharedBody<S>>>,
+    active: bool,
+}
+
+impl<S: NativeBody> SharedBodyReader<S> {
+    pub(crate) fn pair(native: S) -> (Self, Self) {
+        let shared = Rc::new(RefCell::new(SharedBody::new(native)));
+        (
+            Self {
+                shared: shared.clone(),
+                active: true,
+            },
+            Self {
+                shared,
+                active: true,
+            },
+        )
+    }
+
+    pub(crate) fn branch(&self) -> Self {
+        self.shared.borrow_mut().readers += 1;
+        Self {
+            shared: self.shared.clone(),
+            active: true,
         }
     }
 
-    pub(crate) fn discard(shared: &Rc<RefCell<Self>>)
-    where
-        S: NativeBody,
-    {
+    pub(crate) fn discard(self) {
+        drop(self);
+    }
+}
+
+impl<S: NativeBody> Drop for SharedBodyReader<S> {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        self.active = false;
         let (native, waiters) = {
-            let mut state = shared.borrow_mut();
-            state.finished = true;
-            (state.native.take(), std::mem::take(&mut state.waiters))
+            let mut state = self.shared.borrow_mut();
+            state.readers = state
+                .readers
+                .checked_sub(1)
+                .expect("shared response reader count underflow");
+            if state.readers == 0 && !state.finished {
+                state.finished = true;
+                (state.native.take(), std::mem::take(&mut state.waiters))
+            } else {
+                (None, Vec::new())
+            }
         };
         if let Some(native) = native {
             native.discard();
@@ -55,23 +101,31 @@ impl<S: NativeBody> Drop for NativeLease<S> {
         let Some(native) = self.native.take() else {
             return;
         };
-        native.discard();
-        let waiters = {
+        let (native, waiters) = {
             let mut state = self.shared.borrow_mut();
-            state.finished = true;
-            std::mem::take(&mut state.waiters)
+            let discard = state.readers == 0 || state.finished;
+            if discard {
+                state.finished = true;
+                (Some(native), std::mem::take(&mut state.waiters))
+            } else {
+                state.native = Some(native);
+                (None, std::mem::take(&mut state.waiters))
+            }
         };
+        if let Some(native) = native {
+            native.discard();
+        }
         wake_all(waiters);
     }
 }
 
 pub(crate) async fn collect<'js, S: NativeBody>(
     ctx: &Ctx<'js>,
-    shared: Rc<RefCell<SharedBody<S>>>,
+    reader: SharedBodyReader<S>,
 ) -> rquickjs::Result<Vec<u8>> {
     let mut position = 0;
     let mut bytes = Vec::new();
-    while let Some(chunk) = read_chunk(ctx, &shared, position).await? {
+    while let Some(chunk) = read_chunk(ctx, &reader, position).await? {
         position += chunk.len();
         bytes.extend_from_slice(&chunk);
     }
@@ -80,9 +134,10 @@ pub(crate) async fn collect<'js, S: NativeBody>(
 
 pub(crate) async fn read_chunk<'js, S: NativeBody>(
     ctx: &Ctx<'js>,
-    shared: &Rc<RefCell<SharedBody<S>>>,
+    reader: &SharedBodyReader<S>,
     position: usize,
 ) -> rquickjs::Result<Option<Vec<u8>>> {
+    let shared = &reader.shared;
     loop {
         {
             let state = shared.borrow();

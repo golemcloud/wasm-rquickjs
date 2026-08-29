@@ -312,6 +312,28 @@ pub async fn start_response_body_abort_test_server() -> (
                 let empty = request
                     .windows(b"/empty-response-body".len())
                     .any(|window| window == b"/empty-response-body");
+                let clone = request
+                    .windows(b"/clone-response-body".len())
+                    .any(|window| window == b"/clone-response-body");
+                if clone {
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 23\r\nConnection: close\r\n\r\n",
+                        )
+                        .await
+                        .unwrap();
+                    socket.flush().await.unwrap();
+                    let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    socket.write_all(b"first chunk").await.unwrap();
+                    socket.flush().await.unwrap();
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    socket.write_all(b"second chunk").await.unwrap();
+                    socket.flush().await.unwrap();
+                    let _ = socket.shutdown().await;
+                    let _ = released_tx.send(ResponseBodyServerEvent::Released);
+                    return;
+                }
                 let response = if truncated {
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial".as_slice()
                 } else if empty {
