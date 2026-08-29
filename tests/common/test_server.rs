@@ -10,6 +10,7 @@ use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
@@ -267,6 +268,59 @@ pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::Unbounde
     });
 
     (port, TestServerHandle::new(handle), arrived_rx)
+}
+
+/// Starts an endpoint that sends its response head and one chunk, then leaves the body pending.
+/// Dropping the client-side body closes the raw connection and reports through `released_rx`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResponseBodyServerEvent {
+    Connected,
+    HeadSent,
+    Released,
+}
+
+pub async fn start_response_body_abort_test_server() -> (
+    u16,
+    TestServerHandle,
+    mpsc::UnboundedReceiver<ResponseBodyServerEvent>,
+) {
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (released_tx, released_rx) = mpsc::unbounded_channel();
+
+    let handle = tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let released_tx = released_tx.clone();
+            tokio::spawn(async move {
+                let mut request = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let read = socket.read(&mut buf).await.unwrap_or(0);
+                    if read == 0 {
+                        return;
+                    }
+                    request.extend_from_slice(&buf[..read]);
+                }
+
+                let _ = released_tx.send(ResponseBodyServerEvent::Connected);
+
+                socket
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\nfirst chunk",
+                    )
+                    .await
+                    .unwrap();
+                socket.flush().await.unwrap();
+                let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
+
+                while socket.read(&mut buf).await.unwrap_or(0) != 0 {}
+                let _ = released_tx.send(ResponseBodyServerEvent::Released);
+            });
+        }
+    });
+
+    (port, TestServerHandle::new(handle), released_rx)
 }
 
 #[derive(Debug, Clone, Serialize)]

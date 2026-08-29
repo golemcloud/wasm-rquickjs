@@ -57,10 +57,10 @@ mod dns;
 mod domain;
 #[path = "builtin/encoding.rs"]
 mod encoding;
-#[path = "builtin/execution.rs"]
-pub(crate) mod execution;
 #[path = "builtin/events.rs"]
 mod events;
+#[path = "builtin/execution.rs"]
+pub(crate) mod execution;
 #[path = "builtin/formdata_node.rs"]
 mod formdata_node;
 #[path = "builtin/fs.rs"]
@@ -71,6 +71,8 @@ mod gc;
 mod http;
 #[path = "builtin/http2.rs"]
 mod http2;
+#[path = "builtin/http_body_p3.rs"]
+mod http_body;
 #[path = "builtin/https.rs"]
 mod https;
 #[path = "builtin/ieee754.rs"]

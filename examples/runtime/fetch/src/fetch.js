@@ -1138,3 +1138,69 @@ export async function abortResponseBody(port) {
     }
     return streamError instanceof DOMException && streamError.name === 'AbortError';
 }
+
+function isAbortError(error) {
+    return error instanceof DOMException && error.name === 'AbortError';
+}
+
+export async function abortPendingResponseBody(port, testCase) {
+    const url = `http://localhost:${port}/pending-response-body`;
+
+    if (testCase === 0) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        controller.abort();
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            return isAbortError(error);
+        }
+    }
+
+    if (testCase === 1) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const read = response.text();
+        controller.abort();
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return isAbortError(error);
+        }
+    }
+
+    if (testCase === 2) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        const pendingRead = reader.read();
+        controller.abort();
+        try {
+            await pendingRead;
+            return false;
+        } catch (error) {
+            return first.done === false
+                && new TextDecoder().decode(first.value) === 'first chunk'
+                && isAbortError(error);
+        }
+    }
+
+    if (testCase === 3) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const clone = response.clone();
+        const read = clone.text();
+        controller.abort();
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return isAbortError(error);
+        }
+    }
+
+    return false;
+}

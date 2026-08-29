@@ -753,7 +753,16 @@ impl HttpResponse {
     }
 
     pub fn discard_body(&mut self) {
-        self.body_source = ResponseBodySource::Consumed;
+        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
+        match source {
+            ResponseBodySource::Native(response) => discard_native_response(*response),
+            ResponseBodySource::Shared(shared) => {
+                if let Some(response) = shared.borrow_mut().response.take() {
+                    discard_native_response(response);
+                }
+            }
+            ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
+        }
     }
 
     #[qjs(get)]
@@ -797,33 +806,57 @@ impl HttpResponse {
             .to_string()
     }
 
-    #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn array_buffer<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ArrayBuffer<'js>> {
+    pub async fn array_buffer<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<ArrayBuffer<'js>> {
+        with_abort_signal(&ctx, signal.clone(), async { Ok(()) }).await?;
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         let bytes = match source {
             ResponseBodySource::Bytes(body_bytes) => body_bytes,
-            ResponseBodySource::Native(response) => response
-                .bytes()
-                .await
-                .map_err(|_| Exception::throw_message(&ctx, "failed to read response body"))?
-                .to_vec(),
-            ResponseBodySource::Shared(shared) => {
-                let mut shared = shared.borrow_mut();
-                if let Some(response) = shared.response.take() {
-                    // Native response was not read yet, read it now
-                    let bytes = response
+            ResponseBodySource::Native(response) => {
+                let error_ctx = ctx.clone();
+                with_abort_signal(&ctx, signal, async move {
+                    response
                         .bytes()
                         .await
+                        .map(|bytes| bytes.to_vec())
                         .map_err(|_| {
-                            Exception::throw_message(&ctx, "failed to read response body")
-                        })?
-                        .to_vec();
+                            Exception::throw_message(&error_ctx, "failed to read response body")
+                        })
+                })
+                .await?
+            }
+            ResponseBodySource::Shared(shared) => {
+                let response = shared.borrow_mut().response.take();
+                if let Some(response) = response {
+                    // Native response was not read yet, read it now
+                    let error_ctx = ctx.clone();
+                    let result = with_abort_signal(&ctx, signal, async move {
+                        response
+                            .bytes()
+                            .await
+                            .map(|bytes| bytes.to_vec())
+                            .map_err(|_| {
+                                Exception::throw_message(&error_ctx, "failed to read response body")
+                            })
+                    })
+                    .await;
+                    let bytes = match result {
+                        Ok(bytes) => bytes,
+                        Err(error) => {
+                            shared.borrow_mut().finished = true;
+                            return Err(error);
+                        }
+                    };
+                    let mut shared = shared.borrow_mut();
                     shared.buffer = bytes.clone();
                     shared.finished = true;
                     bytes
                 } else {
                     // Response already read and buffered
-                    shared.buffer.clone()
+                    shared.borrow().buffer.clone()
                 }
             }
             ResponseBodySource::Consumed => {
@@ -911,28 +944,49 @@ impl HttpResponse {
         }
     }
 
-    #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn text<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<String> {
+    pub async fn text<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<String> {
+        with_abort_signal(&ctx, signal.clone(), async { Ok(()) }).await?;
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Bytes(body_bytes) => {
                 Ok(String::from_utf8_lossy(&body_bytes).to_string())
             }
-            ResponseBodySource::Native(response) => response
-                .text()
+            ResponseBodySource::Native(response) => {
+                let error_ctx = ctx.clone();
+                with_abort_signal(&ctx, signal, async move {
+                    response.text().await.map_err(|_| {
+                        Exception::throw_message(&error_ctx, "failed to read response body")
+                    })
+                })
                 .await
-                .map_err(|_| Exception::throw_message(&ctx, "failed to read response body")),
+            }
             ResponseBodySource::Shared(shared) => {
-                let mut shared = shared.borrow_mut();
-                if let Some(response) = shared.response.take() {
-                    let text = response.text().await.map_err(|_| {
-                        Exception::throw_message(&ctx, "failed to read response body")
-                    })?;
+                let response = shared.borrow_mut().response.take();
+                if let Some(response) = response {
+                    let error_ctx = ctx.clone();
+                    let result = with_abort_signal(&ctx, signal, async move {
+                        response.text().await.map_err(|_| {
+                            Exception::throw_message(&error_ctx, "failed to read response body")
+                        })
+                    })
+                    .await;
+                    let text = match result {
+                        Ok(text) => text,
+                        Err(error) => {
+                            shared.borrow_mut().finished = true;
+                            return Err(error);
+                        }
+                    };
+                    let mut shared = shared.borrow_mut();
                     shared.buffer = text.clone().into_bytes();
                     shared.finished = true;
                     Ok(text)
                 } else {
-                    Ok(String::from_utf8_lossy(&shared.buffer).to_string())
+                    Ok(String::from_utf8_lossy(&shared.borrow().buffer).to_string())
                 }
             }
             ResponseBodySource::Consumed => Err(Exception::throw_message(
@@ -1033,6 +1087,13 @@ impl HttpResponse {
     }
 }
 
+fn discard_native_response(mut response: golem_wasi_http::Response) {
+    let (stream, body) = response.get_raw_input_stream();
+    drop(stream);
+    drop(wasip2::http::types::IncomingBody::finish(body));
+    drop(response);
+}
+
 pub struct SharedResponse {
     response: Option<golem_wasi_http::Response>,
     stream: Option<Rc<RefCell<SharedStream>>>,
@@ -1105,34 +1166,61 @@ impl ResponseBodyStream {
     pub async fn pull<'js>(
         &mut self,
         ctx: Ctx<'js>,
-    ) -> List<(Option<TypedArray<'js, u8>>, Option<String>)> {
-        let (result, stream) = match self.stream.take() {
-            Some(BodySource::Native {
-                stream,
-                body,
-                response,
-            }) => {
-                const CHUNK_SIZE: u64 = 4096;
-                let pollable = stream.subscribe();
-                AsyncPollable::new(pollable).wait_for().await;
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
+        let source = self.stream.take();
+        let pull_ctx = ctx.clone();
+        let pull = async move {
+            let ctx = pull_ctx;
+            let (result, stream) = match source {
+                Some(BodySource::Native {
+                    stream,
+                    body,
+                    response,
+                }) => {
+                    const CHUNK_SIZE: u64 = 4096;
+                    let pollable = stream.subscribe();
+                    AsyncPollable::new(pollable).wait_for().await;
 
-                match stream.read(CHUNK_SIZE) {
-                    Ok(chunk) => match TypedArray::new_copy(ctx.clone(), chunk) {
-                        Ok(js_array) => (
-                            List((Some(js_array), None)),
-                            Some(BodySource::Native {
-                                stream,
-                                body,
-                                response,
-                            }),
-                        ),
-                        Err(_) => (
+                    match stream.read(CHUNK_SIZE) {
+                        Ok(chunk) => match TypedArray::new_copy(ctx.clone(), chunk) {
+                            Ok(js_array) => (
+                                List((Some(js_array), None)),
+                                Some(BodySource::Native {
+                                    stream,
+                                    body,
+                                    response,
+                                }),
+                            ),
+                            Err(_) => (
+                                List((
+                                    None,
+                                    Some(
+                                        "Failed to create TypedArray from response body chunk"
+                                            .to_string(),
+                                    ),
+                                )),
+                                Some(BodySource::Native {
+                                    stream,
+                                    body,
+                                    response,
+                                }),
+                            ),
+                        },
+                        Err(StreamError::Closed) => {
+                            // No more data to read, close the stream
+                            drop(stream);
+                            drop(body);
+                            drop(response);
+                            (List((None, None)), None)
+                        }
+                        Err(StreamError::LastOperationFailed(err)) => (
                             List((
                                 None,
-                                Some(
-                                    "Failed to create TypedArray from response body chunk"
-                                        .to_string(),
-                                ),
+                                Some(format!(
+                                    "Failed to read response body: {}",
+                                    err.to_debug_string()
+                                )),
                             )),
                             Some(BodySource::Native {
                                 stream,
@@ -1140,67 +1228,45 @@ impl ResponseBodyStream {
                                 response,
                             }),
                         ),
-                    },
-                    Err(StreamError::Closed) => {
-                        // No more data to read, close the stream
-                        drop(stream);
-                        drop(body);
-                        drop(response);
-                        (List((None, None)), None)
                     }
-                    Err(StreamError::LastOperationFailed(err)) => (
-                        List((
-                            None,
-                            Some(format!(
-                                "Failed to read response body: {}",
-                                err.to_debug_string()
-                            )),
-                        )),
-                        Some(BodySource::Native {
-                            stream,
-                            body,
-                            response,
-                        }),
-                    ),
                 }
-            }
-            Some(BodySource::SharedNative {
-                shared_stream: rc_shared_stream,
-                position,
-            }) => {
-                let shared_stream = rc_shared_stream.borrow();
-                let shared = shared_stream
-                    .shared
-                    .upgrade()
-                    .expect("Shared stream has been dropped");
-                let mut shared = shared.borrow_mut();
-                let buffer_len = shared.buffer.len();
+                Some(BodySource::SharedNative {
+                    shared_stream: rc_shared_stream,
+                    position,
+                }) => {
+                    let shared_stream = rc_shared_stream.borrow();
+                    let shared = shared_stream
+                        .shared
+                        .upgrade()
+                        .expect("Shared stream has been dropped");
+                    let mut shared = shared.borrow_mut();
+                    let buffer_len = shared.buffer.len();
 
-                if position < buffer_len {
-                    let chunk = &shared.buffer[position..];
-                    let chunk_len = chunk.len();
-                    let chunk_array = TypedArray::new_copy(ctx.clone(), chunk).unwrap();
-                    (
-                        List((Some(chunk_array), None)),
-                        Some(BodySource::SharedNative {
-                            shared_stream: rc_shared_stream.clone(),
-                            position: position + chunk_len,
-                        }),
-                    )
-                } else {
-                    if shared.finished {
-                        (List((None, None)), None)
+                    if position < buffer_len {
+                        let chunk = &shared.buffer[position..];
+                        let chunk_len = chunk.len();
+                        let chunk_array = TypedArray::new_copy(ctx.clone(), chunk).unwrap();
+                        (
+                            List((Some(chunk_array), None)),
+                            Some(BodySource::SharedNative {
+                                shared_stream: rc_shared_stream.clone(),
+                                position: position + chunk_len,
+                            }),
+                        )
                     } else {
-                        const CHUNK_SIZE: u64 = 4096;
-                        let pollable = shared_stream.stream.subscribe();
-                        AsyncPollable::new(pollable).wait_for().await;
+                        if shared.finished {
+                            (List((None, None)), None)
+                        } else {
+                            const CHUNK_SIZE: u64 = 4096;
+                            let pollable = shared_stream.stream.subscribe();
+                            AsyncPollable::new(pollable).wait_for().await;
 
-                        match shared_stream.stream.read(CHUNK_SIZE) {
-                            Ok(chunk) => {
-                                let chunk_len = chunk.len();
-                                shared.buffer.extend_from_slice(&chunk);
+                            match shared_stream.stream.read(CHUNK_SIZE) {
+                                Ok(chunk) => {
+                                    let chunk_len = chunk.len();
+                                    shared.buffer.extend_from_slice(&chunk);
 
-                                match TypedArray::new_copy(ctx.clone(), chunk) {
+                                    match TypedArray::new_copy(ctx.clone(), chunk) {
                                     Ok(js_array) => {
                                         (List((Some(js_array), None)), Some(BodySource::SharedNative {
                             shared_stream: rc_shared_stream.clone(),
@@ -1218,68 +1284,80 @@ impl ResponseBodyStream {
                             position: position + chunk_len,
                         })),
                                 }
-                            }
-                            Err(StreamError::Closed) => {
-                                // No more data to read, close the stream
-                                shared.finished = true;
-                                (List((None, None)), None)
-                            }
-                            Err(StreamError::LastOperationFailed(err)) => (
-                                List((
-                                    None,
-                                    Some(format!(
-                                        "Failed to read response body: {}",
-                                        err.to_debug_string()
+                                }
+                                Err(StreamError::Closed) => {
+                                    // No more data to read, close the stream
+                                    shared.finished = true;
+                                    (List((None, None)), None)
+                                }
+                                Err(StreamError::LastOperationFailed(err)) => (
+                                    List((
+                                        None,
+                                        Some(format!(
+                                            "Failed to read response body: {}",
+                                            err.to_debug_string()
+                                        )),
                                     )),
-                                )),
-                                Some(BodySource::SharedNative {
-                                    shared_stream: rc_shared_stream.clone(),
-                                    position,
-                                }),
-                            ),
+                                    Some(BodySource::SharedNative {
+                                        shared_stream: rc_shared_stream.clone(),
+                                        position,
+                                    }),
+                                ),
+                            }
                         }
                     }
                 }
-            }
-            Some(BodySource::Bytes(mut cursor)) => {
-                let mut buf = [0u8; 4096];
-                match std::io::Read::read(&mut cursor, &mut buf) {
-                    Ok(0) => {
-                        // EOF
-                        (List((None, None)), None)
+                Some(BodySource::Bytes(mut cursor)) => {
+                    let mut buf = [0u8; 4096];
+                    match std::io::Read::read(&mut cursor, &mut buf) {
+                        Ok(0) => {
+                            // EOF
+                            (List((None, None)), None)
+                        }
+                        Ok(n) => match TypedArray::new_copy(ctx.clone(), &buf[..n]) {
+                            Ok(js_array) => (
+                                List((Some(js_array), None)),
+                                Some(BodySource::Bytes(cursor)),
+                            ),
+                            Err(_) => (
+                                List((
+                                    None,
+                                    Some(
+                                        "Failed to create TypedArray from response body chunk"
+                                            .to_string(),
+                                    ),
+                                )),
+                                Some(BodySource::Bytes(cursor)),
+                            ),
+                        },
+                        Err(err) => (
+                            List((None, Some(format!("Failed to read response body: {}", err)))),
+                            Some(BodySource::Bytes(cursor)),
+                        ),
                     }
-                    Ok(n) => match TypedArray::new_copy(ctx.clone(), &buf[..n]) {
-                        Ok(js_array) => (
-                            List((Some(js_array), None)),
-                            Some(BodySource::Bytes(cursor)),
-                        ),
-                        Err(_) => (
-                            List((
-                                None,
-                                Some(
-                                    "Failed to create TypedArray from response body chunk"
-                                        .to_string(),
-                                ),
-                            )),
-                            Some(BodySource::Bytes(cursor)),
-                        ),
-                    },
-                    Err(err) => (
-                        List((None, Some(format!("Failed to read response body: {}", err)))),
-                        Some(BodySource::Bytes(cursor)),
-                    ),
                 }
-            }
-            None => (
-                List((
+                None => (
+                    List((
+                        None,
+                        Some("Response body stream has already been consumed".to_string()),
+                    )),
                     None,
-                    Some("Response body stream has already been consumed".to_string()),
-                )),
-                None,
-            ),
+                ),
+            };
+            Ok((result, stream))
         };
-        self.stream = stream;
-        result
+        match with_abort_signal(&ctx, signal, pull).await {
+            Ok((result, stream)) => {
+                self.stream = stream;
+                Ok(result)
+            }
+            Err(error) => {
+                // The cancelled future owned the native stream/body/response state, so dropping it
+                // promptly cancels the transport work and leaves this reader terminal.
+                self.stream = None;
+                Err(error)
+            }
+        }
     }
 }
 

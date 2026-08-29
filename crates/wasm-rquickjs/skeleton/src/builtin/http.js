@@ -468,6 +468,15 @@ export class Response {
             this._isError = isError;
             this._isNative = true;
             this._signal = signal;
+            this._abortBodyListener = undefined;
+            if (signal?.aborted) {
+                this.nativeResponse.discardBody();
+            } else if (signal) {
+                this._abortBodyListener = () => {
+                    if (!this.bodyUsed) this.nativeResponse.discardBody();
+                };
+                signal.addEventListener('abort', this._abortBodyListener, {once: true});
+            }
         } else {
             // Standard Web API path: new Response(body, init)
             const body = bodyOrNative;
@@ -484,6 +493,13 @@ export class Response {
             this._body = body instanceof ArrayBuffer || ArrayBuffer.isView(body)
                 ? snapshotBufferSource(body)
                 : body !== undefined && body !== null ? body : null;
+        }
+    }
+
+    _detachAbortBodyListener() {
+        if (this._signal && this._abortBodyListener) {
+            this._signal.removeEventListener('abort', this._abortBodyListener);
+            this._abortBodyListener = undefined;
         }
     }
 
@@ -523,15 +539,17 @@ export class Response {
                     let next;
                     let err;
                     try {
-                        [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull();
+                        [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull(response._signal);
                     } catch (error) {
                         if (response._signal?.aborted) throw responseAbortError();
                         throw error;
                     }
                     if (err !== undefined) {
+                        response._detachAbortBodyListener();
                         console.error("Error reading response body stream:", err);
                         controller.error(err);
                     } else if (next === undefined) {
+                        response._detachAbortBodyListener();
                         controller.close();
                     } else {
                         controller.enqueue(next);
@@ -709,12 +727,13 @@ export class Response {
             if (this._signal?.aborted) throw responseAbortError();
             let result;
             try {
-                result = await this.nativeResponse.arrayBuffer();
+                result = await this.nativeResponse.arrayBuffer(this._signal);
             } catch (error) {
                 if (this._signal?.aborted) throw responseAbortError();
                 throw error;
             }
             this.bodyUsed = true;
+            this._detachAbortBodyListener();
             return result;
         }
         this.bodyUsed = true;
@@ -773,12 +792,13 @@ export class Response {
             if (this._signal?.aborted) throw responseAbortError();
             let result;
             try {
-                result = await this.nativeResponse.text();
+                result = await this.nativeResponse.text(this._signal);
             } catch (error) {
                 if (this._signal?.aborted) throw responseAbortError();
                 throw error;
             }
             this.bodyUsed = true;
+            this._detachAbortBodyListener();
             return result;
         }
         this.bodyUsed = true;
