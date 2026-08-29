@@ -1388,6 +1388,7 @@ export async function abortPendingResponseBody(port, testCase) {
         await Promise.resolve();
         const pendingUntilSurvivorFinishes = !cancelSettled;
         await pendingRead.catch(() => undefined);
+        await new Promise(resolve => setTimeout(resolve, 0));
         const pendingAfterCanceledReadSettled = !cancelSettled;
         const text = await response.text();
         await cancel;
@@ -1443,8 +1444,8 @@ export async function abortPendingResponseBody(port, testCase) {
             cancelSettled = true;
         });
         await pendingRead.catch(() => undefined);
-        const pendingAfterCanceledReadSettled = !cancelSettled;
         await new Promise(resolve => setTimeout(resolve, 0));
+        const pendingAfterCanceledReadSettled = !cancelSettled;
         const recoveredBytes = hasRecoveryTestHook
             ? response.nativeResponse.takeRecoveredBodyReadBytesForTest()
             : 0;
