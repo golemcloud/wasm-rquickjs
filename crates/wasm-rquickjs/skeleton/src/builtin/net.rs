@@ -647,7 +647,7 @@ impl TcpSocket {
                     let output = inner.output.as_ref().ok_or_else(|| {
                         throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    let check = output.check_write().map_err(|e| match e {
+                    output.check_write().map_err(|e| match e {
                         StreamError::Closed => {
                             throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                         }
@@ -660,8 +660,7 @@ impl TcpSocket {
                                 &format!("check_write failed: {debug_message}"),
                             )
                         }
-                    })?;
-                    check
+                    })?
                 };
                 #[cfg(feature = "net-write-profiling")]
                 {
@@ -747,9 +746,15 @@ impl TcpSocket {
         Ok(total as u32)
     }
 
-    #[cfg(feature = "net-write-profiling")]
-    pub fn write_profile(&self) -> String {
-        self.inner.borrow().write_profile.to_json()
+    pub fn write_profile(&self) -> Option<String> {
+        #[cfg(feature = "net-write-profiling")]
+        {
+            Some(self.inner.borrow().write_profile.to_json())
+        }
+        #[cfg(not(feature = "net-write-profiling"))]
+        {
+            None
+        }
     }
 
     pub fn shutdown(&self, ctx: Ctx<'_>, how: u32) -> rquickjs::Result<()> {
@@ -1342,9 +1347,15 @@ impl TcpSocket {
         Ok(total as u32)
     }
 
-    #[cfg(feature = "net-write-profiling")]
-    pub fn write_profile(&self) -> String {
-        self.inner.borrow().write_profile.to_json()
+    pub fn write_profile(&self) -> Option<String> {
+        #[cfg(feature = "net-write-profiling")]
+        {
+            Some(self.inner.borrow().write_profile.to_json())
+        }
+        #[cfg(not(feature = "net-write-profiling"))]
+        {
+            None
+        }
     }
 
     pub fn shutdown(&self, ctx: Ctx<'_>, how: u32) -> rquickjs::Result<()> {

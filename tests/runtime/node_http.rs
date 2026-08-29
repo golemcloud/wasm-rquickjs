@@ -7,6 +7,14 @@ use wasmtime::component::Val;
 #[test_dep(tagged_as = "node_http", scope = Cloneable)]
 async fn compiled_node_http() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/node-http");
+    CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile node_http")
+}
+
+#[test_dep(tagged_as = "node_http_profiling", scope = Cloneable)]
+async fn compiled_node_http_profiling() -> CompiledTest {
+    let path = Utf8Path::new("examples/runtime/node-http");
     CompiledTest::new_with_features(path, true, FeatureCombination::NetWriteProfiling)
         .await
         .expect("Failed to compile node_http")
@@ -320,7 +328,7 @@ async fn node_net_writev_boundaries(
 
 #[test]
 async fn node_net_write_profile(
-    #[tagged_as("node_http")] compiled: &CompiledTest,
+    #[tagged_as("node_http_profiling")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     for (chunk_size, chunk_count) in [
         (4 * 1024, 16),

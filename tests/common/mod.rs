@@ -350,7 +350,7 @@ pub fn strip_jsonc_comments(input: &str) -> String {
     result
 }
 
-fn truthy_env(name: &str) -> bool {
+pub(crate) fn truthy_env(name: &str) -> bool {
     std::env::var(name)
         .map(|value| {
             matches!(

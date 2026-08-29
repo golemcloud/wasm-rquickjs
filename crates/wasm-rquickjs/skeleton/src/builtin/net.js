@@ -131,7 +131,10 @@ function forwardNativeHandle(wrap, handle) {
     wrap.local_address = handle.local_address.bind(handle);
     wrap.set_no_delay = handle.set_no_delay.bind(handle);
     wrap.set_keep_alive = handle.set_keep_alive.bind(handle);
-    if (typeof handle.write_profile === 'function') {
+    const initialNativeProfile = typeof handle.write_profile === 'function'
+        ? handle.write_profile()
+        : null;
+    if (typeof initialNativeProfile === 'string') {
         wrap._writeProfile = {
             writeCalls: 0,
             writeBytes: 0,
