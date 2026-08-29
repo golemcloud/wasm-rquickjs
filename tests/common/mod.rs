@@ -3,6 +3,7 @@ pub mod test_server;
 
 use crate::common::WasmSource::Precompiled;
 use anyhow::anyhow;
+use bytes::Buf;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use futures::FutureExt;
@@ -303,6 +304,18 @@ enum HttpLifecyclePhase {
     ServerResponseWriteError = 41,
     ServerResponsePendingAtDrop = 42,
     ServerResponseCorrelationOverlap = 43,
+    ServerResponseBodyExpectedBytes = 44,
+    ServerResponseBodyExpectedUnknown = 45,
+    ServerResponseBodyPolledBytes = 46,
+    ServerResponseWritePartial = 47,
+    ServerResponseWriteBoundaryBytes = 48,
+    ServerResponseFlushBytes = 49,
+    ServerResponseTerminalBytes = 50,
+    ServerResponseByteCountOverflow = 51,
+    ServerConnectionFlushPending = 52,
+    ServerConnectionFlushOk = 53,
+    ServerConnectionShutdownPending = 54,
+    ServerResponseCorrelationBoundary = 55,
 }
 
 impl HttpLifecyclePhase {
@@ -351,9 +364,42 @@ impl HttpLifecyclePhase {
             41 => "server-response-write-error",
             42 => "server-response-pending-at-drop",
             43 => "server-response-correlation-overlap",
+            44 => "server-response-body-expected-bytes",
+            45 => "server-response-body-expected-unknown",
+            46 => "server-response-body-polled-bytes",
+            47 => "server-response-write-partial",
+            48 => "server-response-write-boundary-bytes",
+            49 => "server-response-flush-bytes",
+            50 => "server-response-terminal-bytes",
+            51 => "server-response-byte-count-overflow",
+            52 => "server-connection-flush-pending",
+            53 => "server-connection-flush-ok",
+            54 => "server-connection-shutdown-pending",
+            55 => "server-response-correlation-boundary",
             _ => "unknown",
         }
     }
+}
+
+const HTTP_BYTE_COUNT_EXPECTED: u16 = 1;
+const HTTP_BYTE_COUNT_POLLED: u16 = 2;
+const HTTP_BYTE_COUNT_WRITE: u16 = 3;
+
+fn record_http_byte_count(
+    trace: &HttpLifecycleTrace,
+    request: usize,
+    phase: HttpLifecyclePhase,
+    count: u64,
+    overflow_kind: u16,
+) {
+    if count > u64::from(u16::MAX) {
+        trace.record(
+            request,
+            HttpLifecyclePhase::ServerResponseByteCountOverflow,
+            overflow_kind,
+        );
+    }
+    trace.record(request, phase, count.min(u64::from(u16::MAX)) as u16);
 }
 
 struct HttpLifecycleJournal {
@@ -640,12 +686,17 @@ impl HttpConnectionState {
         }
     }
 
-    fn record_response_write(&self, phase: HttpLifecyclePhase) {
-        let request_id = self.pending_response.swap(0, Ordering::AcqRel);
-        if request_id != 0 {
-            self.trace.record(request_id, phase, self.connection);
+    fn take_pending_response(&self) -> Option<usize> {
+        match self.pending_response.swap(0, Ordering::AcqRel) {
+            0 => None,
+            request_id => Some(request_id),
         }
     }
+}
+
+struct ActiveResponseWrite {
+    request_id: usize,
+    accepted_bytes: u64,
 }
 
 pub(crate) struct TracedTestServerIo<T> {
@@ -655,6 +706,9 @@ pub(crate) struct TracedTestServerIo<T> {
     saw_write: bool,
     read_terminal: bool,
     write_terminal: bool,
+    active_response: Option<ActiveResponseWrite>,
+    flush_pending: bool,
+    shutdown_pending: bool,
 }
 
 impl<T> TracedTestServerIo<T> {
@@ -666,6 +720,9 @@ impl<T> TracedTestServerIo<T> {
             saw_write: false,
             read_terminal: false,
             write_terminal: false,
+            active_response: None,
+            flush_pending: false,
+            shutdown_pending: false,
         }
     }
 
@@ -675,24 +732,106 @@ impl<T> TracedTestServerIo<T> {
             .record(usize::from(self.state.connection), phase, detail);
     }
 
-    fn record_write_success(&mut self, bytes: usize) {
+    fn record_response_bytes(&self, request_id: usize, phase: HttpLifecyclePhase, bytes: u64) {
+        record_http_byte_count(
+            &self.state.trace,
+            request_id,
+            phase,
+            bytes,
+            HTTP_BYTE_COUNT_WRITE,
+        );
+    }
+
+    fn activate_pending_response(&mut self, first_accepted_bytes: Option<usize>) -> Option<usize> {
+        let pending = self.state.take_pending_response();
+        if let Some(request_id) = pending {
+            match self.active_response.take() {
+                Some(active) if active.request_id != request_id => {
+                    self.record_response_bytes(
+                        active.request_id,
+                        HttpLifecyclePhase::ServerResponseWriteBoundaryBytes,
+                        active.accepted_bytes,
+                    );
+                    self.state.trace.record(
+                        active.request_id,
+                        HttpLifecyclePhase::ServerResponseCorrelationBoundary,
+                        request_id.min(usize::from(u16::MAX)) as u16,
+                    );
+                }
+                Some(active) => {
+                    self.active_response = Some(active);
+                    return Some(request_id);
+                }
+                None => {}
+            }
+            if let Some(first_accepted_bytes) = first_accepted_bytes {
+                self.record_response_bytes(
+                    request_id,
+                    HttpLifecyclePhase::ServerResponseWriteAfterFrame,
+                    first_accepted_bytes as u64,
+                );
+            }
+            self.active_response = Some(ActiveResponseWrite {
+                request_id,
+                accepted_bytes: 0,
+            });
+        }
+        self.active_response
+            .as_ref()
+            .map(|active| active.request_id)
+    }
+
+    fn snapshot_active_response(&mut self, phase: HttpLifecyclePhase) {
+        if let Some(active) = self.active_response.take() {
+            self.record_response_bytes(active.request_id, phase, active.accepted_bytes);
+        }
+    }
+
+    fn record_pending_response(&self, phase: HttpLifecyclePhase) {
+        if let Some(request_id) = self.state.take_pending_response() {
+            self.state
+                .trace
+                .record(request_id, phase, self.state.connection);
+        }
+    }
+
+    fn record_write_success(&mut self, offered: usize, accepted: usize) {
         if !self.saw_write {
             self.saw_write = true;
             self.record_connection(
                 HttpLifecyclePhase::ServerConnectionFirstWrite,
-                bytes.min(usize::from(u16::MAX)) as u16,
+                accepted.min(usize::from(u16::MAX)) as u16,
             );
         }
-        if bytes != 0 {
-            self.state
-                .record_response_write(HttpLifecyclePhase::ServerResponseWriteAfterFrame);
+        if let Some(request_id) = self.activate_pending_response(Some(accepted)) {
+            if let Some(active) = &mut self.active_response {
+                active.accepted_bytes = active.accepted_bytes.saturating_add(accepted as u64);
+            }
+            if accepted < offered {
+                self.record_response_bytes(
+                    request_id,
+                    HttpLifecyclePhase::ServerResponseWritePartial,
+                    offered.saturating_sub(accepted) as u64,
+                );
+            }
         }
     }
 
     fn record_write_error(&mut self, error: &std::io::Error) {
         self.write_terminal = true;
-        self.state
-            .record_response_write(HttpLifecyclePhase::ServerResponseWriteError);
+        self.activate_pending_response(None);
+        if let Some(request_id) = self
+            .active_response
+            .as_ref()
+            .map(|active| active.request_id)
+        {
+            self.state.trace.record(
+                request_id,
+                HttpLifecyclePhase::ServerResponseWriteError,
+                self.state.connection,
+            );
+        }
+        self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
         self.record_connection(
             HttpLifecyclePhase::ServerConnectionWriteError,
             error.raw_os_error().unwrap_or_default() as u16,
@@ -743,7 +882,7 @@ impl<T: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for TracedTestServe
     ) -> Poll<std::io::Result<usize>> {
         match Pin::new(&mut self.inner).poll_write(cx, buffer) {
             Poll::Ready(Ok(bytes)) => {
-                self.record_write_success(bytes);
+                self.record_write_success(buffer.len(), bytes);
                 Poll::Ready(Ok(bytes))
             }
             Poll::Ready(Err(error)) => {
@@ -761,7 +900,10 @@ impl<T: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for TracedTestServe
     ) -> Poll<std::io::Result<usize>> {
         match Pin::new(&mut self.inner).poll_write_vectored(cx, buffers) {
             Poll::Ready(Ok(bytes)) => {
-                self.record_write_success(bytes);
+                let offered = buffers
+                    .iter()
+                    .fold(0usize, |total, buffer| total.saturating_add(buffer.len()));
+                self.record_write_success(offered, bytes);
                 Poll::Ready(Ok(bytes))
             }
             Poll::Ready(Err(error)) => {
@@ -778,48 +920,93 @@ impl<T: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for TracedTestServe
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match Pin::new(&mut self.inner).poll_flush(cx) {
+            Poll::Ready(Ok(())) => {
+                self.flush_pending = false;
+                self.snapshot_active_response(HttpLifecyclePhase::ServerResponseFlushBytes);
+                self.record_connection(HttpLifecyclePhase::ServerConnectionFlushOk, 0);
+                Poll::Ready(Ok(()))
+            }
             Poll::Ready(Err(error)) => {
+                self.flush_pending = false;
                 self.write_terminal = true;
-                self.state
-                    .record_response_write(HttpLifecyclePhase::ServerResponseWriteError);
+                if let Some(request_id) = self
+                    .active_response
+                    .as_ref()
+                    .map(|active| active.request_id)
+                {
+                    self.state.trace.record(
+                        request_id,
+                        HttpLifecyclePhase::ServerResponseWriteError,
+                        self.state.connection,
+                    );
+                }
+                self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+                self.record_pending_response(HttpLifecyclePhase::ServerResponseWriteError);
                 self.record_connection(
                     HttpLifecyclePhase::ServerConnectionFlushError,
                     error.raw_os_error().unwrap_or_default() as u16,
                 );
                 Poll::Ready(Err(error))
             }
-            result => result,
+            Poll::Pending => {
+                if !self.flush_pending {
+                    self.flush_pending = true;
+                    self.record_connection(HttpLifecyclePhase::ServerConnectionFlushPending, 0);
+                }
+                Poll::Pending
+            }
         }
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match Pin::new(&mut self.inner).poll_shutdown(cx) {
             Poll::Ready(Ok(())) => {
+                self.shutdown_pending = false;
                 if !self.write_terminal {
                     self.write_terminal = true;
+                    self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+                    self.record_pending_response(HttpLifecyclePhase::ServerResponsePendingAtDrop);
                     self.record_connection(HttpLifecyclePhase::ServerConnectionShutdown, 0);
                 }
                 Poll::Ready(Ok(()))
             }
             Poll::Ready(Err(error)) => {
+                self.shutdown_pending = false;
                 self.write_terminal = true;
-                self.state
-                    .record_response_write(HttpLifecyclePhase::ServerResponseWriteError);
+                if let Some(request_id) = self
+                    .active_response
+                    .as_ref()
+                    .map(|active| active.request_id)
+                {
+                    self.state.trace.record(
+                        request_id,
+                        HttpLifecyclePhase::ServerResponseWriteError,
+                        self.state.connection,
+                    );
+                }
+                self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+                self.record_pending_response(HttpLifecyclePhase::ServerResponseWriteError);
                 self.record_connection(
                     HttpLifecyclePhase::ServerConnectionShutdownError,
                     error.raw_os_error().unwrap_or_default() as u16,
                 );
                 Poll::Ready(Err(error))
             }
-            Poll::Pending => Poll::Pending,
+            Poll::Pending => {
+                if !self.shutdown_pending {
+                    self.shutdown_pending = true;
+                    self.record_connection(HttpLifecyclePhase::ServerConnectionShutdownPending, 0);
+                }
+                Poll::Pending
+            }
         }
     }
 }
 
 impl<T> Drop for TracedTestServerIo<T> {
     fn drop(&mut self) {
-        self.state
-            .record_response_write(HttpLifecyclePhase::ServerResponsePendingAtDrop);
+        self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+        self.record_pending_response(HttpLifecyclePhase::ServerResponsePendingAtDrop);
         let detail = u16::from(self.saw_read)
             | (u16::from(self.saw_write) << 1)
             | (u16::from(self.read_terminal) << 2)
@@ -857,7 +1044,7 @@ fn traced_test_server_response_body<B: HttpBody>(
 }
 
 /// A transparent body observer. It never polls ahead or adds an await: every host poll is
-/// delegated exactly once, with only the first frame and the terminal outcome recorded.
+/// delegated exactly once while frame byte totals and the terminal outcome are recorded.
 struct TracedHttpBody<B: HttpBody> {
     inner: Pin<Box<B>>,
     trace: HttpLifecycleTrace,
@@ -866,6 +1053,9 @@ struct TracedHttpBody<B: HttpBody> {
     server_connection: Option<Arc<HttpConnectionState>>,
     saw_frame: bool,
     terminal: bool,
+    expected_body_bytes: Option<u64>,
+    polled_body_bytes: u64,
+    body_bytes_recorded: bool,
 }
 
 impl<B: HttpBody> TracedHttpBody<B> {
@@ -876,7 +1066,10 @@ impl<B: HttpBody> TracedHttpBody<B> {
         side: &'static str,
         server_connection: Option<Arc<HttpConnectionState>>,
     ) -> Self {
-        Self {
+        let expected_body_bytes = (side == "server-response")
+            .then(|| inner.size_hint().exact())
+            .flatten();
+        let body = Self {
             inner: Box::pin(inner),
             trace,
             request,
@@ -884,7 +1077,28 @@ impl<B: HttpBody> TracedHttpBody<B> {
             server_connection,
             saw_frame: false,
             terminal: false,
+            expected_body_bytes,
+            polled_body_bytes: 0,
+            body_bytes_recorded: false,
+        };
+        if side == "server-response" {
+            if let Some(expected) = body.expected_body_bytes {
+                record_http_byte_count(
+                    &body.trace,
+                    request,
+                    HttpLifecyclePhase::ServerResponseBodyExpectedBytes,
+                    expected,
+                    HTTP_BYTE_COUNT_EXPECTED,
+                );
+            } else {
+                body.trace.record(
+                    request,
+                    HttpLifecyclePhase::ServerResponseBodyExpectedUnknown,
+                    0,
+                );
+            }
         }
+        body
     }
 
     fn event(&self, outcome: &'static str) {
@@ -911,6 +1125,27 @@ impl<B: HttpBody> TracedHttpBody<B> {
         };
         self.trace.record(self.request, phase, 0);
     }
+
+    fn record_body_bytes(&mut self) {
+        if self.side == "server-response" && !self.body_bytes_recorded {
+            self.body_bytes_recorded = true;
+            record_http_byte_count(
+                &self.trace,
+                self.request,
+                HttpLifecyclePhase::ServerResponseBodyPolledBytes,
+                self.polled_body_bytes,
+                HTTP_BYTE_COUNT_POLLED,
+            );
+        }
+    }
+
+    fn record_terminal(&mut self, outcome: &'static str) {
+        if !self.terminal {
+            self.terminal = true;
+            self.event(outcome);
+        }
+        self.record_body_bytes();
+    }
 }
 
 impl<B: HttpBody> HttpBody for TracedHttpBody<B> {
@@ -924,6 +1159,11 @@ impl<B: HttpBody> HttpBody for TracedHttpBody<B> {
         let this = self.get_mut();
         match this.inner.as_mut().poll_frame(cx) {
             Poll::Ready(Some(Ok(frame))) => {
+                if let Some(data) = frame.data_ref() {
+                    this.polled_body_bytes = this
+                        .polled_body_bytes
+                        .saturating_add(data.remaining() as u64);
+                }
                 if !this.saw_frame {
                     this.saw_frame = true;
                     let outcome = if frame.is_data() {
@@ -938,16 +1178,17 @@ impl<B: HttpBody> HttpBody for TracedHttpBody<B> {
                         connection.arm_response(this.request);
                     }
                 }
+                if this.inner.as_ref().is_end_stream() {
+                    this.record_terminal("eof");
+                }
                 Poll::Ready(Some(Ok(frame)))
             }
             Poll::Ready(Some(Err(error))) => {
-                this.terminal = true;
-                this.event("error");
+                this.record_terminal("error");
                 Poll::Ready(Some(Err(error)))
             }
             Poll::Ready(None) => {
-                this.terminal = true;
-                this.event("eof");
+                this.record_terminal("eof");
                 Poll::Ready(None)
             }
             Poll::Pending => Poll::Pending,
@@ -968,6 +1209,7 @@ impl<B: HttpBody> Drop for TracedHttpBody<B> {
         if !self.terminal && !self.inner.as_ref().is_end_stream() {
             self.event("drop-before-terminal");
         }
+        self.record_body_bytes();
     }
 }
 
@@ -1559,6 +1801,7 @@ impl Drop for TestCacheLock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
     use test_r::test;
     use tokio::io::{AsyncRead as _, AsyncReadExt as _, AsyncWrite as _, AsyncWriteExt as _};
 
@@ -1574,6 +1817,9 @@ mod tests {
     struct ScriptedIo {
         calls: Arc<ScriptedIoCalls>,
         fail_write: bool,
+        accepted_writes: VecDeque<usize>,
+        flush_pending_once: bool,
+        shutdown_pending_once: bool,
     }
 
     impl tokio::io::AsyncRead for ScriptedIo {
@@ -1590,7 +1836,7 @@ mod tests {
 
     impl tokio::io::AsyncWrite for ScriptedIo {
         fn poll_write(
-            self: Pin<&mut Self>,
+            mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             buffer: &[u8],
         ) -> Poll<std::io::Result<usize>> {
@@ -1598,12 +1844,16 @@ mod tests {
             if self.fail_write {
                 Poll::Ready(Err(std::io::Error::other("scripted write failure")))
             } else {
-                Poll::Ready(Ok(buffer.len()))
+                Poll::Ready(Ok(self
+                    .accepted_writes
+                    .pop_front()
+                    .unwrap_or(buffer.len())
+                    .min(buffer.len())))
             }
         }
 
         fn poll_write_vectored(
-            self: Pin<&mut Self>,
+            mut self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
             buffers: &[std::io::IoSlice<'_>],
         ) -> Poll<std::io::Result<usize>> {
@@ -1611,7 +1861,12 @@ mod tests {
             if self.fail_write {
                 Poll::Ready(Err(std::io::Error::other("scripted write failure")))
             } else {
-                Poll::Ready(Ok(buffers.iter().map(|buffer| buffer.len()).sum()))
+                let offered = buffers.iter().map(|buffer| buffer.len()).sum();
+                Poll::Ready(Ok(self
+                    .accepted_writes
+                    .pop_front()
+                    .unwrap_or(offered)
+                    .min(offered)))
             }
         }
 
@@ -1619,13 +1874,24 @@ mod tests {
             true
         }
 
-        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
             self.calls.flushes.fetch_add(1, Ordering::Relaxed);
+            if std::mem::take(&mut self.flush_pending_once) {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
             Poll::Ready(Ok(()))
         }
 
-        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
             self.calls.shutdowns.fetch_add(1, Ordering::Relaxed);
+            if std::mem::take(&mut self.shutdown_pending_once) {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
             Poll::Ready(Ok(()))
         }
     }
@@ -1641,6 +1907,9 @@ mod tests {
             ScriptedIo {
                 calls: calls.clone(),
                 fail_write,
+                accepted_writes: VecDeque::new(),
+                flush_pending_once: false,
+                shutdown_pending_once: false,
             },
             state,
         );
@@ -1843,6 +2112,9 @@ mod tests {
             ScriptedIo {
                 calls,
                 fail_write: false,
+                accepted_writes: VecDeque::new(),
+                flush_pending_once: false,
+                shutdown_pending_once: false,
             },
             state.clone(),
         );
@@ -1863,9 +2135,161 @@ mod tests {
         let snapshot = trace.snapshot();
         assert_eq!(
             snapshot
-                .matches("request=41 phase=server-response-write-after-frame detail=9")
+                .matches("request=41 phase=server-response-write-after-frame detail=8")
                 .count(),
             1
+        );
+        assert!(snapshot.contains("request=41 phase=server-response-body-expected-bytes detail=4"));
+        assert!(snapshot.contains("request=41 phase=server-response-body-polled-bytes detail=4"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_counts_partial_and_cumulative_writes() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, calls) = scripted_connection(trace.clone(), 10, false);
+        io.inner.accepted_writes = VecDeque::from([4, 6]);
+        io.state.arm_response(44);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"0123456789"),
+            Poll::Ready(Ok(4))
+        ));
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"456789"),
+            Poll::Ready(Ok(6))
+        ));
+        assert!(matches!(
+            Pin::new(&mut io).poll_flush(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(calls.writes.load(Ordering::Relaxed), 2);
+        assert_eq!(calls.flushes.load(Ordering::Relaxed), 1);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=44 phase=server-response-write-after-frame detail=4"));
+        assert!(snapshot.contains("request=44 phase=server-response-write-partial detail=6"));
+        assert!(snapshot.contains("request=44 phase=server-response-flush-bytes detail=10"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_records_full_accepted_write_at_terminal() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 11, false);
+        io.state.arm_response(54);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let response = [0; 151];
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, &response),
+            Poll::Ready(Ok(151))
+        ));
+        drop(io);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=54 phase=server-response-write-after-frame detail=151"));
+        assert!(snapshot.contains("request=54 phase=server-response-terminal-bytes detail=151"));
+        assert!(!snapshot.contains("request=54 phase=server-response-write-partial"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_counters_are_independent_after_flush() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 12, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        for (request, bytes) in [(45, b"first".as_slice()), (46, b"second".as_slice())] {
+            io.state.arm_response(request);
+            assert!(Pin::new(&mut io).poll_write(&mut cx, bytes).is_ready());
+            assert!(Pin::new(&mut io).poll_flush(&mut cx).is_ready());
+        }
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=45 phase=server-response-flush-bytes detail=5"));
+        assert!(snapshot.contains("request=46 phase=server-response-flush-bytes detail=6"));
+        assert!(!snapshot.contains("server-response-correlation-boundary"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_io_records_pending_flush_and_shutdown_once() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, calls) = scripted_connection(trace.clone(), 14, false);
+        io.inner.flush_pending_once = true;
+        io.inner.shutdown_pending_once = true;
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(Pin::new(&mut io).poll_flush(&mut cx).is_pending());
+        assert!(Pin::new(&mut io).poll_flush(&mut cx).is_ready());
+        assert!(Pin::new(&mut io).poll_shutdown(&mut cx).is_pending());
+        assert!(Pin::new(&mut io).poll_shutdown(&mut cx).is_ready());
+        assert_eq!(calls.flushes.load(Ordering::Relaxed), 2);
+        assert_eq!(calls.shutdowns.load(Ordering::Relaxed), 2);
+
+        let snapshot = trace.snapshot();
+        assert_eq!(
+            snapshot.matches("server-connection-flush-pending").count(),
+            1
+        );
+        assert_eq!(snapshot.matches("server-connection-flush-ok").count(), 1);
+        assert_eq!(
+            snapshot
+                .matches("server-connection-shutdown-pending")
+                .count(),
+            1
+        );
+        assert_eq!(snapshot.matches("server-connection-shutdown").count(), 2);
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_records_unknown_and_overflow_body_sizes() {
+        let trace = HttpLifecycleTrace::new();
+        let unknown = http_body_util::StreamBody::new(futures::stream::iter([Ok::<
+            _,
+            std::convert::Infallible,
+        >(
+            Frame::data(bytes::Bytes::from_static(b"unknown")),
+        )]));
+        let mut unknown = Box::pin(TracedHttpBody::new(
+            unknown,
+            trace.clone(),
+            47,
+            "server-response",
+            None,
+        ));
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(unknown.as_mut().poll_frame(&mut cx).is_ready());
+        drop(unknown);
+
+        let overflow = http_body_util::Full::new(bytes::Bytes::from(vec![0; 70_000]));
+        let mut overflow = Box::pin(TracedHttpBody::new(
+            overflow,
+            trace.clone(),
+            48,
+            "server-response",
+            None,
+        ));
+        assert!(overflow.as_mut().poll_frame(&mut cx).is_ready());
+        drop(overflow);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=47 phase=server-response-body-expected-unknown"));
+        assert!(snapshot.contains("request=47 phase=server-response-body-polled-bytes detail=7"));
+        assert!(
+            snapshot.contains("request=48 phase=server-response-body-expected-bytes detail=65535")
+        );
+        assert!(
+            snapshot.contains("request=48 phase=server-response-body-polled-bytes detail=65535")
+        );
+        assert_eq!(
+            snapshot
+                .matches("request=48 phase=server-response-byte-count-overflow")
+                .count(),
+            2
         );
     }
 
@@ -1884,6 +2308,38 @@ mod tests {
         let snapshot = trace.snapshot();
         assert!(snapshot.contains("request=42 phase=server-response-write-error detail=11"));
         assert!(snapshot.contains("request=11 phase=server-connection-write-error"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_error_and_drop_snapshot_accepted_bytes() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 15, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        io.state.arm_response(49);
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"abc"),
+            Poll::Ready(Ok(3))
+        ));
+        io.inner.fail_write = true;
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"failure"),
+            Poll::Ready(Err(_))
+        ));
+
+        let (mut dropped, _) = scripted_connection(trace.clone(), 16, false);
+        dropped.state.arm_response(50);
+        assert!(matches!(
+            Pin::new(&mut dropped).poll_write(&mut cx, b"drop"),
+            Poll::Ready(Ok(4))
+        ));
+        drop(dropped);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=49 phase=server-response-terminal-bytes detail=3"));
+        assert!(snapshot.contains("request=49 phase=server-response-write-error detail=15"));
+        assert!(snapshot.contains("request=50 phase=server-response-terminal-bytes detail=4"));
     }
 
     #[test]
@@ -1924,6 +2380,28 @@ mod tests {
         assert!(
             snapshot.contains("request=62 phase=server-response-correlation-overlap detail=61")
         );
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_boundary_without_flush_is_explicit() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 20, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        io.state.arm_response(63);
+        assert!(Pin::new(&mut io).poll_write(&mut cx, b"one").is_ready());
+        io.state.arm_response(64);
+        assert!(Pin::new(&mut io).poll_write(&mut cx, b"two").is_ready());
+
+        let snapshot = trace.snapshot();
+        assert!(
+            snapshot.contains("request=63 phase=server-response-write-boundary-bytes detail=3")
+        );
+        assert!(
+            snapshot.contains("request=63 phase=server-response-correlation-boundary detail=64")
+        );
+        assert!(snapshot.contains("request=64 phase=server-response-write-after-frame detail=3"));
     }
 
     #[test]
@@ -1993,8 +2471,15 @@ mod tests {
             assert!(snapshot.contains(&format!(
                 "request={request_id} phase=server-response-write-after-frame"
             )));
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-response-body-expected-bytes detail=2"
+            )));
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-response-body-polled-bytes detail=2"
+            )));
         }
         assert!(!snapshot.contains("server-response-correlation-overlap"));
+        assert!(!snapshot.contains("server-response-correlation-boundary"));
     }
 
     #[cfg(feature = "use-golem-wasmtime")]
