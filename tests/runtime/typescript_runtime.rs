@@ -102,8 +102,18 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["typeOnlyReexportTransformCount"], 2);
     assert_eq!(report["typeModuleCtsReexportValue"], 42);
     assert_eq!(report["typeModuleCtsReexportTransformCount"], 2);
-    assert_eq!(report["lexicalEsmChildReexportValue"], 42);
+    assert_eq!(report["lexicalEsmChildReexportValue"], "ANALYSIS_ONLY");
     assert_eq!(report["lexicalEsmChildReexportTransformCount"], 1);
+    assert_eq!(report["topLevelForAwaitReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["topLevelForAwaitReexportTransformCount"], 1);
+    assert_eq!(report["nestedForAwaitReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["nestedForAwaitReexportTransformCount"], 2);
+    assert_eq!(report["topLevelAwaitUsingReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["topLevelAwaitUsingReexportTransformCount"], 1);
+    assert_eq!(report["nestedAwaitUsingReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["nestedAwaitUsingReexportTransformCount"], 2);
+    assert_eq!(report["declareWrapperReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["declareWrapperReexportTransformCount"], 2);
     assert_eq!(
         report["recoverablePrepareError"],
         "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"

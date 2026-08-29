@@ -253,26 +253,107 @@ export async function run() {
 
     fs.writeFileSync(
         '/typescript-runtime/lexical-esm-reexport-child.ts',
-        `const { value: module } = { value: 1 };
-         export const answer: number = module + 41;`,
+        'const { value: module } = { value: 1 };',
     );
-    fs.writeFileSync(
-        '/typescript-runtime/lexical-esm-reexport-parent.cts',
-        `if (false) {
-             const child = require('./lexical-esm-reexport-child.ts');
-             Object.keys(child).forEach(function (key) {
-                 if (key === 'default' || key === '__esModule') return;
-                 Object.defineProperty(exports, key, {
-                     enumerable: true,
-                     get: function () { return child[key]; },
-                 });
+    const writeAnalysisOnlyReexport = (parent, child) => fs.writeFileSync(
+        parent,
+        `throw new Error('ANALYSIS_ONLY');
+         const child = require('${child}');
+         Object.keys(child).forEach(function (key) {
+             if (key === 'default' || key === '__esModule') return;
+             Object.defineProperty(exports, key, {
+                 enumerable: true,
+                 get: function () { return child[key]; },
              });
-         }
-         module.exports = 42;`,
+         });`,
     );
-    resetTransformCount();
-    const lexicalEsmChildReexportValue = (await import('/typescript-runtime/lexical-esm-reexport-parent.cts')).default;
-    const lexicalEsmChildReexportTransformCount = getTransformCount();
+    const observeAnalysisOnlyReexport = async (parent) => {
+        resetTransformCount();
+        try {
+            await import(parent);
+        } catch (error) {
+            return { error: error.message, transformCount: getTransformCount() };
+        }
+        throw new Error(`expected analysis-only parent ${parent} to throw`);
+    };
+    writeAnalysisOnlyReexport(
+        '/typescript-runtime/lexical-esm-reexport-parent.cts',
+        './lexical-esm-reexport-child.ts',
+    );
+    const lexicalEsmChildReexport = await observeAnalysisOnlyReexport(
+        '/typescript-runtime/lexical-esm-reexport-parent.cts',
+    );
+    const lexicalEsmChildReexportValue = lexicalEsmChildReexport.error;
+    const lexicalEsmChildReexportTransformCount = lexicalEsmChildReexport.transformCount;
+    fs.writeFileSync(
+        '/typescript-runtime/top-level-for-await-child.ts',
+        'const marker: number = 1; for await (const item of []) { void item; }',
+    );
+    writeAnalysisOnlyReexport(
+        '/typescript-runtime/top-level-for-await-parent.cts',
+        './top-level-for-await-child.ts',
+    );
+    const topLevelForAwaitReexport = await observeAnalysisOnlyReexport(
+        '/typescript-runtime/top-level-for-await-parent.cts',
+    );
+    const topLevelForAwaitReexportValue = topLevelForAwaitReexport.error;
+    const topLevelForAwaitReexportTransformCount = topLevelForAwaitReexport.transformCount;
+
+    fs.writeFileSync(
+        '/typescript-runtime/nested-for-await-child.ts',
+        'const marker: number = 1; async function run() { for await (const item of []) { void item; } } module.exports = marker + 41;',
+    );
+    writeAnalysisOnlyReexport(
+        '/typescript-runtime/nested-for-await-parent.cts',
+        './nested-for-await-child.ts',
+    );
+    const nestedForAwaitReexport = await observeAnalysisOnlyReexport(
+        '/typescript-runtime/nested-for-await-parent.cts',
+    );
+    const nestedForAwaitReexportValue = nestedForAwaitReexport.error;
+    const nestedForAwaitReexportTransformCount = nestedForAwaitReexport.transformCount;
+
+    fs.writeFileSync(
+        '/typescript-runtime/top-level-await-using-child.ts',
+        'const marker: number = 1; await using resource = acquire();',
+    );
+    writeAnalysisOnlyReexport(
+        '/typescript-runtime/top-level-await-using-parent.cts',
+        './top-level-await-using-child.ts',
+    );
+    const topLevelAwaitUsingReexport = await observeAnalysisOnlyReexport(
+        '/typescript-runtime/top-level-await-using-parent.cts',
+    );
+    const topLevelAwaitUsingReexportValue = topLevelAwaitUsingReexport.error;
+    const topLevelAwaitUsingReexportTransformCount = topLevelAwaitUsingReexport.transformCount;
+
+    fs.writeFileSync(
+        '/typescript-runtime/nested-await-using-child.ts',
+        'const marker: number = 1; async function run() { await using resource = acquire(); } module.exports = marker + 41;',
+    );
+    writeAnalysisOnlyReexport(
+        '/typescript-runtime/nested-await-using-parent.cts',
+        './nested-await-using-child.ts',
+    );
+    const nestedAwaitUsingReexport = await observeAnalysisOnlyReexport(
+        '/typescript-runtime/nested-await-using-parent.cts',
+    );
+    const nestedAwaitUsingReexportValue = nestedAwaitUsingReexport.error;
+    const nestedAwaitUsingReexportTransformCount = nestedAwaitUsingReexport.transformCount;
+
+    fs.writeFileSync(
+        '/typescript-runtime/declare-wrapper-child.ts',
+        'declare const require: unknown; declare class module {} module.exports = 42;',
+    );
+    writeAnalysisOnlyReexport(
+        '/typescript-runtime/declare-wrapper-parent.cts',
+        './declare-wrapper-child.ts',
+    );
+    const declareWrapperReexport = await observeAnalysisOnlyReexport(
+        '/typescript-runtime/declare-wrapper-parent.cts',
+    );
+    const declareWrapperReexportValue = declareWrapperReexport.error;
+    const declareWrapperReexportTransformCount = declareWrapperReexport.transformCount;
 
     const recoverableFilename = '/typescript-runtime/recoverable-prepare.cts';
     fs.writeFileSync(
@@ -495,6 +576,16 @@ export async function run() {
         typeModuleCtsReexportTransformCount,
         lexicalEsmChildReexportValue,
         lexicalEsmChildReexportTransformCount,
+        topLevelForAwaitReexportValue,
+        topLevelForAwaitReexportTransformCount,
+        nestedForAwaitReexportValue,
+        nestedForAwaitReexportTransformCount,
+        topLevelAwaitUsingReexportValue,
+        topLevelAwaitUsingReexportTransformCount,
+        nestedAwaitUsingReexportValue,
+        nestedAwaitUsingReexportTransformCount,
+        declareWrapperReexportValue,
+        declareWrapperReexportTransformCount,
         recoverablePrepareError: recoverableFailure.error,
         recoverableCachedAfterFailure: recoverableFailure.cached,
         recoverableChildrenBefore: recoverableFailure.before,

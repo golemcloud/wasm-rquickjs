@@ -72,11 +72,14 @@ fn module_item_has_cjs_wrapper_lexical_declaration(item: &ModuleItem) -> bool {
         return false;
     };
     match decl {
-        Decl::Class(decl) => is_cjs_wrapper_binding(decl.ident.sym.as_ref()),
-        Decl::Var(decl) if matches!(decl.kind, VarDeclKind::Let | VarDeclKind::Const) => decl
-            .decls
-            .iter()
-            .any(|declarator| pattern_binds_cjs_wrapper(&declarator.name)),
+        Decl::Class(decl) => !decl.declare && is_cjs_wrapper_binding(decl.ident.sym.as_ref()),
+        Decl::Var(decl)
+            if !decl.declare && matches!(decl.kind, VarDeclKind::Let | VarDeclKind::Const) =>
+        {
+            decl.decls
+                .iter()
+                .any(|declarator| pattern_binds_cjs_wrapper(&declarator.name))
+        }
         _ => false,
     }
 }
@@ -92,9 +95,7 @@ fn pattern_binds_cjs_wrapper(pattern: &Pat) -> bool {
         Pat::Rest(pattern) => pattern_binds_cjs_wrapper(&pattern.arg),
         Pat::Object(pattern) => pattern.props.iter().any(|property| match property {
             ObjectPatProp::KeyValue(property) => pattern_binds_cjs_wrapper(&property.value),
-            ObjectPatProp::Assign(property) => {
-                is_cjs_wrapper_binding(property.key.id.sym.as_ref())
-            }
+            ObjectPatProp::Assign(property) => is_cjs_wrapper_binding(property.key.id.sym.as_ref()),
             ObjectPatProp::Rest(property) => pattern_binds_cjs_wrapper(&property.arg),
         }),
         Pat::Assign(pattern) => pattern_binds_cjs_wrapper(&pattern.left),
@@ -350,7 +351,21 @@ mod tests {
             ),
             Ok(false)
         );
-        assert_eq!(source_uses_esm_format("var require = load;", "input.ts"), Ok(false));
+        assert_eq!(
+            source_uses_esm_format("var require = load;", "input.ts"),
+            Ok(false)
+        );
+        assert_eq!(
+            source_uses_esm_format(
+                "declare const require: unknown; module.exports = 42;",
+                "input.ts"
+            ),
+            Ok(false)
+        );
+        assert_eq!(
+            source_uses_esm_format("declare class module {} module.exports = 42;", "input.ts"),
+            Ok(false)
+        );
     }
 
     #[test]
