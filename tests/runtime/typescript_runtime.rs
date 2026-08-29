@@ -90,6 +90,28 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["reexportChildTransformValue"], 42);
     assert_eq!(report["reexportChildHasPhantom"], false);
     assert_eq!(report["reexportChildImportTransformCount"], 2);
+    assert_eq!(report["cachedChildReexportValue"], 42);
+    assert_eq!(report["cachedChildReexportTransformCount"], 2);
+    assert_eq!(report["esmChildReexportValue"], 42);
+    assert_eq!(report["esmChildReexportTransformCount"], 1);
+    assert_eq!(report["importTypeCommonJsValue"], 42);
+    assert_eq!(
+        report["recoverablePrepareError"],
+        "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"
+    );
+    assert_eq!(report["recoverableCachedAfterFailure"], false);
+    assert_eq!(
+        report["recoverableChildrenAfterFailure"],
+        report["recoverableChildrenBefore"]
+    );
+    assert_eq!(report["recoverablePrepareValue"], 42);
+    assert_eq!(report["recoverableCachedAfterSuccess"], true);
+    assert_eq!(
+        report["recoverableChildrenAfterSuccess"].as_u64(),
+        report["recoverableChildrenBefore"]
+            .as_u64()
+            .map(|value| value + 1)
+    );
     assert_eq!(report["requiredMtsDefault"], 42);
     assert_eq!(report["importedMtsDefault"], 42);
     assert_eq!(report["importedMtsLive"], 1);

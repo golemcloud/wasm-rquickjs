@@ -8674,7 +8674,6 @@ fn analyze_cjs_reexport_specifier_names(
             && let physical_path = canonical_cjs_analysis_path(ctx, &logical_path)
             && !seen.contains(&physical_path)
             && is_cjs_analysis_source_path(&physical_path)
-            && let Ok(source) = std::fs::read_to_string(&physical_path)
         {
             let child_filename = if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks")
             {
@@ -8683,7 +8682,29 @@ fn analyze_cjs_reexport_specifier_names(
                 physical_path
             };
             #[cfg(feature = "typescript-runtime")]
+            if is_typescript_module_path(&child_filename)
+                && let Ok(Some(exports)) =
+                    cached_cjs_typescript_export_names_for_filename(ctx, &child_filename)
+            {
+                for name in exports {
+                    add_unique(&mut names, name);
+                }
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(&child_filename) else {
+                continue;
+            };
+            #[cfg(feature = "typescript-runtime")]
             let source = if is_typescript_module_path(&child_filename) {
+                if typescript_module_path_is_esm(ctx, &child_filename, &source) {
+                    continue;
+                }
+                if let Some(prepared) = prepared_typescript
+                    .as_deref()
+                    .and_then(|graph| graph.get(&child_filename))
+                {
+                    prepared.prepared_source.clone()
+                } else {
                 let original_source = source;
                 let Ok(output) = crate::internal::typescript::transform_module(
                     original_source.clone(),
@@ -8712,6 +8733,7 @@ fn analyze_cjs_reexport_specifier_names(
                     );
                 }
                 output.code
+                }
             } else {
                 source
             };
@@ -8895,6 +8917,14 @@ fn cjs_package_scope_info<'js>(
 
 fn source_uses_esm_format(source: String) -> bool {
     source_looks_like_esm(&source) || has_cjs_wrapper_lexical_redeclaration(&source)
+}
+
+#[cfg(feature = "typescript-runtime")]
+fn typescript_module_path_is_esm(ctx: &Ctx<'_>, filename: &str, source: &str) -> bool {
+    filename.ends_with(".mts")
+        || (!filename.ends_with(".cts")
+            && (package_scope_type(ctx, filename).as_deref() == Some("module")
+                || typescript_source_looks_like_esm(source)))
 }
 
 fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
@@ -9113,7 +9143,8 @@ impl Loader for CjsCompatLoader {
         let source_path = module_source_filesystem_path(ctx, path);
         let source = read_module_source_or_throw(ctx, path, &source_path)?;
         #[cfg(feature = "typescript-runtime")]
-        let raw_typescript_looks_esm = is_typescript && source_looks_like_esm(&source);
+        let raw_typescript_looks_esm =
+            is_typescript && typescript_module_path_is_esm(ctx, &fs_abs_path, &source);
         #[cfg(not(feature = "typescript-runtime"))]
         let raw_typescript_looks_esm = false;
         #[cfg(feature = "typescript-runtime")]
@@ -9923,6 +9954,39 @@ fn source_looks_like_esm(source: &str) -> bool {
     source_has_static_import_or_export(source)
         || source_has_import_meta(source)
         || source_has_top_level_await(source, false)
+}
+
+fn typescript_source_looks_like_esm(source: &str) -> bool {
+    let mut type_only_ranges = Vec::new();
+    let _ = scan_code_positions(source, true, |i, _| {
+        let keyword_end = if parse_ident_name(source, i, "import").is_some() {
+            i + "import".len()
+        } else if parse_ident_name(source, i, "export").is_some() {
+            i + "export".len()
+        } else {
+            return ControlFlow::Continue(None);
+        };
+        let type_start = skip_ws_comments(source, keyword_end);
+        if parse_ident_name(source, type_start, "type").is_none() {
+            return ControlFlow::Continue(None);
+        }
+        let end = module_statement_end(source, keyword_end);
+        type_only_ranges.push((i, end));
+        ControlFlow::Continue(Some(end))
+    });
+    if type_only_ranges.is_empty() {
+        return source_looks_like_esm(source);
+    }
+
+    let mut runtime_source = source.as_bytes().to_vec();
+    for (start, end) in type_only_ranges {
+        for byte in &mut runtime_source[start..end] {
+            if !matches!(*byte, b'\n' | b'\r') {
+                *byte = b' ';
+            }
+        }
+    }
+    source_looks_like_esm(std::str::from_utf8(&runtime_source).expect("source began as UTF-8"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12229,6 +12293,19 @@ import "./dep.js" withあ;
         ));
         assert!(!source_looks_like_esm("globalThis.meta = obj.import.meta;"));
         assert!(!source_looks_like_esm("const text = 'import.meta.url';"));
+    }
+
+    #[test]
+    fn typescript_esm_detection_ignores_type_only_module_statements() {
+        assert!(!typescript_source_looks_like_esm(
+            "import type { Missing } from './missing.mts'; module.exports = 42;"
+        ));
+        assert!(!typescript_source_looks_like_esm(
+            "export type Answer = number; module.exports = 42;"
+        ));
+        assert!(typescript_source_looks_like_esm(
+            "import type { Missing } from './missing.mts'; export default 42;"
+        ));
     }
 
     #[test]

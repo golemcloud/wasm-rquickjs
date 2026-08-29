@@ -2907,14 +2907,19 @@ function loadCommonJsTransaction(descriptor) {
             let compiledSource = preparedTypeScript ? preparedTypeScript.preparedSource : source;
             let typeScriptExportNames;
             let ownsPreparedTypeScriptGraph = false;
-            if (!preparedTypeScript) {
-                const prepared = prepareCommonJsTypeScript(filename, source);
-                compiledSource = prepared.source;
-                typeScriptExportNames = prepared.exportNames;
-                if (prepared.preparedTypeScriptGraph) {
-                    activePreparedTypeScriptGraph = prepared.preparedTypeScriptGraph;
-                    ownsPreparedTypeScriptGraph = true;
+            try {
+                if (!preparedTypeScript) {
+                    const prepared = prepareCommonJsTypeScript(filename, source);
+                    compiledSource = prepared.source;
+                    typeScriptExportNames = prepared.exportNames;
+                    if (prepared.preparedTypeScriptGraph) {
+                        activePreparedTypeScriptGraph = prepared.preparedTypeScriptGraph;
+                        ownsPreparedTypeScriptGraph = true;
+                    }
                 }
+            } catch (err) {
+                discardCjsModuleLoad(cacheKey, parentModule, mod);
+                throw err;
             }
             const childRequire = makeRequire(
                 dirname,

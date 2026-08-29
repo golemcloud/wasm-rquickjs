@@ -145,6 +145,84 @@ export async function run() {
 
     resetTransformCount();
     fs.writeFileSync(
+        '/typescript-runtime/cached-reexport-child.cts',
+        'type Hidden = typeof exports.phantom; exports.answer = 42;',
+    );
+    require('/typescript-runtime/cached-reexport-child.cts');
+    fs.writeFileSync(
+        '/typescript-runtime/cached-reexport-parent.cts',
+        `const child = require('./cached-reexport-child.cts');
+         Object.keys(child).forEach(function (key) {
+             if (key === 'default' || key === '__esModule') return;
+             Object.defineProperty(exports, key, {
+                 enumerable: true,
+                 get: function () { return child[key]; },
+             });
+         });`,
+    );
+    const cachedChildReexportValue = (await import('/typescript-runtime/cached-reexport-parent.cts')).answer;
+    const cachedChildReexportTransformCount = getTransformCount();
+
+    fs.writeFileSync(
+        '/typescript-runtime/esm-reexport-child.mts',
+        'export const answer: number = 42;',
+    );
+    resetTransformCount();
+    fs.writeFileSync(
+        '/typescript-runtime/esm-reexport-parent.cts',
+        `if (false) {
+             const child = require('./esm-reexport-child.mts');
+             Object.keys(child).forEach(function (key) {
+                 if (key === 'default' || key === '__esModule') return;
+                 Object.defineProperty(exports, key, {
+                     enumerable: true,
+                     get: function () { return child[key]; },
+                 });
+             });
+         }
+         module.exports = 42;`,
+    );
+    const esmChildReexportValue = (await import('/typescript-runtime/esm-reexport-parent.cts')).default;
+    const esmChildReexportTransformCount = getTransformCount();
+
+    fs.writeFileSync(
+        '/typescript-runtime/import-type-commonjs.ts',
+        'import type { Missing } from "./missing.mts"; const value: Missing = 42; module.exports = value;',
+    );
+    const importTypeCommonJsValue = (await import('/typescript-runtime/import-type-commonjs.ts')).default;
+
+    const recoverableFilename = '/typescript-runtime/recoverable-prepare.cts';
+    fs.writeFileSync(
+        '/typescript-runtime/recoverable-parent.cjs',
+        `module.exports = function (filename) {
+             const before = module.children.filter((child) => child.filename === filename).length;
+             try {
+                 const value = require(filename);
+                 return {
+                     value,
+                     before,
+                     after: module.children.filter((child) => child.filename === filename).length,
+                     cached: filename in require.cache,
+                 };
+             } catch (error) {
+                 return {
+                     error: error.code,
+                     before,
+                     after: module.children.filter((child) => child.filename === filename).length,
+                     cached: filename in require.cache,
+                 };
+             }
+         };`,
+    );
+    const recoverableLoad = require('/typescript-runtime/recoverable-parent.cjs');
+    fs.writeFileSync(recoverableFilename, 'enum Direction { Up, Down }');
+    const recoverableResolved = require.resolve(recoverableFilename);
+    const recoverableFailure = recoverableLoad(recoverableResolved);
+    fs.writeFileSync(recoverableFilename, 'const value: number = 42; module.exports = value;');
+    const recoverableSuccess = recoverableLoad(recoverableResolved);
+
+    resetTransformCount();
+    fs.writeFileSync(
         '/typescript-runtime/transform-count-esm.mts',
         'export let live: number = 1; export default 42;',
     );
@@ -320,6 +398,18 @@ export async function run() {
         reexportChildTransformValue,
         reexportChildHasPhantom,
         reexportChildImportTransformCount,
+        cachedChildReexportValue,
+        cachedChildReexportTransformCount,
+        esmChildReexportValue,
+        esmChildReexportTransformCount,
+        importTypeCommonJsValue,
+        recoverablePrepareError: recoverableFailure.error,
+        recoverableCachedAfterFailure: recoverableFailure.cached,
+        recoverableChildrenBefore: recoverableFailure.before,
+        recoverableChildrenAfterFailure: recoverableFailure.after,
+        recoverablePrepareValue: recoverableSuccess.value,
+        recoverableCachedAfterSuccess: recoverableSuccess.cached,
+        recoverableChildrenAfterSuccess: recoverableSuccess.after,
         requiredMtsDefault: requiredMtsNamespace.default,
         importedMtsDefault: importedMtsNamespace.default,
         importedMtsLive: importedMtsNamespace.live,
