@@ -91,4 +91,9 @@ pub mod native_module {
             ))
         }
     }
+
+    #[rquickjs::function]
+    pub fn transform_observability_enabled() -> bool {
+        cfg!(feature = "typescript-transform-observability")
+    }
 }

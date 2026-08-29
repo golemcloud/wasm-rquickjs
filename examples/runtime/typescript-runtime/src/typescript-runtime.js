@@ -1,6 +1,7 @@
 import { stripTypeScriptTypes } from 'node:module';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import diagnosticsChannel from 'node:diagnostics_channel';
 import { runJavaScript, startJavaScript } from 'wasm-rquickjs:execution';
 
 export async function run() {
@@ -60,6 +61,111 @@ export async function run() {
     const moduleTs = (await import('/typescript-runtime/module-package/value.ts')).default;
     const moduleMts = (await import('/typescript-runtime/value.mts')).default;
     const commonJsCts = require('/typescript-runtime/value.cts');
+
+    const getTransformCount = globalThis.__wasm_rquickjs_get_typescript_module_transform_count;
+    const resetTransformCount = globalThis.__wasm_rquickjs_reset_typescript_module_transform_count;
+    resetTransformCount();
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-direct.cts',
+        'const value: number = 42; module.exports = value;',
+    );
+    const directTransformValue = require('/typescript-runtime/transform-count-direct.cts');
+    const directFirstLoadTransformCount = getTransformCount();
+    const directCachedTransformValue = require('/typescript-runtime/transform-count-direct.cts');
+    const directCachedTransformCount = getTransformCount();
+
+    resetTransformCount();
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-import.ts',
+        'const value: number = 42; module.exports = value;',
+    );
+    const moduleRequireTrace = diagnosticsChannel.tracingChannel('module.require');
+    const preparedImportTraceEvents = [];
+    moduleRequireTrace.subscribe({
+        start: (event) => {
+            if (event.id === '/typescript-runtime/transform-count-import.ts') {
+                preparedImportTraceEvents.push('start');
+            }
+        },
+        end: (event) => {
+            if (event.id === '/typescript-runtime/transform-count-import.ts') {
+                preparedImportTraceEvents.push('end');
+            }
+        },
+    });
+    const importedTransformValue = (await import('/typescript-runtime/transform-count-import.ts')).default;
+    const importedFirstLoadTransformCount = getTransformCount();
+    const preparedImportFirstLoadTrace = preparedImportTraceEvents.join(',');
+    const importedCachedTransformValue = (await import('/typescript-runtime/transform-count-import.ts')).default;
+    const importedCachedTransformCount = getTransformCount();
+    const importedThenRequiredTransformValue = require('/typescript-runtime/transform-count-import.ts');
+    const importedThenRequiredTransformCount = getTransformCount();
+
+    resetTransformCount();
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-require-import.cts',
+        'type Hidden = typeof exports.phantom; exports.answer = 42;',
+    );
+    const requiredBeforeImportTransformValue = require('/typescript-runtime/transform-count-require-import.cts');
+    const requiredBeforeImportTransformCount = getTransformCount();
+    const requiredThenImportedNamespace = await import('/typescript-runtime/transform-count-require-import.cts');
+    const requiredThenImportedTransformValue = requiredThenImportedNamespace.answer;
+    const requiredThenImportedHasPhantom = 'phantom' in requiredThenImportedNamespace;
+    const requiredThenImportedTransformCount = getTransformCount();
+
+    resetTransformCount();
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-reexport-child.cts',
+        'type Hidden = typeof exports.phantom; exports.answer = 42;',
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-reexport.cts',
+        `const child: { answer: number } = require('./transform-count-reexport-child.cts');
+         Object.keys(child).forEach(function (key) {
+             if (key === 'default' || key === '__esModule') return;
+             Object.defineProperty(exports, key, {
+                 enumerable: true,
+                 get: function () { return child[key]; },
+             });
+         });`,
+    );
+    const requiredReexportValue = require('/typescript-runtime/transform-count-reexport.cts');
+    const requiredReexportTransformCount = getTransformCount();
+    const reexportNamespace = await import('/typescript-runtime/transform-count-reexport.cts');
+    const reexportTransformValue = reexportNamespace.answer;
+    const reexportHasPhantom = 'phantom' in reexportNamespace;
+    const reexportFirstLoadTransformCount = getTransformCount();
+    const reexportCachedNamespace = await import('/typescript-runtime/transform-count-reexport.cts');
+    const reexportCachedTransformValue = reexportCachedNamespace.answer;
+    const reexportCachedTransformCount = getTransformCount();
+    const reexportChildNamespace = await import('/typescript-runtime/transform-count-reexport-child.cts');
+    const reexportChildTransformValue = reexportChildNamespace.answer;
+    const reexportChildHasPhantom = 'phantom' in reexportChildNamespace;
+    const reexportChildImportTransformCount = getTransformCount();
+
+    resetTransformCount();
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-esm.mts',
+        'export let live: number = 1; export default 42;',
+    );
+    const requiredMtsNamespace = require('/typescript-runtime/transform-count-esm.mts');
+    const importedMtsNamespace = await import('/typescript-runtime/transform-count-esm.mts');
+    const mtsRequireImportTransformCount = getTransformCount();
+
+    resetTransformCount();
+    fs.mkdirSync('/typescript-runtime/transform-count-module-package', { recursive: true });
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-module-package/package.json',
+        JSON.stringify({ type: 'module' }),
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/transform-count-module-package/value.ts',
+        'export let live: number = 1; export default 42;',
+    );
+    const modulePackageFilename = '/typescript-runtime/transform-count-module-package/value.ts';
+    const requiredModuleTsNamespace = require(modulePackageFilename);
+    const importedModuleTsNamespace = await import(modulePackageFilename);
+    const moduleTsRequireImportTransformCount = getTransformCount();
     let extensionlessCommonJsTsError;
     try {
         require('/typescript-runtime/cjs-value');
@@ -188,6 +294,42 @@ export async function run() {
         moduleTs,
         moduleMts,
         commonJsCts,
+        directTransformValue,
+        directCachedTransformValue,
+        directFirstLoadTransformCount,
+        directCachedTransformCount,
+        importedTransformValue,
+        importedCachedTransformValue,
+        importedFirstLoadTransformCount,
+        preparedImportFirstLoadTrace,
+        importedCachedTransformCount,
+        importedThenRequiredTransformValue,
+        importedThenRequiredTransformCount,
+        requiredBeforeImportTransformValue,
+        requiredBeforeImportTransformCount,
+        requiredThenImportedTransformValue,
+        requiredThenImportedHasPhantom,
+        requiredThenImportedTransformCount,
+        reexportTransformValue,
+        requiredReexportValue,
+        requiredReexportTransformCount,
+        reexportHasPhantom,
+        reexportFirstLoadTransformCount,
+        reexportCachedTransformValue,
+        reexportCachedTransformCount,
+        reexportChildTransformValue,
+        reexportChildHasPhantom,
+        reexportChildImportTransformCount,
+        requiredMtsDefault: requiredMtsNamespace.default,
+        importedMtsDefault: importedMtsNamespace.default,
+        importedMtsLive: importedMtsNamespace.live,
+        mtsRequireImportSameNamespace: requiredMtsNamespace === importedMtsNamespace,
+        mtsRequireImportTransformCount,
+        requiredModuleTsDefault: requiredModuleTsNamespace.default,
+        importedModuleTsDefault: importedModuleTsNamespace.default,
+        importedModuleTsLive: importedModuleTsNamespace.live,
+        moduleTsRequireImportSameNamespace: requiredModuleTsNamespace === importedModuleTsNamespace,
+        moduleTsRequireImportTransformCount,
         extensionlessCommonJsTsError,
         extensionlessEsmError,
         loaderUnsupportedCode,

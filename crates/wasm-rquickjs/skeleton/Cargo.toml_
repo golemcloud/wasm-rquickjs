@@ -83,6 +83,8 @@ timezone = ["dep:chrono-tz"]
 # TypeScript
 typescript-runtime = ["dep:swc_common", "dep:swc_ts_fast_strip"]
 typescript-transform-runtime = ["typescript-runtime"]
+# Test-harness-only transform counting. This is intentionally excluded from every runtime tier.
+typescript-transform-observability = ["typescript-runtime"]
 
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]
