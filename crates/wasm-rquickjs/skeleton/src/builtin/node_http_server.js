@@ -3,6 +3,7 @@ import { Server as NetServer } from 'node:net';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
+import { initializeIncomingMessage } from '__wasm_rquickjs_builtin/node_http_incoming';
 import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
@@ -121,8 +122,7 @@ function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs,
 
     Readable.call(this, {});
 
-    this.socket = socket;
-    this.connection = socket;
+    initializeIncomingMessage(this, socket);
     this.method = method;
     this.url = url;
     this.httpVersion = httpVersion;
@@ -136,28 +136,42 @@ function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs,
     this.headersDistinct = parsed.headersDistinct;
     this.rawHeaders = parsed.rawHeaders;
 
-    this.complete = false;
-    this.aborted = false;
-    this.trailers = {};
-    this.trailersDistinct = {};
-    this.rawTrailers = [];
-    this.client = socket;
-    this._consuming = false;
-    this._dumped = false;
-    this._timeout = null;
 }
 
 Object.setPrototypeOf(ServerIncomingMessage.prototype, Readable.prototype);
 Object.setPrototypeOf(ServerIncomingMessage, Readable);
 
 ServerIncomingMessage.prototype._read = function _read() {
-    // no-op: parser pushes data via this.push()
+    this._consuming = true;
 };
 
-ServerIncomingMessage.prototype.setTimeout = function setTimeout(ms, cb) {
-    this._timeout = ms;
-    if (cb) this.once('timeout', cb);
-    return this;
+ServerIncomingMessage.prototype._destroy = function _destroy(_err, cb) {
+    const aborted = !this.readableEnded || !this.complete;
+    let destroyFinished = false;
+    const finishDestroy = () => {
+        if (destroyFinished) return;
+        destroyFinished = true;
+        process.nextTick(() => {
+            cb(_err && this.listenerCount('error') > 0 ? _err : null);
+        });
+    };
+    if (aborted) {
+        this.aborted = true;
+        this.emit('aborted');
+    }
+    if (aborted && this.socket && !this.socket.destroyed) {
+        const socket = this.socket;
+        const onSocketFinished = () => {
+            socket.removeListener('error', onSocketFinished);
+            socket.removeListener('close', onSocketFinished);
+            finishDestroy();
+        };
+        socket.once('error', onSocketFinished);
+        socket.once('close', onSocketFinished);
+        this.socket.destroy(_err || undefined);
+        return;
+    }
+    finishDestroy();
 };
 
 // ===== Status code validation =====
@@ -1441,6 +1455,12 @@ function createConnectionParser(server, socket) {
                             !isDroppedRequest &&
                             !res._last &&
                             !server._closeRequested;
+                        const resumeScheduled = req._readableState &&
+                            req._readableState.resumeScheduled;
+                        if (!req._consuming && !resumeScheduled &&
+                            typeof req._dump === 'function') {
+                            req._dump();
+                        }
                         maybeFinalizeResponse(context);
                     });
 

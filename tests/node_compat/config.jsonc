@@ -4471,7 +4471,7 @@
         }
       }
     },
-    "parallel/test-http-dump-req-when-res-ends.js": { "category": "known-gap", "reason": "request auto-dump/resume when response ends early is incomplete, causing the request/response lifecycle to hang" },
+    "parallel/test-http-dump-req-when-res-ends.js": { "category": "known-gap", "reason": "wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks" },
     "parallel/test-http-early-hints-invalid-argument.js": { "category": "known-gap", "reason": "ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws)" },
     "parallel/test-http-early-hints.js": {
       "split": true,
@@ -4568,7 +4568,7 @@
     },
     "parallel/test-http-multiple-headers.js": { "category": "known-gap", "reason": "rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible" },
     "parallel/test-http-mutable-headers.js": { "category": "known-gap", "reason": "OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected)" },
-    "parallel/test-http-no-read-no-dump.js": { "category": "known-gap", "reason": "keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior" },
+    "parallel/test-http-no-read-no-dump.js": { "category": "known-gap", "reason": "wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks" },
     "parallel/test-http-nodelay.js": { "category": "known-gap", "reason": "node:http client path does not honor/verify net.Socket connect noDelay semantics like Node" },
     "parallel/test-http-outgoing-destroyed.js": {
       "split": true,
@@ -4696,7 +4696,7 @@
     "parallel/test-http-server-headers-timeout-interrupted-headers.js": { "category": "known-gap", "reason": "server.headersTimeout 408 behavior for interrupted header lines is incomplete" },
     "parallel/test-http-server-headers-timeout-keepalive.js": { "category": "known-gap", "reason": "server.headersTimeout handling across keep-alive requests is not Node-compatible" },
     "parallel/test-http-server-headers-timeout-pipelining.js": { "category": "known-gap", "reason": "server.headersTimeout handling for pipelined requests is not Node-compatible" },
-    "parallel/test-http-server-incomingmessage-destroy.js": { "category": "known-gap", "reason": "req.destroy() on server-side IncomingMessage does not propagate Node-compatible ECONNRESET client behavior" },
+    "parallel/test-http-server-incomingmessage-destroy.js": { "category": "known-gap", "reason": "wasi:http client does not translate an incomplete response after server request destruction into the expected ECONNRESET request error" },
     "parallel/test-http-server-keep-alive-defaults.js": {},
     "parallel/test-http-server-keep-alive-max-requests-null.js": {},
     "parallel/test-http-server-keepalive-end.js": { "category": "node-internals", "reason": "asserts private req.socket.parser.incoming lifecycle after keep-alive request end" },

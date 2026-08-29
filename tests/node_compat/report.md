@@ -813,6 +813,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
 | vm timeout interrupt is surfaced as a wasm trap instead of ERR_SCRIPT_EXECUTION_TIMEOUT | 2 | `parallel/test-vm-timeout.js`, `sequential/test-vm-timeout-rethrow.js` |
+| wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks | 2 | `parallel/test-http-dump-req-when-res-ends.js`, `parallel/test-http-no-read-no-dump.js` |
 | wasi:http client path does not surface HPE_UNEXPECTED_CONTENT_LENGTH parse errors | 2 | `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`, `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead` |
 | wasi:http request body is not finalized/sent until end(), so write()-only request flow diverges from Node | 2 | `parallel/test-http-outgoing-destroyed.js#block_00_block_00`, `parallel/test-http-outgoing-destroyed.js#block_01_block_01` |
 | --disable-proto=delete semantics differ in QuickJS (__proto__ yields null) | 1 | `parallel/test-disable-proto-delete.js` |
@@ -1132,7 +1133,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | invalid URL parsing errors lack Node's TypeError and ERR_INVALID_URL shape | 1 | `parallel/test-whatwg-url-custom-parsing.js` |
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
-| keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior | 1 | `parallel/test-http-no-read-no-dump.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
@@ -1200,9 +1200,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
-| req.destroy() on server-side IncomingMessage does not propagate Node-compatible ECONNRESET client behavior | 1 | `parallel/test-http-server-incomingmessage-destroy.js` |
 | req.setTimeout() handling for actively consumed request bodies is not Node-compatible | 1 | `parallel/test-http-server-consumed-timeout.js` |
-| request auto-dump/resume when response ends early is incomplete, causing the request/response lifecycle to hang | 1 | `parallel/test-http-dump-req-when-res-ends.js` |
 | request drain captureRejections path hangs when request is never finalized with end() under wasi:http | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01` |
 | request header population/normalization (for example Accept) is incomplete | 1 | `parallel/test-http.js` |
 | request/response pause-resume flow control does not complete with Node-compatible behavior | 1 | `parallel/test-http-pause.js` |
@@ -1324,6 +1322,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http client does not surface informational 1xx responses with Node-compatible status/raw headers | 1 | `parallel/test-http-information-headers.js` |
 | wasi:http client does not surface llhttp parse errors/rawPacket for malformed raw TCP responses | 1 | `parallel/test-http-client-error-rawbytes.js` |
 | wasi:http client does not surface llhttp parser errors for malformed raw TCP responses | 1 | `parallel/test-http-client-parse-error.js` |
+| wasi:http client does not translate an incomplete response after server request destruction into the expected ECONNRESET request error | 1 | `parallel/test-http-server-incomingmessage-destroy.js` |
 | wasi:http response header filtering strips headers like Host/Proxy-Authorization, so duplicate-header expectations diverge | 1 | `parallel/test-http-response-multiheaders.js` |
 | wasi:http strips forbidden hop-by-hop headers like Connection, so automatic response headers differ | 1 | `parallel/test-http-automatic-headers.js` |
 | wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients | 1 | `parallel/test-http-keep-alive-timeout-custom.js` |
