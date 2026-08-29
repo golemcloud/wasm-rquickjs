@@ -187,9 +187,48 @@ export async function run() {
 
     fs.writeFileSync(
         '/typescript-runtime/import-type-commonjs.ts',
-        'import type { Missing } from "./missing.mts"; const value: Missing = 42; module.exports = value;',
+        `import type { Missing } from "./missing.mts";
+         export interface Options { value: Missing }
+         export declare const phantom: Missing;
+         const value: Missing = 42;
+         module.exports = value;`,
     );
+    resetTransformCount();
     const importTypeCommonJsValue = (await import('/typescript-runtime/import-type-commonjs.ts')).default;
+    const importTypeCommonJsTransformCount = getTransformCount();
+
+    fs.mkdirSync('/typescript-runtime/type-commonjs', { recursive: true });
+    fs.writeFileSync('/typescript-runtime/type-commonjs/package.json', '{"type":"commonjs"}');
+    fs.writeFileSync(
+        '/typescript-runtime/type-commonjs/value.ts',
+        `export interface Options { value: number }
+         export declare const phantom: number;
+         module.exports = 42;`,
+    );
+    resetTransformCount();
+    const typeCommonJsValue = (await import('/typescript-runtime/type-commonjs/value.ts')).default;
+    const typeCommonJsTransformCount = getTransformCount();
+
+    fs.writeFileSync(
+        '/typescript-runtime/type-only-reexport-child.ts',
+        `export interface Options { value: number }
+         export declare const phantom: number;
+         exports.answer = 42;`,
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/type-only-reexport-parent.cts',
+        `const child = require('./type-only-reexport-child.ts');
+         Object.keys(child).forEach(function (key) {
+             if (key === 'default' || key === '__esModule') return;
+             Object.defineProperty(exports, key, {
+                 enumerable: true,
+                 get: function () { return child[key]; },
+             });
+         });`,
+    );
+    resetTransformCount();
+    const typeOnlyReexportValue = (await import('/typescript-runtime/type-only-reexport-parent.cts')).answer;
+    const typeOnlyReexportTransformCount = getTransformCount();
 
     const recoverableFilename = '/typescript-runtime/recoverable-prepare.cts';
     fs.writeFileSync(
@@ -403,6 +442,11 @@ export async function run() {
         esmChildReexportValue,
         esmChildReexportTransformCount,
         importTypeCommonJsValue,
+        importTypeCommonJsTransformCount,
+        typeCommonJsValue,
+        typeCommonJsTransformCount,
+        typeOnlyReexportValue,
+        typeOnlyReexportTransformCount,
         recoverablePrepareError: recoverableFailure.error,
         recoverableCachedAfterFailure: recoverableFailure.cached,
         recoverableChildrenBefore: recoverableFailure.before,

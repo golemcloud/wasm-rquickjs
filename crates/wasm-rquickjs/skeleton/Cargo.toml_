@@ -81,7 +81,13 @@ sqlite = ["dep:rusqlite"]
 timezone = ["dep:chrono-tz"]
 
 # TypeScript
-typescript-runtime = ["dep:swc_common", "dep:swc_ts_fast_strip"]
+typescript-runtime = [
+    "dep:swc_common",
+    "dep:swc_ecma_ast",
+    "dep:swc_ecma_parser",
+    "dep:swc_ecma_visit",
+    "dep:swc_ts_fast_strip",
+]
 typescript-transform-runtime = ["typescript-runtime"]
 # Test-harness-only transform counting. This is intentionally excluded from every runtime tier.
 typescript-transform-observability = ["typescript-runtime"]
@@ -173,6 +179,9 @@ unicode-segmentation = "1.12"
 
 # TypeScript
 swc_common = { version = "24.0.0", optional = true }
+swc_ecma_ast = { version = "27.0.0", optional = true }
+swc_ecma_parser = { version = "43.0.0", default-features = false, features = ["typescript", "unstable"], optional = true }
+swc_ecma_visit = { version = "27.0.0", optional = true }
 swc_ts_fast_strip = { version = "56.0.0", optional = true }
 
 # HTTP

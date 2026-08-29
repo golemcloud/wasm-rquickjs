@@ -2,10 +2,16 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use swc_common::{
-    GLOBALS, Globals, SourceMap,
+    FileName, GLOBALS, Globals, SourceMap,
     errors::{HANDLER, Handler},
     sync::Lrc,
 };
+use swc_ecma_ast::{
+    ArrowExpr, AwaitExpr, Decl, EsVersion, Function, MetaPropExpr, MetaPropKind, ModuleDecl,
+    ModuleItem,
+};
+use swc_ecma_parser::{Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
+use swc_ecma_visit::{Visit, VisitWith};
 use swc_ts_fast_strip::{ErrorCode, Mode, Options, operate};
 
 #[derive(Copy, Clone)]
@@ -19,6 +25,99 @@ pub(crate) fn runtime_mode() -> TypeScriptMode {
         TypeScriptMode::Transform
     } else {
         TypeScriptMode::Strip
+    }
+}
+
+pub(crate) fn source_uses_esm_format(source: &str, filename: &str) -> Result<bool, ()> {
+    let source_map: Lrc<SourceMap> = Default::default();
+    let source_file = source_map.new_source_file(
+        FileName::Custom(filename.to_string()).into(),
+        source.to_string(),
+    );
+    let lexer = Lexer::new(
+        Syntax::Typescript(TsSyntax {
+            tsx: filename.ends_with(".tsx"),
+            ..Default::default()
+        }),
+        EsVersion::EsNext,
+        StringInput::from(&*source_file),
+        None,
+    );
+    let mut parser = Parser::new_from(lexer);
+    let module = parser.parse_module().map_err(|_| ())?;
+    if !parser.take_errors().is_empty() {
+        return Err(());
+    }
+
+    if module.body.iter().any(module_item_has_runtime_module_decl) {
+        return Ok(true);
+    }
+
+    let mut syntax = RuntimeModuleSyntax::default();
+    module.visit_with(&mut syntax);
+    Ok(syntax.found)
+}
+
+fn module_item_has_runtime_module_decl(item: &ModuleItem) -> bool {
+    let ModuleItem::ModuleDecl(decl) = item else {
+        return false;
+    };
+    match decl {
+        ModuleDecl::Import(import) => !import.type_only,
+        ModuleDecl::ExportAll(export) => !export.type_only,
+        ModuleDecl::ExportNamed(export) => !export.type_only,
+        ModuleDecl::ExportDecl(export) => declaration_has_runtime(&export.decl),
+        ModuleDecl::ExportDefaultDecl(export) => {
+            !matches!(export.decl, swc_ecma_ast::DefaultDecl::TsInterfaceDecl(_))
+        }
+        ModuleDecl::ExportDefaultExpr(_) => true,
+        ModuleDecl::TsNamespaceExport(_) => true,
+        ModuleDecl::TsImportEquals(_) | ModuleDecl::TsExportAssignment(_) => false,
+    }
+}
+
+fn declaration_has_runtime(decl: &Decl) -> bool {
+    match decl {
+        Decl::Class(decl) => !decl.declare,
+        Decl::Fn(decl) => !decl.declare,
+        Decl::Var(decl) => !decl.declare,
+        Decl::Using(_) => true,
+        Decl::TsInterface(_) | Decl::TsTypeAlias(_) => false,
+        Decl::TsEnum(decl) => !decl.declare,
+        Decl::TsModule(decl) => !decl.declare,
+    }
+}
+
+#[derive(Default)]
+struct RuntimeModuleSyntax {
+    found: bool,
+    function_depth: usize,
+}
+
+impl Visit for RuntimeModuleSyntax {
+    fn visit_meta_prop_expr(&mut self, expression: &MetaPropExpr) {
+        if expression.kind == MetaPropKind::ImportMeta {
+            self.found = true;
+        }
+    }
+
+    fn visit_await_expr(&mut self, expression: &AwaitExpr) {
+        if self.function_depth == 0 {
+            self.found = true;
+        }
+        expression.visit_children_with(self);
+    }
+
+    fn visit_function(&mut self, function: &Function) {
+        self.function_depth += 1;
+        function.visit_children_with(self);
+        self.function_depth -= 1;
+    }
+
+    fn visit_arrow_expr(&mut self, expression: &ArrowExpr) {
+        self.function_depth += 1;
+        expression.visit_children_with(self);
+        self.function_depth -= 1;
     }
 }
 
@@ -142,7 +241,36 @@ fn typescript_error_code(code: ErrorCode) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{TypeScriptMode, transform};
+    use super::{TypeScriptMode, source_uses_esm_format, transform};
+
+    #[test]
+    fn module_format_uses_typescript_ast_semantics() {
+        for source in [
+            "import type { Missing } from './missing.mts'; module.exports = 42;",
+            "export type Answer = number; module.exports = 42;",
+            "export interface Options { value: number } module.exports = 42;",
+            "export declare const phantom: number; module.exports = 42;",
+            "declare namespace Example { type Answer = number } module.exports = 42;",
+        ] {
+            assert_eq!(source_uses_esm_format(source, "input.ts"), Ok(false));
+        }
+        for source in [
+            "import { type Missing } from './missing.mts'; module.exports = 42;",
+            "export { type Missing }; module.exports = 42;",
+            "import type { Missing } from './missing.mts'; export default 42;",
+            "globalThis.url = import.meta.url;",
+            "await Promise.resolve();",
+        ] {
+            assert_eq!(source_uses_esm_format(source, "input.ts"), Ok(true));
+        }
+        assert_eq!(
+            source_uses_esm_format(
+                "async function run() { await Promise.resolve(); }",
+                "input.ts"
+            ),
+            Ok(false)
+        );
+    }
 
     #[test]
     fn strip_preserves_source_positions() {
