@@ -80,22 +80,31 @@ async fn fs_read_file_sync_fast_path(
     assert_eq!(result["emptyLength"], 0);
     assert_eq!(result["missing"]["code"], "ENOENT");
     assert_eq!(result["missing"]["syscall"], "open");
-    assert_eq!(result["missing"]["path"], "/test/read-file-sync-missing.bin");
-    assert!(result["missing"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("open '/test/read-file-sync-missing.bin'"));
+    assert_eq!(
+        result["missing"]["path"],
+        "/test/read-file-sync-missing.bin"
+    );
+    assert!(
+        result["missing"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("open '/test/read-file-sync-missing.bin'")
+    );
     assert_eq!(result["directory"]["code"], "EISDIR");
     assert_eq!(result["directory"]["syscall"], "read");
     assert_eq!(result["directory"]["hasPath"], false);
-    assert!(!result["directory"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("/test/read-file-sync-directory"));
-    assert!(result["directory"]["message"]
-        .as_str()
-        .unwrap()
-        .ends_with(", read"));
+    assert!(
+        !result["directory"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("/test/read-file-sync-directory")
+    );
+    assert!(
+        result["directory"]["message"]
+            .as_str()
+            .unwrap()
+            .ends_with(", read")
+    );
     assert_eq!(result["tooLarge"]["code"], "ERR_FS_FILE_TOO_LARGE");
     Ok(())
 }
