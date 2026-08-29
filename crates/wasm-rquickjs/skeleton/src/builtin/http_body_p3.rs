@@ -13,11 +13,19 @@ use wasip3::wit_bindgen::rt::async_support::{
 type BodyResultReader = FutureReader<Result<Option<Trailers>, ErrorCode>>;
 type BodyResultFuture = Pin<Box<<BodyResultReader as IntoFuture>::IntoFuture>>;
 type ResponseResultWriter = FutureWriter<Result<(), ErrorCode>>;
-type RecoveredRead = Rc<RefCell<Option<(StreamResult, Vec<u8>)>>>;
+#[derive(Default)]
+struct RecoveredReadState {
+    outcome: Option<(StreamResult, Vec<u8>)>,
+    recovered_bytes_for_test: usize,
+    pause_ready_for_test: bool,
+}
+
+type RecoveredRead = Rc<RefCell<RecoveredReadState>>;
 
 struct CancelSafeRead<'a> {
     read: Pin<Box<StreamRead<'a, u8>>>,
     recovered: RecoveredRead,
+    ready_for_test: Option<(StreamResult, Vec<u8>)>,
     completed: bool,
 }
 
@@ -26,6 +34,7 @@ impl<'a> CancelSafeRead<'a> {
         Self {
             read: Box::pin(read),
             recovered,
+            ready_for_test: None,
             completed: false,
         }
     }
@@ -35,8 +44,19 @@ impl Future for CancelSafeRead<'_> {
     type Output = (StreamResult, Vec<u8>);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.ready_for_test.is_some() {
+            return Poll::Pending;
+        }
         match self.read.as_mut().poll(cx) {
             Poll::Ready(result) => {
+                let pause_ready_for_test = {
+                    let mut recovered = self.recovered.borrow_mut();
+                    std::mem::take(&mut recovered.pause_ready_for_test)
+                };
+                if pause_ready_for_test {
+                    self.ready_for_test = Some(result);
+                    return Poll::Pending;
+                }
                 self.completed = true;
                 Poll::Ready(result)
             }
@@ -48,7 +68,13 @@ impl Future for CancelSafeRead<'_> {
 impl Drop for CancelSafeRead<'_> {
     fn drop(&mut self) {
         if !self.completed {
-            self.recovered.replace(Some(self.read.as_mut().cancel()));
+            let recovered = self
+                .ready_for_test
+                .take()
+                .unwrap_or_else(|| self.read.as_mut().cancel());
+            let mut state = self.recovered.borrow_mut();
+            state.recovered_bytes_for_test += recovered.1.len();
+            state.outcome = Some(recovered);
         }
     }
 }
@@ -81,19 +107,28 @@ impl ResponseBody {
     pub(crate) fn empty() -> Self {
         Self {
             state: ResponseBodyState::Consumed,
-            recovered_read: Rc::new(RefCell::new(None)),
+            recovered_read: Rc::new(RefCell::new(RecoveredReadState::default())),
         }
     }
 
     pub(crate) fn new(response: Response) -> Self {
         Self {
             state: ResponseBodyState::Unconsumed(response),
-            recovered_read: Rc::new(RefCell::new(None)),
+            recovered_read: Rc::new(RefCell::new(RecoveredReadState::default())),
         }
     }
 
     pub(crate) fn discard(&mut self) {
         self.state = ResponseBodyState::Consumed;
+    }
+
+    pub(crate) fn take_recovered_read_bytes_for_test(&self) -> usize {
+        std::mem::take(&mut self.recovered_read.borrow_mut().recovered_bytes_for_test)
+    }
+
+    pub(crate) fn pause_next_ready_read_for_test(&self) -> bool {
+        self.recovered_read.borrow_mut().pause_ready_for_test = true;
+        true
     }
 
     pub(crate) async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
@@ -124,7 +159,7 @@ impl ResponseBody {
     async fn read_from_reader(&mut self) -> Result<Option<Vec<u8>>, String> {
         const CHUNK_SIZE: usize = 16 * 1024;
         loop {
-            let recovered = self.recovered_read.borrow_mut().take();
+            let recovered = self.recovered_read.borrow_mut().outcome.take();
             let (status, bytes) = if let Some(recovered) = recovered {
                 recovered
             } else {

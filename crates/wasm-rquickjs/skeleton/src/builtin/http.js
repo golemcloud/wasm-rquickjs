@@ -472,7 +472,7 @@ export class Response {
             this._bodyStream = undefined;
             this._nativeBodyState = {source: undefined, controller: undefined};
             this._nativeBodyGroup = nativeBodyGroup || {active: 1, cancelWaiters: []};
-            this._nativeBodyBranchFinished = false;
+            this._nativeBodyBranchFinished = this._nativeBodyGroup.terminal === true;
             if (signal?.aborted) {
                 this.nativeResponse.discardBody();
                 this._finishNativeBodyBranch();
@@ -523,10 +523,21 @@ export class Response {
         if (!this._isNative || this._nativeBodyBranchFinished) return;
         this._nativeBodyBranchFinished = true;
         const group = this._nativeBodyGroup;
+        if (group.terminal) return;
         group.active--;
         if (group.active === 0) {
             for (const resolve of group.cancelWaiters.splice(0)) resolve();
         }
+    }
+
+    _finishNativeBodyGroup() {
+        if (!this._isNative) return;
+        this._nativeBodyBranchFinished = true;
+        const group = this._nativeBodyGroup;
+        if (group.terminal) return;
+        group.terminal = true;
+        group.active = 0;
+        for (const resolve of group.cancelWaiters.splice(0)) resolve();
     }
 
     _cancelNativeBodyBranch() {
@@ -575,13 +586,13 @@ export class Response {
                         [next, err] = await bodyState.source.pull();
                     } catch (error) {
                         response._detachAbortBodyListener();
-                        response._finishNativeBodyBranch();
+                        response._finishNativeBodyGroup();
                         if (response._signal?.aborted) throw responseAbortReason(response._signal);
                         throw error;
                     }
                     if (err !== undefined) {
                         response._detachAbortBodyListener();
-                        response._finishNativeBodyBranch();
+                        response._finishNativeBodyGroup();
                         console.error("Error reading response body stream:", err);
                         controller.error(err);
                     } else if (next === undefined) {
@@ -730,7 +741,7 @@ export class Response {
 
         if (this._isNative) {
             const nativeClone = this.nativeResponse.clone();
-            this._nativeBodyGroup.active++;
+            if (!this._nativeBodyGroup.terminal) this._nativeBodyGroup.active++;
             return new Response(
                 nativeClone,
                 this.url,
@@ -780,6 +791,7 @@ export class Response {
             try {
                 return await this.nativeResponse.arrayBuffer(this._signal);
             } catch (error) {
+                if (!this._signal?.aborted) this._finishNativeBodyGroup();
                 if (this._signal?.aborted) throw responseAbortReason(this._signal);
                 throw error;
             } finally {
@@ -845,6 +857,7 @@ export class Response {
             try {
                 return await this.nativeResponse.text(this._signal);
             } catch (error) {
+                if (!this._signal?.aborted) this._finishNativeBodyGroup();
                 if (this._signal?.aborted) throw responseAbortReason(this._signal);
                 throw error;
             } finally {

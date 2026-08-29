@@ -8,6 +8,14 @@ use std::task::{Poll, Waker};
 pub(crate) trait NativeBody {
     async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String>;
     fn discard(self);
+    #[cfg(feature = "p3")]
+    fn take_recovered_read_bytes_for_test(&self) -> usize {
+        0
+    }
+    #[cfg(feature = "p3")]
+    fn pause_next_ready_read_for_test(&self) -> bool {
+        false
+    }
 }
 
 pub(crate) struct SharedBody<S> {
@@ -19,7 +27,7 @@ pub(crate) struct SharedBody<S> {
     readers: usize,
 }
 
-impl<S> SharedBody<S> {
+impl<S: NativeBody> SharedBody<S> {
     fn new(native: S) -> Self {
         Self {
             native: Some(native),
@@ -62,6 +70,24 @@ impl<S: NativeBody> SharedBodyReader<S> {
 
     pub(crate) fn discard(self) {
         drop(self);
+    }
+
+    #[cfg(feature = "p3")]
+    pub(crate) fn take_recovered_read_bytes_for_test(&self) -> usize {
+        self.shared
+            .borrow()
+            .native
+            .as_ref()
+            .map_or(0, NativeBody::take_recovered_read_bytes_for_test)
+    }
+
+    #[cfg(feature = "p3")]
+    pub(crate) fn pause_next_ready_read_for_test(&self) -> bool {
+        self.shared
+            .borrow()
+            .native
+            .as_ref()
+            .is_some_and(NativeBody::pause_next_ready_read_for_test)
     }
 }
 

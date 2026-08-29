@@ -1416,24 +1416,59 @@ export async function abortPendingResponseBody(port, testCase) {
     if (testCase === 18) {
         const response = await fetch(`http://localhost:${port}/clone-race-response-body`);
         const canceled = response.clone();
+        const requiresPendingRace =
+            typeof response.nativeResponse.makeOpaqueRedirect === 'function';
+        const pauseArmed = requiresPendingRace
+            ? canceled.nativeResponse.pauseNextBodyReadAfterReadyForTest()
+            : false;
         const reader = canceled.body.getReader();
         let pendingReadSettled = false;
         const pendingRead = reader.read().finally(() => {
             pendingReadSettled = true;
         });
         await fetch(`http://localhost:${port}/clone-race-release`);
+        await Promise.resolve();
+        if (requiresPendingRace) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
         // Preview 3's cancel-safe native read is the race under test. Preview 2 may deliver the
         // available chunk before this continuation, but must still preserve it for the survivor.
-        const requiresPendingRace =
-            typeof response.nativeResponse.makeOpaqueRedirect === 'function';
         const exercisedTargetRace = !requiresPendingRace || !pendingReadSettled;
         const cancel = reader.cancel('cancel after bytes became available');
         await pendingRead.catch(() => undefined);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const recoveredBytes = requiresPendingRace
+            ? response.nativeResponse.takeRecoveredBodyReadBytesForTest()
+            : 0;
         const text = await response.text();
         await cancel;
         return finishPendingResponseBodyCase(
-            exercisedTargetRace && text === 'first chunksecond chunk',
+            (!requiresPendingRace || pauseArmed)
+            && exercisedTargetRace
+            && (!requiresPendingRace || recoveredBytes > 0)
+            && text === 'first chunksecond chunk',
         );
+    }
+
+    if (testCase === 19) {
+        const response = await fetch(`http://localhost:${port}/truncated-response-body`);
+        const canceled = response.clone();
+        response.clone(); // Keep a third branch idle while the shared source errors.
+        let cancelSettled = false;
+        const cancel = canceled.body.cancel('cancel before shared body error').then(() => {
+            cancelSettled = true;
+        });
+        await Promise.resolve();
+        const pendingBeforeError = !cancelSettled;
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            await cancel;
+            return finishPendingResponseBodyCase(
+                pendingBeforeError && cancelSettled && error instanceof Error,
+            );
+        }
     }
 
     return false;

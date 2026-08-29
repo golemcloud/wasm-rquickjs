@@ -887,6 +887,14 @@ impl NativeBody for NativeResponseBody {
     fn discard(mut self) {
         NativeResponseBody::discard(&mut self);
     }
+
+    fn take_recovered_read_bytes_for_test(&self) -> usize {
+        NativeResponseBody::take_recovered_read_bytes_for_test(self)
+    }
+
+    fn pause_next_ready_read_for_test(&self) -> bool {
+        NativeResponseBody::pause_next_ready_read_for_test(self)
+    }
 }
 
 #[derive(rquickjs::class::Trace, JsLifetime)]
@@ -963,6 +971,22 @@ impl HttpResponse {
             ResponseBody::Native(native) => native.discard(),
             ResponseBody::Shared(shared) => shared.discard(),
             ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
+        }
+    }
+
+    pub fn take_recovered_body_read_bytes_for_test(&self) -> usize {
+        match &self.body {
+            ResponseBody::Native(native) => native.take_recovered_read_bytes_for_test(),
+            ResponseBody::Shared(shared) => shared.take_recovered_read_bytes_for_test(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => 0,
+        }
+    }
+
+    pub fn pause_next_body_read_after_ready_for_test(&self) -> bool {
+        match &self.body {
+            ResponseBody::Native(native) => native.pause_next_ready_read_for_test(),
+            ResponseBody::Shared(shared) => shared.pause_next_ready_read_for_test(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => false,
         }
     }
 
@@ -1122,10 +1146,7 @@ impl HttpResponse {
             ),
             ResponseBody::Native(native) => {
                 let (kept, cloned) = SharedResponseBody::pair(native);
-                (
-                    ResponseBody::Shared(kept),
-                    ResponseBody::Shared(cloned),
-                )
+                (ResponseBody::Shared(kept), ResponseBody::Shared(cloned))
             }
             ResponseBody::Shared(shared) => (
                 ResponseBody::Shared(shared.branch()),
