@@ -7,6 +7,7 @@ pub mod native_module {
 
 use futures::SinkExt;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::future::{AbortHandle, Abortable};
 use futures_concurrency::stream::IntoStream;
 use golem_wasi_http::header::{HeaderName, HeaderValue};
 use golem_wasi_http::{
@@ -20,10 +21,10 @@ use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArr
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::task::{Poll, Waker};
 use wstd::runtime::AsyncPollable;
 
-use super::abort_signal::{ensure_not_aborted, with_abort_signal};
+use super::abort_signal::with_abort_signal;
+use super::shared_response_body::{self, NativeBody, SharedBody};
 
 /// Request mode - defines the cross-origin behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
@@ -757,16 +758,7 @@ impl HttpResponse {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Native(response) => discard_native_response(*response),
-            ResponseBodySource::Shared(shared) => {
-                let mut shared = shared.borrow_mut();
-                if let Some(native) = shared.native.take() {
-                    discard_shared_native_response(native);
-                }
-                shared.finished = true;
-                for waiter in shared.waiters.drain(..) {
-                    waiter.wake();
-                }
-            }
+            ResponseBodySource::Shared(shared) => SharedResponse::discard(&shared),
             ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
         }
     }
@@ -817,7 +809,6 @@ impl HttpResponse {
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<ArrayBuffer<'js>> {
-        ensure_not_aborted(&ctx, signal.as_ref())?;
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         let bytes = match source {
             ResponseBodySource::Bytes(body_bytes) => body_bytes,
@@ -857,26 +848,24 @@ impl HttpResponse {
     pub fn stream<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ResponseBodyStream> {
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
-            ResponseBodySource::Bytes(body_bytes) => Ok(ResponseBodyStream {
-                stream: Some(BodySource::Bytes(std::io::Cursor::new(body_bytes))),
-            }),
+            ResponseBodySource::Bytes(body_bytes) => Ok(ResponseBodyStream::from_source(
+                BodySource::Bytes(std::io::Cursor::new(body_bytes)),
+            )),
             ResponseBodySource::Native(mut response) => {
                 let (stream, body) = response.get_raw_input_stream();
 
-                Ok(ResponseBodyStream {
-                    stream: Some(BodySource::Native {
-                        stream,
-                        body,
-                        response,
-                    }),
-                })
+                Ok(ResponseBodyStream::from_source(BodySource::Native {
+                    stream,
+                    body,
+                    response,
+                }))
             }
-            ResponseBodySource::Shared(shared) => Ok(ResponseBodyStream {
-                stream: Some(BodySource::Shared {
+            ResponseBodySource::Shared(shared) => {
+                Ok(ResponseBodyStream::from_source(BodySource::Shared {
                     shared,
                     position: 0,
-                }),
-            }),
+                }))
+            }
             ResponseBodySource::Consumed => Err(Exception::throw_message(
                 &ctx,
                 "The response has already been consumed",
@@ -889,7 +878,6 @@ impl HttpResponse {
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<String> {
-        ensure_not_aborted(&ctx, signal.as_ref())?;
         let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
         match source {
             ResponseBodySource::Bytes(body_bytes) => {
@@ -977,17 +965,11 @@ impl HttpResponse {
             ),
             ResponseBodySource::Native(mut response) => {
                 let (stream, body) = response.get_raw_input_stream();
-                let shared = Rc::new(RefCell::new(SharedResponse {
-                    native: Some(SharedNativeResponse {
-                        stream,
-                        body,
-                        response: *response,
-                    }),
-                    buffer: Vec::new(),
-                    finished: false,
-                    error: None,
-                    waiters: Vec::new(),
-                }));
+                let shared = Rc::new(RefCell::new(SharedResponse::new(SharedNativeResponse {
+                    stream: Some(stream),
+                    body: Some(body),
+                    response: Some(*response),
+                })));
                 (
                     ResponseBodySource::Shared(shared.clone()),
                     ResponseBodySource::Shared(shared),
@@ -1019,143 +1001,61 @@ fn discard_native_response(mut response: golem_wasi_http::Response) {
     drop(response);
 }
 
-fn discard_shared_native_response(native: SharedNativeResponse) {
-    drop(native.stream);
-    drop(wasip2::http::types::IncomingBody::finish(native.body));
-    drop(native.response);
-}
-
 async fn collect_shared_response_body<'js>(
     ctx: &Ctx<'js>,
     signal: Option<Value<'js>>,
     shared: Rc<RefCell<SharedResponse>>,
 ) -> rquickjs::Result<Vec<u8>> {
-    let read = async {
-        let mut position = 0;
-        let mut bytes = Vec::new();
-        while let Some(chunk) =
-            read_shared_response_body_chunk(ctx, None, &shared, position).await?
-        {
-            position += chunk.len();
-            bytes.extend_from_slice(&chunk);
-        }
-        Ok(bytes)
-    };
-    with_abort_signal(ctx, signal, read).await
+    with_abort_signal(ctx, signal, async {
+        shared_response_body::collect(ctx, shared).await
+    })
+    .await
 }
 
-async fn read_shared_response_body_chunk<'js>(
-    ctx: &Ctx<'js>,
-    signal: Option<Value<'js>>,
-    shared: &Rc<RefCell<SharedResponse>>,
-    position: usize,
-) -> rquickjs::Result<Option<Vec<u8>>> {
-    loop {
-        {
-            let state = shared.borrow();
-            if position < state.buffer.len() {
-                let end = (position + 16 * 1024).min(state.buffer.len());
-                return Ok(Some(state.buffer[position..end].to_vec()));
-            }
-            if let Some(error) = &state.error {
-                return Err(Exception::throw_message(ctx, error));
-            }
-            if state.finished {
-                return Ok(None);
-            }
-        }
+pub type SharedResponse = SharedBody<SharedNativeResponse>;
 
-        let native = shared.borrow_mut().native.take();
-        let Some(native) = native else {
-            let wait = std::future::poll_fn(|cx| {
-                let mut state = shared.borrow_mut();
-                if position < state.buffer.len()
-                    || state.error.is_some()
-                    || state.finished
-                    || state.native.is_some()
-                {
-                    Poll::Ready(())
-                } else {
-                    if !state
-                        .waiters
-                        .iter()
-                        .any(|waker| waker.will_wake(cx.waker()))
-                    {
-                        state.waiters.push(cx.waker().clone());
-                    }
-                    Poll::Pending
-                }
-            });
-            with_abort_signal(ctx, signal.clone(), async {
-                wait.await;
-                Ok(())
-            })
-            .await?;
-            continue;
-        };
+pub struct SharedNativeResponse {
+    stream: Option<golem_wasi_http::InputStream>,
+    body: Option<golem_wasi_http::IncomingBody>,
+    response: Option<golem_wasi_http::Response>,
+}
 
-        let read = async move {
-            loop {
-                let pollable = native.stream.subscribe();
-                AsyncPollable::new(pollable).wait_for().await;
-                match native.stream.read(16 * 1024) {
-                    Ok(chunk) if chunk.is_empty() => continue,
-                    Ok(chunk) => return Ok((Some(native), Some(chunk.to_vec()))),
-                    Err(StreamError::Closed) => {
-                        discard_shared_native_response(native);
-                        return Ok((None, None));
-                    }
-                    Err(StreamError::LastOperationFailed(error)) => {
-                        let message =
-                            format!("Failed to read response body: {}", error.to_debug_string());
-                        discard_shared_native_response(native);
-                        return Err(message);
-                    }
+impl NativeBody for SharedNativeResponse {
+    async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
+        let stream = self
+            .stream
+            .as_ref()
+            .expect("shared response stream is present");
+        loop {
+            let pollable = stream.subscribe();
+            AsyncPollable::new(pollable).wait_for().await;
+            match stream.read(16 * 1024) {
+                Ok(chunk) if chunk.is_empty() => continue,
+                Ok(chunk) => return Ok(Some(chunk.to_vec())),
+                Err(StreamError::Closed) => return Ok(None),
+                Err(StreamError::LastOperationFailed(error)) => {
+                    return Err(format!(
+                        "Failed to read response body: {}",
+                        error.to_debug_string()
+                    ));
                 }
             }
-        };
-        let outcome = with_abort_signal(ctx, signal, async { Ok(read.await) }).await;
-        let mut state = shared.borrow_mut();
-        let result = match outcome {
-            Err(error) => {
-                state.finished = true;
-                Err(error)
-            }
-            Ok(Ok((native, Some(chunk)))) => {
-                state.buffer.extend_from_slice(&chunk);
-                state.native = native;
-                Ok(Some(chunk))
-            }
-            Ok(Ok((native, None))) => {
-                state.native = native;
-                state.finished = true;
-                Ok(None)
-            }
-            Ok(Err(error)) => {
-                state.error = Some(error.clone());
-                state.finished = true;
-                Err(Exception::throw_message(ctx, &error))
-            }
-        };
-        for waiter in state.waiters.drain(..) {
-            waiter.wake();
         }
-        return result;
+    }
+
+    fn discard(self) {
+        drop(self);
     }
 }
 
-pub struct SharedResponse {
-    native: Option<SharedNativeResponse>,
-    buffer: Vec<u8>,
-    finished: bool,
-    error: Option<String>,
-    waiters: Vec<Waker>,
-}
-
-pub struct SharedNativeResponse {
-    stream: golem_wasi_http::InputStream,
-    body: golem_wasi_http::IncomingBody,
-    response: golem_wasi_http::Response,
+impl Drop for SharedNativeResponse {
+    fn drop(&mut self) {
+        drop(self.stream.take());
+        if let Some(body) = self.body.take() {
+            drop(wasip2::http::types::IncomingBody::finish(body));
+        }
+        drop(self.response.take());
+    }
 }
 
 /// Represents the source of response body data
@@ -1190,7 +1090,13 @@ pub enum BodySource {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct ResponseBodyStream {
     #[qjs(skip_trace)]
+    state: Rc<RefCell<ResponseBodyStreamState>>,
+}
+
+struct ResponseBodyStreamState {
     stream: Option<BodySource>,
+    active_abort: Option<AbortHandle>,
+    discarded: bool,
 }
 
 impl Default for ResponseBodyStream {
@@ -1203,7 +1109,13 @@ impl Default for ResponseBodyStream {
 impl ResponseBodyStream {
     #[qjs(constructor)]
     pub fn new() -> Self {
-        ResponseBodyStream { stream: None }
+        Self {
+            state: Rc::new(RefCell::new(ResponseBodyStreamState {
+                stream: None,
+                active_abort: None,
+                discarded: false,
+            })),
+        }
     }
 
     #[qjs(get, rename = "type")]
@@ -1212,11 +1124,18 @@ impl ResponseBodyStream {
     }
 
     pub async fn pull<'js>(
-        &mut self,
+        &self,
         ctx: Ctx<'js>,
-        signal: Option<Value<'js>>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
-        let source = self.stream.take();
+        let source = {
+            let mut state = self.state.borrow_mut();
+            if state.discarded {
+                return Ok(List((None, None)));
+            }
+            state.stream.take()
+        };
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        self.state.borrow_mut().active_abort = Some(abort_handle);
         let pull_ctx = ctx.clone();
         let pull = async move {
             let ctx = pull_ctx;
@@ -1279,7 +1198,7 @@ impl ResponseBodyStream {
                     }
                 }
                 Some(BodySource::Shared { shared, position }) => {
-                    match read_shared_response_body_chunk(&ctx, None, &shared, position).await? {
+                    match shared_response_body::read_chunk(&ctx, &shared, position).await? {
                         Some(chunk) => {
                             let chunk_len = chunk.len();
                             match TypedArray::new_copy(ctx.clone(), &chunk) {
@@ -1347,18 +1266,45 @@ impl ResponseBodyStream {
             };
             Ok((result, stream))
         };
-        match with_abort_signal(&ctx, signal, pull).await {
-            Ok((result, stream)) => {
-                self.stream = stream;
+        let outcome = Abortable::new(pull, abort_registration).await;
+        let mut state = self.state.borrow_mut();
+        state.active_abort = None;
+        match outcome {
+            Ok(Ok((result, stream))) => {
+                if !state.discarded {
+                    state.stream = stream;
+                }
                 Ok(result)
             }
-            Err(error) => {
-                // The cancelled future owned the native stream/body/response state, so dropping it
-                // promptly cancels the transport work and leaves this reader terminal.
-                self.stream = None;
-                Err(error)
+            Ok(Err(error)) => Err(error),
+            Err(_) => {
+                state.discarded = true;
+                Err(Exception::throw_message(
+                    &ctx,
+                    "Response body stream was discarded",
+                ))
             }
         }
+    }
+
+    pub fn discard(&self) {
+        let (stream, abort) = {
+            let mut state = self.state.borrow_mut();
+            state.discarded = true;
+            (state.stream.take(), state.active_abort.take())
+        };
+        drop(stream);
+        if let Some(abort) = abort {
+            abort.abort();
+        }
+    }
+}
+
+impl ResponseBodyStream {
+    fn from_source(stream: BodySource) -> Self {
+        let response = Self::new();
+        response.state.borrow_mut().stream = Some(stream);
+        response
     }
 }
 

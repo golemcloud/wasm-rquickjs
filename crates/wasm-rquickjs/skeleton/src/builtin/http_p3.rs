@@ -32,14 +32,15 @@ use rquickjs::convert::Coerced;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 
-use super::abort_signal::{ensure_not_aborted, with_abort_signal};
+use super::abort_signal::with_abort_signal;
 use super::http_body::ResponseBody as NativeResponseBody;
+use super::shared_response_body::{self, NativeBody, SharedBody};
+use futures::future::{AbortHandle, Abortable};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::task::{Poll, Waker};
 use url::Url;
 use wasip3::http::types::{ErrorCode, Fields, Method, Request, Response, Scheme, Trailers};
 use wasip3::wit_bindgen::{FutureWriter, StreamWriter};
@@ -876,12 +877,16 @@ enum ResponseBody {
     Consumed,
 }
 
-struct SharedResponseBody {
-    native: Option<NativeResponseBody>,
-    buffer: Vec<u8>,
-    finished: bool,
-    error: Option<String>,
-    waiters: Vec<Waker>,
+type SharedResponseBody = SharedBody<NativeResponseBody>;
+
+impl NativeBody for NativeResponseBody {
+    async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
+        NativeResponseBody::read_chunk(self).await
+    }
+
+    fn discard(mut self) {
+        NativeResponseBody::discard(&mut self);
+    }
 }
 
 #[derive(rquickjs::class::Trace, JsLifetime)]
@@ -955,17 +960,8 @@ impl HttpResponse {
 
     pub fn discard_body(&mut self) {
         match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
-            ResponseBody::Native(mut native) => native.discard(),
-            ResponseBody::Shared(shared) => {
-                let mut shared = shared.borrow_mut();
-                if let Some(mut native) = shared.native.take() {
-                    native.discard();
-                }
-                shared.finished = true;
-                for waiter in shared.waiters.drain(..) {
-                    waiter.wake();
-                }
-            }
+            ResponseBody::Native(native) => native.discard(),
+            ResponseBody::Shared(shared) => SharedResponseBody::discard(&shared),
             ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
         }
     }
@@ -1054,18 +1050,15 @@ impl HttpResponse {
 
     pub fn stream<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ResponseBodyStream> {
         match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
-            ResponseBody::Bytes(bytes) => Ok(ResponseBodyStream {
-                source: Some(ResponseBodyStreamSource::Bytes(bytes)),
-                position: 0,
-            }),
-            ResponseBody::Native(native) => Ok(ResponseBodyStream {
-                source: Some(ResponseBodyStreamSource::Native(native)),
-                position: 0,
-            }),
-            ResponseBody::Shared(shared) => Ok(ResponseBodyStream {
-                source: Some(ResponseBodyStreamSource::Shared(shared)),
-                position: 0,
-            }),
+            ResponseBody::Bytes(bytes) => Ok(ResponseBodyStream::from_source(
+                ResponseBodyStreamSource::Bytes(bytes),
+            )),
+            ResponseBody::Native(native) => Ok(ResponseBodyStream::from_source(
+                ResponseBodyStreamSource::Native(native),
+            )),
+            ResponseBody::Shared(shared) => Ok(ResponseBodyStream::from_source(
+                ResponseBodyStreamSource::Shared(shared),
+            )),
             ResponseBody::Consumed => Err(Exception::throw_message(
                 &ctx,
                 "The response has already been consumed",
@@ -1128,13 +1121,7 @@ impl HttpResponse {
                 ResponseBody::Bytes(bytes),
             ),
             ResponseBody::Native(native) => {
-                let shared = Rc::new(RefCell::new(SharedResponseBody {
-                    native: Some(native),
-                    buffer: Vec::new(),
-                    finished: false,
-                    error: None,
-                    waiters: Vec::new(),
-                }));
+                let shared = Rc::new(RefCell::new(SharedResponseBody::new(native)));
                 (
                     ResponseBody::Shared(shared.clone()),
                     ResponseBody::Shared(shared),
@@ -1164,7 +1151,6 @@ impl HttpResponse {
         ctx: &Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<Vec<u8>> {
-        ensure_not_aborted(ctx, signal.as_ref())?;
         match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
             ResponseBody::Bytes(bytes) => Ok(bytes),
             ResponseBody::Native(mut native) => {
@@ -1195,99 +1181,10 @@ async fn collect_shared_body<'js>(
     signal: Option<Value<'js>>,
     shared: Rc<RefCell<SharedResponseBody>>,
 ) -> rquickjs::Result<Vec<u8>> {
-    let read = async {
-        let mut position = 0;
-        let mut bytes = Vec::new();
-        while let Some(chunk) = read_shared_body_chunk(ctx, None, &shared, position).await? {
-            position += chunk.len();
-            bytes.extend_from_slice(&chunk);
-        }
-        Ok(bytes)
-    };
-    with_abort_signal(ctx, signal, read).await
-}
-
-async fn read_shared_body_chunk<'js>(
-    ctx: &Ctx<'js>,
-    signal: Option<Value<'js>>,
-    shared: &Rc<RefCell<SharedResponseBody>>,
-    position: usize,
-) -> rquickjs::Result<Option<Vec<u8>>> {
-    loop {
-        {
-            let state = shared.borrow();
-            if position < state.buffer.len() {
-                let end = (position + 16 * 1024).min(state.buffer.len());
-                return Ok(Some(state.buffer[position..end].to_vec()));
-            }
-            if let Some(error) = &state.error {
-                return Err(Exception::throw_message(ctx, error));
-            }
-            if state.finished {
-                return Ok(None);
-            }
-        }
-
-        let native = shared.borrow_mut().native.take();
-        let Some(mut native) = native else {
-            let wait = std::future::poll_fn(|cx| {
-                let mut state = shared.borrow_mut();
-                if position < state.buffer.len()
-                    || state.error.is_some()
-                    || state.finished
-                    || state.native.is_some()
-                {
-                    Poll::Ready(())
-                } else {
-                    if !state
-                        .waiters
-                        .iter()
-                        .any(|waker| waker.will_wake(cx.waker()))
-                    {
-                        state.waiters.push(cx.waker().clone());
-                    }
-                    Poll::Pending
-                }
-            });
-            with_abort_signal(ctx, signal.clone(), async {
-                wait.await;
-                Ok(())
-            })
-            .await?;
-            continue;
-        };
-
-        let read = async { Ok(native.read_chunk().await) };
-        let outcome = with_abort_signal(ctx, signal, read).await;
-        let mut state = shared.borrow_mut();
-        let result = match outcome {
-            Err(error) => {
-                state.finished = true;
-                state.native = None;
-                Err(error)
-            }
-            Ok(Err(error)) => {
-                state.error = Some(error.clone());
-                state.finished = true;
-                state.native = None;
-                Err(Exception::throw_message(ctx, &error))
-            }
-            Ok(Ok(Some(chunk))) => {
-                state.buffer.extend_from_slice(&chunk);
-                state.native = Some(native);
-                Ok(Some(chunk))
-            }
-            Ok(Ok(None)) => {
-                state.finished = true;
-                state.native = None;
-                Ok(None)
-            }
-        };
-        for waiter in state.waiters.drain(..) {
-            waiter.wake();
-        }
-        return result;
-    }
+    with_abort_signal(ctx, signal, async {
+        shared_response_body::collect(ctx, shared).await
+    })
+    .await
 }
 
 enum ResponseBodyStreamSource {
@@ -1297,19 +1194,38 @@ enum ResponseBodyStreamSource {
 }
 
 /// Response body reader backing `response.body` / `ReadableStream`.
-#[derive(Default, rquickjs::class::Trace, JsLifetime)]
+#[derive(rquickjs::class::Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct ResponseBodyStream {
     #[qjs(skip_trace)]
+    state: Rc<RefCell<ResponseBodyStreamState>>,
+}
+
+struct ResponseBodyStreamState {
     source: Option<ResponseBodyStreamSource>,
     position: usize,
+    active_abort: Option<AbortHandle>,
+    discarded: bool,
+}
+
+impl Default for ResponseBodyStream {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[rquickjs::methods(rename_all = "camelCase")]
 impl ResponseBodyStream {
     #[qjs(constructor)]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            state: Rc::new(RefCell::new(ResponseBodyStreamState {
+                source: None,
+                position: 0,
+                active_abort: None,
+                discarded: false,
+            })),
+        }
     }
 
     #[qjs(get, rename = "type")]
@@ -1318,50 +1234,100 @@ impl ResponseBodyStream {
     }
 
     pub async fn pull<'js>(
-        &mut self,
+        &self,
         ctx: Ctx<'js>,
-        signal: Option<Value<'js>>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
-        let Some(source) = self.source.take() else {
+        let (source, position) = {
+            let mut state = self.state.borrow_mut();
+            if state.discarded {
+                return Ok(List((None, None)));
+            }
+            (state.source.take(), state.position)
+        };
+        let Some(source) = source else {
             return Ok(List((None, None)));
         };
-        let chunk = match source {
-            ResponseBodyStreamSource::Bytes(bytes) => {
-                if self.position >= bytes.len() {
-                    None
-                } else {
-                    let end = (self.position + 16 * 1024).min(bytes.len());
-                    let chunk = bytes[self.position..end].to_vec();
-                    self.source = Some(ResponseBodyStreamSource::Bytes(bytes));
-                    Some(chunk)
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        self.state.borrow_mut().active_abort = Some(abort_handle);
+        let pull_ctx = ctx.clone();
+        let pull = async move {
+            let result = match source {
+                ResponseBodyStreamSource::Bytes(bytes) => {
+                    if position >= bytes.len() {
+                        (None, None)
+                    } else {
+                        let end = (position + 16 * 1024).min(bytes.len());
+                        let chunk = bytes[position..end].to_vec();
+                        (Some(chunk), Some(ResponseBodyStreamSource::Bytes(bytes)))
+                    }
                 }
-            }
-            ResponseBodyStreamSource::Native(mut native) => {
-                let read = async { Ok(native.read_chunk().await) };
-                let chunk = with_abort_signal(&ctx, signal, read)
-                    .await?
-                    .map_err(|error| Exception::throw_message(&ctx, &error))?;
-                if chunk.is_some() {
-                    self.source = Some(ResponseBodyStreamSource::Native(native));
+                ResponseBodyStreamSource::Native(mut native) => {
+                    let chunk = native
+                        .read_chunk()
+                        .await
+                        .map_err(|error| Exception::throw_message(&pull_ctx, &error))?;
+                    let source = chunk
+                        .as_ref()
+                        .map(|_| ResponseBodyStreamSource::Native(native));
+                    (chunk, source)
                 }
-                chunk
-            }
-            ResponseBodyStreamSource::Shared(shared) => {
-                let chunk = read_shared_body_chunk(&ctx, signal, &shared, self.position).await?;
-                if chunk.is_some() {
-                    self.source = Some(ResponseBodyStreamSource::Shared(shared));
+                ResponseBodyStreamSource::Shared(shared) => {
+                    let chunk =
+                        shared_response_body::read_chunk(&pull_ctx, &shared, position).await?;
+                    let source = chunk
+                        .as_ref()
+                        .map(|_| ResponseBodyStreamSource::Shared(shared));
+                    (chunk, source)
                 }
-                chunk
+            };
+            Ok::<_, rquickjs::Error>(result)
+        };
+        let outcome = Abortable::new(pull, abort_registration).await;
+        let (chunk, source) = match outcome {
+            Ok(result) => result?,
+            Err(_) => {
+                let mut state = self.state.borrow_mut();
+                state.active_abort = None;
+                state.discarded = true;
+                return Err(Exception::throw_message(
+                    &ctx,
+                    "Response body stream was discarded",
+                ));
             }
         };
+        let mut state = self.state.borrow_mut();
+        state.active_abort = None;
+        if !state.discarded {
+            state.source = source;
+        }
         let Some(chunk) = chunk else {
             return Ok(List((None, None)));
         };
         let array = TypedArray::new_copy(ctx.clone(), &chunk).map_err(|_| {
             Exception::throw_message(&ctx, "Failed to create TypedArray from response body chunk")
         })?;
-        self.position += chunk.len();
+        state.position += chunk.len();
         Ok(List((Some(array), None)))
+    }
+
+    pub fn discard(&self) {
+        let (source, abort) = {
+            let mut state = self.state.borrow_mut();
+            state.discarded = true;
+            (state.source.take(), state.active_abort.take())
+        };
+        drop(source);
+        if let Some(abort) = abort {
+            abort.abort();
+        }
+    }
+}
+
+impl ResponseBodyStream {
+    fn from_source(source: ResponseBodyStreamSource) -> Self {
+        let response = Self::new();
+        response.state.borrow_mut().source = Some(source);
+        response
     }
 }
 

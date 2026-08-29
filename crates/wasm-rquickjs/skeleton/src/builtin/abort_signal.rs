@@ -2,20 +2,6 @@ use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::This;
 use rquickjs::{Ctx, Persistent, Value};
 
-pub(crate) fn ensure_not_aborted<'js>(
-    ctx: &Ctx<'js>,
-    signal: Option<&Value<'js>>,
-) -> rquickjs::Result<()> {
-    let Some(signal) = signal.filter(|signal| !signal.is_undefined() && !signal.is_null()) else {
-        return Ok(());
-    };
-    let signal = rquickjs::Object::from_value(signal.clone())?;
-    if signal.get::<_, bool>("aborted")? {
-        return Err(ctx.throw(signal.get::<_, Value<'js>>("reason")?));
-    }
-    Ok(())
-}
-
 pub(crate) async fn with_abort_signal<'js, F, T>(
     ctx: &Ctx<'js>,
     signal: Option<Value<'js>>,

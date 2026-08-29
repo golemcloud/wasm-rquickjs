@@ -454,7 +454,9 @@ async function streamingRequest(
 }
 
 function responseAbortReason(signal) {
-    return signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    return signal?.aborted
+        ? signal.reason
+        : new DOMException('The operation was aborted.', 'AbortError');
 }
 
 export class Response {
@@ -469,15 +471,23 @@ export class Response {
             this._isNative = true;
             this._signal = signal;
             this._abortBodyListener = undefined;
+            this._bodyStream = undefined;
+            this._nativeBodyState = {source: undefined, controller: undefined};
             if (signal?.aborted) {
                 this.nativeResponse.discardBody();
             } else if (signal) {
                 const responseRef = new WeakRef(this);
                 this._abortBodyListener = () => {
                     const response = responseRef.deref();
-                    // Rust owns cancellation once consumption starts. This hook only releases an
-                    // unread body, which otherwise has no active native future to cancel.
-                    if (response && !response.bodyUsed) response.nativeResponse.discardBody();
+                    if (!response) return;
+                    const bodyState = response._nativeBodyState;
+                    if (bodyState.source) {
+                        bodyState.source.discard();
+                    } else if (!response.bodyUsed) {
+                        response.nativeResponse.discardBody();
+                    }
+                    bodyState.controller?.error(responseAbortReason(signal));
+                    response._detachAbortBodyListener();
                 };
                 signal.addEventListener('abort', this._abortBodyListener, {once: true});
             }
@@ -523,12 +533,12 @@ export class Response {
 
     get body() {
         if (this._isNative) {
-            let nativeStreamSourceSlot = {
-                nativeStreamSource: undefined
-            };
+            if (this._bodyStream !== undefined) return this._bodyStream;
             let response = this;
-            return new ReadableStream({
-                start() {
+            const bodyState = this._nativeBodyState;
+            this._bodyStream = new ReadableStream({
+                start(controller) {
+                    bodyState.controller = controller;
                 },
                 get type() {
                     return "bytes";
@@ -536,16 +546,17 @@ export class Response {
                 async pull(controller) {
                     response.bodyUsed = true;
                     if (response._signal?.aborted) throw responseAbortReason(response._signal);
-                    if (nativeStreamSourceSlot.nativeStreamSource === undefined) {
-                        nativeStreamSourceSlot.nativeStreamSource = response.nativeResponse.stream();
+                    if (bodyState.source === undefined) {
+                        bodyState.source = response.nativeResponse.stream();
                     }
 
                     let next;
                     let err;
                     try {
-                        [next, err] = await nativeStreamSourceSlot.nativeStreamSource.pull(response._signal);
+                        [next, err] = await bodyState.source.pull();
                     } catch (error) {
                         response._detachAbortBodyListener();
+                        if (response._signal?.aborted) throw responseAbortReason(response._signal);
                         throw error;
                     }
                     if (err !== undefined) {
@@ -558,8 +569,18 @@ export class Response {
                     } else {
                         controller.enqueue(next);
                     }
+                },
+                cancel() {
+                    response.bodyUsed = true;
+                    if (bodyState.source) {
+                        bodyState.source.discard();
+                    } else {
+                        response.nativeResponse.discardBody();
+                    }
+                    response._detachAbortBodyListener();
                 }
             });
+            return this._bodyStream;
         }
 
         if (this._body === null) {

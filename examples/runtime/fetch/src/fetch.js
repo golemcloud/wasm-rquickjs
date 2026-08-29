@@ -564,6 +564,7 @@ export async function responseCloneStreamingBody(port) {
     console.log(`Original status: ${response.status}`);
 
     const cloned = response.clone();
+    const buffered = response.clone();
 
     console.log(`Cloned status: ${cloned.status}`);
 
@@ -578,15 +579,17 @@ export async function responseCloneStreamingBody(port) {
     };
 
     // Clones must tee the native stream: both readers are deliberately active together.
-    const [clonedBytes, originalBytes] = await Promise.all([
+    const [clonedBytes, originalBytes, bufferedBytes] = await Promise.all([
         consume(cloned.body),
         consume(response.body),
+        buffered.arrayBuffer().then(buffer => new Uint8Array(buffer)),
     ]);
 
     console.log(`Cloned body: ${clonedBytes}`);
     console.log(`Original body: ${originalBytes}`);
 
-    if (Buffer.compare(clonedBytes, originalBytes) === 0) {
+    if (Buffer.compare(clonedBytes, originalBytes) === 0
+        && Buffer.compare(originalBytes, bufferedBytes) === 0) {
         console.log("Streaming clone test passed");
     }
 }
@@ -1263,6 +1266,95 @@ export async function abortPendingResponseBody(port, testCase) {
                 resolvedAtHead && response.bodyUsed && cloneThrows(response) && error instanceof Error,
             );
         }
+    }
+
+    if (testCase === 7) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        controller.abort(null);
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                error === null && response.bodyUsed && cloneThrows(response),
+            );
+        }
+    }
+
+    if (testCase === 8) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const read = response.arrayBuffer();
+        const disturbedImmediately = response.bodyUsed && cloneThrows(response);
+        controller.abort(null);
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                disturbedImmediately && response.bodyUsed && error === null,
+            );
+        }
+    }
+
+    if (testCase === 9) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const clone = response.clone();
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        const pendingRead = reader.read();
+        const pendingClone = clone.text();
+        controller.abort(null);
+        const [readerResult, cloneResult] = await Promise.allSettled([
+            pendingRead,
+            pendingClone,
+        ]);
+        return finishPendingResponseBodyCase(
+            first.done === false
+            && new TextDecoder().decode(first.value) === 'first chunk'
+            && readerResult.status === 'rejected'
+            && readerResult.reason === null
+            && cloneResult.status === 'rejected'
+            && cloneResult.reason === null,
+        );
+    }
+
+    if (testCase === 10) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        const reason = 'idle reader abort';
+        controller.abort(reason);
+        let closedReason;
+        try {
+            await reader.closed;
+            return false;
+        } catch (error) {
+            closedReason = error;
+        }
+        return finishPendingResponseBodyCase(
+            first.done === false && closedReason === reason,
+        );
+    }
+
+    if (testCase === 11) {
+        const response = await fetch(url);
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        await reader.cancel('consumer stopped');
+        return finishPendingResponseBodyCase(first.done === false && response.bodyUsed);
+    }
+
+    if (testCase === 12) {
+        const response = await fetch(`http://localhost:${port}/empty-response-body`);
+        const resolvedAtHead = response.status === 204 && !response.bodyUsed;
+        const text = await response.text();
+        return finishPendingResponseBodyCase(
+            resolvedAtHead && text === '' && response.bodyUsed && cloneThrows(response),
+        );
     }
 
     return false;

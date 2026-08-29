@@ -1017,7 +1017,7 @@ async fn fetch_abort_response_body(
     assert_eq!(
         result?,
         Some(Val::Bool(true)),
-        "response body consumption after abort must reject with AbortError. Output:\n{output}"
+        "response body consumption after abort must reject with the exact abort reason. Output:\n{output}"
     );
     Ok(())
 }
@@ -1027,7 +1027,7 @@ async fn fetch_abort_pending_response_body(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (port, _server, mut released) = start_response_body_abort_test_server().await;
-    for test_case in 0..7u8 {
+    for test_case in 0..13u8 {
         let wasm_path = compiled.wasm_path().to_path_buf();
         let mut invocation = tokio::spawn(async move {
             invoke_and_capture_output(

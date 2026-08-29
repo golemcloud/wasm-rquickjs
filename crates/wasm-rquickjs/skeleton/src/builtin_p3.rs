@@ -109,6 +109,8 @@ mod querystring;
 mod readline;
 #[path = "builtin/repl.rs"]
 mod repl;
+#[path = "builtin/shared_response_body.rs"]
+mod shared_response_body;
 #[path = "builtin/socket_helpers.rs"]
 mod socket_helpers;
 #[cfg(feature = "sqlite")]

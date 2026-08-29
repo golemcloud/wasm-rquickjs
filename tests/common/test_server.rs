@@ -309,8 +309,14 @@ pub async fn start_response_body_abort_test_server() -> (
                 let truncated = request
                     .windows(b"/truncated-response-body".len())
                     .any(|window| window == b"/truncated-response-body");
+                let empty = request
+                    .windows(b"/empty-response-body".len())
+                    .any(|window| window == b"/empty-response-body");
                 let response = if truncated {
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial".as_slice()
+                } else if empty {
+                    b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .as_slice()
                 } else {
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\nfirst chunk".as_slice()
                 };
@@ -318,7 +324,7 @@ pub async fn start_response_body_abort_test_server() -> (
                 socket.flush().await.unwrap();
                 let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
 
-                if truncated {
+                if truncated || empty {
                     let _ = socket.shutdown().await;
                 } else {
                     while socket.read(&mut buf).await.unwrap_or(0) != 0 {}
