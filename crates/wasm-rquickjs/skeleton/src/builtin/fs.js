@@ -907,7 +907,8 @@ export let readFileSync = function readFileSync(path, options) {
         }
         return getBuffer().from(nativeResult.buffer);
     }
-    // Use openSync so readFile errors match Node's syscall/path metadata exactly.
+    // Retain the descriptor path for custom flags so its flag and error
+    // semantics continue to match openSync + readSync.
     const fd = openSync(path, numericFlag);
     try {
         const statResult = native.fs_fstat(fd);

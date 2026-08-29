@@ -76,6 +76,10 @@ The feature-gated job profile additionally aggregates native module-resolution
 outcomes, file and directory probes, package metadata and module-source reads,
 TypeScript transformations, and `node:fs` read/stat/directory operations. It
 records bounded counters and byte totals rather than paths or event traces.
+The canonical cold CLI workload runs before the in-component sidecar profile,
+so the cold row retains its original ordering. Schema-v5 components use the
+non-default `typescript-compiler-profiling` feature; each report records that
+feature explicitly because the counters add instrumentation overhead.
 
 The Wasmtime host records the highest requested guest linear-memory size
 without limiting growth. With Golem's Wasmtime fork it explicitly excludes

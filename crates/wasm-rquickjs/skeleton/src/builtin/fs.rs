@@ -382,6 +382,7 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
         std::io::ErrorKind::PermissionDenied => ("EACCES", -13, "permission denied"),
         std::io::ErrorKind::InvalidInput => ("EINVAL", -22, "invalid argument"),
         std::io::ErrorKind::NotADirectory => ("ENOTDIR", -20, "not a directory"),
+        std::io::ErrorKind::IsADirectory => ("EISDIR", -21, "illegal operation on a directory"),
         _ => {
             let err_text = err.to_string().to_lowercase();
             if err_text.contains("too many levels of symbolic links") || err_text.contains("eloop")
@@ -654,6 +655,20 @@ pub mod native_module {
     }
 
     #[cfg(feature = "typescript-compiler-profiling")]
+    fn profile_fs_entries(ctx: &Ctx<'_>, operation: &str, entries: usize) {
+        if entries == 0 {
+            return;
+        }
+        let profile = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .execution_profile();
+        if let Some(profile) = profile {
+            profile.add(&format!("filesystem.{operation}.entries"), entries as u64);
+        }
+    }
+
+    #[cfg(feature = "typescript-compiler-profiling")]
     fn fs_error_outcome(error: &std::io::Error) -> &'static str {
         if error.kind() == std::io::ErrorKind::NotFound {
             "notFound"
@@ -696,13 +711,6 @@ pub mod native_module {
     ) -> List<(Option<String>, Option<String>)> {
         let resolved_path = runtime_path(&ctx, &path);
         let List((value, error)) = super::read_file_with_encoding_impl(&resolved_path, &encoding);
-        #[cfg(feature = "typescript-compiler-profiling")]
-        profile_fs(
-            &ctx,
-            "readFileWithEncoding",
-            Some(if error.is_none() { "success" } else { "errors" }),
-            value.as_ref().map_or(0, |value| value.len()),
-        );
         List((
             value,
             error.map(|error| error.replace(&resolved_path, &path)),
@@ -717,15 +725,11 @@ pub mod native_module {
         let resolved_path = runtime_path(&ctx, &path);
         match std::fs::read(&resolved_path) {
             Ok(bytes) => {
-                #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "readFile", Some("success"), bytes.len());
                 let typed_array =
                     TypedArray::new_copy(ctx.clone(), &bytes).expect("Failed to create TypedArray");
                 List((Some(typed_array), None))
             }
             Err(err) => {
-                #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "readFile", Some(fs_error_outcome(&err)), 0);
                 let error_message = format!("Failed to read file {path:?}: {err}");
                 List((None, Some(error_message)))
             }
@@ -764,13 +768,22 @@ pub mod native_module {
                 return result;
             }
         };
-        if let Ok(metadata) = file.metadata()
-            && metadata.len() > max_length as u64
-        {
-            #[cfg(feature = "typescript-compiler-profiling")]
-            profile_fs(&ctx, "readFileNative", Some("tooLarge"), 0);
-            result.set("sizeTooLarge", metadata.len() as f64).unwrap();
-            return result;
+        if let Ok(metadata) = file.metadata() {
+            if metadata.is_dir() {
+                let error = std::io::Error::from(std::io::ErrorKind::IsADirectory);
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs(&ctx, "readFileNative", Some("errors"), 0);
+                result
+                    .set("error", super::make_fs_error(&ctx, &error, "read", None))
+                    .unwrap();
+                return result;
+            }
+            if metadata.len() > max_length as u64 {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs(&ctx, "readFileNative", Some("tooLarge"), 0);
+                result.set("sizeTooLarge", metadata.len() as f64).unwrap();
+                return result;
+            }
         }
 
         let mut bytes = Vec::new();
@@ -779,9 +792,11 @@ pub mod native_module {
                 #[cfg(feature = "typescript-compiler-profiling")]
                 profile_fs(&ctx, "readFileNative", Some("success"), bytes.len());
                 if decode_utf8 {
-                    result
-                        .set("text", String::from_utf8_lossy(&bytes).into_owned())
-                        .unwrap();
+                    let text = match String::from_utf8(bytes) {
+                        Ok(text) => text,
+                        Err(error) => String::from_utf8_lossy(error.as_bytes()).into_owned(),
+                    };
+                    result.set("text", text).unwrap();
                 } else {
                     let typed_array = TypedArray::new_copy(ctx.clone(), &bytes)
                         .expect("Failed to create TypedArray");
@@ -792,16 +807,12 @@ pub mod native_module {
                 #[cfg(feature = "typescript-compiler-profiling")]
                 profile_fs(&ctx, "readFileNative", Some(fs_error_outcome(&error)), 0);
                 result
-                    .set(
-                        "error",
-                        super::make_fs_error(&ctx, &error, "read", Some(&path)),
-                    )
+                    .set("error", super::make_fs_error(&ctx, &error, "read", None))
                     .unwrap();
             }
         }
         result
     }
-
 
     #[rquickjs::function]
     pub fn write_file_with_encoding(
@@ -1412,7 +1423,10 @@ pub mod native_module {
                 }
                 result.set("entries", arr).unwrap();
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "readdir", Some("success"), idx);
+                {
+                    profile_fs(&ctx, "readdir", Some("success"), 0);
+                    profile_fs_entries(&ctx, "readdir", idx);
+                }
             }
             Err(err) => {
                 #[cfg(feature = "typescript-compiler-profiling")]

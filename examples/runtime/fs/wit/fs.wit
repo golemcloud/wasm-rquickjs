@@ -16,4 +16,5 @@ world fs {
   export test-mkdir-callback-recursive: func();
   export test-unlink-sync: func();
   export test-unlink-callback: func();
+  export test-read-file-sync-fast-path: func() -> string;
 }

@@ -1,5 +1,6 @@
 declare module 'agentic-ts' {
   export function runTsc(args: string[], timeoutMs: bigint): Promise<string>;
+  export function profileTsc(timeoutMs: bigint): Promise<string>;
   export function runEntry(path: string): Promise<string>;
   export function runGenerated(path: string): Promise<string>;
   export function runCpu(): Promise<string>;

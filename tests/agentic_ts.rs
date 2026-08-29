@@ -64,10 +64,18 @@ async fn main() -> anyhow::Result<()> {
             validate_phase_profile(&sample, "Wasm", true)?;
             wasm.push(sample);
         }
+        let concurrent = timed_invoke(&mut instance, "run-concurrent", &[]).await?;
+        for sibling in ["compiler", "cpu", "io"] {
+            validate_execution_profile_timing(
+                &concurrent["result"][sibling]["result"]["profile"],
+                &format!("concurrent {sibling}"),
+            )?;
+        }
         let formatted = serde_json::to_string_pretty(&json!({
             "target": format!("{:?}", test_target()).to_lowercase(),
             "node": summarize(&node),
             "wasm": summarize(&wasm),
+            "concurrent": concurrent,
         }))?;
         if let Ok(path) = std::env::var("AGENTIC_TS_PROFILE_SMOKE_REPORT") {
             fs::write(path, format!("{formatted}\n"))?;
@@ -78,8 +86,6 @@ async fn main() -> anyhow::Result<()> {
 
     let node_baseline = node_baseline()?;
     let node_phase_profile = node_phase_profile()?;
-    let wasm_phase_profile =
-        timed_invoke(&mut instance, "profile-tsc", &[Val::U64(300_000)]).await?;
     let cold = timed_invoke(
         &mut instance,
         "run-tsc",
@@ -89,6 +95,8 @@ async fn main() -> anyhow::Result<()> {
         ],
     )
     .await?;
+    let wasm_phase_profile =
+        timed_invoke(&mut instance, "profile-tsc", &[Val::U64(300_000)]).await?;
 
     let mut unchanged = Vec::with_capacity(iterations);
     for _ in 0..iterations {
@@ -415,6 +423,7 @@ fn validate_report_pair(
         "/environment/node",
         "/environment/npm",
         "/environment/typescript",
+        "/environment/componentFeatures",
         "/environment/rustc",
         "/environment/cargo",
     ] {
@@ -442,6 +451,12 @@ fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<(
             && report["environment"]["iterations"].as_u64().unwrap_or(0) >= 5,
         "{path} does not use the pinned baseline settings"
     );
+    if report["schemaVersion"] == 5 {
+        anyhow::ensure!(
+            report["environment"]["componentFeatures"] == "typescript-compiler-profiling",
+            "{path} does not identify the profiling component feature"
+        );
+    }
     let target = report["target"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("{path} has no target"))?;
@@ -951,11 +966,12 @@ fn node_phase_profile() -> anyhow::Result<Value> {
         String::from_utf8_lossy(&output.stderr)
     );
     let value: Value = serde_json::from_slice(&output.stdout)?;
+    let wall_ms = millis(started.elapsed());
     Ok(json!({
-        "wallMs": millis(started.elapsed()),
+        "wallMs": wall_ms,
         "outerOverheadMs": value["phasesMs"]["measuredTotal"]
             .as_f64()
-            .map(|inner_ms| millis(started.elapsed()) - inner_ms),
+            .map(|inner_ms| wall_ms - inner_ms),
         "result": { "value": value, "stdout": "", "stderr": "", "overflowed": false },
     }))
 }
@@ -1005,6 +1021,7 @@ fn environment(iterations: usize) -> anyhow::Result<Value> {
         "node": command_text(Command::new("node").args(["-p", "process.versions.node"]))?,
         "npm": command_text(Command::new("npm").arg("--version"))?,
         "typescript": command_text(Command::new("node").args(["-p", "require('./tests/agentic_ts/node_modules/typescript/package.json').version"]))?,
+        "componentFeatures": "typescript-compiler-profiling",
         "iterations": iterations,
         "artifactCache": std::env::var("WASM_RQUICKJS_TEST_ARTIFACT_CACHE").ok(),
         "wasmtimeCache": std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").ok(),
@@ -1035,6 +1052,12 @@ fn validate_report(report: &Value) -> anyhow::Result<()> {
     if report["schemaVersion"] == 5 {
         validate_phase_profile(&report["phaseProfiles"]["node"], "Node", false)?;
         validate_phase_profile(&report["phaseProfiles"]["wasm"], "Wasm", true)?;
+        for sibling in ["compiler", "cpu", "io"] {
+            validate_execution_profile_timing(
+                &report["workloads"]["concurrent"]["contended"]["result"][sibling]["result"]["profile"],
+                &format!("concurrent {sibling}"),
+            )?;
+        }
     }
     for path in [
         "/workloads/coldNoEmit/result/value/exitCode",
@@ -1216,38 +1239,13 @@ fn validate_phase_profile(
     }
     if require_execution_profile {
         let execution = &profile["result"]["profile"];
+        validate_execution_profile_timing(execution, label)?;
         anyhow::ensure!(
             execution["version"] == 1
                 && execution["totalMs"]
                     .as_f64()
                     .is_some_and(|duration| duration >= 0.0),
             "{label} execution profile has no supported version or total"
-        );
-        let mut classified_ms = 0.0;
-        for phase in [
-            "runtimeCreation",
-            "loaderInitialization",
-            "processConfiguration",
-            "builtinInitialization",
-            "transportWiring",
-            "wrapperPreparation",
-            "initialEvaluation",
-            "userAwait",
-            "resultFormatting",
-            "teardown",
-        ] {
-            let duration = execution["phasesMs"][phase]
-                .as_f64()
-                .filter(|duration| duration.is_finite() && *duration >= 0.0)
-                .ok_or_else(|| anyhow::anyhow!("{label} execution profile has no {phase}"))?;
-            classified_ms += duration;
-        }
-        anyhow::ensure!(
-            execution["phasesMs"]["queueDelay"]
-                .as_f64()
-                .is_some_and(|duration| duration.is_finite() && duration >= 0.0)
-                && classified_ms <= execution["totalMs"].as_f64().unwrap() + 1.0,
-            "{label} execution profile phases exceed its total"
         );
         let counters = &execution["counters"];
         let counter = |name: &str| counters[name].as_u64().unwrap_or_default();
@@ -1286,6 +1284,41 @@ fn validate_phase_profile(
             "{label} native filesystem counters did not observe compiler reads"
         );
     }
+    Ok(())
+}
+
+fn validate_execution_profile_timing(execution: &Value, label: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        execution["version"] == 1
+            && execution["totalMs"]
+                .as_f64()
+                .is_some_and(|duration| duration.is_finite() && duration >= 0.0),
+        "{label} execution profile has no supported version or total"
+    );
+    let mut classified_ms = 0.0;
+    for phase in [
+        "queueDelay",
+        "runtimeCreation",
+        "loaderInitialization",
+        "processConfiguration",
+        "builtinInitialization",
+        "transportWiring",
+        "wrapperPreparation",
+        "initialEvaluation",
+        "userAwait",
+        "resultFormatting",
+        "teardown",
+    ] {
+        let duration = execution["phasesMs"][phase]
+            .as_f64()
+            .filter(|duration| duration.is_finite() && *duration >= 0.0)
+            .ok_or_else(|| anyhow::anyhow!("{label} execution profile has no {phase}"))?;
+        classified_ms += duration;
+    }
+    anyhow::ensure!(
+        classified_ms <= execution["totalMs"].as_f64().unwrap() + 1.0,
+        "{label} execution profile phases exceed its lifecycle total"
+    );
     Ok(())
 }
 

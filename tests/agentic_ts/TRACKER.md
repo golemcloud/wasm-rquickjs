@@ -29,7 +29,9 @@ benchmarked on Node in this first report. These reports use dev-profile guest
 components and mirror the canonical runtime profiles: P2 with Golem's Wasmtime
 fork and P3 with stock Wasmtime. Each column is an independent regression
 baseline; comparing them does not isolate the preview level or Wasmtime
-distribution.
+distribution. Schema-v5 rows use the recorded
+`typescript-compiler-profiling` component feature, and the cold CLI workload
+runs before the in-component profiler sidecar.
 
 The preceding schema-v4 baseline remains available as
 `results/2026-08-27-p2-macos-aarch64.json` and

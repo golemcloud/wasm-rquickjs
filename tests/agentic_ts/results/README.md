@@ -36,6 +36,8 @@ and feature-gated execution-job phase/counter summaries. The accepted bounded
 mitigation replaces the default path-based `readFileSync` open/stat/8 KiB read
 loop with one private native whole-file read, while file-descriptor operands and
 custom flags retain the existing path.
+The reports record the `typescript-compiler-profiling` component feature, and
+the canonical cold CLI workload runs before the in-component profiling sidecar.
 
 Five-sample controlled A/B measurements compared baseline commit `097e767b`
 with mitigation commit `d04496f5`, with caches disabled:

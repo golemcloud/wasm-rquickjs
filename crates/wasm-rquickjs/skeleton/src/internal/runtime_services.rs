@@ -3,9 +3,9 @@ use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::collections::BTreeMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
@@ -48,7 +48,10 @@ impl ExecutionProfile {
 
     pub(crate) fn mark(&self, name: &str) {
         let now = Instant::now();
-        self.set_duration(name, now.saturating_duration_since(self.last_phase.replace(now)));
+        self.set_duration(
+            name,
+            now.saturating_duration_since(self.last_phase.replace(now)),
+        );
     }
 
     pub(crate) fn increment(&self, name: &str) {
@@ -62,15 +65,15 @@ impl ExecutionProfile {
     }
 
     pub(crate) fn snapshot(&self) -> ExecutionProfileSnapshot {
+        let phases = self.phases.borrow();
+        let queue_delay = phases.get("queueDelay").copied().unwrap_or_default();
         ExecutionProfileSnapshot {
             version: 1,
-            phases_ms: self
-                .phases
-                .borrow()
+            phases_ms: phases
                 .iter()
                 .map(|(name, duration)| (name.clone(), duration.as_secs_f64() * 1000.0))
                 .collect(),
-            total_ms: self.started.elapsed().as_secs_f64() * 1000.0,
+            total_ms: (queue_delay + self.started.elapsed()).as_secs_f64() * 1000.0,
             counters: self.counters.borrow().clone(),
         }
     }
