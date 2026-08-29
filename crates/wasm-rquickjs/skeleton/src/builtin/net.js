@@ -131,6 +131,31 @@ function forwardNativeHandle(wrap, handle) {
     wrap.local_address = handle.local_address.bind(handle);
     wrap.set_no_delay = handle.set_no_delay.bind(handle);
     wrap.set_keep_alive = handle.set_keep_alive.bind(handle);
+    if (typeof handle.write_profile === 'function') {
+        wrap._writeProfile = {
+            writeCalls: 0,
+            writeBytes: 0,
+            writevCalls: 0,
+            writevBytes: 0,
+            concatCalls: 0,
+            concatBytes: 0,
+            serializedWritevChunks: 0,
+            nativeCrossings: 0,
+            completions: 0,
+            drainEvents: 0,
+            elapsedMs: 0,
+            nativeReadCrossings: 0,
+            readChunks: 0,
+            readBytes: 0,
+            readElapsedMs: 0,
+            streamReadRequests: 0,
+            lastReadRequestSize: 0,
+        };
+        wrap.get_write_profile = () => ({
+            js: { ...wrap._writeProfile },
+            native: JSON.parse(handle.write_profile()),
+        });
+    }
 }
 
 // IPC path → TCP loopback mapping for in-process Unix socket emulation
@@ -958,6 +983,10 @@ Socket.prototype._read = function _read(n) {
         return;
     }
     if (!this._handle || this.destroyed) return;
+    if (this._handle._writeProfile) {
+        this._handle._writeProfile.streamReadRequests++;
+        this._handle._writeProfile.lastReadRequestSize = n;
+    }
     if (this._pendingReadChunks.length > 0) {
         this._drainPendingReadChunks();
         if (this._netPaused || this._pendingReadChunks.length > 0) return;
@@ -1007,7 +1036,11 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
         while (this._reading && this._handle && token === this._readToken) {
             try {
                 this._readInFlight = true;
+                const profile = this._handle._writeProfile;
+                const readStartedAt = profile ? Date.now() : 0;
+                if (profile) profile.nativeReadCrossings++;
                 const chunk = await this._handle.read(16384);
+                if (profile) profile.readElapsedMs += Date.now() - readStartedAt;
                 this._readInFlight = false;
                 if (token !== this._readToken) break;
                 if (chunk === null || chunk === undefined) {
@@ -1018,6 +1051,10 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                         this.read(0);
                     }
                     break;
+                }
+                if (profile) {
+                    profile.readChunks++;
+                    profile.readBytes += chunk.length;
                 }
                 this.bytesRead += chunk.length;
                 this._resetTimeout();
@@ -1055,6 +1092,17 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     const data = typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk;
     const buf = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
     const handle = this._handle;
+    const profile = handle._writeProfile;
+    const startedAt = profile ? Date.now() : 0;
+    if (profile) {
+        profile.writeCalls++;
+        profile.writeBytes += buf.byteLength;
+        profile.nativeCrossings++;
+        if (!this._writeProfileDrainListener) {
+            this._writeProfileDrainListener = true;
+            this.on('drain', () => profile.drainEvents++);
+        }
+    }
     handle.writeQueueSize += buf.byteLength;
 
     (async () => {
@@ -1062,10 +1110,12 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
             const written = await handle.write(buf);
             this._bytesDispatched += written;
             this._resetTimeout();
+            if (profile) profile.completions++;
             callback(null);
         } catch (e) {
             callback(parseNativeError(e));
         } finally {
+            if (profile) profile.elapsedMs += Date.now() - startedAt;
             handle.writeQueueSize = Math.max(0, handle.writeQueueSize - buf.byteLength);
         }
     })();
@@ -1080,15 +1130,25 @@ Socket.prototype._writev = function _writev(chunks, callback) {
                 : Buffer.from(chunk)
     ));
     const totalLength = buffers.reduce((total, buffer) => total + buffer.length, 0);
+    const profile = this._handle && this._handle._writeProfile;
+    if (profile) {
+        profile.writevCalls++;
+        profile.writevBytes += totalLength;
+    }
 
     // Coalesce ordinary corked writes (notably HTTP response framing) while
     // bounding the temporary Buffer.concat allocation for large batches.
     if (totalLength <= 64 * 1024) {
+        if (profile) {
+            profile.concatCalls++;
+            profile.concatBytes += totalLength;
+        }
         this._write(Buffer.concat(buffers, totalLength), 'buffer', callback);
         return;
     }
 
     let index = 0;
+    if (profile) profile.serializedWritevChunks += buffers.length;
     const writeNext = (error) => {
         if (error || index === buffers.length) {
             callback(error || null);
@@ -1130,6 +1190,17 @@ Socket.prototype._destroy = function _destroy(err, callback) {
         this._connectingHandle = null;
     }
     if (this._handle) {
+        if (typeof this._handle.get_write_profile === 'function') {
+            try {
+                const profile = this._handle.get_write_profile();
+                if (
+                    profile.native.requestedBytes > 0 ||
+                    profile.native.completedReadBytes > 0
+                ) {
+                    console.error('[net-write-profile]' + JSON.stringify(profile));
+                }
+            } catch (_) {}
+        }
         this._handle.close();
         this._handle = null;
     }

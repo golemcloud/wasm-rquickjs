@@ -1009,6 +1009,76 @@ export async function netWritevBoundaries() {
         await runBatch([32 * 1024, 32 * 1024, 1]);
 }
 
+export async function netWriteProfile(chunkSize, chunkCount, corked) {
+    const startedAt = Date.now();
+    const expectedBytes = chunkSize * chunkCount;
+    let receivedBytes = 0;
+    let falseWrites = 0;
+    let snapshot = null;
+    let receiver = null;
+
+    const server = net.createServer((socket) => {
+        socket.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            if (!receiver && receivedBytes >= expectedBytes) {
+                receiver = socket._handle.get_write_profile();
+            }
+        });
+        socket.on('end', () => socket.end());
+    });
+
+    await new Promise((resolve, reject) => {
+        server.on('error', reject);
+        server.listen(0, resolve);
+    });
+
+    const socket = net.connect({ port: server.address().port });
+    await new Promise((resolve, reject) => {
+        socket.once('connect', resolve);
+        socket.once('error', reject);
+    });
+
+    const writeOnce = (buffer) => new Promise((resolve, reject) => {
+        if (!socket.write(buffer, (error) => error ? reject(error) : resolve())) {
+            falseWrites++;
+        }
+    });
+
+    if (corked) {
+        socket.cork();
+        const writes = [];
+        for (let index = 0; index < chunkCount; index++) {
+            writes.push(writeOnce(Buffer.alloc(chunkSize, 65 + (index % 26))));
+        }
+        socket.uncork();
+        await Promise.all(writes);
+    } else {
+        for (let index = 0; index < chunkCount; index++) {
+            await writeOnce(Buffer.alloc(chunkSize, 65 + (index % 26)));
+        }
+    }
+
+    snapshot = socket._handle.get_write_profile();
+    socket.end();
+    await new Promise((resolve, reject) => {
+        socket.once('close', resolve);
+        socket.once('error', reject);
+    });
+    await new Promise((resolve) => server.close(resolve));
+
+    return JSON.stringify({
+        chunkSize,
+        chunkCount,
+        corked,
+        expectedBytes,
+        receivedBytes,
+        falseWrites,
+        wallMs: Date.now() - startedAt,
+        receiver,
+        ...snapshot,
+    });
+}
+
 export async function httpPipelinedMaxRequests() {
     return new Promise((resolve) => {
         let settled = false;

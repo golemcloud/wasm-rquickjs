@@ -1,4 +1,6 @@
 use std::cell::RefCell;
+#[cfg(feature = "net-write-profiling")]
+use std::time::Instant;
 
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
@@ -72,6 +74,56 @@ pub mod native_module {
 
 // ── TcpSocket (client and accepted connections) ─────────────────────────
 
+#[cfg(feature = "net-write-profiling")]
+#[derive(Default)]
+struct TcpWriteProfile {
+    native_calls: u64,
+    requested_bytes: u64,
+    copied_bytes: u64,
+    completed_bytes: u64,
+    elapsed_ns: u64,
+    p2_check_write_calls: u64,
+    p2_capacity_waits: u64,
+    p2_capacity_wait_ns: u64,
+    p2_write_calls: u64,
+    p3_write_all_calls: u64,
+    native_read_calls: u64,
+    requested_read_bytes: u64,
+    completed_read_bytes: u64,
+    read_elapsed_ns: u64,
+    p2_read_ops: u64,
+    p2_read_waits: u64,
+    p2_read_wait_ns: u64,
+    p3_read_ops: u64,
+}
+
+#[cfg(feature = "net-write-profiling")]
+impl TcpWriteProfile {
+    fn to_json(&self) -> String {
+        serde_json::to_string(&serde_json::json!({
+            "nativeCalls": self.native_calls,
+            "requestedBytes": self.requested_bytes,
+            "copiedBytes": self.copied_bytes,
+            "completedBytes": self.completed_bytes,
+            "elapsedNs": self.elapsed_ns,
+            "p2CheckWriteCalls": self.p2_check_write_calls,
+            "p2CapacityWaits": self.p2_capacity_waits,
+            "p2CapacityWaitNs": self.p2_capacity_wait_ns,
+            "p2WriteCalls": self.p2_write_calls,
+            "p3WriteAllCalls": self.p3_write_all_calls,
+            "nativeReadCalls": self.native_read_calls,
+            "requestedReadBytes": self.requested_read_bytes,
+            "completedReadBytes": self.completed_read_bytes,
+            "readElapsedNs": self.read_elapsed_ns,
+            "p2ReadOps": self.p2_read_ops,
+            "p2ReadWaits": self.p2_read_waits,
+            "p2ReadWaitNs": self.p2_read_wait_ns,
+            "p3ReadOps": self.p3_read_ops,
+        }))
+        .expect("TCP write profile is serializable")
+    }
+}
+
 #[cfg(feature = "p2")]
 fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSocket> {
     let ip_family = match family {
@@ -105,6 +157,8 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             closed: false,
             generation: 0,
             waiters: 0,
+            #[cfg(feature = "net-write-profiling")]
+            write_profile: TcpWriteProfile::default(),
         }),
     })
 }
@@ -121,6 +175,8 @@ struct TcpInner {
     /// Number of async tasks currently holding a pollable derived from this socket's streams.
     /// Resources must not be dropped while waiters > 0.
     waiters: u32,
+    #[cfg(feature = "net-write-profiling")]
+    write_profile: TcpWriteProfile,
 }
 
 #[cfg(feature = "p2")]
@@ -172,6 +228,8 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             family: ip_family,
             connected: false,
             closed: false,
+            #[cfg(feature = "net-write-profiling")]
+            write_profile: TcpWriteProfile::default(),
         }),
     })
 }
@@ -205,6 +263,8 @@ struct TcpInner {
     family: IpAddressFamily,
     connected: bool,
     closed: bool,
+    #[cfg(feature = "net-write-profiling")]
+    write_profile: TcpWriteProfile,
 }
 
 #[derive(Trace, JsLifetime)]
@@ -432,6 +492,8 @@ impl TcpSocket {
     }
 
     pub async fn read(&self, ctx: Ctx<'_>, len: u64) -> rquickjs::Result<Option<Vec<u8>>> {
+        #[cfg(feature = "net-write-profiling")]
+        let read_started = Instant::now();
         let start_gen = {
             let inner = self.inner.borrow();
             if inner.closed {
@@ -452,6 +514,12 @@ impl TcpSocket {
             }
             inner.generation
         };
+        #[cfg(feature = "net-write-profiling")]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_profile.native_read_calls += 1;
+            inner.write_profile.requested_read_bytes += len;
+        }
 
         loop {
             let result = {
@@ -462,12 +530,27 @@ impl TcpSocket {
                     .ok_or_else(|| throw_socket_error(&ctx, "EBADF", "read", "No input stream"))?;
                 input.read(len)
             };
+            #[cfg(feature = "net-write-profiling")]
+            {
+                self.inner.borrow_mut().write_profile.p2_read_ops += 1;
+            }
 
             match result {
-                Ok(data) if !data.is_empty() => return Ok(Some(data)),
+                Ok(data) if !data.is_empty() => {
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        let mut inner = self.inner.borrow_mut();
+                        inner.write_profile.completed_read_bytes += data.len() as u64;
+                        inner.write_profile.read_elapsed_ns +=
+                            read_started.elapsed().as_nanos() as u64;
+                    }
+                    return Ok(Some(data));
+                }
                 Ok(_) => {
                     // Empty read = no data yet (connection still open).
                     // Poll the input stream and retry.
+                    #[cfg(feature = "net-write-profiling")]
+                    let wait_started = Instant::now();
                     let pollable = {
                         let mut inner = self.inner.borrow_mut();
                         let input = inner.input.as_ref().ok_or_else(|| {
@@ -482,6 +565,12 @@ impl TcpSocket {
                     {
                         let mut inner = self.inner.borrow_mut();
                         inner.waiters -= 1;
+                        #[cfg(feature = "net-write-profiling")]
+                        {
+                            inner.write_profile.p2_read_waits += 1;
+                            inner.write_profile.p2_read_wait_ns +=
+                                wait_started.elapsed().as_nanos() as u64;
+                        }
                         if inner.closed || inner.generation != start_gen {
                             inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
@@ -513,6 +602,8 @@ impl TcpSocket {
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
     ) -> rquickjs::Result<u32> {
+        #[cfg(feature = "net-write-profiling")]
+        let write_started = Instant::now();
         let data = data
             .as_bytes()
             .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
@@ -539,6 +630,13 @@ impl TcpSocket {
         };
 
         let total = data.len();
+        #[cfg(feature = "net-write-profiling")]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_profile.native_calls += 1;
+            inner.write_profile.requested_bytes += total as u64;
+            inner.write_profile.copied_bytes += total as u64;
+        }
         let mut offset = 0;
 
         while offset < total {
@@ -549,7 +647,7 @@ impl TcpSocket {
                     let output = inner.output.as_ref().ok_or_else(|| {
                         throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    output.check_write().map_err(|e| match e {
+                    let check = output.check_write().map_err(|e| match e {
                         StreamError::Closed => {
                             throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                         }
@@ -562,14 +660,24 @@ impl TcpSocket {
                                 &format!("check_write failed: {debug_message}"),
                             )
                         }
-                    })?
+                    })?;
+                    check
                 };
+                #[cfg(feature = "net-write-profiling")]
+                {
+                    self.inner
+                        .borrow_mut()
+                        .write_profile
+                        .p2_check_write_calls += 1;
+                }
 
                 if check > 0 {
                     break check;
                 }
 
                 // No capacity — poll and retry
+                #[cfg(feature = "net-write-profiling")]
+                let wait_started = Instant::now();
                 let pollable = {
                     let mut inner = self.inner.borrow_mut();
                     let output = inner.output.as_ref().ok_or_else(|| {
@@ -583,6 +691,12 @@ impl TcpSocket {
                 {
                     let mut inner = self.inner.borrow_mut();
                     inner.waiters -= 1;
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        inner.write_profile.p2_capacity_waits += 1;
+                        inner.write_profile.p2_capacity_wait_ns +=
+                            wait_started.elapsed().as_nanos() as u64;
+                    }
                     if inner.closed || inner.generation != start_gen {
                         inner.finalize_close_if_ready();
                         return Err(throw_socket_error(
@@ -616,10 +730,26 @@ impl TcpSocket {
                     }
                 })?;
             };
+            #[cfg(feature = "net-write-profiling")]
+            {
+                self.inner.borrow_mut().write_profile.p2_write_calls += 1;
+            }
             offset = end;
         }
 
+        #[cfg(feature = "net-write-profiling")]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_profile.completed_bytes += total as u64;
+            inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
+        }
+
         Ok(total as u32)
+    }
+
+    #[cfg(feature = "net-write-profiling")]
+    pub fn write_profile(&self) -> String {
+        self.inner.borrow().write_profile.to_json()
     }
 
     pub fn shutdown(&self, ctx: Ctx<'_>, how: u32) -> rquickjs::Result<()> {
@@ -985,6 +1115,8 @@ impl TcpSocket {
     }
 
     pub async fn read(&self, ctx: Ctx<'_>, len: u64) -> rquickjs::Result<Option<Vec<u8>>> {
+        #[cfg(feature = "net-write-profiling")]
+        let read_started = Instant::now();
         let (_keepalive, mut reader, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
             if let Some(error) = inner.recv_error.take() {
@@ -1011,6 +1143,11 @@ impl TcpSocket {
                     "Socket is not connected",
                 ));
             }
+            #[cfg(feature = "net-write-profiling")]
+            {
+                inner.write_profile.native_read_calls += 1;
+                inner.write_profile.requested_read_bytes += len;
+            }
             match (inner.socket.clone(), inner.reader.take()) {
                 (Some(sock), Some(reader)) => {
                     // Register a cancel signal so `close()` / `shutdown(SHUT_RD)`
@@ -1029,6 +1166,10 @@ impl TcpSocket {
 
         let cap = if len == 0 { 16384 } else { len as usize };
         loop {
+            #[cfg(feature = "net-write-profiling")]
+            {
+                self.inner.borrow_mut().write_profile.p3_read_ops += 1;
+            }
             let (status, buf) = {
                 let read_fut = reader.read(Vec::with_capacity(cap));
                 futures::pin_mut!(read_fut);
@@ -1047,6 +1188,12 @@ impl TcpSocket {
                 StreamResult::Complete(_) if !buf.is_empty() => {
                     let mut inner = self.inner.borrow_mut();
                     inner.read_cancel = None;
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        inner.write_profile.completed_read_bytes += buf.len() as u64;
+                        inner.write_profile.read_elapsed_ns +=
+                            read_started.elapsed().as_nanos() as u64;
+                    }
                     if !inner.closed {
                         inner.reader = Some(reader);
                     }
@@ -1095,6 +1242,8 @@ impl TcpSocket {
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
     ) -> rquickjs::Result<u32> {
+        #[cfg(feature = "net-write-profiling")]
+        let write_started = Instant::now();
         let data = data
             .as_bytes()
             .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
@@ -1117,6 +1266,13 @@ impl TcpSocket {
                     "write",
                     "Socket is not connected",
                 ));
+            }
+            #[cfg(feature = "net-write-profiling")]
+            {
+                inner.write_profile.native_calls += 1;
+                inner.write_profile.requested_bytes += total as u64;
+                inner.write_profile.copied_bytes += total as u64;
+                inner.write_profile.p3_write_all_calls += 1;
             }
             match (inner.socket.clone(), inner.writer.take()) {
                 (Some(sock), Some(writer)) => {
@@ -1158,6 +1314,11 @@ impl TcpSocket {
         };
         let mut inner = self.inner.borrow_mut();
         inner.write_cancel = None;
+        #[cfg(feature = "net-write-profiling")]
+        {
+            inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
+            inner.write_profile.completed_bytes += (total - leftover.len()) as u64;
+        }
         if !leftover.is_empty() {
             // The peer hung up before all bytes were accepted.
             inner.writer = None;
@@ -1179,6 +1340,11 @@ impl TcpSocket {
             inner.writer = Some(writer);
         }
         Ok(total as u32)
+    }
+
+    #[cfg(feature = "net-write-profiling")]
+    pub fn write_profile(&self) -> String {
+        self.inner.borrow().write_profile.to_json()
     }
 
     pub fn shutdown(&self, ctx: Ctx<'_>, how: u32) -> rquickjs::Result<()> {
@@ -1967,6 +2133,8 @@ impl TcpListener {
                             closed: false,
                             generation: 0,
                             waiters: 0,
+                            #[cfg(feature = "net-write-profiling")]
+                            write_profile: TcpWriteProfile::default(),
                         }),
                     };
 
@@ -2289,6 +2457,8 @@ impl TcpListener {
                 family: client_family,
                 connected: true,
                 closed: false,
+                #[cfg(feature = "net-write-profiling")]
+                write_profile: TcpWriteProfile::default(),
             }),
         };
 

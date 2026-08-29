@@ -84,6 +84,9 @@ timezone = ["dep:chrono-tz"]
 typescript-runtime = ["dep:swc_common", "dep:swc_ts_fast_strip"]
 typescript-transform-runtime = ["typescript-runtime"]
 
+# Private measurement hooks for the GOL-360 TCP write/backpressure benchmark.
+net-write-profiling = []
+
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]
 
