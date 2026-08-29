@@ -15,6 +15,8 @@ world node-http {
   export http-pipelined-connection-close: func() -> bool;
   export http-pipelined-active-timeout: func() -> bool;
   export http-close-idle-connections: func() -> bool;
+  export http-idle-resource-reclamation: func() -> bool;
+  export http-zero-keep-alive-timeout: func() -> bool;
   export http-informational-write-after-close: func() -> bool;
   export http-max-requests-closes-socket: func() -> bool;
   export net-writev-boundaries: func() -> bool;

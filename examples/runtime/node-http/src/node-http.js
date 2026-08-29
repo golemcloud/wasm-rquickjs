@@ -836,6 +836,185 @@ export async function httpCloseIdleConnections() {
     });
 }
 
+function getConnectionCount(server) {
+    return new Promise((resolve, reject) => {
+        server.getConnections((error, count) => {
+            if (error) reject(error);
+            else resolve(count);
+        });
+    });
+}
+
+function waitForConnectionCount(server, expected, attempts = 25) {
+    return new Promise((resolve) => {
+        const check = () => {
+            server.getConnections((error, count) => {
+                if (error || count === expected || attempts-- === 0) {
+                    resolve(!error && count === expected);
+                } else {
+                    setTimeout(check, 20);
+                }
+            });
+        };
+        check();
+    });
+}
+
+export async function httpIdleResourceReclamation() {
+    const sockets = new Set();
+    let handled = 0;
+    const server = http.createServer((_req, res) => {
+        handled++;
+        res.end('ok');
+    });
+    server.keepAliveTimeout = 40;
+
+    const closeServer = () =>
+        new Promise((resolve) => {
+            for (const socket of sockets) socket.destroy();
+            server.closeAllConnections();
+            if (server.listening) server.close(resolve);
+            else resolve();
+        });
+
+    try {
+        await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(0, resolve);
+        });
+
+        const runBatch = async (batchSize) => {
+            const port = server.address().port;
+            await Promise.all(
+                Array.from(
+                    { length: batchSize },
+                    () =>
+                        new Promise((resolve, reject) => {
+                            let wire = '';
+                            let settled = false;
+                            const socket = net.connect({ port });
+                            sockets.add(socket);
+                            const timeout = setTimeout(
+                                () => finish(new Error('idle connection did not close')),
+                                1500
+                            );
+                            const finish = (error) => {
+                                if (settled) return;
+                                settled = true;
+                                clearTimeout(timeout);
+                                sockets.delete(socket);
+                                if (error) reject(error);
+                                else resolve();
+                            };
+                            socket.on('connect', () => {
+                                socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
+                            });
+                            socket.on('data', (chunk) => {
+                                wire += chunk.toString('latin1');
+                            });
+                            socket.on('close', () => {
+                                const responseComplete =
+                                    wire.includes('HTTP/1.1 200') &&
+                                    wire.includes('\r\nConnection: keep-alive\r\n') &&
+                                    wire.includes('\r\n\r\n') &&
+                                    wire.includes('ok');
+                                finish(
+                                    responseComplete
+                                        ? undefined
+                                        : new Error('incomplete keep-alive response')
+                                );
+                            });
+                            socket.on('error', finish);
+                        })
+                )
+            );
+            return (await getConnectionCount(server)) === 0;
+        };
+
+        const firstReclaimed = await runBatch(6);
+        const secondReclaimed = firstReclaimed && (await runBatch(6));
+        return firstReclaimed && secondReclaimed && handled === 12;
+    } catch (_error) {
+        return false;
+    } finally {
+        await closeServer();
+    }
+}
+
+export async function httpZeroKeepAliveTimeout() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let secondRequestScheduled = false;
+        let explicitCleanupRequested = false;
+        let closedBeforeExplicitCleanup = false;
+        const server = http.createServer((_req, res) => {
+            handled++;
+            if (handled === 2) {
+                res.on('finish', () => {
+                    explicitCleanupRequested = true;
+                    setImmediate(() => server.closeIdleConnections());
+                });
+            }
+            res.end(`ok-${handled}`);
+        });
+        server.keepAliveTimeout = 0;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(overallTimeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            const complete = () => resolve(result);
+            if (server.listening) server.close(complete);
+            else complete();
+        };
+        const overallTimeout = setTimeout(() => finish(false), 2500);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write('GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!secondRequestScheduled && handled === 1 && wire.includes('ok-1')) {
+                    secondRequestScheduled = true;
+                    setTimeout(() => {
+                        if (socket.destroyed) {
+                            closedBeforeExplicitCleanup = true;
+                            finish(false);
+                            return;
+                        }
+                        socket.write('GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n');
+                    }, 120);
+                }
+            });
+            socket.on('end', () => {
+                if (!explicitCleanupRequested) closedBeforeExplicitCleanup = true;
+            });
+            socket.on('close', () => {
+                const connectionHeaders = wire.match(/\r\nConnection: keep-alive\r\n/g) || [];
+                waitForConnectionCount(server, 0).then((countReachedZero) => {
+                    finish(
+                        countReachedZero &&
+                            handled === 2 &&
+                            !closedBeforeExplicitCleanup &&
+                            connectionHeaders.length === 2 &&
+                            !wire.includes('\r\nKeep-Alive:') &&
+                            wire.includes('ok-1') &&
+                            wire.includes('ok-2')
+                    );
+                });
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
 export async function httpInformationalWriteAfterClose() {
     return new Promise((resolve) => {
         let settled = false;
