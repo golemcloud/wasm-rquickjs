@@ -302,6 +302,7 @@ enum HttpLifecyclePhase {
     ServerResponseWriteAfterFrame = 40,
     ServerResponseWriteError = 41,
     ServerResponsePendingAtDrop = 42,
+    ServerResponseCorrelationOverlap = 43,
 }
 
 impl HttpLifecyclePhase {
@@ -349,6 +350,7 @@ impl HttpLifecyclePhase {
             40 => "server-response-write-after-frame",
             41 => "server-response-write-error",
             42 => "server-response-pending-at-drop",
+            43 => "server-response-correlation-overlap",
             _ => "unknown",
         }
     }
@@ -624,7 +626,18 @@ impl HttpConnectionState {
     }
 
     fn arm_response(&self, request_id: usize) {
-        self.pending_response.store(request_id, Ordering::Release);
+        if let Err(pending_request) = self.pending_response.compare_exchange(
+            0,
+            request_id,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            self.trace.record(
+                request_id,
+                HttpLifecyclePhase::ServerResponseCorrelationOverlap,
+                pending_request.min(usize::from(u16::MAX)) as u16,
+            );
+        }
     }
 
     fn record_response_write(&self, phase: HttpLifecyclePhase) {
@@ -1547,7 +1560,7 @@ impl Drop for TestCacheLock {
 mod tests {
     use super::*;
     use test_r::test;
-    use tokio::io::{AsyncRead as _, AsyncWrite as _};
+    use tokio::io::{AsyncRead as _, AsyncReadExt as _, AsyncWrite as _, AsyncWriteExt as _};
 
     #[derive(Default)]
     struct ScriptedIoCalls {
@@ -1886,7 +1899,7 @@ mod tests {
     }
 
     #[test]
-    fn http_lifecycle_server_connection_maps_multiple_requests_without_conflation() {
+    fn http_lifecycle_server_connection_maps_multiple_requests_to_same_connection() {
         let trace = HttpLifecycleTrace::new();
         let connection = TracedTestServerConnection {
             state: Arc::new(HttpConnectionState::new(trace.clone(), 17)),
@@ -1897,6 +1910,91 @@ mod tests {
         let snapshot = trace.snapshot();
         assert!(snapshot.contains("request=51 phase=server-request-connection detail=17"));
         assert!(snapshot.contains("request=52 phase=server-request-connection detail=17"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_overlap_is_explicit_and_non_overwriting() {
+        let trace = HttpLifecycleTrace::new();
+        let state = HttpConnectionState::new(trace.clone(), 19);
+        state.arm_response(61);
+        state.arm_response(62);
+
+        assert_eq!(state.pending_response.load(Ordering::Acquire), 61);
+        let snapshot = trace.snapshot();
+        assert!(
+            snapshot.contains("request=62 phase=server-response-correlation-overlap detail=61")
+        );
+    }
+
+    #[test]
+    async fn http_lifecycle_axum_pipeline_preserves_response_correlation() {
+        use axum::body::Body;
+        use axum::extract::{ConnectInfo, Request};
+        use axum::routing::any;
+        use bytes::Bytes;
+        use http_body_util::Full;
+
+        let trace = HttpLifecycleTrace::new();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let listener = TracedTestServerListener {
+            listener,
+            trace: trace.clone(),
+        };
+        let router = axum::Router::new().route(
+            "/",
+            any(
+                |ConnectInfo(connection): ConnectInfo<TracedTestServerConnection>,
+                 request: Request| async move {
+                    let request_id = test_server_http_correlation(request.headers());
+                    record_test_server_connection(request_id, Some(&connection));
+                    axum::response::Response::new(Body::new(TracedHttpBody::new(
+                        Full::new(Bytes::from_static(b"ok")),
+                        connection.state.trace.clone(),
+                        request_id,
+                        "server-response",
+                        Some(connection.state),
+                    )))
+                },
+            ),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<TracedTestServerConnection>(),
+            )
+            .await
+            .unwrap();
+        });
+
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        client
+            .write_all(
+                b"GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: 71\r\n\r\n\
+                  GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: 72\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        server.abort();
+
+        assert_eq!(
+            String::from_utf8_lossy(&response)
+                .matches("HTTP/1.1 200 OK")
+                .count(),
+            2
+        );
+        let snapshot = trace.snapshot();
+        for request_id in [71, 72] {
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-request-connection"
+            )));
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-response-write-after-frame"
+            )));
+        }
+        assert!(!snapshot.contains("server-response-correlation-overlap"));
     }
 
     #[cfg(feature = "use-golem-wasmtime")]
