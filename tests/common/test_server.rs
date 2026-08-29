@@ -1,6 +1,8 @@
 use axum::body::Body;
+use axum::extract::Request;
 use axum::extract::{Multipart, Path};
 use axum::http::HeaderMap;
+use axum::middleware::Next;
 use axum::response::{AppendHeaders, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -26,6 +28,30 @@ impl Drop for TestServerHandle {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+fn trace_http_lifecycle(router: Router, port: u16) -> Router {
+    router.layer(axum::middleware::from_fn(
+        move |request: Request, next: Next| async move {
+            super::record_test_server_arrival(port, request.uri());
+            let (parts, body) = request.into_parts();
+            let request = Request::from_parts(
+                parts,
+                Body::new(super::traced_test_server_body(body, port, "server-request")),
+            );
+            let response = next.run(request).await;
+            super::record_test_server_response_head(port, response.status());
+            let (parts, body) = response.into_parts();
+            axum::response::Response::from_parts(
+                parts,
+                Body::new(super::traced_test_server_body(
+                    body,
+                    port,
+                    "server-response",
+                )),
+            )
+        },
+    ))
 }
 
 pub async fn start_test_server() -> (u16, TestServerHandle) {
@@ -227,6 +253,7 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                         .into_response()
                 }),
             );
+        let router = trace_http_lifecycle(router, host_http_port);
 
         axum::serve(listener, router).await.unwrap();
     });
@@ -263,6 +290,7 @@ pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::Unbounde
                 axum::routing::any(async || (StatusCode::FOUND, [("Location", "/slow-response")])),
             )
             .route("/abort-ready", ready);
+        let router = trace_http_lifecycle(router, port);
         axum::serve(listener, router).await.unwrap();
     });
 

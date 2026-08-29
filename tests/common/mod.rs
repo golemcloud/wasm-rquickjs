@@ -250,6 +250,7 @@ const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 static HOST_TRACE: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 const HOST_TRACE_CAP: usize = 256 * 1024;
 static NEXT_HTTP_TRACE_INVOCATION: AtomicUsize = AtomicUsize::new(1);
+static TEST_SERVER_HTTP_TRACE: OnceLock<HttpLifecycleTrace> = OnceLock::new();
 const HTTP_LIFECYCLE_CAP: usize = 256;
 
 #[repr(u8)]
@@ -271,13 +272,24 @@ enum HttpLifecyclePhase {
     SendError = 14,
     ResponseIoOk = 15,
     ResponseIoError = 16,
+    ServerArrival = 17,
+    ServerRequestFirstData = 18,
+    ServerRequestEof = 19,
+    ServerRequestError = 20,
+    ServerRequestDrop = 21,
+    ServerResponseHead = 22,
+    ServerResponseFirstData = 23,
+    ServerResponseEof = 24,
+    ServerResponseError = 25,
+    ServerResponseDrop = 26,
+    TargetPath = 27,
 }
 
 impl HttpLifecyclePhase {
     fn label(value: u8) -> &'static str {
         match value {
             1 => "submit",
-            2 => "target",
+            2 => "target-port",
             3 => "request-first-data",
             4 => "request-first-trailers",
             5 => "request-eof",
@@ -292,6 +304,17 @@ impl HttpLifecyclePhase {
             14 => "send-error",
             15 => "response-io-ok",
             16 => "response-io-error",
+            17 => "server-arrival",
+            18 => "server-request-first-data",
+            19 => "server-request-eof",
+            20 => "server-request-error",
+            21 => "server-request-drop-before-terminal",
+            22 => "server-response-head",
+            23 => "server-response-first-data",
+            24 => "server-response-eof",
+            25 => "server-response-error",
+            26 => "server-response-drop-before-terminal",
+            27 => "target-path-hash",
             _ => "unknown",
         }
     }
@@ -312,11 +335,27 @@ impl HttpLifecycleJournal {
 
     fn record(&self, request: usize, phase: HttpLifecyclePhase, detail: u16) {
         let sequence = self.next_event.fetch_add(1, Ordering::Relaxed);
+        self.publish(sequence, request, phase, detail);
+    }
+
+    fn publish(&self, sequence: usize, request: usize, phase: HttpLifecyclePhase, detail: u16) {
         let packed = ((sequence as u64 & 0x00ff_ffff) << 40)
             | ((request as u64 & 0xffff) << 24)
             | ((phase as u64) << 16)
             | u64::from(detail);
-        self.slots[sequence % HTTP_LIFECYCLE_CAP].store(packed, Ordering::Release);
+        let slot = &self.slots[sequence % HTTP_LIFECYCLE_CAP];
+        let mut current = slot.load(Ordering::Acquire);
+        loop {
+            let current_sequence = current >> 40;
+            if current_sequence >= (sequence as u64 & 0x00ff_ffff) {
+                return;
+            }
+            match slot.compare_exchange_weak(current, packed, Ordering::Release, Ordering::Acquire)
+            {
+                Ok(_) => return,
+                Err(observed) => current = observed,
+            }
+        }
     }
 
     fn snapshot(&self, invocation: usize) -> String {
@@ -389,11 +428,16 @@ impl HttpLifecycleTrace {
             0
         };
         self.record(request, HttpLifecyclePhase::Submit, method);
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        uri.hash(&mut hasher);
         self.record(
             request,
             HttpLifecyclePhase::Target,
+            uri.port_u16().unwrap_or_default(),
+        );
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        uri.path_and_query().hash(&mut hasher);
+        self.record(
+            request,
+            HttpLifecyclePhase::TargetPath,
             (hasher.finish() & 0xffff) as u16,
         );
     }
@@ -403,9 +447,44 @@ impl HttpLifecycleTrace {
     }
 }
 
+fn test_server_http_trace() -> &'static HttpLifecycleTrace {
+    TEST_SERVER_HTTP_TRACE.get_or_init(HttpLifecycleTrace::new)
+}
+
+fn record_test_server_arrival(port: u16, uri: &http::Uri) {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    uri.path_and_query().hash(&mut hasher);
+    test_server_http_trace().record(
+        usize::from(port),
+        HttpLifecyclePhase::ServerArrival,
+        (hasher.finish() & 0xffff) as u16,
+    );
+}
+
+fn record_test_server_response_head(port: u16, status: http::StatusCode) {
+    test_server_http_trace().record(
+        usize::from(port),
+        HttpLifecyclePhase::ServerResponseHead,
+        status.as_u16(),
+    );
+}
+
+fn traced_test_server_body<B: HttpBody>(
+    body: B,
+    port: u16,
+    side: &'static str,
+) -> TracedHttpBody<B> {
+    TracedHttpBody::new(
+        body,
+        test_server_http_trace().clone(),
+        usize::from(port),
+        side,
+    )
+}
+
 /// A transparent body observer. It never polls ahead or adds an await: every host poll is
 /// delegated exactly once, with only the first frame and the terminal outcome recorded.
-struct TracedHttpBody<B> {
+struct TracedHttpBody<B: HttpBody> {
     inner: Pin<Box<B>>,
     trace: HttpLifecycleTrace,
     request: usize,
@@ -414,7 +493,7 @@ struct TracedHttpBody<B> {
     terminal: bool,
 }
 
-impl<B> TracedHttpBody<B> {
+impl<B: HttpBody> TracedHttpBody<B> {
     fn new(inner: B, trace: HttpLifecycleTrace, request: usize, side: &'static str) -> Self {
         Self {
             inner: Box::pin(inner),
@@ -438,6 +517,14 @@ impl<B> TracedHttpBody<B> {
             ("response", "eof") => HttpLifecyclePhase::ResponseEof,
             ("response", "error") => HttpLifecyclePhase::ResponseError,
             ("response", "drop-before-terminal") => HttpLifecyclePhase::ResponseDrop,
+            ("server-request", "first-data") => HttpLifecyclePhase::ServerRequestFirstData,
+            ("server-request", "eof") => HttpLifecyclePhase::ServerRequestEof,
+            ("server-request", "error") => HttpLifecyclePhase::ServerRequestError,
+            ("server-request", "drop-before-terminal") => HttpLifecyclePhase::ServerRequestDrop,
+            ("server-response", "first-data") => HttpLifecyclePhase::ServerResponseFirstData,
+            ("server-response", "eof") => HttpLifecyclePhase::ServerResponseEof,
+            ("server-response", "error") => HttpLifecyclePhase::ServerResponseError,
+            ("server-response", "drop-before-terminal") => HttpLifecyclePhase::ServerResponseDrop,
             _ => return,
         };
         self.trace.record(self.request, phase, 0);
@@ -488,9 +575,9 @@ impl<B: HttpBody> HttpBody for TracedHttpBody<B> {
     }
 }
 
-impl<B> Drop for TracedHttpBody<B> {
+impl<B: HttpBody> Drop for TracedHttpBody<B> {
     fn drop(&mut self) {
-        if !self.terminal {
+        if !self.terminal && !self.inner.as_ref().is_end_stream() {
             self.event("drop-before-terminal");
         }
     }
@@ -498,6 +585,43 @@ impl<B> Drop for TracedHttpBody<B> {
 
 #[derive(Clone)]
 struct P2HttpTraceHooks(HttpLifecycleTrace);
+
+fn trace_p2_result(
+    trace: &HttpLifecycleTrace,
+    request_id: usize,
+    result: Result<
+        wasmtime_wasi_http::p2::types::IncomingResponse,
+        wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
+    >,
+) -> Result<
+    wasmtime_wasi_http::p2::types::IncomingResponse,
+    wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
+> {
+    match result {
+        Ok(mut incoming) => {
+            trace.record(
+                request_id,
+                HttpLifecyclePhase::ResponseHead,
+                incoming.resp.status().as_u16(),
+            );
+            let (parts, body) = incoming.resp.into_parts();
+            incoming.resp = http::Response::from_parts(
+                parts,
+                TracedHttpBody::new(body, trace.clone(), request_id, "response").boxed_unsync(),
+            );
+            Ok(incoming)
+        }
+        Err(error) => {
+            trace.record(request_id, HttpLifecyclePhase::SendError, 0);
+            Err(error)
+        }
+    }
+}
+
+#[cfg(feature = "use-golem-wasmtime")]
+fn p2_method_expects_body(method: &http::Method) -> bool {
+    method == http::Method::POST || method == http::Method::PUT || method == http::Method::PATCH
+}
 
 impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
     #[cfg(not(feature = "use-golem-wasmtime"))]
@@ -516,9 +640,12 @@ impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
             parts,
             TracedHttpBody::new(body, trace.clone(), request_id, "request").boxed_unsync(),
         );
-        Ok(wasmtime_wasi_http::p2::default_send_request(
-            request, config,
-        ))
+        let handle = wasmtime_wasi::runtime::spawn(async move {
+            let result =
+                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
+            Ok(trace_p2_result(&trace, request_id, result))
+        });
+        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
     }
 
     #[cfg(feature = "use-golem-wasmtime")]
@@ -532,17 +659,44 @@ impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
         let trace = self.0.clone();
         let request_id = trace.next_request();
         trace.record_submit(request_id, request.method(), request.uri());
+        let collect_before_send =
+            !p2_method_expects_body(request.method()) && body_completion.is_some();
         let (parts, body) = request.into_parts();
         let request = http::Request::from_parts(
             parts,
-            TracedHttpBody::new(body, trace, request_id, "request").boxed_unsync(),
+            TracedHttpBody::new(body, trace.clone(), request_id, "request").boxed_unsync(),
         );
-        Ok(wasmtime_wasi_http::p2::default_send_request_with_pool(
-            request,
-            config,
-            body_completion,
-            None,
-        ))
+        let handle = wasmtime_wasi::runtime::spawn(async move {
+            let request = if collect_before_send {
+                let body_completion = body_completion.expect("checked above");
+                let (parts, body) = request.into_parts();
+                let completion = async {
+                    match body_completion.await {
+                        Ok(Ok(())) => Ok(()),
+                        Ok(Err(error)) => Err(error),
+                        Err(_) => Err(
+                            wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError,
+                        ),
+                    }
+                };
+                let collect = async {
+                    BodyExt::collect(body).await.map(|collected| {
+                        collected
+                            .map_err(|_: std::convert::Infallible| unreachable!())
+                            .boxed_unsync()
+                    })
+                };
+                let (completion, collected) = futures::future::join(completion, collect).await;
+                completion?;
+                http::Request::from_parts(parts, collected?)
+            } else {
+                request
+            };
+            let result =
+                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
+            Ok(trace_p2_result(&trace, request_id, result))
+        });
+        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
     }
 }
 
@@ -1000,6 +1154,83 @@ impl Drop for TestCacheLock {
 mod tests {
     use super::*;
     use test_r::test;
+
+    #[test]
+    fn http_lifecycle_ring_rejects_delayed_old_generation() {
+        let journal = HttpLifecycleJournal::new();
+        journal.publish(1, 1, HttpLifecyclePhase::Submit, 0);
+        journal.publish(
+            1 + HTTP_LIFECYCLE_CAP,
+            2,
+            HttpLifecyclePhase::ResponseHead,
+            200,
+        );
+        journal.publish(1, 3, HttpLifecyclePhase::SendError, 0);
+
+        let retained = journal.slots[1].load(Ordering::Acquire);
+        assert_eq!(retained >> 40, (1 + HTTP_LIFECYCLE_CAP) as u64);
+        assert_eq!((retained >> 24) & 0xffff, 2);
+    }
+
+    #[test]
+    fn http_lifecycle_ring_remains_valid_during_concurrent_snapshots() {
+        let journal = Arc::new(HttpLifecycleJournal::new());
+        let writers = (0..8)
+            .map(|request| {
+                let journal = journal.clone();
+                thread::spawn(move || {
+                    for _ in 0..1_000 {
+                        journal.record(request, HttpLifecyclePhase::Submit, 0);
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for _ in 0..100 {
+            let snapshot = journal.snapshot(1);
+            assert!(snapshot.starts_with("invocation=1\n"));
+        }
+        for writer in writers {
+            writer.join().unwrap();
+        }
+
+        let newest = journal.next_event.load(Ordering::Acquire) - 1;
+        let retained = journal
+            .slots
+            .iter()
+            .map(|slot| slot.load(Ordering::Acquire) >> 40)
+            .collect::<Vec<_>>();
+        assert!(retained.contains(&(newest as u64)));
+        assert!(
+            retained
+                .iter()
+                .all(|sequence| *sequence > (newest - HTTP_LIFECYCLE_CAP) as u64)
+        );
+    }
+
+    #[test]
+    fn http_lifecycle_empty_body_drop_is_terminal() {
+        let trace = HttpLifecycleTrace::new();
+        let body = http_body_util::Empty::<bytes::Bytes>::new();
+        drop(TracedHttpBody::new(body, trace.clone(), 1, "request"));
+
+        let snapshot = trace.snapshot();
+        assert!(!snapshot.contains("drop-before-terminal"));
+    }
+
+    #[test]
+    fn http_lifecycle_p2_send_error_is_terminal_boundary() {
+        let trace = HttpLifecycleTrace::new();
+        let result = trace_p2_result(
+            &trace,
+            7,
+            Err(wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError),
+        );
+
+        assert!(result.is_err());
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=7 phase=send-error"));
+    }
 
     #[test]
     fn artifact_cache_stamp_must_not_be_older_than_output() -> anyhow::Result<()> {
@@ -2334,8 +2565,9 @@ impl TestInstance {
         let results = results.map_err(|err| {
             let host_trace = host_trace();
             let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
+            let server_http_lifecycle = test_server_http_trace().snapshot();
             err.context(format!(
-                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nHTTP lifecycle:\n{http_lifecycle}\nhost trace:\n{host_trace}"
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nHTTP lifecycle:\n{http_lifecycle}\ntest-server HTTP lifecycle:\n{server_http_lifecycle}\nhost trace:\n{host_trace}"
             ))
         });
 
