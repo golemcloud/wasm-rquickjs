@@ -26,7 +26,7 @@
   "inputs": {
     "algorithm": "blake3-composite-v1",
     "benchmarkHash": "0e2e8491825cdfaf9a6fd93ac92d346911160798e755b84991245f1e5dc316cd",
-    "buildHash": "c33361b9eccebf7bcdf9c66cf986b9e7cc6c018a674503f75a3fe9893ba845f6"
+    "buildHash": "42830791a9aea317f28ca8a64dbaa8a3bd26c8580c013f2ccce203f1a370b8d7"
   },
   "nodeBaseline": {
     "exitCode": 0,
