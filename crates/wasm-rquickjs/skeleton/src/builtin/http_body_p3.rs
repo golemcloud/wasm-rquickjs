@@ -1,15 +1,57 @@
 //! Shared Preview 3 response-body ownership for `fetch` and `node:http`.
 
-use std::future::IntoFuture;
+use std::cell::RefCell;
+use std::future::{Future, IntoFuture};
 use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context, Poll};
 use wasip3::http::types::{ErrorCode, Response, Trailers};
 use wasip3::wit_bindgen::rt::async_support::{
-    FutureReader, FutureWriter, StreamReader, StreamResult,
+    FutureReader, FutureWriter, StreamRead, StreamReader, StreamResult,
 };
 
 type BodyResultReader = FutureReader<Result<Option<Trailers>, ErrorCode>>;
 type BodyResultFuture = Pin<Box<<BodyResultReader as IntoFuture>::IntoFuture>>;
 type ResponseResultWriter = FutureWriter<Result<(), ErrorCode>>;
+type RecoveredRead = Rc<RefCell<Option<(StreamResult, Vec<u8>)>>>;
+
+struct CancelSafeRead<'a> {
+    read: Pin<Box<StreamRead<'a, u8>>>,
+    recovered: RecoveredRead,
+    completed: bool,
+}
+
+impl<'a> CancelSafeRead<'a> {
+    fn new(read: StreamRead<'a, u8>, recovered: RecoveredRead) -> Self {
+        Self {
+            read: Box::pin(read),
+            recovered,
+            completed: false,
+        }
+    }
+}
+
+impl Future for CancelSafeRead<'_> {
+    type Output = (StreamResult, Vec<u8>);
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.read.as_mut().poll(cx) {
+            Poll::Ready(result) => {
+                self.completed = true;
+                Poll::Ready(result)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl Drop for CancelSafeRead<'_> {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.recovered.replace(Some(self.read.as_mut().cancel()));
+        }
+    }
+}
 
 enum ResponseBodyState {
     Unconsumed(Response),
@@ -32,18 +74,21 @@ enum ResponseBodyState {
 /// the owner still drops the reader, body-result future, response-result writer, and response.
 pub(crate) struct ResponseBody {
     state: ResponseBodyState,
+    recovered_read: RecoveredRead,
 }
 
 impl ResponseBody {
     pub(crate) fn empty() -> Self {
         Self {
             state: ResponseBodyState::Consumed,
+            recovered_read: Rc::new(RefCell::new(None)),
         }
     }
 
     pub(crate) fn new(response: Response) -> Self {
         Self {
             state: ResponseBodyState::Unconsumed(response),
+            recovered_read: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -79,11 +124,16 @@ impl ResponseBody {
     async fn read_from_reader(&mut self) -> Result<Option<Vec<u8>>, String> {
         const CHUNK_SIZE: usize = 16 * 1024;
         loop {
-            let (status, bytes) = {
+            let recovered = self.recovered_read.borrow_mut().take();
+            let (status, bytes) = if let Some(recovered) = recovered {
+                recovered
+            } else {
+                let recovered_read = self.recovered_read.clone();
                 let ResponseBodyState::Reading { reader, .. } = &mut self.state else {
                     return Ok(None);
                 };
-                reader.read(Vec::with_capacity(CHUNK_SIZE)).await
+                CancelSafeRead::new(reader.read(Vec::with_capacity(CHUNK_SIZE)), recovered_read)
+                    .await
             };
             match status {
                 StreamResult::Complete(_) if !bytes.is_empty() => return Ok(Some(bytes)),
@@ -108,10 +158,7 @@ impl ResponseBody {
                         Ok(Some(bytes))
                     };
                 }
-                StreamResult::Cancelled => {
-                    self.state = ResponseBodyState::Consumed;
-                    return Ok(None);
-                }
+                StreamResult::Cancelled => continue,
             }
         }
     }
