@@ -677,7 +677,7 @@ fn des3_cbc_encrypt_no_padding(key: &[u8], iv: &[u8; 8], data: &[u8]) -> Option<
 
     let mut enc = cbc::Encryptor::<des::TdesEde3>::new_from_slices(key, iv).ok()?;
     let mut output = Vec::with_capacity(data.len());
-    for chunk in data.chunks_exact(8) {
+    for chunk in data.as_chunks::<8>().0 {
         let mut block = cipher::Block::<des::TdesEde3>::default();
         block.copy_from_slice(chunk);
         enc.encrypt_block_mut(&mut block);
@@ -697,7 +697,7 @@ fn des3_cbc_decrypt_no_padding(key: &[u8], iv: &[u8; 8], data: &[u8]) -> Option<
 
     let mut dec = cbc::Decryptor::<des::TdesEde3>::new_from_slices(key, iv).ok()?;
     let mut output = Vec::with_capacity(data.len());
-    for chunk in data.chunks_exact(8) {
+    for chunk in data.as_chunks::<8>().0 {
         let mut block = cipher::Block::<des::TdesEde3>::default();
         block.copy_from_slice(chunk);
         dec.decrypt_block_mut(&mut block);
