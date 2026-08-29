@@ -462,12 +462,6 @@ export class Response {
         if (bodyOrNative instanceof httpNative.HttpResponse) {
             // Internal path: constructed from native HttpResponse
             this.nativeResponse = bodyOrNative;
-            if (typeof httpNative.pauseNextBodyReadAfterReadyForTest === 'function') {
-                this.pauseNextBodyReadAfterReadyForTest = () =>
-                    httpNative.pauseNextBodyReadAfterReadyForTest(this.nativeResponse);
-                this.takeRecoveredBodyReadBytesForTest = () =>
-                    httpNative.takeRecoveredBodyReadBytesForTest(this.nativeResponse);
-            }
             this.url = initOrUrl || '';
             this.bodyUsed = false;
             this._credentials = credentials || 'same-origin';

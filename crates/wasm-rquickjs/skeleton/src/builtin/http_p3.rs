@@ -1653,7 +1653,14 @@ fn is_https_to_http(from_url: &Url, to_url: &Url) -> bool {
 // JavaScript sources (shared with the Preview 2 path).
 // ---------------------------------------------------------------------------
 
+#[cfg(not(feature = "internal-test-execution"))]
 pub const HTTP_JS: &str = include_str!("http.js");
+#[cfg(feature = "internal-test-execution")]
+pub const HTTP_JS: &str = concat!(
+    include_str!("http.js"),
+    "\n",
+    include_str!("http_internal_test.js")
+);
 pub const FETCH_BLOB_JS: &str = include_str!("fetch-blob-4.0.0.js");
 pub const FORMDATA_JS: &str = include_str!("formdata-polyfill-4.0.10.js");
 
