@@ -470,7 +470,7 @@ export class Response {
             this._signal = signal;
             this._abortBodyListener = undefined;
             this._bodyStream = undefined;
-            this._nativeBodyState = {source: undefined, controller: undefined};
+            this._nativeBodyState = {source: undefined, controller: undefined, discarded: false};
             this._nativeBodyGroup = nativeBodyGroup || {active: 1, cancelWaiters: []};
             this._nativeBodyBranchFinished = this._nativeBodyGroup.terminal === true;
             if (signal?.aborted) {
@@ -482,6 +482,7 @@ export class Response {
                     const response = responseRef.deref();
                     if (!response) return;
                     const bodyState = response._nativeBodyState;
+                    bodyState.discarded = true;
                     if (bodyState.source) {
                         bodyState.source.discard();
                     } else if (!response.bodyUsed) {
@@ -586,7 +587,11 @@ export class Response {
                         [next, err] = await bodyState.source.pull();
                     } catch (error) {
                         response._detachAbortBodyListener();
-                        response._finishNativeBodyGroup();
+                        if (bodyState.discarded) {
+                            response._finishNativeBodyBranch();
+                        } else {
+                            response._finishNativeBodyGroup();
+                        }
                         if (response._signal?.aborted) throw responseAbortReason(response._signal);
                         throw error;
                     }
@@ -605,6 +610,7 @@ export class Response {
                 },
                 cancel() {
                     response.bodyUsed = true;
+                    bodyState.discarded = true;
                     if (bodyState.source) {
                         bodyState.source.discard();
                     } else {

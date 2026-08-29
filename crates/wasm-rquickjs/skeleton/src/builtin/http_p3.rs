@@ -888,10 +888,12 @@ impl NativeBody for NativeResponseBody {
         NativeResponseBody::discard(&mut self);
     }
 
+    #[cfg(feature = "internal-test-execution")]
     fn take_recovered_read_bytes_for_test(&self) -> usize {
         NativeResponseBody::take_recovered_read_bytes_for_test(self)
     }
 
+    #[cfg(feature = "internal-test-execution")]
     fn pause_next_ready_read_for_test(&self) -> bool {
         NativeResponseBody::pause_next_ready_read_for_test(self)
     }
@@ -974,6 +976,7 @@ impl HttpResponse {
         }
     }
 
+    #[cfg(feature = "internal-test-execution")]
     pub fn take_recovered_body_read_bytes_for_test(&self) -> usize {
         match &self.body {
             ResponseBody::Native(native) => native.take_recovered_read_bytes_for_test(),
@@ -982,6 +985,7 @@ impl HttpResponse {
         }
     }
 
+    #[cfg(feature = "internal-test-execution")]
     pub fn pause_next_body_read_after_ready_for_test(&self) -> bool {
         match &self.body {
             ResponseBody::Native(native) => native.pause_next_ready_read_for_test(),

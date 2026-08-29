@@ -1388,10 +1388,12 @@ export async function abortPendingResponseBody(port, testCase) {
         await Promise.resolve();
         const pendingUntilSurvivorFinishes = !cancelSettled;
         await pendingRead.catch(() => undefined);
+        const pendingAfterCanceledReadSettled = !cancelSettled;
         const text = await response.text();
         await cancel;
         return finishPendingResponseBodyCase(
             pendingUntilSurvivorFinishes
+            && pendingAfterCanceledReadSettled
             && cancelSettled
             && text === 'first chunksecond chunk',
         );
@@ -1418,7 +1420,9 @@ export async function abortPendingResponseBody(port, testCase) {
         const canceled = response.clone();
         const requiresPendingRace =
             typeof response.nativeResponse.makeOpaqueRedirect === 'function';
-        const pauseArmed = requiresPendingRace
+        const hasRecoveryTestHook =
+            typeof canceled.nativeResponse.pauseNextBodyReadAfterReadyForTest === 'function';
+        const pauseArmed = hasRecoveryTestHook
             ? canceled.nativeResponse.pauseNextBodyReadAfterReadyForTest()
             : false;
         const reader = canceled.body.getReader();
@@ -1434,17 +1438,22 @@ export async function abortPendingResponseBody(port, testCase) {
         // Preview 3's cancel-safe native read is the race under test. Preview 2 may deliver the
         // available chunk before this continuation, but must still preserve it for the survivor.
         const exercisedTargetRace = !requiresPendingRace || !pendingReadSettled;
-        const cancel = reader.cancel('cancel after bytes became available');
+        let cancelSettled = false;
+        const cancel = reader.cancel('cancel after bytes became available').then(() => {
+            cancelSettled = true;
+        });
         await pendingRead.catch(() => undefined);
+        const pendingAfterCanceledReadSettled = !cancelSettled;
         await new Promise(resolve => setTimeout(resolve, 0));
-        const recoveredBytes = requiresPendingRace
+        const recoveredBytes = hasRecoveryTestHook
             ? response.nativeResponse.takeRecoveredBodyReadBytesForTest()
             : 0;
         const text = await response.text();
         await cancel;
         return finishPendingResponseBodyCase(
-            (!requiresPendingRace || pauseArmed)
+            (!requiresPendingRace || (hasRecoveryTestHook && pauseArmed))
             && exercisedTargetRace
+            && pendingAfterCanceledReadSettled
             && (!requiresPendingRace || recoveredBytes > 0)
             && text === 'first chunksecond chunk',
         );

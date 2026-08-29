@@ -16,7 +16,9 @@ type ResponseResultWriter = FutureWriter<Result<(), ErrorCode>>;
 #[derive(Default)]
 struct RecoveredReadState {
     outcome: Option<(StreamResult, Vec<u8>)>,
+    #[cfg(feature = "internal-test-execution")]
     recovered_bytes_for_test: usize,
+    #[cfg(feature = "internal-test-execution")]
     pause_ready_for_test: bool,
 }
 
@@ -25,6 +27,7 @@ type RecoveredRead = Rc<RefCell<RecoveredReadState>>;
 struct CancelSafeRead<'a> {
     read: Pin<Box<StreamRead<'a, u8>>>,
     recovered: RecoveredRead,
+    #[cfg(feature = "internal-test-execution")]
     ready_for_test: Option<(StreamResult, Vec<u8>)>,
     completed: bool,
 }
@@ -34,6 +37,7 @@ impl<'a> CancelSafeRead<'a> {
         Self {
             read: Box::pin(read),
             recovered,
+            #[cfg(feature = "internal-test-execution")]
             ready_for_test: None,
             completed: false,
         }
@@ -44,18 +48,22 @@ impl Future for CancelSafeRead<'_> {
     type Output = (StreamResult, Vec<u8>);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        #[cfg(feature = "internal-test-execution")]
         if self.ready_for_test.is_some() {
             return Poll::Pending;
         }
         match self.read.as_mut().poll(cx) {
             Poll::Ready(result) => {
-                let pause_ready_for_test = {
-                    let mut recovered = self.recovered.borrow_mut();
-                    std::mem::take(&mut recovered.pause_ready_for_test)
-                };
-                if pause_ready_for_test {
-                    self.ready_for_test = Some(result);
-                    return Poll::Pending;
+                #[cfg(feature = "internal-test-execution")]
+                {
+                    let pause_ready_for_test = {
+                        let mut recovered = self.recovered.borrow_mut();
+                        std::mem::take(&mut recovered.pause_ready_for_test)
+                    };
+                    if pause_ready_for_test {
+                        self.ready_for_test = Some(result);
+                        return Poll::Pending;
+                    }
                 }
                 self.completed = true;
                 Poll::Ready(result)
@@ -68,12 +76,18 @@ impl Future for CancelSafeRead<'_> {
 impl Drop for CancelSafeRead<'_> {
     fn drop(&mut self) {
         if !self.completed {
+            #[cfg(feature = "internal-test-execution")]
             let recovered = self
                 .ready_for_test
                 .take()
                 .unwrap_or_else(|| self.read.as_mut().cancel());
+            #[cfg(not(feature = "internal-test-execution"))]
+            let recovered = self.read.as_mut().cancel();
             let mut state = self.recovered.borrow_mut();
-            state.recovered_bytes_for_test += recovered.1.len();
+            #[cfg(feature = "internal-test-execution")]
+            {
+                state.recovered_bytes_for_test += recovered.1.len();
+            }
             state.outcome = Some(recovered);
         }
     }
@@ -122,10 +136,12 @@ impl ResponseBody {
         self.state = ResponseBodyState::Consumed;
     }
 
+    #[cfg(feature = "internal-test-execution")]
     pub(crate) fn take_recovered_read_bytes_for_test(&self) -> usize {
         std::mem::take(&mut self.recovered_read.borrow_mut().recovered_bytes_for_test)
     }
 
+    #[cfg(feature = "internal-test-execution")]
     pub(crate) fn pause_next_ready_read_for_test(&self) -> bool {
         self.recovered_read.borrow_mut().pause_ready_for_test = true;
         true

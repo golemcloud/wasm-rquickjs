@@ -2,7 +2,9 @@ use crate::common::test_server::{
     ResponseBodyServerEvent, start_abort_test_server, start_response_body_abort_test_server,
     start_test_server,
 };
-use crate::common::{CompiledTest, TestTarget, invoke_and_capture_output, test_target};
+use crate::common::{
+    CompiledTest, FeatureCombination, TestTarget, invoke_and_capture_output, test_target,
+};
 use camino::Utf8Path;
 
 use test_r::{test, test_dep};
@@ -16,6 +18,14 @@ async fn compiled_fetch() -> CompiledTest {
     CompiledTest::new(path, true)
         .await
         .expect("Failed to compile fetch")
+}
+
+#[test_dep(tagged_as = "fetch_internal", scope = Cloneable)]
+async fn compiled_fetch_internal() -> CompiledTest {
+    let path = Utf8Path::new("examples/runtime/fetch");
+    CompiledTest::new_with_features(path, true, FeatureCombination::InternalTestExecution)
+        .await
+        .expect("Failed to compile fetch with internal test instrumentation")
 }
 
 #[test]
@@ -1024,7 +1034,7 @@ async fn fetch_abort_response_body(
 
 #[test]
 async fn fetch_abort_pending_response_body(
-    #[tagged_as("fetch")] compiled: &CompiledTest,
+    #[tagged_as("fetch_internal")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (port, _server, mut released) = start_response_body_abort_test_server().await;
     for test_case in 0..20u8 {
