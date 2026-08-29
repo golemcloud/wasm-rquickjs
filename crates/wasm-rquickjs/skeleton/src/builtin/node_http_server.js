@@ -225,6 +225,7 @@ function ServerResponse(req, options) {
     this._keepAliveMaxRequests = 0;
     this._last = false;
     this._sentContentLength = false;
+    this._header = null;
     this._headersSentWire = false;
     this._rejectNonStandardBodyWrites = !!(options && options.rejectNonStandardBodyWrites);
 
@@ -320,7 +321,7 @@ ServerResponse.prototype._implicitHeader = function _implicitHeader() {
 };
 
 ServerResponse.prototype.setHeader = function setHeader(name, value) {
-    if (this._headersSentWire) {
+    if (this.headersSent) {
         throw new ERR_HTTP_HEADERS_SENT('set');
     }
     if (typeof name !== 'string' || !/^[\x21-\x7e]+$/.test(name)) {
@@ -360,7 +361,7 @@ ServerResponse.prototype.hasHeader = function hasHeader(name) {
 };
 
 ServerResponse.prototype.removeHeader = function removeHeader(name) {
-    if (this._headersSentWire) {
+    if (this.headersSent) {
         throw new ERR_HTTP_HEADERS_SENT('remove');
     }
     const lower = name.toLowerCase();
@@ -509,13 +510,15 @@ ServerResponse.prototype.writeHead = function writeHead(statusCode, statusMessag
         }
     }
 
-    this.headersSent = true;
+    // Node commits both the serialized header and its private persistence
+    // decision at writeHead(). Keep the bytes buffered until the response is
+    // active, but reject and ignore subsequent header mutations immediately.
+    this._buildHeaderString();
     return this;
 };
 
 ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
-    if (this._headersSentWire) return '';
-    this._headersSentWire = true;
+    if (this._header !== null) return this._header;
     this.headersSent = true;
 
     const statusMessage = _validateStatusMessage(
@@ -585,6 +588,7 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     const canKeepAlive = !!this._keepAlive;
     const canPersistForOverflow = !!this._acceptOverflowRequest;
     const selfDelimited = !this._hasBody || this._sentContentLength || this._chunked;
+    const chunkedWithoutTerminator = isNoBodyStatus && this._chunked;
 
     // Finalize the same private persistence decision that response completion
     // consumes. maxRequestsPerSocket is the Node-compatible exception: its
@@ -593,6 +597,7 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     this._last =
         !(canKeepAlive || canPersistForOverflow) ||
         userSaysClose ||
+        chunkedWithoutTerminator ||
         !selfDelimited;
 
     // Explicit Keep-Alive is user-owned and suppresses automatic generation.
@@ -625,11 +630,14 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
     }
 
     head += '\r\n';
-    return head;
+    this._header = head;
+    return this._header;
 };
 
 ServerResponse.prototype._sendHeaders = function _sendHeaders() {
+    if (this._headersSentWire) return;
     const head = this._buildHeaderString();
+    this._headersSentWire = true;
     if (head) {
         this._writeOutput(Buffer.from(head));
     }
@@ -865,6 +873,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
             const body = typeof data === 'string' ? Buffer.from(data, encoding || 'utf8') : Buffer.from(data);
             this.setHeader('Content-Length', body.length);
             const head = this._buildHeaderString();
+            this._headersSentWire = true;
             if (this._hasBody && head) {
                 const headerBuf = Buffer.from(head);
                 const combined = Buffer.concat([headerBuf, body]);

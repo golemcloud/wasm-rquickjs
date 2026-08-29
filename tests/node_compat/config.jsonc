@@ -4386,7 +4386,7 @@
       }
     },
     "parallel/test-http-chunk-problem.js": { "category": "wasi-impossible", "reason": "requires external shell pipeline and cat subprocess via child_process" },
-    "parallel/test-http-chunked-304.js": { "category": "known-gap", "reason": "HTTP server incorrectly emits chunked terminator semantics for 204/304 responses" },
+    "parallel/test-http-chunked-304.js": {},
     "parallel/test-http-chunked-smuggling.js": { "category": "known-gap", "reason": "HTTP parser accepts invalid chunk extensions and mishandles smuggling-style input" },
     "parallel/test-http-chunked.js": {},
     "parallel/test-http-client-abort-destroy.js": {
@@ -4761,7 +4761,7 @@
     "parallel/test-http-upgrade-client2.js": { "category": "wasi-impossible", "reason": "wasi:http does not support HTTP Upgrade/101 socket takeover for node:http clients" },
     "parallel/test-http-upgrade-reconsume-stream.js": { "category": "wasi-impossible", "reason": "requires HTTP Upgrade socket takeover plus tls.TLSSocket, unavailable in WASI" },
     "parallel/test-http-upgrade-server2.js": { "category": "known-gap", "reason": "server-side Upgrade event/error propagation is incomplete" },
-    "parallel/test-http-wget.js": { "category": "known-gap", "reason": "HTTP/1.0 keep-alive response connection-closing semantics are not Node-compatible" },
+    "parallel/test-http-wget.js": {},
     "parallel/test-http-writable-true-after-close.js": { "category": "known-gap", "reason": "response writable state around aborted proxy close is not Node-compatible" },
     "parallel/test-http-write-callbacks.js": { "category": "known-gap", "reason": "checkContinue/write callback ordering and completion semantics are incomplete" },
     "parallel/test-http-write-empty-string.js": {},
@@ -5016,7 +5016,7 @@
     "parallel/test-domain-async-id-map-leak.js": { "category": "known-gap", "reason": "domain/async_hooks integration for AsyncResource domain tracking and async-id map behavior is incomplete" },
 
     // === Additional node:http tests (require HTTP server or internals) ===
-    "parallel/test-http-1.0-keep-alive.js": { "category": "known-gap", "reason": "HTTP/1.0 keep-alive client/server framing is not Node-compatible; consistently fails on CI even with retries" },
+    "parallel/test-http-1.0-keep-alive.js": {},
     "parallel/test-http-1.0.js": {
       "split": true,
       "subtests": {

@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3175/4387 (72.4%)
+**Primary compatibility (CI-enforced):** 3178/4387 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3175 | 72.4% | 55.2% | 46.2% |
-| 🧩 known gap | 1212 | 27.6% | 21.1% | 17.6% |
+| ✅ passing (runnable) | 3178 | 72.4% | 55.3% | 46.2% |
+| 🧩 known gap | 1209 | 27.6% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3175/5750 (55.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3178/5750 (55.3%)**.
 
 ## Inventory by Module
 
@@ -52,7 +52,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 230 | 285 | 301 | 2 | 0 | 80 | 44.7% | 28.1% |
+| http | 898 | 233 | 282 | 301 | 2 | 0 | 80 | 45.2% | 28.5% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 122 | 32 | 7 | 1 | 0 | 12 | 79.2% | 75.3% |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1212)
+### known gap (1209)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -889,11 +889,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP server close/reopen ECONNREFUSED sequencing is not Node-compatible | 1 | `sequential/test-http-econnrefused.js` |
 | HTTP server duplicate request-header coalescing for allowed/forbidden header sets is not Node-compatible | 1 | `parallel/test-http-server-multiheaders2.js` |
 | HTTP server duplicate request-header coalescing/deduplication is not Node-compatible | 1 | `parallel/test-http-server-multiheaders.js` |
-| HTTP server incorrectly emits chunked terminator semantics for 204/304 responses | 1 | `parallel/test-http-chunked-304.js` |
 | HTTP server parser does not emit Node-compatible HPE_HEADER_OVERFLOW/431 behavior for oversized headers | 1 | `parallel/test-http-header-overflow.js` |
 | HTTP server socket.setEncoding('') error path (ERR_HTTP_SOCKET_ENCODING) is not Node-compatible | 1 | `parallel/test-http-socket-encoding-error.js` |
-| HTTP/1.0 keep-alive client/server framing is not Node-compatible; consistently fails on CI even with retries | 1 | `parallel/test-http-1.0-keep-alive.js` |
-| HTTP/1.0 keep-alive response connection-closing semantics are not Node-compatible | 1 | `parallel/test-http-wget.js` |
 | Happy Eyeballs autoSelectFamily over custom dual-stack DNS is not wired through wasi:http transport | 1 | `parallel/test-http-autoselectfamily.js` |
 | Host header generation ignores globalAgent.defaultPort and incorrectly includes the port | 1 | `parallel/test-http-default-port.js` |
 | Host header generation/handling in node:http is not fully Node-compatible | 1 | `parallel/test-http-host-headers.js` |

@@ -1219,6 +1219,7 @@ export async function httpResponsePersistence() {
         let settled = false;
         let wire = '';
         let responseComplete = false;
+        let serverBehaviorMatch = true;
         let socketEnded = false;
         let socket;
         const server = http.createServer((_req, res) => {
@@ -1237,9 +1238,24 @@ export async function httpResponsePersistence() {
                 res.removeHeader('Transfer-Encoding');
             }
             if (options.writeHeadFirst) {
-                res.writeHead(200);
+                res.writeHead(options.statusCode || 200);
             }
-            res.end('ok');
+            if (options.mutateAfterWriteHead) {
+                let mutationErrors = 0;
+                try {
+                    res.setHeader('X-Late', 'rejected');
+                } catch (error) {
+                    mutationErrors += error.code === 'ERR_HTTP_HEADERS_SENT' ? 1 : 0;
+                }
+                try {
+                    res.removeHeader('Connection');
+                } catch (error) {
+                    mutationErrors += error.code === 'ERR_HTTP_HEADERS_SENT' ? 1 : 0;
+                }
+                options.headers[0][1].push('close');
+                serverBehaviorMatch = mutationErrors === 2;
+            }
+            res.end(options.noBody ? undefined : 'ok');
         });
         if (Object.hasOwn(options, 'keepAliveTimeout')) {
             server.keepAliveTimeout = options.keepAliveTimeout;
@@ -1281,7 +1297,10 @@ export async function httpResponsePersistence() {
             const transferEncodingMatch = !Object.hasOwn(options, 'transferEncoding') ||
                 JSON.stringify(headerValues('transfer-encoding')) ===
                     JSON.stringify(options.transferEncoding);
-            return primaryMatch && contentLengthMatch && transferEncodingMatch;
+            const noChunkTerminatorMatch = !options.noChunkTerminator ||
+                !wire.slice(wire.indexOf('\r\n\r\n') + 4).includes('0\r\n\r\n');
+            return serverBehaviorMatch && primaryMatch && contentLengthMatch &&
+                transferEncodingMatch && noChunkTerminatorMatch;
         };
 
         const timeout = setTimeout(() => finish(false), 1500);
@@ -1293,9 +1312,10 @@ export async function httpResponsePersistence() {
             });
             socket.on('data', (chunk) => {
                 wire += chunk.toString('latin1');
+                const body = wire.slice(wire.indexOf('\r\n\r\n') + 4);
                 if (!responseComplete &&
                     wire.includes('\r\n\r\n') &&
-                    wire.endsWith('ok')) {
+                    (options.noBody || body.includes('ok'))) {
                     responseComplete = true;
                     if (!options.expectEnd) {
                         setTimeout(() => finish(headersMatch() && !socketEnded), 30);
@@ -1344,6 +1364,37 @@ export async function httpResponsePersistence() {
             headers: [['Connection', 'upgrade'], ['Keep-Alive', 'custom=1']],
             connection: ['upgrade'],
             keepAlive: ['custom=1'],
+        },
+        {
+            headers: [['Keep-Alive', 'custom=2']],
+            connection: ['keep-alive'],
+            keepAlive: ['custom=2'],
+        },
+        {
+            headers: [['Connection', ['keep-alive']]],
+            writeHeadFirst: true,
+            mutateAfterWriteHead: true,
+            connection: ['keep-alive'],
+        },
+        {
+            headers: [['Transfer-Encoding', 'chunked']],
+            statusCode: 204,
+            writeHeadFirst: true,
+            connection: ['close'],
+            transferEncoding: ['chunked'],
+            noBody: true,
+            noChunkTerminator: true,
+            expectEnd: true,
+        },
+        {
+            headers: [['Transfer-Encoding', 'chunked']],
+            statusCode: 304,
+            writeHeadFirst: true,
+            connection: ['close'],
+            transferEncoding: ['chunked'],
+            noBody: true,
+            noChunkTerminator: true,
+            expectEnd: true,
         },
         { removeConnection: true },
         {
