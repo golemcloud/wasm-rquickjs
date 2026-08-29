@@ -51,14 +51,14 @@ with mitigation commit `d04496f5`, with caches disabled:
 
 The compiler load changed from 1,453 native 8 KiB read crossings to 68
 whole-file reads for the same 10,961,854 bytes. In the accepted reports, the
-remaining controlled P2/P3 work is approximately 7.38/7.42 s importing
-TypeScript, 4.81/4.81 s creating the program, and 7.56/7.51 s computing
+remaining controlled P2/P3 work is approximately 7.38/7.53 s importing
+TypeScript, 4.83/4.96 s creating the program, and 7.55/7.78 s computing
 diagnostics. Runtime creation, loader setup, process setup, transport wiring,
 and wrapper preparation together remain under 5 ms; built-in initialization is
-about 163 ms and teardown about 364 ms.
+about 163 ms and teardown about 369 ms.
 
-The reports also record 155,003,256-byte P2 and 151,716,620-byte P3 optimized
-components, 28.47/27.61 s builds, and 15.05/14.34 s preparation plus
+The reports also record 155,036,326-byte P2 and 151,722,077-byte P3 optimized
+components, 28.36/29.88 s builds, and 14.38/14.85 s preparation plus
 instantiation. These are per-component costs rather than the owner of repeated
 fresh-job compiler latency. Repeated jobs retain zero linear-memory high-water
 growth, at most 8,744 bytes of observed QuickJS heap variation, and successful
