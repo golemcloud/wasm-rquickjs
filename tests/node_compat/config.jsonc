@@ -4606,7 +4606,7 @@
     "parallel/test-http-raw-headers.js": { "category": "known-gap", "reason": "rawHeaders/rawTrailers casing and duplicate-header preservation differ from Node semantics" },
     "parallel/test-http-readable-data-event.js": {},
     "parallel/test-http-remove-connection-header-persists-connection.js": {},
-    "parallel/test-http-remove-header-stays-removed.js": { "category": "known-gap", "reason": "removing hop-by-hop/framing headers is not serialized with Node-compatible behavior" },
+    "parallel/test-http-remove-header-stays-removed.js": {},
     "parallel/test-http-req-close-robust-from-tampering.js": { "category": "node-internals", "reason": "invokes private req.client._events.close handlers directly" },
     "parallel/test-http-request-arguments.js": {},
     "parallel/test-http-request-dont-override-options.js": {},

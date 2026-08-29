@@ -20,4 +20,5 @@ world node-http {
   export net-writev-boundaries: func() -> bool;
   export http-pipelined-max-requests: func() -> bool;
   export http-custom-connection-rejected: func() -> bool;
+  export http-response-persistence: func() -> bool;
 }

@@ -1213,3 +1213,167 @@ export async function httpCustomConnectionRejected() {
     return rejectsAsynchronously && agentHookIgnoredExplicitly && destroyBeforeRejection &&
         connectDoesNotOpenSocket && plainConnectRejected;
 }
+
+export async function httpResponsePersistence() {
+    const runCase = (options) => new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let responseComplete = false;
+        let socketEnded = false;
+        let socket;
+        const server = http.createServer((_req, res) => {
+            if (options.serverCloseBeforeCommit) {
+                server.close();
+            }
+            for (const [name, value] of options.headers || []) {
+                res.setHeader(name, value);
+            }
+            if (options.removeConnection) {
+                res.removeHeader('Connection');
+            }
+            if (options.removeFraming) {
+                res.removeHeader('Connection');
+                res.removeHeader('Content-Length');
+                res.removeHeader('Transfer-Encoding');
+            }
+            if (options.writeHeadFirst) {
+                res.writeHead(200);
+            }
+            res.end('ok');
+        });
+        if (Object.hasOwn(options, 'keepAliveTimeout')) {
+            server.keepAliveTimeout = options.keepAliveTimeout;
+        }
+        if (Object.hasOwn(options, 'maxRequestsPerSocket')) {
+            server.maxRequestsPerSocket = options.maxRequestsPerSocket;
+        }
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            if (server.listening) {
+                server.close(() => resolve(result));
+            } else {
+                resolve(result);
+            }
+        };
+
+        const headerValues = (name) => {
+            const headerEnd = wire.indexOf('\r\n\r\n');
+            if (headerEnd === -1) return [];
+            const prefix = name.toLowerCase() + ':';
+            return wire.slice(0, headerEnd).split('\r\n')
+                .filter((line) => line.toLowerCase().startsWith(prefix))
+                .map((line) => line.slice(line.indexOf(':') + 1).trim());
+        };
+
+        const headersMatch = () => {
+            const primaryMatch = JSON.stringify(headerValues('connection')) ===
+                JSON.stringify(options.connection || []) &&
+            JSON.stringify(headerValues('keep-alive')) ===
+                JSON.stringify(options.keepAlive || []);
+            const contentLengthMatch = !Object.hasOwn(options, 'contentLength') ||
+                JSON.stringify(headerValues('content-length')) ===
+                    JSON.stringify(options.contentLength);
+            const transferEncodingMatch = !Object.hasOwn(options, 'transferEncoding') ||
+                JSON.stringify(headerValues('transfer-encoding')) ===
+                    JSON.stringify(options.transferEncoding);
+            return primaryMatch && contentLengthMatch && transferEncodingMatch;
+        };
+
+        const timeout = setTimeout(() => finish(false), 1500);
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(options.request ||
+                    'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!responseComplete &&
+                    wire.includes('\r\n\r\n') &&
+                    wire.endsWith('ok')) {
+                    responseComplete = true;
+                    if (!options.expectEnd) {
+                        setTimeout(() => finish(headersMatch() && !socketEnded), 30);
+                    }
+                }
+            });
+            socket.on('end', () => {
+                socketEnded = true;
+                if (options.expectEnd) {
+                    finish(responseComplete && headersMatch());
+                } else {
+                    finish(false);
+                }
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+
+    const cases = [
+        { connection: ['keep-alive'], keepAlive: ['timeout=5'] },
+        { keepAliveTimeout: 0, connection: ['keep-alive'] },
+        { keepAliveTimeout: null, connection: ['keep-alive'] },
+        { keepAliveTimeout: undefined, connection: ['keep-alive'] },
+        { keepAliveTimeout: NaN, connection: ['keep-alive'] },
+        { keepAliveTimeout: -1, connection: ['keep-alive'], keepAlive: ['timeout=-1'] },
+        { keepAliveTimeout: 500, connection: ['keep-alive'], keepAlive: ['timeout=0'] },
+        { keepAliveTimeout: 1500, connection: ['keep-alive'], keepAlive: ['timeout=1'] },
+        { headers: [['Connection', 'keep-alive']], connection: ['keep-alive'] },
+        { headers: [['Connection', 'close']], connection: ['close'], expectEnd: true },
+        { headers: [['Connection', ['close']]], connection: ['close'], expectEnd: true },
+        {
+            headers: [['Connection', ['keep-alive', 'close']]],
+            connection: ['keep-alive', 'close'],
+            expectEnd: true,
+        },
+        {
+            headers: [['Connection', ['keep-alive', 'upgrade']]],
+            connection: ['keep-alive', 'upgrade'],
+        },
+        {
+            headers: [['Connection', 'Keep-Alive, ClOsE']],
+            connection: ['Keep-Alive, ClOsE'],
+            expectEnd: true,
+        },
+        {
+            headers: [['Connection', 'upgrade'], ['Keep-Alive', 'custom=1']],
+            connection: ['upgrade'],
+            keepAlive: ['custom=1'],
+        },
+        { removeConnection: true },
+        {
+            removeFraming: true,
+            contentLength: [],
+            transferEncoding: [],
+            expectEnd: true,
+        },
+        {
+            request: 'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n',
+            connection: ['close'],
+            expectEnd: true,
+        },
+        {
+            request: 'GET / HTTP/1.0\r\n\r\n',
+            writeHeadFirst: true,
+            connection: ['close'],
+            expectEnd: true,
+        },
+        { maxRequestsPerSocket: 1, connection: ['close'] },
+        {
+            serverCloseBeforeCommit: true,
+            connection: ['keep-alive'],
+            keepAlive: ['timeout=5'],
+            expectEnd: true,
+        },
+    ];
+
+    for (const options of cases) {
+        if (!await runCase(options)) return false;
+    }
+    return true;
+}
