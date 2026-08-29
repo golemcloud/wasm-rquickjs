@@ -1,6 +1,6 @@
 use axum::body::Body;
 use axum::extract::Request;
-use axum::extract::{Multipart, Path};
+use axum::extract::{ConnectInfo, Multipart, Path};
 use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::{AppendHeaders, IntoResponse};
@@ -34,7 +34,13 @@ fn trace_http_lifecycle(router: Router, port: u16) -> Router {
     router.layer(axum::middleware::from_fn(
         move |request: Request, next: Next| async move {
             let request_id = super::test_server_http_correlation(request.headers());
+            let connection = request
+                .extensions()
+                .get::<ConnectInfo<super::TracedTestServerConnection>>()
+                .map(|connection| connection.0.clone());
+            let trace_response_write = request.version() == http::Version::HTTP_11;
             super::record_test_server_arrival(request_id, port, request.uri());
+            super::record_test_server_connection(request_id, connection.as_ref());
             let (parts, body) = request.into_parts();
             let request = Request::from_parts(
                 parts,
@@ -49,10 +55,10 @@ fn trace_http_lifecycle(router: Router, port: u16) -> Router {
             let (parts, body) = response.into_parts();
             axum::response::Response::from_parts(
                 parts,
-                Body::new(super::traced_test_server_body(
+                Body::new(super::traced_test_server_response_body(
                     body,
                     request_id,
-                    "server-response",
+                    trace_response_write.then_some(connection).flatten(),
                 )),
             )
         },
@@ -260,7 +266,13 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
             );
         let router = trace_http_lifecycle(router, host_http_port);
 
-        axum::serve(listener, router).await.unwrap();
+        let listener = super::traced_test_server_listener(listener);
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<super::TracedTestServerConnection>(),
+        )
+        .await
+        .unwrap();
     });
 
     (host_http_port, TestServerHandle::new(handle))
@@ -296,7 +308,13 @@ pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::Unbounde
             )
             .route("/abort-ready", ready);
         let router = trace_http_lifecycle(router, port);
-        axum::serve(listener, router).await.unwrap();
+        let listener = super::traced_test_server_listener(listener);
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<super::TracedTestServerConnection>(),
+        )
+        .await
+        .unwrap();
     });
 
     (port, TestServerHandle::new(handle), arrived_rx)
