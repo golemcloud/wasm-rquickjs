@@ -2937,7 +2937,7 @@
     "parallel/test-net-write-arguments.js": {},
     "parallel/test-net-write-cb-on-destroy-before-connect.js": {},
     "parallel/test-net-write-connect-write.js": {},
-    "parallel/test-net-write-fully-async-buffer.js": { "category": "known-gap", "reason": "isolated P2/P3 profiling runs pass in 54-63 seconds, but repeated 200 MiB writes remain too close to the 120-second limit for reliable concurrent CI load" },
+    "parallel/test-net-write-fully-async-buffer.js": { "category": "known-gap", "reason": "isolated P2/P3 runs pass in about 54-63 seconds for 200 one-MiB writes; although a per-entry timeout is configurable, enabling this case would add excessive wall time and remain unreliable under concurrent CI load" },
     "parallel/test-net-write-fully-async-hex-string.js": { "category": "runnable" },
     "parallel/test-net-write-slow.js": { "category": "known-gap", "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
     "parallel/test-process-next-tick.js": {},
@@ -10463,7 +10463,7 @@
         "block_02_block_02": { "category": "known-gap", "reason": "perf_hooks.monitorEventLoopDelay is not implemented" }
       }
     },
-    "sequential/test-pipe.js": { "category": "known-gap", "reason": "isolated P2/P3 runs take about 91 seconds and remain too close to the 120-second limit for reliable concurrent CI load; transport profiling attributes most wall time outside the socket path" },
+    "sequential/test-pipe.js": { "category": "known-gap", "reason": "isolated P2/P3 runs take about 91-97 seconds; although a per-entry timeout is configurable, enabling this case would add excessive CI wall time, and transport profiling attributes most of the delay outside the socket path" },
     "sequential/test-process-title.js": { "category": "known-gap", "reason": "child_process -p/process.title behavior is incomplete in WASM child emulation" },
     "sequential/test-process-warnings.js": {},
     "sequential/test-repl-timeout-throw.js": { "category": "known-gap", "reason": "child_process.spawn emulation does not support --interactive REPL sessions" },

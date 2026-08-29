@@ -131,6 +131,8 @@ function forwardNativeHandle(wrap, handle) {
     wrap.local_address = handle.local_address.bind(handle);
     wrap.set_no_delay = handle.set_no_delay.bind(handle);
     wrap.set_keep_alive = handle.set_keep_alive.bind(handle);
+    // The bridge method must exist in every build; only profiling builds return JSON.
+    // Probe once so ordinary sockets allocate no counters or listeners.
     const initialNativeProfile = typeof handle.write_profile === 'function'
         ? handle.write_profile()
         : null;

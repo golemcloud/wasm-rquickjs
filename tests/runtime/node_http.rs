@@ -15,7 +15,9 @@ async fn compiled_node_http() -> CompiledTest {
 #[test_dep(tagged_as = "node_http_profiling", scope = Cloneable)]
 async fn compiled_node_http_profiling() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/node-http");
-    CompiledTest::new_with_features(path, true, FeatureCombination::NetWriteProfiling)
+    // The ordinary and profiling dependencies coexist in group8. Keep their
+    // component artifacts separate so one feature set cannot overwrite the other.
+    CompiledTest::new_with_features(path, false, FeatureCombination::NetWriteProfiling)
         .await
         .expect("Failed to compile node_http")
 }

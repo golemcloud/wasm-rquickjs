@@ -747,6 +747,8 @@ impl TcpSocket {
     }
 
     pub fn write_profile(&self) -> Option<String> {
+        // rquickjs cannot cfg-remove an individual method from this methods impl.
+        // A JSON string therefore means the private profiling feature is enabled.
         #[cfg(feature = "net-write-profiling")]
         {
             Some(self.inner.borrow().write_profile.to_json())
@@ -1348,6 +1350,8 @@ impl TcpSocket {
     }
 
     pub fn write_profile(&self) -> Option<String> {
+        // rquickjs cannot cfg-remove an individual method from this methods impl.
+        // A JSON string therefore means the private profiling feature is enabled.
         #[cfg(feature = "net-write-profiling")]
         {
             Some(self.inner.borrow().write_profile.to_json())

@@ -1132,8 +1132,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | invalid EC private keys do not raise Node-compatible DataError | 1 | `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys` |
 | invalid URL parsing errors lack Node's TypeError and ERR_INVALID_URL shape | 1 | `parallel/test-whatwg-url-custom-parsing.js` |
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
-| isolated P2/P3 profiling runs pass in 54-63 seconds, but repeated 200 MiB writes remain too close to the 120-second limit for reliable concurrent CI load | 1 | `parallel/test-net-write-fully-async-buffer.js` |
-| isolated P2/P3 runs take about 91 seconds and remain too close to the 120-second limit for reliable concurrent CI load; transport profiling attributes most wall time outside the socket path | 1 | `sequential/test-pipe.js` |
+| isolated P2/P3 runs pass in about 54-63 seconds for 200 one-MiB writes; although a per-entry timeout is configurable, enabling this case would add excessive wall time and remain unreliable under concurrent CI load | 1 | `parallel/test-net-write-fully-async-buffer.js` |
+| isolated P2/P3 runs take about 91-97 seconds; although a per-entry timeout is configurable, enabling this case would add excessive CI wall time, and transport profiling attributes most of the delay outside the socket path | 1 | `sequential/test-pipe.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior | 1 | `parallel/test-http-no-read-no-dump.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
