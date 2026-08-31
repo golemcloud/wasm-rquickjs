@@ -518,6 +518,25 @@ async fn run_export_stream_producer_cleanup(component_path: &Utf8Path) -> Result
         .await?
 }
 
+async fn run_export_sibling_streams(component_path: &Utf8Path) -> Result<(Vec<u8>, Vec<u8>)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    store
+        .run_concurrent(async move |accessor| {
+            let (first, second) = bindings.call_run_sibling_streams(accessor).await?;
+            let (first_tx, first_rx) = mpsc::channel(16);
+            let (second_tx, second_rx) = mpsc::channel(16);
+            accessor.with(|access| first.pipe(access, PipeConsumer::new(first_tx)))?;
+            accessor.with(|access| second.pipe(access, PipeConsumer::new(second_tx)))?;
+            Ok(futures::future::join(first_rx.collect(), second_rx.collect()).await)
+        })
+        .await?
+}
+
 async fn run_nested_export_stream_cleanup(
     component_path: &Utf8Path,
     cleanup_failure: bool,
@@ -887,6 +906,17 @@ fn p3_exported_js_stream_peer_drop_runs_iterator_cleanup() {
         state, "2|1|1",
         "peer drop after one accepted item must stop further pulls and await return() exactly once"
     );
+}
+
+#[test]
+fn p3_exported_sibling_streams_can_exceed_buffer_capacity() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (first, second) = block_on_with_timeout(120, run_export_sibling_streams(&wasm));
+
+    assert_eq!(first, vec![1, 2]);
+    assert_eq!(second, (0..64).collect::<Vec<_>>());
 }
 
 #[test]

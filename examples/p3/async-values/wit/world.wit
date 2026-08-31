@@ -25,6 +25,7 @@ world async-values {
 
   export run-future: async func() -> future<u32>;
   export run-stream: async func() -> stream<u8>;
+  export run-sibling-streams: async func() -> tuple<stream<u8>, stream<u8>>;
   export run-nested: async func() -> result<nested-values, string>;
   export run-nested-error: async func() -> result<nested-values, string>;
   export take-future: async func(f: future<u32>) -> u32;

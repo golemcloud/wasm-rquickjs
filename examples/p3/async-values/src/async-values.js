@@ -20,6 +20,13 @@ export async function runStream() {
   return gen();
 }
 
+export async function runSiblingStreams() {
+  return [
+    [1, 2],
+    Array.from({ length: 64 }, (_, index) => index),
+  ];
+}
+
 // Returns future/stream readers nested in a record. The wrapper must return the record to the host
 // before its writer tasks encounter backpressure on those readers.
 export async function runNested() {
