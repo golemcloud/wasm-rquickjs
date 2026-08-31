@@ -89,8 +89,9 @@ typescript-runtime = [
     "dep:swc_ts_fast_strip",
 ]
 typescript-transform-runtime = ["typescript-runtime"]
-# Test-harness-only transform counting. This is intentionally excluded from every runtime tier.
-typescript-transform-observability = ["typescript-runtime"]
+# Private test instrumentation. Individual test combinations opt into the
+# capabilities they observe; this umbrella is excluded from every runtime tier.
+test-observability = []
 
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]
@@ -179,8 +180,11 @@ unicode-segmentation = "1.12"
 
 # TypeScript
 swc_common = { version = "24.0.0", optional = true }
+# Direct dependencies for TypeScript-aware module-format classification. These
+# are also transitive dependencies of swc_ts_fast_strip, but this crate imports
+# their public APIs directly and must not rely on transitive visibility.
 swc_ecma_ast = { version = "27.0.0", optional = true }
-swc_ecma_parser = { version = "43.0.0", default-features = false, features = ["typescript", "unstable"], optional = true }
+swc_ecma_parser = { version = "43.0.0", default-features = false, features = ["typescript"], optional = true }
 swc_ecma_visit = { version = "27.0.0", optional = true }
 swc_ts_fast_strip = { version = "56.0.0", optional = true }
 

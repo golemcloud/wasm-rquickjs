@@ -64,17 +64,25 @@ export async function run() {
 
     const getTransformCount = globalThis.__wasm_rquickjs_get_typescript_module_transform_count;
     const resetTransformCount = globalThis.__wasm_rquickjs_reset_typescript_module_transform_count;
+    const getAnalysisCount = globalThis.__wasm_rquickjs_get_commonjs_export_analysis_count;
+    const resetAnalysisCount = globalThis.__wasm_rquickjs_reset_commonjs_export_analysis_count;
+    const getPreparedSourceCacheStats =
+        globalThis.__wasm_rquickjs_get_cjs_typescript_prepared_source_cache_stats;
     resetTransformCount();
+    resetAnalysisCount();
     fs.writeFileSync(
         '/typescript-runtime/transform-count-direct.cts',
         'const value: number = 42; module.exports = value;',
     );
     const directTransformValue = require('/typescript-runtime/transform-count-direct.cts');
     const directFirstLoadTransformCount = getTransformCount();
+    const directFirstLoadAnalysisCount = getAnalysisCount();
     const directCachedTransformValue = require('/typescript-runtime/transform-count-direct.cts');
     const directCachedTransformCount = getTransformCount();
+    const directCachedAnalysisCount = getAnalysisCount();
 
     resetTransformCount();
+    resetAnalysisCount();
     fs.writeFileSync(
         '/typescript-runtime/transform-count-import.ts',
         'const value: number = 42; module.exports = value;',
@@ -102,18 +110,41 @@ export async function run() {
     const importedThenRequiredTransformCount = getTransformCount();
 
     resetTransformCount();
+    resetAnalysisCount();
     fs.writeFileSync(
         '/typescript-runtime/transform-count-require-import.cts',
         'type Hidden = typeof exports.phantom; exports.answer = 42;',
     );
+    const requiredBeforeImportCacheStatsBefore = getPreparedSourceCacheStats();
     const requiredBeforeImportTransformValue = require('/typescript-runtime/transform-count-require-import.cts');
     const requiredBeforeImportTransformCount = getTransformCount();
+    const requiredBeforeImportAnalysisCount = getAnalysisCount();
+    const requiredBeforeImportCacheStatsAfterRequire = getPreparedSourceCacheStats();
     const requiredThenImportedNamespace = await import('/typescript-runtime/transform-count-require-import.cts');
     const requiredThenImportedTransformValue = requiredThenImportedNamespace.answer;
     const requiredThenImportedHasPhantom = 'phantom' in requiredThenImportedNamespace;
     const requiredThenImportedTransformCount = getTransformCount();
+    const requiredThenImportedAnalysisCount = getAnalysisCount();
+    const requiredBeforeImportCacheStatsAfterImport = getPreparedSourceCacheStats();
 
     resetTransformCount();
+    resetAnalysisCount();
+    fs.writeFileSync(
+        '/typescript-runtime/rewrite-before-import.cts',
+        'exports.answer = 42 as number;',
+    );
+    const rewriteRequiredValue = require('/typescript-runtime/rewrite-before-import.cts');
+    fs.writeFileSync(
+        '/typescript-runtime/rewrite-before-import.cts',
+        'exports.changed = 7 as number;',
+    );
+    const rewriteImportedNamespace = await import('/typescript-runtime/rewrite-before-import.cts');
+    const rewriteImportedKeys = Object.keys(rewriteImportedNamespace).sort();
+    const rewriteTransformCount = getTransformCount();
+    const rewriteAnalysisCount = getAnalysisCount();
+
+    resetTransformCount();
+    resetAnalysisCount();
     fs.writeFileSync(
         '/typescript-runtime/transform-count-reexport-child.cts',
         'type Hidden = typeof exports.phantom; exports.answer = 42;',
@@ -131,10 +162,12 @@ export async function run() {
     );
     const requiredReexportValue = require('/typescript-runtime/transform-count-reexport.cts');
     const requiredReexportTransformCount = getTransformCount();
+    const requiredReexportAnalysisCount = getAnalysisCount();
     const reexportNamespace = await import('/typescript-runtime/transform-count-reexport.cts');
     const reexportTransformValue = reexportNamespace.answer;
     const reexportHasPhantom = 'phantom' in reexportNamespace;
     const reexportFirstLoadTransformCount = getTransformCount();
+    const reexportFirstLoadAnalysisCount = getAnalysisCount();
     const reexportCachedNamespace = await import('/typescript-runtime/transform-count-reexport.cts');
     const reexportCachedTransformValue = reexportCachedNamespace.answer;
     const reexportCachedTransformCount = getTransformCount();
@@ -142,6 +175,63 @@ export async function run() {
     const reexportChildTransformValue = reexportChildNamespace.answer;
     const reexportChildHasPhantom = 'phantom' in reexportChildNamespace;
     const reexportChildImportTransformCount = getTransformCount();
+
+    resetTransformCount();
+    resetAnalysisCount();
+    globalThis.__typescriptCycleAExecutions = 0;
+    globalThis.__typescriptCycleBExecutions = 0;
+    fs.writeFileSync(
+        '/typescript-runtime/reexport-cycle-a.cts',
+        `globalThis.__typescriptCycleAExecutions += 1;
+         exports.a = 1 as number;
+         const child = require('./reexport-cycle-b.cts');
+         Object.keys(child).forEach(function (key) {
+             if (key === 'default' || key === '__esModule') return;
+             Object.defineProperty(exports, key, { enumerable: true, get: function () { return child[key]; } });
+         });`,
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/reexport-cycle-b.cts',
+        `globalThis.__typescriptCycleBExecutions += 1;
+         exports.b = 2 as number;
+         const parent = require('./reexport-cycle-a.cts');
+         if (false) {
+             Object.keys(parent).forEach(function (key) {
+                 if (key === 'default' || key === '__esModule') return;
+                 Object.defineProperty(exports, key, { enumerable: true, get: function () { return parent[key]; } });
+             });
+         }`,
+    );
+    const requiredCycleValue = require('/typescript-runtime/reexport-cycle-a.cts');
+    const importedCycleNamespace = await import('/typescript-runtime/reexport-cycle-a.cts');
+    const cachedCycleValue = require('/typescript-runtime/reexport-cycle-a.cts');
+    const cycleTransformCount = getTransformCount();
+    const cycleAnalysisCount = getAnalysisCount();
+    const cycleExecutionCounts = [
+        globalThis.__typescriptCycleAExecutions,
+        globalThis.__typescriptCycleBExecutions,
+    ];
+
+    for (let index = 0; index < 34; index += 1) {
+        const filename = `/typescript-runtime/bounded-cache-${index}.cts`;
+        fs.writeFileSync(filename, `module.exports = ${index} as number;`);
+        require(filename);
+    }
+    const preparedSourceCacheStats = getPreparedSourceCacheStats();
+
+    resetTransformCount();
+    resetAnalysisCount();
+    const oversizedCacheStatsBefore = getPreparedSourceCacheStats();
+    fs.writeFileSync(
+        '/typescript-runtime/oversized-cache.cts',
+        'exports.answer = 42 as number;/*' + 'x'.repeat(300 * 1024) + '*/',
+    );
+    const oversizedRequiredValue = require('/typescript-runtime/oversized-cache.cts');
+    const oversizedCacheStatsAfterRequire = getPreparedSourceCacheStats();
+    const oversizedImportedValue = (await import('/typescript-runtime/oversized-cache.cts')).answer;
+    const oversizedTransformCount = getTransformCount();
+    const oversizedAnalysisCount = getAnalysisCount();
+    const oversizedCacheStatsAfterImport = getPreparedSourceCacheStats();
 
     resetTransformCount();
     fs.writeFileSync(
@@ -539,7 +629,9 @@ export async function run() {
         directTransformValue,
         directCachedTransformValue,
         directFirstLoadTransformCount,
+        directFirstLoadAnalysisCount,
         directCachedTransformCount,
+        directCachedAnalysisCount,
         importedTransformValue,
         importedCachedTransformValue,
         importedFirstLoadTransformCount,
@@ -549,19 +641,48 @@ export async function run() {
         importedThenRequiredTransformCount,
         requiredBeforeImportTransformValue,
         requiredBeforeImportTransformCount,
+        requiredBeforeImportAnalysisCount,
         requiredThenImportedTransformValue,
         requiredThenImportedHasPhantom,
         requiredThenImportedTransformCount,
+        requiredThenImportedAnalysisCount,
+        requiredBeforeImportCacheStatsBefore,
+        requiredBeforeImportCacheStatsAfterRequire,
+        requiredBeforeImportCacheStatsAfterImport,
+        rewriteRequiredValue,
+        rewriteImportedDefault: rewriteImportedNamespace.default,
+        rewriteImportedKeys,
+        rewriteTransformCount,
+        rewriteAnalysisCount,
         reexportTransformValue,
         requiredReexportValue,
         requiredReexportTransformCount,
+        requiredReexportAnalysisCount,
         reexportHasPhantom,
         reexportFirstLoadTransformCount,
+        reexportFirstLoadAnalysisCount,
         reexportCachedTransformValue,
         reexportCachedTransformCount,
         reexportChildTransformValue,
         reexportChildHasPhantom,
         reexportChildImportTransformCount,
+        requiredCycleA: requiredCycleValue.a,
+        requiredCycleB: requiredCycleValue.b,
+        importedCycleA: importedCycleNamespace.a,
+        importedCycleB: importedCycleNamespace.b,
+        cachedCycleA: cachedCycleValue.a,
+        cachedCycleB: cachedCycleValue.b,
+        cycleTransformCount,
+        cycleAnalysisCount,
+        cycleExecutionCounts,
+        preparedSourceCacheStats,
+        oversizedRequiredValue,
+        oversizedImportedValue,
+        oversizedTransformCount,
+        oversizedAnalysisCount,
+        oversizedCacheStatsBefore,
+        oversizedCacheStatsAfterRequire,
+        oversizedCacheStatsAfterImport,
         cachedChildReexportValue,
         cachedChildReexportTransformCount,
         esmChildReexportValue,

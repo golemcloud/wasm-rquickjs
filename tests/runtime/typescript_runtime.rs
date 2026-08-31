@@ -67,7 +67,9 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["directTransformValue"], 42);
     assert_eq!(report["directCachedTransformValue"], 42);
     assert_eq!(report["directFirstLoadTransformCount"], 1);
+    assert_eq!(report["directFirstLoadAnalysisCount"], 0);
     assert_eq!(report["directCachedTransformCount"], 1);
+    assert_eq!(report["directCachedAnalysisCount"], 0);
     assert_eq!(report["importedTransformValue"], 42);
     assert_eq!(report["importedCachedTransformValue"], 42);
     assert_eq!(report["importedFirstLoadTransformCount"], 1);
@@ -77,19 +79,104 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["importedThenRequiredTransformCount"], 1);
     assert_eq!(report["requiredBeforeImportTransformValue"]["answer"], 42);
     assert_eq!(report["requiredBeforeImportTransformCount"], 1);
+    assert_eq!(report["requiredBeforeImportAnalysisCount"], 0);
     assert_eq!(report["requiredThenImportedTransformValue"], 42);
     assert_eq!(report["requiredThenImportedHasPhantom"], false);
     assert_eq!(report["requiredThenImportedTransformCount"], 1);
+    assert_eq!(report["requiredThenImportedAnalysisCount"], 1);
+    assert_eq!(
+        report["requiredBeforeImportCacheStatsAfterRequire"]["preparedEntries"].as_u64(),
+        report["requiredBeforeImportCacheStatsBefore"]["preparedEntries"]
+            .as_u64()
+            .map(|value| value + 1)
+    );
+    assert_eq!(
+        report["requiredBeforeImportCacheStatsAfterImport"]["preparedEntries"],
+        report["requiredBeforeImportCacheStatsBefore"]["preparedEntries"]
+    );
+    assert!(
+        report["requiredBeforeImportCacheStatsAfterRequire"]["preparedBytes"]
+            .as_u64()
+            .unwrap()
+            > report["requiredBeforeImportCacheStatsBefore"]["preparedBytes"]
+                .as_u64()
+                .unwrap()
+    );
+    assert_eq!(
+        report["requiredBeforeImportCacheStatsAfterImport"]["preparedBytes"],
+        report["requiredBeforeImportCacheStatsBefore"]["preparedBytes"]
+    );
+    assert_eq!(report["rewriteRequiredValue"]["answer"], 42);
+    assert_eq!(report["rewriteImportedDefault"]["answer"], 42);
+    assert_eq!(
+        report["rewriteImportedKeys"],
+        serde_json::json!(["changed", "default"])
+    );
+    assert_eq!(report["rewriteTransformCount"], 2);
+    assert_eq!(report["rewriteAnalysisCount"], 1);
     assert_eq!(report["requiredReexportValue"]["answer"], 42);
     assert_eq!(report["requiredReexportTransformCount"], 2);
+    assert_eq!(report["requiredReexportAnalysisCount"], 0);
     assert_eq!(report["reexportTransformValue"], 42);
     assert_eq!(report["reexportHasPhantom"], false);
     assert_eq!(report["reexportFirstLoadTransformCount"], 2);
+    assert_eq!(report["reexportFirstLoadAnalysisCount"], 2);
     assert_eq!(report["reexportCachedTransformValue"], 42);
     assert_eq!(report["reexportCachedTransformCount"], 2);
     assert_eq!(report["reexportChildTransformValue"], 42);
     assert_eq!(report["reexportChildHasPhantom"], false);
     assert_eq!(report["reexportChildImportTransformCount"], 2);
+    assert_eq!(report["requiredCycleA"], 1);
+    assert_eq!(report["requiredCycleB"], 2);
+    assert_eq!(report["importedCycleA"], 1);
+    assert_eq!(report["importedCycleB"], 2);
+    assert_eq!(report["cachedCycleA"], 1);
+    assert_eq!(report["cachedCycleB"], 2);
+    assert_eq!(report["cycleTransformCount"], 2);
+    assert_eq!(report["cycleAnalysisCount"], 2);
+    assert_eq!(report["cycleExecutionCounts"], serde_json::json!([1, 1]));
+    assert!(
+        report["preparedSourceCacheStats"]["entries"]
+            .as_u64()
+            .unwrap()
+            <= 32
+    );
+    assert!(
+        report["preparedSourceCacheStats"]["bytes"]
+            .as_u64()
+            .unwrap()
+            <= 1024 * 1024
+    );
+    assert_eq!(report["preparedSourceCacheStats"]["maxEntries"], 32);
+    assert_eq!(report["preparedSourceCacheStats"]["maxBytes"], 1024 * 1024);
+    assert_eq!(report["oversizedRequiredValue"]["answer"], 42);
+    assert_eq!(report["oversizedImportedValue"], 42);
+    assert_eq!(report["oversizedTransformCount"], 2);
+    assert_eq!(report["oversizedAnalysisCount"], 1);
+    assert_eq!(
+        report["oversizedCacheStatsAfterRequire"]["preparedEntries"],
+        report["oversizedCacheStatsBefore"]["preparedEntries"]
+    );
+    assert_eq!(
+        report["oversizedCacheStatsAfterRequire"]["preparedBytes"],
+        report["oversizedCacheStatsBefore"]["preparedBytes"]
+    );
+    assert!(
+        report["oversizedCacheStatsAfterImport"]["entries"]
+            .as_u64()
+            .unwrap()
+            <= report["oversizedCacheStatsAfterImport"]["maxEntries"]
+                .as_u64()
+                .unwrap()
+    );
+    assert!(
+        report["oversizedCacheStatsAfterImport"]["bytes"]
+            .as_u64()
+            .unwrap()
+            <= report["oversizedCacheStatsAfterImport"]["maxBytes"]
+                .as_u64()
+                .unwrap()
+    );
     assert_eq!(report["cachedChildReexportValue"], 42);
     assert_eq!(report["cachedChildReexportTransformCount"], 2);
     assert_eq!(report["esmChildReexportValue"], 42);

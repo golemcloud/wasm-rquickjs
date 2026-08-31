@@ -65,7 +65,7 @@ import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } f
 import {
     transform_typescript as transformTypeScriptNative,
     transform_typescript_module as transformTypeScriptModuleNative,
-    transform_observability_enabled as typeScriptTransformObservabilityEnabledNative,
+    test_observability_enabled as testObservabilityEnabledNative,
 } from '__wasm_rquickjs_builtin/typescript_native';
 
 const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
@@ -718,7 +718,10 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin',
     configurable: false,
 });
 
-// Module cache: resolved absolute path -> Module object
+// Runtime-local CommonJS cache: resolved absolute path -> Module object. Like
+// Node's require.cache, it does not stat or hash files after first load. A new
+// QuickJS runtime (including every wasm-rquickjs execution job) starts empty;
+// within one runtime callers must delete the entry to observe an updated file.
 const moduleCache = Object.create(null);
 let moduleExportsInitialized = false;
 
@@ -1603,9 +1606,12 @@ function isTypeScriptFilename(filename) {
 }
 
 let recordTypeScriptModuleTransform = () => {};
-if (typeScriptTransformObservabilityEnabledNative()) {
+let recordCommonJsExportAnalysis = () => {};
+if (testObservabilityEnabledNative()) {
     let typeScriptModuleTransformCount = 0;
+    let commonJsExportAnalysisCount = 0;
     recordTypeScriptModuleTransform = () => { typeScriptModuleTransformCount += 1; };
+    recordCommonJsExportAnalysis = () => { commonJsExportAnalysisCount += 1; };
     Object.defineProperties(globalThis, {
         __wasm_rquickjs_record_typescript_module_transform: {
             value: recordTypeScriptModuleTransform,
@@ -1619,6 +1625,21 @@ if (typeScriptTransformObservabilityEnabledNative()) {
         },
         __wasm_rquickjs_reset_typescript_module_transform_count: {
             value: () => { typeScriptModuleTransformCount = 0; },
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_record_commonjs_export_analysis: {
+            value: recordCommonJsExportAnalysis,
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_get_commonjs_export_analysis_count: {
+            value: () => commonJsExportAnalysisCount,
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_reset_commonjs_export_analysis_count: {
+            value: () => { commonJsExportAnalysisCount = 0; },
             writable: false,
             configurable: false,
         },
@@ -1639,22 +1660,14 @@ function transpileTypeScriptModule(filename, source, module = undefined) {
 }
 
 function prepareCommonJsTypeScript(filename, source) {
-    if (!isTypeScriptFilename(filename)) {
-        return { source, exportNames: undefined, preparedTypeScriptGraph: undefined };
-    }
-    const preparedSource = transpileTypeScriptModule(filename, source, false);
-    const analysis = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_analyze_cjs_typescript_for_require(
-        filename,
-        preparedSource,
-    );
-    return {
-        source: preparedSource,
-        exportNames: analysis.exports,
-        preparedTypeScriptGraph: analysis.preparedTypeScriptGraph,
-    };
+    return isTypeScriptFilename(filename)
+        ? transpileTypeScriptModule(filename, source, false)
+        : source;
 }
 
 function clearPreparedTypeScriptGraph(graph) {
+    // This graph belongs only to the active load transaction. require.cache is
+    // the durable per-runtime owner once a module finishes loading.
     if (!graph || typeof graph !== 'object') return;
     for (const filename of Object.keys(graph)) delete graph[filename];
 }
@@ -1901,11 +1914,19 @@ function fileUrlForPath(filename) {
 }
 
 const cjsEsmDefaultSnapshotSymbol = Symbol('wasm-rquickjs.cjs-esm-default-snapshot');
+const cjsTypeScriptAnalysisCache = new WeakMap();
+const cjsTypeScriptAnalysisCacheQueue = [];
+const cjsTypeScriptAnalysisCacheMaxEntries = 32;
+const cjsTypeScriptAnalysisCacheMaxBytes = 1024 * 1024;
+let cjsTypeScriptAnalysisCacheEntries = 0;
+let cjsTypeScriptAnalysisCacheBytes = 0;
+let cjsTypeScriptPreparedSourceEntries = 0;
+let cjsTypeScriptPreparedSourceBytes = 0;
 const cjsEsmDefaultSnapshotToken = {};
 
 function installCjsEsmDefaultSnapshotSlot(mod) {
     if (!mod || (typeof mod !== 'object' && typeof mod !== 'function') || cjsFacadeHasOwnProperty(mod, cjsEsmDefaultSnapshotSymbol)) return;
-    const state = { captured: false, value: undefined, typeScriptExportNames: undefined };
+    const state = { captured: false, value: undefined };
     Object.defineProperty(mod, cjsEsmDefaultSnapshotSymbol, {
         value: function cjsEsmDefaultSnapshotSlot(token, op, value) {
             if (token !== cjsEsmDefaultSnapshotToken) return undefined;
@@ -1918,11 +1939,6 @@ function installCjsEsmDefaultSnapshotSlot(mod) {
             }
             if (op === 'has') return state.captured;
             if (op === 'get') return state.value;
-            if (op === 'set-typescript-export-names') {
-                state.typeScriptExportNames = Array.isArray(value) ? value.slice() : [];
-                return state.typeScriptExportNames;
-            }
-            if (op === 'get-typescript-export-names') return state.typeScriptExportNames;
             return undefined;
         },
         writable: false,
@@ -1957,9 +1973,76 @@ function getCjsEsmDefaultSnapshot(cache, filename) {
     return slot ? slot(cjsEsmDefaultSnapshotToken, 'get') : undefined;
 }
 
-function captureCjsTypeScriptExportNames(mod, names) {
-    const slot = cjsEsmDefaultSnapshotSlot(mod);
-    if (slot) slot(cjsEsmDefaultSnapshotToken, 'set-typescript-export-names', names);
+function discardCjsTypeScriptAnalysisCacheEntry(mod) {
+    const entry = mod && cjsTypeScriptAnalysisCache.get(mod);
+    if (!entry) return;
+    cjsTypeScriptAnalysisCache.delete(mod);
+    entry.active = false;
+    cjsTypeScriptAnalysisCacheEntries -= 1;
+    cjsTypeScriptAnalysisCacheBytes -= entry.bytes;
+    if (entry.preparedSource !== undefined) {
+        cjsTypeScriptPreparedSourceEntries -= 1;
+        cjsTypeScriptPreparedSourceBytes -= entry.preparedBytes;
+    }
+    entry.mod = undefined;
+    entry.originalSource = undefined;
+    entry.preparedSource = undefined;
+    entry.exportNames = undefined;
+    if (cjsTypeScriptAnalysisCacheQueue.length > cjsTypeScriptAnalysisCacheMaxEntries * 2) {
+        const active = cjsTypeScriptAnalysisCacheQueue.filter((queued) => queued.active);
+        cjsTypeScriptAnalysisCacheQueue.splice(
+            0,
+            cjsTypeScriptAnalysisCacheQueue.length,
+            ...active,
+        );
+    }
+}
+
+function pruneCjsTypeScriptAnalysisCache() {
+    while (cjsTypeScriptAnalysisCacheEntries > cjsTypeScriptAnalysisCacheMaxEntries ||
+           cjsTypeScriptAnalysisCacheBytes > cjsTypeScriptAnalysisCacheMaxBytes) {
+        const entry = cjsTypeScriptAnalysisCacheQueue.shift();
+        if (!entry || !entry.active) continue;
+        discardCjsTypeScriptAnalysisCacheEntry(entry.mod);
+    }
+}
+
+function captureCjsTypeScriptAnalysisCacheEntry(mod, originalSource, preparedSource, exportNames) {
+    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function')) return;
+    discardCjsTypeScriptAnalysisCacheEntry(mod);
+    const names = Array.isArray(exportNames) ? exportNames.slice() : undefined;
+    const preparedBytes = preparedSource === undefined ? 0 : preparedSource.length * 2;
+    const namesBytes = names === undefined
+        ? 0
+        : names.reduce((total, name) => total + String(name).length * 2, 0);
+    const bytes = originalSource.length * 2 + preparedBytes + namesBytes;
+    if (bytes > cjsTypeScriptAnalysisCacheMaxBytes) return;
+    const entry = {
+        mod,
+        originalSource,
+        preparedSource,
+        exportNames: names,
+        bytes,
+        preparedBytes,
+        active: true,
+    };
+    cjsTypeScriptAnalysisCache.set(mod, entry);
+    cjsTypeScriptAnalysisCacheQueue.push(entry);
+    cjsTypeScriptAnalysisCacheEntries += 1;
+    cjsTypeScriptAnalysisCacheBytes += bytes;
+    if (preparedSource !== undefined) {
+        cjsTypeScriptPreparedSourceEntries += 1;
+        cjsTypeScriptPreparedSourceBytes += preparedBytes;
+    }
+    pruneCjsTypeScriptAnalysisCache();
+}
+
+function captureCjsTypeScriptExportNames(mod, names, originalSource) {
+    captureCjsTypeScriptAnalysisCacheEntry(mod, originalSource, undefined, names);
+}
+
+function captureCjsTypeScriptPreparedSource(mod, originalSource, preparedSource) {
+    captureCjsTypeScriptAnalysisCacheEntry(mod, originalSource, preparedSource, undefined);
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', {
@@ -1974,12 +2057,33 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot'
     configurable: false,
 });
 
-function getCachedCjsTypeScriptExportNames(filename) {
+function getCachedCjsTypeScriptAnalysisEntry(filename, source) {
     const require = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_create_require(filename);
     const resolvedFilename = require.resolve(filename);
     const mod = require.cache[resolvedFilename];
-    const slot = cjsEsmDefaultSnapshotSlot(mod);
-    return slot ? slot(cjsEsmDefaultSnapshotToken, 'get-typescript-export-names') : undefined;
+    const entry = mod && cjsTypeScriptAnalysisCache.get(mod);
+    if (!entry || entry.originalSource !== source) {
+        discardCjsTypeScriptAnalysisCacheEntry(mod);
+        return undefined;
+    }
+    return entry;
+}
+
+function getCachedCjsTypeScriptExportNames(filename, source) {
+    return getCachedCjsTypeScriptAnalysisEntry(filename, source)?.exportNames;
+}
+
+function getCachedCjsTypeScriptPreparedSource(filename, source) {
+    return getCachedCjsTypeScriptAnalysisEntry(filename, source)?.preparedSource;
+}
+
+function setCachedCjsTypeScriptExportNames(filename, names, source) {
+    const require = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_create_require(filename);
+    const resolvedFilename = require.resolve(filename);
+    const mod = require.cache[resolvedFilename];
+    if (mod) {
+        captureCjsTypeScriptExportNames(mod, names, source);
+    }
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_export_names', {
@@ -1987,6 +2091,30 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_exp
     writable: false,
     configurable: false,
 });
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_prepared_source', {
+    value: getCachedCjsTypeScriptPreparedSource,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_set_cached_cjs_typescript_export_names', {
+    value: setCachedCjsTypeScriptExportNames,
+    writable: false,
+    configurable: false,
+});
+if (testObservabilityEnabledNative()) {
+    Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_typescript_prepared_source_cache_stats', {
+        value: () => ({
+            entries: cjsTypeScriptAnalysisCacheEntries,
+            bytes: cjsTypeScriptAnalysisCacheBytes,
+            preparedEntries: cjsTypeScriptPreparedSourceEntries,
+            preparedBytes: cjsTypeScriptPreparedSourceBytes,
+            maxEntries: cjsTypeScriptAnalysisCacheMaxEntries,
+            maxBytes: cjsTypeScriptAnalysisCacheMaxBytes,
+        }),
+        writable: false,
+        configurable: false,
+    });
+}
 
 function takePreparedCjsTypeScript(meta) {
     const prepared = meta.__wasm_rquickjs_prepared_cjs_typescript;
@@ -2006,12 +2134,23 @@ function loadCjsEsmFacadeDefault(filename, preparedTypeScriptGraph) {
     return hasCjsEsmDefaultSnapshot(require.cache, resolvedFilename)
         ? getCjsEsmDefaultSnapshot(require.cache, resolvedFilename)
         : preparedTypeScriptGraph
-            ? require.__wasm_rquickjs_load_prepared_typescript(
+            ? loadPreparedCjsTypeScript(
                 resolvedFilename,
                 preparedTypeScriptGraph,
                 filename,
             )
             : require(filename);
+}
+
+function loadPreparedCjsTypeScript(resolvedFilename, graph, traceId) {
+    // An ESM facade has no real CommonJS parent; do not invent a self-parent.
+    return traceModuleRequire(traceId, null, () => {
+        try {
+            return loadFilesystemCommonJs(resolvedFilename, null, graph).exports;
+        } finally {
+            clearPreparedTypeScriptGraph(graph);
+        }
+    });
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_load_cjs_esm_facade_default', {
@@ -2903,20 +3042,13 @@ function loadCommonJsTransaction(descriptor) {
                 throw err;
             }
             const dirname = pathModule.dirname(filename);
-            let activePreparedTypeScriptGraph = preparedTypeScriptGraph;
-            let compiledSource = preparedTypeScript ? preparedTypeScript.preparedSource : source;
+            let compiledSource;
             let typeScriptExportNames;
-            let ownsPreparedTypeScriptGraph = false;
             try {
-                if (!preparedTypeScript) {
-                    const prepared = prepareCommonJsTypeScript(filename, source);
-                    compiledSource = prepared.source;
-                    typeScriptExportNames = prepared.exportNames;
-                    if (prepared.preparedTypeScriptGraph) {
-                        activePreparedTypeScriptGraph = prepared.preparedTypeScriptGraph;
-                        ownsPreparedTypeScriptGraph = true;
-                    }
-                }
+                compiledSource = preparedTypeScript
+                    ? preparedTypeScript.preparedSource
+                    : prepareCommonJsTypeScript(filename, source);
+                typeScriptExportNames = preparedTypeScript && preparedTypeScript.exportNames;
             } catch (err) {
                 discardCjsModuleLoad(cacheKey, parentModule, mod);
                 throw err;
@@ -2926,7 +3058,7 @@ function loadCommonJsTransaction(descriptor) {
                 mod,
                 undefined,
                 mainModule,
-                activePreparedTypeScriptGraph,
+                preparedTypeScriptGraph,
             );
             let compiledFn;
             let cjsSyntaxError = null;
@@ -2987,15 +3119,20 @@ function loadCommonJsTransaction(descriptor) {
                     discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
-                } finally {
-                    if (ownsPreparedTypeScriptGraph) {
-                        clearPreparedTypeScriptGraph(activePreparedTypeScriptGraph);
-                    }
                 }
                 if (typeScriptExportNames !== undefined) {
-                    captureCjsTypeScriptExportNames(mod, typeScriptExportNames);
-                } else if (preparedTypeScript && Array.isArray(preparedTypeScript.exportNames)) {
-                    captureCjsTypeScriptExportNames(mod, preparedTypeScript.exportNames);
+                    captureCjsTypeScriptExportNames(
+                        mod,
+                        typeScriptExportNames,
+                        source,
+                    );
+                }
+                if (isTypeScriptFilename(filename) && typeScriptExportNames === undefined) {
+                    captureCjsTypeScriptPreparedSource(
+                        mod,
+                        source,
+                        compiledSource,
+                    );
                 }
                 cjsEsmDefaultSnapshotEligible = true;
             }
@@ -3408,26 +3545,6 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         writable: true,
         configurable: true,
         enumerable: true,
-    });
-
-    Object.defineProperty(localRequire, '__wasm_rquickjs_load_prepared_typescript', {
-        value: (resolvedFilename, graph, traceId) => traceModuleRequire(
-            traceId,
-            parentFilename,
-            () => {
-                try {
-                    return loadFilesystemCommonJs(
-                        resolvedFilename,
-                        parentModule || null,
-                        graph,
-                    ).exports;
-                } finally {
-                    clearPreparedTypeScriptGraph(graph);
-                }
-            },
-        ),
-        writable: false,
-        configurable: false,
     });
 
     return localRequire;
