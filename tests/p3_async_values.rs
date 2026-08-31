@@ -22,6 +22,8 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use wasm_rquickjs::{
@@ -33,6 +35,7 @@ use wasmtime::component::{
     StreamResult, bindgen,
 };
 use wasmtime::{Config, Engine, Result, Store, StoreContextMut};
+use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
@@ -69,6 +72,8 @@ struct Host {
     http: WasiHttpCtx,
     table: ResourceTable,
     stored_future: Option<oneshot::Receiver<u32>>,
+    nested_cleanup_calls: usize,
+    stderr: MemoryOutputPipe,
     // The Golem wasmtime fork's `WasiCtxBuilder::build()` also yields an `IoCtx` that the
     // `WasiCtxView` requires; on stock wasmtime this field does not exist.
     #[cfg(feature = "use-golem-wasmtime")]
@@ -97,6 +102,12 @@ impl WasiHttpView for Host {
 }
 
 impl test::async_values_import::host::Host for Host {}
+
+impl export_bindings::test::async_values::observer::Host for Host {
+    fn cleanup_complete(&mut self) {
+        self.nested_cleanup_calls += 1;
+    }
+}
 
 impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
     fn make_future(mut host: Access<T, Self>, x: u32) -> FutureReader<u32> {
@@ -131,6 +142,20 @@ impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
             .await
     }
 
+    async fn consume_stream_prefix(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u8 {
+        let (tx, rx) = oneshot::channel();
+        accessor
+            .with(|access| s.pipe(access, PrefixConsumer::new(tx)))
+            .expect("failed to pipe prefix stream");
+        rx.await.expect("prefix stream did not yield an item")
+    }
+
+    async fn consume_stream_with_backpressure(accessor: &Accessor<T, Self>, s: StreamReader<u8>) {
+        accessor
+            .with(|access| s.pipe(access, BackpressureDropConsumer::default()))
+            .expect("failed to pipe backpressure stream");
+    }
+
     async fn store_future(accessor: &Accessor<T, Self>, f: FutureReader<u32>) {
         let (tx, rx) = oneshot::channel();
         accessor
@@ -150,10 +175,13 @@ impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
 }
 
 fn new_store(engine: &Engine) -> Store<Host> {
+    let stderr = MemoryOutputPipe::new(1024 * 1024);
+    let mut builder = WasiCtxBuilder::new();
+    builder.inherit_stdout().stderr(stderr.clone());
     #[cfg(feature = "use-golem-wasmtime")]
-    let (wasi, io_ctx) = WasiCtxBuilder::new().inherit_stdio().build();
+    let (wasi, io_ctx) = builder.build();
     #[cfg(not(feature = "use-golem-wasmtime"))]
-    let wasi = WasiCtxBuilder::new().inherit_stdio().build();
+    let wasi = builder.build();
     Store::new(
         engine,
         Host {
@@ -161,6 +189,8 @@ fn new_store(engine: &Engine) -> Store<Host> {
             http: WasiHttpCtx::new(),
             table: ResourceTable::new(),
             stored_future: None,
+            nested_cleanup_calls: 0,
+            stderr,
             #[cfg(feature = "use-golem-wasmtime")]
             io_ctx,
         },
@@ -180,6 +210,10 @@ fn base_linker(engine: &Engine) -> Result<Linker<Host>> {
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    export_bindings::test::async_values::observer::add_to_linker::<Host, HasSelf<Host>>(
+        &mut linker,
+        |host| host,
+    )?;
     add_wasi_logging_stub(&mut linker)?;
     Ok(linker)
 }
@@ -358,6 +392,178 @@ async fn run_export_world(
     ))
 }
 
+async fn run_export_stream_lifecycle(
+    component_path: &Utf8Path,
+) -> Result<(
+    String,
+    u8,
+    String,
+    String,
+    String,
+    usize,
+    usize,
+    usize,
+    usize,
+    usize,
+)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+
+    let completion = {
+        let mut store = new_store(&engine);
+        let reader = StreamReader::new(
+            &mut store,
+            PipeProducer::new(futures::stream::iter(vec![1u8, 2, 3])),
+        )?;
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| {
+                bindings
+                    .call_inspect_stream_completion(accessor, reader)
+                    .await
+            })
+            .await??
+    };
+
+    let (early_break, break_drops) = {
+        let observation = Arc::new(ProducerObservation::default());
+        let mut store = new_store(&engine);
+        let reader = StreamReader::new(&mut store, ObservedProducer::new(observation.clone()))?;
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        let value = store
+            .run_concurrent(async move |accessor| {
+                bindings.call_break_stream(accessor, reader).await
+            })
+            .await??;
+        (value, observation.drops.load(Ordering::SeqCst))
+    };
+
+    let (returned, return_drops) = {
+        let observation = Arc::new(ProducerObservation::default());
+        let mut store = new_store(&engine);
+        let reader = StreamReader::new(&mut store, ObservedProducer::new(observation.clone()))?;
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        let value = store
+            .run_concurrent(async move |accessor| {
+                bindings.call_return_stream(accessor, reader).await
+            })
+            .await??;
+        (value, observation.drops.load(Ordering::SeqCst))
+    };
+
+    let (thrown, throw_drops) = {
+        let observation = Arc::new(ProducerObservation::default());
+        let mut store = new_store(&engine);
+        let reader = StreamReader::new(&mut store, ObservedProducer::new(observation.clone()))?;
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        let value = store
+            .run_concurrent(async move |accessor| {
+                bindings.call_throw_stream(accessor, reader).await
+            })
+            .await??;
+        (value, observation.drops.load(Ordering::SeqCst))
+    };
+
+    let (pending_close, pending_polls, pending_drops) = {
+        let observation = Arc::new(ProducerObservation::default());
+        let mut store = new_store(&engine);
+        let reader = StreamReader::new(
+            &mut store,
+            PendingObservedProducer::new(observation.clone()),
+        )?;
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        let value = store
+            .run_concurrent(async move |accessor| {
+                bindings.call_close_pending_stream(accessor, reader).await
+            })
+            .await??;
+        (
+            value,
+            observation.polls.load(Ordering::SeqCst),
+            observation.drops.load(Ordering::SeqCst),
+        )
+    };
+
+    Ok((
+        completion,
+        early_break,
+        returned,
+        thrown,
+        pending_close,
+        break_drops,
+        return_drops,
+        throw_drops,
+        pending_polls,
+        pending_drops,
+    ))
+}
+
+async fn run_export_stream_producer_cleanup(component_path: &Utf8Path) -> Result<(u8, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    store
+        .run_concurrent(async move |accessor| {
+            let reader = bindings.call_run_observed_stream(accessor).await?;
+            let (tx, rx) = oneshot::channel();
+            accessor.with(|access| reader.pipe(access, PrefixConsumer::new(tx)))?;
+            let first = rx.await?;
+            let state = bindings.call_read_observed_stream_state(accessor).await?;
+            Ok((first, state))
+        })
+        .await?
+}
+
+async fn run_nested_export_stream_cleanup(
+    component_path: &Utf8Path,
+    cleanup_failure: bool,
+) -> Result<(Result<u8>, usize, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    let result = match store
+        .run_concurrent(async move |accessor| -> Result<u8> {
+            let nested = bindings
+                .call_run_nested_observed_stream(accessor, cleanup_failure)
+                .await?
+                .expect("run-nested-observed-stream should return the success arm");
+            assert_eq!(nested.label, "nested-observed");
+            assert!(nested.stderr.is_none());
+
+            let (future_tx, future_rx) = oneshot::channel();
+            accessor.with(|access| {
+                nested
+                    .future_value
+                    .pipe(access, OneshotConsumer::new(future_tx))
+            })?;
+            assert_eq!(future_rx.await?, 1);
+
+            let stdout = nested.stdout.expect("nested stdout should be present");
+            let (stdout_tx, stdout_rx) = oneshot::channel();
+            accessor.with(|access| stdout.pipe(access, PrefixConsumer::new(stdout_tx)))?;
+            let first = stdout_rx.await?;
+            // Keep the host session active without re-entering QuickJS. The nested stream's own
+            // retained driver must advance its asynchronous iterator cleanup during this wait.
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            Ok(first)
+        })
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => Err(error),
+    };
+    let cleanup_calls = store.data().nested_cleanup_calls;
+    let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
+    Ok((result, cleanup_calls, stderr))
+}
+
 // ---------------------------------------------------------------------------------------------
 // Import-boundary world (`test:async-values-import`)
 // ---------------------------------------------------------------------------------------------
@@ -404,6 +610,65 @@ async fn run_import_world_stored_future(component_path: &Utf8Path) -> Result<Str
         .run_concurrent(async move |accessor| bindings.call_run_stored_future(accessor).await)
         .await??;
     Ok(result)
+}
+
+async fn run_import_world_stream_lifecycle(component_path: &Utf8Path) -> Result<(String, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = base_linker(&engine)?;
+    test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |h| h)?;
+
+    let readable_drop = {
+        let mut store = new_store(&engine);
+        let bindings =
+            AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| {
+                bindings.call_run_stream_readable_drop(accessor).await
+            })
+            .await??
+    };
+
+    let backpressure = {
+        let mut store = new_store(&engine);
+        let bindings =
+            AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| {
+                bindings.call_run_stream_backpressure(accessor).await
+            })
+            .await??
+    };
+
+    Ok((readable_drop, backpressure))
+}
+
+async fn run_import_world_stream_failure(
+    component_path: &Utf8Path,
+    cleanup_failure: bool,
+) -> Result<(Result<String>, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = base_linker(&engine)?;
+    test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |h| h)?;
+
+    let mut store = new_store(&engine);
+    let bindings = AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+    let result = match store
+        .run_concurrent(async move |accessor| {
+            if cleanup_failure {
+                bindings.call_run_stream_cleanup_failure(accessor).await
+            } else {
+                bindings.call_run_stream_failure(accessor).await
+            }
+        })
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => Err(error),
+    };
+    let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
+    Ok((result, stderr))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -571,6 +836,130 @@ fn p3_async_values_import_future_param_can_be_consumed_after_import_returns() {
     assert_eq!(result, "99");
 }
 
+#[test]
+fn p3_component_stream_js_iterator_lifecycle() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (
+        completion,
+        early_break,
+        returned,
+        thrown,
+        pending_close,
+        break_drops,
+        return_drops,
+        throw_drops,
+        pending_polls,
+        pending_drops,
+    ) = block_on_with_timeout(120, run_export_stream_lifecycle(&wasm));
+
+    assert_eq!(completion, "1,2,3|true|true");
+    assert_eq!(early_break, 1);
+    assert_eq!(returned, "1|true|true");
+    assert_eq!(thrown, "1|consumer-stop");
+    assert_eq!(
+        pending_close,
+        "true|closed|true|true|true|closed-again|true|true"
+    );
+    assert_eq!(break_drops, 1, "early break must drop the readable end");
+    assert_eq!(return_drops, 1, "return() must drop the readable end");
+    assert_eq!(throw_drops, 1, "throw() must drop the readable end");
+    assert!(
+        pending_polls > 0,
+        "the close regression must exercise a genuinely pending component read"
+    );
+    assert_eq!(
+        pending_drops, 1,
+        "closing any iterator instance must abort the active pull and drop the shared readable end once"
+    );
+}
+
+#[test]
+fn p3_exported_js_stream_peer_drop_runs_iterator_cleanup() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (first, state) = block_on_with_timeout(120, run_export_stream_producer_cleanup(&wasm));
+
+    assert_eq!(first, 1);
+    assert_eq!(
+        state, "2|1|1",
+        "peer drop after one accepted item must stop further pulls and await return() exactly once"
+    );
+}
+
+#[test]
+fn p3_nested_exported_stream_keeps_scheduler_until_iterator_cleanup_settles() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (result, cleanup_calls, _stderr) =
+        block_on_with_timeout(120, run_nested_export_stream_cleanup(&wasm, false));
+    assert_eq!(result.expect("nested stream cleanup should succeed"), 1);
+    assert_eq!(
+        cleanup_calls, 1,
+        "nested stream cleanup must finish exactly once before its scheduler driver is released"
+    );
+
+    let (result, cleanup_calls, stderr) =
+        block_on_with_timeout(120, run_nested_export_stream_cleanup(&wasm, true));
+    result.expect_err("rejecting nested iterator return() must fail the active stream session");
+    assert_eq!(
+        cleanup_calls, 1,
+        "rejecting cleanup must still run exactly once"
+    );
+    assert!(
+        stderr.contains("nested-cleanup-failed"),
+        "nested cleanup failure should preserve its diagnostic, got: {stderr}"
+    );
+}
+
+#[test]
+fn p3_js_stream_peer_drop_runs_iterator_cleanup_with_backpressure() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+
+    let (readable_drop, backpressure) =
+        block_on_with_timeout(120, run_import_world_stream_lifecycle(&wasm));
+
+    assert_eq!(
+        (readable_drop.as_str(), backpressure.as_str()),
+        ("1|2|1|1", "1|1|1"),
+        "an accepted write may permit one more pull, a pending write must gate it, and peer drop must await return() exactly once"
+    );
+}
+
+#[test]
+fn p3_js_stream_producer_failure_is_not_clean_eof() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+
+    let (result, stderr) =
+        block_on_with_timeout(120, run_import_world_stream_failure(&wasm, false));
+    result.expect_err("throwing producer must fail the active stream consumer");
+    assert!(
+        stderr.contains("producer-failed"),
+        "producer failure should preserve its diagnostic, got: {stderr}"
+    );
+}
+
+#[test]
+fn p3_js_stream_cleanup_rejection_fails_active_consumer() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+
+    let (result, stderr) = block_on_with_timeout(120, run_import_world_stream_failure(&wasm, true));
+    result.expect_err("rejecting iterator return() must fail the active stream consumer");
+    assert!(
+        stderr.contains("cleanup-failed"),
+        "cleanup failure should preserve its diagnostic, got: {stderr}"
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Host-side producers/consumers for Component Model `future<T>` / `stream<T>` values.
 //
@@ -584,6 +973,90 @@ struct PipeProducer<S>(S);
 impl<S> PipeProducer<S> {
     fn new(rx: S) -> Self {
         Self(rx)
+    }
+}
+
+#[derive(Default)]
+struct ProducerObservation {
+    drops: AtomicUsize,
+    polls: AtomicUsize,
+}
+
+struct ObservedProducer {
+    next: u8,
+    observation: Arc<ProducerObservation>,
+}
+
+impl ObservedProducer {
+    fn new(observation: Arc<ProducerObservation>) -> Self {
+        Self {
+            next: 1,
+            observation,
+        }
+    }
+}
+
+impl Drop for ObservedProducer {
+    fn drop(&mut self) {
+        self.observation.drops.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl<D> StreamProducer<D> for ObservedProducer {
+    type Item = u8;
+    type Buffer = Option<u8>;
+
+    fn poll_produce<'a>(
+        mut self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        _: StoreContextMut<D>,
+        mut destination: Destination<'a, Self::Item, Self::Buffer>,
+        finish: bool,
+    ) -> Poll<Result<StreamResult>> {
+        if finish {
+            return Poll::Ready(Ok(StreamResult::Cancelled));
+        }
+
+        let value = self.next;
+        self.next = self.next.wrapping_add(1);
+        destination.set_buffer(Some(value));
+        Poll::Ready(Ok(StreamResult::Completed))
+    }
+}
+
+struct PendingObservedProducer {
+    observation: Arc<ProducerObservation>,
+}
+
+impl PendingObservedProducer {
+    fn new(observation: Arc<ProducerObservation>) -> Self {
+        Self { observation }
+    }
+}
+
+impl Drop for PendingObservedProducer {
+    fn drop(&mut self) {
+        self.observation.drops.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+impl<D> StreamProducer<D> for PendingObservedProducer {
+    type Item = u8;
+    type Buffer = Option<u8>;
+
+    fn poll_produce<'a>(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        _: StoreContextMut<D>,
+        _: Destination<'a, Self::Item, Self::Buffer>,
+        finish: bool,
+    ) -> Poll<Result<StreamResult>> {
+        self.observation.polls.fetch_add(1, Ordering::SeqCst);
+        if finish {
+            Poll::Ready(Ok(StreamResult::Cancelled))
+        } else {
+            Poll::Pending
+        }
     }
 }
 
@@ -626,6 +1099,60 @@ struct PipeConsumer<T, S>(S, PhantomData<fn() -> T>);
 impl<T, S> PipeConsumer<T, S> {
     fn new(tx: S) -> Self {
         Self(tx, PhantomData)
+    }
+}
+
+struct PrefixConsumer<T>(Option<oneshot::Sender<T>>);
+
+impl<T> PrefixConsumer<T> {
+    fn new(tx: oneshot::Sender<T>) -> Self {
+        Self(Some(tx))
+    }
+}
+
+impl<D, T: Lift + Send + 'static> StreamConsumer<D> for PrefixConsumer<T> {
+    type Item = T;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        store: StoreContextMut<D>,
+        mut source: Source<Self::Item>,
+        _: bool,
+    ) -> Poll<Result<StreamResult>> {
+        let value = &mut None;
+        source.read(store, value)?;
+        let value = value.take().expect("prefix stream write had no item");
+        let _ = self.get_mut().0.take().unwrap().send(value);
+        Poll::Ready(Ok(StreamResult::Dropped))
+    }
+}
+
+#[derive(Default)]
+struct BackpressureDropConsumer {
+    delayed_once: bool,
+}
+
+impl<D> StreamConsumer<D> for BackpressureDropConsumer {
+    type Item = u8;
+
+    fn poll_consume(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        _: StoreContextMut<D>,
+        _: Source<Self::Item>,
+        finish: bool,
+    ) -> Poll<Result<StreamResult>> {
+        if finish {
+            return Poll::Ready(Ok(StreamResult::Cancelled));
+        }
+        if self.delayed_once {
+            Poll::Ready(Ok(StreamResult::Dropped))
+        } else {
+            self.delayed_once = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
     }
 }
 

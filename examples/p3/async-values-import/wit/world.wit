@@ -11,6 +11,8 @@ interface host {
   make-stream: func(n: u32) -> stream<u8>;
   consume-future: async func(f: future<u32>) -> u32;
   consume-stream: async func(s: stream<u8>) -> u32;
+  consume-stream-prefix: async func(s: stream<u8>) -> u8;
+  consume-stream-with-backpressure: async func(s: stream<u8>);
   store-future: async func(f: future<u32>);
   read-stored-future: async func() -> u32;
 }
@@ -21,4 +23,8 @@ world async-values-import {
   export run: async func() -> string;
   export run-promise-stream-items: async func() -> string;
   export run-stored-future: async func() -> string;
+  export run-stream-readable-drop: async func() -> string;
+  export run-stream-backpressure: async func() -> string;
+  export run-stream-failure: async func() -> string;
+  export run-stream-cleanup-failure: async func() -> string;
 }

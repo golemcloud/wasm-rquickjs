@@ -100,17 +100,44 @@ impl JsState {
                 .expect("Failed to initialize the exported resource table");
 
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
-            // turns a Rust-provided `pull()` (returning a promise of `{ value, done }`) into a JS
-            // async-iterable; `get_async_iterator` normalizes any (async or sync) iterable passed
-            // from JS into an async iterator whose `next()` always returns a promise.
+            // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
+            // `get_async_iterator` normalizes any (async or sync) iterable passed from JS into an
+            // async iterator whose lifecycle operations always return promises.
             Module::evaluate(
                 ctx.clone(),
                 "__wasm_rquickjs_async_values",
                 r#"
-                globalThis.__wasm_rquickjs_make_async_iterable = function (pull) {
+                globalThis.__wasm_rquickjs_make_async_iterable = function (pull, close) {
+                    let closed = false;
+                    let closePromise;
+                    const closeOnce = function () {
+                        closed = true;
+                        if (closePromise === undefined) {
+                            try {
+                                closePromise = Promise.resolve(close());
+                            } catch (error) {
+                                closePromise = Promise.reject(error);
+                            }
+                        }
+                        return closePromise;
+                    };
                     return {
                         [Symbol.asyncIterator]() {
-                            return { next() { return pull(); } };
+                            return {
+                                next() {
+                                    return closed
+                                        ? Promise.resolve({ done: true, value: undefined })
+                                        : pull();
+                                },
+                                async return(value) {
+                                    await closeOnce();
+                                    return { done: true, value };
+                                },
+                                async throw(reason) {
+                                    await closeOnce();
+                                    throw reason;
+                                },
+                            };
                         },
                     };
                 };
@@ -120,9 +147,31 @@ impl JsState {
                     }
                     if (iterable != null && typeof iterable[Symbol.iterator] === 'function') {
                         const it = iterable[Symbol.iterator]();
-                        return { next() { return Promise.resolve(it.next()); } };
+                        return {
+                            next() { return Promise.resolve(it.next()); },
+                            async return(value) {
+                                return typeof it.return === 'function'
+                                    ? it.return(value)
+                                    : { done: true, value };
+                            },
+                            async throw(reason) {
+                                if (typeof it.throw === 'function') {
+                                    return it.throw(reason);
+                                }
+                                throw reason;
+                            },
+                        };
                     }
                     throw new TypeError('value provided for a component stream<T> is not (async) iterable');
+                };
+                globalThis.__wasm_rquickjs_close_async_iterator = async function (iterator) {
+                    if (typeof iterator.return !== 'function') {
+                        return;
+                    }
+                    const result = await iterator.return();
+                    if (result == null || typeof result !== 'object') {
+                        throw new TypeError('stream iterator return() did not resolve to an object');
+                    }
                 };
                 // Drives a JS (async/sync) iterable `source` into a component stream, calling the
                 // native `writeOne(item)` for each item and awaiting the promise it returns before
@@ -144,6 +193,7 @@ impl JsState {
                         // promise-valued items; `for await` awaits each value, so do the same.
                         const keepGoing = await writeOne(await result.value);
                         if (!keepGoing) {
+                            await globalThis.__wasm_rquickjs_close_async_iterator(iterator);
                             return;
                         }
                     }
@@ -1572,6 +1622,23 @@ pub fn spawn_future_writer<T, R, F>(
     spawn_local(future_writer_task(js_value, writer, convert));
 }
 
+async fn close_js_stream_iterator(iterator: Persistent<Object<'static>>) {
+    async_with!(get_js_state().ctx => |ctx| {
+        let iterator = iterator
+            .restore(&ctx)
+            .expect("Failed to restore a persisted stream iterator during cleanup");
+        let close: Function = ctx
+            .globals()
+            .get("__wasm_rquickjs_close_async_iterator")
+            .expect("async-value helper __wasm_rquickjs_close_async_iterator is missing");
+        let result: Value = close
+            .call((iterator,))
+            .unwrap_or_else(|e| panic!("Failed to close a component stream<T> iterator: {e:?}"));
+        let _: Value = resolve_js_value(&ctx, result).await;
+    })
+    .await;
+}
+
 /// The future produced by [`spawn_stream_writer`], factored out so it can also be composed with
 /// an import call in a single wit-bindgen task (see [`drive_import_with_writers`]) instead of
 /// always being spawned as an independent task.
@@ -1612,9 +1679,9 @@ pub async fn stream_writer_task<T, R, F>(
     loop {
         // Clone the persisted iterator handle per iteration so the `async_with!` closure moves
         // a fresh clone each time rather than the shared handle (which the loop reuses).
-        let iterator = iterator.clone();
+        let iterator_for_next = iterator.clone();
         let item: Option<T> = async_with!(get_js_state().ctx => |ctx| {
-                let iterator = iterator
+                let iterator = iterator_for_next
                     .restore(&ctx)
                     .expect("Failed to restore a persisted stream iterator");
                 let next_fn: Function = iterator
@@ -1646,7 +1713,8 @@ pub async fn stream_writer_task<T, R, F>(
         match item {
             Some(item) => {
                 if writer.write_one(item).await.is_some() {
-                    // The reader hung up; stop producing further items.
+                    // The reader hung up; stop producing further items and await source cleanup.
+                    close_js_stream_iterator(iterator.clone()).await;
                     break;
                 }
             }
@@ -1868,13 +1936,9 @@ where
     // oneshot the task uses to acknowledge whether the stream should keep producing.
     let (cmd_tx, mut cmd_rx) =
         futures::channel::mpsc::unbounded::<(T, futures::channel::oneshot::Sender<bool>)>();
-    let writer_guard = writer_group
-        .as_ref()
-        .map(ExportResultWriterGroup::register_writer);
 
     // Pure write task: no `async_with!`, only component-model awaits.
     spawn_local(async move {
-        let _writer_guard = writer_guard;
         use futures::StreamExt as _;
         let mut writer = writer;
         while let Some((payload, ack)) = cmd_rx.next().await {
@@ -1895,8 +1959,14 @@ where
         drop(writer);
     });
 
-    let cmd_tx = Rc::new(cmd_tx);
+    let cmd_tx = Rc::new(RefCell::new(Some(cmd_tx)));
+    let writer_guard = Rc::new(RefCell::new(
+        writer_group
+            .as_ref()
+            .map(ExportResultWriterGroup::register_writer),
+    ));
     let writer_group_for_item = writer_group.clone();
+    let cmd_tx_for_item = cmd_tx.clone();
     // Returns a `Promised` (converted to a JS promise by rquickjs) that resolves to whether the
     // pump should keep producing. Returning `Promised` directly (rather than `into_js`-ing it here)
     // avoids tying an explicit `Value<'js>` return to the argument's invariant lifetime.
@@ -1914,7 +1984,10 @@ where
         let payload = convert(wrapped);
         let (ack_tx, ack_rx) = futures::channel::oneshot::channel::<bool>();
         // If the pure task already exited (reader hung up) the send fails; report "stop".
-        let accepted = cmd_tx.unbounded_send((payload, ack_tx)).is_ok();
+        let accepted = cmd_tx_for_item
+            .borrow()
+            .as_ref()
+            .is_some_and(|cmd_tx| cmd_tx.unbounded_send((payload, ack_tx)).is_ok());
         Promised(async move {
             if accepted {
                 ack_rx.await.unwrap_or(false)
@@ -1928,18 +2001,27 @@ where
         .globals()
         .get("__wasm_rquickjs_drive_stream_param")
         .expect("async-value helper __wasm_rquickjs_drive_stream_param is missing");
-    // The pump returns a promise; attach a rejection handler so a throwing iterable traps with a
-    // clear diagnostic instead of surfacing as an unhandled rejection.
+    // Keep nested export ownership until the pump has awaited iterator cleanup. Releasing it when
+    // the pure writer first observes peer drop can stop the QuickJS scheduler before `return()`
+    // settles.
     let pump: Value = drive.call((value, write_one))?;
     if let Some(pump) = pump.as_promise() {
+        let cmd_tx_ok = cmd_tx.clone();
+        let writer_guard_ok = writer_guard.clone();
+        let on_fulfilled = Function::new(ctx.clone(), move |_value: Value<'_>| -> () {
+            cmd_tx_ok.borrow_mut().take();
+            writer_guard_ok.borrow_mut().take();
+        })?;
         let on_rejected = Function::new(ctx.clone(), move |reason: Value<'_>| -> () {
+            cmd_tx.borrow_mut().take();
+            writer_guard.borrow_mut().take();
             panic!(
                 "A JavaScript iterable backing a component stream failed:\n{}",
                 format_js_exception(&reason)
             );
         })?;
         let then: Function = pump.get("then")?;
-        then.call::<_, ()>((This(pump.clone()), rquickjs::Undefined, on_rejected))?;
+        then.call::<_, ()>((This(pump.clone()), on_fulfilled, on_rejected))?;
     }
     Ok(())
 }
@@ -2021,7 +2103,8 @@ pub fn async_value_default<T>() -> T {
 }
 
 /// Builds a JavaScript async-iterable that yields items pulled one at a time from a component
-/// stream reader, applying `wrap` to convert each payload to its JS representation.
+/// stream reader, applying `wrap` to convert each payload to its JS representation. Returning or
+/// throwing into its iterator drops the component readable end.
 ///
 /// Concurrent `next()` calls are serialized through an async mutex so a second pull started
 /// before the first resolves waits its turn instead of observing a premature end-of-stream.
@@ -2035,22 +2118,58 @@ where
     R: for<'a> IntoJs<'a> + 'static,
     F: Fn(T) -> R + Clone + 'static,
 {
-    let state: Rc<futures::lock::Mutex<StreamReader<T>>> =
-        Rc::new(futures::lock::Mutex::new(reader));
+    let state = Rc::new(futures::lock::Mutex::new(Some(reader)));
+    let close_requested = Rc::new(Cell::new(false));
+    let active_pull = Rc::new(RefCell::new(None::<AbortHandle>));
+    let pull_state = state.clone();
+    let pull_close_requested = close_requested.clone();
+    let pull_active = active_pull.clone();
     let pull = Function::new(ctx.clone(), move || {
-        let state = state.clone();
+        let state = pull_state.clone();
+        let close_requested = pull_close_requested.clone();
+        let active_pull = pull_active.clone();
         let wrap = wrap.clone();
         Promised(async move {
             let item: Option<T> = {
-                let mut reader = state.lock().await;
-                reader.next().await
+                let mut state = state.lock().await;
+                if close_requested.get() {
+                    state.take();
+                    return IterResult(None);
+                }
+
+                let (handle, registration) = AbortHandle::new_pair();
+                let previous = active_pull.borrow_mut().replace(handle);
+                debug_assert!(previous.is_none());
+                let item = match state.as_mut() {
+                    Some(reader) => Abortable::new(reader.next(), registration)
+                        .await
+                        .ok()
+                        .flatten(),
+                    None => None,
+                };
+                active_pull.borrow_mut().take();
+                if item.is_none() {
+                    state.take();
+                }
+                item
             };
             IterResult(item.map(&wrap))
         })
     })?;
 
+    let close = Function::new(ctx.clone(), move || {
+        close_requested.set(true);
+        if let Some(active_pull) = active_pull.borrow_mut().take() {
+            active_pull.abort();
+        }
+        let state = state.clone();
+        Promised(async move {
+            state.lock().await.take();
+        })
+    })?;
+
     let make: Function = ctx.globals().get("__wasm_rquickjs_make_async_iterable")?;
-    let iterable: Value = make.call((pull,))?;
+    let iterable: Value = make.call((pull, close))?;
     Ok(iterable)
 }
 
