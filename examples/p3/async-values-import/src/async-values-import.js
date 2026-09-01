@@ -139,3 +139,46 @@ export async function runStreamCleanupFailure() {
   await new Promise(resolve => setTimeout(resolve, 10));
   return 'clean-eof';
 }
+
+export async function runStreamConversionFailure() {
+  let nextCalls = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          nextCalls += 1;
+          return { done: false, value: 'not-a-u8' };
+        },
+        async return() {
+          host.cleanupComplete();
+          throw new Error('secondary-cleanup-failed');
+        },
+      };
+    },
+  };
+
+  await host.consumeStream(source);
+  return `clean-eof|${nextCalls}`;
+}
+
+export async function runSyncStreamPromiseRejection() {
+  const source = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          return {
+            done: false,
+            value: Promise.reject(new Error('sync-item-failed')),
+          };
+        },
+        return() {
+          host.cleanupComplete();
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+
+  await host.consumeStream(source);
+  return 'clean-eof';
+}

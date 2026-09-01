@@ -10,8 +10,8 @@ use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::promise::Promised;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Filter, FromJs, Function,
-    IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
+    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Exception, Filter, FromJs,
+    Function, IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -147,18 +147,27 @@ impl JsState {
                     }
                     if (iterable != null && typeof iterable[Symbol.iterator] === 'function') {
                         const it = iterable[Symbol.iterator]();
+                        const continueFromSync = async function (result) {
+                            if (result == null || typeof result !== 'object') {
+                                throw new TypeError('stream sync iterator method did not return an object');
+                            }
+                            return {
+                                done: Boolean(result.done),
+                                value: await result.value,
+                            };
+                        };
                         return {
-                            next() { return Promise.resolve(it.next()); },
-                            async return(value) {
+                            next() { return continueFromSync(it.next()); },
+                            return(value) {
                                 return typeof it.return === 'function'
-                                    ? it.return(value)
-                                    : { done: true, value };
+                                    ? continueFromSync(it.return(value))
+                                    : Promise.resolve({ done: true, value });
                             },
-                            async throw(reason) {
+                            throw(reason) {
                                 if (typeof it.throw === 'function') {
-                                    return it.throw(reason);
+                                    return continueFromSync(it.throw(reason));
                                 }
-                                throw reason;
+                                return Promise.reject(reason);
                             },
                         };
                     }
@@ -191,7 +200,21 @@ impl JsState {
                         }
                         // A sync iterable normalized into an async iterator can still yield
                         // promise-valued items; `for await` awaits each value, so do the same.
-                        const keepGoing = await writeOne(await result.value);
+                        let keepGoing;
+                        try {
+                            keepGoing = await writeOne(await result.value);
+                        } catch (error) {
+                            // This is an abrupt failure while consuming an item, so mirror
+                            // AsyncIteratorClose. Keep the payload/write error primary if cleanup
+                            // also rejects. A rejection from next() itself is outside this block
+                            // and must not call return().
+                            try {
+                                await globalThis.__wasm_rquickjs_close_async_iterator(iterator);
+                            } catch (_cleanupError) {
+                                // Preserve the primary consumption failure.
+                            }
+                            throw error;
+                        }
                         if (!keepGoing) {
                             await globalThis.__wasm_rquickjs_close_async_iterator(iterator);
                             return;
@@ -1512,7 +1535,7 @@ pub fn format_caught_error(caught: CaughtError) -> String {
 /// Awaits a JavaScript value, transparently resolving it if it is a promise, and converts the
 /// result to `R`. Panics (traps) if the promise rejects or the value cannot be converted, since
 /// `future<T>` has no error channel.
-async fn resolve_js_value<'js, R>(ctx: &Ctx<'js>, value: Value<'js>) -> R
+async fn try_resolve_js_value<'js, R>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<R, String>
 where
     R: FromJs<'js>,
 {
@@ -1521,25 +1544,34 @@ where
             .into_promise()
             .expect("value.is_promise() returned true but conversion to Promise failed");
         match promise.into_future::<R>().await {
-            Ok(v) => v,
+            Ok(v) => Ok(v),
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic!(
+                Err(format!(
                     "A JavaScript promise backing a component future/stream payload rejected:\n{}",
                     format_js_exception(&exception)
-                );
+                ))
             }
-            Err(e) => panic!(
+            Err(e) => Err(format!(
                 "Error awaiting a JavaScript promise for a component future/stream payload: {e:?}"
-            ),
+            )),
         }
     } else {
-        R::from_js(ctx, value).unwrap_or_else(|e| {
-            panic!(
+        R::from_js(ctx, value).map_err(|e| {
+            format!(
                 "Failed to convert a JavaScript value to a component future/stream payload: {e:?}"
             )
         })
     }
+}
+
+async fn resolve_js_value<'js, R>(ctx: &Ctx<'js>, value: Value<'js>) -> R
+where
+    R: FromJs<'js>,
+{
+    try_resolve_js_value(ctx, value)
+        .await
+        .unwrap_or_else(|error| panic!("{error}"))
 }
 
 /// Calls an exported JS function and returns its raw return value (a promise or a plain value)
@@ -1622,21 +1654,34 @@ pub fn spawn_future_writer<T, R, F>(
     spawn_local(future_writer_task(js_value, writer, convert));
 }
 
-async fn close_js_stream_iterator(iterator: Persistent<Object<'static>>) {
+async fn try_close_js_stream_iterator(iterator: Persistent<Object<'static>>) -> Result<(), String> {
     async_with!(get_js_state().ctx => |ctx| {
         let iterator = iterator
             .restore(&ctx)
-            .expect("Failed to restore a persisted stream iterator during cleanup");
+            .map_err(|error| format!("Failed to restore a persisted stream iterator during cleanup: {error:?}"))?;
         let close: Function = ctx
             .globals()
             .get("__wasm_rquickjs_close_async_iterator")
-            .expect("async-value helper __wasm_rquickjs_close_async_iterator is missing");
+            .map_err(|error| format!("async-value helper __wasm_rquickjs_close_async_iterator is missing: {error:?}"))?;
         let result: Value = close
             .call((iterator,))
-            .unwrap_or_else(|e| panic!("Failed to close a component stream<T> iterator: {e:?}"));
-        let _: Value = resolve_js_value(&ctx, result).await;
+            .map_err(|error| format!("Failed to close a component stream<T> iterator: {error:?}"))?;
+        let _: Value = try_resolve_js_value(&ctx, result).await?;
+        Ok(())
     })
-    .await;
+    .await
+}
+
+async fn close_js_stream_iterator(iterator: Persistent<Object<'static>>) {
+    try_close_js_stream_iterator(iterator)
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+}
+
+enum StreamWriterItem<T> {
+    Done,
+    Item(T),
+    PayloadError(String),
 }
 
 /// The future produced by [`spawn_stream_writer`], factored out so it can also be composed with
@@ -1680,7 +1725,7 @@ pub async fn stream_writer_task<T, R, F>(
         // Clone the persisted iterator handle per iteration so the `async_with!` closure moves
         // a fresh clone each time rather than the shared handle (which the loop reuses).
         let iterator_for_next = iterator.clone();
-        let item: Option<T> = async_with!(get_js_state().ctx => |ctx| {
+        let item: StreamWriterItem<T> = async_with!(get_js_state().ctx => |ctx| {
                 let iterator = iterator_for_next
                     .restore(&ctx)
                     .expect("Failed to restore a persisted stream iterator");
@@ -1696,7 +1741,7 @@ pub async fn stream_writer_task<T, R, F>(
                     .unwrap_or_else(|| panic!("stream iterator next() did not resolve to an object"));
                 let done: bool = result_obj.get("done").unwrap_or(false);
                 if done {
-                    None
+                    StreamWriterItem::Done
                 } else {
                     let value: Value = result_obj
                         .get("value")
@@ -1704,22 +1749,31 @@ pub async fn stream_writer_task<T, R, F>(
                     // A sync iterable normalized into an async iterator can still yield
                     // promise-valued items; JS `for await` awaits each value (AsyncFromSyncIterator
                     // semantics), so resolve promises before converting to the payload type.
-                    let r: R = resolve_js_value::<R>(&ctx, value).await;
-                    Some(convert(r))
+                    match try_resolve_js_value::<R>(&ctx, value).await {
+                        Ok(r) => StreamWriterItem::Item(convert(r)),
+                        Err(error) => StreamWriterItem::PayloadError(error),
+                    }
                 }
             })
             .await;
 
         match item {
-            Some(item) => {
+            StreamWriterItem::Item(item) => {
                 if writer.write_one(item).await.is_some() {
                     // The reader hung up; stop producing further items and await source cleanup.
                     close_js_stream_iterator(iterator.clone()).await;
                     break;
                 }
             }
-            None => {
+            StreamWriterItem::Done => {
                 break;
+            }
+            StreamWriterItem::PayloadError(error) => {
+                // `next()` succeeded and yielded an item, so close the iterator before surfacing
+                // the payload failure. Cleanup is best-effort here: the primary conversion or
+                // promise-rejection diagnostic must not be replaced by a secondary close error.
+                let _ = try_close_js_stream_iterator(iterator.clone()).await;
+                panic!("{error}");
             }
         }
     }
@@ -1978,9 +2032,14 @@ where
             Some(group) => with_export_result_writer_group(group, converted),
             None => converted(),
         }
-        .unwrap_or_else(|e| {
-            panic!("Failed to convert a JavaScript value to a component stream payload: {e:?}")
-        });
+        .map_err(|error| {
+            Exception::throw_message(
+                &cb_ctx,
+                &format!(
+                    "Failed to convert a JavaScript value to a component stream payload: {error:?}"
+                ),
+            )
+        })?;
         let payload = convert(wrapped);
         let (ack_tx, ack_rx) = futures::channel::oneshot::channel::<bool>();
         // If the pure task already exited (reader hung up) the send fails; report "stop".
@@ -1988,13 +2047,13 @@ where
             .borrow()
             .as_ref()
             .is_some_and(|cmd_tx| cmd_tx.unbounded_send((payload, ack_tx)).is_ok());
-        Promised(async move {
+        Ok::<_, rquickjs::Error>(Promised(async move {
             if accepted {
                 ack_rx.await.unwrap_or(false)
             } else {
                 false
             }
-        })
+        }))
     })?;
 
     let drive: Function = ctx

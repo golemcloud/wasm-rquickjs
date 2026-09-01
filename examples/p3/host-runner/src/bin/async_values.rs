@@ -10,7 +10,7 @@ use anyhow::{Result, anyhow};
 use futures::StreamExt;
 use futures::channel::{mpsc, oneshot};
 use p3_host_runner::util::{OneshotConsumer, OneshotProducer, PipeConsumer, PipeProducer};
-use wasmtime::component::{Component, FutureReader, Linker, StreamReader, bindgen};
+use wasmtime::component::{Component, FutureReader, HasSelf, Linker, StreamReader, bindgen};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::WasiHttpCtx;
@@ -44,6 +44,10 @@ impl WasiHttpView for Host {
             hooks: wasmtime_wasi_http::p3::default_hooks(),
         }
     }
+}
+
+impl test::async_values::observer::Host for Host {
+    fn cleanup_complete(&mut self) {}
 }
 
 fn component_path() -> Result<String> {
@@ -83,7 +87,9 @@ fn component_path() -> Result<String> {
     let target_dir = json["target_directory"]
         .as_str()
         .ok_or_else(|| anyhow!("missing target_directory"))?;
-    Ok(format!("{target_dir}/wasm32-wasip2/debug/async_values.wasm"))
+    Ok(format!(
+        "{target_dir}/wasm32-wasip2/debug/async_values.wasm"
+    ))
 }
 
 async fn instantiate() -> Result<(Store<Host>, AsyncValues)> {
@@ -99,6 +105,7 @@ async fn instantiate() -> Result<(Store<Host>, AsyncValues)> {
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    test::async_values::observer::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |host| host)?;
 
     let wasi = WasiCtxBuilder::new().inherit_stdio().build();
     let mut store = Store::new(
@@ -170,7 +177,10 @@ async fn call_take_stream(items: Vec<u8>) -> Result<u32> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let run_future = call_run_future().await?;
-    assert_eq!(run_future, 42, "expected run_future() == 42, got {run_future}");
+    assert_eq!(
+        run_future, 42,
+        "expected run_future() == 42, got {run_future}"
+    );
 
     let run_stream = call_run_stream().await?;
     assert_eq!(

@@ -190,6 +190,19 @@ export async function runObservedStream() {
   };
 }
 
+export async function runInvalidObservedStream() {
+  async function* invalid() {
+    try {
+      yield 'not-a-u8';
+    } finally {
+      observer.cleanupComplete();
+      throw new Error('secondary-export-cleanup-failed');
+    }
+  }
+
+  return invalid();
+}
+
 export async function readObservedStreamState() {
   await Promise.race([
     observedStreamState.cleanupCompleted,
