@@ -14,6 +14,54 @@ import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
 const _callSiteWithFnPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
 const _callSiteNoFnPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
 
+function _remapSourceMappedLocation(fileName, lineNumber, columnNumber) {
+    const mapper = globalThis.__wasm_rquickjs_remap_source_mapped_position;
+    if (typeof mapper !== 'function') return undefined;
+    try {
+        return mapper(fileName, lineNumber, columnNumber);
+    } catch {
+        return undefined;
+    }
+}
+
+function _remapSourceMappedStack(stackString) {
+    if (typeof stackString !== 'string') return stackString;
+    if (globalThis.__wasm_rquickjs_suppress_source_map_stack === true) return stackString;
+    const lines = stackString.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let match = line.match(_callSiteWithFnPattern);
+        let fileName;
+        let lineNumber;
+        let columnNumber;
+        if (match) {
+            fileName = match[2];
+            lineNumber = parseInt(match[3], 10);
+            columnNumber = parseInt(match[4], 10);
+        } else {
+            match = line.match(_callSiteNoFnPattern);
+            if (!match) continue;
+            fileName = match[1];
+            lineNumber = parseInt(match[2], 10);
+            columnNumber = parseInt(match[3], 10);
+        }
+        const origin = _remapSourceMappedLocation(fileName, lineNumber, columnNumber);
+        if (!origin || typeof origin.fileName !== 'string') continue;
+        const location = `${fileName}:${lineNumber}:${columnNumber}`;
+        const offset = line.lastIndexOf(location);
+        if (offset === -1) continue;
+        const mapped = `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}`;
+        lines[i] = line.slice(0, offset) + mapped + line.slice(offset + location.length);
+    }
+    return lines.join('\n');
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_remap_source_mapped_stack', {
+    value: _remapSourceMappedStack,
+    writable: false,
+    configurable: false,
+});
+
 function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
     return {
         getThis() { return undefined; },
@@ -45,6 +93,7 @@ function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
 
 function _parseStackStringToCallSites(stackString) {
     if (typeof stackString !== 'string') return [];
+    stackString = _remapSourceMappedStack(stackString);
     const lines = stackString.split('\n');
     const sites = [];
     for (let i = 0; i < lines.length; i++) {
@@ -81,6 +130,7 @@ const nativeErrorStackDescriptor = Object.getOwnPropertyDescriptor(Error.prototy
 const NativeError = Error;
 const nativeErrorToString = Error.prototype.toString;
 const materializedErrorStacks = new WeakSet();
+let errorStackShimInstalled = false;
 
 function materializeOwnStack(errorInstance) {
     if (!errorInstance || (typeof errorInstance !== "object" && typeof errorInstance !== "function")) {
@@ -115,14 +165,15 @@ function materializeOwnStack(errorInstance) {
     }
 
     try {
-        Object.defineProperty(errorInstance, "stack", _dataDesc(stackValue));
+        Object.defineProperty(errorInstance, "stack", _dataDesc(_remapSourceMappedStack(stackValue)));
         materializedErrorStacks.add(errorInstance);
     } catch {
         // Best effort only.
     }
 }
 
-function installErrorStackShimForNonConfigurablePrototype() {
+function installErrorStackShim() {
+    if (errorStackShimInstalled) return;
     const ErrorShimPrototype = Object.create(NativeError.prototype);
 
     Object.defineProperty(ErrorShimPrototype, "stack", {
@@ -149,6 +200,25 @@ function installErrorStackShimForNonConfigurablePrototype() {
     const ErrorShim = function Error() {
         const ctorTarget = new.target || ErrorShim;
         const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
+        if (typeof NativeError.captureStackTrace === 'function') {
+            const hadSuppression = Object.prototype.hasOwnProperty.call(
+                globalThis,
+                '__wasm_rquickjs_suppress_source_map_stack',
+            );
+            const previousSuppression = globalThis.__wasm_rquickjs_suppress_source_map_stack;
+            globalThis.__wasm_rquickjs_suppress_source_map_stack = true;
+            try {
+                NativeError.captureStackTrace(errorInstance, ErrorShim);
+            } catch {
+                // Keep the native constructor stack if captureStackTrace rejects.
+            } finally {
+                if (hadSuppression) {
+                    globalThis.__wasm_rquickjs_suppress_source_map_stack = previousSuppression;
+                } else {
+                    delete globalThis.__wasm_rquickjs_suppress_source_map_stack;
+                }
+            }
+        }
         materializeOwnStack(errorInstance);
 
         // Error.prepareStackTrace support (V8 compat).
@@ -161,7 +231,7 @@ function installErrorStackShimForNonConfigurablePrototype() {
                 const prepareStackTrace = globalThis.Error && globalThis.Error.prepareStackTrace;
                 const result = typeof prepareStackTrace === "function"
                     ? prepareStackTrace(errorInstance, _parseStackStringToCallSites(rawStack))
-                    : rawStack;
+                    : _remapSourceMappedStack(rawStack);
                 Object.defineProperty(errorInstance, "stack", _dataDesc(result));
                 return result;
             },
@@ -197,45 +267,20 @@ function installErrorStackShimForNonConfigurablePrototype() {
     });
 
     globalThis.Error = ErrorShim;
+    errorStackShimInstalled = true;
 }
 
-if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === false) {
-    try {
-        installErrorStackShimForNonConfigurablePrototype();
-    } catch {
-        // Keep the runtime default behavior if shimming fails.
-    }
-} else {
-    try {
-        Object.defineProperty(Error.prototype, "stack", {
-            configurable: true,
-            enumerable: false,
-            get: function getErrorStack() {
-                if (this === Error.prototype) {
-                    return undefined;
-                }
-
-                const own = Object.getOwnPropertyDescriptor(this, "stack");
-                if (own) {
-                    if (Object.prototype.hasOwnProperty.call(own, "value")) {
-                        return own.value;
-                    }
-                    if (typeof own.get === "function" && own.get !== getErrorStack) {
-                        return own.get.call(this);
-                    }
-                    return undefined;
-                }
-                return undefined;
-            },
-            set(value) {
-                Object.defineProperty(this, "stack", _dataDesc(value));
-                materializedErrorStacks.add(this);
-            },
-        });
-    } catch {
-        // Keep best-effort compatibility if the runtime forbids reconfiguration.
-    }
-}
+Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stack_shim', {
+    value() {
+        try {
+            installErrorStackShim();
+        } catch {
+            // Keep the runtime default behavior if shimming fails.
+        }
+    },
+    writable: false,
+    configurable: false,
+});
 
 // ---------------------------------------------------------------------------
 // Global Error.captureStackTrace & Error.stackTraceLimit (V8 compat)
@@ -290,8 +335,10 @@ if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === fa
                     });
                 }
             } else {
-                // No prepareStackTrace set — just use the native implementation as-is.
                 nativeCaptureStackTrace(targetObject, constructorOpt);
+                if (typeof targetObject.stack === 'string') {
+                    targetObject.stack = _remapSourceMappedStack(targetObject.stack);
+                }
             }
         };
     }

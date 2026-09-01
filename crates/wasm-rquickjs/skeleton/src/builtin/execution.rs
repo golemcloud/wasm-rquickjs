@@ -4,7 +4,7 @@ use crate::internal::runtime_services::{
 
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
-use rquickjs::{CatchResultExt, Ctx, Module, Promise, async_with};
+use rquickjs::{CatchResultExt, Ctx, Function, Module, Promise, Value, async_with};
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -157,10 +157,10 @@ fn transform_typescript_execution_source(source: String, name: &str) -> Result<S
         source,
         name,
         crate::internal::typescript::runtime_mode(),
-        false,
+        cfg!(feature = "typescript-transform-runtime"),
         Some(true),
     )
-    .map(|output| output.code)
+    .map(|output| output.into_code_with_inline_source_map())
     .map_err(|error| error.message)
 }
 
@@ -458,7 +458,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         )
     } else {
         format!(
-            "globalThis.__wasmRquickjsExecutionResult = (async () => __wasmRquickjsSerializeExecutionResult(await (async () => {{ {}\n}})()))();",
+            "globalThis.__wasmRquickjsExecutionResult = (async () => __wasmRquickjsSerializeExecutionResult(await (async () => {{\n{}\n}})()))();",
             options.source.unwrap_or_default()
         )
     };
@@ -481,6 +481,22 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     }
     let execution = async {
         async_with!(runtime.ctx => |ctx| {
+            if options.language == ExecutionLanguage::Typescript
+                && let Ok(register_source_map) = ctx.globals().get::<_, Function>(
+                    "__wasm_rquickjs_register_transformed_source_map",
+                )
+            {
+                register_source_map.call::<_, ()>((
+                        name.as_str(),
+                        source.as_str(),
+                        Value::new_null(ctx.clone()),
+                        0,
+                        1,
+                    ))
+                    .map_err(|error| {
+                        format!("failed to register TypeScript source map: {error:?}")
+                    })?;
+            }
             Module::evaluate(ctx.clone(), name, source).catch(&ctx)
                 .map_err(|e| crate::internal::format_caught_error(e))?.finish::<()>().catch(&ctx)
                 .map_err(|e| crate::internal::format_caught_error(e))?;

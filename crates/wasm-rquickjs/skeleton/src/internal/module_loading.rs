@@ -6599,10 +6599,17 @@ fn transform_typescript_module_source<'js>(
     fs_path: &str,
     source: String,
 ) -> rquickjs::Result<String> {
+    let source_map = cfg!(feature = "typescript-transform-runtime")
+        && ctx
+            .globals()
+            .get::<_, Function>("__wasm_rquickjs_module_has_exec_argv_flag")
+            .ok()
+            .and_then(|has_flag| has_flag.call::<_, bool>(("--no-enable-source-maps",)).ok())
+            != Some(true);
     match crate::internal::typescript::transform_module(
         source,
         fs_path,
-        false,
+        source_map,
         match std::path::Path::new(fs_path)
             .extension()
             .and_then(|extension| extension.to_str())
@@ -6614,7 +6621,7 @@ fn transform_typescript_module_source<'js>(
     ) {
         Ok(output) => {
             record_typescript_module_transform(ctx)?;
-            Ok(output.code)
+            Ok(output.into_code_with_inline_source_map())
         }
         Err(error) => {
             let constructor_name = match error.kind {
@@ -11333,6 +11340,18 @@ fn declare_esm_file_module_from_source<'js>(
         source,
         processed.dynamic_import_binding_names.as_ref(),
     );
+    if let Ok(register_source_map) =
+        globals.get::<_, Function>("__wasm_rquickjs_register_transformed_source_map")
+    {
+        register_source_map.call::<_, ()>((
+            fs_abs_path.as_str(),
+            injected.as_str(),
+            module_id,
+            1,
+            0,
+            true,
+        ))?;
+    }
     match declare_module_with_import_meta(ctx, module_id, &injected, &init) {
         Ok(module) => {
             if has_top_level_await {

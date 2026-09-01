@@ -271,6 +271,13 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["commonJsEntryRunner"], 42);
     assert_eq!(report["largeInlineRunner"], 42);
     assert!(
+        report["stripRuntimeStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("strip-stack.mts:3:")),
+        "strip mode did not preserve original coordinates: {}",
+        report["stripRuntimeStack"]
+    );
+    assert!(
         report["unsupported"]
             .as_str()
             .is_some_and(|message| message.contains("TypeScript enum is not supported"))
@@ -311,5 +318,43 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["commonJsNodeModulesTypeScriptErrorName"], "Error");
     assert_eq!(report["executionInline"], 1);
     assert_eq!(report["largeInlineExecution"], 1);
+    for (field, file, line) in [
+        ("esmRuntimeStack", "stack-esm.mts", 3),
+        ("cjsRuntimeStack", "stack-cjs.cts", 3),
+        ("importedCjsRuntimeStack", "stack-cjs.cts", 3),
+        ("executionEntryStack", "stack-entry.mts", 4),
+        (
+            "executionInlineStack",
+            "__wasm_rquickjs_execution_inline.mjs",
+            3,
+        ),
+    ] {
+        let stack = report[field]
+            .as_str()
+            .unwrap_or_else(|| panic!("missing {field}"));
+        assert!(
+            stack.contains(&format!("{file}:{line}:")),
+            "{field} did not map to the original TypeScript location: {stack}"
+        );
+    }
+    let rewritten_cjs_stack = report["rewrittenCjsRuntimeStack"]
+        .as_str()
+        .expect("missing rewrittenCjsRuntimeStack");
+    assert!(
+        rewritten_cjs_stack.contains("stack-cjs.cts:4:"),
+        "rewritten CJS map was stale: {rewritten_cjs_stack}"
+    );
+    assert!(
+        rewritten_cjs_stack.contains("stack-caller.cjs:2:"),
+        "mixed JavaScript frame was not preserved: {rewritten_cjs_stack}"
+    );
+    let disabled_stack = report["disabledRuntimeStack"]
+        .as_str()
+        .expect("missing disabledRuntimeStack");
+    assert!(disabled_stack.contains("stack-disabled.mts:"));
+    assert!(
+        !disabled_stack.contains("stack-disabled.mts:3:"),
+        "--no-enable-source-maps unexpectedly remapped the stack: {disabled_stack}"
+    );
     Ok(())
 }

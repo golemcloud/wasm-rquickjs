@@ -96,6 +96,103 @@ export async function run() {
         language: 'typescript',
         source: largeSource,
     });
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-esm.mts',
+        `enum StackShift { Value }
+         export function failEsm(): never {
+             throw new Error('esm-typescript-stack');
+         }`,
+    );
+    let esmRuntimeStack;
+    try {
+        (await import('/typescript-transform-runtime/stack-esm.mts')).failEsm();
+    } catch (error) {
+        esmRuntimeStack = error.stack;
+    }
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-cjs.cts',
+        `enum StackShift { Value }
+         exports.failCjs = function failCjs(): never {
+             throw new Error('cjs-typescript-stack');
+         };`,
+    );
+    let cjsRuntimeStack;
+    const cjsStackModule = require('/typescript-transform-runtime/stack-cjs.cts');
+    try {
+        cjsStackModule.failCjs();
+    } catch (error) {
+        cjsRuntimeStack = error.stack;
+    }
+    let importedCjsRuntimeStack;
+    try {
+        (await import('/typescript-transform-runtime/stack-cjs.cts')).default.failCjs();
+    } catch (error) {
+        importedCjsRuntimeStack = error.stack;
+    }
+    delete require.cache[require.resolve('/typescript-transform-runtime/stack-cjs.cts')];
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-cjs.cts',
+        `enum StackShift { Value }
+         const marker: number = StackShift.Value;
+         exports.failCjs = function failCjs(): never {
+             throw new Error('rewritten-cjs-typescript-stack-' + marker);
+         };`,
+    );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-caller.cjs',
+        `const target = require('./stack-cjs.cts');
+         module.exports = function callTypeScript() { target.failCjs(); };`,
+    );
+    let rewrittenCjsRuntimeStack;
+    try {
+        require('/typescript-transform-runtime/stack-caller.cjs')();
+    } catch (error) {
+        rewrittenCjsRuntimeStack = error.stack;
+    }
+    process.execArgv.push('--no-enable-source-maps');
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-disabled.mts',
+        `enum StackShift { Value }
+         export function failDisabled(): never {
+             throw new Error('disabled-typescript-stack');
+         }`,
+    );
+    let disabledRuntimeStack;
+    try {
+        (await import('/typescript-transform-runtime/stack-disabled.mts')).failDisabled();
+    } catch (error) {
+        disabledRuntimeStack = error.stack;
+    } finally {
+        process.execArgv.pop();
+    }
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-entry.mts',
+        `enum StackShift { Value }
+         export async function run(): Promise<never> {
+             await Promise.resolve();
+             throw new Error('entry-typescript-stack');
+         }`,
+    );
+    let executionEntryStack;
+    try {
+        await runJavaScript({
+            cwd: '/typescript-transform-runtime',
+            entry: './stack-entry.mts',
+        });
+    } catch (error) {
+        executionEntryStack = error.message;
+    }
+    let executionInlineStack;
+    try {
+        await runJavaScript({
+            language: 'typescript',
+            source: `enum StackShift { Value }
+                     await Promise.resolve();
+                     throw new Error('inline-typescript-stack');`,
+        });
+    } catch (error) {
+        executionInlineStack = error.message;
+    }
     return JSON.stringify({
         processFeature: process.features.typescript,
         transformObservability: typeof globalThis.__wasm_rquickjs_get_typescript_module_transform_count,
@@ -109,5 +206,12 @@ export async function run() {
         commonJsNodeModulesTypeScriptErrorName,
         executionInline: executionInline.value,
         largeInlineExecution: largeInlineExecution.value,
+        esmRuntimeStack,
+        cjsRuntimeStack,
+        importedCjsRuntimeStack,
+        rewrittenCjsRuntimeStack,
+        disabledRuntimeStack,
+        executionEntryStack,
+        executionInlineStack,
     });
 }

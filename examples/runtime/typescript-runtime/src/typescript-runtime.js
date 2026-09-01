@@ -625,6 +625,19 @@ export async function run() {
         language: 'typescript',
         source: largeSource,
     });
+    fs.writeFileSync(
+        '/typescript-runtime/strip-stack.mts',
+        `export function failStrip(): never {
+             const value: number = 42;
+             throw new Error('strip-typescript-stack-' + value);
+         }`,
+    );
+    let stripRuntimeStack;
+    try {
+        (await import('/typescript-runtime/strip-stack.mts')).failStrip();
+    } catch (error) {
+        stripRuntimeStack = error.stack;
+    }
 
     return JSON.stringify({
         stripped,
@@ -758,5 +771,6 @@ export async function run() {
         entryRunner: entryRunner.value,
         commonJsEntryRunner: commonJsEntryRunner.value,
         largeInlineRunner: largeInlineRunner.value,
+        stripRuntimeStack,
     });
 }

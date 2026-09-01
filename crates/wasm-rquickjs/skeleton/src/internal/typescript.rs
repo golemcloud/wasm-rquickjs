@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
+use base64ct::Encoding;
 use swc_common::{
     FileName, GLOBALS, Globals, SourceMap,
     errors::{HANDLER, Handler},
@@ -231,6 +232,19 @@ pub(crate) fn transform_module(
 pub(crate) struct TypeScriptOutput {
     pub(crate) code: String,
     pub(crate) source_map: Option<String>,
+}
+
+impl TypeScriptOutput {
+    pub(crate) fn into_code_with_inline_source_map(self) -> String {
+        let Some(source_map) = self.source_map else {
+            return self.code;
+        };
+        let encoded = base64ct::Base64::encode_string(source_map.as_bytes());
+        format!(
+            "{}\n//# sourceMappingURL=data:application/json;base64,{encoded}",
+            self.code
+        )
+    }
 }
 
 #[derive(Debug)]
