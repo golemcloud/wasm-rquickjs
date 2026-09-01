@@ -131,6 +131,7 @@ function forwardNativeHandle(wrap, handle) {
     wrap.local_address = handle.local_address.bind(handle);
     wrap.set_no_delay = handle.set_no_delay.bind(handle);
     wrap.set_keep_alive = handle.set_keep_alive.bind(handle);
+    wrap.write_queue_size = handle.write_queue_size.bind(handle);
     // The bridge method must exist in every build; only profiling builds return JSON.
     // Probe once so ordinary sockets allocate no counters or listeners.
     const initialNativeProfile = typeof handle.write_profile === 'function'
@@ -321,6 +322,7 @@ function Socket(options) {
     this.connecting = false;
     this._timeout = null;
     this._timeoutValue = 0;
+    this._lastWriteQueueSize = 0;
     this.bytesRead = 0;
     this._bytesDispatched = 0;
     this.remoteAddress = undefined;
@@ -1109,19 +1111,28 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
         }
     }
     handle.writeQueueSize += buf.byteLength;
+    handle._writeInFlight = true;
+    this._lastWriteQueueSize = handle.writeQueueSize;
 
     (async () => {
+        let writeError;
         try {
             const written = await handle.write(buf);
             this._bytesDispatched += written;
-            this._resetTimeout();
             if (profile) profile.completions++;
-            callback(null);
         } catch (e) {
-            callback(parseNativeError(e));
+            writeError = parseNativeError(e);
         } finally {
             if (profile) profile.elapsedMs += Date.now() - startedAt;
             handle.writeQueueSize = Math.max(0, handle.writeQueueSize - buf.byteLength);
+            handle._writeInFlight = false;
+            this._lastWriteQueueSize = 0;
+        }
+        if (writeError) {
+            callback(writeError);
+        } else {
+            this._resetTimeout();
+            callback(null);
         }
     })();
 };
@@ -1252,9 +1263,17 @@ Socket.prototype._resetTimeout = function _resetTimeout() {
 };
 
 Socket.prototype._onTimeout = function _onTimeout() {
-    if (this._handle && this._handle.writeQueueSize > 0) {
-        this._resetTimeout();
-        return;
+    const handle = this._handle;
+    const lastWriteQueueSize = this._lastWriteQueueSize;
+    if (lastWriteQueueSize > 0 && handle) {
+        const writeQueueSize = handle._writeInFlight && typeof handle.write_queue_size === 'function'
+            ? Number(handle.write_queue_size())
+            : handle.writeQueueSize;
+        if (lastWriteQueueSize !== writeQueueSize) {
+            this._lastWriteQueueSize = writeQueueSize;
+            this._resetTimeout();
+            return;
+        }
     }
     this.emit('timeout');
 };

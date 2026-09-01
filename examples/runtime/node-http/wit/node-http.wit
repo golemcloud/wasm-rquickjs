@@ -18,6 +18,7 @@ world node-http {
   export http-informational-write-after-close: func() -> bool;
   export http-max-requests-closes-socket: func() -> bool;
   export net-writev-boundaries: func() -> bool;
+  export net-write-timeout-lifecycle: func() -> bool;
   export net-write-profile: func(chunk-size: u32, chunk-count: u32, corked: bool) -> string;
   export http-pipelined-max-requests: func() -> bool;
   export http-custom-connection-rejected: func() -> bool;

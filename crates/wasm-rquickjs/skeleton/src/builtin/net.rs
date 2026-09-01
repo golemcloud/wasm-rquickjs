@@ -157,6 +157,7 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             closed: false,
             generation: 0,
             waiters: 0,
+            pending_write_bytes: 0,
             #[cfg(feature = "net-write-profiling")]
             write_profile: TcpWriteProfile::default(),
         }),
@@ -175,6 +176,8 @@ struct TcpInner {
     /// Number of async tasks currently holding a pollable derived from this socket's streams.
     /// Resources must not be dropped while waiters > 0.
     waiters: u32,
+    /// Bytes not yet accepted by the WASI output stream for the active write.
+    pending_write_bytes: usize,
     #[cfg(feature = "net-write-profiling")]
     write_profile: TcpWriteProfile,
 }
@@ -228,6 +231,7 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             family: ip_family,
             connected: false,
             closed: false,
+            pending_write_bytes: 0,
             #[cfg(feature = "net-write-profiling")]
             write_profile: TcpWriteProfile::default(),
         }),
@@ -263,6 +267,8 @@ struct TcpInner {
     family: IpAddressFamily,
     connected: bool,
     closed: bool,
+    /// Bytes not yet accepted by the WASI stream writer for the active write.
+    pending_write_bytes: usize,
     #[cfg(feature = "net-write-profiling")]
     write_profile: TcpWriteProfile,
 }
@@ -630,6 +636,7 @@ impl TcpSocket {
         };
 
         let total = data.len();
+        self.inner.borrow_mut().pending_write_bytes = total;
         #[cfg(feature = "net-write-profiling")]
         {
             let mut inner = self.inner.borrow_mut();
@@ -664,10 +671,7 @@ impl TcpSocket {
                 };
                 #[cfg(feature = "net-write-profiling")]
                 {
-                    self.inner
-                        .borrow_mut()
-                        .write_profile
-                        .p2_check_write_calls += 1;
+                    self.inner.borrow_mut().write_profile.p2_check_write_calls += 1;
                 }
 
                 if check > 0 {
@@ -734,6 +738,7 @@ impl TcpSocket {
                 self.inner.borrow_mut().write_profile.p2_write_calls += 1;
             }
             offset = end;
+            self.inner.borrow_mut().pending_write_bytes = total - offset;
         }
 
         #[cfg(feature = "net-write-profiling")]
@@ -744,6 +749,10 @@ impl TcpSocket {
         }
 
         Ok(total as u32)
+    }
+
+    pub fn write_queue_size(&self) -> u64 {
+        self.inner.borrow().pending_write_bytes as u64
     }
 
     pub fn write_profile(&self) -> Option<String> {
@@ -1279,8 +1288,8 @@ impl TcpSocket {
                 inner.write_profile.native_calls += 1;
                 inner.write_profile.requested_bytes += total as u64;
                 inner.write_profile.copied_bytes += total as u64;
-                inner.write_profile.p3_write_all_calls += 1;
             }
+            inner.pending_write_bytes = total;
             match (inner.socket.clone(), inner.writer.take()) {
                 (Some(sock), Some(writer)) => {
                     // Register a cancel signal so `close()` can wake a write that
@@ -1302,7 +1311,27 @@ impl TcpSocket {
         };
 
         let leftover = {
-            let write_fut = writer.write_all(data);
+            let write_fut = async {
+                let mut offset = 0;
+                while offset < total {
+                    // Keep progress observable to the JS timeout lifecycle
+                    // instead of hiding one large write_all() behind a single
+                    // pending promise.
+                    let end = std::cmp::min(offset + 64 * 1024, total);
+                    let chunk_len = end - offset;
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        self.inner.borrow_mut().write_profile.p3_write_all_calls += 1;
+                    }
+                    let chunk_leftover = writer.write_all(data[offset..end].to_vec()).await;
+                    offset += chunk_len - chunk_leftover.len();
+                    self.inner.borrow_mut().pending_write_bytes = total - offset;
+                    if !chunk_leftover.is_empty() {
+                        return data[offset..].to_vec();
+                    }
+                }
+                Vec::new()
+            };
             futures::pin_mut!(write_fut);
             match futures::future::select(write_fut, &mut cancel_rx).await {
                 Either::Left((leftover, _)) => leftover,
@@ -1310,6 +1339,7 @@ impl TcpSocket {
                     // Cancelled by `close()`. Dropping the in-flight write future
                     // cancels the pending stream write; dropping the writer and
                     // the keepalive `Rc` releases the socket.
+                    self.inner.borrow_mut().pending_write_bytes = 0;
                     return Err(throw_socket_error(
                         &ctx,
                         "EPIPE",
@@ -1321,6 +1351,7 @@ impl TcpSocket {
         };
         let mut inner = self.inner.borrow_mut();
         inner.write_cancel = None;
+        inner.pending_write_bytes = 0;
         #[cfg(feature = "net-write-profiling")]
         {
             inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
@@ -1347,6 +1378,10 @@ impl TcpSocket {
             inner.writer = Some(writer);
         }
         Ok(total as u32)
+    }
+
+    pub fn write_queue_size(&self) -> u64 {
+        self.inner.borrow().pending_write_bytes as u64
     }
 
     pub fn write_profile(&self) -> Option<String> {
@@ -2148,6 +2183,7 @@ impl TcpListener {
                             closed: false,
                             generation: 0,
                             waiters: 0,
+                            pending_write_bytes: 0,
                             #[cfg(feature = "net-write-profiling")]
                             write_profile: TcpWriteProfile::default(),
                         }),
@@ -2472,6 +2508,7 @@ impl TcpListener {
                 family: client_family,
                 connected: true,
                 closed: false,
+                pending_write_bytes: 0,
                 #[cfg(feature = "net-write-profiling")]
                 write_profile: TcpWriteProfile::default(),
             }),

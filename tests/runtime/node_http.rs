@@ -270,6 +270,22 @@ async fn node_http_pipelined_active_timeout(
 }
 
 #[test]
+async fn net_write_timeout_lifecycle(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "net-write-timeout-lifecycle",
+        &[],
+    )
+    .await;
+    assert!(output.is_empty(), "unexpected output: {output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_close_idle_connections(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

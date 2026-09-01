@@ -16,6 +16,7 @@ declare module 'node-http' {
   export function httpInformationalWriteAfterClose(): Promise<boolean>;
   export function httpMaxRequestsClosesSocket(): Promise<boolean>;
   export function netWritevBoundaries(): Promise<boolean>;
+  export function netWriteTimeoutLifecycle(): Promise<boolean>;
   export function netWriteProfile(chunkSize: number, chunkCount: number, corked: boolean): Promise<string>;
   export function httpPipelinedMaxRequests(): Promise<boolean>;
   export function httpCustomConnectionRejected(): Promise<boolean>;

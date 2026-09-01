@@ -1009,6 +1009,82 @@ export async function netWritevBoundaries() {
         await runBatch([32 * 1024, 32 * 1024, 1]);
 }
 
+export async function netWriteTimeoutLifecycle() {
+    const socket = new net.Socket();
+    let pending = 128;
+    let resetCount = 0;
+    let timeoutCount = 0;
+    socket._handle = {
+        writeQueueSize: 128,
+        _writeInFlight: true,
+        write_queue_size: () => pending,
+        close() {},
+    };
+    socket._lastWriteQueueSize = 128;
+    socket._resetTimeout = () => { resetCount++; };
+    socket.on('timeout', () => { timeoutCount++; });
+
+    // An unchanged pending write is stalled and must time out.
+    socket._onTimeout();
+    const stalled = timeoutCount === 1 && resetCount === 0;
+
+    // Any observed progress buys one more timeout interval.
+    pending = 64;
+    socket._onTimeout();
+    const progressed = timeoutCount === 1 && resetCount === 1 &&
+        socket._lastWriteQueueSize === 64;
+
+    // Once progress stops, the next check emits.
+    socket._onTimeout();
+    const resumedThenStalled = timeoutCount === 2 && resetCount === 1;
+
+    // A drained native queue counts as progress once, then ordinary idle
+    // timeout semantics apply on the following interval.
+    pending = 0;
+    socket._onTimeout();
+    socket._onTimeout();
+    const drained = timeoutCount === 3 && resetCount === 2 &&
+        socket._lastWriteQueueSize === 0;
+
+    // Reconfiguring a timeout must not erase the pending-write observation.
+    socket._lastWriteQueueSize = 32;
+    socket.setTimeout(25);
+    socket.setTimeout(50);
+    const reconfigured = socket._lastWriteQueueSize === 32;
+    socket.setTimeout(0);
+    socket.destroy();
+
+    // Exercise the real _write bookkeeping around an asynchronously completing
+    // handle, including progress observation and completion cleanup.
+    let activePending = 64;
+    let completeWrite;
+    let activeResets = 0;
+    const active = new net.Socket();
+    active._handle = {
+        writeQueueSize: 0,
+        write_queue_size: () => activePending,
+        write: () => new Promise((resolve) => { completeWrite = resolve; }),
+        close() {},
+    };
+    active._resetTimeout = () => { activeResets++; };
+    const completion = new Promise((resolve) => {
+        active._write(Buffer.alloc(64), 'buffer', (error) => resolve(error));
+    });
+    activePending = 32;
+    active._onTimeout();
+    completeWrite(64);
+    const completionError = await completion;
+    const writeLifecycle = completionError === null &&
+        activeResets === 2 &&
+        active._lastWriteQueueSize === 0 &&
+        active._handle.writeQueueSize === 0 &&
+        active._handle._writeInFlight === false;
+    active.destroy();
+
+    return stalled && progressed && resumedThenStalled && drained && reconfigured &&
+        writeLifecycle;
+}
+
 export async function netWriteProfile(chunkSize, chunkCount, corked) {
     const startedAt = Date.now();
     const expectedBytes = chunkSize * chunkCount;
