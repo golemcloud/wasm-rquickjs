@@ -38,8 +38,9 @@ three-sample profile. The calibration observed 64-KiB direct-API maxima at or be
 the accepted local bound for this exact profile. This is evidence, not a CI
 threshold or a general upper bound. In strip mode, the separately timed
 prepared-ESM case reproduces nearly all of the much larger ESM module latency after
-transformation, while the same stripped output completes inline in about 203 ms and
-through CommonJS in about 370 ms. This localizes the separate bottleneck to the ESM
-module-loading path rather than generic compilation of whitespace-preserving
-output. GOL-347 owns phase-level profiling and any measured optimization for that
-path; end-to-end strip-mode ESM latency is not considered acceptable here.
+transformation, while similarly sized inputs with the same dense stripped padding
+complete inline in about 203 ms and through CommonJS in about 370 ms. This localizes
+the separate bottleneck to the ESM module-loading path rather than generic
+compilation of whitespace-preserving output. GOL-347 owns phase-level profiling and
+any measured optimization for that path; end-to-end strip-mode ESM latency is not
+considered acceptable here.

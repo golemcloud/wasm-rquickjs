@@ -26,7 +26,8 @@ must not be described as native-transform time or preemption.
 The highest observed guest linear-memory reservation was 22,544,384 bytes. This is
 an instance-wide monotone high-water mark, not retained memory. Strip-mode prepared
 ESM reproduces nearly all of the end-to-end ESM delay after transformation has
-already finished, while inline execution is about 203 ms and CommonJS about 370 ms
-for the same stripped output. The separate bottleneck is therefore in the ESM
-module-loading path, not generic compilation of whitespace-preserving output;
-GOL-347 owns its phase-level profiling and measured mitigation.
+already finished, while similarly sized inputs with the same dense stripped padding
+complete inline in about 203 ms and through CommonJS in about 370 ms. The separate
+bottleneck is therefore in the ESM module-loading path, not generic compilation of
+whitespace-preserving output; GOL-347 owns its phase-level profiling and measured
+mitigation.
