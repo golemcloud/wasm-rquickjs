@@ -8756,11 +8756,13 @@ fn analyze_cjs_reexport_specifier_names(
             let had_cached_prepared_source = cached_prepared_source.is_some();
             #[cfg(feature = "typescript-runtime")]
             let source = if is_typescript_module_path(&child_filename) {
-                if typescript_module_path_is_esm(
-                    &child_filename,
-                    &source,
-                    package_scope_type(ctx, &child_filename).as_deref(),
-                ) {
+                if !had_cached_prepared_source
+                    && typescript_module_path_is_esm(
+                        &child_filename,
+                        &source,
+                        package_scope_type(ctx, &child_filename).as_deref(),
+                    )
+                {
                     continue;
                 }
                 if let Some(prepared) = prepared_typescript
