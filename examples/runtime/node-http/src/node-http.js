@@ -1091,9 +1091,20 @@ export async function netWriteTimeoutLifecycle() {
         let settled = false;
         const server = net.createServer((socket) => {
             writer = socket;
-            socket.setTimeout(1000);
-            socket.once('timeout', () => finish(false));
-            socket.write(Buffer.alloc(8 * 1024 * 1024), (error) => finish(error == null));
+            const onTimeoutCheckpoint = socket._onTimeout.bind(socket);
+            socket._onTimeout = () => {
+                const previous = socket._lastWriteQueueSize;
+                const pending = Number(socket._handle.write_queue_size());
+                onTimeoutCheckpoint();
+                if (pending < previous && socket._lastWriteQueueSize === pending) {
+                    finish({ ok: true, reason: 'native-progress-checkpoint' });
+                }
+            };
+            socket.setTimeout(25);
+            socket.once('timeout', () => finish({ ok: false, reason: 'timeout' }));
+            socket.write(Buffer.alloc(64 * 1024 * 1024), (error) => {
+                finish({ ok: false, reason: error == null ? 'completed' : 'write-error' });
+            });
         });
         function finish(result) {
             if (settled) return;
@@ -1103,20 +1114,21 @@ export async function netWriteTimeoutLifecycle() {
             if (client) client.destroy();
             server.close(() => resolve(result));
         }
-        server.once('error', () => finish(false));
+        server.once('error', () => finish({ ok: false, reason: 'server-error' }));
         server.listen(0, '127.0.0.1', () => {
             client = net.connect(server.address().port, '127.0.0.1');
             client.on('data', () => {
                 client.pause();
                 setTimeout(() => client.resume(), 5);
             });
-            client.once('error', () => finish(false));
-            fallback = setTimeout(() => finish(false), 5000);
+            client.once('error', () => finish({ ok: false, reason: 'client-error' }));
+            fallback = setTimeout(() => finish({ ok: false, reason: 'fallback' }), 10000);
         });
     });
 
-    return stalled && progressed && resumedThenStalled && drained && reconfigured &&
-        writeLifecycle && nativeProgress;
+    const result = stalled && progressed && resumedThenStalled && drained && reconfigured &&
+        writeLifecycle && nativeProgress.ok;
+    return result;
 }
 
 export async function netWriteProfile(chunkSize, chunkCount, corked) {

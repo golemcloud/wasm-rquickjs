@@ -1,5 +1,7 @@
 use std::cell::RefCell;
-#[cfg(feature = "net-write-profiling")]
+#[cfg(feature = "p2")]
+use std::time::Duration;
+#[cfg(any(feature = "p2", feature = "net-write-profiling"))]
 use std::time::Instant;
 
 use rquickjs::class::Trace;
@@ -86,7 +88,7 @@ struct TcpWriteProfile {
     p2_capacity_waits: u64,
     p2_capacity_wait_ns: u64,
     p2_write_calls: u64,
-    p3_write_all_calls: u64,
+    p3_stream_write_ops: u64,
     native_read_calls: u64,
     requested_read_bytes: u64,
     completed_read_bytes: u64,
@@ -110,7 +112,7 @@ impl TcpWriteProfile {
             "p2CapacityWaits": self.p2_capacity_waits,
             "p2CapacityWaitNs": self.p2_capacity_wait_ns,
             "p2WriteCalls": self.p2_write_calls,
-            "p3WriteAllCalls": self.p3_write_all_calls,
+            "p3StreamWriteOps": self.p3_stream_write_ops,
             "nativeReadCalls": self.native_read_calls,
             "requestedReadBytes": self.requested_read_bytes,
             "completedReadBytes": self.completed_read_bytes,
@@ -607,6 +609,8 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
+        timeout_ms: u32,
+        timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
         let write_started = Instant::now();
@@ -637,6 +641,9 @@ impl TcpSocket {
 
         let total = data.len();
         self.inner.borrow_mut().pending_write_bytes = total;
+        let mut checkpoint_interval = Duration::from_millis(timeout_ms as u64);
+        let mut checkpoint_deadline = (timeout_ms > 0 && timeout_checkpoint.is_some())
+            .then(|| Instant::now() + checkpoint_interval);
         #[cfg(feature = "net-write-profiling")]
         {
             let mut inner = self.inner.borrow_mut();
@@ -693,7 +700,23 @@ impl TcpSocket {
                         inner.waiters += 1;
                         p
                     };
-                    AsyncPollable::new(pollable).wait_for().await;
+                    let capacity_wait = AsyncPollable::new(pollable).wait_for();
+                    let checkpoint_due = if let Some(deadline) = checkpoint_deadline {
+                        let remaining = deadline.saturating_duration_since(Instant::now());
+                        if remaining.is_zero() {
+                            true
+                        } else {
+                            let checkpoint_wait = wstd::task::sleep(remaining.into());
+                            futures::pin_mut!(capacity_wait, checkpoint_wait);
+                            matches!(
+                                futures::future::select(capacity_wait, checkpoint_wait).await,
+                                futures::future::Either::Right(_)
+                            )
+                        }
+                    } else {
+                        capacity_wait.await;
+                        false
+                    };
                     {
                         let mut inner = self.inner.borrow_mut();
                         inner.waiters -= 1;
@@ -711,6 +734,14 @@ impl TcpSocket {
                                 "write",
                                 "Socket was closed or reset",
                             ));
+                        }
+                    }
+                    if checkpoint_due {
+                        if let Some(callback) = timeout_checkpoint.as_ref() {
+                            let next_timeout_ms = callback.call::<_, u32>(())?;
+                            checkpoint_interval = Duration::from_millis(next_timeout_ms as u64);
+                            checkpoint_deadline =
+                                (next_timeout_ms > 0).then(|| Instant::now() + checkpoint_interval);
                         }
                     }
                 };
@@ -742,6 +773,14 @@ impl TcpSocket {
                 }
                 offset = end;
                 self.inner.borrow_mut().pending_write_bytes = total - offset;
+                if checkpoint_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    if let Some(callback) = timeout_checkpoint.as_ref() {
+                        let next_timeout_ms = callback.call::<_, u32>(())?;
+                        checkpoint_interval = Duration::from_millis(next_timeout_ms as u64);
+                        checkpoint_deadline =
+                            (next_timeout_ms > 0).then(|| Instant::now() + checkpoint_interval);
+                    }
+                }
             }
             Ok(())
         }
@@ -1265,6 +1304,8 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
+        _timeout_ms: u32,
+        _timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
         let write_started = Instant::now();
@@ -1326,7 +1367,7 @@ impl TcpSocket {
                 // expose progress after each actual component-stream write.
                 #[cfg(feature = "net-write-profiling")]
                 {
-                    self.inner.borrow_mut().write_profile.p3_write_all_calls += 1;
+                    self.inner.borrow_mut().write_profile.p3_stream_write_ops += 1;
                 }
                 let (mut status, mut buffer) = writer.write(data).await;
                 self.inner.borrow_mut().pending_write_bytes = buffer.remaining();
@@ -1335,7 +1376,7 @@ impl TcpSocket {
                         StreamResult::Complete(_) if buffer.remaining() > 0 => {
                             #[cfg(feature = "net-write-profiling")]
                             {
-                                self.inner.borrow_mut().write_profile.p3_write_all_calls += 1;
+                                self.inner.borrow_mut().write_profile.p3_stream_write_ops += 1;
                             }
                             (status, buffer) = writer.write_buf(buffer).await;
                             self.inner.borrow_mut().pending_write_bytes = buffer.remaining();

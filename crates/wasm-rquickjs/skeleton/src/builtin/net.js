@@ -1121,7 +1121,13 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     (async () => {
         let writeError;
         try {
-            const written = await handle.write(buf);
+            const timeoutCheckpoint = this._timeoutValue > 0
+                ? () => {
+                    this._onTimeout();
+                    return this._timeoutValue;
+                }
+                : undefined;
+            const written = await handle.write(buf, this._timeoutValue, timeoutCheckpoint);
             this._bytesDispatched += written;
             if (profile) profile.completions++;
         } catch (e) {
