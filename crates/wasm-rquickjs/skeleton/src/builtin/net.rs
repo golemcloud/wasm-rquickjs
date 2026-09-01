@@ -609,7 +609,7 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
-        timeout_ms: u32,
+        timeout_ms: Option<u32>,
         timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
@@ -641,9 +641,9 @@ impl TcpSocket {
 
         let total = data.len();
         self.inner.borrow_mut().pending_write_bytes = total;
-        let mut checkpoint_interval = Duration::from_millis(timeout_ms as u64);
-        let mut checkpoint_deadline = (timeout_ms > 0 && timeout_checkpoint.is_some())
-            .then(|| Instant::now() + checkpoint_interval);
+        let mut checkpoint_deadline = timeout_ms
+            .filter(|timeout_ms| *timeout_ms > 0 && timeout_checkpoint.is_some())
+            .map(|timeout_ms| Instant::now() + Duration::from_millis(timeout_ms as u64));
         #[cfg(feature = "net-write-profiling")]
         {
             let mut inner = self.inner.borrow_mut();
@@ -688,6 +688,21 @@ impl TcpSocket {
                         break check;
                     }
 
+                    // Check an already-expired deadline before subscribing. A
+                    // timeout listener may destroy the socket, so no derived
+                    // pollable may remain alive when JavaScript is called.
+                    if checkpoint_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                        if let Some(callback) = timeout_checkpoint.as_ref() {
+                            checkpoint_deadline = callback
+                                .call::<_, Option<u32>>(())?
+                                .filter(|timeout_ms| *timeout_ms > 0)
+                                .map(|timeout_ms| {
+                                    Instant::now() + Duration::from_millis(timeout_ms as u64)
+                                });
+                        }
+                        continue;
+                    }
+
                     // No capacity — poll and retry
                     #[cfg(feature = "net-write-profiling")]
                     let wait_started = Instant::now();
@@ -703,15 +718,20 @@ impl TcpSocket {
                     let capacity_wait = AsyncPollable::new(pollable).wait_for();
                     let checkpoint_due = if let Some(deadline) = checkpoint_deadline {
                         let remaining = deadline.saturating_duration_since(Instant::now());
-                        if remaining.is_zero() {
-                            true
-                        } else {
-                            let checkpoint_wait = wstd::task::sleep(remaining.into());
-                            futures::pin_mut!(capacity_wait, checkpoint_wait);
-                            matches!(
-                                futures::future::select(capacity_wait, checkpoint_wait).await,
-                                futures::future::Either::Right(_)
-                            )
+                        let checkpoint_wait = wstd::task::sleep(remaining.into());
+                        futures::pin_mut!(capacity_wait, checkpoint_wait);
+                        match futures::future::select(capacity_wait, checkpoint_wait).await {
+                            futures::future::Either::Left((_, checkpoint_wait)) => {
+                                drop(checkpoint_wait);
+                                false
+                            }
+                            futures::future::Either::Right((_, capacity_wait)) => {
+                                // Drop the losing capacity future before the
+                                // waiter count can reach zero and before a
+                                // timeout listener can close the streams.
+                                drop(capacity_wait);
+                                true
+                            }
                         }
                     } else {
                         capacity_wait.await;
@@ -738,10 +758,12 @@ impl TcpSocket {
                     }
                     if checkpoint_due {
                         if let Some(callback) = timeout_checkpoint.as_ref() {
-                            let next_timeout_ms = callback.call::<_, u32>(())?;
-                            checkpoint_interval = Duration::from_millis(next_timeout_ms as u64);
-                            checkpoint_deadline =
-                                (next_timeout_ms > 0).then(|| Instant::now() + checkpoint_interval);
+                            checkpoint_deadline = callback
+                                .call::<_, Option<u32>>(())?
+                                .filter(|timeout_ms| *timeout_ms > 0)
+                                .map(|timeout_ms| {
+                                    Instant::now() + Duration::from_millis(timeout_ms as u64)
+                                });
                         }
                     }
                 };
@@ -775,10 +797,12 @@ impl TcpSocket {
                 self.inner.borrow_mut().pending_write_bytes = total - offset;
                 if checkpoint_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
                     if let Some(callback) = timeout_checkpoint.as_ref() {
-                        let next_timeout_ms = callback.call::<_, u32>(())?;
-                        checkpoint_interval = Duration::from_millis(next_timeout_ms as u64);
-                        checkpoint_deadline =
-                            (next_timeout_ms > 0).then(|| Instant::now() + checkpoint_interval);
+                        checkpoint_deadline = callback
+                            .call::<_, Option<u32>>(())?
+                            .filter(|timeout_ms| *timeout_ms > 0)
+                            .map(|timeout_ms| {
+                                Instant::now() + Duration::from_millis(timeout_ms as u64)
+                            });
                     }
                 }
             }
@@ -1304,7 +1328,7 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
-        _timeout_ms: u32,
+        _timeout_ms: Option<u32>,
         _timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]

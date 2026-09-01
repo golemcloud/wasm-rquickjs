@@ -1081,6 +1081,79 @@ export async function netWriteTimeoutLifecycle() {
         active._handle._writeInFlight === false;
     active.destroy();
 
+    // The JS adapter owns timeout normalization and tells native P2 writes
+    // explicitly whether a checkpoint was rearmed. Positive fractions use
+    // Node's minimum 1 ms duration; a plain timeout is one-shot.
+    let checkpointPending = 64;
+    let checkpointCallback;
+    let finishCheckpointWrite;
+    let checkpointDelay;
+    let checkpointTimeouts = 0;
+    const checkpointSocket = new net.Socket();
+    checkpointSocket._handle = {
+        writeQueueSize: 0,
+        write_queue_size: () => checkpointPending,
+        write: (_buffer, timeout, checkpoint) => {
+            checkpointDelay = timeout;
+            checkpointCallback = checkpoint;
+            return new Promise((resolve) => { finishCheckpointWrite = resolve; });
+        },
+        close() {},
+    };
+    checkpointSocket.on('timeout', () => { checkpointTimeouts++; });
+    checkpointSocket.setTimeout(0.5);
+    const checkpointCompletion = new Promise((resolve) => {
+        checkpointSocket._write(Buffer.alloc(64), 'buffer', (error) => resolve(error));
+    });
+    checkpointPending = 32;
+    const progressRearm = checkpointCallback();
+    checkpointSocket.once('timeout', () => checkpointSocket.setTimeout(2));
+    const listenerRearm = checkpointCallback();
+    const stalledRearm = checkpointCallback();
+    finishCheckpointWrite(64);
+    const checkpointError = await checkpointCompletion;
+    const normalizedOneShot = checkpointError === null &&
+        checkpointDelay === 1 &&
+        progressRearm === 1 &&
+        listenerRearm === 2 &&
+        stalledRearm === undefined &&
+        checkpointTimeouts === 2;
+    checkpointSocket.destroy();
+
+    // Socket timeouts clamp overflow before reaching either the JS timer or
+    // Rust's u32 boundary, while preserving the raw public `timeout` value.
+    let overflowDelay;
+    let finishOverflowWrite;
+    let overflowWarning;
+    const originalEmitWarning = process.emitWarning;
+    const overflowSocket = new net.Socket();
+    overflowSocket._handle = {
+        writeQueueSize: 0,
+        write_queue_size: () => 1,
+        write: (_buffer, timeout) => {
+            overflowDelay = timeout;
+            return new Promise((resolve) => { finishOverflowWrite = resolve; });
+        },
+        close() {},
+    };
+    try {
+        process.emitWarning = (message, type) => { overflowWarning = { message, type }; };
+        overflowSocket.setTimeout(2 ** 31);
+    } finally {
+        process.emitWarning = originalEmitWarning;
+    }
+    const overflowCompletion = new Promise((resolve) => {
+        overflowSocket._write(Buffer.alloc(1), 'buffer', (error) => resolve(error));
+    });
+    finishOverflowWrite(1);
+    const overflowError = await overflowCompletion;
+    const normalizedOverflow = overflowError === null &&
+        overflowDelay === 2 ** 31 - 1 &&
+        overflowSocket.timeout === 2 ** 31 &&
+        overflowWarning?.type === 'TimeoutOverflowWarning' &&
+        overflowWarning.message.includes('truncated to 2147483647');
+    overflowSocket.destroy();
+
     // Use the real P2/P3 TCP bridge while the receiver repeatedly pauses and
     // resumes. This complements the exact policy checks above without relying
     // on host-specific socket-buffer sizes to manufacture a stall.
@@ -1127,7 +1200,7 @@ export async function netWriteTimeoutLifecycle() {
     });
 
     const result = stalled && progressed && resumedThenStalled && drained && reconfigured &&
-        writeLifecycle && nativeProgress.ok;
+        writeLifecycle && normalizedOneShot && normalizedOverflow && nativeProgress.ok;
     return result;
 }
 

@@ -17,6 +17,7 @@ import { validateAbortSignal } from '__wasm_rquickjs_builtin/internal/validators
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
+const TIMEOUT_MAX = 2 ** 31 - 1;
 
 // --- IP address utilities ---
 
@@ -110,6 +111,21 @@ function deferred(fn) {
     } else {
         nextTick(fn);
     }
+}
+
+function normalizeSocketTimeout(timeout) {
+    if (timeout > TIMEOUT_MAX) {
+        if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+            process.emitWarning(
+                `${timeout} does not fit into a 32-bit signed integer.\n` +
+                `Timer duration was truncated to ${TIMEOUT_MAX}.`,
+                'TimeoutOverflowWarning',
+            );
+        }
+        return TIMEOUT_MAX;
+    }
+    if (timeout === 0) return 0;
+    return Math.max(1, Math.trunc(timeout));
 }
 
 function createHandleWrap() {
@@ -321,7 +337,8 @@ function Socket(options) {
     this._abortHandler = null;
     this.connecting = false;
     this._timeout = null;
-    this._timeoutValue = 0;
+    this._timeoutDuration = 0;
+    this._timeoutGeneration = 0;
     this._lastWriteQueueSize = 0;
     this.bytesRead = 0;
     this._bytesDispatched = 0;
@@ -1121,13 +1138,22 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     (async () => {
         let writeError;
         try {
-            const timeoutCheckpoint = this._timeoutValue > 0
+            const timeoutDuration = this._timeoutDuration;
+            const timeoutCheckpoint = timeoutDuration > 0
                 ? () => {
-                    this._onTimeout();
-                    return this._timeoutValue;
+                    // P2 cannot run the ordinary JS timer while its native write
+                    // is waiting for capacity. Consume that timer here and let
+                    // `_onTimeout` report whether progress or a listener
+                    // explicitly rearmed it.
+                    this._clearTimeout();
+                    return this._onTimeout() ? this._timeoutDuration : undefined;
                 }
                 : undefined;
-            const written = await handle.write(buf, this._timeoutValue, timeoutCheckpoint);
+            const written = await handle.write(
+                buf,
+                timeoutDuration > 0 ? timeoutDuration : undefined,
+                timeoutCheckpoint,
+            );
             this._bytesDispatched += written;
             if (profile) profile.completions++;
         } catch (e) {
@@ -1243,7 +1269,8 @@ Socket.prototype.setTimeout = function setTimeout(timeout, callback) {
     }
     if (this.destroyed) return this;
     this._clearTimeout();
-    this._timeoutValue = timeout;
+    this.timeout = timeout;
+    this._timeoutDuration = normalizeSocketTimeout(timeout);
     if (timeout === 0) {
         if (callback !== undefined) {
             if (typeof callback !== 'function') {
@@ -1264,11 +1291,13 @@ Socket.prototype.setTimeout = function setTimeout(timeout, callback) {
 };
 
 Socket.prototype._resetTimeout = function _resetTimeout() {
-    if (this._timeoutValue > 0) {
+    if (this._timeoutDuration > 0) {
         this._clearTimeout();
+        this._timeoutGeneration++;
         this._timeout = globalThis.setTimeout(() => {
+            this._timeout = null;
             this._onTimeout();
-        }, this._timeoutValue);
+        }, this._timeoutDuration);
     }
 };
 
@@ -1282,10 +1311,12 @@ Socket.prototype._onTimeout = function _onTimeout() {
         if (lastWriteQueueSize !== writeQueueSize) {
             this._lastWriteQueueSize = writeQueueSize;
             this._resetTimeout();
-            return;
+            return true;
         }
     }
+    const timeoutGeneration = this._timeoutGeneration;
     this.emit('timeout');
+    return this._timeoutDuration > 0 && this._timeoutGeneration !== timeoutGeneration;
 };
 
 Socket.prototype._clearTimeout = function _clearTimeout() {
