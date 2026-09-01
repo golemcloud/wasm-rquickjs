@@ -6553,27 +6553,27 @@ fn is_typescript_module_path(path: &str) -> bool {
 }
 
 #[cfg(feature = "typescript-runtime")]
-fn cached_cjs_typescript_export_names_for_filename(
-    ctx: &Ctx<'_>,
-    filename: &str,
-    source: &str,
-) -> rquickjs::Result<Option<Vec<String>>> {
-    let get_names: Function = ctx
-        .globals()
-        .get("__wasm_rquickjs_get_cached_cjs_typescript_export_names")?;
-    get_names.call((filename, source))
+struct CachedCjsTypeScriptAnalysis {
+    prepared_source: Option<String>,
+    export_names: Option<Vec<String>>,
 }
 
 #[cfg(feature = "typescript-runtime")]
-fn cached_cjs_typescript_prepared_source_for_filename(
+fn cached_cjs_typescript_analysis_for_filename(
     ctx: &Ctx<'_>,
     filename: &str,
     source: &str,
-) -> rquickjs::Result<Option<String>> {
-    let get_source: Function = ctx
+) -> rquickjs::Result<Option<CachedCjsTypeScriptAnalysis>> {
+    let get_analysis: Function = ctx
         .globals()
-        .get("__wasm_rquickjs_get_cached_cjs_typescript_prepared_source")?;
-    get_source.call((filename, source))
+        .get("__wasm_rquickjs_get_cached_cjs_typescript_analysis")?;
+    let Some(value) = get_analysis.call::<_, Option<Object>>((filename, source))? else {
+        return Ok(None);
+    };
+    Ok(Some(CachedCjsTypeScriptAnalysis {
+        prepared_source: value.get("preparedSource")?,
+        export_names: value.get("exportNames")?,
+    }))
 }
 
 #[cfg(feature = "typescript-runtime")]
@@ -8732,9 +8732,17 @@ fn analyze_cjs_reexport_specifier_names(
             #[cfg(feature = "typescript-runtime")]
             let original_source_for_cache = source.clone();
             #[cfg(feature = "typescript-runtime")]
-            if is_typescript_module_path(&child_filename)
-                && let Ok(Some(exports)) =
-                    cached_cjs_typescript_export_names_for_filename(ctx, &child_filename, &source)
+            let cached_typescript_analysis = if is_typescript_module_path(&child_filename) {
+                cached_cjs_typescript_analysis_for_filename(ctx, &child_filename, &source)
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            };
+            #[cfg(feature = "typescript-runtime")]
+            if let Some(exports) = cached_typescript_analysis
+                .as_ref()
+                .and_then(|cached| cached.export_names.clone())
             {
                 for name in exports {
                     add_unique(&mut names, name);
@@ -8742,13 +8750,8 @@ fn analyze_cjs_reexport_specifier_names(
                 continue;
             }
             #[cfg(feature = "typescript-runtime")]
-            let cached_prepared_source = if is_typescript_module_path(&child_filename) {
-                cached_cjs_typescript_prepared_source_for_filename(ctx, &child_filename, &source)
-                    .ok()
-                    .flatten()
-            } else {
-                None
-            };
+            let cached_prepared_source =
+                cached_typescript_analysis.and_then(|cached| cached.prepared_source);
             #[cfg(feature = "typescript-runtime")]
             let had_cached_prepared_source = cached_prepared_source.is_some();
             #[cfg(feature = "typescript-runtime")]
@@ -8975,7 +8978,7 @@ fn typescript_module_path_is_esm(filename: &str, source: &str, package_type: Opt
     if package_type == Some("commonjs") {
         return false;
     }
-    crate::internal::typescript::source_uses_esm_format(source, filename).unwrap_or(true)
+    crate::internal::typescript::source_uses_esm_format(source, filename).unwrap_or(false)
 }
 
 fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
@@ -9186,17 +9189,18 @@ impl Loader for CjsCompatLoader {
         #[cfg(feature = "typescript-runtime")]
         let original_source_for_cache = source.clone();
         #[cfg(feature = "typescript-runtime")]
-        let cached_typescript_export_names = if is_typescript {
-            cached_cjs_typescript_export_names_for_filename(ctx, &fs_abs_path, &source)?
+        let cached_typescript_analysis = if is_typescript {
+            cached_cjs_typescript_analysis_for_filename(ctx, &fs_abs_path, &source)?
         } else {
             None
         };
         #[cfg(feature = "typescript-runtime")]
-        let cached_typescript_prepared_source = if is_typescript {
-            cached_cjs_typescript_prepared_source_for_filename(ctx, &fs_abs_path, &source)?
-        } else {
-            None
-        };
+        let cached_typescript_export_names = cached_typescript_analysis
+            .as_ref()
+            .and_then(|cached| cached.export_names.clone());
+        #[cfg(feature = "typescript-runtime")]
+        let cached_typescript_prepared_source =
+            cached_typescript_analysis.and_then(|cached| cached.prepared_source);
         #[cfg(not(feature = "typescript-runtime"))]
         let cached_typescript_export_names: Option<Vec<String>> = None;
         #[cfg(not(feature = "typescript-runtime"))]
@@ -9207,6 +9211,7 @@ impl Loader for CjsCompatLoader {
             has_cached_typescript_export_names || has_cached_typescript_prepared_source;
         #[cfg(feature = "typescript-runtime")]
         let raw_typescript_looks_esm = is_typescript
+            && !has_cached_cjs_typescript
             && typescript_module_path_is_esm(&fs_abs_path, &source, package_type.as_deref());
         #[cfg(not(feature = "typescript-runtime"))]
         let raw_typescript_looks_esm = false;
@@ -9232,8 +9237,9 @@ impl Loader for CjsCompatLoader {
         let cjs_url = url.clone();
         let has_esm_syntax = force_module
             || raw_typescript_looks_esm
-            || source_looks_like_esm(&source)
-            || has_cjs_wrapper_lexical_redeclaration(&source);
+            || (!is_typescript
+                && (source_looks_like_esm(&source)
+                    || has_cjs_wrapper_lexical_redeclaration(&source)));
         // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
         let is_cjs = has_cached_cjs_typescript

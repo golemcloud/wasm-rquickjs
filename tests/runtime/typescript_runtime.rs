@@ -64,6 +64,8 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["moduleTs"], 42);
     assert_eq!(report["moduleMts"], 42);
     assert_eq!(report["commonJsCts"], 42);
+    assert_eq!(report["ambiguousAwaitImported"], 42);
+    assert_eq!(report["ambiguousAwaitRequired"], 42);
     assert_eq!(report["directTransformValue"], 42);
     assert_eq!(report["directCachedTransformValue"], 42);
     assert_eq!(report["directFirstLoadTransformCount"], 1);
@@ -112,6 +114,7 @@ async fn strip_typescript_types_matches_node_contract(
         report["rewriteImportedKeys"],
         serde_json::json!(["changed", "default"])
     );
+    assert_eq!(report["rewriteImportedChangedIsUndefined"], true);
     assert_eq!(report["rewriteTransformCount"], 2);
     assert_eq!(report["rewriteAnalysisCount"], 1);
     assert_eq!(report["requiredReexportValue"]["answer"], 42);

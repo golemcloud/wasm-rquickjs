@@ -2069,12 +2069,12 @@ function getCachedCjsTypeScriptAnalysisEntry(filename, source) {
     return entry;
 }
 
-function getCachedCjsTypeScriptExportNames(filename, source) {
-    return getCachedCjsTypeScriptAnalysisEntry(filename, source)?.exportNames;
-}
-
-function getCachedCjsTypeScriptPreparedSource(filename, source) {
-    return getCachedCjsTypeScriptAnalysisEntry(filename, source)?.preparedSource;
+function getCachedCjsTypeScriptAnalysis(filename, source) {
+    const entry = getCachedCjsTypeScriptAnalysisEntry(filename, source);
+    return entry === undefined ? undefined : {
+        exportNames: entry.exportNames,
+        preparedSource: entry.preparedSource,
+    };
 }
 
 function setCachedCjsTypeScriptExportNames(filename, names, source) {
@@ -2086,13 +2086,8 @@ function setCachedCjsTypeScriptExportNames(filename, names, source) {
     }
 }
 
-Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_export_names', {
-    value: getCachedCjsTypeScriptExportNames,
-    writable: false,
-    configurable: false,
-});
-Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_prepared_source', {
-    value: getCachedCjsTypeScriptPreparedSource,
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_analysis', {
+    value: getCachedCjsTypeScriptAnalysis,
     writable: false,
     configurable: false,
 });

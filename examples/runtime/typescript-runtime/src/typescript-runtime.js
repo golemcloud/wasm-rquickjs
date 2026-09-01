@@ -61,6 +61,13 @@ export async function run() {
     const moduleTs = (await import('/typescript-runtime/module-package/value.ts')).default;
     const moduleMts = (await import('/typescript-runtime/value.mts')).default;
     const commonJsCts = require('/typescript-runtime/value.cts');
+    fs.writeFileSync(
+        '/typescript-runtime/ambiguous-await.ts',
+        'const await: number = 42; module.exports = await;',
+    );
+    const ambiguousAwaitImported =
+        (await import('/typescript-runtime/ambiguous-await.ts')).default;
+    const ambiguousAwaitRequired = require('/typescript-runtime/ambiguous-await.ts');
 
     const getTransformCount = globalThis.__wasm_rquickjs_get_typescript_module_transform_count;
     const resetTransformCount = globalThis.__wasm_rquickjs_reset_typescript_module_transform_count;
@@ -140,6 +147,9 @@ export async function run() {
     );
     const rewriteImportedNamespace = await import('/typescript-runtime/rewrite-before-import.cts');
     const rewriteImportedKeys = Object.keys(rewriteImportedNamespace).sort();
+    // Node keeps the require()-cached default value but performs fresh static
+    // named-export detection when the later ESM facade is created.
+    const rewriteImportedChangedIsUndefined = rewriteImportedNamespace.changed === undefined;
     const rewriteTransformCount = getTransformCount();
     const rewriteAnalysisCount = getAnalysisCount();
 
@@ -626,6 +636,8 @@ export async function run() {
         moduleTs,
         moduleMts,
         commonJsCts,
+        ambiguousAwaitImported,
+        ambiguousAwaitRequired,
         directTransformValue,
         directCachedTransformValue,
         directFirstLoadTransformCount,
@@ -652,6 +664,7 @@ export async function run() {
         rewriteRequiredValue,
         rewriteImportedDefault: rewriteImportedNamespace.default,
         rewriteImportedKeys,
+        rewriteImportedChangedIsUndefined,
         rewriteTransformCount,
         rewriteAnalysisCount,
         reexportTransformValue,

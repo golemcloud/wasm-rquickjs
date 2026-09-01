@@ -44,10 +44,32 @@ pub(crate) fn source_uses_esm_format(source: &str, filename: &str) -> Result<boo
         None,
     );
     let mut parser = Parser::new_from(lexer);
-    let module = parser.parse_module().map_err(|_| ())?;
-    if !parser.take_errors().is_empty() {
-        return Err(());
-    }
+    let parsed_module = parser.parse_module();
+    let module_errors = parser.take_errors();
+    let module = match parsed_module {
+        Ok(module) if module_errors.is_empty() => module,
+        _ => {
+            // Node detects an ambiguous .ts file's format after stripping its
+            // types. Some valid CommonJS scripts (for example, one binding an
+            // identifier named `await`) are not valid ES modules. Accept that
+            // distinction here; malformed TypeScript is still rejected later
+            // by the transform that owns diagnostics.
+            let lexer = Lexer::new(
+                Syntax::Typescript(TsSyntax {
+                    tsx: filename.ends_with(".tsx"),
+                    ..Default::default()
+                }),
+                EsVersion::EsNext,
+                StringInput::from(&*source_file),
+                None,
+            );
+            let mut parser = Parser::new_from(lexer);
+            if parser.parse_script().is_ok() && parser.take_errors().is_empty() {
+                return Ok(false);
+            }
+            return Err(());
+        }
+    };
 
     if module.body.iter().any(module_item_has_runtime_module_decl) {
         return Ok(true);
@@ -314,6 +336,7 @@ mod tests {
             "export interface Options { value: number } module.exports = 42;",
             "export declare const phantom: number; module.exports = 42;",
             "declare namespace Example { type Answer = number } module.exports = 42;",
+            "const await: number = 42; module.exports = await;",
         ] {
             assert_eq!(source_uses_esm_format(source, "input.ts"), Ok(false));
         }
