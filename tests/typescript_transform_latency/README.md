@@ -34,7 +34,7 @@ QuickJS runtime, Wasmtime store, or component instance is reused across reports.
 The documented native-transform bound is deliberately narrow: the direct public
 API samples cover dense inputs through 64 KiB on the recorded host, target, and
 three-sample profile. The calibration observed 64-KiB direct-API maxima at or below
-20 ms in all four P2/P3 strip/transform profiles; a conservative 25 ms maximum is
+21 ms in all four P2/P3 strip/transform profiles; a conservative 25 ms maximum is
 the accepted local bound for this exact profile. This is evidence, not a CI
 threshold or a general upper bound. In strip mode,
 the separately timed prepared-ESM case attributes the much larger module latency to
