@@ -1245,31 +1245,9 @@ function _isInternalUtilCallSite(scriptName) {
         scriptName.indexOf('/builtin/util.js') !== -1;
 }
 
-function _hasExecArgvFlag(flag) {
-    if (typeof process === 'undefined' || !Array.isArray(process.execArgv)) {
-        return false;
-    }
-
-    const prefixed = flag + '=';
-    for (let i = 0; i < process.execArgv.length; i++) {
-        const arg = String(process.execArgv[i]);
-        if (arg === flag || arg.indexOf(prefixed) === 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 function _isSourceMapsEnabledFromExecArgv() {
-    if (_hasExecArgvFlag('--no-enable-source-maps')) {
-        return false;
-    }
-
-    return _hasExecArgvFlag('--enable-source-maps') ||
-        _hasExecArgvFlag('--experimental-transform-types') ||
-        (typeof process !== 'undefined' && process.features &&
-            process.features.typescript === 'transform');
+    const isEnabled = globalThis.__wasm_rquickjs_source_maps_enabled;
+    return typeof isEnabled === 'function' && isEnabled();
 }
 
 function _getCjsLineOffsetRegistry() {
@@ -1311,7 +1289,7 @@ function _mapCallSiteWithSimpleSourceMap(callSite) {
     if (typeof mapper !== 'function') return _normalizeCallSiteLineNumber(callSite);
     let origin;
     try {
-        origin = mapper(callSite.scriptName, callSite.lineNumber, callSite.columnNumber);
+        origin = mapper(callSite.scriptName, callSite.lineNumber, callSite.columnNumber, true);
     } catch (_) {
         return _normalizeCallSiteLineNumber(callSite);
     }

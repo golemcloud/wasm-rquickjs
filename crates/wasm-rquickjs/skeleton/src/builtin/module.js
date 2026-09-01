@@ -1567,6 +1567,40 @@ function decodeInlineSourceMap(url) {
     }
 }
 
+function storeSourceMap(filename, source, payload, sourceBasePath, moduleObject, options) {
+    const registry = getSimpleSourceMapRegistry();
+    const owners = getCjsSourceMapOwnerRegistry();
+    if (!isSourceMapsEnabled() || payload === null || typeof payload !== 'object') {
+        delete registry[filename];
+        delete owners[filename];
+        return;
+    }
+    registry[filename] = new SourceMap(payload, {
+        lineLengths: sourceMapLineLengths(source),
+        sourceBasePath,
+        originalLineOffset: options && options.originalLineOffset,
+    });
+    const installErrorStackShim = globalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
+    if (typeof installErrorStackShim === 'function') installErrorStackShim();
+    if (moduleObject) {
+        const ownerRef = makeWeakRef(moduleObject);
+        if (ownerRef !== undefined) owners[filename] = ownerRef;
+        else delete owners[filename];
+    } else {
+        delete owners[filename];
+    }
+}
+
+function registerSourceMapPayload(filename, source, sourceMap, moduleObject) {
+    let payload = null;
+    try {
+        payload = typeof sourceMap === 'string' ? JSON.parse(sourceMap) : sourceMap;
+    } catch (_) {
+        payload = null;
+    }
+    storeSourceMap(filename, source, payload, pathModule.dirname(filename), moduleObject);
+}
+
 function registerSourceMapForCjs(filename, source, moduleObject, options = undefined) {
     const registry = getSimpleSourceMapRegistry();
     const owners = getCjsSourceMapOwnerRegistry();
@@ -1610,23 +1644,7 @@ function registerSourceMapForCjs(filename, source, moduleObject, options = undef
         delete owners[filename];
         return;
     }
-    registry[filename] = new SourceMap(payload, {
-        lineLengths: sourceMapLineLengths(source),
-        sourceBasePath,
-        originalLineOffset: options && options.originalLineOffset,
-    });
-    const installErrorStackShim = globalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
-    if (typeof installErrorStackShim === 'function') installErrorStackShim();
-    if (moduleObject) {
-        const ownerRef = makeWeakRef(moduleObject);
-        if (ownerRef !== undefined) {
-            owners[filename] = ownerRef;
-        } else {
-            delete owners[filename];
-        }
-    } else {
-        delete owners[filename];
-    }
+    storeSourceMap(filename, source, payload, sourceBasePath, moduleObject, options);
 }
 
 function registerSourceMapForTransformedSource(
@@ -1680,10 +1698,7 @@ function remapSourceMappedPosition(
     const lineOffset = lineOffsets[scriptName];
     const forcedLineOffset = forcedOffsets[scriptName] === true;
     if (typeof lineOffset === 'number' && Number.isFinite(lineOffset) && lineOffset > 0 &&
-        (forcedLineOffset ||
-            hasCjsWrapperOffset === true ||
-            (sourceMap && Array.isArray(sourceMap._decodedMappings) &&
-                lineNumber - 1 >= sourceMap._decodedMappings.length))) {
+        (forcedLineOffset || hasCjsWrapperOffset === true)) {
         lineNumber -= lineOffset;
     }
     if (lineNumber <= 0) return undefined;
@@ -1702,6 +1717,11 @@ function remapSourceMappedPosition(
 }
 
 Object.defineProperties(globalThis, {
+    __wasm_rquickjs_source_maps_enabled: {
+        value: isSourceMapsEnabled,
+        writable: false,
+        configurable: false,
+    },
     __wasm_rquickjs_register_transformed_source_map: {
         value: registerSourceMapForTransformedSource,
         writable: false,
@@ -1759,9 +1779,9 @@ if (testObservabilityEnabledNative()) {
     });
 }
 
-function transpileTypeScriptModule(filename, source, module = undefined) {
+function transformTypeScriptModuleOutput(filename, source, module = undefined) {
     if (!isTypeScriptFilename(filename)) {
-        return source;
+        return { code: source, sourceMap: null };
     }
     // Rust owns the transform semantics. This adapter only applies CommonJS
     // loader policy; the Rust filesystem loader applies the same service for ESM.
@@ -1769,15 +1789,17 @@ function transpileTypeScriptModule(filename, source, module = undefined) {
         String(source), filename, isSourceMapsEnabled(), module
     ));
     recordTypeScriptModuleTransform();
+    return output;
+}
+
+function codeWithInlineSourceMap(output) {
     if (!output.sourceMap) return output.code;
     const encoded = buffer.Buffer.from(output.sourceMap, 'utf8').toString('base64');
     return output.code + `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
 }
 
-function prepareCommonJsTypeScript(filename, source) {
-    return isTypeScriptFilename(filename)
-        ? transpileTypeScriptModule(filename, source, false)
-        : source;
+function transpileTypeScriptModule(filename, source, module = undefined) {
+    return codeWithInlineSourceMap(transformTypeScriptModuleOutput(filename, source, module));
 }
 
 function clearPreparedTypeScriptGraph(graph) {
@@ -2464,7 +2486,13 @@ function wrapForCompile(script, dynamicImportBindings) {
     return activeWrapper[0] + script + activeWrapper[1];
 }
 
-function compileCjs(filename, source, isPreparedTypeScript = false, moduleObject = undefined) {
+function compileCjs(
+    filename,
+    source,
+    isPreparedTypeScript = false,
+    moduleObject = undefined,
+    sourceMap = undefined,
+) {
     if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
         source = source.slice(1);
     }
@@ -2474,9 +2502,12 @@ function compileCjs(filename, source, isPreparedTypeScript = false, moduleObject
     }
 
     if (!isPreparedTypeScript) {
-        source = transpileTypeScriptModule(filename, source, false);
+        const output = transformTypeScriptModuleOutput(filename, source, false);
+        source = output.code;
+        sourceMap = output.sourceMap;
     }
-    registerSourceMapForCjs(filename, source, moduleObject);
+    if (sourceMap) registerSourceMapPayload(filename, source, sourceMap, moduleObject);
+    else registerSourceMapForCjs(filename, source, moduleObject);
     source = stripV8OptimizationIntrinsics(source);
     const strippedImportAttributes = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_prepare_cjs_source(
         source,
@@ -3153,11 +3184,19 @@ function loadCommonJsTransaction(descriptor) {
             }
             const dirname = pathModule.dirname(filename);
             let compiledSource;
+            let preparedSourceForCache;
+            let typeScriptSourceMap;
             let typeScriptExportNames;
             try {
-                compiledSource = preparedTypeScript
-                    ? preparedTypeScript.preparedSource
-                    : prepareCommonJsTypeScript(filename, source);
+                if (preparedTypeScript) {
+                    compiledSource = preparedTypeScript.preparedSource;
+                    preparedSourceForCache = compiledSource;
+                } else {
+                    const output = transformTypeScriptModuleOutput(filename, source, false);
+                    compiledSource = output.code;
+                    typeScriptSourceMap = output.sourceMap;
+                    preparedSourceForCache = codeWithInlineSourceMap(output);
+                }
                 typeScriptExportNames = preparedTypeScript && preparedTypeScript.exportNames;
             } catch (err) {
                 discardCjsModuleLoad(cacheKey, parentModule, mod);
@@ -3182,6 +3221,7 @@ function loadCommonJsTransaction(descriptor) {
                     compiledSource,
                     true,
                     mod,
+                    typeScriptSourceMap,
                 );
             } catch (err) {
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
@@ -3242,7 +3282,7 @@ function loadCommonJsTransaction(descriptor) {
                     captureCjsTypeScriptPreparedSource(
                         mod,
                         source,
-                        compiledSource,
+                        preparedSourceForCache,
                     );
                 }
                 cjsEsmDefaultSnapshotEligible = true;

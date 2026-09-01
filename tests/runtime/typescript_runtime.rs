@@ -278,6 +278,13 @@ async fn strip_typescript_types_matches_node_contract(
         report["stripRuntimeStack"]
     );
     assert!(
+        report["stripInlineExecutionStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("__wasm_rquickjs_execution_inline.mjs:2:")),
+        "strip inline execution did not remove its wrapper offset: {}",
+        report["stripInlineExecutionStack"]
+    );
+    assert!(
         report["unsupported"]
             .as_str()
             .is_some_and(|message| message.contains("TypeScript enum is not supported"))
@@ -318,11 +325,28 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["commonJsNodeModulesTypeScriptErrorName"], "Error");
     assert_eq!(report["executionInline"], 1);
     assert_eq!(report["largeInlineExecution"], 1);
+    for field in ["withoutSourceMap", "withSourceMap"] {
+        let latency = report["transformLatencyMs"][field]
+            .as_f64()
+            .unwrap_or_else(|| panic!("missing {field} transform latency"));
+        assert!(
+            latency <= 25.0,
+            "64 KiB {field} transform exceeded the GOL-417 bound: {latency:.3} ms"
+        );
+    }
     for (field, file, line) in [
         ("esmRuntimeStack", "stack-esm.mts", 3),
         ("cjsRuntimeStack", "stack-cjs.cts", 3),
         ("importedCjsRuntimeStack", "stack-cjs.cts", 3),
         ("executionEntryStack", "stack-entry.mts", 4),
+        ("typeErrorRuntimeStack", "stack-errors.mts", 4),
+        ("customErrorRuntimeStack", "stack-errors.mts", 7),
+        ("syntaxErrorRuntimeStack", "stack-errors.mts", 19),
+        (
+            "reexportPreparedRuntimeStack",
+            "stack-reexport-child.cts",
+            3,
+        ),
         (
             "executionInlineStack",
             "__wasm_rquickjs_execution_inline.mjs",
@@ -335,6 +359,10 @@ async fn typescript_transform_runtime_is_immutable(
         assert!(
             stack.contains(&format!("{file}:{line}:")),
             "{field} did not map to the original TypeScript location: {stack}"
+        );
+        assert!(
+            !stack.contains("__wasm_rquickjs_builtin/internal/errors"),
+            "{field} leaked Error shim frames: {stack}"
         );
     }
     let rewritten_cjs_stack = report["rewrittenCjsRuntimeStack"]
@@ -356,5 +384,39 @@ async fn typescript_transform_runtime_is_immutable(
         !disabled_stack.contains("stack-disabled.mts:3:"),
         "--no-enable-source-maps unexpectedly remapped the stack: {disabled_stack}"
     );
+    assert_eq!(report["errorConstructorsStable"], true);
+    assert!(
+        report["generatedSite"]["fileName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-errors.mts")),
+        "unexpected generated custom prepare call site: {}",
+        report["generatedSite"]
+    );
+    assert_ne!(report["generatedSite"]["lineNumber"], 13);
+    assert!(
+        report["preparedOrigin"]["fileName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-errors.mts"))
+    );
+    assert_eq!(report["preparedOrigin"]["lineNumber"], 14);
+    assert!(
+        report["callSites"]["mapped"]["scriptName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-sites.mts"))
+    );
+    assert_eq!(report["callSites"]["mapped"]["lineNumber"], 5);
+    assert_eq!(report["callSites"]["mapped"]["columnNumber"], 26);
+    assert!(
+        report["callSites"]["generated"]["scriptName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-sites.mts"))
+    );
+    assert_ne!(report["callSites"]["generated"]["lineNumber"], 6);
+    assert!(
+        report["disabledCallSite"]["scriptName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-disabled-sites.mts"))
+    );
+    assert_ne!(report["disabledCallSite"]["lineNumber"], 4);
     Ok(())
 }

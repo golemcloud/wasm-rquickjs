@@ -955,7 +955,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | SourceTextModule evaluation timeout does not interrupt an infinite loop | 1 | `parallel/test-vm-module-basic.js#block_02_statement_02` |
 | SourceTextModule identifiers are not incremented per VM context like Node | 1 | `parallel/test-vm-module-basic.js#block_03_check_the_generated_identifier_for_each_module` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
-| TypeScript transform source maps are not applied to QuickJS stack call-site locations | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | URL inspect output uses the URL string instead of Node's structured URL representation | 1 | `parallel/test-whatwg-url-custom-inspect.js` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
@@ -1269,6 +1268,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | setDefaultHeaders:false still injects/default-normalizes headers (Host/Content-Length/casing/duplicates) | 1 | `parallel/test-http-dont-set-default-headers-with-set-header.js` |
 | setImmediate queue turn semantics are unstable and can trap in the timeout scheduler | 1 | `parallel/test-timers-immediate-queue.js` |
 | setInterval scheduling incorrectly includes callback execution time | 1 | `sequential/test-timers-set-interval-excludes-callback-duration.js` |
+| simulated child_process TypeScript CLI execution does not publish its transform map to util.getCallSites | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | snapshot update/read flow via node:test is incomplete in WASM child emulation | 1 | `parallel/test-runner-snapshot-file-tests.js#test_01_t_assert_filesnapshot_update_read_flow` |
 | spawn() stdio handling is incomplete: non-requested stderr stream is still created | 1 | `sequential/test-child-process-exit.js` |
 | spawn() timeout validation path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02` |
@@ -1569,6 +1569,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | v8.writeHeapSnapshot is a V8-specific API and is unavailable in QuickJS | 2 | `parallel/test-permission-fs-write-v8.js#block_00_block_00`, `parallel/test-permission-fs-write-v8.js#block_01_block_01` |
 | GC observability used by common/gc.onGC is not available in the QuickJS/WASM runtime | 1 | `parallel/test-net-connect-memleak.js` |
 | QuickJS await/promise-hook semantics differ from V8, so AsyncLocalStorage runStores context is lost across await boundaries | 1 | `parallel/test-diagnostics-channel-tracing-channel-promise-run-stores.js` |
+| QuickJS custom Error.prepareStackTrace does not expose the throwing CommonJS CallSite | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
 | QuickJS private-field TypeError message text differs from V8 | 1 | `parallel/test-runner-mocking.js#test_21_mocks_a_constructor` |
 | SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-module-cached-data.js` |
 | asserts V8-specific syntax error stderr text/format that differs in QuickJS | 1 | `es-module/test-require-module-errors.js` |
@@ -1577,7 +1578,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | depends on V8 native syntax and runtime flags not available in QuickJS | 1 | `parallel/test-v8-flags.js` |
 | depends on engine-specific ArrayBuffer OOM RangeError message text in skip path | 1 | `sequential/test-buffer-creation-regression.js` |
 | expects V8 heap space statistics that QuickJS does not expose | 1 | `parallel/test-v8-stats.js` |
-| native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
 | uses V8 natives syntax intrinsics (`%DebugPrint`, `%HaveSameMap`, `%CollectGarbage`) unavailable in QuickJS | 1 | `parallel/test-http-same-map.js` |
 | uses v8.getHeapSnapshot, which is V8-specific and unavailable in QuickJS | 1 | `parallel/test-http2-ping-settings-heapdump.js` |
 | v8.cachedDataVersionTag depends on V8 internals unavailable in QuickJS | 1 | `parallel/test-v8-version-tag.js` |

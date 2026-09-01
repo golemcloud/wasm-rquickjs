@@ -1,8 +1,10 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
+import module, { createRequire } from 'node:module';
 import { runJavaScript } from 'wasm-rquickjs:execution';
 
 export async function run() {
+    const errorConstructorBefore = Error;
+    const typeErrorConstructorBefore = TypeError;
     fs.mkdirSync('/typescript-transform-runtime', { recursive: true });
     fs.writeFileSync(
         '/typescript-transform-runtime/transformed.mts',
@@ -96,6 +98,27 @@ export async function run() {
         language: 'typescript',
         source: largeSource,
     });
+    const measuredSource = `enum Direction { Up, Down }
+        export default Direction.Down;
+        /*${'x'.repeat(64 * 1024)}*/`;
+    function measureTransform(sourceMap) {
+        const samples = [];
+        for (let i = 0; i < 6; i++) {
+            const started = performance.now();
+            module.stripTypeScriptTypes(measuredSource, {
+                mode: 'transform',
+                sourceMap,
+                sourceUrl: 'measured.ts',
+            });
+            if (i > 0) samples.push(performance.now() - started);
+        }
+        samples.sort((left, right) => left - right);
+        return samples[2];
+    }
+    const transformLatencyMs = {
+        withoutSourceMap: measureTransform(false),
+        withSourceMap: measureTransform(true),
+    };
     fs.writeFileSync(
         '/typescript-transform-runtime/stack-esm.mts',
         `enum StackShift { Value }
@@ -109,6 +132,71 @@ export async function run() {
     } catch (error) {
         esmRuntimeStack = error.stack;
     }
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-errors.mts',
+        `enum StackShift { Value }
+         export class CustomStackError extends Error {}
+         export function failTypeError(): never {
+             throw new TypeError('type-error-typescript-stack');
+         }
+         export function failCustomError(): never {
+             throw new CustomStackError('custom-error-typescript-stack');
+         }
+         export function captureGeneratedSite() {
+             const previous = Error.prepareStackTrace;
+             try {
+                 Error.prepareStackTrace = (_error, sites) => sites[0];
+                 return new Error('prepared-typescript-stack').stack;
+             } finally {
+                 Error.prepareStackTrace = previous;
+             }
+         }
+         export function failSyntaxError(): never {
+             throw new SyntaxError('syntax-error-typescript-stack');
+         }`,
+    );
+    const stackErrorsModule = await import('/typescript-transform-runtime/stack-errors.mts');
+    let typeErrorRuntimeStack;
+    try {
+        stackErrorsModule.failTypeError();
+    } catch (error) {
+        typeErrorRuntimeStack = error.stack;
+    }
+    let customErrorRuntimeStack;
+    try {
+        stackErrorsModule.failCustomError();
+    } catch (error) {
+        customErrorRuntimeStack = error.stack;
+    }
+    let syntaxErrorRuntimeStack;
+    try {
+        stackErrorsModule.failSyntaxError();
+    } catch (error) {
+        syntaxErrorRuntimeStack = error.stack;
+    }
+    const generatedSite = stackErrorsModule.captureGeneratedSite();
+    const generatedSiteFile = generatedSite.getFileName();
+    const generatedSiteLine = generatedSite.getLineNumber();
+    const generatedSiteColumn = generatedSite.getColumnNumber();
+    const preparedSourceMap = module.findSourceMap(generatedSiteFile);
+    const preparedOrigin = preparedSourceMap &&
+        preparedSourceMap.findOrigin(generatedSiteLine, generatedSiteColumn);
+    const errorConstructorsStable = Error === errorConstructorBefore &&
+        TypeError === typeErrorConstructorBefore &&
+        new Error().constructor === Error &&
+        new TypeError().constructor === TypeError;
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-sites.mts',
+        `import { getCallSites } from 'node:util';
+         enum StackShift { Value }
+         export function captureSites() {
+             return {
+                 mapped: getCallSites(1)[0],
+                 generated: getCallSites(1, { sourceMap: false })[0],
+             };
+         }`,
+    );
+    const callSites = (await import('/typescript-transform-runtime/stack-sites.mts')).captureSites();
     fs.writeFileSync(
         '/typescript-transform-runtime/stack-cjs.cts',
         `enum StackShift { Value }
@@ -128,6 +216,30 @@ export async function run() {
         (await import('/typescript-transform-runtime/stack-cjs.cts')).default.failCjs();
     } catch (error) {
         importedCjsRuntimeStack = error.stack;
+    }
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-reexport-child.cts',
+        `enum StackShift { Value }
+         exports.failPrepared = function failPrepared(): never {
+             throw new Error('prepared-reexport-typescript-stack');
+         };`,
+    );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-reexport-parent.cts',
+        `const child = require('./stack-reexport-child.cts');
+         Object.keys(child).forEach(function (key) {
+             Object.defineProperty(exports, key, {
+                 enumerable: true,
+                 get: function () { return child[key]; },
+             });
+         });`,
+    );
+    const reexportStackModule = await import('/typescript-transform-runtime/stack-reexport-parent.cts');
+    let reexportPreparedRuntimeStack;
+    try {
+        reexportStackModule.default.failPrepared();
+    } catch (error) {
+        reexportPreparedRuntimeStack = error.stack;
     }
     delete require.cache[require.resolve('/typescript-transform-runtime/stack-cjs.cts')];
     fs.writeFileSync(
@@ -151,6 +263,14 @@ export async function run() {
     }
     process.execArgv.push('--no-enable-source-maps');
     fs.writeFileSync(
+        '/typescript-transform-runtime/stack-disabled-sites.mts',
+        `import { getCallSites } from 'node:util';
+         enum StackShift { Value }
+         export function captureDisabledSite() {
+             return getCallSites(1)[0];
+         }`,
+    );
+    fs.writeFileSync(
         '/typescript-transform-runtime/stack-disabled.mts',
         `enum StackShift { Value }
          export function failDisabled(): never {
@@ -158,10 +278,16 @@ export async function run() {
          }`,
     );
     let disabledRuntimeStack;
+    let disabledCallSite;
     try {
         (await import('/typescript-transform-runtime/stack-disabled.mts')).failDisabled();
     } catch (error) {
         disabledRuntimeStack = error.stack;
+    }
+    try {
+        disabledCallSite = (await import(
+            '/typescript-transform-runtime/stack-disabled-sites.mts'
+        )).captureDisabledSite();
     } finally {
         process.execArgv.pop();
     }
@@ -206,6 +332,7 @@ export async function run() {
         commonJsNodeModulesTypeScriptErrorName,
         executionInline: executionInline.value,
         largeInlineExecution: largeInlineExecution.value,
+        transformLatencyMs,
         esmRuntimeStack,
         cjsRuntimeStack,
         importedCjsRuntimeStack,
@@ -213,5 +340,18 @@ export async function run() {
         disabledRuntimeStack,
         executionEntryStack,
         executionInlineStack,
+        typeErrorRuntimeStack,
+        customErrorRuntimeStack,
+        syntaxErrorRuntimeStack,
+        errorConstructorsStable,
+        generatedSite: {
+            fileName: generatedSiteFile,
+            lineNumber: generatedSiteLine,
+            columnNumber: generatedSiteColumn,
+        },
+        preparedOrigin,
+        callSites,
+        disabledCallSite,
+        reexportPreparedRuntimeStack,
     });
 }

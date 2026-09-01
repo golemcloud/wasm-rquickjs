@@ -343,7 +343,7 @@
         "block_09_error_stacktracelimit_should_not_influence_callsite_size": {},
         "block_10_block_10": {
           "category": "known-gap",
-          "reason": "TypeScript transform source maps are not applied to QuickJS stack call-site locations"
+          "reason": "simulated child_process TypeScript CLI execution does not publish its transform map to util.getCallSites"
         },
         "block_11_block_11": {},
         "block_12_block_12": {}
@@ -8276,7 +8276,7 @@
         "block_00_it_should_throw_with_invalid_args": { "category": "runnable" },
         "block_01_findsourcemap_should_return_undefined_when_no_source_map_is_": { "category": "runnable" },
         "block_02_non_exceptional_case": { "category": "runnable" },
-        "block_03_source_map_attached_to_error": { "category": "engine-difference", "reason": "native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset" },
+        "block_03_source_map_attached_to_error": { "category": "engine-difference", "reason": "QuickJS custom Error.prepareStackTrace does not expose the throwing CommonJS CallSite" },
         "block_04_sourcemap_can_be_instantiated_with_source_map_v3_object_as_p": { "category": "runnable" },
         "block_05_error_when_receiving_a_malformed_mappings": { "category": "runnable" },
         "block_06_sourcemap_can_be_instantiated_with_index_source_map_v3_objec": { "category": "runnable" },

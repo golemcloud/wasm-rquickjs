@@ -2,6 +2,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use base64ct::Encoding;
+use rquickjs::{Ctx, Function as JsFunction};
 use swc_common::{
     FileName, GLOBALS, Globals, SourceMap,
     errors::{HANDLER, Handler},
@@ -27,6 +28,17 @@ pub(crate) fn runtime_mode() -> TypeScriptMode {
     } else {
         TypeScriptMode::Strip
     }
+}
+
+pub(crate) fn source_maps_enabled(ctx: &Ctx<'_>) -> bool {
+    if !cfg!(feature = "typescript-transform-runtime") {
+        return false;
+    }
+    ctx.globals()
+        .get::<_, JsFunction>("__wasm_rquickjs_source_maps_enabled")
+        .ok()
+        .and_then(|is_enabled| is_enabled.call::<_, bool>(()).ok())
+        .unwrap_or(false)
 }
 
 pub(crate) fn source_uses_esm_format(source: &str, filename: &str) -> Result<bool, ()> {

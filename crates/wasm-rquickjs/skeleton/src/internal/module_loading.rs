@@ -6599,13 +6599,7 @@ fn transform_typescript_module_source<'js>(
     fs_path: &str,
     source: String,
 ) -> rquickjs::Result<String> {
-    let source_map = cfg!(feature = "typescript-transform-runtime")
-        && ctx
-            .globals()
-            .get::<_, Function>("__wasm_rquickjs_module_has_exec_argv_flag")
-            .ok()
-            .and_then(|has_flag| has_flag.call::<_, bool>(("--no-enable-source-maps",)).ok())
-            != Some(true);
+    let source_map = crate::internal::typescript::source_maps_enabled(ctx);
     match crate::internal::typescript::transform_module(
         source,
         fs_path,
@@ -8784,7 +8778,7 @@ fn analyze_cjs_reexport_specifier_names(
                     let Ok(output) = crate::internal::typescript::transform_module(
                         original_source.clone(),
                         &child_filename,
-                        false,
+                        crate::internal::typescript::source_maps_enabled(ctx),
                         match std::path::Path::new(&child_filename)
                             .extension()
                             .and_then(|extension| extension.to_str())
@@ -8796,18 +8790,19 @@ fn analyze_cjs_reexport_specifier_names(
                     ) else {
                         continue;
                     };
+                    let prepared_source = output.into_code_with_inline_source_map();
                     if let Some(graph) = prepared_typescript.as_deref_mut() {
                         let _ = record_typescript_module_transform(ctx);
                         graph.insert(
                             child_filename.clone(),
                             PreparedCjsTypeScript {
                                 original_source,
-                                prepared_source: output.code.clone(),
+                                prepared_source: prepared_source.clone(),
                                 export_names: Vec::new(),
                             },
                         );
                     }
-                    output.code
+                    prepared_source
                 }
             } else {
                 source

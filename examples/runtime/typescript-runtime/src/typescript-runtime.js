@@ -638,6 +638,16 @@ export async function run() {
     } catch (error) {
         stripRuntimeStack = error.stack;
     }
+    let stripInlineExecutionStack;
+    try {
+        await runJavaScript({
+            language: 'typescript',
+            source: `const value: number = 42;
+                     throw new Error('strip-inline-stack-' + value);`,
+        });
+    } catch (error) {
+        stripInlineExecutionStack = error.message;
+    }
 
     return JSON.stringify({
         stripped,
@@ -772,5 +782,6 @@ export async function run() {
         commonJsEntryRunner: commonJsEntryRunner.value,
         largeInlineRunner: largeInlineRunner.value,
         stripRuntimeStack,
+        stripInlineExecutionStack,
     });
 }

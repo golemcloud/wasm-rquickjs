@@ -14,6 +14,10 @@ import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
 const _callSiteWithFnPattern = /^\s*at\s+(.+?)\s+\((.+):(\d+):(\d+)\)\s*$/;
 const _callSiteNoFnPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
 
+function _isInternalErrorFrame(fileName) {
+    return fileName === '__wasm_rquickjs_builtin/internal/errors';
+}
+
 function _remapSourceMappedLocation(fileName, lineNumber, columnNumber) {
     const mapper = globalThis.__wasm_rquickjs_remap_source_mapped_position;
     if (typeof mapper !== 'function') return undefined;
@@ -44,6 +48,11 @@ function _remapSourceMappedStack(stackString) {
             fileName = match[1];
             lineNumber = parseInt(match[2], 10);
             columnNumber = parseInt(match[3], 10);
+        }
+        if (_isInternalErrorFrame(fileName)) {
+            lines.splice(i, 1);
+            i -= 1;
+            continue;
         }
         const origin = _remapSourceMappedLocation(fileName, lineNumber, columnNumber);
         if (!origin || typeof origin.fileName !== 'string') continue;
@@ -93,18 +102,19 @@ function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
 
 function _parseStackStringToCallSites(stackString) {
     if (typeof stackString !== 'string') return [];
-    stackString = _remapSourceMappedStack(stackString);
     const lines = stackString.split('\n');
     const sites = [];
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         let m = line.match(_callSiteWithFnPattern);
         if (m) {
+            if (_isInternalErrorFrame(m[2])) continue;
             sites.push(_makeCallSite(m[1], m[2], parseInt(m[3], 10), parseInt(m[4], 10)));
             continue;
         }
         m = line.match(_callSiteNoFnPattern);
         if (m) {
+            if (_isInternalErrorFrame(m[1])) continue;
             sites.push(_makeCallSite(null, m[1], parseInt(m[2], 10), parseInt(m[3], 10)));
         }
     }
@@ -131,6 +141,17 @@ const NativeError = Error;
 const nativeErrorToString = Error.prototype.toString;
 const materializedErrorStacks = new WeakSet();
 let errorStackShimInstalled = false;
+
+function constructNativeErrorWithoutPrepare(NativeConstructor, args) {
+    const activeError = globalThis.Error;
+    const prepareStackTrace = activeError && activeError.prepareStackTrace;
+    if (typeof prepareStackTrace === 'function') activeError.prepareStackTrace = undefined;
+    try {
+        return Reflect.construct(NativeConstructor, args, NativeConstructor);
+    } finally {
+        if (typeof prepareStackTrace === 'function') activeError.prepareStackTrace = prepareStackTrace;
+    }
+}
 
 function materializeOwnStack(errorInstance) {
     if (!errorInstance || (typeof errorInstance !== "object" && typeof errorInstance !== "function")) {
@@ -199,26 +220,7 @@ function installErrorStackShim() {
 
     const ErrorShim = function Error() {
         const ctorTarget = new.target || ErrorShim;
-        const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
-        if (typeof NativeError.captureStackTrace === 'function') {
-            const hadSuppression = Object.prototype.hasOwnProperty.call(
-                globalThis,
-                '__wasm_rquickjs_suppress_source_map_stack',
-            );
-            const previousSuppression = globalThis.__wasm_rquickjs_suppress_source_map_stack;
-            globalThis.__wasm_rquickjs_suppress_source_map_stack = true;
-            try {
-                NativeError.captureStackTrace(errorInstance, ErrorShim);
-            } catch {
-                // Keep the native constructor stack if captureStackTrace rejects.
-            } finally {
-                if (hadSuppression) {
-                    globalThis.__wasm_rquickjs_suppress_source_map_stack = previousSuppression;
-                } else {
-                    delete globalThis.__wasm_rquickjs_suppress_source_map_stack;
-                }
-            }
-        }
+        const errorInstance = constructNativeErrorWithoutPrepare(NativeError, arguments);
         materializeOwnStack(errorInstance);
 
         // Error.prepareStackTrace support (V8 compat).
@@ -253,7 +255,7 @@ function installErrorStackShim() {
     Object.setPrototypeOf(ErrorShim, NativeError);
     ErrorShim.prototype = ErrorShimPrototype;
     Object.defineProperty(ErrorShimPrototype, "constructor", {
-        value: NativeError,
+        value: ErrorShim,
         writable: true,
         configurable: true,
         enumerable: false,
@@ -268,6 +270,70 @@ function installErrorStackShim() {
 
     globalThis.Error = ErrorShim;
     errorStackShimInstalled = true;
+}
+
+function installNativeErrorSubclassShim(name) {
+    const NativeConstructor = globalThis[name];
+    if (typeof NativeConstructor !== 'function') return;
+    const ShimPrototype = Object.create(NativeConstructor.prototype);
+    const Shim = function(...args) {
+        const ctorTarget = new.target || Shim;
+        const errorInstance = constructNativeErrorWithoutPrepare(NativeConstructor, args);
+        materializeOwnStack(errorInstance);
+        const rawStack = errorInstance.stack;
+        Object.defineProperty(errorInstance, 'stack', {
+            get() {
+                const prepareStackTrace = globalThis.Error && globalThis.Error.prepareStackTrace;
+                const result = typeof prepareStackTrace === 'function'
+                    ? prepareStackTrace(errorInstance, _parseStackStringToCallSites(rawStack))
+                    : _remapSourceMappedStack(rawStack);
+                Object.defineProperty(errorInstance, 'stack', _dataDesc(result));
+                return result;
+            },
+            set(value) {
+                Object.defineProperty(errorInstance, 'stack', _dataDesc(value));
+            },
+            configurable: true,
+            enumerable: false,
+        });
+        const targetPrototype = (ctorTarget && ctorTarget.prototype) || ShimPrototype;
+        if (Object.getPrototypeOf(errorInstance) !== targetPrototype) {
+            Object.setPrototypeOf(errorInstance, targetPrototype);
+        }
+        return errorInstance;
+    };
+    Object.setPrototypeOf(Shim, NativeConstructor);
+    Shim.prototype = ShimPrototype;
+    Object.defineProperty(ShimPrototype, 'constructor', {
+        value: Shim,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+    });
+    Object.defineProperty(Shim, Symbol.hasInstance, {
+        value(value) {
+            return value instanceof NativeConstructor;
+        },
+        configurable: true,
+    });
+    globalThis[name] = Shim;
+}
+
+try {
+    installErrorStackShim();
+    for (const name of [
+        'TypeError',
+        'RangeError',
+        'ReferenceError',
+        'SyntaxError',
+        'EvalError',
+        'URIError',
+        'AggregateError',
+    ]) {
+        installNativeErrorSubclassShim(name);
+    }
+} catch {
+    // Keep the runtime default behavior if shimming fails.
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stack_shim', {

@@ -152,12 +152,16 @@ fn execution_control_error(job: &ExecutionJob, deadline: Option<Instant>) -> Opt
 }
 
 #[cfg(feature = "typescript-runtime")]
-fn transform_typescript_execution_source(source: String, name: &str) -> Result<String, String> {
+fn transform_typescript_execution_source(
+    source: String,
+    name: &str,
+    source_map: bool,
+) -> Result<String, String> {
     crate::internal::typescript::transform(
         source,
         name,
         crate::internal::typescript::runtime_mode(),
-        cfg!(feature = "typescript-transform-runtime"),
+        source_map,
         Some(true),
     )
     .map(|output| output.into_code_with_inline_source_map())
@@ -165,8 +169,22 @@ fn transform_typescript_execution_source(source: String, name: &str) -> Result<S
 }
 
 #[cfg(not(feature = "typescript-runtime"))]
-fn transform_typescript_execution_source(_source: String, _name: &str) -> Result<String, String> {
+fn transform_typescript_execution_source(
+    _source: String,
+    _name: &str,
+    _source_map: bool,
+) -> Result<String, String> {
     Err("TypeScript runtime support is not enabled".to_string())
+}
+
+#[cfg(feature = "typescript-runtime")]
+fn execution_source_maps_enabled(ctx: &Ctx<'_>) -> bool {
+    crate::internal::typescript::source_maps_enabled(ctx)
+}
+
+#[cfg(not(feature = "typescript-runtime"))]
+fn execution_source_maps_enabled(_ctx: &Ctx<'_>) -> bool {
+    false
 }
 
 #[derive(serde::Serialize)]
@@ -439,10 +457,11 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         })))
         .await;
 
-    let wrapper_name = cwd.join(if entry.is_some() {
-        "__wasm_rquickjs_execution_entry.mjs"
-    } else {
+    let is_inline = entry.is_none();
+    let wrapper_name = cwd.join(if is_inline {
         "__wasm_rquickjs_execution_inline.mjs"
+    } else {
+        "__wasm_rquickjs_execution_entry.mjs"
     });
     let name = wrapper_name.to_string_lossy().into_owned();
     let mut source = if let Some(entry) = entry {
@@ -462,12 +481,17 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             options.source.unwrap_or_default()
         )
     };
+    let source_maps_enabled = if options.language == ExecutionLanguage::Typescript {
+        async_with!(runtime.ctx => |ctx| { execution_source_maps_enabled(&ctx) }).await
+    } else {
+        false
+    };
     if options.language == ExecutionLanguage::Typescript {
         if let Some(error) = execution_control_error(&job, deadline) {
             job.complete(Err(error.to_string()));
             return;
         }
-        source = match transform_typescript_execution_source(source, &name) {
+        source = match transform_typescript_execution_source(source, &name, source_maps_enabled) {
             Ok(source) => source,
             Err(error) => {
                 job.complete(Err(error));
@@ -486,12 +510,21 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
                     "__wasm_rquickjs_register_transformed_source_map",
                 )
             {
+                let (line_offset, original_line_offset, force_line_offset) =
+                    if source_maps_enabled {
+                        (0, usize::from(is_inline), false)
+                    } else if is_inline {
+                        (1, 0, true)
+                    } else {
+                        (0, 0, false)
+                    };
                 register_source_map.call::<_, ()>((
                         name.as_str(),
                         source.as_str(),
                         Value::new_null(ctx.clone()),
-                        0,
-                        1,
+                        line_offset,
+                        original_line_offset,
+                        force_line_offset,
                     ))
                     .map_err(|error| {
                         format!("failed to register TypeScript source map: {error:?}")
