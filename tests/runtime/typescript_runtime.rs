@@ -285,6 +285,27 @@ async fn strip_typescript_types_matches_node_contract(
         report["stripInlineExecutionStack"]
     );
     assert!(
+        report["plainInlineExecutionStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("__wasm_rquickjs_execution_inline.mjs:2:")),
+        "plain JavaScript inline execution retained its wrapper offset: {}",
+        report["plainInlineExecutionStack"]
+    );
+    assert_eq!(
+        report["errorConstructorMetadata"],
+        serde_json::json!([
+            { "name": "Error", "length": 1 },
+            { "name": "TypeError", "length": 1 },
+            { "name": "RangeError", "length": 1 },
+            { "name": "ReferenceError", "length": 1 },
+            { "name": "SyntaxError", "length": 1 },
+            { "name": "EvalError", "length": 1 },
+            { "name": "URIError", "length": 1 },
+            { "name": "AggregateError", "length": 2 },
+        ])
+    );
+    assert_eq!(report["errorConstructorRelationships"], true);
+    assert!(
         report["unsupported"]
             .as_str()
             .is_some_and(|message| message.contains("TypeScript enum is not supported"))
@@ -385,6 +406,24 @@ async fn typescript_transform_runtime_is_immutable(
         "--no-enable-source-maps unexpectedly remapped the stack: {disabled_stack}"
     );
     assert_eq!(report["errorConstructorsStable"], true);
+    assert_eq!(
+        report["errorConstructorMetadata"],
+        serde_json::json!([
+            { "name": "Error", "length": 1 },
+            { "name": "TypeError", "length": 1 },
+            { "name": "RangeError", "length": 1 },
+            { "name": "ReferenceError", "length": 1 },
+            { "name": "SyntaxError", "length": 1 },
+            { "name": "EvalError", "length": 1 },
+            { "name": "URIError", "length": 1 },
+            { "name": "AggregateError", "length": 2 },
+        ])
+    );
+    assert_eq!(report["errorConstructorRelationships"], true);
+    assert_eq!(report["nonWritablePrepareStack"], "non-writable-prepare");
+    assert_eq!(report["prepareSetterCalls"], 0);
+    assert_eq!(report["nestedPrepareCalls"], 1);
+    assert_eq!(report["nestedPrepareStack"], "nested-prepare");
     assert!(
         report["generatedSite"]["fileName"]
             .as_str()
@@ -398,7 +437,7 @@ async fn typescript_transform_runtime_is_immutable(
             .as_str()
             .is_some_and(|file| file.ends_with("stack-errors.mts"))
     );
-    assert_eq!(report["preparedOrigin"]["lineNumber"], 14);
+    assert_eq!(report["preparedOrigin"]["lineNumber"], 13);
     assert!(
         report["callSites"]["mapped"]["scriptName"]
             .as_str()

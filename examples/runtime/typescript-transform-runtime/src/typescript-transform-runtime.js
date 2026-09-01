@@ -181,6 +181,51 @@ export async function run() {
     const preparedSourceMap = module.findSourceMap(generatedSiteFile);
     const preparedOrigin = preparedSourceMap &&
         preparedSourceMap.findOrigin(generatedSiteLine, generatedSiteColumn);
+    const errorConstructorMetadata = [
+        Error,
+        TypeError,
+        RangeError,
+        ReferenceError,
+        SyntaxError,
+        EvalError,
+        URIError,
+        AggregateError,
+    ].map((Constructor) => ({ name: Constructor.name, length: Constructor.length }));
+    class NarrowTypeError extends TypeError {}
+    const errorConstructorRelationships = Error.isPrototypeOf(TypeError) &&
+        !(new TypeError('base') instanceof NarrowTypeError) &&
+        new NarrowTypeError('narrow') instanceof NarrowTypeError;
+
+    const originalPrepareDescriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    const originalPrepareValue = Error.prepareStackTrace;
+    Object.defineProperty(Error, 'prepareStackTrace', {
+        value: () => 'non-writable-prepare',
+        writable: false,
+        configurable: true,
+    });
+    const nonWritablePrepareStack = new TypeError('non-writable').stack;
+    Object.defineProperty(Error, 'prepareStackTrace', originalPrepareDescriptor);
+    Error.prepareStackTrace = originalPrepareValue;
+
+    let prepareSetterCalls = 0;
+    Object.defineProperty(Error, 'prepareStackTrace', {
+        get() { return undefined; },
+        set() { prepareSetterCalls++; },
+        configurable: true,
+    });
+    new TypeError('accessor-backed');
+    Object.defineProperty(Error, 'prepareStackTrace', originalPrepareDescriptor);
+    Error.prepareStackTrace = originalPrepareValue;
+
+    let nestedPrepareCalls = 0;
+    Error.prepareStackTrace = () => {
+        nestedPrepareCalls++;
+        new TypeError('nested');
+        return 'nested-prepare';
+    };
+    const nestedPrepareStack = new Error('outer').stack;
+    Object.defineProperty(Error, 'prepareStackTrace', originalPrepareDescriptor);
+    Error.prepareStackTrace = originalPrepareValue;
     const errorConstructorsStable = Error === errorConstructorBefore &&
         TypeError === typeErrorConstructorBefore &&
         new Error().constructor === Error &&
@@ -344,6 +389,12 @@ export async function run() {
         customErrorRuntimeStack,
         syntaxErrorRuntimeStack,
         errorConstructorsStable,
+        errorConstructorMetadata,
+        errorConstructorRelationships,
+        nonWritablePrepareStack,
+        prepareSetterCalls,
+        nestedPrepareCalls,
+        nestedPrepareStack,
         generatedSite: {
             fileName: generatedSiteFile,
             lineNumber: generatedSiteLine,

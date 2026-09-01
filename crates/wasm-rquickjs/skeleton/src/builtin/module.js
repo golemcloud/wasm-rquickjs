@@ -1230,9 +1230,22 @@ function isSourceMapsEnabled() {
 
     return hasActiveExecArgvFlag('--enable-source-maps') ||
         isExperimentalTransformTypesEnabled() ||
+        (processModule.features && processModule.features.typescript === 'transform') ||
         (wasmRquickjsModuleGlobalThis.process &&
             wasmRquickjsModuleGlobalThis.process.features &&
             wasmRquickjsModuleGlobalThis.process.features.typescript === 'transform');
+}
+
+// Transform-mode source maps are active before user modules execute. Install
+// their Error hooks here, after node:process has initialized, so constructors
+// do not change identity on the first transformed module load. Strip-only and
+// source-map-disabled runtimes keep their normal Error subclasses.
+if (isSourceMapsEnabled() &&
+    processModule.features &&
+    processModule.features.typescript === 'transform') {
+    const installErrorStackShim =
+        wasmRquickjsModuleGlobalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
+    if (typeof installErrorStackShim === 'function') installErrorStackShim();
 }
 
 function getSimpleSourceMapRegistry() {
@@ -1271,6 +1284,9 @@ function getForcedSourceMapLineOffsetRegistry() {
     return registry;
 }
 
+// `_evalWithFilename` compiles the CommonJS function wrapper with six lines
+// ahead of the user source. QuickJS reports those wrapper-relative positions
+// to util.getCallSites(), so remove them before querying the source map.
 const cjsLineOffset = 6;
 
 function derefWeakRef(ref) {
@@ -1512,6 +1528,7 @@ class SourceMap {
             this.lineLengths = Array.prototype.slice.call(options.lineLengths);
         }
         this._originalLineOffset = Number(options.originalLineOffset) || 0;
+        this._generatedLineOffset = Number(options.generatedLineOffset) || 0;
         this._decodedMappings = decodeSourceMapPayload(this.payload, options.sourceBasePath);
     }
 
@@ -1523,7 +1540,7 @@ class SourceMap {
     }
 
     findOrigin(lineNumber, columnNumber) {
-        const generatedLine = Number(lineNumber) - 1;
+        const generatedLine = Number(lineNumber) - 1 - this._generatedLineOffset;
         const generatedColumn = Number(columnNumber) - 1;
         if (!Number.isFinite(generatedLine) || !Number.isFinite(generatedColumn)) return {};
         const match = findSourceMapMapping(this._decodedMappings, generatedLine, generatedColumn);
@@ -1551,7 +1568,11 @@ function findSourceMap(path) {
 }
 
 function sourceMapLineLengths(source) {
-    return String(source).split(/\r\n|[\n\r\u2028\u2029]/).map(line => line.length);
+    const lines = String(source).split(/\r\n|[\n\r\u2028\u2029]/);
+    while (lines.length > 0 && /^\s*\/\/[#@]\s*sourceMappingURL=/.test(lines[lines.length - 1])) {
+        lines.pop();
+    }
+    return lines.map(line => line.length);
 }
 
 function decodeInlineSourceMap(url) {
@@ -1667,6 +1688,9 @@ function registerSourceMapForTransformedSource(
     lineOffset = Number(lineOffset);
     if (Number.isFinite(lineOffset) && lineOffset > 0) offsets[filename] = lineOffset;
     else delete offsets[filename];
+    if (registry[filename] !== undefined) {
+        registry[filename]._generatedLineOffset = Number.isFinite(lineOffset) ? lineOffset : 0;
+    }
     if (forceLineOffset) forcedOffsets[filename] = true;
     else delete forcedOffsets[filename];
     if (alias !== undefined && alias !== null) {
@@ -1699,7 +1723,7 @@ function remapSourceMappedPosition(
     const forcedLineOffset = forcedOffsets[scriptName] === true;
     if (typeof lineOffset === 'number' && Number.isFinite(lineOffset) && lineOffset > 0 &&
         (forcedLineOffset || hasCjsWrapperOffset === true)) {
-        lineNumber -= lineOffset;
+        if (!sourceMap || !forcedLineOffset) lineNumber -= lineOffset;
     }
     if (lineNumber <= 0) return undefined;
     if (!isSourceMapsEnabled() || !sourceMap || typeof sourceMap.findOrigin !== 'function') {

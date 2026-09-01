@@ -141,17 +141,7 @@ const NativeError = Error;
 const nativeErrorToString = Error.prototype.toString;
 const materializedErrorStacks = new WeakSet();
 let errorStackShimInstalled = false;
-
-function constructNativeErrorWithoutPrepare(NativeConstructor, args) {
-    const activeError = globalThis.Error;
-    const prepareStackTrace = activeError && activeError.prepareStackTrace;
-    if (typeof prepareStackTrace === 'function') activeError.prepareStackTrace = undefined;
-    try {
-        return Reflect.construct(NativeConstructor, args, NativeConstructor);
-    } finally {
-        if (typeof prepareStackTrace === 'function') activeError.prepareStackTrace = prepareStackTrace;
-    }
-}
+let errorSubclassShimsInstalled = false;
 
 function materializeOwnStack(errorInstance) {
     if (!errorInstance || (typeof errorInstance !== "object" && typeof errorInstance !== "function")) {
@@ -220,7 +210,7 @@ function installErrorStackShim() {
 
     const ErrorShim = function Error() {
         const ctorTarget = new.target || ErrorShim;
-        const errorInstance = constructNativeErrorWithoutPrepare(NativeError, arguments);
+        const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
         materializeOwnStack(errorInstance);
 
         // Error.prepareStackTrace support (V8 compat).
@@ -253,6 +243,40 @@ function installErrorStackShim() {
     };
 
     Object.setPrototypeOf(ErrorShim, NativeError);
+    Object.defineProperty(ErrorShim, "name", {
+        value: NativeError.name,
+        configurable: true,
+    });
+    Object.defineProperty(ErrorShim, "length", {
+        value: NativeError.length,
+        configurable: true,
+    });
+
+    // Keep the public V8 hook on the shim. QuickJS eagerly invokes the native
+    // Error hook while constructing, whereas Node invokes it when .stack is
+    // read. A separate slot lets us preserve Node's lazy behavior without
+    // mutating a user-defined property for every Error construction.
+    let prepareStackTraceValue = NativeError.prepareStackTrace;
+    NativeError.prepareStackTrace = undefined;
+    Object.defineProperty(ErrorShim, "prepareStackTrace", {
+        get() { return prepareStackTraceValue; },
+        set(value) { prepareStackTraceValue = value; },
+        configurable: true,
+        enumerable: false,
+    });
+
+    const nativeStackTraceLimitDescriptor = Object.getOwnPropertyDescriptor(
+        NativeError,
+        "stackTraceLimit",
+    );
+    if (nativeStackTraceLimitDescriptor) {
+        Object.defineProperty(ErrorShim, "stackTraceLimit", {
+            get() { return NativeError.stackTraceLimit; },
+            set(value) { NativeError.stackTraceLimit = value; },
+            configurable: nativeStackTraceLimitDescriptor.configurable,
+            enumerable: nativeStackTraceLimitDescriptor.enumerable,
+        });
+    }
     ErrorShim.prototype = ErrorShimPrototype;
     Object.defineProperty(ErrorShimPrototype, "constructor", {
         value: ErrorShim,
@@ -263,6 +287,9 @@ function installErrorStackShim() {
 
     Object.defineProperty(ErrorShim, Symbol.hasInstance, {
         value(value) {
+            if (this !== ErrorShim) {
+                return Function.prototype[Symbol.hasInstance].call(this, value);
+            }
             return value instanceof NativeError;
         },
         configurable: true,
@@ -278,7 +305,7 @@ function installNativeErrorSubclassShim(name) {
     const ShimPrototype = Object.create(NativeConstructor.prototype);
     const Shim = function(...args) {
         const ctorTarget = new.target || Shim;
-        const errorInstance = constructNativeErrorWithoutPrepare(NativeConstructor, args);
+        const errorInstance = Reflect.construct(NativeConstructor, args, NativeConstructor);
         materializeOwnStack(errorInstance);
         const rawStack = errorInstance.stack;
         Object.defineProperty(errorInstance, 'stack', {
@@ -302,7 +329,15 @@ function installNativeErrorSubclassShim(name) {
         }
         return errorInstance;
     };
-    Object.setPrototypeOf(Shim, NativeConstructor);
+    Object.setPrototypeOf(Shim, globalThis.Error);
+    Object.defineProperty(Shim, 'name', {
+        value: NativeConstructor.name,
+        configurable: true,
+    });
+    Object.defineProperty(Shim, 'length', {
+        value: NativeConstructor.length,
+        configurable: true,
+    });
     Shim.prototype = ShimPrototype;
     Object.defineProperty(ShimPrototype, 'constructor', {
         value: Shim,
@@ -312,6 +347,9 @@ function installNativeErrorSubclassShim(name) {
     });
     Object.defineProperty(Shim, Symbol.hasInstance, {
         value(value) {
+            if (this !== Shim) {
+                return Function.prototype[Symbol.hasInstance].call(this, value);
+            }
             return value instanceof NativeConstructor;
         },
         configurable: true,
@@ -319,8 +357,8 @@ function installNativeErrorSubclassShim(name) {
     globalThis[name] = Shim;
 }
 
-try {
-    installErrorStackShim();
+function installNativeErrorSubclassShims() {
+    if (errorSubclassShimsInstalled) return;
     for (const name of [
         'TypeError',
         'RangeError',
@@ -332,14 +370,22 @@ try {
     ]) {
         installNativeErrorSubclassShim(name);
     }
-} catch {
-    // Keep the runtime default behavior if shimming fails.
+    errorSubclassShimsInstalled = true;
+}
+
+if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === false) {
+    try {
+        installErrorStackShim();
+    } catch {
+        // Keep the runtime default behavior if shimming fails.
+    }
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stack_shim', {
     value() {
         try {
             installErrorStackShim();
+            installNativeErrorSubclassShims();
         } catch {
             // Keep the runtime default behavior if shimming fails.
         }
@@ -370,14 +416,7 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
             // may not see it through the ErrorShim prototype chain.
             const currentPrepare = globalThis.Error && globalThis.Error.prepareStackTrace;
             if (typeof currentPrepare === 'function') {
-                // Temporarily clear prepareStackTrace so the native implementation
-                // produces a raw string stack (not CallSite objects).
-                globalThis.Error.prepareStackTrace = undefined;
-                try {
-                    nativeCaptureStackTrace(targetObject, constructorOpt);
-                } finally {
-                    globalThis.Error.prepareStackTrace = currentPrepare;
-                }
+                nativeCaptureStackTrace(targetObject, constructorOpt);
 
                 // Read the raw stack string, parse into CallSites, and install
                 // a lazy getter that calls prepareStackTrace on first access.

@@ -648,6 +648,29 @@ export async function run() {
     } catch (error) {
         stripInlineExecutionStack = error.message;
     }
+    let plainInlineExecutionStack;
+    try {
+        await runJavaScript({
+            source: `const value = 42;
+                     throw new Error('plain-inline-stack-' + value);`,
+        });
+    } catch (error) {
+        plainInlineExecutionStack = error.message;
+    }
+    const errorConstructorMetadata = [
+        Error,
+        TypeError,
+        RangeError,
+        ReferenceError,
+        SyntaxError,
+        EvalError,
+        URIError,
+        AggregateError,
+    ].map((Constructor) => ({ name: Constructor.name, length: Constructor.length }));
+    class NarrowTypeError extends TypeError {}
+    const errorConstructorRelationships = Error.isPrototypeOf(TypeError) &&
+        !(new TypeError('base') instanceof NarrowTypeError) &&
+        new NarrowTypeError('narrow') instanceof NarrowTypeError;
 
     return JSON.stringify({
         stripped,
@@ -783,5 +806,8 @@ export async function run() {
         largeInlineRunner: largeInlineRunner.value,
         stripRuntimeStack,
         stripInlineExecutionStack,
+        plainInlineExecutionStack,
+        errorConstructorMetadata,
+        errorConstructorRelationships,
     });
 }

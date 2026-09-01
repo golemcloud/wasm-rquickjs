@@ -505,13 +505,13 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     }
     let execution = async {
         async_with!(runtime.ctx => |ctx| {
-            if options.language == ExecutionLanguage::Typescript
+            if (options.language == ExecutionLanguage::Typescript || is_inline)
                 && let Ok(register_source_map) = ctx.globals().get::<_, Function>(
                     "__wasm_rquickjs_register_transformed_source_map",
                 )
             {
                 let (line_offset, original_line_offset, force_line_offset) =
-                    if source_maps_enabled {
+                    if options.language == ExecutionLanguage::Typescript && source_maps_enabled {
                         (0, usize::from(is_inline), false)
                     } else if is_inline {
                         (1, 0, true)
@@ -527,7 +527,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
                         force_line_offset,
                     ))
                     .map_err(|error| {
-                        format!("failed to register TypeScript source map: {error:?}")
+                        format!("failed to register execution source map: {error:?}")
                     })?;
             }
             Module::evaluate(ctx.clone(), name, source).catch(&ctx)
