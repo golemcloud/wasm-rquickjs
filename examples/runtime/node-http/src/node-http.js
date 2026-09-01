@@ -1075,14 +1075,48 @@ export async function netWriteTimeoutLifecycle() {
     completeWrite(64);
     const completionError = await completion;
     const writeLifecycle = completionError === null &&
-        activeResets === 2 &&
+        activeResets === 3 &&
         active._lastWriteQueueSize === 0 &&
         active._handle.writeQueueSize === 0 &&
         active._handle._writeInFlight === false;
     active.destroy();
 
+    // Use the real P2/P3 TCP bridge while the receiver repeatedly pauses and
+    // resumes. This complements the exact policy checks above without relying
+    // on host-specific socket-buffer sizes to manufacture a stall.
+    const nativeProgress = await new Promise((resolve) => {
+        let client;
+        let writer;
+        let fallback;
+        let settled = false;
+        const server = net.createServer((socket) => {
+            writer = socket;
+            socket.setTimeout(1000);
+            socket.once('timeout', () => finish(false));
+            socket.write(Buffer.alloc(8 * 1024 * 1024), (error) => finish(error == null));
+        });
+        function finish(result) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(fallback);
+            if (writer) writer.destroy();
+            if (client) client.destroy();
+            server.close(() => resolve(result));
+        }
+        server.once('error', () => finish(false));
+        server.listen(0, '127.0.0.1', () => {
+            client = net.connect(server.address().port, '127.0.0.1');
+            client.on('data', () => {
+                client.pause();
+                setTimeout(() => client.resume(), 5);
+            });
+            client.once('error', () => finish(false));
+            fallback = setTimeout(() => finish(false), 5000);
+        });
+    });
+
     return stalled && progressed && resumedThenStalled && drained && reconfigured &&
-        writeLifecycle;
+        writeLifecycle && nativeProgress;
 }
 
 export async function netWriteProfile(chunkSize, chunkCount, corked) {

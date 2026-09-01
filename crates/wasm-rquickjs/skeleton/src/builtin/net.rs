@@ -644,17 +644,84 @@ impl TcpSocket {
             inner.write_profile.requested_bytes += total as u64;
             inner.write_profile.copied_bytes += total as u64;
         }
-        let mut offset = 0;
+        // Rust owns exact native progress while a write is active. Clear it
+        // after every terminal path so the JS adapter can never observe stale
+        // bytes after an error or close.
+        let write_result: rquickjs::Result<()> = async {
+            let mut offset = 0;
+            while offset < total {
+                // Wait for write capacity
+                let permit = loop {
+                    let check = {
+                        let inner = self.inner.borrow();
+                        let output = inner.output.as_ref().ok_or_else(|| {
+                            throw_socket_error(&ctx, "EBADF", "write", "No output stream")
+                        })?;
+                        output.check_write().map_err(|e| match e {
+                            StreamError::Closed => {
+                                throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
+                            }
+                            StreamError::LastOperationFailed(e) => {
+                                let debug_message = e.to_debug_string();
+                                throw_socket_error(
+                                    &ctx,
+                                    stream_error_to_errno(&debug_message),
+                                    "write",
+                                    &format!("check_write failed: {debug_message}"),
+                                )
+                            }
+                        })?
+                    };
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        self.inner.borrow_mut().write_profile.p2_check_write_calls += 1;
+                    }
 
-        while offset < total {
-            // Wait for write capacity
-            let permit = loop {
-                let check = {
+                    if check > 0 {
+                        break check;
+                    }
+
+                    // No capacity — poll and retry
+                    #[cfg(feature = "net-write-profiling")]
+                    let wait_started = Instant::now();
+                    let pollable = {
+                        let mut inner = self.inner.borrow_mut();
+                        let output = inner.output.as_ref().ok_or_else(|| {
+                            throw_socket_error(&ctx, "EBADF", "write", "No output stream")
+                        })?;
+                        let p = output.subscribe();
+                        inner.waiters += 1;
+                        p
+                    };
+                    AsyncPollable::new(pollable).wait_for().await;
+                    {
+                        let mut inner = self.inner.borrow_mut();
+                        inner.waiters -= 1;
+                        #[cfg(feature = "net-write-profiling")]
+                        {
+                            inner.write_profile.p2_capacity_waits += 1;
+                            inner.write_profile.p2_capacity_wait_ns +=
+                                wait_started.elapsed().as_nanos() as u64;
+                        }
+                        if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
+                            return Err(throw_socket_error(
+                                &ctx,
+                                "EBADF",
+                                "write",
+                                "Socket was closed or reset",
+                            ));
+                        }
+                    }
+                };
+
+                let end = std::cmp::min(offset + permit as usize, total);
+                {
                     let inner = self.inner.borrow();
                     let output = inner.output.as_ref().ok_or_else(|| {
                         throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    output.check_write().map_err(|e| match e {
+                    output.write(&data[offset..end]).map_err(|e| match e {
                         StreamError::Closed => {
                             throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                         }
@@ -664,82 +731,23 @@ impl TcpSocket {
                                 &ctx,
                                 stream_error_to_errno(&debug_message),
                                 "write",
-                                &format!("check_write failed: {debug_message}"),
+                                &format!("write failed: {debug_message}"),
                             )
                         }
-                    })?
-                };
-                #[cfg(feature = "net-write-profiling")]
-                {
-                    self.inner.borrow_mut().write_profile.p2_check_write_calls += 1;
-                }
-
-                if check > 0 {
-                    break check;
-                }
-
-                // No capacity — poll and retry
-                #[cfg(feature = "net-write-profiling")]
-                let wait_started = Instant::now();
-                let pollable = {
-                    let mut inner = self.inner.borrow_mut();
-                    let output = inner.output.as_ref().ok_or_else(|| {
-                        throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    let p = output.subscribe();
-                    inner.waiters += 1;
-                    p
                 };
-                AsyncPollable::new(pollable).wait_for().await;
+                #[cfg(feature = "net-write-profiling")]
                 {
-                    let mut inner = self.inner.borrow_mut();
-                    inner.waiters -= 1;
-                    #[cfg(feature = "net-write-profiling")]
-                    {
-                        inner.write_profile.p2_capacity_waits += 1;
-                        inner.write_profile.p2_capacity_wait_ns +=
-                            wait_started.elapsed().as_nanos() as u64;
-                    }
-                    if inner.closed || inner.generation != start_gen {
-                        inner.finalize_close_if_ready();
-                        return Err(throw_socket_error(
-                            &ctx,
-                            "EBADF",
-                            "write",
-                            "Socket was closed or reset",
-                        ));
-                    }
+                    self.inner.borrow_mut().write_profile.p2_write_calls += 1;
                 }
-            };
-
-            let end = std::cmp::min(offset + permit as usize, total);
-            {
-                let inner = self.inner.borrow();
-                let output = inner.output.as_ref().ok_or_else(|| {
-                    throw_socket_error(&ctx, "EBADF", "write", "No output stream")
-                })?;
-                output.write(&data[offset..end]).map_err(|e| match e {
-                    StreamError::Closed => {
-                        throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
-                    }
-                    StreamError::LastOperationFailed(e) => {
-                        let debug_message = e.to_debug_string();
-                        throw_socket_error(
-                            &ctx,
-                            stream_error_to_errno(&debug_message),
-                            "write",
-                            &format!("write failed: {debug_message}"),
-                        )
-                    }
-                })?;
-            };
-            #[cfg(feature = "net-write-profiling")]
-            {
-                self.inner.borrow_mut().write_profile.p2_write_calls += 1;
+                offset = end;
+                self.inner.borrow_mut().pending_write_bytes = total - offset;
             }
-            offset = end;
-            self.inner.borrow_mut().pending_write_bytes = total - offset;
+            Ok(())
         }
+        .await;
+        self.inner.borrow_mut().pending_write_bytes = 0;
+        write_result?;
 
         #[cfg(feature = "net-write-profiling")]
         {
@@ -1289,9 +1297,11 @@ impl TcpSocket {
                 inner.write_profile.requested_bytes += total as u64;
                 inner.write_profile.copied_bytes += total as u64;
             }
-            inner.pending_write_bytes = total;
             match (inner.socket.clone(), inner.writer.take()) {
                 (Some(sock), Some(writer)) => {
+                    // Rust owns the exact remaining byte count while JS uses
+                    // `_writeInFlight` only to select this native observation.
+                    inner.pending_write_bytes = total;
                     // Register a cancel signal so `close()` can wake a write that
                     // is blocked on stream capacity (see `read_cancel`).
                     let (cancel_tx, cancel_rx) = oneshot::channel();
@@ -1312,25 +1322,30 @@ impl TcpSocket {
 
         let leftover = {
             let write_fut = async {
-                let mut offset = 0;
-                while offset < total {
-                    // Keep progress observable to the JS timeout lifecycle
-                    // instead of hiding one large write_all() behind a single
-                    // pending promise.
-                    let end = std::cmp::min(offset + 64 * 1024, total);
-                    let chunk_len = end - offset;
-                    #[cfg(feature = "net-write-profiling")]
-                    {
-                        self.inner.borrow_mut().write_profile.p3_write_all_calls += 1;
-                    }
-                    let chunk_leftover = writer.write_all(data[offset..end].to_vec()).await;
-                    offset += chunk_len - chunk_leftover.len();
-                    self.inner.borrow_mut().pending_write_bytes = total - offset;
-                    if !chunk_leftover.is_empty() {
-                        return data[offset..].to_vec();
+                // Mirror StreamWriter::write_all without copying the input, but
+                // expose progress after each actual component-stream write.
+                #[cfg(feature = "net-write-profiling")]
+                {
+                    self.inner.borrow_mut().write_profile.p3_write_all_calls += 1;
+                }
+                let (mut status, mut buffer) = writer.write(data).await;
+                self.inner.borrow_mut().pending_write_bytes = buffer.remaining();
+                loop {
+                    match status {
+                        StreamResult::Complete(_) if buffer.remaining() > 0 => {
+                            #[cfg(feature = "net-write-profiling")]
+                            {
+                                self.inner.borrow_mut().write_profile.p3_write_all_calls += 1;
+                            }
+                            (status, buffer) = writer.write_buf(buffer).await;
+                            self.inner.borrow_mut().pending_write_bytes = buffer.remaining();
+                            if status == StreamResult::Cancelled {
+                                status = StreamResult::Complete(0);
+                            }
+                        }
+                        _ => return buffer.into_vec(),
                     }
                 }
-                Vec::new()
             };
             futures::pin_mut!(write_fut);
             match futures::future::select(write_fut, &mut cancel_rx).await {

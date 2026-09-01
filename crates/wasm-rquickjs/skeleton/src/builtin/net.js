@@ -1111,8 +1111,12 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
         }
     }
     handle.writeQueueSize += buf.byteLength;
+    // Node refreshes the idle timer when a native write is dispatched so the
+    // new write receives a complete timeout interval. Rust owns the exact
+    // remaining-byte count while this adapter flag selects that finer value.
     handle._writeInFlight = true;
     this._lastWriteQueueSize = handle.writeQueueSize;
+    this._resetTimeout();
 
     (async () => {
         let writeError;

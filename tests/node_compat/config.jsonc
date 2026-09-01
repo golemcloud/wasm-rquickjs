@@ -2939,7 +2939,7 @@
     "parallel/test-net-write-connect-write.js": {},
     "parallel/test-net-write-fully-async-buffer.js": { "category": "known-gap", "reason": "isolated P2/P3 runs pass in about 54-63 seconds for 200 one-MiB writes; although a per-entry timeout is configurable, enabling this case would add excessive wall time and remain unreliable under concurrent CI load" },
     "parallel/test-net-write-fully-async-hex-string.js": { "category": "runnable" },
-    "parallel/test-net-write-slow.js": { "category": "known-gap", "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-write-slow.js": { "category": "known-gap", "reason": "receiver end is not delivered after the test's repeated pause/resume slow drain (P2 mustCall verification gets 0 calls); GOL-389 covers timeout progress separately without depending on that pre-existing EOF lifecycle gap" },
     "parallel/test-process-next-tick.js": {},
     "parallel/test-next-tick-doesnt-hang.js": {},
     "parallel/test-next-tick-fixed-queue-regression.js": {},
