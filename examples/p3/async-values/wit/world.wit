@@ -17,15 +17,31 @@ interface nested-types {
 
 interface observer {
   cleanup-complete: func();
+  gate: async func(id: u8);
+
+  resource wrapped-stream {
+    wrap: static async func(reader: stream<u8>) -> own<wrapped-stream>;
+  }
+}
+
+interface constructor-api {
+  resource streaming-constructor {
+    constructor();
+  }
 }
 
 world async-values {
   use nested-types.{nested-values};
+  use observer.{wrapped-stream};
   import observer;
+  export constructor-api;
 
   export run-future: async func() -> future<u32>;
   export run-stream: async func() -> stream<u8>;
   export run-sibling-streams: async func() -> tuple<stream<u8>, stream<u8>>;
+  export run-wrapped-sibling-streams: async func() -> tuple<wrapped-stream, wrapped-stream>;
+  export run-wrapped-stream-after-gate: async func(id: u8) -> wrapped-stream;
+  export schedule-cleanup: async func(gate-id: u8, delay-ms: u32);
   export run-nested: async func() -> result<nested-values, string>;
   export run-nested-error: async func() -> result<nested-values, string>;
   export take-future: async func(f: future<u32>) -> u32;

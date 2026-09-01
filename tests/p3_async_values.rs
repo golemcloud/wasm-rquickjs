@@ -46,6 +46,10 @@ mod export_bindings {
     bindgen!({
         world: "async-values",
         path: "examples/p3/async-values/wit",
+        with: {
+            "test:async-values/observer.wrapped-stream": super::WrappedStream,
+        },
+        exports: { default: async },
     });
 }
 
@@ -72,6 +76,8 @@ struct Host {
     http: WasiHttpCtx,
     table: ResourceTable,
     stored_future: Option<oneshot::Receiver<u32>>,
+    export_gates: Vec<Option<ExportGate>>,
+    cleanup_notification: Option<oneshot::Sender<()>>,
     nested_cleanup_calls: usize,
     stderr: MemoryOutputPipe,
     // The Golem wasmtime fork's `WasiCtxBuilder::build()` also yields an `IoCtx` that the
@@ -79,6 +85,13 @@ struct Host {
     #[cfg(feature = "use-golem-wasmtime")]
     io_ctx: wasmtime_wasi::IoCtx,
 }
+
+struct ExportGate {
+    reached: oneshot::Sender<()>,
+    release: oneshot::Receiver<()>,
+}
+
+pub struct WrappedStream(StreamReader<u8>);
 
 impl wasmtime_wasi::WasiView for Host {
     fn ctx(&mut self) -> WasiCtxView<'_> {
@@ -106,6 +119,46 @@ impl test::async_values_import::host::Host for Host {}
 impl export_bindings::test::async_values::observer::Host for Host {
     fn cleanup_complete(&mut self) {
         self.nested_cleanup_calls += 1;
+        if let Some(notification) = self.cleanup_notification.take() {
+            let _ = notification.send(());
+        }
+    }
+}
+
+impl<T> export_bindings::test::async_values::observer::HostWithStore<T> for HasSelf<Host> {
+    async fn gate(accessor: &Accessor<T, Self>, id: u8) {
+        let gate = accessor.with(|mut access| {
+            access
+                .get()
+                .export_gates
+                .get_mut(id as usize)
+                .and_then(Option::take)
+        });
+        let gate = gate.unwrap_or_else(|| panic!("export gate {id} was not configured"));
+        let _ = gate.reached.send(());
+        gate.release
+            .await
+            .unwrap_or_else(|_| panic!("export gate {id} release was dropped"));
+    }
+}
+
+impl export_bindings::test::async_values::observer::HostWrappedStream for Host {
+    fn drop(&mut self, rep: wasmtime::component::Resource<WrappedStream>) -> Result<()> {
+        self.table.delete(rep)?;
+        Ok(())
+    }
+}
+
+impl<T> export_bindings::test::async_values::observer::HostWrappedStreamWithStore<T>
+    for HasSelf<Host>
+{
+    async fn wrap(
+        accessor: &Accessor<T, Self>,
+        reader: StreamReader<u8>,
+    ) -> wasmtime::component::Resource<WrappedStream> {
+        accessor
+            .with(|mut access| access.get().table.push(WrappedStream(reader)))
+            .expect("failed to store wrapped stream")
     }
 }
 
@@ -189,6 +242,8 @@ fn new_store(engine: &Engine) -> Store<Host> {
             http: WasiHttpCtx::new(),
             table: ResourceTable::new(),
             stored_future: None,
+            export_gates: Vec::new(),
+            cleanup_notification: None,
             nested_cleanup_calls: 0,
             stderr,
             #[cfg(feature = "use-golem-wasmtime")]
@@ -535,6 +590,161 @@ async fn run_export_sibling_streams(component_path: &Utf8Path) -> Result<(Vec<u8
             Ok(futures::future::join(first_rx.collect(), second_rx.collect()).await)
         })
         .await?
+}
+
+async fn run_export_wrapped_sibling_streams(
+    component_path: &Utf8Path,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    store
+        .run_concurrent(async move |accessor| {
+            let (first, second) = bindings.call_run_wrapped_sibling_streams(accessor).await?;
+            let (first, second) = accessor.with(|mut access| {
+                let first = access.get().table.delete(first)?.0;
+                let second = access.get().table.delete(second)?.0;
+                Result::<_>::Ok((first, second))
+            })?;
+            let (first_tx, first_rx) = mpsc::channel(16);
+            let (second_tx, second_rx) = mpsc::channel(16);
+            accessor.with(|access| first.pipe(access, PipeConsumer::new(first_tx)))?;
+            accessor.with(|access| second.pipe(access, PipeConsumer::new(second_tx)))?;
+            Ok(futures::future::join(first_rx.collect(), second_rx.collect()).await)
+        })
+        .await?
+}
+
+async fn run_overlapping_export_wrapped_streams(
+    component_path: &Utf8Path,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    let (a_reached_tx, a_reached_rx) = oneshot::channel();
+    let (a_release_tx, a_release_rx) = oneshot::channel();
+    let (b_reached_tx, b_reached_rx) = oneshot::channel();
+    let (b_release_tx, b_release_rx) = oneshot::channel();
+    store.data_mut().export_gates = vec![
+        Some(ExportGate {
+            reached: a_reached_tx,
+            release: a_release_rx,
+        }),
+        Some(ExportGate {
+            reached: b_reached_tx,
+            release: b_release_rx,
+        }),
+    ];
+
+    store
+        .run_concurrent(async move |accessor| {
+            let (a_done_tx, a_done_rx) = oneshot::channel();
+            let call_a = async {
+                let result = bindings
+                    .call_run_wrapped_stream_after_gate(accessor, 0)
+                    .await;
+                let _ = a_done_tx.send(());
+                result
+            };
+            let call_b = async {
+                a_reached_rx.await?;
+                bindings
+                    .call_run_wrapped_stream_after_gate(accessor, 1)
+                    .await
+            };
+            let orchestrate = async {
+                b_reached_rx.await?;
+                a_release_tx
+                    .send(())
+                    .unwrap_or_else(|_| panic!("export A release receiver was dropped"));
+                a_done_rx.await?;
+                b_release_tx
+                    .send(())
+                    .unwrap_or_else(|_| panic!("export B release receiver was dropped"));
+                Result::<()>::Ok(())
+            };
+
+            let (first, second, ordered) = futures::join!(call_a, call_b, orchestrate);
+            ordered?;
+            let (first, second) = (first?, second?);
+            let (first, second) = accessor.with(|mut access| {
+                let first = access.get().table.delete(first)?.0;
+                let second = access.get().table.delete(second)?.0;
+                Result::<_>::Ok((first, second))
+            })?;
+            let (first_tx, first_rx) = mpsc::channel(16);
+            let (second_tx, second_rx) = mpsc::channel(16);
+            accessor.with(|access| first.pipe(access, PipeConsumer::new(first_tx)))?;
+            accessor.with(|access| second.pipe(access, PipeConsumer::new(second_tx)))?;
+            Ok(futures::future::join(first_rx.collect(), second_rx.collect()).await)
+        })
+        .await?
+}
+
+async fn run_writer_completion_drains_overlapping_work(
+    component_path: &Utf8Path,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+    let (cleanup_tx, cleanup_rx) = oneshot::channel();
+    store.data_mut().cleanup_notification = Some(cleanup_tx);
+    let (timer_reached_tx, timer_reached_rx) = oneshot::channel();
+    let (timer_release_tx, timer_release_rx) = oneshot::channel();
+    store.data_mut().export_gates = vec![Some(ExportGate {
+        reached: timer_reached_tx,
+        release: timer_release_rx,
+    })];
+
+    store
+        .run_concurrent(async move |accessor| {
+            let (first, second) = bindings.call_run_wrapped_sibling_streams(accessor).await?;
+            bindings.call_schedule_cleanup(accessor, 0, 1).await?;
+            timer_reached_rx.await?;
+
+            let (first, second) = accessor.with(|mut access| {
+                let first = access.get().table.delete(first)?.0;
+                let second = access.get().table.delete(second)?.0;
+                Result::<_>::Ok((first, second))
+            })?;
+            let (first_tx, first_rx) = mpsc::channel(16);
+            let (second_tx, second_rx) = mpsc::channel(16);
+            accessor.with(|access| first.pipe(access, PipeConsumer::new(first_tx)))?;
+            accessor.with(|access| second.pipe(access, PipeConsumer::new(second_tx)))?;
+
+            let streams = futures::future::join(first_rx.collect(), second_rx.collect()).await;
+            timer_release_tx
+                .send(())
+                .unwrap_or_else(|_| panic!("timer gate release receiver was dropped"));
+            cleanup_rx.await?;
+            Ok(streams)
+        })
+        .await?
+}
+
+async fn run_streaming_constructor(component_path: &Utf8Path) -> Result<(bool, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    let trapped = bindings
+        .test_async_values_constructor_api()
+        .streaming_constructor()
+        .call_constructor(&mut store)
+        .await
+        .is_err();
+    let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
+    Ok((trapped, stderr))
 }
 
 async fn run_nested_export_stream_cleanup(
@@ -917,6 +1127,54 @@ fn p3_exported_sibling_streams_can_exceed_buffer_capacity() {
 
     assert_eq!(first, vec![1, 2]);
     assert_eq!(second, (0..64).collect::<Vec<_>>());
+}
+
+#[test]
+fn p3_exported_wrapped_sibling_streams_can_exceed_buffer_capacity() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (first, second) = block_on_with_timeout(120, run_export_wrapped_sibling_streams(&wasm));
+
+    assert_eq!(first, vec![1, 2]);
+    assert_eq!(second, (0..64).collect::<Vec<_>>());
+}
+
+#[test]
+fn p3_overlapping_exports_keep_wrapped_stream_writers_alive() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (first, second) = block_on_with_timeout(120, run_overlapping_export_wrapped_streams(&wasm));
+
+    assert_eq!(first, (0..64).collect::<Vec<_>>());
+    assert_eq!(second, (0..64).collect::<Vec<_>>());
+}
+
+#[test]
+fn p3_writer_completion_drains_work_scheduled_by_overlapping_export() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (first, second) =
+        block_on_with_timeout(120, run_writer_completion_drains_overlapping_work(&wasm));
+
+    assert_eq!(first, vec![1, 2]);
+    assert_eq!(second, (0..64).collect::<Vec<_>>());
+}
+
+#[test]
+fn p3_exported_resource_constructor_rejects_stream_writers() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (trapped, stderr) = block_on_with_timeout(120, run_streaming_constructor(&wasm));
+
+    assert!(trapped, "the synchronous constructor must trap promptly");
+    assert!(
+        stderr.contains("Constructors cannot be asynchronous"),
+        "the trap should explain how to move the work to an asynchronous operation, got: {stderr}"
+    );
 }
 
 #[test]

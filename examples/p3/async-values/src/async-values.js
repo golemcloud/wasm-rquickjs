@@ -1,4 +1,5 @@
 import * as observer from 'test:async-values/observer';
+import { WrappedStream } from 'test:async-values/observer';
 
 // Returns a component `future<u32>` to the host. Returning a value (or a promise of a value) from
 // the JS function is lowered into the component future.
@@ -26,6 +27,35 @@ export async function runSiblingStreams() {
     Array.from({ length: 64 }, (_, index) => index),
   ];
 }
+
+export async function runWrappedSiblingStreams() {
+  return [
+    await WrappedStream.wrap([1, 2]),
+    await WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index)),
+  ];
+}
+
+export async function runWrappedStreamAfterGate(id) {
+  await observer.gate(id);
+  return await WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index));
+}
+
+export async function scheduleCleanup(gateId, delayMs) {
+  setTimeout(async () => {
+    await observer.gate(gateId);
+    observer.cleanupComplete();
+  }, delayMs);
+}
+
+class StreamingConstructor {
+  constructor() {
+    this.wrapped = WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index));
+  }
+}
+
+export const constructorApi = {
+  StreamingConstructor,
+};
 
 // Returns future/stream readers nested in a record. The wrapper must return the record to the host
 // before its writer tasks encounter backpressure on those readers.
