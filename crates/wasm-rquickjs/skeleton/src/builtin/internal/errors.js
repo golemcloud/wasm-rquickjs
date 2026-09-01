@@ -410,17 +410,30 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
 {
     const nativeCaptureStackTrace = globalThis.Error.captureStackTrace;
     if (typeof nativeCaptureStackTrace === 'function') {
+        function captureRawStackTrace(targetObject, constructorOpt) {
+            // QuickJS stores its native prepare hook in the context behind the
+            // original Error constructor. The public ErrorShim deliberately
+            // keeps the Node-facing hook in a separate slot, so suppress the
+            // native slot directly without touching a user-defined descriptor.
+            const nativePrepare = NativeError.prepareStackTrace;
+            NativeError.prepareStackTrace = undefined;
+            try {
+                nativeCaptureStackTrace(targetObject, constructorOpt);
+                return targetObject.stack;
+            } finally {
+                NativeError.prepareStackTrace = nativePrepare;
+            }
+        }
+
         globalThis.Error.captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
             // If prepareStackTrace is set at the JS level (e.g., on the ErrorShim),
             // we need to handle it ourselves since the native captureStackTrace
             // may not see it through the ErrorShim prototype chain.
             const currentPrepare = globalThis.Error && globalThis.Error.prepareStackTrace;
             if (typeof currentPrepare === 'function') {
-                nativeCaptureStackTrace(targetObject, constructorOpt);
-
                 // Read the raw stack string, parse into CallSites, and install
                 // a lazy getter that calls prepareStackTrace on first access.
-                const rawStack = targetObject.stack;
+                const rawStack = captureRawStackTrace(targetObject, constructorOpt);
                 if (typeof rawStack === 'string') {
                     const callSites = _parseStackStringToCallSites(rawStack);
                     Object.defineProperty(targetObject, "stack", {
