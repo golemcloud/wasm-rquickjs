@@ -6,7 +6,8 @@ results_dir="$repo_root/tests/typescript_transform_latency/results"
 
 if [ "${1:-}" = "--check" ]; then
     cd "$repo_root"
-    tools/dev-test.sh p2 standard typescript_transform_latency ""
+    TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
+        tools/dev-test.sh p2 standard typescript_transform_latency ""
     exit 0
 fi
 
@@ -36,4 +37,8 @@ for target in p2 p3; do
     done
 done
 
-(cd "$repo_root" && tools/dev-test.sh p2 standard typescript_transform_latency "")
+(
+    cd "$repo_root"
+    TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
+        tools/dev-test.sh p2 standard typescript_transform_latency ""
+)

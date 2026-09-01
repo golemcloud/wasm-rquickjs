@@ -896,7 +896,7 @@
     "wasmtimeCache": null
   },
   "inputs": {
-    "benchmarkHash": "88f85dfcfa3475e6cab45b5eb303bf48dd307d07306165a525c07149e4d4c24e",
+    "benchmarkHash": "6e7785de480a9e4cfa97f64da21ac3b0eca648aae80399e0fda003ea53380cba",
     "runtimeHash": "791eeb5d424bbd485542532b553a58c7ecd7fc63d50c25921724032f95f17ccb"
   },
   "iterations": 3,
