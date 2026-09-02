@@ -1121,6 +1121,7 @@ export async function netWriteTimeoutLifecycle() {
         let firstTimeoutElapsed = 0;
         let secondTimeoutElapsed = 0;
         let resumedBytes = 0;
+        let resumedThenPaused = false;
         let writerClosed = false;
         let writesSettled = false;
         let settlementCheckScheduled = false;
@@ -1143,7 +1144,7 @@ export async function netWriteTimeoutLifecycle() {
                     openAtFirstTimeout = !socket.destroyed;
                     firstTimeoutElapsed = Date.now() - configuredAt;
                     client.resume();
-                    socket.setTimeout(500);
+                    socket.setTimeout(750);
                 } else {
                     secondTimeoutElapsed = Date.now() - configuredAt - firstTimeoutElapsed;
                     firstWriteCallbacksBeforeDestroy = firstWriteCallbacks;
@@ -1183,6 +1184,7 @@ export async function netWriteTimeoutLifecycle() {
                     firstTimeoutElapsed,
                     secondTimeoutElapsed,
                     resumedBytes,
+                    resumedThenPaused,
                     firstWriteCallbacks,
                     secondWriteCallbacks,
                     writeErrors,
@@ -1208,7 +1210,10 @@ export async function netWriteTimeoutLifecycle() {
             client.on('data', (chunk) => {
                 if (timeoutCount !== 1) return;
                 resumedBytes += chunk.length;
-                if (resumedBytes >= 4 * 1024 * 1024) client.pause();
+                if (!resumedThenPaused && resumedBytes >= 64 * 1024) {
+                    resumedThenPaused = true;
+                    client.pause();
+                }
             });
             client.pause();
             client.once('error', () => finish({ error: 'client' }));
@@ -1219,6 +1224,7 @@ export async function netWriteTimeoutLifecycle() {
                 firstTimeoutElapsed,
                 secondTimeoutElapsed,
                 resumedBytes,
+                resumedThenPaused,
                 firstWriteCallbacks,
                 secondWriteCallbacks,
                 writeErrors,
@@ -1234,9 +1240,10 @@ export async function netWriteTimeoutLifecycle() {
 
     const stalledWritePassed = stalledWrite.timeoutCount === 2 &&
         stalledWrite.openAtFirstTimeout &&
-        stalledWrite.firstTimeoutElapsed >= 15 &&
-        stalledWrite.secondTimeoutElapsed >= 750 &&
-        stalledWrite.resumedBytes > 0 &&
+        stalledWrite.firstTimeoutElapsed >= 50 &&
+        stalledWrite.secondTimeoutElapsed >= 650 &&
+        stalledWrite.resumedBytes >= 64 * 1024 &&
+        stalledWrite.resumedThenPaused &&
         stalledWrite.firstWriteCallbacks === 1 &&
         stalledWrite.secondWriteCallbacks === 1 &&
         stalledWrite.firstWriteCallbacksBeforeDestroy +
