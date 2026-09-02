@@ -8738,6 +8738,8 @@ export const testUnhandledRejectionTurnOrdering = async () => {
 
                     handledLate.catch(() => order.push('late catch job'));
                     const rejectedInTimer = Promise.reject(new Error('timer rejection'));
+                    process.nextTick(() => order.push('timer nextTick'));
+                    Promise.resolve().then(() => order.push('timer microtask'));
 
                     setTimeout(() => {
                         try {
@@ -8748,7 +8750,9 @@ export const testUnhandledRejectionTurnOrdering = async () => {
                                 'nextTick catch job',
                                 'unhandled:handled late',
                                 'first timer',
+                                'timer nextTick',
                                 'late catch job',
+                                'timer microtask',
                                 'rejectionHandled',
                                 'unhandled:timer rejection',
                                 'second timer',

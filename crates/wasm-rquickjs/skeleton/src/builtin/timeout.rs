@@ -212,7 +212,9 @@ fn run_scheduled_task(
 
     result?;
 
-    while ctx.execute_pending_job() {}
+    // A timer callback is itself a Node turn. Drain nextTick before Promise jobs and process
+    // rejection events to a fixpoint before another timer callback can run.
+    run_process_turn_checkpoint(&ctx)?;
 
     Ok(())
 }

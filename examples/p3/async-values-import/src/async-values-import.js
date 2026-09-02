@@ -52,6 +52,143 @@ export async function runStoredFuture() {
   return String(await host.readStoredFuture());
 }
 
+function observedStream(sync = false) {
+  let resolveCleanup;
+  const cleanupCompleted = new Promise(resolve => { resolveCleanup = resolve; });
+  const state = {
+    nextCalls: 0,
+    returnStarted: 0,
+    returnFinished: 0,
+    cleanupCompleted,
+  };
+
+  const iterator = {
+    next() {
+      state.nextCalls += 1;
+      return { done: false, value: state.nextCalls };
+    },
+    async return() {
+      state.returnStarted += 1;
+      await Promise.resolve();
+      state.returnFinished += 1;
+      resolveCleanup();
+      return { done: true, value: undefined };
+    },
+  };
+  const source = sync
+    ? { [Symbol.iterator]() { return iterator; } }
+    : { [Symbol.asyncIterator]() { return iterator; } };
+
+  return { source, state };
+}
+
+async function waitForCleanup(state) {
+  await Promise.race([
+    state.cleanupCompleted,
+    new Promise(resolve => setTimeout(resolve, 1000)),
+  ]);
+}
+
+export async function runStreamReadableDrop() {
+  const { source, state } = observedStream();
+  const first = await host.consumeStreamPrefix(source);
+  await waitForCleanup(state);
+  return `${first}|${state.nextCalls}|${state.returnStarted}|${state.returnFinished}`;
+}
+
+export async function runStreamBackpressure() {
+  const { source, state } = observedStream(true);
+  await host.consumeStreamWithBackpressure(source);
+  await waitForCleanup(state);
+  return `${state.nextCalls}|${state.returnStarted}|${state.returnFinished}`;
+}
+
+export async function runStreamFailure() {
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          await Promise.resolve();
+          throw new Error('producer-failed');
+        },
+      };
+    },
+  };
+
+  await host.consumeStream(source);
+  return 'clean-eof';
+}
+
+export async function runStreamCleanupFailure() {
+  let cleanupStarted;
+  const cleanupStartedPromise = new Promise(resolve => { cleanupStarted = resolve; });
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          return { done: false, value: 1 };
+        },
+        async return() {
+          cleanupStarted();
+          await Promise.resolve();
+          throw new Error('cleanup-failed');
+        },
+      };
+    },
+  };
+
+  await host.consumeStreamPrefix(source);
+  await Promise.race([
+    cleanupStartedPromise,
+    new Promise(resolve => setTimeout(resolve, 1000)),
+  ]);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  return 'clean-eof';
+}
+
+export async function runStreamConversionFailure() {
+  let nextCalls = 0;
+  const source = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          nextCalls += 1;
+          return { done: false, value: 'not-a-u8' };
+        },
+        async return() {
+          host.cleanupComplete();
+          throw new Error('secondary-cleanup-failed');
+        },
+      };
+    },
+  };
+
+  await host.consumeStream(source);
+  return `clean-eof|${nextCalls}`;
+}
+
+export async function runSyncStreamPromiseRejection() {
+  const source = {
+    [Symbol.iterator]() {
+      return {
+        next() {
+          return {
+            done: false,
+            value: Promise.reject(new Error('sync-item-failed')),
+          };
+        },
+        return() {
+          host.cleanupComplete();
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+
+  await host.consumeStream(source);
+  return 'clean-eof';
+}
+
 // The raw future export returns before this continuation runs. Resolving the imported future must
 // checkpoint the rejection created by the continuation before the host can call back into JS.
 export async function runImportCheckpointFuture() {
