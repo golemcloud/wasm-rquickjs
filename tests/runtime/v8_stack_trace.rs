@@ -80,6 +80,23 @@ async fn v8_stack_trace_call_site_methods(
 }
 
 #[test]
+async fn v8_stack_trace_late_prepare(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-late-prepare-stack-trace",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn v8_stack_trace_constructor_opt(
     #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

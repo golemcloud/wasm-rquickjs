@@ -61,6 +61,7 @@ import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstr
 import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal/streams/add-abort-signal';
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
+import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
 import {
     transform_typescript as transformTypeScriptNative,
@@ -1208,32 +1209,28 @@ function rustHasExecArgvFlag(flag) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_module_has_exec_argv_flag(flag);
 }
 
-function hasActiveExecArgvFlag(flag) {
-    if (rustHasExecArgvFlag(flag)) return true;
-    const activeProcess = wasmRquickjsModuleGlobalThis.process;
-    if (!activeProcess || !Array.isArray(activeProcess.execArgv)) return false;
-    const prefixed = flag + '=';
-    return activeProcess.execArgv.some((arg) => {
-        arg = String(arg);
-        return arg === flag || arg.startsWith(prefixed);
-    });
-}
+let sourceMapsSupportEnabled =
+    (processModule.features && processModule.features.typescript === 'transform') ||
+    (wasmRquickjsModuleGlobalThis.process &&
+        wasmRquickjsModuleGlobalThis.process.features &&
+        wasmRquickjsModuleGlobalThis.process.features.typescript === 'transform');
+const sourceMapsSupportDefault = sourceMapsSupportEnabled;
 
-function isExperimentalTransformTypesEnabled() {
-    return hasActiveExecArgvFlag('--experimental-transform-types');
+function configureSourceMapsFromStartupArgs(args) {
+    let enabled = sourceMapsSupportDefault;
+    if (Array.isArray(args)) {
+        for (const value of args) {
+            const arg = String(value);
+            if (arg === '--no-enable-source-maps') enabled = false;
+            else if (arg === '--enable-source-maps' ||
+                arg === '--experimental-transform-types') enabled = true;
+        }
+    }
+    sourceMapsSupportEnabled = enabled;
 }
 
 function isSourceMapsEnabled() {
-    if (hasActiveExecArgvFlag('--no-enable-source-maps')) {
-        return false;
-    }
-
-    return hasActiveExecArgvFlag('--enable-source-maps') ||
-        isExperimentalTransformTypesEnabled() ||
-        (processModule.features && processModule.features.typescript === 'transform') ||
-        (wasmRquickjsModuleGlobalThis.process &&
-            wasmRquickjsModuleGlobalThis.process.features &&
-            wasmRquickjsModuleGlobalThis.process.features.typescript === 'transform');
+    return sourceMapsSupportEnabled;
 }
 
 // Transform-mode source maps are active before user modules execute. Install
@@ -1253,15 +1250,6 @@ function getSimpleSourceMapRegistry() {
     if (!registry || typeof registry !== 'object') {
         registry = Object.create(null);
         globalThis.__wasm_rquickjs_simple_source_maps = registry;
-    }
-    return registry;
-}
-
-function getCjsSourceMapOwnerRegistry() {
-    let registry = globalThis.__wasm_rquickjs_cjs_source_map_owners;
-    if (!registry || typeof registry !== 'object') {
-        registry = Object.create(null);
-        globalThis.__wasm_rquickjs_cjs_source_map_owners = registry;
     }
     return registry;
 }
@@ -1312,6 +1300,39 @@ function makeWeakRef(value) {
         return new WeakRef(value);
     } catch (err) {
         return undefined;
+    }
+}
+
+const cjsSourceMapSymbol = Symbol('wasm-rquickjs.cjsSourceMap');
+const thrownErrorSourceMapSymbol = Symbol('wasm-rquickjs.thrownErrorSourceMap');
+const weakSourceMapEntrySymbol = Symbol('wasm-rquickjs.weakSourceMapEntry');
+let cjsSourceMapStoresUntilSweep = 32;
+
+function sourceMapFromRegistry(path) {
+    const registry = getSimpleSourceMapRegistry();
+    const entry = registry[path];
+    if (!entry || entry[weakSourceMapEntrySymbol] !== true) return entry;
+    const sourceMap = derefWeakRef(entry.ref);
+    if (sourceMap !== undefined) return sourceMap;
+    delete registry[path];
+    delete getCjsLineOffsetRegistry()[path];
+    delete getForcedSourceMapLineOffsetRegistry()[path];
+    return undefined;
+}
+
+function sweepReleasedSourceMaps() {
+    const registry = getSimpleSourceMapRegistry();
+    for (const path of Object.keys(registry)) sourceMapFromRegistry(path);
+}
+
+function retainSourceMapForThrownError(error, filename) {
+    if (!error || (typeof error !== 'object' && typeof error !== 'function')) return;
+    const sourceMap = sourceMapFromRegistry(filename);
+    if (sourceMap === undefined) return;
+    try {
+        Object.defineProperty(error, thrownErrorSourceMapSymbol, { value: sourceMap });
+    } catch (_) {
+        // Stack remapping remains best-effort for non-extensible thrown values.
     }
 }
 
@@ -1556,15 +1577,7 @@ class SourceMap {
 
 function findSourceMap(path) {
     path = String(path);
-    const owners = getCjsSourceMapOwnerRegistry();
-    const ownerRef = owners[path];
-    if (ownerRef !== undefined && derefWeakRef(ownerRef) === undefined) {
-        delete owners[path];
-        delete getSimpleSourceMapRegistry()[path];
-        return undefined;
-    }
-    const registry = getSimpleSourceMapRegistry();
-    return registry[path];
+    return sourceMapFromRegistry(path);
 }
 
 function sourceMapLineLengths(source) {
@@ -1590,13 +1603,11 @@ function decodeInlineSourceMap(url) {
 
 function storeSourceMap(filename, source, payload, sourceBasePath, moduleObject, options) {
     const registry = getSimpleSourceMapRegistry();
-    const owners = getCjsSourceMapOwnerRegistry();
     if (!isSourceMapsEnabled() || payload === null || typeof payload !== 'object') {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
-    registry[filename] = new SourceMap(payload, {
+    const sourceMap = new SourceMap(payload, {
         lineLengths: sourceMapLineLengths(source),
         sourceBasePath,
         originalLineOffset: options && options.originalLineOffset,
@@ -1604,11 +1615,30 @@ function storeSourceMap(filename, source, payload, sourceBasePath, moduleObject,
     const installErrorStackShim = globalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
     if (typeof installErrorStackShim === 'function') installErrorStackShim();
     if (moduleObject) {
-        const ownerRef = makeWeakRef(moduleObject);
-        if (ownerRef !== undefined) owners[filename] = ownerRef;
-        else delete owners[filename];
+        const sourceMapRef = makeWeakRef(sourceMap);
+        if (sourceMapRef !== undefined) {
+            try {
+                Object.defineProperty(moduleObject, cjsSourceMapSymbol, {
+                    value: sourceMap,
+                    configurable: true,
+                });
+                registry[filename] = {
+                    [weakSourceMapEntrySymbol]: true,
+                    ref: sourceMapRef,
+                };
+            } catch (_) {
+                registry[filename] = sourceMap;
+            }
+        } else {
+            registry[filename] = sourceMap;
+        }
+        cjsSourceMapStoresUntilSweep--;
+        if (cjsSourceMapStoresUntilSweep === 0) {
+            sweepReleasedSourceMaps();
+            cjsSourceMapStoresUntilSweep = 32;
+        }
     } else {
-        delete owners[filename];
+        registry[filename] = sourceMap;
     }
 }
 
@@ -1624,23 +1654,15 @@ function registerSourceMapPayload(filename, source, sourceMap, moduleObject) {
 
 function registerSourceMapForCjs(filename, source, moduleObject, options = undefined) {
     const registry = getSimpleSourceMapRegistry();
-    const owners = getCjsSourceMapOwnerRegistry();
     if (!isSourceMapsEnabled()) {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
 
     const sourceText = String(source);
-    const directiveRe = /\/\/[#@]\s*sourceMappingURL=([^\r\n]+)|\/\*[#@]\s*sourceMappingURL=([\s\S]*?)\*\//g;
-    let match;
-    let url = null;
-    while ((match = directiveRe.exec(sourceText)) !== null) {
-        url = (match[1] !== undefined ? match[1] : match[2]).trim();
-    }
-    if (url === null) {
+    const url = extractSourceMapURL(sourceText, { blockComments: true });
+    if (url === undefined) {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
 
@@ -1662,7 +1684,6 @@ function registerSourceMapForCjs(filename, source, moduleObject, options = undef
     }
     if (payload === null) {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
     storeSourceMap(filename, source, payload, sourceBasePath, moduleObject, options);
@@ -1688,8 +1709,9 @@ function registerSourceMapForTransformedSource(
     lineOffset = Number(lineOffset);
     if (Number.isFinite(lineOffset) && lineOffset > 0) offsets[filename] = lineOffset;
     else delete offsets[filename];
-    if (registry[filename] !== undefined) {
-        registry[filename]._generatedLineOffset = Number.isFinite(lineOffset) ? lineOffset : 0;
+    const sourceMap = sourceMapFromRegistry(filename);
+    if (sourceMap !== undefined) {
+        sourceMap._generatedLineOffset = Number.isFinite(lineOffset) ? lineOffset : 0;
     }
     if (forceLineOffset) forcedOffsets[filename] = true;
     else delete forcedOffsets[filename];
@@ -1715,8 +1737,7 @@ function remapSourceMappedPosition(
     columnNumber = Number(columnNumber);
     if (!Number.isFinite(lineNumber) || !Number.isFinite(columnNumber)) return undefined;
 
-    const registry = getSimpleSourceMapRegistry();
-    const sourceMap = registry[scriptName];
+    const sourceMap = sourceMapFromRegistry(scriptName);
     const lineOffsets = getCjsLineOffsetRegistry();
     const forcedOffsets = getForcedSourceMapLineOffsetRegistry();
     const lineOffset = lineOffsets[scriptName];
@@ -1753,6 +1774,14 @@ Object.defineProperties(globalThis, {
     },
     __wasm_rquickjs_remap_source_mapped_position: {
         value: remapSourceMappedPosition,
+        writable: false,
+        configurable: false,
+    },
+    // The compatibility runner calls this before loading a test file to model
+    // immutable Node startup flags. Product code uses module.setSourceMapsSupport
+    // and cannot toggle behavior by mutating the informational execArgv array.
+    __wasm_rquickjs_configure_source_maps_from_startup_args: {
+        value: configureSourceMapsFromStartupArgs,
         writable: false,
         configurable: false,
     },
@@ -1816,10 +1845,18 @@ function transformTypeScriptModuleOutput(filename, source, module = undefined) {
     return output;
 }
 
+function appendInlineSourceMap(code, sourceMap) {
+    if (!sourceMap) return code;
+    // Keep this wire format in sync with
+    // TypeScriptOutput::into_code_with_inline_source_map. Runtime coverage
+    // decodes maps emitted through both the Rust ESM and JavaScript CJS/public
+    // transformation paths and asserts their original coordinates.
+    const encoded = buffer.Buffer.from(sourceMap, 'utf8').toString('base64');
+    return code + `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
+}
+
 function codeWithInlineSourceMap(output) {
-    if (!output.sourceMap) return output.code;
-    const encoded = buffer.Buffer.from(output.sourceMap, 'utf8').toString('base64');
-    return output.code + `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
+    return appendInlineSourceMap(output.code, output.sourceMap);
 }
 
 function transpileTypeScriptModule(filename, source, module = undefined) {
@@ -1864,11 +1901,9 @@ export function stripTypeScriptTypes(code, options = undefined) {
     const transformed = JSON.parse(transformTypeScriptNative(
         code, sourceUrl === undefined ? '' : sourceUrl, mode, sourceMap, undefined
     ));
-    let result = transformed.code;
-    if (sourceMap) {
-        const encoded = buffer.Buffer.from(transformed.sourceMap, 'utf8').toString('base64');
-        result += `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
-    }
+    let result = sourceMap
+        ? appendInlineSourceMap(transformed.code, transformed.sourceMap)
+        : transformed.code;
     if (sourceUrl !== undefined) {
         result += `\n\n//# sourceURL=${sourceUrl}`;
     }
@@ -3291,6 +3326,7 @@ function loadCommonJsTransaction(descriptor) {
                 try {
                     callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
                 } catch (err) {
+                    retainSourceMapForThrownError(err, filename);
                     discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
@@ -4747,6 +4783,7 @@ function setSourceMapsSupport(enabled, options) {
     if (generatedCode !== undefined && typeof generatedCode !== 'boolean') {
         throw new ERR_INVALID_ARG_TYPE('options.generatedCode', 'boolean', generatedCode);
     }
+    sourceMapsSupportEnabled = enabled;
 }
 
 const globalPaths = [];

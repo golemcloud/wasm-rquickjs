@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3174/4387 (72.4%)
+**Primary compatibility (CI-enforced):** 3175/4388 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3174 | 72.4% | 55.2% | 46.2% |
+| ✅ passing (runnable) | 3175 | 72.4% | 55.2% | 46.2% |
 | 🧩 known gap | 1213 | 27.6% | 21.1% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
-| ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
+| ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3174/5750 (55.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3175/5750 (55.2%)**.
 
 ## Inventory by Module
 
@@ -59,7 +59,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 614 | 187 | 145 | 86 | 13 | 0 | 183 | 56.3% | 43.4% |
+| other | 614 | 188 | 145 | 86 | 12 | 0 | 183 | 56.5% | 43.6% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -474,7 +474,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-snapshot-typescript.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-umd.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-warning.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
-| `test-source-map-api.js` | 9 | 8 | 0 | 0 | 1 | 0 | 0 |
+| `test-source-map-api.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-source-map-enable.js` | 23 | 23 | 0 | 0 | 0 | 0 | 0 |
 | `test-sqlite-database-sync.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-sqlite-session.js` | 14 | 13 | 1 | 0 | 0 | 0 | 0 |
@@ -1543,7 +1543,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
 | wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied | 1 | `parallel/test-http-write-head.js` |
 
-### engine difference (168)
+### engine difference (167)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1569,7 +1569,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | v8.writeHeapSnapshot is a V8-specific API and is unavailable in QuickJS | 2 | `parallel/test-permission-fs-write-v8.js#block_00_block_00`, `parallel/test-permission-fs-write-v8.js#block_01_block_01` |
 | GC observability used by common/gc.onGC is not available in the QuickJS/WASM runtime | 1 | `parallel/test-net-connect-memleak.js` |
 | QuickJS await/promise-hook semantics differ from V8, so AsyncLocalStorage runStores context is lost across await boundaries | 1 | `parallel/test-diagnostics-channel-tracing-channel-promise-run-stores.js` |
-| QuickJS custom Error.prepareStackTrace does not expose the throwing CommonJS CallSite | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
 | QuickJS private-field TypeError message text differs from V8 | 1 | `parallel/test-runner-mocking.js#test_21_mocks_a_constructor` |
 | SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-module-cached-data.js` |
 | asserts V8-specific syntax error stderr text/format that differs in QuickJS | 1 | `es-module/test-require-module-errors.js` |

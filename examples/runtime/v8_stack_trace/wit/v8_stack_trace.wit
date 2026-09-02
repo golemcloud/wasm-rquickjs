@@ -5,6 +5,7 @@ world v8-stack-trace {
   export test-capture-stack-trace-basic: func() -> bool;
   export test-prepare-stack-trace: func() -> bool;
   export test-call-site-methods: func() -> bool;
+  export test-late-prepare-stack-trace: func() -> bool;
   export test-constructor-opt: func() -> bool;
   export test-stack-trace-limit: func() -> bool;
   export test-depd-pattern: func() -> bool;

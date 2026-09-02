@@ -306,7 +306,7 @@ export async function run() {
     } catch (error) {
         rewrittenCjsRuntimeStack = error.stack;
     }
-    process.execArgv.push('--no-enable-source-maps');
+    module.setSourceMapsSupport(false);
     fs.writeFileSync(
         '/typescript-transform-runtime/stack-disabled-sites.mts',
         `import { getCallSites } from 'node:util';
@@ -334,8 +334,37 @@ export async function run() {
             '/typescript-transform-runtime/stack-disabled-sites.mts'
         )).captureDisabledSite();
     } finally {
-        process.execArgv.pop();
+        module.setSourceMapsSupport(true);
     }
+    const reclaimableSourceMapPaths = [];
+    for (let i = 0; i < 96; i++) {
+        const filename = `/typescript-transform-runtime/gc-map-${i}.cts`;
+        reclaimableSourceMapPaths.push(filename);
+        fs.writeFileSync(
+            filename,
+            `enum Marker { Value } exports.value = Marker.Value;`,
+        );
+        require(filename);
+        const resolved = require.resolve(filename);
+        const loadedModule = require.cache[resolved];
+        delete require.cache[resolved];
+        if (loadedModule && loadedModule.parent && Array.isArray(loadedModule.parent.children)) {
+            const index = loadedModule.parent.children.indexOf(loadedModule);
+            if (index !== -1) loadedModule.parent.children.splice(index, 1);
+        }
+    }
+    if (typeof gc !== 'function') throw new Error('gc test hook is unavailable');
+    gc();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    gc();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const retainedCjsSourceMaps = reclaimableSourceMapPaths.filter(
+        (filename) => module.findSourceMap(filename) !== undefined,
+    ).length;
+    // WeakRef targets observed by the periodic sweep remain alive through the
+    // current QuickJS job. The sweep batch therefore defines the strict upper
+    // bound until the next exported call/job boundary.
+    const cjsSourceMapsReclaimed = retainedCjsSourceMaps <= 32;
     fs.writeFileSync(
         '/typescript-transform-runtime/stack-entry.mts',
         `enum StackShift { Value }
@@ -404,5 +433,7 @@ export async function run() {
         callSites,
         disabledCallSite,
         reexportPreparedRuntimeStack,
+        cjsSourceMapsReclaimed,
+        retainedCjsSourceMaps,
     });
 }

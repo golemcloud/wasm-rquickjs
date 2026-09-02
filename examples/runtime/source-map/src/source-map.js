@@ -14,9 +14,8 @@ function writeJson(path, value) {
 }
 
 export function testSourceMapApi() {
-    const originalExecArgv = process.execArgv.slice();
     try {
-        process.execArgv = originalExecArgv.concat('--enable-source-maps');
+        module.setSourceMapsSupport(true);
 
         const previousLine = new module.SourceMap({
             sources: ['previous.js'],
@@ -78,6 +77,27 @@ export function testSourceMapApi() {
         require(blockDirective);
         assert(module.findSourceMap(blockDirective).findEntry(0, 0).originalSource.endsWith('/right.js'), 'last block directive wins');
 
+        const lexicalDirective = '/source-map-lexical-directive.cjs';
+        fs.writeFileSync(lexicalDirective, [
+            'module.exports = 1;',
+            '//# sourceMappingURL=right.map',
+            'const stringDecoy = "//# sourceMappingURL=wrong-map.json";',
+            'const templateDecoy = `//# sourceMappingURL=wrong-map.json`;',
+            'const regexDecoy = /[//# sourceMappingURL=wrong-map.json]/;',
+        ].join('\n'));
+        writeJson('/right.map', {
+            version: 3,
+            sources: ['lexically-selected.js'],
+            names: [],
+            mappings: 'AAAA',
+        });
+        require(lexicalDirective);
+        assert(
+            module.findSourceMap(lexicalDirective).findEntry(0, 0).originalSource
+                .endsWith('/lexically-selected.js'),
+            'source map directives inside literals are ignored',
+        );
+
         const customExtension = '/source-map-custom-extension.probe';
         const customMap = '/custom-extension.map';
         fs.writeFileSync(customExtension, 'not JavaScript');
@@ -108,6 +128,6 @@ export function testSourceMapApi() {
         console.log(e && e.stack ? e.stack : String(e));
         return false;
     } finally {
-        process.execArgv = originalExecArgv;
+        module.setSourceMapsSupport(false);
     }
 }

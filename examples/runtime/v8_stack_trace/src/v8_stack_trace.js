@@ -117,6 +117,30 @@ export const testCallSiteMethods = () => {
     }
 };
 
+export const testLatePrepareStackTrace = () => {
+    const originalPrepare = Error.prepareStackTrace;
+    try {
+        Error.prepareStackTrace = undefined;
+        const lateTarget = {};
+        Error.captureStackTrace(lateTarget);
+        Error.prepareStackTrace = () => 'late-prepare';
+        assert.strictEqual(lateTarget.stack, 'late-prepare');
+
+        Error.prepareStackTrace = () => 'capture-time-prepare';
+        const removedTarget = {};
+        Error.captureStackTrace(removedTarget);
+        Error.prepareStackTrace = undefined;
+        assert.strictEqual(typeof removedTarget.stack, 'string');
+        assert.notStrictEqual(removedTarget.stack, 'capture-time-prepare');
+        return true;
+    } catch (e) {
+        console.error('testLatePrepareStackTrace FAIL:', e.message);
+        return false;
+    } finally {
+        Error.prepareStackTrace = originalPrepare;
+    }
+};
+
 // Test 5: constructorOpt parameter strips frames
 export const testConstructorOpt = () => {
     try {

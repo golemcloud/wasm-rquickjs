@@ -426,37 +426,28 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
         }
 
         globalThis.Error.captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
-            // If prepareStackTrace is set at the JS level (e.g., on the ErrorShim),
-            // we need to handle it ourselves since the native captureStackTrace
-            // may not see it through the ErrorShim prototype chain.
-            const currentPrepare = globalThis.Error && globalThis.Error.prepareStackTrace;
-            if (typeof currentPrepare === 'function') {
-                // Read the raw stack string, parse into CallSites, and install
-                // a lazy getter that calls prepareStackTrace on first access.
-                const rawStack = captureRawStackTrace(targetObject, constructorOpt);
-                if (typeof rawStack === 'string') {
-                    const callSites = _parseStackStringToCallSites(rawStack);
-                    Object.defineProperty(targetObject, "stack", {
-                        get() {
-                            const prepare = globalThis.Error && globalThis.Error.prepareStackTrace;
-                            const result = typeof prepare === "function"
-                                ? prepare(targetObject, callSites)
-                                : rawStack;
-                            Object.defineProperty(targetObject, "stack", _dataDesc(result));
-                            return result;
-                        },
-                        set(value) {
-                            Object.defineProperty(targetObject, "stack", _dataDesc(value));
-                        },
-                        configurable: true,
-                        enumerable: false,
-                    });
-                }
-            } else {
-                nativeCaptureStackTrace(targetObject, constructorOpt);
-                if (typeof targetObject.stack === 'string') {
-                    targetObject.stack = _remapSourceMappedStack(targetObject.stack);
-                }
+            // Always capture the native text without its hidden hook. The
+            // public hook is intentionally selected only when `.stack` is
+            // first read, matching V8 when prepareStackTrace changes after
+            // captureStackTrace() returns.
+            const rawStack = captureRawStackTrace(targetObject, constructorOpt);
+            if (typeof rawStack === 'string') {
+                const callSites = _parseStackStringToCallSites(rawStack);
+                Object.defineProperty(targetObject, "stack", {
+                    get() {
+                        const prepare = globalThis.Error && globalThis.Error.prepareStackTrace;
+                        const result = typeof prepare === "function"
+                            ? prepare(targetObject, callSites)
+                            : _remapSourceMappedStack(rawStack);
+                        Object.defineProperty(targetObject, "stack", _dataDesc(result));
+                        return result;
+                    },
+                    set(value) {
+                        Object.defineProperty(targetObject, "stack", _dataDesc(value));
+                    },
+                    configurable: true,
+                    enumerable: false,
+                });
             }
         };
     }

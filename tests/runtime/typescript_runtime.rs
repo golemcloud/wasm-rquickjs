@@ -403,9 +403,14 @@ async fn typescript_transform_runtime_is_immutable(
     assert!(disabled_stack.contains("stack-disabled.mts:"));
     assert!(
         !disabled_stack.contains("stack-disabled.mts:3:"),
-        "--no-enable-source-maps unexpectedly remapped the stack: {disabled_stack}"
+        "disabled source-map support unexpectedly remapped the stack: {disabled_stack}"
     );
     assert_eq!(report["errorConstructorsStable"], true);
+    assert_eq!(
+        report["cjsSourceMapsReclaimed"], true,
+        "CJS source maps were retained after their modules were reclaimed: retained={}",
+        report["retainedCjsSourceMaps"]
+    );
     assert_eq!(
         report["errorConstructorMetadata"],
         serde_json::json!([

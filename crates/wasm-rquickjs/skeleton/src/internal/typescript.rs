@@ -251,6 +251,9 @@ impl TypeScriptOutput {
         let Some(source_map) = self.source_map else {
             return self.code;
         };
+        // This directive is the cross-language transform contract. Keep it in
+        // sync with module.js::appendInlineSourceMap; runtime tests decode and
+        // verify both the Rust ESM and JavaScript CJS/public paths.
         let encoded = base64ct::Base64::encode_string(source_map.as_bytes());
         format!(
             "{}\n//# sourceMappingURL=data:application/json;base64,{encoded}",
