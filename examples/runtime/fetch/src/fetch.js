@@ -563,6 +563,9 @@ export async function responseCloneStreamingBody(port) {
 
     console.log(`Original status: ${response.status}`);
 
+    const lockedReader = response.body.getReader();
+    const cloneRejectedWhileLocked = cloneThrows(response);
+    lockedReader.releaseLock();
     const cloned = response.clone();
     const buffered = response.clone();
 
@@ -588,7 +591,8 @@ export async function responseCloneStreamingBody(port) {
     console.log(`Cloned body: ${clonedBytes}`);
     console.log(`Original body: ${originalBytes}`);
 
-    if (Buffer.compare(clonedBytes, originalBytes) === 0
+    if (cloneRejectedWhileLocked
+        && Buffer.compare(clonedBytes, originalBytes) === 0
         && Buffer.compare(originalBytes, bufferedBytes) === 0) {
         console.log("Streaming clone test passed");
     }
@@ -1479,6 +1483,19 @@ export async function abortPendingResponseBody(port, testCase) {
                 pendingBeforeError && cancelSettled && error instanceof Error,
             );
         }
+    }
+
+    if (testCase === 20) {
+        let response = await fetch(url);
+        const survivor = response;
+        let abandoned = response.clone();
+        response = null;
+        abandoned = null;
+        gc();
+        await Promise.resolve();
+        gc();
+        await survivor.body.cancel('cancel after sibling collection');
+        return finishPendingResponseBodyCase(true);
     }
 
     return false;

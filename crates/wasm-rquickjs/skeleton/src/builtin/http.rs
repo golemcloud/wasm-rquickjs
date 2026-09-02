@@ -24,7 +24,7 @@ use std::rc::Rc;
 use wstd::runtime::AsyncPollable;
 
 use super::abort_signal::with_abort_signal;
-use super::shared_response_body::{self, NativeBody, SharedBodyReader};
+use super::shared_response_body::{self, NativeBody, SharedBodyCompletion, SharedBodyReader};
 
 /// Request mode - defines the cross-origin behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
@@ -763,6 +763,15 @@ impl HttpResponse {
         }
     }
 
+    pub async fn discard_body_and_wait(&mut self) {
+        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
+        match source {
+            ResponseBodySource::Native(response) => discard_native_response(*response),
+            ResponseBodySource::Shared(shared) => shared.discard_and_wait().await,
+            ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
+        }
+    }
+
     #[qjs(get)]
     pub fn redirected(&self) -> bool {
         self.redirected
@@ -863,7 +872,6 @@ impl HttpResponse {
             ResponseBodySource::Shared(shared) => {
                 Ok(ResponseBodyStream::from_source(BodySource::Shared {
                     shared,
-                    position: 0,
                 }))
             }
             ResponseBodySource::Consumed => Err(Exception::throw_message(
@@ -1078,7 +1086,6 @@ pub enum BodySource {
     },
     Shared {
         shared: SharedResponse,
-        position: usize,
     },
     Bytes(std::io::Cursor<Vec<u8>>),
 }
@@ -1095,6 +1102,7 @@ pub struct ResponseBodyStream {
 
 struct ResponseBodyStreamState {
     stream: Option<BodySource>,
+    shared_completion: Option<SharedBodyCompletion<SharedNativeResponse>>,
     active_abort: Option<AbortHandle>,
     discarded: bool,
 }
@@ -1112,6 +1120,7 @@ impl ResponseBodyStream {
         Self {
             state: Rc::new(RefCell::new(ResponseBodyStreamState {
                 stream: None,
+                shared_completion: None,
                 active_abort: None,
                 discarded: false,
             })),
@@ -1197,33 +1206,24 @@ impl ResponseBodyStream {
                         ),
                     }
                 }
-                Some(BodySource::Shared { shared, position }) => {
-                    match shared_response_body::read_chunk(&ctx, &shared, position).await? {
-                        Some(chunk) => {
-                            let chunk_len = chunk.len();
-                            match TypedArray::new_copy(ctx.clone(), &chunk) {
-                                Ok(js_array) => (
-                                    List((Some(js_array), None)),
-                                    Some(BodySource::Shared {
-                                        shared,
-                                        position: position + chunk_len,
-                                    }),
-                                ),
-                                Err(_) => (
-                                    List((
-                                        None,
-                                        Some(
-                                            "Failed to create TypedArray from response body chunk"
-                                                .to_string(),
-                                        ),
-                                    )),
-                                    Some(BodySource::Shared {
-                                        shared,
-                                        position: position + chunk_len,
-                                    }),
-                                ),
-                            }
-                        }
+                Some(BodySource::Shared { shared }) => {
+                    match shared_response_body::read_chunk(&ctx, &shared).await? {
+                        Some(chunk) => match TypedArray::new_copy(ctx.clone(), &chunk) {
+                            Ok(js_array) => (
+                                List((Some(js_array), None)),
+                                Some(BodySource::Shared { shared }),
+                            ),
+                            Err(_) => (
+                                List((
+                                    None,
+                                    Some(
+                                        "Failed to create TypedArray from response body chunk"
+                                            .to_string(),
+                                    ),
+                                )),
+                                Some(BodySource::Shared { shared }),
+                            ),
+                        },
                         None => (List((None, None)), None),
                     }
                 }
@@ -1298,12 +1298,26 @@ impl ResponseBodyStream {
             abort.abort();
         }
     }
+
+    pub async fn wait_for_discard(&self) {
+        let completion = self.state.borrow_mut().shared_completion.take();
+        if let Some(completion) = completion {
+            completion.wait().await;
+        }
+    }
 }
 
 impl ResponseBodyStream {
     fn from_source(stream: BodySource) -> Self {
         let response = Self::new();
-        response.state.borrow_mut().stream = Some(stream);
+        let completion = match &stream {
+            BodySource::Shared { shared } => Some(shared.completion()),
+            BodySource::Native { .. } | BodySource::Bytes(_) => None,
+        };
+        let mut state = response.state.borrow_mut();
+        state.stream = Some(stream);
+        state.shared_completion = completion;
+        drop(state);
         response
     }
 }

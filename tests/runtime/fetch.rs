@@ -1037,7 +1037,7 @@ async fn fetch_abort_pending_response_body(
     #[tagged_as("fetch_internal")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (port, _server, mut released) = start_response_body_abort_test_server().await;
-    for test_case in 0..20u8 {
+    for test_case in 0..21u8 {
         let wasm_path = compiled.wasm_path().to_path_buf();
         let mut invocation = tokio::spawn(async move {
             invoke_and_capture_output(

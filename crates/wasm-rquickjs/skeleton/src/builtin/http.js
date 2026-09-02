@@ -458,7 +458,7 @@ function responseAbortReason(signal) {
 }
 
 export class Response {
-    constructor(bodyOrNative, initOrUrl, credentials, isError = false, signal = undefined, nativeBodyGroup = undefined) {
+    constructor(bodyOrNative, initOrUrl, credentials, isError = false, signal = undefined) {
         if (bodyOrNative instanceof httpNative.HttpResponse) {
             // Internal path: constructed from native HttpResponse
             this.nativeResponse = bodyOrNative;
@@ -471,11 +471,8 @@ export class Response {
             this._abortBodyListener = undefined;
             this._bodyStream = undefined;
             this._nativeBodyState = {source: undefined, controller: undefined, discarded: false};
-            this._nativeBodyGroup = nativeBodyGroup || {active: 1, cancelWaiters: []};
-            this._nativeBodyBranchFinished = this._nativeBodyGroup.terminal === true;
             if (signal?.aborted) {
                 this.nativeResponse.discardBody();
-                this._finishNativeBodyBranch();
             } else if (signal) {
                 const responseRef = new WeakRef(this);
                 this._abortBodyListener = () => {
@@ -489,7 +486,6 @@ export class Response {
                         response.nativeResponse.discardBody();
                     }
                     bodyState.controller?.error(responseAbortReason(signal));
-                    response._finishNativeBodyBranch();
                     response._detachAbortBodyListener();
                 };
                 signal.addEventListener('abort', this._abortBodyListener, {once: true});
@@ -518,34 +514,6 @@ export class Response {
             this._signal.removeEventListener('abort', this._abortBodyListener);
             this._abortBodyListener = undefined;
         }
-    }
-
-    _finishNativeBodyBranch() {
-        if (!this._isNative || this._nativeBodyBranchFinished) return;
-        this._nativeBodyBranchFinished = true;
-        const group = this._nativeBodyGroup;
-        if (group.terminal) return;
-        group.active--;
-        if (group.active === 0) {
-            for (const resolve of group.cancelWaiters.splice(0)) resolve();
-        }
-    }
-
-    _finishNativeBodyGroup() {
-        if (!this._isNative) return;
-        this._nativeBodyBranchFinished = true;
-        const group = this._nativeBodyGroup;
-        if (group.terminal) return;
-        group.terminal = true;
-        group.active = 0;
-        for (const resolve of group.cancelWaiters.splice(0)) resolve();
-    }
-
-    _cancelNativeBodyBranch() {
-        this._finishNativeBodyBranch();
-        const group = this._nativeBodyGroup;
-        if (group.active === 0) return Promise.resolve();
-        return new Promise(resolve => group.cancelWaiters.push(resolve));
     }
 
     get status() {
@@ -587,22 +555,15 @@ export class Response {
                         [next, err] = await bodyState.source.pull();
                     } catch (error) {
                         response._detachAbortBodyListener();
-                        if (bodyState.discarded) {
-                            response._finishNativeBodyBranch();
-                        } else {
-                            response._finishNativeBodyGroup();
-                        }
                         if (response._signal?.aborted) throw responseAbortReason(response._signal);
                         throw error;
                     }
                     if (err !== undefined) {
                         response._detachAbortBodyListener();
-                        response._finishNativeBodyGroup();
                         console.error("Error reading response body stream:", err);
                         controller.error(err);
                     } else if (next === undefined) {
                         response._detachAbortBodyListener();
-                        response._finishNativeBodyBranch();
                         controller.close();
                     } else {
                         controller.enqueue(next);
@@ -612,12 +573,13 @@ export class Response {
                     response.bodyUsed = true;
                     bodyState.discarded = true;
                     if (bodyState.source) {
+                        response._detachAbortBodyListener();
                         bodyState.source.discard();
+                        return bodyState.source.waitForDiscard();
                     } else {
-                        response.nativeResponse.discardBody();
+                        response._detachAbortBodyListener();
+                        return response.nativeResponse.discardBodyAndWait();
                     }
-                    response._detachAbortBodyListener();
-                    return response._cancelNativeBodyBranch();
                 }
             });
             return this._bodyStream;
@@ -741,20 +703,21 @@ export class Response {
     }
 
     clone() {
-        if (this.bodyUsed) {
+        const bodyLocked = this._isNative
+            ? this._bodyStream?.locked === true
+            : this._body instanceof ReadableStream && this._body.locked;
+        if (this.bodyUsed || bodyLocked) {
             throw new TypeError('Response body is already consumed');
         }
 
         if (this._isNative) {
             const nativeClone = this.nativeResponse.clone();
-            if (!this._nativeBodyGroup.terminal) this._nativeBodyGroup.active++;
             return new Response(
                 nativeClone,
                 this.url,
                 this._credentials,
                 this._isError,
                 this._signal,
-                this._nativeBodyGroup,
             );
         }
         let clonedBody = this._body;
@@ -797,12 +760,10 @@ export class Response {
             try {
                 return await this.nativeResponse.arrayBuffer(this._signal);
             } catch (error) {
-                if (!this._signal?.aborted) this._finishNativeBodyGroup();
                 if (this._signal?.aborted) throw responseAbortReason(this._signal);
                 throw error;
             } finally {
                 this._detachAbortBodyListener();
-                this._finishNativeBodyBranch();
             }
         }
         this.bodyUsed = true;
@@ -863,12 +824,10 @@ export class Response {
             try {
                 return await this.nativeResponse.text(this._signal);
             } catch (error) {
-                if (!this._signal?.aborted) this._finishNativeBodyGroup();
                 if (this._signal?.aborted) throw responseAbortReason(this._signal);
                 throw error;
             } finally {
                 this._detachAbortBodyListener();
-                this._finishNativeBodyBranch();
             }
         }
         this.bodyUsed = true;

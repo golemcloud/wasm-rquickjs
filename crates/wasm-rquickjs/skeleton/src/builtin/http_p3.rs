@@ -34,7 +34,7 @@ use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArr
 
 use super::abort_signal::with_abort_signal;
 use super::http_body::ResponseBody as NativeResponseBody;
-use super::shared_response_body::{self, NativeBody, SharedBodyReader};
+use super::shared_response_body::{self, NativeBody, SharedBodyCompletion, SharedBodyReader};
 use futures::future::{AbortHandle, Abortable};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -1004,6 +1004,14 @@ impl HttpResponse {
         }
     }
 
+    pub async fn discard_body_and_wait(&mut self) {
+        match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Native(native) => native.discard(),
+            ResponseBody::Shared(shared) => shared.discard_and_wait().await,
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
+        }
+    }
+
     /// Turns this response into a `redirect: "manual"` opaque-redirect filtered response. Like
     /// [`make_opaque`], it hides status/headers/body, but it additionally reports a `type` of
     /// `opaqueredirect` (via [`is_opaque_redirect`]) so the public `Response.type` getter can tell
@@ -1256,6 +1264,7 @@ pub struct ResponseBodyStream {
 
 struct ResponseBodyStreamState {
     source: Option<ResponseBodyStreamSource>,
+    shared_completion: Option<SharedBodyCompletion<NativeResponseBody>>,
     position: usize,
     active_abort: Option<AbortHandle>,
     discarded: bool,
@@ -1274,6 +1283,7 @@ impl ResponseBodyStream {
         Self {
             state: Rc::new(RefCell::new(ResponseBodyStreamState {
                 source: None,
+                shared_completion: None,
                 position: 0,
                 active_abort: None,
                 discarded: false,
@@ -1325,8 +1335,7 @@ impl ResponseBodyStream {
                     (chunk, source)
                 }
                 ResponseBodyStreamSource::Shared(shared) => {
-                    let chunk =
-                        shared_response_body::read_chunk(&pull_ctx, &shared, position).await?;
+                    let chunk = shared_response_body::read_chunk(&pull_ctx, &shared).await?;
                     let source = chunk
                         .as_ref()
                         .map(|_| ResponseBodyStreamSource::Shared(shared));
@@ -1374,12 +1383,26 @@ impl ResponseBodyStream {
             abort.abort();
         }
     }
+
+    pub async fn wait_for_discard(&self) {
+        let completion = self.state.borrow_mut().shared_completion.take();
+        if let Some(completion) = completion {
+            completion.wait().await;
+        }
+    }
 }
 
 impl ResponseBodyStream {
     fn from_source(source: ResponseBodyStreamSource) -> Self {
         let response = Self::new();
-        response.state.borrow_mut().source = Some(source);
+        let completion = match &source {
+            ResponseBodyStreamSource::Shared(shared) => Some(shared.completion()),
+            ResponseBodyStreamSource::Bytes(_) | ResponseBodyStreamSource::Native(_) => None,
+        };
+        let mut state = response.state.borrow_mut();
+        state.source = Some(source);
+        state.shared_completion = completion;
+        drop(state);
         response
     }
 }
