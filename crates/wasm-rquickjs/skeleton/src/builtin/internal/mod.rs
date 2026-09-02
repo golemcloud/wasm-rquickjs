@@ -4,6 +4,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
     resolver
         .with_module("__wasm_rquickjs_builtin/internal/http")
         .with_module("internal/http")
+        .with_module("__wasm_rquickjs_builtin/internal/timers")
         .with_module("__wasm_rquickjs_builtin/internal/errors")
         .with_module("__wasm_rquickjs_builtin/internal/fs/utils")
         .with_module("__wasm_rquickjs_builtin/internal/fs/shared")
@@ -43,6 +44,10 @@ pub fn module_loader() -> BuiltinLoader {
             include_str!("http.js"),
         )
         .with_module("internal/http", include_str!("http.js"))
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/timers",
+            include_str!("timers.js"),
+        )
         .with_module(
             "__wasm_rquickjs_builtin/internal/errors",
             include_str!("errors.js"),

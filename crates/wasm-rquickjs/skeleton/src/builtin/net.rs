@@ -32,6 +32,10 @@ use wstd::runtime::AsyncPollable;
 //     each Node `write`. The returned future is retained so the operation is
 //     not cancelled.
 //   * `listen()` returns a `stream<tcp-socket>` of accepted connections.
+#[cfg(feature = "p2")]
+use futures::StreamExt;
+#[cfg(feature = "p2")]
+use futures::channel::mpsc;
 #[cfg(feature = "p3")]
 use futures::channel::oneshot;
 #[cfg(feature = "p3")]
@@ -160,6 +164,8 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             generation: 0,
             waiters: 0,
             pending_write_bytes: 0,
+            write_timeout_deadline: None,
+            write_timeout_update: None,
             #[cfg(feature = "net-write-profiling")]
             write_profile: TcpWriteProfile::default(),
         }),
@@ -180,6 +186,11 @@ struct TcpInner {
     waiters: u32,
     /// Bytes not yet accepted by the WASI output stream for the active write.
     pending_write_bytes: usize,
+    /// Deadline for the active write. JavaScript owns timeout semantics while
+    /// this native state keeps a P2 capacity wait interruptible.
+    write_timeout_deadline: Option<Instant>,
+    /// Wakes the active capacity wait when `setTimeout()` changes its deadline.
+    write_timeout_update: Option<mpsc::UnboundedSender<()>>,
     #[cfg(feature = "net-write-profiling")]
     write_profile: TcpWriteProfile,
 }
@@ -609,7 +620,6 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
-        timeout_ms: Option<u32>,
         timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
@@ -640,10 +650,12 @@ impl TcpSocket {
         };
 
         let total = data.len();
-        self.inner.borrow_mut().pending_write_bytes = total;
-        let mut checkpoint_deadline = timeout_ms
-            .filter(|timeout_ms| *timeout_ms > 0 && timeout_checkpoint.is_some())
-            .map(|timeout_ms| Instant::now() + Duration::from_millis(timeout_ms as u64));
+        let (timeout_update, mut timeout_updates) = mpsc::unbounded();
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.pending_write_bytes = total;
+            inner.write_timeout_update = Some(timeout_update);
+        }
         #[cfg(feature = "net-write-profiling")]
         {
             let mut inner = self.inner.borrow_mut();
@@ -691,14 +703,15 @@ impl TcpSocket {
                     // Check an already-expired deadline before subscribing. A
                     // timeout listener may destroy the socket, so no derived
                     // pollable may remain alive when JavaScript is called.
-                    if checkpoint_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    let checkpoint_due = self
+                        .inner
+                        .borrow()
+                        .write_timeout_deadline
+                        .is_some_and(|deadline| Instant::now() >= deadline);
+                    if checkpoint_due {
+                        self.inner.borrow_mut().write_timeout_deadline = None;
                         if let Some(callback) = timeout_checkpoint.as_ref() {
-                            checkpoint_deadline = callback
-                                .call::<_, Option<u32>>(())?
-                                .filter(|timeout_ms| *timeout_ms > 0)
-                                .map(|timeout_ms| {
-                                    Instant::now() + Duration::from_millis(timeout_ms as u64)
-                                });
+                            callback.call::<_, ()>(())?;
                         }
                         continue;
                     }
@@ -715,27 +728,36 @@ impl TcpSocket {
                         inner.waiters += 1;
                         p
                     };
-                    let capacity_wait = AsyncPollable::new(pollable).wait_for();
-                    let checkpoint_due = if let Some(deadline) = checkpoint_deadline {
-                        let remaining = deadline.saturating_duration_since(Instant::now());
-                        let checkpoint_wait = wstd::task::sleep(remaining.into());
-                        futures::pin_mut!(capacity_wait, checkpoint_wait);
-                        match futures::future::select(capacity_wait, checkpoint_wait).await {
-                            futures::future::Either::Left((_, checkpoint_wait)) => {
-                                drop(checkpoint_wait);
-                                false
-                            }
-                            futures::future::Either::Right((_, capacity_wait)) => {
-                                // Drop the losing capacity future before the
-                                // waiter count can reach zero and before a
-                                // timeout listener can close the streams.
-                                drop(capacity_wait);
+                    let checkpoint_due = {
+                        let capacity_wait = AsyncPollable::new(pollable).wait_for();
+                        let checkpoint_deadline = self.inner.borrow().write_timeout_deadline;
+                        let deadline_wait = async move {
+                            if let Some(deadline) = checkpoint_deadline {
+                                let remaining = deadline.saturating_duration_since(Instant::now());
+                                wstd::task::sleep(remaining.into()).await;
                                 true
+                            } else {
+                                futures::future::pending::<bool>().await
+                            }
+                        };
+                        let timeout_update = timeout_updates.next();
+                        let timeout_control = async move {
+                            futures::pin_mut!(deadline_wait, timeout_update);
+                            match futures::future::select(deadline_wait, timeout_update).await {
+                                futures::future::Either::Left((due, _update_wait)) => due,
+                                futures::future::Either::Right((_updated, _deadline_wait)) => false,
+                            }
+                        };
+                        futures::pin_mut!(capacity_wait, timeout_control);
+                        match futures::future::select(capacity_wait, timeout_control).await {
+                            futures::future::Either::Left((_, _timeout_control)) => false,
+                            futures::future::Either::Right((due, _capacity_wait)) => {
+                                // The losing capacity future leaves scope with
+                                // this match, before the waiter count can reach
+                                // zero or JavaScript closes streams.
+                                due
                             }
                         }
-                    } else {
-                        capacity_wait.await;
-                        false
                     };
                     {
                         let mut inner = self.inner.borrow_mut();
@@ -757,13 +779,9 @@ impl TcpSocket {
                         }
                     }
                     if checkpoint_due {
+                        self.inner.borrow_mut().write_timeout_deadline = None;
                         if let Some(callback) = timeout_checkpoint.as_ref() {
-                            checkpoint_deadline = callback
-                                .call::<_, Option<u32>>(())?
-                                .filter(|timeout_ms| *timeout_ms > 0)
-                                .map(|timeout_ms| {
-                                    Instant::now() + Duration::from_millis(timeout_ms as u64)
-                                });
+                            callback.call::<_, ()>(())?;
                         }
                     }
                 };
@@ -795,21 +813,27 @@ impl TcpSocket {
                 }
                 offset = end;
                 self.inner.borrow_mut().pending_write_bytes = total - offset;
-                if checkpoint_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                let checkpoint_due = self
+                    .inner
+                    .borrow()
+                    .write_timeout_deadline
+                    .is_some_and(|deadline| Instant::now() >= deadline);
+                if checkpoint_due {
+                    self.inner.borrow_mut().write_timeout_deadline = None;
                     if let Some(callback) = timeout_checkpoint.as_ref() {
-                        checkpoint_deadline = callback
-                            .call::<_, Option<u32>>(())?
-                            .filter(|timeout_ms| *timeout_ms > 0)
-                            .map(|timeout_ms| {
-                                Instant::now() + Duration::from_millis(timeout_ms as u64)
-                            });
+                        callback.call::<_, ()>(())?;
                     }
                 }
             }
             Ok(())
         }
         .await;
-        self.inner.borrow_mut().pending_write_bytes = 0;
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.pending_write_bytes = 0;
+            inner.write_timeout_deadline = None;
+            inner.write_timeout_update = None;
+        }
         write_result?;
 
         #[cfg(feature = "net-write-profiling")]
@@ -824,6 +848,16 @@ impl TcpSocket {
 
     pub fn write_queue_size(&self) -> u64 {
         self.inner.borrow().pending_write_bytes as u64
+    }
+
+    pub fn set_write_timeout(&self, timeout_ms: Option<u32>) {
+        let mut inner = self.inner.borrow_mut();
+        inner.write_timeout_deadline = timeout_ms
+            .filter(|timeout_ms| *timeout_ms > 0)
+            .map(|timeout_ms| Instant::now() + Duration::from_millis(timeout_ms as u64));
+        if let Some(update) = inner.write_timeout_update.as_mut() {
+            let _ = update.unbounded_send(());
+        }
     }
 
     pub fn write_profile(&self) -> Option<String> {
@@ -1056,6 +1090,9 @@ impl TcpSocket {
         }
         inner.closed = true;
         inner.generation += 1;
+        if let Some(update) = inner.write_timeout_update.as_mut() {
+            let _ = update.unbounded_send(());
+        }
         // Shut down the socket to signal EOF to any pending read/accept pollables.
         if let Some(ref socket) = inner.socket {
             let _ = socket.shutdown(ShutdownType::Both);
@@ -1073,6 +1110,9 @@ impl TcpSocket {
         let mut inner = self.inner.borrow_mut();
         inner.closed = true;
         inner.generation += 1;
+        if let Some(update) = inner.write_timeout_update.as_mut() {
+            let _ = update.unbounded_send(());
+        }
         // Drop all resources immediately, even if waiters are active.
         // The waiters will see closed=true and exit gracefully.
         inner.input = None;
@@ -1328,7 +1368,6 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
-        _timeout_ms: Option<u32>,
         _timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
@@ -1429,40 +1468,46 @@ impl TcpSocket {
                 }
             }
         };
-        let mut inner = self.inner.borrow_mut();
-        inner.write_cancel = None;
-        inner.pending_write_bytes = 0;
-        #[cfg(feature = "net-write-profiling")]
-        {
-            inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
-            inner.write_profile.completed_bytes += (total - leftover.len()) as u64;
-        }
-        if !leftover.is_empty() {
-            // The peer hung up before all bytes were accepted.
-            inner.writer = None;
-            let send_future = inner.send_future.take();
-            drop(inner);
-            if let Some(send_future) = send_future
-                && let Err(error) = send_future.await
+        let send_future = {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_cancel = None;
+            inner.pending_write_bytes = 0;
+            #[cfg(feature = "net-write-profiling")]
             {
-                return Err(throw_socket_error(
-                    &ctx,
-                    error_code_to_errno(&error),
-                    "write",
-                    &format!("send failed: {error:?}"),
-                ));
+                inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
+                inner.write_profile.completed_bytes += (total - leftover.len()) as u64;
             }
-            return Err(throw_socket_error(&ctx, "EPIPE", "write", "Stream closed"));
+            if leftover.is_empty() {
+                if !inner.closed {
+                    inner.writer = Some(writer);
+                }
+                return Ok(total as u32);
+            }
+
+            // The peer hung up before all bytes were accepted. Take the send
+            // completion future out while borrowed, then await after the
+            // RefCell guard has left scope.
+            inner.writer = None;
+            inner.send_future.take()
+        };
+        if let Some(send_future) = send_future
+            && let Err(error) = send_future.await
+        {
+            return Err(throw_socket_error(
+                &ctx,
+                error_code_to_errno(&error),
+                "write",
+                &format!("send failed: {error:?}"),
+            ));
         }
-        if !inner.closed {
-            inner.writer = Some(writer);
-        }
-        Ok(total as u32)
+        Err(throw_socket_error(&ctx, "EPIPE", "write", "Stream closed"))
     }
 
     pub fn write_queue_size(&self) -> u64 {
         self.inner.borrow().pending_write_bytes as u64
     }
+
+    pub fn set_write_timeout(&self, _timeout_ms: Option<u32>) {}
 
     pub fn write_profile(&self) -> Option<String> {
         // rquickjs cannot cfg-remove an individual method from this methods impl.
@@ -2264,6 +2309,8 @@ impl TcpListener {
                             generation: 0,
                             waiters: 0,
                             pending_write_bytes: 0,
+                            write_timeout_deadline: None,
+                            write_timeout_update: None,
                             #[cfg(feature = "net-write-profiling")]
                             write_profile: TcpWriteProfile::default(),
                         }),

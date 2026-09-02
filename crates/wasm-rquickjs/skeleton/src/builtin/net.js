@@ -14,10 +14,10 @@ import {
     ERR_SOCKET_BAD_PORT,
 } from '__wasm_rquickjs_builtin/internal/errors';
 import { validateAbortSignal } from '__wasm_rquickjs_builtin/internal/validators';
+import { getTimerDuration, toTimerDelay } from '__wasm_rquickjs_builtin/internal/timers';
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
-const TIMEOUT_MAX = 2 ** 31 - 1;
 
 // --- IP address utilities ---
 
@@ -113,21 +113,6 @@ function deferred(fn) {
     }
 }
 
-function normalizeSocketTimeout(timeout) {
-    if (timeout > TIMEOUT_MAX) {
-        if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-            process.emitWarning(
-                `${timeout} does not fit into a 32-bit signed integer.\n` +
-                `Timer duration was truncated to ${TIMEOUT_MAX}.`,
-                'TimeoutOverflowWarning',
-            );
-        }
-        return TIMEOUT_MAX;
-    }
-    if (timeout === 0) return 0;
-    return Math.max(1, Math.trunc(timeout));
-}
-
 function createHandleWrap() {
     return {
         writeQueueSize: 0,
@@ -148,6 +133,7 @@ function forwardNativeHandle(wrap, handle) {
     wrap.set_no_delay = handle.set_no_delay.bind(handle);
     wrap.set_keep_alive = handle.set_keep_alive.bind(handle);
     wrap.write_queue_size = handle.write_queue_size.bind(handle);
+    wrap.set_write_timeout = handle.set_write_timeout.bind(handle);
     // The bridge method must exist in every build; only profiling builds return JSON.
     // Probe once so ordinary sockets allocate no counters or listeners.
     const initialNativeProfile = typeof handle.write_profile === 'function'
@@ -1138,28 +1124,34 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
     (async () => {
         let writeError;
         try {
-            const timeoutDuration = this._timeoutDuration;
-            const timeoutCheckpoint = timeoutDuration > 0
-                ? () => {
-                    // P2 cannot run the ordinary JS timer while its native write
-                    // is waiting for capacity. Consume that timer here and let
-                    // `_onTimeout` report whether progress or a listener
-                    // explicitly rearmed it.
-                    this._clearTimeout();
-                    return this._onTimeout() ? this._timeoutDuration : undefined;
+            const timeoutCheckpoint = () => {
+                // P2 cannot run the ordinary JS timer while its native write is
+                // waiting for capacity. Rust consumes its matching deadline;
+                // progress or a listener can explicitly arm the next one.
+                this._clearTimeout();
+                try {
+                    this._onTimeout();
+                } catch (error) {
+                    // Match the ordinary timer wrapper: listener exceptions
+                    // follow uncaught-callback handling and never become the
+                    // pending write's completion error.
+                    if (globalThis.__wasm_rquickjs_handleUncaughtError) {
+                        globalThis.__wasm_rquickjs_handleUncaughtError(error);
+                    } else if (typeof console !== 'undefined') {
+                        console.error(error);
+                    }
                 }
-                : undefined;
-            const written = await handle.write(
-                buf,
-                timeoutDuration > 0 ? timeoutDuration : undefined,
-                timeoutCheckpoint,
-            );
+            };
+            const written = await handle.write(buf, timeoutCheckpoint);
             this._bytesDispatched += written;
             if (profile) profile.completions++;
         } catch (e) {
             writeError = parseNativeError(e);
         } finally {
             if (profile) profile.elapsedMs += Date.now() - startedAt;
+            if (typeof handle.set_write_timeout === 'function') {
+                handle.set_write_timeout(undefined);
+            }
             handle.writeQueueSize = Math.max(0, handle.writeQueueSize - buf.byteLength);
             handle._writeInFlight = false;
             this._lastWriteQueueSize = 0;
@@ -1261,17 +1253,12 @@ Socket.prototype._destroy = function _destroy(err, callback) {
 };
 
 Socket.prototype.setTimeout = function setTimeout(timeout, callback) {
-    if (typeof timeout !== 'number') {
-        throw new ERR_INVALID_ARG_TYPE('msecs', 'number', timeout);
-    }
-    if (timeout < 0 || !Number.isFinite(timeout)) {
-        throw new ERR_OUT_OF_RANGE('msecs', 'a non-negative finite number', timeout);
-    }
     if (this.destroyed) return this;
-    this._clearTimeout();
     this.timeout = timeout;
-    this._timeoutDuration = normalizeSocketTimeout(timeout);
-    if (timeout === 0) {
+    this._timeoutDuration = getTimerDuration(timeout, 'msecs');
+    this._clearTimeout();
+    if (this._timeoutDuration === 0) {
+        this._syncWriteTimeout(0);
         if (callback !== undefined) {
             if (typeof callback !== 'function') {
                 throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
@@ -1280,14 +1267,21 @@ Socket.prototype.setTimeout = function setTimeout(timeout, callback) {
         }
         return this;
     }
+    this._resetTimeout();
     if (callback !== undefined) {
         if (typeof callback !== 'function') {
             throw new ERR_INVALID_ARG_TYPE('callback', 'Function', callback);
         }
         this.once('timeout', callback);
     }
-    this._resetTimeout();
     return this;
+};
+
+Socket.prototype._syncWriteTimeout = function _syncWriteTimeout(timeoutDuration) {
+    const handle = this._handle;
+    if (handle?._writeInFlight && typeof handle.set_write_timeout === 'function') {
+        handle.set_write_timeout(timeoutDuration > 0 ? toTimerDelay(timeoutDuration) : undefined);
+    }
 };
 
 Socket.prototype._resetTimeout = function _resetTimeout() {
@@ -1296,8 +1290,10 @@ Socket.prototype._resetTimeout = function _resetTimeout() {
         this._timeoutGeneration++;
         this._timeout = globalThis.setTimeout(() => {
             this._timeout = null;
+            this._syncWriteTimeout(0);
             this._onTimeout();
         }, this._timeoutDuration);
+        this._syncWriteTimeout(this._timeoutDuration);
     }
 };
 
