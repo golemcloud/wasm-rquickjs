@@ -114,7 +114,11 @@ impl WasiHttpView for Host {
     }
 }
 
-impl test::async_values_import::host::Host for Host {}
+impl test::async_values_import::host::Host for Host {
+    fn cleanup_complete(&mut self) {
+        self.nested_cleanup_calls += 1;
+    }
+}
 
 impl export_bindings::test::async_values::observer::Host for Host {
     fn cleanup_complete(&mut self) {
@@ -573,6 +577,32 @@ async fn run_export_stream_producer_cleanup(component_path: &Utf8Path) -> Result
         .await?
 }
 
+async fn run_export_stream_conversion_failure(
+    component_path: &Utf8Path,
+) -> Result<(Result<Vec<u8>>, usize, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let linker = base_linker(&engine)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+
+    let result = match store
+        .run_concurrent(async move |accessor| -> Result<Vec<u8>> {
+            let reader = bindings.call_run_invalid_observed_stream(accessor).await?;
+            let (tx, rx) = mpsc::channel(16);
+            accessor.with(|access| reader.pipe(access, PipeConsumer::new(tx)))?;
+            Ok(rx.collect().await)
+        })
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => Err(error),
+    };
+    let cleanup_calls = store.data().nested_cleanup_calls;
+    let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
+    Ok((result, cleanup_calls, stderr))
+}
+
 async fn run_export_sibling_streams(component_path: &Utf8Path) -> Result<(Vec<u8>, Vec<u8>)> {
     let engine = engine()?;
     let component = Component::from_file(&engine, component_path)?;
@@ -900,6 +930,56 @@ async fn run_import_world_stream_failure(
     Ok((result, stderr))
 }
 
+async fn run_import_world_stream_conversion_failure(
+    component_path: &Utf8Path,
+) -> Result<(Result<String>, usize, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = base_linker(&engine)?;
+    test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |h| h)?;
+
+    let mut store = new_store(&engine);
+    let bindings = AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+    let result = match store
+        .run_concurrent(async move |accessor| {
+            bindings.call_run_stream_conversion_failure(accessor).await
+        })
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => Err(error),
+    };
+    let cleanup_calls = store.data().nested_cleanup_calls;
+    let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
+    Ok((result, cleanup_calls, stderr))
+}
+
+async fn run_import_world_sync_stream_promise_rejection(
+    component_path: &Utf8Path,
+) -> Result<(Result<String>, usize, String)> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = base_linker(&engine)?;
+    test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |h| h)?;
+
+    let mut store = new_store(&engine);
+    let bindings = AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+    let result = match store
+        .run_concurrent(async move |accessor| {
+            bindings
+                .call_run_sync_stream_promise_rejection(accessor)
+                .await
+        })
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => Err(error),
+    };
+    let cleanup_calls = store.data().nested_cleanup_calls;
+    let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
+    Ok((result, cleanup_calls, stderr))
+}
+
 // ---------------------------------------------------------------------------------------------
 // Component generation + build
 // ---------------------------------------------------------------------------------------------
@@ -1119,6 +1199,28 @@ fn p3_exported_js_stream_peer_drop_runs_iterator_cleanup() {
 }
 
 #[test]
+fn p3_exported_js_stream_conversion_failure_closes_iterator() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+
+    let (result, cleanup_calls, stderr) =
+        block_on_with_timeout(120, run_export_stream_conversion_failure(&wasm));
+    result.expect_err("invalid exported stream payload must fail the active stream session");
+    assert_eq!(
+        cleanup_calls, 1,
+        "payload conversion failure must close the JavaScript iterator exactly once"
+    );
+    assert!(
+        stderr.contains("Failed to convert a JavaScript value"),
+        "conversion failure should preserve its diagnostic, got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("secondary-export-cleanup-failed"),
+        "secondary cleanup failure must not replace the primary conversion failure: {stderr}"
+    );
+}
+
+#[test]
 fn p3_exported_sibling_streams_can_exceed_buffer_capacity() {
     let temp = Utf8TempDir::new().expect("temp dir");
     let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
@@ -1245,6 +1347,48 @@ fn p3_js_stream_cleanup_rejection_fails_active_consumer() {
     assert!(
         stderr.contains("cleanup-failed"),
         "cleanup failure should preserve its diagnostic, got: {stderr}"
+    );
+}
+
+#[test]
+fn p3_js_stream_conversion_failure_closes_iterator_and_preserves_primary_error() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+
+    let (result, cleanup_calls, stderr) =
+        block_on_with_timeout(120, run_import_world_stream_conversion_failure(&wasm));
+    result.expect_err("invalid imported stream payload must fail the active stream consumer");
+    assert_eq!(
+        cleanup_calls, 1,
+        "payload conversion failure must close the JavaScript iterator exactly once"
+    );
+    assert!(
+        stderr.contains("Failed to convert a JavaScript value"),
+        "primary conversion failure should remain visible, got: {stderr}"
+    );
+    assert!(
+        !stderr.contains("secondary-cleanup-failed"),
+        "secondary cleanup failure must not replace the primary conversion failure: {stderr}"
+    );
+}
+
+#[test]
+fn p3_sync_stream_rejected_item_does_not_close_iterator() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+
+    let (result, cleanup_calls, stderr) =
+        block_on_with_timeout(120, run_import_world_sync_stream_promise_rejection(&wasm));
+    result.expect_err("rejected synchronous stream item must fail the active consumer");
+    assert_eq!(
+        cleanup_calls, 0,
+        "AsyncFromSyncIterator next() rejection must not call iterator.return()"
+    );
+    assert!(
+        stderr.contains("sync-item-failed"),
+        "the rejected item diagnostic should remain visible, got: {stderr}"
     );
 }
 

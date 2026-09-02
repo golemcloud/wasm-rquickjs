@@ -53,5 +53,6 @@ world async-values {
   export close-pending-stream: async func(s: stream<u8>) -> string;
   export run-nested-observed-stream: async func(cleanup-failure: bool) -> result<nested-values, string>;
   export run-observed-stream: async func() -> stream<u8>;
+  export run-invalid-observed-stream: async func() -> stream<u8>;
   export read-observed-stream-state: async func() -> string;
 }
