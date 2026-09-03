@@ -1209,11 +1209,12 @@ function rustHasExecArgvFlag(flag) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_module_has_exec_argv_flag(flag);
 }
 
-let sourceMapsSupportEnabled =
+let sourceMapsSupportEnabled = Boolean(
     (processModule.features && processModule.features.typescript === 'transform') ||
     (wasmRquickjsModuleGlobalThis.process &&
         wasmRquickjsModuleGlobalThis.process.features &&
-        wasmRquickjsModuleGlobalThis.process.features.typescript === 'transform');
+        wasmRquickjsModuleGlobalThis.process.features.typescript === 'transform')
+);
 const sourceMapsSupportDefault = sourceMapsSupportEnabled;
 
 function configureSourceMapsFromStartupArgs(args) {
