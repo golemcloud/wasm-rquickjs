@@ -1455,13 +1455,24 @@ export async function abortPendingResponseBody(port, testCase) {
             : 0;
         const text = await response.text();
         await cancel;
-        return finishPendingResponseBodyCase(
+        const result =
             (!requiresPendingRace || (hasRecoveryTestHook && pauseArmed))
             && exercisedTargetRace
             && pendingAfterCanceledReadSettled
             && (!requiresPendingRace || recoveredBytes > 0)
-            && text === 'first chunksecond chunk',
-        );
+            && text === 'first chunksecond chunk';
+        if (!result) {
+            console.log('clone race diagnostics', JSON.stringify({
+                requiresPendingRace,
+                hasRecoveryTestHook,
+                pauseArmed,
+                exercisedTargetRace,
+                pendingAfterCanceledReadSettled,
+                recoveredBytes,
+                text,
+            }));
+        }
+        return finishPendingResponseBodyCase(result);
     }
 
     if (testCase === 19) {
