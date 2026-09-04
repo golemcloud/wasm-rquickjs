@@ -16,13 +16,13 @@ the WASI preview level or to the Wasmtime distribution.
 Do not compare reports produced with different prepared-component, Wasmtime,
 artifact-cache, or unoptimized settings without calling out those differences.
 
-The checked-in macOS arm64 P2/P3 reports are the initial five-sample baseline
-for GOL-426, refreshed after review on 2026-08-27. Each report records a commit
+The checked-in 2026-09-04 macOS arm64 P2/P3 reports are the five-sample
+schema-v5 baseline for GOL-347. Each report records a commit
 hint, dirty state, BLAKE3 composite hashes for build and benchmark inputs, and
 the exact optimized component hash.
-The refreshed reports record `dirty: true` and the parent commit as a navigation
-hint because the reviewed harness correction was uncommitted during measurement;
-their composite input hashes match the committed correction exactly.
+The reports record `dirty: false`; their shared commit hint identifies the
+common source snapshot, while their matching composite input hashes establish
+that both targets used the same build and benchmark inputs.
 `run.sh --check` validates every historical report and requires each P2/P3 pair
 to share the input hashes without resolving Git history. `run.sh
 --check-current` additionally compares selected reports with the current
@@ -40,13 +40,13 @@ The reports record the `typescript-compiler-profiling` component feature, and
 the canonical cold CLI workload runs before the in-component profiling sidecar.
 
 The current reports record 68 whole-file reads for 10,961,854 bytes. The
-remaining controlled P2/P3 work is approximately 7.52/7.58 s importing
-TypeScript, 4.91/4.97 s creating the program, and 7.67/7.99 s computing
+remaining controlled P2/P3 work is approximately 7.44/7.42 s importing
+TypeScript, 4.82/4.82 s creating the program, and 7.55/7.54 s computing
 diagnostics. Runtime creation, loader setup, process setup, transport wiring,
 and wrapper preparation together remain under 5 ms.
 
-The reports also record 155,114,319-byte P2 and 151,958,657-byte P3 optimized
-components, 47.20/45.37 s builds, and 15.64/15.42 s preparation plus
+The reports also record 157,680,677-byte P2 and 155,016,474-byte P3 optimized
+components, 35.29/34.62 s builds, and 20.99/21.10 s preparation plus
 instantiation. These are per-component costs rather than the owner of repeated
 fresh-job compiler latency. Repeated jobs retain zero linear-memory high-water
 growth, at most 8,744 bytes of observed QuickJS heap variation, and successful

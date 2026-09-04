@@ -2,19 +2,19 @@
 
 | Workload | Node 22.14 baseline | P2 | P3 | Evidence |
 |---|---:|---:|---:|---|
-| cold `tsc --noEmit` | 0.57–0.59 s | 16.01 s | 16.34 s | wall time |
-| repeated unchanged non-incremental checks | — | 15.70 s | 16.11 s | median, no `.tsbuildinfo`, 5 fresh jobs |
-| incremental `.tsbuildinfo` checks | — | 9.57 s | 9.63 s | warm median, persisted artifact, 5 fresh jobs |
-| repeated invalid checks then recovery | — | 9.64 s | 9.68 s | warm incremental failure median, one changed file per iteration, then recovery |
-| project references/package graph | — | 16.58 s | 16.70 s | wall time, raw workspace fixture |
-| direct TypeScript execution | n/a | 0.189 s | 0.189 s | structured result and wall time |
-| TypeScript emit | n/a | 16.03 s | 17.47 s | emits the direct fixture to JavaScript; wall time |
-| generated JavaScript execution | n/a | 0.193 s | 0.208 s | structured result and wall time |
-| concurrent compiler/CPU/I/O jobs | n/a | 10.16 s | 10.40 s | warm incremental compiler plus CPU/I/O; isolated baselines in raw reports |
-| repeated timeout then recovery | n/a | 0.202 s | 0.203 s | termination median, five attempts followed by a successful job |
-| repeated cancellation then recovery | n/a | 0.195 s | 0.194 s | termination median, five attempts followed by a successful job |
+| cold `tsc --noEmit` | 0.53 s | 15.86 s | 15.83 s | wall time |
+| repeated unchanged non-incremental checks | — | 15.58 s | 15.62 s | median, no `.tsbuildinfo`, 5 fresh jobs |
+| incremental `.tsbuildinfo` checks | — | 19.22 s | 19.17 s | warm median, persisted artifact, 5 fresh jobs |
+| repeated invalid checks then recovery | — | 21.36 s | 22.25 s | warm incremental failure median, one changed file per iteration, then recovery |
+| project references/package graph | — | 23.27 s | 26.82 s | wall time, raw workspace fixture |
+| direct TypeScript execution | n/a | 0.238 s | 0.255 s | structured result and wall time |
+| TypeScript emit | n/a | 22.47 s | 23.07 s | emits the direct fixture to JavaScript; wall time |
+| generated JavaScript execution | n/a | 0.234 s | 0.248 s | structured result and wall time |
+| concurrent compiler/CPU/I/O jobs | n/a | 14.09 s | 14.48 s | warm incremental compiler plus CPU/I/O; isolated baselines in raw reports |
+| repeated timeout then recovery | n/a | 0.236 s | 0.261 s | termination median, five attempts followed by a successful job |
+| repeated cancellation then recovery | n/a | 0.253 s | 0.246 s | termination median, five attempts followed by a successful job |
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | max linear growth / max fresh-runtime heap variation |
-| phase-attributed core check | 0.65–0.68 s | 20.71 s | 21.18 s | instrumented wall time; measured compiler phases account for 20.11 s / 20.56 s |
+| phase-attributed core check | 0.63–0.64 s | 20.42 s | 20.38 s | instrumented wall time; measured compiler phases account for 19.83 s / 19.79 s |
 
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
