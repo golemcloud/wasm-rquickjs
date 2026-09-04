@@ -6,9 +6,20 @@ sibling responsiveness, and the guest linear-memory high-water observation.
 
 Checked-in timings are local evidence and are not enforced as CI thresholds.
 
+Each configured size is a requested source-byte target. Generated declarations and
+case-specific suffixes can make the actual source slightly larger; samples in the
+requested 64-KiB profile contain 65,602–65,637 source bytes.
+
+The reports' `environment.commitHint` records the checkout used for the workload
+capture (`058b9042`), while the input hashes are the currentness keys. The
+`benchmarkHash` was refreshed after capture only because `run.sh` gained
+validation-only source-root wiring; the recorded timings and component artifacts
+still come from the `058b9042` capture.
+
 ## 2026-09-01 macOS arm64 baseline
 
-All values below are milliseconds at the 64-KiB input unless noted otherwise.
+All values below are milliseconds for the requested 64-KiB profile unless noted
+otherwise.
 
 | Target/mode | Direct API median / max | Inline median | Entry median | ESM median | Prepared ESM median | CJS median |
 |---|---:|---:|---:|---:|---:|---:|

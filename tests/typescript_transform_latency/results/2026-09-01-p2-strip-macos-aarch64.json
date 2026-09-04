@@ -896,7 +896,7 @@
     "wasmtimeCache": null
   },
   "inputs": {
-    "benchmarkHash": "6e7785de480a9e4cfa97f64da21ac3b0eca648aae80399e0fda003ea53380cba",
+    "benchmarkHash": "9c271ca9f5517af7f4b5cc7638d3398b2a844e94e85c9e6775382aa0b1bc0a8f",
     "runtimeHash": "791eeb5d424bbd485542532b553a58c7ecd7fc63d50c25921724032f95f17ccb"
   },
   "iterations": 3,
@@ -904,7 +904,7 @@
   "notes": [
     "manual local measurement; timings are not CI thresholds",
     "execution-path samples use fresh jobs and unique filesystem module paths; direct API samples run in the outer runtime",
-    "timeout and cancellation budgets are requested before the synchronous native transform",
+    "the timeout deadline and cancellation timer are armed before the synchronous native transform; the cancellation call is delivered after the outer runtime regains control",
     "linear-memory values are monotone instance-wide high-water observations, not retained-allocation measurements"
   ],
   "schemaVersion": 1,

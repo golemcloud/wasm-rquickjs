@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
         "notes": [
             "manual local measurement; timings are not CI thresholds",
             "execution-path samples use fresh jobs and unique filesystem module paths; direct API samples run in the outer runtime",
-            "timeout and cancellation budgets are requested before the synchronous native transform",
+            "the timeout deadline and cancellation timer are armed before the synchronous native transform; the cancellation call is delivered after the outer runtime regains control",
             "linear-memory values are monotone instance-wide high-water observations, not retained-allocation measurements",
         ],
     });
@@ -193,7 +193,7 @@ fn validate_checked_reports() -> anyhow::Result<()> {
         );
         anyhow::ensure!(
             report["sizesBytes"] == json!([4096, 16384, 65536]),
-            "{} does not use the calibrated 4/16/64 KiB size matrix",
+            "{} does not use the calibrated requested 4/16/64 KiB size matrix",
             path.display()
         );
         let profile = (
