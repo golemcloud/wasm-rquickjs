@@ -3,17 +3,23 @@ pub mod test_server;
 
 use crate::common::WasmSource::Precompiled;
 use anyhow::anyhow;
+use bytes::Buf;
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::{NamedUtf8TempFile, Utf8TempDir};
 use futures::FutureExt;
 use heck::ToSnakeCase;
+use http_body::{Body as HttpBody, Frame, SizeHint};
+use http_body_util::BodyExt;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
+use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
+use std::pin::Pin;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::task::{Context, Poll};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
@@ -31,7 +37,7 @@ use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView, default_hooks};
+use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
 
 pub mod ws_mock_p2 {
     wasmtime::component::bindgen!({
@@ -244,6 +250,1187 @@ const TEST_WASMTIME_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_WASMTIME_CACHE";
 /// The buffer is shared by all tests in the process and capped, keeping the most recent output.
 static HOST_TRACE: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 const HOST_TRACE_CAP: usize = 256 * 1024;
+static NEXT_HTTP_TRACE_INVOCATION: AtomicUsize = AtomicUsize::new(1);
+static NEXT_HTTP_TRACE_REQUEST: AtomicUsize = AtomicUsize::new(1);
+static NEXT_HTTP_TRACE_CONNECTION: AtomicUsize = AtomicUsize::new(1);
+static TEST_SERVER_HTTP_TRACE: OnceLock<HttpLifecycleTrace> = OnceLock::new();
+const HTTP_LIFECYCLE_CAP: usize = 256;
+const HTTP_LIFECYCLE_SEQUENCE_MASK: u64 = 0x00ff_ffff;
+const HTTP_LIFECYCLE_SEQUENCE_HALF: u64 = 0x0080_0000;
+
+#[repr(u8)]
+#[derive(Clone, Copy)]
+enum HttpLifecyclePhase {
+    Submit = 1,
+    Target = 2,
+    RequestFirstData = 3,
+    RequestFirstTrailers = 4,
+    RequestEof = 5,
+    RequestError = 6,
+    RequestDrop = 7,
+    ResponseHead = 8,
+    ResponseFirstData = 9,
+    ResponseFirstTrailers = 10,
+    ResponseEof = 11,
+    ResponseError = 12,
+    ResponseDrop = 13,
+    SendError = 14,
+    ResponseIoOk = 15,
+    ResponseIoError = 16,
+    ServerArrival = 17,
+    ServerRequestFirstData = 18,
+    ServerRequestEof = 19,
+    ServerRequestError = 20,
+    ServerRequestDrop = 21,
+    ServerResponseHead = 22,
+    ServerResponseFirstData = 23,
+    ServerResponseEof = 24,
+    ServerResponseError = 25,
+    ServerResponseDrop = 26,
+    TargetPath = 27,
+    ServerPort = 28,
+    ServerConnectionAccept = 29,
+    ServerRequestConnection = 30,
+    ServerConnectionFirstRead = 31,
+    ServerConnectionReadEof = 32,
+    ServerConnectionReadError = 33,
+    ServerConnectionFirstWrite = 34,
+    ServerConnectionWriteError = 35,
+    ServerConnectionFlushError = 36,
+    ServerConnectionShutdown = 37,
+    ServerConnectionShutdownError = 38,
+    ServerConnectionDrop = 39,
+    ServerResponseWriteAfterFrame = 40,
+    ServerResponseWriteError = 41,
+    ServerResponsePendingAtDrop = 42,
+    ServerResponseCorrelationOverlap = 43,
+    ServerResponseBodyExpectedBytes = 44,
+    ServerResponseBodyExpectedUnknown = 45,
+    ServerResponseBodyPolledBytes = 46,
+    ServerResponseWritePartial = 47,
+    ServerResponseWriteBoundaryBytes = 48,
+    ServerResponseFlushBytes = 49,
+    ServerResponseTerminalBytes = 50,
+    ServerResponseByteCountOverflow = 51,
+    ServerConnectionFlushPending = 52,
+    ServerConnectionFlushOk = 53,
+    ServerConnectionShutdownPending = 54,
+    ServerResponseCorrelationBoundary = 55,
+}
+
+impl HttpLifecyclePhase {
+    fn label(value: u8) -> &'static str {
+        match value {
+            1 => "submit",
+            2 => "target-port",
+            3 => "request-first-data",
+            4 => "request-first-trailers",
+            5 => "request-eof",
+            6 => "request-error",
+            7 => "request-drop-before-terminal",
+            8 => "response-head",
+            9 => "response-first-data",
+            10 => "response-first-trailers",
+            11 => "response-eof",
+            12 => "response-error",
+            13 => "response-drop-before-terminal",
+            14 => "send-error",
+            15 => "response-io-ok",
+            16 => "response-io-error",
+            17 => "server-arrival",
+            18 => "server-request-first-data",
+            19 => "server-request-eof",
+            20 => "server-request-error",
+            21 => "server-request-drop-before-terminal",
+            22 => "server-response-head",
+            23 => "server-response-first-data",
+            24 => "server-response-eof",
+            25 => "server-response-error",
+            26 => "server-response-drop-before-terminal",
+            27 => "target-path-hash",
+            28 => "server-port",
+            29 => "server-connection-accept",
+            30 => "server-request-connection",
+            31 => "server-connection-first-read",
+            32 => "server-connection-read-eof",
+            33 => "server-connection-read-error",
+            34 => "server-connection-first-write",
+            35 => "server-connection-write-error",
+            36 => "server-connection-flush-error",
+            37 => "server-connection-shutdown",
+            38 => "server-connection-shutdown-error",
+            39 => "server-connection-drop",
+            40 => "server-response-write-after-frame",
+            41 => "server-response-write-error",
+            42 => "server-response-pending-at-drop",
+            43 => "server-response-correlation-overlap",
+            44 => "server-response-body-expected-bytes",
+            45 => "server-response-body-expected-unknown",
+            46 => "server-response-body-polled-bytes",
+            47 => "server-response-write-partial",
+            48 => "server-response-write-boundary-bytes",
+            49 => "server-response-flush-bytes",
+            50 => "server-response-terminal-bytes",
+            51 => "server-response-byte-count-overflow",
+            52 => "server-connection-flush-pending",
+            53 => "server-connection-flush-ok",
+            54 => "server-connection-shutdown-pending",
+            55 => "server-response-correlation-boundary",
+            _ => "unknown",
+        }
+    }
+}
+
+const HTTP_BYTE_COUNT_EXPECTED: u16 = 1;
+const HTTP_BYTE_COUNT_POLLED: u16 = 2;
+const HTTP_BYTE_COUNT_WRITE: u16 = 3;
+
+fn record_http_byte_count(
+    trace: &HttpLifecycleTrace,
+    request: usize,
+    phase: HttpLifecyclePhase,
+    count: u64,
+    overflow_kind: u16,
+) {
+    if count > u64::from(u16::MAX) {
+        trace.record(
+            request,
+            HttpLifecyclePhase::ServerResponseByteCountOverflow,
+            overflow_kind,
+        );
+    }
+    trace.record(request, phase, count.min(u64::from(u16::MAX)) as u16);
+}
+
+struct HttpLifecycleJournal {
+    next_event: AtomicUsize,
+    slots: [std::sync::atomic::AtomicU64; HTTP_LIFECYCLE_CAP],
+}
+
+impl HttpLifecycleJournal {
+    fn new() -> Self {
+        Self {
+            next_event: AtomicUsize::new(1),
+            slots: std::array::from_fn(|_| std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+
+    fn record(&self, request: usize, phase: HttpLifecyclePhase, detail: u16) {
+        let sequence = self.next_event.fetch_add(1, Ordering::Relaxed);
+        self.publish(sequence, request, phase, detail);
+    }
+
+    fn publish(&self, sequence: usize, request: usize, phase: HttpLifecyclePhase, detail: u16) {
+        let encoded_sequence = sequence as u64 & HTTP_LIFECYCLE_SEQUENCE_MASK;
+        let packed = (encoded_sequence << 40)
+            | ((request as u64 & 0xffff) << 24)
+            | ((phase as u64) << 16)
+            | u64::from(detail);
+        let slot = &self.slots[sequence % HTTP_LIFECYCLE_CAP];
+        let mut current = slot.load(Ordering::Acquire);
+        loop {
+            let current_sequence = current >> 40;
+            if current != 0 {
+                let advance =
+                    encoded_sequence.wrapping_sub(current_sequence) & HTTP_LIFECYCLE_SEQUENCE_MASK;
+                if advance == 0 || advance >= HTTP_LIFECYCLE_SEQUENCE_HALF {
+                    return;
+                }
+            }
+            match slot.compare_exchange_weak(current, packed, Ordering::Release, Ordering::Acquire)
+            {
+                Ok(_) => return,
+                Err(observed) => current = observed,
+            }
+        }
+    }
+
+    fn snapshot(&self, invocation: usize) -> String {
+        let newest_full_sequence = self.next_event.load(Ordering::Acquire).saturating_sub(1);
+        let newest_encoded_sequence = newest_full_sequence as u64 & HTTP_LIFECYCLE_SEQUENCE_MASK;
+        let mut events = self
+            .slots
+            .iter()
+            .map(|slot| slot.load(Ordering::Acquire))
+            .filter(|event| *event != 0)
+            .collect::<Vec<_>>();
+        events.retain(|event| {
+            let sequence = event >> 40;
+            let age = newest_encoded_sequence.wrapping_sub(sequence) & HTTP_LIFECYCLE_SEQUENCE_MASK;
+            age < HTTP_LIFECYCLE_SEQUENCE_HALF
+        });
+        events.sort_unstable_by_key(|event| {
+            let sequence = event >> 40;
+            std::cmp::Reverse(
+                newest_encoded_sequence.wrapping_sub(sequence) & HTTP_LIFECYCLE_SEQUENCE_MASK,
+            )
+        });
+        let mut result = format!("invocation={invocation}\n");
+        for event in events {
+            let encoded_sequence = event >> 40;
+            let age = newest_encoded_sequence.wrapping_sub(encoded_sequence)
+                & HTTP_LIFECYCLE_SEQUENCE_MASK;
+            let sequence = newest_full_sequence.saturating_sub(age as usize);
+            let request = (event >> 24) & 0xffff;
+            let phase = ((event >> 16) & 0xff) as u8;
+            let detail = event & 0xffff;
+            use std::fmt::Write as _;
+            let _ = writeln!(
+                result,
+                "seq={sequence} request={request} phase={} detail={detail}",
+                HttpLifecyclePhase::label(phase)
+            );
+        }
+        result
+    }
+}
+
+/// Per-component correlation state for the test harness' outgoing HTTP lifecycle trace.
+///
+/// The trace is intentionally implemented in the host rather than the embedded skeleton: it is
+/// test-only, covers both P2 and P3, and can observe the Wasmtime transport boundary without
+/// changing a generated component. Events use a fixed atomic journal, so the hot path has no
+/// locks, allocation, clocks, or output; the journal is formatted only after an invocation fails.
+#[derive(Clone)]
+struct HttpLifecycleTrace {
+    invocation: usize,
+    journal: Arc<HttpLifecycleJournal>,
+}
+
+impl HttpLifecycleTrace {
+    fn new() -> Self {
+        Self {
+            invocation: NEXT_HTTP_TRACE_INVOCATION.fetch_add(1, Ordering::Relaxed),
+            journal: Arc::new(HttpLifecycleJournal::new()),
+        }
+    }
+
+    fn next_request(&self) -> usize {
+        NEXT_HTTP_TRACE_REQUEST.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn record(&self, request: usize, phase: HttpLifecyclePhase, detail: u16) {
+        self.journal.record(request, phase, detail);
+    }
+
+    fn record_submit(&self, request: usize, method: &http::Method, uri: &http::Uri) {
+        let method = if method == http::Method::GET {
+            1
+        } else if method == http::Method::POST {
+            2
+        } else if method == http::Method::PUT {
+            3
+        } else if method == http::Method::DELETE {
+            4
+        } else if method == http::Method::HEAD {
+            5
+        } else {
+            0
+        };
+        self.record(request, HttpLifecyclePhase::Submit, method);
+        self.record(
+            request,
+            HttpLifecyclePhase::Target,
+            uri.port_u16().unwrap_or_default(),
+        );
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        uri.path_and_query().hash(&mut hasher);
+        self.record(
+            request,
+            HttpLifecyclePhase::TargetPath,
+            (hasher.finish() & 0xffff) as u16,
+        );
+    }
+
+    fn snapshot(&self) -> String {
+        self.journal.snapshot(self.invocation)
+    }
+}
+
+fn test_server_http_trace() -> &'static HttpLifecycleTrace {
+    TEST_SERVER_HTTP_TRACE.get_or_init(HttpLifecycleTrace::new)
+}
+
+fn record_http_submit<B>(trace: &HttpLifecycleTrace, request: &http::Request<B>) -> usize {
+    let request_id = trace.next_request();
+    trace.record_submit(request_id, request.method(), request.uri());
+    request_id
+}
+
+fn next_test_server_http_request() -> usize {
+    test_server_http_trace().next_request()
+}
+
+fn record_test_server_arrival(request_id: usize, port: u16, uri: &http::Uri) {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    uri.path_and_query().hash(&mut hasher);
+    test_server_http_trace().record(
+        request_id,
+        HttpLifecyclePhase::ServerArrival,
+        (hasher.finish() & 0xffff) as u16,
+    );
+    test_server_http_trace().record(request_id, HttpLifecyclePhase::ServerPort, port);
+}
+
+fn record_test_server_response_head(request_id: usize, status: http::StatusCode) {
+    test_server_http_trace().record(
+        request_id,
+        HttpLifecyclePhase::ServerResponseHead,
+        status.as_u16(),
+    );
+}
+
+fn record_test_server_connection(
+    request_id: usize,
+    connection: Option<&TracedTestServerConnection>,
+) {
+    if let Some(connection) = connection {
+        connection.state.trace.record(
+            request_id,
+            HttpLifecyclePhase::ServerRequestConnection,
+            connection.state.connection,
+        );
+    }
+}
+
+pub(crate) fn traced_test_server_listener(
+    listener: tokio::net::TcpListener,
+) -> TracedTestServerListener {
+    TracedTestServerListener {
+        listener,
+        trace: test_server_http_trace().clone(),
+    }
+}
+
+pub(crate) struct TracedTestServerListener {
+    listener: tokio::net::TcpListener,
+    trace: HttpLifecycleTrace,
+}
+
+impl axum::serve::Listener for TracedTestServerListener {
+    type Io = TracedTestServerIo<tokio::net::TcpStream>;
+    type Addr = std::net::SocketAddr;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        let (stream, peer) =
+            <tokio::net::TcpListener as axum::serve::Listener>::accept(&mut self.listener).await;
+        let connection = (NEXT_HTTP_TRACE_CONNECTION.fetch_add(1, Ordering::Relaxed)
+            % usize::from(u16::MAX))
+            + 1;
+        let state = Arc::new(HttpConnectionState::new(
+            self.trace.clone(),
+            connection as u16,
+        ));
+        self.trace.record(
+            connection,
+            HttpLifecyclePhase::ServerConnectionAccept,
+            peer.port(),
+        );
+        (TracedTestServerIo::new(stream, state), peer)
+    }
+
+    fn local_addr(&self) -> std::io::Result<Self::Addr> {
+        self.listener.local_addr()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct TracedTestServerConnection {
+    state: Arc<HttpConnectionState>,
+}
+
+impl
+    axum::extract::connect_info::Connected<
+        axum::serve::IncomingStream<'_, TracedTestServerListener>,
+    > for TracedTestServerConnection
+{
+    fn connect_info(target: axum::serve::IncomingStream<'_, TracedTestServerListener>) -> Self {
+        Self {
+            state: target.io().state.clone(),
+        }
+    }
+}
+
+struct HttpConnectionState {
+    trace: HttpLifecycleTrace,
+    connection: u16,
+    pending_response: AtomicUsize,
+}
+
+impl HttpConnectionState {
+    fn new(trace: HttpLifecycleTrace, connection: u16) -> Self {
+        Self {
+            trace,
+            connection,
+            pending_response: AtomicUsize::new(0),
+        }
+    }
+
+    fn arm_response(&self, request_id: usize) {
+        if let Err(pending_request) = self.pending_response.compare_exchange(
+            0,
+            request_id,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            self.trace.record(
+                request_id,
+                HttpLifecyclePhase::ServerResponseCorrelationOverlap,
+                pending_request.min(usize::from(u16::MAX)) as u16,
+            );
+        }
+    }
+
+    fn take_pending_response(&self) -> Option<usize> {
+        match self.pending_response.swap(0, Ordering::AcqRel) {
+            0 => None,
+            request_id => Some(request_id),
+        }
+    }
+}
+
+struct ActiveResponseWrite {
+    request_id: usize,
+    accepted_bytes: u64,
+}
+
+pub(crate) struct TracedTestServerIo<T> {
+    inner: T,
+    state: Arc<HttpConnectionState>,
+    saw_read: bool,
+    saw_write: bool,
+    read_terminal: bool,
+    write_terminal: bool,
+    active_response: Option<ActiveResponseWrite>,
+    flush_pending: bool,
+    shutdown_pending: bool,
+}
+
+impl<T> TracedTestServerIo<T> {
+    fn new(inner: T, state: Arc<HttpConnectionState>) -> Self {
+        Self {
+            inner,
+            state,
+            saw_read: false,
+            saw_write: false,
+            read_terminal: false,
+            write_terminal: false,
+            active_response: None,
+            flush_pending: false,
+            shutdown_pending: false,
+        }
+    }
+
+    fn record_connection(&self, phase: HttpLifecyclePhase, detail: u16) {
+        self.state
+            .trace
+            .record(usize::from(self.state.connection), phase, detail);
+    }
+
+    fn record_response_bytes(&self, request_id: usize, phase: HttpLifecyclePhase, bytes: u64) {
+        record_http_byte_count(
+            &self.state.trace,
+            request_id,
+            phase,
+            bytes,
+            HTTP_BYTE_COUNT_WRITE,
+        );
+    }
+
+    fn activate_pending_response(&mut self, first_accepted_bytes: Option<usize>) -> Option<usize> {
+        let pending = self.state.take_pending_response();
+        if let Some(request_id) = pending {
+            match self.active_response.take() {
+                Some(active) if active.request_id != request_id => {
+                    self.record_response_bytes(
+                        active.request_id,
+                        HttpLifecyclePhase::ServerResponseWriteBoundaryBytes,
+                        active.accepted_bytes,
+                    );
+                    self.state.trace.record(
+                        active.request_id,
+                        HttpLifecyclePhase::ServerResponseCorrelationBoundary,
+                        request_id.min(usize::from(u16::MAX)) as u16,
+                    );
+                }
+                Some(active) => {
+                    self.active_response = Some(active);
+                    return Some(request_id);
+                }
+                None => {}
+            }
+            if let Some(first_accepted_bytes) = first_accepted_bytes {
+                self.record_response_bytes(
+                    request_id,
+                    HttpLifecyclePhase::ServerResponseWriteAfterFrame,
+                    first_accepted_bytes as u64,
+                );
+            }
+            self.active_response = Some(ActiveResponseWrite {
+                request_id,
+                accepted_bytes: 0,
+            });
+        }
+        self.active_response
+            .as_ref()
+            .map(|active| active.request_id)
+    }
+
+    fn snapshot_active_response(&mut self, phase: HttpLifecyclePhase) {
+        if let Some(active) = self.active_response.take() {
+            self.record_response_bytes(active.request_id, phase, active.accepted_bytes);
+        }
+    }
+
+    fn record_pending_response(&self, phase: HttpLifecyclePhase) {
+        if let Some(request_id) = self.state.take_pending_response() {
+            self.state
+                .trace
+                .record(request_id, phase, self.state.connection);
+        }
+    }
+
+    fn record_write_success(&mut self, offered: usize, accepted: usize) {
+        if !self.saw_write {
+            self.saw_write = true;
+            self.record_connection(
+                HttpLifecyclePhase::ServerConnectionFirstWrite,
+                accepted.min(usize::from(u16::MAX)) as u16,
+            );
+        }
+        if let Some(request_id) = self.activate_pending_response(Some(accepted)) {
+            if let Some(active) = &mut self.active_response {
+                active.accepted_bytes = active.accepted_bytes.saturating_add(accepted as u64);
+            }
+            if accepted < offered {
+                self.record_response_bytes(
+                    request_id,
+                    HttpLifecyclePhase::ServerResponseWritePartial,
+                    offered.saturating_sub(accepted) as u64,
+                );
+            }
+        }
+    }
+
+    fn record_write_error(&mut self, error: &std::io::Error) {
+        self.write_terminal = true;
+        self.activate_pending_response(None);
+        if let Some(request_id) = self
+            .active_response
+            .as_ref()
+            .map(|active| active.request_id)
+        {
+            self.state.trace.record(
+                request_id,
+                HttpLifecyclePhase::ServerResponseWriteError,
+                self.state.connection,
+            );
+        }
+        self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+        self.record_connection(
+            HttpLifecyclePhase::ServerConnectionWriteError,
+            error.raw_os_error().unwrap_or_default() as u16,
+        );
+    }
+}
+
+impl<T: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for TracedTestServerIo<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let filled_before = buffer.filled().len();
+        match Pin::new(&mut self.inner).poll_read(cx, buffer) {
+            Poll::Ready(Ok(())) => {
+                let bytes = buffer.filled().len().saturating_sub(filled_before);
+                if bytes != 0 && !self.saw_read {
+                    self.saw_read = true;
+                    self.record_connection(
+                        HttpLifecyclePhase::ServerConnectionFirstRead,
+                        bytes.min(usize::from(u16::MAX)) as u16,
+                    );
+                } else if bytes == 0 && !self.read_terminal {
+                    self.read_terminal = true;
+                    self.record_connection(HttpLifecyclePhase::ServerConnectionReadEof, 0);
+                }
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(error)) => {
+                self.read_terminal = true;
+                self.record_connection(
+                    HttpLifecyclePhase::ServerConnectionReadError,
+                    error.raw_os_error().unwrap_or_default() as u16,
+                );
+                Poll::Ready(Err(error))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl<T: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for TracedTestServerIo<T> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        match Pin::new(&mut self.inner).poll_write(cx, buffer) {
+            Poll::Ready(Ok(bytes)) => {
+                self.record_write_success(buffer.len(), bytes);
+                Poll::Ready(Ok(bytes))
+            }
+            Poll::Ready(Err(error)) => {
+                self.record_write_error(&error);
+                Poll::Ready(Err(error))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buffers: &[std::io::IoSlice<'_>],
+    ) -> Poll<std::io::Result<usize>> {
+        match Pin::new(&mut self.inner).poll_write_vectored(cx, buffers) {
+            Poll::Ready(Ok(bytes)) => {
+                let offered = buffers
+                    .iter()
+                    .fold(0usize, |total, buffer| total.saturating_add(buffer.len()));
+                self.record_write_success(offered, bytes);
+                Poll::Ready(Ok(bytes))
+            }
+            Poll::Ready(Err(error)) => {
+                self.record_write_error(&error);
+                Poll::Ready(Err(error))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        match Pin::new(&mut self.inner).poll_flush(cx) {
+            Poll::Ready(Ok(())) => {
+                self.flush_pending = false;
+                self.snapshot_active_response(HttpLifecyclePhase::ServerResponseFlushBytes);
+                self.record_connection(HttpLifecyclePhase::ServerConnectionFlushOk, 0);
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(error)) => {
+                self.flush_pending = false;
+                self.write_terminal = true;
+                if let Some(request_id) = self
+                    .active_response
+                    .as_ref()
+                    .map(|active| active.request_id)
+                {
+                    self.state.trace.record(
+                        request_id,
+                        HttpLifecyclePhase::ServerResponseWriteError,
+                        self.state.connection,
+                    );
+                }
+                self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+                self.record_pending_response(HttpLifecyclePhase::ServerResponseWriteError);
+                self.record_connection(
+                    HttpLifecyclePhase::ServerConnectionFlushError,
+                    error.raw_os_error().unwrap_or_default() as u16,
+                );
+                Poll::Ready(Err(error))
+            }
+            Poll::Pending => {
+                if !self.flush_pending {
+                    self.flush_pending = true;
+                    self.record_connection(HttpLifecyclePhase::ServerConnectionFlushPending, 0);
+                }
+                Poll::Pending
+            }
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        match Pin::new(&mut self.inner).poll_shutdown(cx) {
+            Poll::Ready(Ok(())) => {
+                self.shutdown_pending = false;
+                if !self.write_terminal {
+                    self.write_terminal = true;
+                    self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+                    self.record_pending_response(HttpLifecyclePhase::ServerResponsePendingAtDrop);
+                    self.record_connection(HttpLifecyclePhase::ServerConnectionShutdown, 0);
+                }
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(error)) => {
+                self.shutdown_pending = false;
+                self.write_terminal = true;
+                if let Some(request_id) = self
+                    .active_response
+                    .as_ref()
+                    .map(|active| active.request_id)
+                {
+                    self.state.trace.record(
+                        request_id,
+                        HttpLifecyclePhase::ServerResponseWriteError,
+                        self.state.connection,
+                    );
+                }
+                self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+                self.record_pending_response(HttpLifecyclePhase::ServerResponseWriteError);
+                self.record_connection(
+                    HttpLifecyclePhase::ServerConnectionShutdownError,
+                    error.raw_os_error().unwrap_or_default() as u16,
+                );
+                Poll::Ready(Err(error))
+            }
+            Poll::Pending => {
+                if !self.shutdown_pending {
+                    self.shutdown_pending = true;
+                    self.record_connection(HttpLifecyclePhase::ServerConnectionShutdownPending, 0);
+                }
+                Poll::Pending
+            }
+        }
+    }
+}
+
+impl<T> Drop for TracedTestServerIo<T> {
+    fn drop(&mut self) {
+        self.snapshot_active_response(HttpLifecyclePhase::ServerResponseTerminalBytes);
+        self.record_pending_response(HttpLifecyclePhase::ServerResponsePendingAtDrop);
+        let detail = u16::from(self.saw_read)
+            | (u16::from(self.saw_write) << 1)
+            | (u16::from(self.read_terminal) << 2)
+            | (u16::from(self.write_terminal) << 3);
+        self.record_connection(HttpLifecyclePhase::ServerConnectionDrop, detail);
+    }
+}
+
+fn traced_test_server_body<B: HttpBody>(
+    body: B,
+    request_id: usize,
+    side: &'static str,
+) -> TracedHttpBody<B> {
+    TracedHttpBody::new(
+        body,
+        test_server_http_trace().clone(),
+        request_id,
+        side,
+        None,
+    )
+}
+
+fn traced_test_server_response_body<B: HttpBody>(
+    body: B,
+    request_id: usize,
+    connection: Option<TracedTestServerConnection>,
+) -> TracedHttpBody<B> {
+    TracedHttpBody::new(
+        body,
+        test_server_http_trace().clone(),
+        request_id,
+        "server-response",
+        connection.map(|connection| connection.state),
+    )
+}
+
+/// A transparent body observer. It never polls ahead or adds an await: every host poll is
+/// delegated exactly once while frame byte totals and the terminal outcome are recorded.
+struct TracedHttpBody<B: HttpBody> {
+    inner: Pin<Box<B>>,
+    trace: HttpLifecycleTrace,
+    request: usize,
+    side: &'static str,
+    server_connection: Option<Arc<HttpConnectionState>>,
+    saw_frame: bool,
+    terminal: bool,
+    expected_body_bytes: Option<u64>,
+    polled_body_bytes: u64,
+    body_bytes_recorded: bool,
+}
+
+impl<B: HttpBody> TracedHttpBody<B> {
+    fn new(
+        inner: B,
+        trace: HttpLifecycleTrace,
+        request: usize,
+        side: &'static str,
+        server_connection: Option<Arc<HttpConnectionState>>,
+    ) -> Self {
+        let expected_body_bytes = (side == "server-response")
+            .then(|| inner.size_hint().exact())
+            .flatten();
+        let body = Self {
+            inner: Box::pin(inner),
+            trace,
+            request,
+            side,
+            server_connection,
+            saw_frame: false,
+            terminal: false,
+            expected_body_bytes,
+            polled_body_bytes: 0,
+            body_bytes_recorded: false,
+        };
+        if side == "server-response" {
+            if let Some(expected) = body.expected_body_bytes {
+                record_http_byte_count(
+                    &body.trace,
+                    request,
+                    HttpLifecyclePhase::ServerResponseBodyExpectedBytes,
+                    expected,
+                    HTTP_BYTE_COUNT_EXPECTED,
+                );
+            } else {
+                body.trace.record(
+                    request,
+                    HttpLifecyclePhase::ServerResponseBodyExpectedUnknown,
+                    0,
+                );
+            }
+        }
+        body
+    }
+
+    fn event(&self, outcome: &'static str) {
+        let phase = match (self.side, outcome) {
+            ("request", "first-data") => HttpLifecyclePhase::RequestFirstData,
+            ("request", "first-trailers") => HttpLifecyclePhase::RequestFirstTrailers,
+            ("request", "eof") => HttpLifecyclePhase::RequestEof,
+            ("request", "error") => HttpLifecyclePhase::RequestError,
+            ("request", "drop-before-terminal") => HttpLifecyclePhase::RequestDrop,
+            ("response", "first-data") => HttpLifecyclePhase::ResponseFirstData,
+            ("response", "first-trailers") => HttpLifecyclePhase::ResponseFirstTrailers,
+            ("response", "eof") => HttpLifecyclePhase::ResponseEof,
+            ("response", "error") => HttpLifecyclePhase::ResponseError,
+            ("response", "drop-before-terminal") => HttpLifecyclePhase::ResponseDrop,
+            ("server-request", "first-data") => HttpLifecyclePhase::ServerRequestFirstData,
+            ("server-request", "eof") => HttpLifecyclePhase::ServerRequestEof,
+            ("server-request", "error") => HttpLifecyclePhase::ServerRequestError,
+            ("server-request", "drop-before-terminal") => HttpLifecyclePhase::ServerRequestDrop,
+            ("server-response", "first-data") => HttpLifecyclePhase::ServerResponseFirstData,
+            ("server-response", "eof") => HttpLifecyclePhase::ServerResponseEof,
+            ("server-response", "error") => HttpLifecyclePhase::ServerResponseError,
+            ("server-response", "drop-before-terminal") => HttpLifecyclePhase::ServerResponseDrop,
+            _ => return,
+        };
+        self.trace.record(self.request, phase, 0);
+    }
+
+    fn record_body_bytes(&mut self) {
+        if self.side == "server-response" && !self.body_bytes_recorded {
+            self.body_bytes_recorded = true;
+            record_http_byte_count(
+                &self.trace,
+                self.request,
+                HttpLifecyclePhase::ServerResponseBodyPolledBytes,
+                self.polled_body_bytes,
+                HTTP_BYTE_COUNT_POLLED,
+            );
+        }
+    }
+
+    fn record_terminal(&mut self, outcome: &'static str) {
+        if !self.terminal {
+            self.terminal = true;
+            self.event(outcome);
+        }
+        self.record_body_bytes();
+    }
+}
+
+impl<B: HttpBody> HttpBody for TracedHttpBody<B> {
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.get_mut();
+        match this.inner.as_mut().poll_frame(cx) {
+            Poll::Ready(Some(Ok(frame))) => {
+                if let Some(data) = frame.data_ref() {
+                    this.polled_body_bytes = this
+                        .polled_body_bytes
+                        .saturating_add(data.remaining() as u64);
+                }
+                if !this.saw_frame {
+                    this.saw_frame = true;
+                    let outcome = if frame.is_data() {
+                        "first-data"
+                    } else {
+                        "first-trailers"
+                    };
+                    this.event(outcome);
+                    if outcome == "first-data"
+                        && let Some(connection) = &this.server_connection
+                    {
+                        connection.arm_response(this.request);
+                    }
+                }
+                if this.inner.as_ref().is_end_stream() {
+                    this.record_terminal("eof");
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            Poll::Ready(Some(Err(error))) => {
+                this.record_terminal("error");
+                Poll::Ready(Some(Err(error)))
+            }
+            Poll::Ready(None) => {
+                this.record_terminal("eof");
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.as_ref().is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.inner.as_ref().size_hint()
+    }
+}
+
+impl<B: HttpBody> Drop for TracedHttpBody<B> {
+    fn drop(&mut self) {
+        if !self.terminal && !self.inner.as_ref().is_end_stream() {
+            self.event("drop-before-terminal");
+        }
+        self.record_body_bytes();
+    }
+}
+
+#[derive(Clone)]
+struct P2HttpTraceHooks(HttpLifecycleTrace);
+
+fn trace_p2_result(
+    trace: &HttpLifecycleTrace,
+    request_id: usize,
+    result: Result<
+        wasmtime_wasi_http::p2::types::IncomingResponse,
+        wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
+    >,
+) -> Result<
+    wasmtime_wasi_http::p2::types::IncomingResponse,
+    wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
+> {
+    match result {
+        Ok(mut incoming) => {
+            trace.record(
+                request_id,
+                HttpLifecyclePhase::ResponseHead,
+                incoming.resp.status().as_u16(),
+            );
+            let (parts, body) = incoming.resp.into_parts();
+            incoming.resp = http::Response::from_parts(
+                parts,
+                TracedHttpBody::new(body, trace.clone(), request_id, "response", None)
+                    .boxed_unsync(),
+            );
+            Ok(incoming)
+        }
+        Err(error) => {
+            trace.record(request_id, HttpLifecyclePhase::SendError, 0);
+            Err(error)
+        }
+    }
+}
+
+#[cfg(feature = "use-golem-wasmtime")]
+fn p2_method_expects_body(method: &http::Method) -> bool {
+    method == http::Method::POST || method == http::Method::PUT || method == http::Method::PATCH
+}
+
+#[cfg(feature = "use-golem-wasmtime")]
+fn p2_body_completion_for_dispatch(
+    method: &http::Method,
+    body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
+) -> Option<wasmtime_wasi_http::p2::BodyCompletionReceiver> {
+    if p2_method_expects_body(method) {
+        drop(body_completion);
+        None
+    } else {
+        body_completion
+    }
+}
+
+impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
+    #[cfg(not(feature = "use-golem-wasmtime"))]
+    fn send_request(
+        &mut self,
+        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
+    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
+    {
+        let trace = self.0.clone();
+        let request_id = record_http_submit(&trace, &request);
+
+        let (parts, body) = request.into_parts();
+        let request = http::Request::from_parts(
+            parts,
+            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
+        );
+        let handle = wasmtime_wasi::runtime::spawn(async move {
+            let result =
+                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
+            Ok(trace_p2_result(&trace, request_id, result))
+        });
+        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
+    }
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    fn send_request(
+        &mut self,
+        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
+        body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
+    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
+    {
+        let trace = self.0.clone();
+        let request_id = record_http_submit(&trace, &request);
+        let body_completion = p2_body_completion_for_dispatch(request.method(), body_completion);
+        let collect_before_send = body_completion.is_some();
+        let (parts, body) = request.into_parts();
+        let request = http::Request::from_parts(
+            parts,
+            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
+        );
+        let handle = wasmtime_wasi::runtime::spawn(async move {
+            let request = if collect_before_send {
+                let body_completion = body_completion.expect("checked above");
+                let (parts, body) = request.into_parts();
+                let completion = async {
+                    match body_completion.await {
+                        Ok(Ok(())) => Ok(()),
+                        Ok(Err(error)) => Err(error),
+                        Err(_) => Err(
+                            wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError,
+                        ),
+                    }
+                };
+                let collect = async {
+                    BodyExt::collect(body).await.map(|collected| {
+                        collected
+                            .map_err(|_: std::convert::Infallible| unreachable!())
+                            .boxed_unsync()
+                    })
+                };
+                let (completion, collected) = futures::future::join(completion, collect).await;
+                completion?;
+                http::Request::from_parts(parts, collected?)
+            } else {
+                request
+            };
+            let result =
+                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
+            Ok(trace_p2_result(&trace, request_id, result))
+        });
+        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
+    }
+}
+
+#[derive(Clone)]
+struct P3HttpTraceHooks(HttpLifecycleTrace);
+
+impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
+    fn send_request(
+        &mut self,
+        request: http::Request<
+            http_body_util::combinators::UnsyncBoxBody<
+                bytes::Bytes,
+                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+            >,
+        >,
+        options: Option<wasmtime_wasi_http::p3::RequestOptions>,
+        response_processing: Box<
+            dyn Future<
+                    Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
+                > + Send,
+        >,
+    ) -> Box<
+        dyn Future<
+                Output = Result<
+                    (
+                        http::Response<
+                            http_body_util::combinators::UnsyncBoxBody<
+                                bytes::Bytes,
+                                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                            >,
+                        >,
+                        Box<
+                            dyn Future<
+                                    Output = Result<
+                                        (),
+                                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                                    >,
+                                > + Send,
+                        >,
+                    ),
+                    wasmtime_wasi::TrappableError<
+                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
+                    >,
+                >,
+            > + Send,
+    > {
+        // Match Wasmtime's default hook: response-processing is currently not wired into the
+        // default client. Keep that ownership behavior unchanged while tracing the returned I/O
+        // future, which is the transport's actual connection lifetime signal.
+        drop(response_processing);
+
+        let trace = self.0.clone();
+        let request_id = record_http_submit(&trace, &request);
+        let (parts, body) = request.into_parts();
+        let request = http::Request::from_parts(
+            parts,
+            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
+        );
+
+        Box::new(async move {
+            let result = wasmtime_wasi_http::p3::default_send_request(request, options).await;
+            let (response, io) = match result {
+                Ok(value) => value,
+                Err(error) => {
+                    trace.record(request_id, HttpLifecyclePhase::SendError, 0);
+                    return Err(error.into());
+                }
+            };
+            trace.record(
+                request_id,
+                HttpLifecyclePhase::ResponseHead,
+                response.status().as_u16(),
+            );
+            let (parts, body) = response.into_parts();
+            let response = http::Response::from_parts(
+                parts,
+                TracedHttpBody::new(body, trace.clone(), request_id, "response", None)
+                    .boxed_unsync(),
+            );
+            let io_trace = trace.clone();
+            let io = Box::new(async move {
+                let result = io.await;
+                io_trace.record(
+                    request_id,
+                    if result.is_ok() {
+                        HttpLifecyclePhase::ResponseIoOk
+                    } else {
+                        HttpLifecyclePhase::ResponseIoError
+                    },
+                    0,
+                );
+                result
+            }) as Box<dyn Future<Output = Result<_, _>> + Send>;
+            Ok((response, io))
+        })
+    }
+}
 
 #[derive(Clone, Copy)]
 struct HostTraceWriter;
@@ -603,7 +1790,864 @@ impl Drop for TestCacheLock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
     use test_r::test;
+    use tokio::io::{AsyncRead as _, AsyncReadExt as _, AsyncWrite as _, AsyncWriteExt as _};
+
+    #[derive(Default)]
+    struct ScriptedIoCalls {
+        reads: AtomicUsize,
+        writes: AtomicUsize,
+        vectored_writes: AtomicUsize,
+        flushes: AtomicUsize,
+        shutdowns: AtomicUsize,
+    }
+
+    struct CountedBody {
+        frames: VecDeque<bytes::Bytes>,
+        polls: Arc<AtomicUsize>,
+        exact_size: Option<u64>,
+        end_when_empty: bool,
+    }
+
+    impl HttpBody for CountedBody {
+        type Data = bytes::Bytes;
+        type Error = std::convert::Infallible;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+            self.polls.fetch_add(1, Ordering::Relaxed);
+            Poll::Ready(self.frames.pop_front().map(|data| Ok(Frame::data(data))))
+        }
+
+        fn is_end_stream(&self) -> bool {
+            self.end_when_empty && self.frames.is_empty()
+        }
+
+        fn size_hint(&self) -> SizeHint {
+            let mut hint = SizeHint::new();
+            if let Some(exact_size) = self.exact_size {
+                hint.set_exact(exact_size);
+            }
+            hint
+        }
+    }
+
+    struct ScriptedIo {
+        calls: Arc<ScriptedIoCalls>,
+        fail_write: bool,
+        accepted_writes: VecDeque<usize>,
+        flush_pending_once: bool,
+        shutdown_pending_once: bool,
+        fail_flush: bool,
+        fail_shutdown: bool,
+    }
+
+    impl tokio::io::AsyncRead for ScriptedIo {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buffer: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            self.calls.reads.fetch_add(1, Ordering::Relaxed);
+            buffer.put_slice(b"r");
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl tokio::io::AsyncWrite for ScriptedIo {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buffer: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            self.calls.writes.fetch_add(1, Ordering::Relaxed);
+            if self.fail_write {
+                Poll::Ready(Err(std::io::Error::other("scripted write failure")))
+            } else {
+                Poll::Ready(Ok(self
+                    .accepted_writes
+                    .pop_front()
+                    .unwrap_or(buffer.len())
+                    .min(buffer.len())))
+            }
+        }
+
+        fn poll_write_vectored(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buffers: &[std::io::IoSlice<'_>],
+        ) -> Poll<std::io::Result<usize>> {
+            self.calls.vectored_writes.fetch_add(1, Ordering::Relaxed);
+            if self.fail_write {
+                Poll::Ready(Err(std::io::Error::other("scripted write failure")))
+            } else {
+                let offered = buffers.iter().map(|buffer| buffer.len()).sum();
+                Poll::Ready(Ok(self
+                    .accepted_writes
+                    .pop_front()
+                    .unwrap_or(offered)
+                    .min(offered)))
+            }
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            true
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            self.calls.flushes.fetch_add(1, Ordering::Relaxed);
+            if std::mem::take(&mut self.flush_pending_once) {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            if self.fail_flush {
+                return Poll::Ready(Err(std::io::Error::other("scripted flush failure")));
+            }
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            self.calls.shutdowns.fetch_add(1, Ordering::Relaxed);
+            if std::mem::take(&mut self.shutdown_pending_once) {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            if self.fail_shutdown {
+                return Poll::Ready(Err(std::io::Error::other("scripted shutdown failure")));
+            }
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn scripted_connection(
+        trace: HttpLifecycleTrace,
+        connection: u16,
+        fail_write: bool,
+    ) -> (TracedTestServerIo<ScriptedIo>, Arc<ScriptedIoCalls>) {
+        let calls = Arc::new(ScriptedIoCalls::default());
+        let state = Arc::new(HttpConnectionState::new(trace, connection));
+        let io = TracedTestServerIo::new(
+            ScriptedIo {
+                calls: calls.clone(),
+                fail_write,
+                accepted_writes: VecDeque::new(),
+                flush_pending_once: false,
+                shutdown_pending_once: false,
+                fail_flush: false,
+                fail_shutdown: false,
+            },
+            state,
+        );
+        (io, calls)
+    }
+
+    #[test]
+    fn http_lifecycle_ring_rejects_delayed_old_generation() {
+        let journal = HttpLifecycleJournal::new();
+        journal.publish(1, 1, HttpLifecyclePhase::Submit, 0);
+        journal.publish(
+            1 + HTTP_LIFECYCLE_CAP,
+            2,
+            HttpLifecyclePhase::ResponseHead,
+            200,
+        );
+        journal.publish(1, 3, HttpLifecyclePhase::SendError, 0);
+
+        let retained = journal.slots[1].load(Ordering::Acquire);
+        assert_eq!(retained >> 40, (1 + HTTP_LIFECYCLE_CAP) as u64);
+        assert_eq!((retained >> 24) & 0xffff, 2);
+    }
+
+    #[test]
+    fn http_lifecycle_ring_accepts_encoded_sequence_rollover() {
+        let journal = HttpLifecycleJournal::new();
+        let before_rollover = HTTP_LIFECYCLE_SEQUENCE_MASK as usize;
+        journal.publish(
+            before_rollover - (HTTP_LIFECYCLE_CAP - 1),
+            1,
+            HttpLifecyclePhase::Submit,
+            0,
+        );
+        journal.publish(
+            before_rollover + 1,
+            2,
+            HttpLifecyclePhase::ResponseHead,
+            200,
+        );
+
+        let retained =
+            journal.slots[(before_rollover + 1) % HTTP_LIFECYCLE_CAP].load(Ordering::Acquire);
+        assert_eq!(retained >> 40, 0);
+        assert_eq!((retained >> 24) & 0xffff, 2);
+    }
+
+    #[test]
+    fn http_lifecycle_ring_remains_valid_during_concurrent_snapshots() {
+        let journal = Arc::new(HttpLifecycleJournal::new());
+        let writers = (0..8)
+            .map(|request| {
+                let journal = journal.clone();
+                thread::spawn(move || {
+                    for _ in 0..1_000 {
+                        journal.record(request, HttpLifecyclePhase::Submit, 0);
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for _ in 0..100 {
+            let snapshot = journal.snapshot(1);
+            assert!(snapshot.starts_with("invocation=1\n"));
+        }
+        for writer in writers {
+            writer.join().unwrap();
+        }
+
+        let newest = journal.next_event.load(Ordering::Acquire) - 1;
+        let retained = journal
+            .slots
+            .iter()
+            .map(|slot| slot.load(Ordering::Acquire) >> 40)
+            .collect::<Vec<_>>();
+        assert!(retained.contains(&(newest as u64)));
+        assert!(
+            retained
+                .iter()
+                .all(|sequence| *sequence > (newest - HTTP_LIFECYCLE_CAP) as u64)
+        );
+    }
+
+    #[test]
+    fn http_lifecycle_empty_body_drop_is_terminal() {
+        let trace = HttpLifecycleTrace::new();
+        let body = http_body_util::Empty::<bytes::Bytes>::new();
+        drop(TracedHttpBody::new(body, trace.clone(), 1, "request", None));
+
+        let snapshot = trace.snapshot();
+        assert!(!snapshot.contains("drop-before-terminal"));
+    }
+
+    #[test]
+    fn http_lifecycle_p2_send_error_is_terminal_boundary() {
+        let trace = HttpLifecycleTrace::new();
+        let result = trace_p2_result(
+            &trace,
+            7,
+            Err(wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError),
+        );
+
+        assert!(result.is_err());
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=7 phase=send-error"));
+    }
+
+    #[test]
+    fn http_lifecycle_submit_does_not_mutate_guest_headers() {
+        let trace = HttpLifecycleTrace::new();
+        let request = http::Request::get("http://127.0.0.1:1234/same")
+            .header("x-guest-header", "preserved")
+            .header("x-wrq-http-trace-id", "guest-value")
+            .body(())
+            .unwrap();
+        let request_without_trace_header = http::Request::get("http://127.0.0.1:1234/same")
+            .body(())
+            .unwrap();
+
+        let first_request_id = record_http_submit(&trace, &request);
+        let second_request_id = record_http_submit(&trace, &request_without_trace_header);
+
+        assert_ne!(first_request_id, second_request_id);
+        assert_eq!(request.headers()["x-guest-header"], "preserved");
+        assert_eq!(request.headers()["x-wrq-http-trace-id"], "guest-value");
+        assert!(
+            !request_without_trace_header
+                .headers()
+                .contains_key("x-wrq-http-trace-id")
+        );
+    }
+
+    #[test]
+    fn http_lifecycle_server_io_delegates_each_poll_once() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, calls) = scripted_connection(trace.clone(), 7, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        let mut storage = [0; 4];
+        let mut read = tokio::io::ReadBuf::new(&mut storage);
+        assert!(Pin::new(&mut io).poll_read(&mut cx, &mut read).is_ready());
+        assert_eq!(read.filled(), b"r");
+        assert_eq!(calls.reads.load(Ordering::Relaxed), 1);
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"abc"),
+            Poll::Ready(Ok(3))
+        ));
+        assert_eq!(calls.writes.load(Ordering::Relaxed), 1);
+
+        let buffers = [std::io::IoSlice::new(b"d"), std::io::IoSlice::new(b"ef")];
+        assert!(matches!(
+            Pin::new(&mut io).poll_write_vectored(&mut cx, &buffers),
+            Poll::Ready(Ok(3))
+        ));
+        assert_eq!(calls.vectored_writes.load(Ordering::Relaxed), 1);
+        assert!(io.is_write_vectored());
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_flush(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(calls.flushes.load(Ordering::Relaxed), 1);
+        assert!(matches!(
+            Pin::new(&mut io).poll_shutdown(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(calls.shutdowns.load(Ordering::Relaxed), 1);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=7 phase=server-connection-first-read detail=1"));
+        assert!(snapshot.contains("request=7 phase=server-connection-first-write detail=3"));
+        assert!(snapshot.contains("request=7 phase=server-connection-shutdown"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_frame_arms_exactly_one_correlated_write() {
+        let trace = HttpLifecycleTrace::new();
+        let state = Arc::new(HttpConnectionState::new(trace.clone(), 9));
+        let body = http_body_util::Full::new(bytes::Bytes::from_static(b"body"));
+        let mut body = Box::pin(TracedHttpBody::new(
+            body,
+            trace.clone(),
+            41,
+            "server-response",
+            Some(state.clone()),
+        ));
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(matches!(
+            body.as_mut().poll_frame(&mut cx),
+            Poll::Ready(Some(Ok(_)))
+        ));
+        assert_eq!(state.pending_response.load(Ordering::Acquire), 41);
+
+        let calls = Arc::new(ScriptedIoCalls::default());
+        let mut io = TracedTestServerIo::new(
+            ScriptedIo {
+                calls,
+                fail_write: false,
+                accepted_writes: VecDeque::new(),
+                flush_pending_once: false,
+                shutdown_pending_once: false,
+                fail_flush: false,
+                fail_shutdown: false,
+            },
+            state.clone(),
+        );
+        let buffers = [
+            std::io::IoSlice::new(b"head"),
+            std::io::IoSlice::new(b"body"),
+        ];
+        assert!(matches!(
+            Pin::new(&mut io).poll_write_vectored(&mut cx, &buffers),
+            Poll::Ready(Ok(8))
+        ));
+        assert_eq!(state.pending_response.load(Ordering::Acquire), 0);
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"later"),
+            Poll::Ready(Ok(5))
+        ));
+
+        let snapshot = trace.snapshot();
+        assert_eq!(
+            snapshot
+                .matches("request=41 phase=server-response-write-after-frame detail=8")
+                .count(),
+            1
+        );
+        assert!(snapshot.contains("request=41 phase=server-response-body-expected-bytes detail=4"));
+        assert!(snapshot.contains("request=41 phase=server-response-body-polled-bytes detail=4"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_counts_partial_and_cumulative_writes() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, calls) = scripted_connection(trace.clone(), 10, false);
+        io.inner.accepted_writes = VecDeque::from([4, 6]);
+        io.state.arm_response(44);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"0123456789"),
+            Poll::Ready(Ok(4))
+        ));
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"456789"),
+            Poll::Ready(Ok(6))
+        ));
+        assert!(matches!(
+            Pin::new(&mut io).poll_flush(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(calls.writes.load(Ordering::Relaxed), 2);
+        assert_eq!(calls.flushes.load(Ordering::Relaxed), 1);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=44 phase=server-response-write-after-frame detail=4"));
+        assert!(snapshot.contains("request=44 phase=server-response-write-partial detail=6"));
+        assert!(snapshot.contains("request=44 phase=server-response-flush-bytes detail=10"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_records_full_accepted_write_at_terminal() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 11, false);
+        io.state.arm_response(54);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        let response = [0; 151];
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, &response),
+            Poll::Ready(Ok(151))
+        ));
+        drop(io);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=54 phase=server-response-write-after-frame detail=151"));
+        assert!(snapshot.contains("request=54 phase=server-response-terminal-bytes detail=151"));
+        assert!(!snapshot.contains("request=54 phase=server-response-write-partial"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_counters_are_independent_after_flush() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 12, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        for (request, bytes) in [(45, b"first".as_slice()), (46, b"second".as_slice())] {
+            io.state.arm_response(request);
+            assert!(Pin::new(&mut io).poll_write(&mut cx, bytes).is_ready());
+            assert!(Pin::new(&mut io).poll_flush(&mut cx).is_ready());
+        }
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=45 phase=server-response-flush-bytes detail=5"));
+        assert!(snapshot.contains("request=46 phase=server-response-flush-bytes detail=6"));
+        assert!(!snapshot.contains("server-response-correlation-boundary"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_io_records_pending_flush_and_shutdown_once() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, calls) = scripted_connection(trace.clone(), 14, false);
+        io.inner.flush_pending_once = true;
+        io.inner.shutdown_pending_once = true;
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(Pin::new(&mut io).poll_flush(&mut cx).is_pending());
+        assert!(Pin::new(&mut io).poll_flush(&mut cx).is_ready());
+        assert!(Pin::new(&mut io).poll_shutdown(&mut cx).is_pending());
+        assert!(Pin::new(&mut io).poll_shutdown(&mut cx).is_ready());
+        assert_eq!(calls.flushes.load(Ordering::Relaxed), 2);
+        assert_eq!(calls.shutdowns.load(Ordering::Relaxed), 2);
+
+        let snapshot = trace.snapshot();
+        assert_eq!(
+            snapshot.matches("server-connection-flush-pending").count(),
+            1
+        );
+        assert_eq!(snapshot.matches("server-connection-flush-ok").count(), 1);
+        assert_eq!(
+            snapshot
+                .matches("server-connection-shutdown-pending")
+                .count(),
+            1
+        );
+        assert_eq!(snapshot.matches("server-connection-shutdown").count(), 2);
+    }
+
+    #[test]
+    fn http_lifecycle_server_io_errors_snapshot_active_and_pending_responses() {
+        let trace = HttpLifecycleTrace::new();
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        let (mut flush_io, _) = scripted_connection(trace.clone(), 21, false);
+        flush_io.state.arm_response(55);
+        assert!(matches!(
+            Pin::new(&mut flush_io).poll_write(&mut cx, b"four"),
+            Poll::Ready(Ok(4))
+        ));
+        flush_io.state.arm_response(56);
+        flush_io.inner.fail_flush = true;
+        assert!(matches!(
+            Pin::new(&mut flush_io).poll_flush(&mut cx),
+            Poll::Ready(Err(_))
+        ));
+        drop(flush_io);
+
+        let (mut shutdown_io, _) = scripted_connection(trace.clone(), 22, false);
+        shutdown_io.state.arm_response(57);
+        assert!(matches!(
+            Pin::new(&mut shutdown_io).poll_write(&mut cx, b"five!"),
+            Poll::Ready(Ok(5))
+        ));
+        shutdown_io.state.arm_response(58);
+        shutdown_io.inner.fail_shutdown = true;
+        assert!(matches!(
+            Pin::new(&mut shutdown_io).poll_shutdown(&mut cx),
+            Poll::Ready(Err(_))
+        ));
+        drop(shutdown_io);
+
+        let snapshot = trace.snapshot();
+        for (active, pending, connection, bytes, connection_phase) in [
+            (55, 56, 21, 4, "server-connection-flush-error"),
+            (57, 58, 22, 5, "server-connection-shutdown-error"),
+        ] {
+            assert_eq!(
+                snapshot
+                    .matches(&format!(
+                        "request={active} phase=server-response-write-error detail={connection}"
+                    ))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                snapshot
+                    .matches(&format!(
+                        "request={active} phase=server-response-terminal-bytes detail={bytes}"
+                    ))
+                    .count(),
+                1
+            );
+            assert_eq!(
+                snapshot
+                    .matches(&format!(
+                        "request={pending} phase=server-response-write-error detail={connection}"
+                    ))
+                    .count(),
+                1
+            );
+            assert!(snapshot.contains(&format!("request={connection} phase={connection_phase}")));
+        }
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_body_counts_terminate_without_extra_poll() {
+        let trace = HttpLifecycleTrace::new();
+        let exact_polls = Arc::new(AtomicUsize::new(0));
+        let exact = CountedBody {
+            frames: VecDeque::from([
+                bytes::Bytes::from_static(b"abc"),
+                bytes::Bytes::from_static(b"defg"),
+            ]),
+            polls: exact_polls.clone(),
+            exact_size: Some(7),
+            end_when_empty: true,
+        };
+        let mut exact = Box::pin(TracedHttpBody::new(
+            exact,
+            trace.clone(),
+            47,
+            "server-response",
+            None,
+        ));
+        let unknown_polls = Arc::new(AtomicUsize::new(0));
+        let unknown = CountedBody {
+            frames: VecDeque::from([
+                bytes::Bytes::from_static(b"un"),
+                bytes::Bytes::from_static(b"known"),
+            ]),
+            polls: unknown_polls.clone(),
+            exact_size: None,
+            end_when_empty: true,
+        };
+        let mut unknown = Box::pin(TracedHttpBody::new(
+            unknown,
+            trace.clone(),
+            48,
+            "server-response",
+            None,
+        ));
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        for body in [&mut exact, &mut unknown] {
+            assert!(matches!(
+                body.as_mut().poll_frame(&mut cx),
+                Poll::Ready(Some(Ok(_)))
+            ));
+            assert!(matches!(
+                body.as_mut().poll_frame(&mut cx),
+                Poll::Ready(Some(Ok(_)))
+            ));
+        }
+        assert_eq!(exact_polls.load(Ordering::Relaxed), 2);
+        assert_eq!(unknown_polls.load(Ordering::Relaxed), 2);
+        drop(exact);
+        drop(unknown);
+
+        let overflow = http_body_util::Full::new(bytes::Bytes::from(vec![0; 70_000]));
+        let mut overflow = Box::pin(TracedHttpBody::new(
+            overflow,
+            trace.clone(),
+            49,
+            "server-response",
+            None,
+        ));
+        assert!(overflow.as_mut().poll_frame(&mut cx).is_ready());
+        drop(overflow);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=47 phase=server-response-body-expected-bytes detail=7"));
+        assert!(snapshot.contains("request=47 phase=server-response-body-polled-bytes detail=7"));
+        assert!(snapshot.contains("request=47 phase=server-response-eof"));
+        assert!(!snapshot.contains("request=47 phase=server-response-drop-before-terminal"));
+        assert!(snapshot.contains("request=48 phase=server-response-body-expected-unknown"));
+        assert!(snapshot.contains("request=48 phase=server-response-body-polled-bytes detail=7"));
+        assert!(snapshot.contains("request=48 phase=server-response-eof"));
+        assert!(!snapshot.contains("request=48 phase=server-response-drop-before-terminal"));
+        assert!(
+            snapshot.contains("request=49 phase=server-response-body-expected-bytes detail=65535")
+        );
+        assert!(
+            snapshot.contains("request=49 phase=server-response-body-polled-bytes detail=65535")
+        );
+        assert_eq!(
+            snapshot
+                .matches("request=49 phase=server-response-byte-count-overflow")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_write_error_preserves_correlation() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 11, true);
+        io.state.arm_response(42);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"response"),
+            Poll::Ready(Err(_))
+        ));
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=42 phase=server-response-write-error detail=11"));
+        assert!(snapshot.contains("request=11 phase=server-connection-write-error"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_error_and_drop_snapshot_accepted_bytes() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 15, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        io.state.arm_response(49);
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"abc"),
+            Poll::Ready(Ok(3))
+        ));
+        io.inner.fail_write = true;
+        assert!(matches!(
+            Pin::new(&mut io).poll_write(&mut cx, b"failure"),
+            Poll::Ready(Err(_))
+        ));
+
+        let (mut dropped, _) = scripted_connection(trace.clone(), 16, false);
+        dropped.state.arm_response(50);
+        assert!(matches!(
+            Pin::new(&mut dropped).poll_write(&mut cx, b"drop"),
+            Poll::Ready(Ok(4))
+        ));
+        drop(dropped);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=49 phase=server-response-terminal-bytes detail=3"));
+        assert!(snapshot.contains("request=49 phase=server-response-write-error detail=15"));
+        assert!(snapshot.contains("request=50 phase=server-response-terminal-bytes detail=4"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_connection_drop_reports_armed_response() {
+        let trace = HttpLifecycleTrace::new();
+        let (io, _) = scripted_connection(trace.clone(), 13, false);
+        io.state.arm_response(43);
+        drop(io);
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=43 phase=server-response-pending-at-drop detail=13"));
+        assert!(snapshot.contains("request=13 phase=server-connection-drop"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_connection_maps_multiple_requests_to_same_connection() {
+        let trace = HttpLifecycleTrace::new();
+        let connection = TracedTestServerConnection {
+            state: Arc::new(HttpConnectionState::new(trace.clone(), 17)),
+        };
+        record_test_server_connection(51, Some(&connection));
+        record_test_server_connection(52, Some(&connection));
+
+        let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=51 phase=server-request-connection detail=17"));
+        assert!(snapshot.contains("request=52 phase=server-request-connection detail=17"));
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_overlap_is_explicit_and_non_overwriting() {
+        let trace = HttpLifecycleTrace::new();
+        let state = HttpConnectionState::new(trace.clone(), 19);
+        state.arm_response(61);
+        state.arm_response(62);
+
+        assert_eq!(state.pending_response.load(Ordering::Acquire), 61);
+        let snapshot = trace.snapshot();
+        assert!(
+            snapshot.contains("request=62 phase=server-response-correlation-overlap detail=61")
+        );
+    }
+
+    #[test]
+    fn http_lifecycle_server_response_boundary_without_flush_is_explicit() {
+        let trace = HttpLifecycleTrace::new();
+        let (mut io, _) = scripted_connection(trace.clone(), 20, false);
+        let waker = futures::task::noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        io.state.arm_response(63);
+        assert!(Pin::new(&mut io).poll_write(&mut cx, b"one").is_ready());
+        io.state.arm_response(64);
+        assert!(Pin::new(&mut io).poll_write(&mut cx, b"two").is_ready());
+
+        let snapshot = trace.snapshot();
+        assert!(
+            snapshot.contains("request=63 phase=server-response-write-boundary-bytes detail=3")
+        );
+        assert!(
+            snapshot.contains("request=63 phase=server-response-correlation-boundary detail=64")
+        );
+        assert!(snapshot.contains("request=64 phase=server-response-write-after-frame detail=3"));
+    }
+
+    #[test]
+    async fn http_lifecycle_axum_pipeline_preserves_response_correlation() {
+        use axum::body::Body;
+        use axum::extract::{ConnectInfo, Request};
+        use axum::routing::any;
+        use bytes::Bytes;
+        use http_body_util::Full;
+
+        let trace = HttpLifecycleTrace::new();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let listener = TracedTestServerListener {
+            listener,
+            trace: trace.clone(),
+        };
+        let router = axum::Router::new().route(
+            "/",
+            any(
+                |ConnectInfo(connection): ConnectInfo<TracedTestServerConnection>,
+                 request: Request| async move {
+                    assert!(matches!(
+                        request
+                            .headers()
+                            .get("x-wrq-http-trace-id")
+                            .and_then(|value| value.to_str().ok()),
+                        Some("guest-one" | "guest-two")
+                    ));
+                    let request_id = next_test_server_http_request();
+                    record_test_server_connection(request_id, Some(&connection));
+                    axum::response::Response::new(Body::new(TracedHttpBody::new(
+                        Full::new(Bytes::from_static(b"ok")),
+                        connection.state.trace.clone(),
+                        request_id,
+                        "server-response",
+                        Some(connection.state),
+                    )))
+                },
+            ),
+        );
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<TracedTestServerConnection>(),
+            )
+            .await
+            .unwrap();
+        });
+
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        client
+            .write_all(
+                b"GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: guest-one\r\n\r\n\
+                  GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: guest-two\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        server.abort();
+
+        assert_eq!(
+            String::from_utf8_lossy(&response)
+                .matches("HTTP/1.1 200 OK")
+                .count(),
+            2
+        );
+        let snapshot = trace.snapshot();
+        let mut request_ids = snapshot
+            .lines()
+            .filter(|line| line.contains("phase=server-request-connection"))
+            .filter_map(|line| {
+                line.split_whitespace()
+                    .find_map(|field| field.strip_prefix("request="))
+            })
+            .collect::<Vec<_>>();
+        request_ids.sort_unstable();
+        request_ids.dedup();
+        assert_eq!(request_ids.len(), 2, "{snapshot}");
+        for request_id in request_ids {
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-request-connection"
+            )));
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-response-write-after-frame"
+            )));
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-response-body-expected-bytes detail=2"
+            )));
+            assert!(snapshot.contains(&format!(
+                "request={request_id} phase=server-response-body-polled-bytes detail=2"
+            )));
+        }
+        assert!(!snapshot.contains("server-response-correlation-overlap"));
+        assert!(!snapshot.contains("server-response-correlation-boundary"));
+    }
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    #[test]
+    fn p2_body_method_drops_unused_completion_before_dispatch() {
+        let (sender, receiver) = tokio::sync::oneshot::channel::<
+            Result<(), wasmtime_wasi_http::p2::bindings::http::types::ErrorCode>,
+        >();
+        let retained = p2_body_completion_for_dispatch(&http::Method::POST, Some(receiver));
+
+        assert!(retained.is_none());
+        assert!(sender.is_closed());
+    }
 
     #[test]
     fn artifact_cache_stamp_must_not_be_older_than_output() -> anyhow::Result<()> {
@@ -1836,10 +3880,13 @@ impl TestInstance {
         #[cfg(not(feature = "use-golem-wasmtime"))]
         let ctx = ctx_builder.build();
         let http_ctx = WasiHttpCtx::new();
+        let http_trace = HttpLifecycleTrace::new();
         let host = Host {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(Mutex::new(http_ctx)),
+            p2_http_hooks: P2HttpTraceHooks(http_trace.clone()),
+            p3_http_hooks: P3HttpTraceHooks(http_trace),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
@@ -1934,8 +3981,10 @@ impl TestInstance {
         // on CI).
         let results = results.map_err(|err| {
             let host_trace = host_trace();
+            let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
+            let server_http_lifecycle = test_server_http_trace().snapshot();
             err.context(format!(
-                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nhost trace:\n{host_trace}"
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nHTTP lifecycle:\n{http_lifecycle}\ntest-server HTTP lifecycle:\n{server_http_lifecycle}\nhost trace:\n{host_trace}"
             ))
         });
 
@@ -2527,6 +4576,8 @@ pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<Mutex<WasiHttpCtx>>,
+    p2_http_hooks: P2HttpTraceHooks,
+    p3_http_hooks: P3HttpTraceHooks,
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
@@ -2596,7 +4647,7 @@ impl WasiHttpView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
-            hooks: default_hooks(),
+            hooks: &mut self.p2_http_hooks,
         }
     }
 }
@@ -2800,7 +4851,7 @@ fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> a
 impl wasmtime_wasi_http::p3::WasiHttpView for Host {
     fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
         wasmtime_wasi_http::p3::WasiHttpCtxView {
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: &mut self.p3_http_hooks,
             table: Arc::get_mut(&mut self.table)
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
