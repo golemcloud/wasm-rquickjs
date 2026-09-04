@@ -594,6 +594,7 @@ fn fields_to_pairs(fields: &Fields) -> Vec<Vec<String>> {
 
 pub const NODE_HTTP_JS: &str = include_str!("node_http.js");
 pub const NODE_HTTP_SERVER_JS: &str = include_str!("node_http_server.js");
+pub const HTTP_INCOMING_JS: &str = include_str!("node_http_incoming.js");
 pub const HTTP_COMMON_JS: &str = include_str!("node_http_common.js");
 pub const HTTP_AGENT_JS: &str = include_str!("node_http_agent.js");
 pub const REEXPORT_JS: &str = r#"export * from 'node:http'; export { default } from 'node:http';"#;

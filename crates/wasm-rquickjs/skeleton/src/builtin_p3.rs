@@ -298,6 +298,7 @@ pub fn add_module_resolvers(
         .with_module("node:inspector")
         .with_module("inspector")
         .with_module("__wasm_rquickjs_builtin/node_http_native")
+        .with_module("__wasm_rquickjs_builtin/node_http_incoming")
         .with_module("__wasm_rquickjs_builtin/node_http_server")
         .with_module("node:_http_common")
         .with_module("_http_common")
@@ -560,6 +561,10 @@ pub fn module_loader() -> (
         .with_module("dns/promises", dns::REEXPORT_PROMISES_JS)
         .with_module("node:domain", domain::DOMAIN_JS)
         .with_module("domain", domain::REEXPORT_JS)
+        .with_module(
+            "__wasm_rquickjs_builtin/node_http_incoming",
+            node_http::HTTP_INCOMING_JS,
+        )
         .with_module(
             "__wasm_rquickjs_builtin/node_http_server",
             node_http::NODE_HTTP_SERVER_JS,
