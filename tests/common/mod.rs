@@ -1564,7 +1564,9 @@ impl FeatureCombination {
             FeatureCombination::InternalTestExecution => {
                 vec!["--features", "internal-test-execution"]
             }
-            FeatureCombination::TypeScriptRuntime => vec!["--features", "typescript-runtime"],
+            FeatureCombination::TypeScriptRuntime => {
+                vec!["--features", "typescript-runtime,test-observability"]
+            }
             FeatureCombination::TypeScriptTransformRuntime => {
                 vec!["--features", "typescript-transform-runtime"]
             }
@@ -1615,7 +1617,9 @@ impl FeatureCombination {
                     FeatureCombination::InternalTestExecution => {
                         "normal-p3,internal-test-execution"
                     }
-                    FeatureCombination::TypeScriptRuntime => "normal-p3,typescript-runtime",
+                    FeatureCombination::TypeScriptRuntime => {
+                        "normal-p3,typescript-runtime,test-observability"
+                    }
                     FeatureCombination::TypeScriptTransformRuntime => {
                         "normal-p3,typescript-transform-runtime"
                     }
