@@ -1582,11 +1582,9 @@ function findSourceMap(path) {
 }
 
 function sourceMapLineLengths(source) {
-    const lines = String(source).split(/\r\n|[\n\r\u2028\u2029]/);
-    while (lines.length > 0 && /^\s*\/\/[#@]\s*sourceMappingURL=/.test(lines[lines.length - 1])) {
-        lines.pop();
-    }
-    return lines.map(line => line.length);
+    return String(source)
+        .split(/\r\n|[\n\r\u2028\u2029]/)
+        .map(line => line.length);
 }
 
 function decodeInlineSourceMap(url) {
@@ -1661,7 +1659,7 @@ function registerSourceMapForCjs(filename, source, moduleObject, options = undef
     }
 
     const sourceText = String(source);
-    const url = extractSourceMapURL(sourceText, { blockComments: true });
+    const url = extractSourceMapURL(sourceText);
     if (url === undefined) {
         delete registry[filename];
         return;
@@ -3237,7 +3235,6 @@ function loadCommonJsTransaction(descriptor) {
                 source = preparedTypeScript
                     ? preparedTypeScript.originalSource
                     : fsModule.readFileSync(filename, 'utf8');
-                registerSourceMapForCjs(filename, source, mod);
             } catch (err) {
                 discardCjsModuleLoad(cacheKey, parentModule, mod);
                 throw err;

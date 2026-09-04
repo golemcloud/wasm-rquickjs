@@ -7247,6 +7247,8 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.strictEqual(new vm.Script('/[//# sourceMappingURL=regex.map]/;').sourceMapURL, undefined);
         assert.strictEqual(new vm.Script('/*\n//# sourceMappingURL=inside-block.map\n*/').sourceMapURL, undefined);
         assert.strictEqual(new vm.Script('1 + 1\n/*# sourceMappingURL=block.map */').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=bad.map trailing').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=good.map   \t').sourceMapURL, 'good.map');
         assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=script.map').sourceMapURL, 'script.map');
         assert.strictEqual(new vm.Script('1;\n//# sourceMappingURL=semi.map').sourceMapURL, 'semi.map');
         assert.strictEqual(new vm.Script('1 + 1\n//#\tsourceMappingURL=tab.map').sourceMapURL, 'tab.map');

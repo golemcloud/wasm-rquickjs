@@ -285,9 +285,8 @@ function findTemplateExpressionEnd(source, start) {
   return -1;
 }
 
-function sourceMapURLFromComment(comment, blockComment) {
-  const prefixLength = blockComment ? 3 : 3;
-  let index = prefixLength;
+function sourceMapURLFromComment(comment) {
+  let index = 3;
   const separator = comment.charCodeAt(index);
   if (
     separator !== 0x09 &&
@@ -299,14 +298,16 @@ function sourceMapURLFromComment(comment, blockComment) {
     return undefined;
   index++;
   if (!comment.startsWith("sourceMappingURL=", index)) return undefined;
-  const value = comment.slice(index + 17, blockComment ? -2 : undefined).trim();
-  return value || undefined;
+  const valueStart = index + 17;
+  let valueEnd = valueStart;
+  while (valueEnd < comment.length && !/\s/.test(comment[valueEnd])) valueEnd++;
+  if (valueEnd === valueStart || comment.slice(valueEnd).trim() !== "") return undefined;
+  return comment.slice(valueStart, valueEnd);
 }
 
-export function extractSourceMapURL(code, options = undefined) {
+export function extractSourceMapURL(code) {
   const source = String(code);
   if (source.indexOf("sourceMappingURL=") === -1) return undefined;
-  const allowBlockComments = options && options.blockComments === true;
   let result;
 
   function scan(start, end) {
@@ -359,10 +360,7 @@ export function extractSourceMapURL(code, options = undefined) {
           lineEnd++;
         const marker = source.charCodeAt(index + 2);
         if (marker === 0x23 || marker === 0x40) {
-          const value = sourceMapURLFromComment(
-            source.slice(index, lineEnd),
-            false,
-          );
+          const value = sourceMapURLFromComment(source.slice(index, lineEnd));
           if (value !== undefined) result = value;
         }
         index = lineEnd;
@@ -371,14 +369,6 @@ export function extractSourceMapURL(code, options = undefined) {
       if (next === 0x2a) {
         const close = source.indexOf("*/", index + 2);
         const blockEnd = close === -1 ? end : Math.min(close + 2, end);
-        const marker = source.charCodeAt(index + 2);
-        if (allowBlockComments && (marker === 0x23 || marker === 0x40)) {
-          const value = sourceMapURLFromComment(
-            source.slice(index, blockEnd),
-            true,
-          );
-          if (value !== undefined) result = value;
-        }
         index = blockEnd;
         continue;
       }

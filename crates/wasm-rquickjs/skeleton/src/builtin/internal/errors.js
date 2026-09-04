@@ -18,6 +18,10 @@ function _isInternalErrorFrame(fileName) {
     return fileName === '__wasm_rquickjs_builtin/internal/errors';
 }
 
+function _isInternalErrorStackLine(line) {
+    return /^\s*at construct \(native\)\s*$/.test(line);
+}
+
 function _remapSourceMappedLocation(fileName, lineNumber, columnNumber) {
     const mapper = globalThis.__wasm_rquickjs_remap_source_mapped_position;
     if (typeof mapper !== 'function') return undefined;
@@ -34,6 +38,11 @@ function _remapSourceMappedStack(stackString) {
     const lines = stackString.split('\n');
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+        if (_isInternalErrorStackLine(line)) {
+            lines.splice(i, 1);
+            i -= 1;
+            continue;
+        }
         let match = line.match(_callSiteWithFnPattern);
         let fileName;
         let lineNumber;
@@ -138,10 +147,22 @@ function _dataDesc(value) {
 // Node (i.e. `delete err.stack` makes subsequent `err.stack` reads undefined).
 const nativeErrorStackDescriptor = Object.getOwnPropertyDescriptor(Error.prototype, "stack");
 const NativeError = Error;
+const nativeErrorCaptureStackTrace = NativeError.captureStackTrace;
 const nativeErrorToString = Error.prototype.toString;
 const materializedErrorStacks = new WeakSet();
 let errorStackShimInstalled = false;
 let errorSubclassShimsInstalled = false;
+
+function recaptureNativeErrorStack(errorInstance, constructorOpt) {
+    if (typeof nativeErrorCaptureStackTrace !== 'function') return;
+    const nativePrepare = NativeError.prepareStackTrace;
+    NativeError.prepareStackTrace = undefined;
+    try {
+        nativeErrorCaptureStackTrace(errorInstance, constructorOpt);
+    } finally {
+        NativeError.prepareStackTrace = nativePrepare;
+    }
+}
 
 function materializeOwnStack(errorInstance) {
     if (!errorInstance || (typeof errorInstance !== "object" && typeof errorInstance !== "function")) {
@@ -211,6 +232,7 @@ function installErrorStackShim() {
     const ErrorShim = function Error() {
         const ctorTarget = new.target || ErrorShim;
         const errorInstance = Reflect.construct(NativeError, arguments, NativeError);
+        recaptureNativeErrorStack(errorInstance, ctorTarget);
         materializeOwnStack(errorInstance);
 
         // Error.prepareStackTrace support (V8 compat).
@@ -306,6 +328,7 @@ function installNativeErrorSubclassShim(name) {
     const Shim = function(...args) {
         const ctorTarget = new.target || Shim;
         const errorInstance = Reflect.construct(NativeConstructor, args, NativeConstructor);
+        recaptureNativeErrorStack(errorInstance, ctorTarget);
         materializeOwnStack(errorInstance);
         const rawStack = errorInstance.stack;
         Object.defineProperty(errorInstance, 'stack', {
@@ -373,12 +396,14 @@ function installNativeErrorSubclassShims() {
     errorSubclassShimsInstalled = true;
 }
 
-if (nativeErrorStackDescriptor && nativeErrorStackDescriptor.configurable === false) {
-    try {
-        installErrorStackShim();
-    } catch {
-        // Keep the runtime default behavior if shimming fails.
-    }
+try {
+    // Install before guest code can retain a constructor reference. Source-map
+    // support can be enabled later, and enabling it must not replace any of the
+    // public Error constructors at an observable boundary.
+    installErrorStackShim();
+    installNativeErrorSubclassShims();
+} catch {
+    // Keep the runtime default behavior if shimming fails.
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stack_shim', {
@@ -408,8 +433,7 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
 // libraries like depd that set Error.prepareStackTrace and then call
 // Error.captureStackTrace get proper CallSite objects.
 {
-    const nativeCaptureStackTrace = globalThis.Error.captureStackTrace;
-    if (typeof nativeCaptureStackTrace === 'function') {
+    if (typeof nativeErrorCaptureStackTrace === 'function') {
         function captureRawStackTrace(targetObject, constructorOpt) {
             // QuickJS stores its native prepare hook in the context behind the
             // original Error constructor. The public ErrorShim deliberately
@@ -418,7 +442,7 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
             const nativePrepare = NativeError.prepareStackTrace;
             NativeError.prepareStackTrace = undefined;
             try {
-                nativeCaptureStackTrace(targetObject, constructorOpt);
+                nativeErrorCaptureStackTrace(targetObject, constructorOpt);
                 return targetObject.stack;
             } finally {
                 NativeError.prepareStackTrace = nativePrepare;
@@ -432,12 +456,15 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
             // captureStackTrace() returns.
             const rawStack = captureRawStackTrace(targetObject, constructorOpt);
             if (typeof rawStack === 'string') {
-                const callSites = _parseStackStringToCallSites(rawStack);
+                let callSites;
                 Object.defineProperty(targetObject, "stack", {
                     get() {
                         const prepare = globalThis.Error && globalThis.Error.prepareStackTrace;
                         const result = typeof prepare === "function"
-                            ? prepare(targetObject, callSites)
+                            ? prepare(
+                                targetObject,
+                                callSites ??= _parseStackStringToCallSites(rawStack),
+                            )
                             : _remapSourceMappedStack(rawStack);
                         Object.defineProperty(targetObject, "stack", _dataDesc(result));
                         return result;
