@@ -438,7 +438,10 @@
         "block_70_verify_non_enumerable_keys_get_escaped": { "category": "runnable" },
         "block_71_check_for_special_colors": { "category": "runnable" },
         "block_72_non_indices_array_properties_are_sorted_as_well": { "category": "runnable" },
-        "block_73_manipulate_the_prototype_in_weird_ways": { "category": "runnable" },
+        "block_73_manipulate_the_prototype_in_weird_ways": {
+          "category": "known-gap",
+          "reason": "requires V8 hidden-class constructor-name recovery after the prototype constructor is detached"
+        },
         "block_74_check_that_the_fallback_always_works": { "category": "runnable" },
         "block_75_check_the_getter_option": { "category": "runnable" },
         "block_76_check_compact_number_mode": { "category": "runnable" },

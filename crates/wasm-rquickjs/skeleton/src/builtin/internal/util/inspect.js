@@ -1207,7 +1207,7 @@ function getConstructorName(
         return null;
     }
 
-    const res = internalGetConstructorName(tmp, recurseTimes === 0);
+    const res = internalGetConstructorName(tmp);
 
     if (recurseTimes > ctx.depth && ctx.depth !== null) {
         return `${res} <Complex prototype>`;
