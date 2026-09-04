@@ -27,8 +27,11 @@ tools/check-skeleton-clippy.sh
 ```
 
 It checks the supported P2/P3 default and maximal feature lanes with
-`-Dwarnings`, restores `Cargo.toml_`, and removes skeleton-local `target/`
-artifacts on success, failure, or interruption.
+`-Dwarnings`. The helper temporarily symlinks `Cargo.toml` to the checked-in
+`Cargo.toml_`, directs output to the workspace-root `target/` cache, preserves
+that cache, and removes the symlink on exit. Run `./cleanup-skeleton.sh`
+separately if a pre-existing skeleton-local `target/` must be removed before
+embedding.
 
 ### When modifying skeleton files
 
