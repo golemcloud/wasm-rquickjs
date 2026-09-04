@@ -19,6 +19,7 @@ pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
+mod shared_response_body;
 
 #[cfg(feature = "fetch")]
 mod http;
