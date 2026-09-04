@@ -114,6 +114,63 @@ async fn v8_stack_trace_default_error_stack_headers(
 }
 
 #[test]
+async fn v8_stack_trace_error_inspect_uses_current_name(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-error-inspect-uses-current-name",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn v8_stack_trace_assertion_listener_stack_frame(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-assertion-listener-stack-frame",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    let Some(Val::String(frame)) = r else {
+        anyhow::bail!("expected a stack-frame string, got {r:?}");
+    };
+    assert!(
+        frame.contains(" (") && frame.ends_with(')'),
+        "expected a parenthesized stack frame, got {frame:?}"
+    );
+    Ok(())
+}
+
+#[test]
+async fn v8_stack_trace_cjs_call_site_line_offset(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-cjs-call-site-line-offset",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{}", output);
+    assert_eq!(r, Some(Val::String("2".into())));
+    Ok(())
+}
+
+#[test]
 async fn v8_stack_trace_prepare_stack_trace_descriptors(
     #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

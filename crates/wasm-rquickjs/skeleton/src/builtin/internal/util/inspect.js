@@ -1652,6 +1652,28 @@ function formatError(
         }
     }
 
+    // QuickJS prepares native Error stacks during construction, before a guest
+    // can replace `name`. Refresh only the recognizable native summary line so
+    // inspect() retains Node's current-name formatting without rewriting a
+    // manually assigned stack.
+    if (
+        typeof stack === "string" &&
+        nativeErrorConstructorNames.has(constructor) &&
+        codes.isPreparedNativeStack(err, stack)
+    ) {
+        const stackStart = stack.indexOf("\n    at");
+        if (stackStart !== -1) {
+            const initialHeader = stack.slice(0, stackStart);
+            const nativeHeader = err.message ? `${constructor}: ${err.message}` : constructor;
+            if (initialHeader === nativeHeader) {
+                const currentHeader = Error.prototype.toString.call(err);
+                if (typeof currentHeader === "string" && currentHeader !== initialHeader) {
+                    stack = currentHeader + stack.slice(stackStart);
+                }
+            }
+        }
+    }
+
     // QuickJS may drop the summary line and return only stack frames for some
     // tampered error-name cases. Reconstruct the header from toString() so
     // improveStack() can normalize the first line like Node does.

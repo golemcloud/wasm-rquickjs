@@ -90,6 +90,9 @@ function _formatNativeCallSites(error, callSites) {
         let columnNumber;
         try {
             functionName = callSite.getFunctionName();
+            if (!functionName && typeof callSite.getMethodName === 'function') {
+                functionName = callSite.getMethodName();
+            }
             fileName = callSite.getFileName();
             lineNumber = callSite.getLineNumber();
             columnNumber = callSite.getColumnNumber();
@@ -141,29 +144,44 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_remap_source_mapped_stack', {
     configurable: false,
 });
 
-function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
+function _callSiteMethod(callSite, name, fallback) {
+    if (callSite && typeof callSite[name] === 'function') {
+        try {
+            return callSite[name]();
+        } catch {
+            // Use the compatibility fallback below.
+        }
+    }
+    return fallback;
+}
+
+function _makeCallSite(functionName, fileName, lineNumber, columnNumber, callSite) {
     return {
-        getThis() { return undefined; },
-        getTypeName() { return null; },
-        getFunction() { return undefined; },
+        getThis() { return _callSiteMethod(callSite, 'getThis', undefined); },
+        getTypeName() { return _callSiteMethod(callSite, 'getTypeName', null); },
+        getFunction() { return _callSiteMethod(callSite, 'getFunction', undefined); },
         getFunctionName() { return functionName || null; },
-        getMethodName() { return null; },
+        getMethodName() { return _callSiteMethod(callSite, 'getMethodName', null); },
         getFileName() { return fileName || null; },
         getLineNumber() { return lineNumber | 0; },
         getColumnNumber() { return columnNumber | 0; },
-        getEvalOrigin() { return undefined; },
-        isToplevel() { return true; },
-        isEval() { return false; },
-        isNative() { return false; },
-        isConstructor() { return false; },
-        isAsync() { return false; },
-        isPromiseAll() { return false; },
-        getPromiseIndex() { return null; },
+        getEvalOrigin() { return _callSiteMethod(callSite, 'getEvalOrigin', undefined); },
+        isToplevel() { return _callSiteMethod(callSite, 'isToplevel', true); },
+        isEval() { return _callSiteMethod(callSite, 'isEval', false); },
+        isNative() { return _callSiteMethod(callSite, 'isNative', false); },
+        isConstructor() { return _callSiteMethod(callSite, 'isConstructor', false); },
+        isAsync() { return _callSiteMethod(callSite, 'isAsync', false); },
+        isPromiseAll() { return _callSiteMethod(callSite, 'isPromiseAll', false); },
+        getPromiseIndex() { return _callSiteMethod(callSite, 'getPromiseIndex', null); },
         getScriptNameOrSourceURL() { return fileName || null; },
         toString() {
-            const name = functionName || '<anonymous>';
             if (fileName) {
-                return `${name} (${fileName}:${lineNumber}:${columnNumber})`;
+                const location = `${fileName}:${lineNumber}:${columnNumber}`;
+                return functionName ? `${functionName} (${location})` : location;
+            }
+            const name = functionName || '<anonymous>';
+            if (_callSiteMethod(callSite, 'isNative', false)) {
+                return `${name} (native)`;
             }
             return name;
         },
@@ -171,29 +189,28 @@ function _makeCallSite(functionName, fileName, lineNumber, columnNumber) {
 }
 
 function _toCompatibleCallSite(callSite) {
-    const requiredMethods = [
-        'getThis', 'getTypeName', 'getFunction', 'getFunctionName',
-        'getMethodName', 'getFileName', 'getLineNumber', 'getColumnNumber',
-        'getEvalOrigin', 'isToplevel', 'isEval', 'isNative', 'isConstructor',
-        'isAsync', 'isPromiseAll', 'getPromiseIndex', 'getScriptNameOrSourceURL',
-        'toString',
-    ];
-    if (requiredMethods.every((name) => typeof callSite[name] === 'function')) {
-        return callSite;
-    }
     let functionName;
     let fileName;
     let lineNumber;
     let columnNumber;
     try {
         functionName = callSite.getFunctionName();
+        if (!functionName && typeof callSite.getMethodName === 'function') {
+            functionName = callSite.getMethodName();
+        }
         fileName = callSite.getFileName();
         lineNumber = callSite.getLineNumber();
         columnNumber = callSite.getColumnNumber();
     } catch {
         // Return a complete neutral CallSite when the native object is partial.
     }
-    return _makeCallSite(functionName, fileName, lineNumber, columnNumber);
+    return _makeCallSite(
+        functionName,
+        fileName,
+        lineNumber,
+        columnNumber,
+        callSite,
+    );
 }
 
 // Helper to create property descriptors immune to Object.prototype pollution.
@@ -217,13 +234,27 @@ const nativeErrorPrepareStackTraceDescriptor = Object.getOwnPropertyDescriptor(
 );
 const nativeErrorCaptureStackTrace = NativeError.captureStackTrace;
 const initialPublicPrepareStackTrace = NativeError.prepareStackTrace;
+const preparedNativeStacks = new WeakMap();
+
+export function isPreparedNativeStack(error, stack) {
+    return error !== null &&
+        (typeof error === 'object' || typeof error === 'function') &&
+        preparedNativeStacks.get(error) === stack;
+}
 
 function _dispatchPrepareStackTrace(error, callSites) {
-    const prepare = NativeError.prepareStackTrace;
-    if (typeof prepare === 'function') {
-        return prepare(error, callSites.map(_toCompatibleCallSite));
+    if (error && (typeof error === 'object' || typeof error === 'function') &&
+        preparedNativeStacks.has(error)) {
+        return preparedNativeStacks.get(error);
     }
-    return _prepareSourceMappedStack(error, callSites);
+    const prepare = NativeError.prepareStackTrace;
+    const result = typeof prepare === 'function'
+        ? prepare(error, callSites.map(_toCompatibleCallSite))
+        : _prepareSourceMappedStack(error, callSites);
+    if (error && (typeof error === 'object' || typeof error === 'function')) {
+        preparedNativeStacks.set(error, result);
+    }
+    return result;
 }
 
 if (nativeErrorPrepareStackTraceDescriptor &&
