@@ -33,7 +33,9 @@ impl Drop for TestServerHandle {
 fn trace_http_lifecycle(router: Router, port: u16) -> Router {
     router.layer(axum::middleware::from_fn(
         move |request: Request, next: Next| async move {
-            let request_id = super::test_server_http_correlation(request.headers());
+            // Server-side IDs are intentionally independent from client-side IDs. Passing a
+            // private correlation value over the wire would mutate guest-visible requests.
+            let request_id = super::next_test_server_http_request();
             let connection = request
                 .extensions()
                 .get::<ConnectInfo<super::TracedTestServerConnection>>()

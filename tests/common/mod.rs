@@ -551,19 +551,14 @@ fn test_server_http_trace() -> &'static HttpLifecycleTrace {
     TEST_SERVER_HTTP_TRACE.get_or_init(HttpLifecycleTrace::new)
 }
 
-fn attach_http_correlation<B>(request: &mut http::Request<B>, request_id: usize) {
-    request.headers_mut().insert(
-        http::HeaderName::from_static("x-wrq-http-trace-id"),
-        http::HeaderValue::try_from(request_id.to_string()).expect("numeric header is valid"),
-    );
+fn record_http_submit<B>(trace: &HttpLifecycleTrace, request: &http::Request<B>) -> usize {
+    let request_id = trace.next_request();
+    trace.record_submit(request_id, request.method(), request.uri());
+    request_id
 }
 
-fn test_server_http_correlation(headers: &http::HeaderMap) -> usize {
-    headers
-        .get("x-wrq-http-trace-id")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-        .unwrap_or_default()
+fn next_test_server_http_request() -> usize {
+    test_server_http_trace().next_request()
 }
 
 fn record_test_server_arrival(request_id: usize, port: u16, uri: &http::Uri) {
@@ -1271,14 +1266,12 @@ impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
     #[cfg(not(feature = "use-golem-wasmtime"))]
     fn send_request(
         &mut self,
-        mut request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
         config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
     ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
     {
         let trace = self.0.clone();
-        let request_id = trace.next_request();
-        attach_http_correlation(&mut request, request_id);
-        trace.record_submit(request_id, request.method(), request.uri());
+        let request_id = record_http_submit(&trace, &request);
 
         let (parts, body) = request.into_parts();
         let request = http::Request::from_parts(
@@ -1296,15 +1289,13 @@ impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
     #[cfg(feature = "use-golem-wasmtime")]
     fn send_request(
         &mut self,
-        mut request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
         config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
         body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
     ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
     {
         let trace = self.0.clone();
-        let request_id = trace.next_request();
-        attach_http_correlation(&mut request, request_id);
-        trace.record_submit(request_id, request.method(), request.uri());
+        let request_id = record_http_submit(&trace, &request);
         let body_completion = p2_body_completion_for_dispatch(request.method(), body_completion);
         let collect_before_send = body_completion.is_some();
         let (parts, body) = request.into_parts();
@@ -1352,7 +1343,7 @@ struct P3HttpTraceHooks(HttpLifecycleTrace);
 impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
     fn send_request(
         &mut self,
-        mut request: http::Request<
+        request: http::Request<
             http_body_util::combinators::UnsyncBoxBody<
                 bytes::Bytes,
                 wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
@@ -1395,9 +1386,7 @@ impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
         drop(response_processing);
 
         let trace = self.0.clone();
-        let request_id = trace.next_request();
-        attach_http_correlation(&mut request, request_id);
-        trace.record_submit(request_id, request.method(), request.uri());
+        let request_id = record_http_submit(&trace, &request);
         let (parts, body) = request.into_parts();
         let request = http::Request::from_parts(
             parts,
@@ -2059,30 +2048,28 @@ mod tests {
     }
 
     #[test]
-    fn http_lifecycle_correlation_distinguishes_same_path_requests() {
-        let mut first = http::Request::get("http://127.0.0.1:1234/same")
+    fn http_lifecycle_submit_does_not_mutate_guest_headers() {
+        let trace = HttpLifecycleTrace::new();
+        let request = http::Request::get("http://127.0.0.1:1234/same")
+            .header("x-guest-header", "preserved")
+            .header("x-wrq-http-trace-id", "guest-value")
             .body(())
             .unwrap();
-        let mut second = http::Request::get("http://127.0.0.1:1234/same")
+        let request_without_trace_header = http::Request::get("http://127.0.0.1:1234/same")
             .body(())
             .unwrap();
-        attach_http_correlation(&mut first, 41);
-        attach_http_correlation(&mut second, 42);
 
-        assert_eq!(test_server_http_correlation(first.headers()), 41);
-        assert_eq!(test_server_http_correlation(second.headers()), 42);
+        let first_request_id = record_http_submit(&trace, &request);
+        let second_request_id = record_http_submit(&trace, &request_without_trace_header);
 
-        let uri = Arc::new(first.uri().clone());
-        let arrivals = [41, 42].map(|request_id| {
-            let uri = uri.clone();
-            thread::spawn(move || record_test_server_arrival(request_id, 1234, &uri))
-        });
-        for arrival in arrivals {
-            arrival.join().unwrap();
-        }
-        let snapshot = test_server_http_trace().snapshot();
-        assert!(snapshot.contains("request=41 phase=server-arrival"));
-        assert!(snapshot.contains("request=42 phase=server-arrival"));
+        assert_ne!(first_request_id, second_request_id);
+        assert_eq!(request.headers()["x-guest-header"], "preserved");
+        assert_eq!(request.headers()["x-wrq-http-trace-id"], "guest-value");
+        assert!(
+            !request_without_trace_header
+                .headers()
+                .contains_key("x-wrq-http-trace-id")
+        );
     }
 
     #[test]
@@ -2574,7 +2561,14 @@ mod tests {
             any(
                 |ConnectInfo(connection): ConnectInfo<TracedTestServerConnection>,
                  request: Request| async move {
-                    let request_id = test_server_http_correlation(request.headers());
+                    assert!(matches!(
+                        request
+                            .headers()
+                            .get("x-wrq-http-trace-id")
+                            .and_then(|value| value.to_str().ok()),
+                        Some("guest-one" | "guest-two")
+                    ));
+                    let request_id = next_test_server_http_request();
                     record_test_server_connection(request_id, Some(&connection));
                     axum::response::Response::new(Body::new(TracedHttpBody::new(
                         Full::new(Bytes::from_static(b"ok")),
@@ -2598,8 +2592,8 @@ mod tests {
         let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
         client
             .write_all(
-                b"GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: 71\r\n\r\n\
-                  GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: 72\r\nConnection: close\r\n\r\n",
+                b"GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: guest-one\r\n\r\n\
+                  GET / HTTP/1.1\r\nHost: localhost\r\nx-wrq-http-trace-id: guest-two\r\nConnection: close\r\n\r\n",
             )
             .await
             .unwrap();
@@ -2614,7 +2608,18 @@ mod tests {
             2
         );
         let snapshot = trace.snapshot();
-        for request_id in [71, 72] {
+        let mut request_ids = snapshot
+            .lines()
+            .filter(|line| line.contains("phase=server-request-connection"))
+            .filter_map(|line| {
+                line.split_whitespace()
+                    .find_map(|field| field.strip_prefix("request="))
+            })
+            .collect::<Vec<_>>();
+        request_ids.sort_unstable();
+        request_ids.dedup();
+        assert_eq!(request_ids.len(), 2, "{snapshot}");
+        for request_id in request_ids {
             assert!(snapshot.contains(&format!(
                 "request={request_id} phase=server-request-connection"
             )));
