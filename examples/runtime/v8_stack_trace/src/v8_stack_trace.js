@@ -141,6 +141,72 @@ export const testLatePrepareStackTrace = () => {
     }
 };
 
+export const testDefaultErrorStackHeaders = () => {
+    const originalPrepare = Error.prepareStackTrace;
+    try {
+        Error.prepareStackTrace = undefined;
+        assert.match(new Error('base').stack, /^Error: base(?:\n|$)/);
+        assert.match(new TypeError('native').stack, /^TypeError: native(?:\n|$)/);
+        assert.match(new Error().stack, /^Error(?:\n|$)/);
+        class CustomError extends Error {}
+        CustomError.prototype.name = 'CustomError';
+        assert.match(new CustomError('custom').stack, /^CustomError: custom(?:\n|$)/);
+        class EmptyNameError extends Error {}
+        EmptyNameError.prototype.name = '';
+        assert.match(new EmptyNameError('message-only').stack, /^message-only(?:\n|$)/);
+        const originalToString = Error.prototype.toString;
+        Error.prototype.toString = () => 'POISON';
+        const protectedHeader = new Error('protected').stack;
+        Error.prototype.toString = originalToString;
+        assert.match(protectedHeader, /^Error: protected(?:\n|$)/);
+        return true;
+    } catch (e) {
+        console.error('testDefaultErrorStackHeaders FAIL:', e.message);
+        return false;
+    } finally {
+        Error.prepareStackTrace = originalPrepare;
+    }
+};
+
+export const testPrepareStackTraceDescriptors = () => {
+    try {
+        const customPrepare = () => 'custom-prepare';
+        Error.prepareStackTrace = customPrepare;
+        Object.defineProperty(Error, 'prepareStackTrace', { enumerable: false });
+        assert.strictEqual(Error.prepareStackTrace, customPrepare);
+        assert.strictEqual(new Error('partial-descriptor').stack, 'custom-prepare');
+
+        let getterCalls = 0;
+        Object.defineProperty(Error, 'prepareStackTrace', {
+            get() {
+                getterCalls++;
+                return customPrepare;
+            },
+            configurable: true,
+        });
+        assert.strictEqual(getterCalls, 0);
+        assert.strictEqual(new TypeError('accessor').stack, 'custom-prepare');
+
+        delete Error.prepareStackTrace;
+        assert.match(new Error('deleted').stack, /^Error: deleted(?:\n|$)/);
+
+        Object.defineProperty(Error, 'prepareStackTrace', {
+            value: customPrepare,
+            writable: true,
+            configurable: true,
+        });
+        Object.freeze(Error);
+        const descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+        assert.strictEqual(descriptor.writable, false);
+        assert.strictEqual(descriptor.configurable, false);
+        assert.strictEqual(new Error('frozen').stack, 'custom-prepare');
+        return true;
+    } catch (e) {
+        console.error('testPrepareStackTraceDescriptors FAIL:', e.message);
+        return false;
+    }
+};
+
 // Test 5: constructorOpt parameter strips frames
 export const testConstructorOpt = () => {
     try {
