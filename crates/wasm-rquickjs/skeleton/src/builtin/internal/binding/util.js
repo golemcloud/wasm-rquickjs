@@ -320,6 +320,7 @@ function findGlobalConstructorNameByPrototype(value) {
 
 const inspectNewCallPattern = /\b(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?inspect\s*\(\s*new\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/;
 const stackLocationPattern = /\(?(.+):(\d+):(\d+)\)?\s*$/;
+const bareStackLocationPattern = /^\s*at\s+(.+):(\d+):(\d+)\s*$/;
 
 function inferConstructorNameFromCallsite() {
     const currentModule = globalThis.__wasm_rquickjs_current_module;
@@ -341,11 +342,18 @@ function inferConstructorNameFromCallsite() {
     const sourceLines = currentModule.source.split("\n");
     const stackLines = stack.split("\n");
     for (let i = stackLines.length - 1; i >= 1; i--) {
-        if (!stackLines[i].includes("anonymous (") && !stackLines[i].includes("<anonymous> (")) {
+        const stackLine = stackLines[i];
+        const isAnonymousFrame = stackLine.includes("anonymous (") ||
+            stackLine.includes("<anonymous> (");
+        const bareLocation = bareStackLocationPattern.exec(stackLine);
+        if (
+            !isAnonymousFrame &&
+            (bareLocation === null || bareLocation[1] !== currentModule.filename)
+        ) {
             continue;
         }
 
-        const locationMatch = stackLocationPattern.exec(stackLines[i]);
+        const locationMatch = stackLocationPattern.exec(stackLine);
         if (locationMatch === null) {
             continue;
         }
