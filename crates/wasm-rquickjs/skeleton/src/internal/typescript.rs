@@ -256,7 +256,7 @@ impl TypeScriptOutput {
         // verify both the Rust ESM and JavaScript CJS/public paths.
         let encoded = base64ct::Base64::encode_string(source_map.as_bytes());
         format!(
-            "{}\n//# sourceMappingURL=data:application/json;base64,{encoded}",
+            "{}\n\n//# sourceMappingURL=data:application/json;base64,{encoded}",
             self.code
         )
     }

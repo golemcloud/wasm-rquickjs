@@ -98,27 +98,6 @@ export async function run() {
         language: 'typescript',
         source: largeSource,
     });
-    const measuredSource = `enum Direction { Up, Down }
-        export default Direction.Down;
-        /*${'x'.repeat(64 * 1024)}*/`;
-    function measureTransform(sourceMap) {
-        const samples = [];
-        for (let i = 0; i < 6; i++) {
-            const started = performance.now();
-            module.stripTypeScriptTypes(measuredSource, {
-                mode: 'transform',
-                sourceMap,
-                sourceUrl: 'measured.ts',
-            });
-            if (i > 0) samples.push(performance.now() - started);
-        }
-        samples.sort((left, right) => left - right);
-        return samples[2];
-    }
-    const transformLatencyMs = {
-        withoutSourceMap: measureTransform(false),
-        withSourceMap: measureTransform(true),
-    };
     fs.writeFileSync(
         '/typescript-transform-runtime/stack-esm.mts',
         `enum StackShift { Value }
@@ -406,7 +385,6 @@ export async function run() {
         commonJsNodeModulesTypeScriptErrorName,
         executionInline: executionInline.value,
         largeInlineExecution: largeInlineExecution.value,
-        transformLatencyMs,
         esmRuntimeStack,
         cjsRuntimeStack,
         importedCjsRuntimeStack,

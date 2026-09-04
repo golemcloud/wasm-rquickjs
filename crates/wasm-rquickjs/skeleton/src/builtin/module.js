@@ -1851,7 +1851,7 @@ function appendInlineSourceMap(code, sourceMap) {
     // decodes maps emitted through both the Rust ESM and JavaScript CJS/public
     // transformation paths and asserts their original coordinates.
     const encoded = buffer.Buffer.from(sourceMap, 'utf8').toString('base64');
-    return code + `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
+    return code + `\n\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
 }
 
 function codeWithInlineSourceMap(output) {
@@ -1900,9 +1900,10 @@ export function stripTypeScriptTypes(code, options = undefined) {
     const transformed = JSON.parse(transformTypeScriptNative(
         code, sourceUrl === undefined ? '' : sourceUrl, mode, sourceMap, undefined
     ));
-    let result = sourceMap
-        ? appendInlineSourceMap(transformed.code, transformed.sourceMap)
-        : transformed.code;
+    if (sourceMap) {
+        return appendInlineSourceMap(transformed.code, transformed.sourceMap);
+    }
+    let result = transformed.code;
     if (sourceUrl !== undefined) {
         result += `\n\n//# sourceURL=${sourceUrl}`;
     }
