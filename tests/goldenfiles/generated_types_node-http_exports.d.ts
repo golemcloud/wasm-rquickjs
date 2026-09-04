@@ -13,9 +13,18 @@ declare module 'node-http' {
   export function httpPipelinedConnectionClose(): Promise<boolean>;
   export function httpPipelinedActiveTimeout(): Promise<boolean>;
   export function httpCloseIdleConnections(): Promise<boolean>;
+  export function httpIdleResourceReclamation(): Promise<boolean>;
+  export function httpZeroKeepAliveTimeout(): Promise<boolean>;
+  export function httpUnreadRequestBodyDisposal(): Promise<boolean>;
+  export function httpServerRequestDestroy(): Promise<boolean>;
+  export function httpPartiallyConsumedRequestBody(): Promise<boolean>;
+  export function httpResumeScheduledRequestBody(): Promise<boolean>;
+  export function httpCompleteUnreadRequestBody(): Promise<boolean>;
+  export function httpClientResponseOwnership(): Promise<boolean>;
   export function httpInformationalWriteAfterClose(): Promise<boolean>;
   export function httpMaxRequestsClosesSocket(): Promise<boolean>;
   export function netWritevBoundaries(): Promise<boolean>;
   export function httpPipelinedMaxRequests(): Promise<boolean>;
   export function httpCustomConnectionRejected(): Promise<boolean>;
+  export function httpResponsePersistence(): Promise<boolean>;
 }
