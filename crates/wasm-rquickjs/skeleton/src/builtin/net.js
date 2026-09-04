@@ -1304,7 +1304,7 @@ Socket.prototype._onTimeout = function _onTimeout() {
         const writeQueueSize = handle._writeInFlight && typeof handle.write_queue_size === 'function'
             ? Number(handle.write_queue_size())
             : handle.writeQueueSize;
-        if (lastWriteQueueSize !== writeQueueSize) {
+        if (writeQueueSize < lastWriteQueueSize) {
             this._lastWriteQueueSize = writeQueueSize;
             this._resetTimeout();
             return true;
