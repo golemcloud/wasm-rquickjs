@@ -1,9 +1,29 @@
+import * as observer from 'test:async-values/observer';
+import { WrappedStream } from 'test:async-values/observer';
+
 // Returns a component `future<u32>` to the host. Returning a value (or a promise of a value) from
 // the JS function is lowered into the component future.
 export async function runFuture() {
   // Yield to the microtask queue first to prove the value is resolved asynchronously.
   await Promise.resolve();
   return 42;
+}
+
+const checkpointReason = new Error('raw future checkpoint');
+let checkpointCount = 0;
+process.on('unhandledRejection', (reason) => {
+  if (reason === checkpointReason) checkpointCount += 1;
+});
+
+// The unrelated rejection must be reported at the raw future export boundary,
+// before the host can make its next call into JavaScript.
+export async function runCheckpointFuture() {
+  Promise.reject(checkpointReason);
+  return 7;
+}
+
+export function readCheckpointCount() {
+  return checkpointCount;
 }
 
 // Returns a component `stream<u8>` to the host. Returning an async-iterable (here an async
@@ -17,6 +37,53 @@ export async function runStream() {
   }
   return gen();
 }
+
+export async function runSiblingStreams() {
+  return [
+    [1, 2],
+    Array.from({ length: 64 }, (_, index) => index),
+  ];
+}
+
+export async function runWrappedSiblingStreams() {
+  return [
+    await WrappedStream.wrap([1, 2]),
+    await WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index)),
+  ];
+}
+
+export async function runWrappedStreamAfterGate(id) {
+  await observer.gate(id);
+  return await WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index));
+}
+
+export async function scheduleCleanup(gateId, delayMs) {
+  setTimeout(async () => {
+    await observer.gate(gateId);
+    observer.cleanupComplete();
+  }, delayMs);
+}
+
+class StreamingConstructor {
+  constructor() {
+    this.wrapped = WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index));
+  }
+}
+
+class DeferredStreamingConstructor {
+  constructor() {
+    // The constructor itself returns synchronously. The end-of-turn checkpoint must still notice
+    // that its microtask creates a component stream writer and reject the synchronous operation.
+    Promise.resolve().then(() => {
+      this.wrapped = WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index));
+    });
+  }
+}
+
+export const constructorApi = {
+  StreamingConstructor,
+  DeferredStreamingConstructor,
+};
 
 // Returns future/stream readers nested in a record. The wrapper must return the record to the host
 // before its writer tasks encounter backpressure on those readers.
@@ -61,4 +128,143 @@ export async function takeStream(s) {
     sum += x;
   }
   return sum;
+}
+
+export async function inspectStreamCompletion(s) {
+  const iterator = s[Symbol.asyncIterator]();
+  const values = [];
+  while (true) {
+    const result = await iterator.next();
+    if (result.done) {
+      return `${values.join(',')}|${result.done}|${result.value === undefined}`;
+    }
+    values.push(result.value);
+  }
+}
+
+export async function breakStream(s) {
+  for await (const value of s) {
+    return value;
+  }
+  throw new Error('component stream ended before yielding an item');
+}
+
+export async function returnStream(s) {
+  const iterator = s[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  const closed = await iterator.return();
+  return `${first.value}|${closed.done}|${closed.value === undefined}`;
+}
+
+export async function throwStream(s) {
+  const iterator = s[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  try {
+    await iterator.throw(new Error('consumer-stop'));
+    return 'throw-resolved';
+  } catch (error) {
+    return `${first.value}|${error.message}`;
+  }
+}
+
+export async function closePendingStream(s) {
+  const pending = s[Symbol.asyncIterator]().next();
+  await new Promise(resolve => setTimeout(resolve, 1));
+
+  const closed = await s[Symbol.asyncIterator]().return('closed');
+  const pendingResult = await pending;
+  const closedAgain = await s[Symbol.asyncIterator]().return('closed-again');
+  const nextAfterClose = await s[Symbol.asyncIterator]().next();
+
+  return [
+    closed.done,
+    closed.value,
+    pendingResult.done,
+    pendingResult.value === undefined,
+    closedAgain.done,
+    closedAgain.value,
+    nextAfterClose.done,
+    nextAfterClose.value === undefined,
+  ].join('|');
+}
+
+export async function runNestedObservedStream(cleanupFailure) {
+  let nextValue = 0;
+  const stdout = {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          nextValue += 1;
+          return { done: false, value: nextValue };
+        },
+        async return() {
+          await new Promise(resolve => setTimeout(resolve, 1));
+          observer.cleanupComplete();
+          if (cleanupFailure) {
+            throw new Error('nested-cleanup-failed');
+          }
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+
+  return {
+    label: 'nested-observed',
+    futureValue: Promise.resolve(1),
+    stdout,
+    stderr: null,
+  };
+}
+
+let observedStreamState;
+
+export async function runObservedStream() {
+  let resolveCleanup;
+  const cleanupCompleted = new Promise(resolve => { resolveCleanup = resolve; });
+  observedStreamState = {
+    nextCalls: 0,
+    returnStarted: 0,
+    returnFinished: 0,
+    cleanupCompleted,
+  };
+
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          observedStreamState.nextCalls += 1;
+          return { done: false, value: observedStreamState.nextCalls };
+        },
+        async return() {
+          observedStreamState.returnStarted += 1;
+          await Promise.resolve();
+          observedStreamState.returnFinished += 1;
+          resolveCleanup();
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+}
+
+export async function runInvalidObservedStream() {
+  async function* invalid() {
+    try {
+      yield 'not-a-u8';
+    } finally {
+      observer.cleanupComplete();
+      throw new Error('secondary-export-cleanup-failed');
+    }
+  }
+
+  return invalid();
+}
+
+export async function readObservedStreamState() {
+  await Promise.race([
+    observedStreamState.cleanupCompleted,
+    new Promise(resolve => setTimeout(resolve, 1000)),
+  ]);
+  return `${observedStreamState.nextCalls}|${observedStreamState.returnStarted}|${observedStreamState.returnFinished}`;
 }

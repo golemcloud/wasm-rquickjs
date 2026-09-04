@@ -4389,7 +4389,7 @@
       }
     },
     "parallel/test-http-chunk-problem.js": { "category": "wasi-impossible", "reason": "requires external shell pipeline and cat subprocess via child_process" },
-    "parallel/test-http-chunked-304.js": { "category": "known-gap", "reason": "HTTP server incorrectly emits chunked terminator semantics for 204/304 responses" },
+    "parallel/test-http-chunked-304.js": {},
     "parallel/test-http-chunked-smuggling.js": { "category": "known-gap", "reason": "HTTP parser accepts invalid chunk extensions and mishandles smuggling-style input" },
     "parallel/test-http-chunked.js": {},
     "parallel/test-http-client-abort-destroy.js": {
@@ -4474,7 +4474,7 @@
         }
       }
     },
-    "parallel/test-http-dump-req-when-res-ends.js": { "category": "known-gap", "reason": "request auto-dump/resume when response ends early is incomplete, causing the request/response lifecycle to hang" },
+    "parallel/test-http-dump-req-when-res-ends.js": { "category": "known-gap", "reason": "wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks" },
     "parallel/test-http-early-hints-invalid-argument.js": { "category": "known-gap", "reason": "ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws)" },
     "parallel/test-http-early-hints.js": {
       "split": true,
@@ -4571,7 +4571,7 @@
     },
     "parallel/test-http-multiple-headers.js": { "category": "known-gap", "reason": "rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible" },
     "parallel/test-http-mutable-headers.js": { "category": "known-gap", "reason": "OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected)" },
-    "parallel/test-http-no-read-no-dump.js": { "category": "known-gap", "reason": "keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior" },
+    "parallel/test-http-no-read-no-dump.js": { "category": "known-gap", "reason": "wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks" },
     "parallel/test-http-nodelay.js": { "category": "known-gap", "reason": "node:http client path does not honor/verify net.Socket connect noDelay semantics like Node" },
     "parallel/test-http-outgoing-destroyed.js": {
       "split": true,
@@ -4609,7 +4609,7 @@
     "parallel/test-http-raw-headers.js": { "category": "known-gap", "reason": "rawHeaders/rawTrailers casing and duplicate-header preservation differ from Node semantics" },
     "parallel/test-http-readable-data-event.js": {},
     "parallel/test-http-remove-connection-header-persists-connection.js": {},
-    "parallel/test-http-remove-header-stays-removed.js": { "category": "known-gap", "reason": "removing hop-by-hop/framing headers is not serialized with Node-compatible behavior" },
+    "parallel/test-http-remove-header-stays-removed.js": {},
     "parallel/test-http-req-close-robust-from-tampering.js": { "category": "node-internals", "reason": "invokes private req.client._events.close handlers directly" },
     "parallel/test-http-request-arguments.js": {},
     "parallel/test-http-request-dont-override-options.js": {},
@@ -4699,7 +4699,7 @@
     "parallel/test-http-server-headers-timeout-interrupted-headers.js": { "category": "known-gap", "reason": "server.headersTimeout 408 behavior for interrupted header lines is incomplete" },
     "parallel/test-http-server-headers-timeout-keepalive.js": { "category": "known-gap", "reason": "server.headersTimeout handling across keep-alive requests is not Node-compatible" },
     "parallel/test-http-server-headers-timeout-pipelining.js": { "category": "known-gap", "reason": "server.headersTimeout handling for pipelined requests is not Node-compatible" },
-    "parallel/test-http-server-incomingmessage-destroy.js": { "category": "known-gap", "reason": "req.destroy() on server-side IncomingMessage does not propagate Node-compatible ECONNRESET client behavior" },
+    "parallel/test-http-server-incomingmessage-destroy.js": { "category": "known-gap", "reason": "wasi:http client does not translate an incomplete response after server request destruction into the expected ECONNRESET request error" },
     "parallel/test-http-server-keep-alive-defaults.js": {},
     "parallel/test-http-server-keep-alive-max-requests-null.js": {},
     "parallel/test-http-server-keepalive-end.js": { "category": "node-internals", "reason": "asserts private req.socket.parser.incoming lifecycle after keep-alive request end" },
@@ -4764,7 +4764,7 @@
     "parallel/test-http-upgrade-client2.js": { "category": "wasi-impossible", "reason": "wasi:http does not support HTTP Upgrade/101 socket takeover for node:http clients" },
     "parallel/test-http-upgrade-reconsume-stream.js": { "category": "wasi-impossible", "reason": "requires HTTP Upgrade socket takeover plus tls.TLSSocket, unavailable in WASI" },
     "parallel/test-http-upgrade-server2.js": { "category": "known-gap", "reason": "server-side Upgrade event/error propagation is incomplete" },
-    "parallel/test-http-wget.js": { "category": "known-gap", "reason": "HTTP/1.0 keep-alive response connection-closing semantics are not Node-compatible" },
+    "parallel/test-http-wget.js": {},
     "parallel/test-http-writable-true-after-close.js": { "category": "known-gap", "reason": "response writable state around aborted proxy close is not Node-compatible" },
     "parallel/test-http-write-callbacks.js": { "category": "known-gap", "reason": "checkContinue/write callback ordering and completion semantics are incomplete" },
     "parallel/test-http-write-empty-string.js": {},
@@ -5019,7 +5019,7 @@
     "parallel/test-domain-async-id-map-leak.js": { "category": "known-gap", "reason": "domain/async_hooks integration for AsyncResource domain tracking and async-id map behavior is incomplete" },
 
     // === Additional node:http tests (require HTTP server or internals) ===
-    "parallel/test-http-1.0-keep-alive.js": { "category": "known-gap", "reason": "HTTP/1.0 keep-alive client/server framing is not Node-compatible; consistently fails on CI even with retries" },
+    "parallel/test-http-1.0-keep-alive.js": { "category": "known-gap", "reason": "HTTP/1.0 TE: chunked request negotiation does not enable implicit chunked response framing and persistence" },
     "parallel/test-http-1.0.js": {
       "split": true,
       "subtests": {
@@ -7429,7 +7429,7 @@
       }
     },
     "parallel/test-process-versions.js": { "category": "node-internals", "reason": "depends on Node source-tree deps/* package metadata and process.config build internals" },
-    "parallel/test-promise-handled-rejection-no-warning.js": { "category": "known-gap", "reason": "process unhandledRejection/warning semantics are incomplete" },
+    "parallel/test-promise-handled-rejection-no-warning.js": {},
     "parallel/test-promise-hook-create-hook.js": { "category": "engine-difference", "reason": "v8.promiseHooks is V8-specific and not available in QuickJS" },
     "parallel/test-promise-hook-exceptions.js": { "category": "engine-difference", "reason": "v8.promiseHooks is V8-specific and not available in QuickJS" },
     "parallel/test-promise-hook-on-after.js": { "category": "engine-difference", "reason": "v8.promiseHooks is V8-specific and not available in QuickJS" },
@@ -7438,12 +7438,12 @@
     "parallel/test-promise-hook-on-resolve.js": { "category": "engine-difference", "reason": "v8.promiseHooks is V8-specific and not available in QuickJS" },
     "parallel/test-promise-reject-callback-exception.js": { "category": "engine-difference", "reason": "depends on V8 PromiseRejectCallback stack-overflow behavior" },
     "parallel/test-promise-unhandled-flag.js": { "category": "known-gap", "reason": "CLI --unhandled-rejections flag parsing/validation is incomplete" },
-    "parallel/test-promise-unhandled-silent-no-hook.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
-    "parallel/test-promise-unhandled-silent.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
+    "parallel/test-promise-unhandled-silent-no-hook.js": { "category": "known-gap", "reason": "node-compat runner treats a no-listener rejection as failure even with --unhandled-rejections=none" },
+    "parallel/test-promise-unhandled-silent.js": {},
     "parallel/test-promise-unhandled-warn-no-hook.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
     "parallel/test-promise-unhandled-warn.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
-    "parallel/test-promises-unhandled-proxy-rejections.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
-    "parallel/test-promises-unhandled-rejections.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
+    "parallel/test-promises-unhandled-proxy-rejections.js": { "category": "known-gap", "reason": "node-compat runner inspects a no-listener proxy rejection and triggers its throwing traps" },
+    "parallel/test-promises-unhandled-rejections.js": {},
     "parallel/test-promises-unhandled-symbol-rejections.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
     "parallel/test-promises-warning-on-unhandled-rejection.js": { "category": "known-gap", "reason": "process unhandledRejection/rejectionHandled/warning mode behavior is incomplete" },
     "parallel/test-punycode.js": {},

@@ -15,13 +15,50 @@ interface nested-types {
   }
 }
 
+interface observer {
+  cleanup-complete: func();
+  gate: async func(id: u8);
+
+  resource wrapped-stream {
+    wrap: static async func(reader: stream<u8>) -> own<wrapped-stream>;
+  }
+}
+
+interface constructor-api {
+  resource streaming-constructor {
+    constructor();
+  }
+
+  resource deferred-streaming-constructor {
+    constructor();
+  }
+}
+
 world async-values {
   use nested-types.{nested-values};
+  use observer.{wrapped-stream};
+  import observer;
+  export constructor-api;
 
   export run-future: async func() -> future<u32>;
+  export run-checkpoint-future: async func() -> future<u32>;
+  export read-checkpoint-count: async func() -> u32;
   export run-stream: async func() -> stream<u8>;
+  export run-sibling-streams: async func() -> tuple<stream<u8>, stream<u8>>;
+  export run-wrapped-sibling-streams: async func() -> tuple<wrapped-stream, wrapped-stream>;
+  export run-wrapped-stream-after-gate: async func(id: u8) -> wrapped-stream;
+  export schedule-cleanup: async func(gate-id: u8, delay-ms: u32);
   export run-nested: async func() -> result<nested-values, string>;
   export run-nested-error: async func() -> result<nested-values, string>;
   export take-future: async func(f: future<u32>) -> u32;
   export take-stream: async func(s: stream<u8>) -> u32;
+  export inspect-stream-completion: async func(s: stream<u8>) -> string;
+  export break-stream: async func(s: stream<u8>) -> u8;
+  export return-stream: async func(s: stream<u8>) -> string;
+  export throw-stream: async func(s: stream<u8>) -> string;
+  export close-pending-stream: async func(s: stream<u8>) -> string;
+  export run-nested-observed-stream: async func(cleanup-failure: bool) -> result<nested-values, string>;
+  export run-observed-stream: async func() -> stream<u8>;
+  export run-invalid-observed-stream: async func() -> stream<u8>;
+  export read-observed-stream-state: async func() -> string;
 }

@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3174/4388 (72.3%)
+**Primary compatibility (CI-enforced):** 3180/4388 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3174 | 72.3% | 55.2% | 46.2% |
-| 🧩 known gap | 1214 | 27.7% | 21.1% | 17.7% |
+| ✅ passing (runnable) | 3180 | 72.5% | 55.3% | 46.3% |
+| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3174/5750 (55.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3180/5750 (55.3%)**.
 
 ## Inventory by Module
 
@@ -52,7 +52,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 229 | 286 | 301 | 2 | 0 | 80 | 44.5% | 28.0% |
+| http | 898 | 232 | 283 | 301 | 2 | 0 | 80 | 45.0% | 28.4% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 122 | 32 | 7 | 1 | 0 | 12 | 79.2% | 75.3% |
@@ -64,7 +64,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
 | process | 93 | 45 | 34 | 4 | 0 | 0 | 10 | 57.0% | 54.2% |
-| promises | 23 | 1 | 15 | 0 | 7 | 0 | 0 | 6.2% | 4.3% |
+| promises | 23 | 4 | 12 | 0 | 7 | 0 | 0 | 25.0% | 17.4% |
 | querystring | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | readline | 101 | 0 | 22 | 0 | 0 | 0 | 79 | 0.0% | 0.0% |
 | repl | 85 | 1 | 2 | 72 | 0 | 0 | 10 | 33.3% | 1.3% |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1214)
+### known gap (1208)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -710,7 +710,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | spawn() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 9 | `parallel/test-child-process-spawn-controller.js#block_00_block_00`, `parallel/test-child-process-spawn-controller.js#block_01_block_01`, `parallel/test-child-process-spawn-controller.js#block_02_block_02`, ... (+6) |
 | spawnSync() returns ENOSYS for non-execPath commands; Node expects ENOENT after option validation | 9 | `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`, `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`, `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`, ... (+6) |
 | the split fixture creates rooted symlink targets before the isolated stat subtests; those targets cannot be resolved inside a WASI preopen | 9 | `parallel/test-fs-stat-bigint.js#block_00_block_00`, `parallel/test-fs-stat-bigint.js#block_01_block_01`, `parallel/test-fs-stat-bigint.js#block_02_block_02`, ... (+6) |
-| process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 8 | `parallel/test-promise-unhandled-silent-no-hook.js`, `parallel/test-promise-unhandled-silent.js`, `parallel/test-promise-unhandled-warn-no-hook.js`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
 | WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source | 7 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_04_should_be_importable`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_05_should_be_importable_from_a_module_scope_under_node_modules`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_09_should_run_on_import`, ... (+4) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
@@ -735,6 +734,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: net.connect option validation/coercion for port and hints is not Node-compatible | 4 | `parallel/test-net-connect-options-port.js#block_00_test_wrong_type_of_ports`, `parallel/test-net-connect-options-port.js#block_01_test_out_of_range_ports`, `parallel/test-net-connect-options-port.js#block_02_test_invalid_hints`, ... (+1) |
 | isMarkedAsUntransferable() and related mark/query behavior are incomplete | 4 | `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_00_block_00`, `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_01_block_01`, `parallel/test-worker-message-transfer-port-mark-as-untransferable.js#block_02_block_02`, ... (+1) |
 | markAsUncloneable and DataCloneError semantics are incomplete | 4 | `parallel/test-worker-message-mark-as-uncloneable.js#block_00_uncloneables_cannot_be_cloned_during_message_posting`, `parallel/test-worker-message-mark-as-uncloneable.js#block_01_uncloneables_cannot_be_cloned_during_structured_cloning`, `parallel/test-worker-message-mark-as-uncloneable.js#block_02_markasuncloneable_cannot_affect_arraybuffer`, ... (+1) |
+| process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 4 | `parallel/test-promise-unhandled-warn-no-hook.js`, `parallel/test-promise-unhandled-warn.js`, `parallel/test-promises-unhandled-symbol-rejections.js`, ... (+1) |
 | promisified exec()/execFile() contract is incomplete (promise.child is not a ChildProcess instance) | 4 | `parallel/test-child-process-promisified.js#block_00_block_00`, `parallel/test-child-process-promisified.js#block_01_block_01`, `parallel/test-child-process-promisified.js#block_02_block_02`, ... (+1) |
 | remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes | 4 | `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs`, `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_01_b_mjs_c_mjs_d_mjs_c_mjs`, `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_02_c_mjs_d_mjs_c_mjs`, ... (+1) |
 | requires spawned process.execPath entry-point execution plus WebAssembly module loading support | 4 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_03_should_run_as_the_entry_point`, `es-module/test-esm-type-flag-loose-files.mjs#test_02_should_run_as_wasm_an_extensionless_wasm_file_that_is_outsid`, `es-module/test-esm-type-flag-package-scopes.mjs#test_03_should_run_as_wasm_an_extensionless_wasm_file_within_a_type_`, ... (+1) |
@@ -813,6 +813,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
 | vm timeout interrupt is surfaced as a wasm trap instead of ERR_SCRIPT_EXECUTION_TIMEOUT | 2 | `parallel/test-vm-timeout.js`, `sequential/test-vm-timeout-rethrow.js` |
+| wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks | 2 | `parallel/test-http-dump-req-when-res-ends.js`, `parallel/test-http-no-read-no-dump.js` |
 | wasi:http client path does not surface HPE_UNEXPECTED_CONTENT_LENGTH parse errors | 2 | `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`, `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead` |
 | wasi:http request body is not finalized/sent until end(), so write()-only request flow diverges from Node | 2 | `parallel/test-http-outgoing-destroyed.js#block_00_block_00`, `parallel/test-http-outgoing-destroyed.js#block_01_block_01` |
 | --disable-proto=delete semantics differ in QuickJS (__proto__ yields null) | 1 | `parallel/test-disable-proto-delete.js` |
@@ -889,11 +890,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP server close/reopen ECONNREFUSED sequencing is not Node-compatible | 1 | `sequential/test-http-econnrefused.js` |
 | HTTP server duplicate request-header coalescing for allowed/forbidden header sets is not Node-compatible | 1 | `parallel/test-http-server-multiheaders2.js` |
 | HTTP server duplicate request-header coalescing/deduplication is not Node-compatible | 1 | `parallel/test-http-server-multiheaders.js` |
-| HTTP server incorrectly emits chunked terminator semantics for 204/304 responses | 1 | `parallel/test-http-chunked-304.js` |
 | HTTP server parser does not emit Node-compatible HPE_HEADER_OVERFLOW/431 behavior for oversized headers | 1 | `parallel/test-http-header-overflow.js` |
 | HTTP server socket.setEncoding('') error path (ERR_HTTP_SOCKET_ENCODING) is not Node-compatible | 1 | `parallel/test-http-socket-encoding-error.js` |
-| HTTP/1.0 keep-alive client/server framing is not Node-compatible; consistently fails on CI even with retries | 1 | `parallel/test-http-1.0-keep-alive.js` |
-| HTTP/1.0 keep-alive response connection-closing semantics are not Node-compatible | 1 | `parallel/test-http-wget.js` |
+| HTTP/1.0 TE: chunked request negotiation does not enable implicit chunked response framing and persistence | 1 | `parallel/test-http-1.0-keep-alive.js` |
 | Happy Eyeballs autoSelectFamily over custom dual-stack DNS is not wired through wasi:http transport | 1 | `parallel/test-http-autoselectfamily.js` |
 | Host header generation ignores globalAgent.defaultPort and incorrectly includes the port | 1 | `parallel/test-http-default-port.js` |
 | Host header generation/handling in node:http is not fully Node-compatible | 1 | `parallel/test-http-host-headers.js` |
@@ -1133,7 +1132,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | invalid URL parsing errors lack Node's TypeError and ERR_INVALID_URL shape | 1 | `parallel/test-whatwg-url-custom-parsing.js` |
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
-| keep-alive request sequencing with unread request bodies has non-Node lifecycle behavior | 1 | `parallel/test-http-no-read-no-dump.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
@@ -1147,6 +1145,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
 | node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals | 1 | `parallel/test-timers-api-refs.js` |
+| node-compat runner inspects a no-listener proxy rejection and triggers its throwing traps | 1 | `parallel/test-promises-unhandled-proxy-rejections.js` |
+| node-compat runner treats a no-listener rejection as failure even with --unhandled-rejections=none | 1 | `parallel/test-promise-unhandled-silent-no-hook.js` |
 | node:http abort/destroy response lifecycle (aborted/error/close ordering) is incomplete | 1 | `parallel/test-http-abort-client.js` |
 | node:http client path does not honor/verify net.Socket connect noDelay semantics like Node | 1 | `parallel/test-http-nodelay.js` |
 | node:http client socketPath flow used by this domain test is incomplete (request/response never completes) | 1 | `parallel/test-http-client-response-domain.js` |
@@ -1180,7 +1180,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | process 'multipleResolves' event semantics are not implemented | 1 | `parallel/test-promise-swallowed-event.js` |
 | process prototype chain is not fully Node-compatible (prototype is not EventEmitter-based) | 1 | `parallel/test-process-prototype.js` |
 | process uncaughtException handling inside http client callbacks is incomplete | 1 | `parallel/test-http-catch-uncaughtexception.js` |
-| process unhandledRejection/warning semantics are incomplete | 1 | `parallel/test-promise-handled-rejection-no-warning.js` |
 | process.assert() is not implemented | 1 | `parallel/test-process-assert.js` |
 | process.config ICU path and process.versions.tz metadata are not available | 1 | `parallel/test-tz-version.js` |
 | process.config reports ICU disabled and full Node Intl metadata and fidelity are not implemented | 1 | `parallel/test-intl.js` |
@@ -1200,11 +1199,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
-| removing hop-by-hop/framing headers is not serialized with Node-compatible behavior | 1 | `parallel/test-http-remove-header-stays-removed.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
-| req.destroy() on server-side IncomingMessage does not propagate Node-compatible ECONNRESET client behavior | 1 | `parallel/test-http-server-incomingmessage-destroy.js` |
 | req.setTimeout() handling for actively consumed request bodies is not Node-compatible | 1 | `parallel/test-http-server-consumed-timeout.js` |
-| request auto-dump/resume when response ends early is incomplete, causing the request/response lifecycle to hang | 1 | `parallel/test-http-dump-req-when-res-ends.js` |
 | request drain captureRejections path hangs when request is never finalized with end() under wasi:http | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01` |
 | request header population/normalization (for example Accept) is incomplete | 1 | `parallel/test-http.js` |
 | request/response pause-resume flow control does not complete with Node-compatible behavior | 1 | `parallel/test-http-pause.js` |
@@ -1328,6 +1324,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http client does not surface informational 1xx responses with Node-compatible status/raw headers | 1 | `parallel/test-http-information-headers.js` |
 | wasi:http client does not surface llhttp parse errors/rawPacket for malformed raw TCP responses | 1 | `parallel/test-http-client-error-rawbytes.js` |
 | wasi:http client does not surface llhttp parser errors for malformed raw TCP responses | 1 | `parallel/test-http-client-parse-error.js` |
+| wasi:http client does not translate an incomplete response after server request destruction into the expected ECONNRESET request error | 1 | `parallel/test-http-server-incomingmessage-destroy.js` |
 | wasi:http response header filtering strips headers like Host/Proxy-Authorization, so duplicate-header expectations diverge | 1 | `parallel/test-http-response-multiheaders.js` |
 | wasi:http strips forbidden hop-by-hop headers like Connection, so automatic response headers differ | 1 | `parallel/test-http-automatic-headers.js` |
 | wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients | 1 | `parallel/test-http-keep-alive-timeout-custom.js` |

@@ -276,6 +276,134 @@ async fn node_http_close_idle_connections(
 }
 
 #[test]
+async fn node_http_idle_resource_reclamation(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-idle-resource-reclamation",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_zero_keep_alive_timeout(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-zero-keep-alive-timeout",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_unread_request_body_disposal(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-unread-request-body-disposal",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_server_request_destroy(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-server-request-destroy",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_partially_consumed_request_body(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-partially-consumed-request-body",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_resume_scheduled_request_body(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-resume-scheduled-request-body",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_complete_unread_request_body(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-complete-unread-request-body",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_client_response_ownership(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-client-response-ownership",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_informational_write_after_close(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -345,6 +473,18 @@ async fn node_http_custom_connection_rejected(
         &[],
     )
     .await;
+    println!("{output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_response_persistence(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "http-response-persistence", &[])
+            .await;
     println!("{output}");
     assert_eq!(result?, Some(Val::Bool(true)));
     Ok(())

@@ -8684,6 +8684,246 @@ export const testRequireEsmRejectionTracking = async () => {
     }
 };
 
+export const testUnhandledRejectionTurnOrdering = async () => {
+    const order = [];
+    const unhandled = [];
+    const handled = [];
+    const onUnhandled = (reason, promise) => {
+        unhandled.push({ reason, promise });
+        order.push(`unhandled:${reason.message}`);
+    };
+    const onHandled = (promise) => {
+        handled.push(promise);
+        order.push('rejectionHandled');
+    };
+    process.on('unhandledRejection', onUnhandled);
+    process.on('rejectionHandled', onHandled);
+
+    let onFixpointUnhandled;
+    let onThrowingUnhandled;
+    let onThrowingHandled;
+    let onUncaughtException;
+    let onCancellingUnhandled;
+
+    try {
+        const refTimerCount = globalThis.__wasm_rquickjs_ref_timer_count;
+        assert.strictEqual(typeof refTimerCount, 'function');
+        const timersBefore = refTimerCount();
+
+        const handledInNextTick = Promise.reject(new Error('handled in nextTick'));
+        const handledLate = Promise.reject(new Error('handled late'));
+        const timersAfterRejection = refTimerCount();
+        assert.strictEqual(timersAfterRejection, timersBefore);
+
+        process.nextTick(() => {
+            order.push('nextTick');
+            handledInNextTick.catch(() => {
+                order.push('nextTick catch job');
+            });
+        });
+        Promise.resolve().then(() => order.push('microtask'));
+
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                try {
+                    order.push('first timer');
+                    assert.deepStrictEqual(order, [
+                        'nextTick',
+                        'microtask',
+                        'nextTick catch job',
+                        'unhandled:handled late',
+                        'first timer',
+                    ]);
+                    assert.strictEqual(unhandled.length, 1);
+                    assert.strictEqual(unhandled[0].promise, handledLate);
+                    assert.strictEqual(handled.length, 0);
+
+                    handledLate.catch(() => order.push('late catch job'));
+                    const rejectedInTimer = Promise.reject(new Error('timer rejection'));
+                    process.nextTick(() => order.push('timer nextTick'));
+                    Promise.resolve().then(() => order.push('timer microtask'));
+
+                    setTimeout(() => {
+                        try {
+                            order.push('second timer');
+                            assert.deepStrictEqual(order, [
+                                'nextTick',
+                                'microtask',
+                                'nextTick catch job',
+                                'unhandled:handled late',
+                                'first timer',
+                                'timer nextTick',
+                                'late catch job',
+                                'timer microtask',
+                                'rejectionHandled',
+                                'unhandled:timer rejection',
+                                'second timer',
+                            ]);
+                            assert.deepStrictEqual(handled, [handledLate]);
+                            assert.strictEqual(unhandled.length, 2);
+                            assert.strictEqual(unhandled[1].promise, rejectedInTimer);
+                            rejectedInTimer.catch(() => {});
+                            resolve();
+                        } catch (error) {
+                            reject(error);
+                        }
+                    }, 0);
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+
+        process.removeListener('unhandledRejection', onUnhandled);
+        process.removeListener('rejectionHandled', onHandled);
+
+        const fixpointOrder = [];
+        let listenerChild;
+        let handledFromNextTick;
+        onFixpointUnhandled = (reason) => {
+            fixpointOrder.push(`unhandled:${reason.message}`);
+            if (reason.message === 'listener root') {
+                listenerChild = Promise.reject(new Error('listener child'));
+                handledFromNextTick = Promise.reject(new Error('listener handled'));
+                process.nextTick(() => {
+                    fixpointOrder.push('listener nextTick');
+                    handledFromNextTick.catch(() => fixpointOrder.push('listener catch job'));
+                });
+            }
+        };
+        process.on('unhandledRejection', onFixpointUnhandled);
+        Promise.reject(new Error('listener root'));
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                try {
+                    fixpointOrder.push('listener timer');
+                    assert.deepStrictEqual(fixpointOrder, [
+                        'unhandled:listener root',
+                        'listener nextTick',
+                        'listener catch job',
+                        'unhandled:listener child',
+                        'listener timer',
+                    ]);
+                    listenerChild.catch(() => {});
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+        process.removeListener('unhandledRejection', onFixpointUnhandled);
+
+        const exceptionOrder = [];
+        const unhandledListenerError = new Error('unhandled listener threw');
+        const handledListenerError = new Error('handled listener threw');
+        let lateHandledPromise;
+        onUncaughtException = (error, origin) => {
+            exceptionOrder.push(`uncaught:${error.message}:${origin}`);
+        };
+        onThrowingUnhandled = (reason) => {
+            if (reason.message === 'throwing listener root') {
+                exceptionOrder.push('throwing unhandled');
+                throw unhandledListenerError;
+            }
+        };
+        onThrowingHandled = (promise) => {
+            if (promise === lateHandledPromise) {
+                exceptionOrder.push('throwing handled');
+                throw handledListenerError;
+            }
+        };
+        process.on('uncaughtException', onUncaughtException);
+        process.on('unhandledRejection', onThrowingUnhandled);
+        process.on('rejectionHandled', onThrowingHandled);
+        lateHandledPromise = Promise.reject(new Error('throwing listener root'));
+
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                try {
+                    exceptionOrder.push('exception first timer');
+                    lateHandledPromise.catch(() => exceptionOrder.push('exception catch job'));
+                    setTimeout(() => {
+                        try {
+                            exceptionOrder.push('exception second timer');
+                            assert.deepStrictEqual(exceptionOrder, [
+                                'throwing unhandled',
+                                'uncaught:unhandled listener threw:uncaughtException',
+                                'exception first timer',
+                                'exception catch job',
+                                'throwing handled',
+                                'uncaught:handled listener threw:uncaughtException',
+                                'exception second timer',
+                            ]);
+                            resolve();
+                        } catch (error) {
+                            reject(error);
+                        }
+                    }, 0);
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+
+        let cancellationCase;
+        onCancellingUnhandled = (reason) => {
+            if (!cancellationCase || reason !== cancellationCase.reason) return;
+            const activeCase = cancellationCase;
+            activeCase.order.push('unhandled');
+            activeCase.cancel(activeCase.handle);
+            setTimeout(() => {
+                try {
+                    activeCase.order.push('later timer');
+                    assert.deepStrictEqual(activeCase.order, ['unhandled', 'later timer']);
+                    activeCase.resolve();
+                } catch (error) {
+                    activeCase.reject(error);
+                }
+            }, 0);
+        };
+        process.on('unhandledRejection', onCancellingUnhandled);
+
+        const assertCurrentTimerCancelled = async (kind, schedule, cancel) => {
+            const reason = new Error(`cancel current ${kind}`);
+            const order = [];
+            let resolveCancellation;
+            let rejectCancellation;
+            const cancellationComplete = new Promise((resolve, reject) => {
+                resolveCancellation = resolve;
+                rejectCancellation = reject;
+            });
+            cancellationCase = {
+                reason,
+                order,
+                cancel,
+                resolve: resolveCancellation,
+                reject: rejectCancellation,
+            };
+            Promise.reject(reason);
+            cancellationCase.handle = schedule(() => {
+                order.push(`cancelled ${kind} ran`);
+                rejectCancellation(new Error(`the ${kind} cleared during its checkpoint ran`));
+            }, 0);
+            await cancellationComplete;
+            cancellationCase = undefined;
+        };
+
+        await assertCurrentTimerCancelled('timeout', setTimeout, clearTimeout);
+        await assertCurrentTimerCancelled('interval', setInterval, clearInterval);
+        process.removeListener('unhandledRejection', onCancellingUnhandled);
+
+        return true;
+    } finally {
+        process.removeListener('unhandledRejection', onUnhandled);
+        process.removeListener('rejectionHandled', onHandled);
+        if (onFixpointUnhandled) process.removeListener('unhandledRejection', onFixpointUnhandled);
+        if (onThrowingUnhandled) process.removeListener('unhandledRejection', onThrowingUnhandled);
+        if (onThrowingHandled) process.removeListener('rejectionHandled', onThrowingHandled);
+        if (onUncaughtException) process.removeListener('uncaughtException', onUncaughtException);
+        if (onCancellingUnhandled) process.removeListener('unhandledRejection', onCancellingUnhandled);
+    }
+};
+
 export const testRequireEsmCycleGuards = async () => {
     try {
         fs.mkdirSync('/require-esm-cycle-app', { recursive: true });
