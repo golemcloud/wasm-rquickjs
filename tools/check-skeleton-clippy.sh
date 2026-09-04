@@ -18,10 +18,14 @@ activated=true
 cleanup() {
     local status=$?
     local cleanup_failed=0
+    # Ignore termination signals before disabling the EXIT trap. Otherwise a second,
+    # different signal can interrupt this handler after Cargo.toml was activated but
+    # before it has been restored.
+    trap '' INT TERM HUP
     trap - EXIT
 
     # Restore the canonical manifest before any potentially slow or fallible
-    # artifact cleanup. A repeated signal can then never strand Cargo.toml.
+    # artifact cleanup.
     if [[ "$activated" == true && -f "$manifest" ]]; then
         if [[ -e "$stored_manifest" ]]; then
             echo "Refusing to overwrite $stored_manifest while restoring the skeleton manifest." >&2
@@ -76,6 +80,9 @@ run_clippy p2-default "$manifest"
 run_clippy p2-maximal "$manifest" \
     --no-default-features \
     --features full,golem,typescript-compiler-profiling
+run_clippy p2-maximal-no-logging "$manifest" \
+    --no-default-features \
+    --features full-no-logging,golem,typescript-compiler-profiling
 
 # Generated P3 crates bind `mod builtin` to builtin_p3.rs. Lint a temporary copy
 # with the same binding so the P3 HTTP and socket ownership code is actually checked.
@@ -91,3 +98,6 @@ run_clippy p3-default "$p3_dir/Cargo.toml" \
 run_clippy p3-maximal "$p3_dir/Cargo.toml" \
     --no-default-features \
     --features full-p3,golem,typescript-compiler-profiling
+run_clippy p3-maximal-no-logging "$p3_dir/Cargo.toml" \
+    --no-default-features \
+    --features full-no-logging-p3,golem,typescript-compiler-profiling

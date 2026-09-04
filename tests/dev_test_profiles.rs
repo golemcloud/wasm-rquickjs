@@ -234,7 +234,7 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
 
     let invocations = fs::read_to_string(log).expect("fake Cargo log should exist");
     let invocations = invocations.lines().collect::<Vec<_>>();
-    assert_eq!(invocations.len(), 4);
+    assert_eq!(invocations.len(), 6);
     assert!(invocations.iter().all(|args| {
         args.contains("--locked")
             && args.contains("--target wasm32-wasip2")
@@ -243,8 +243,15 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
     }));
     assert!(invocations[0].contains("clippy --manifest-path"));
     assert!(invocations[1].contains("--features full,golem,typescript-compiler-profiling"));
-    assert!(invocations[2].contains("--features normal-p3"));
-    assert!(invocations[3].contains("--features full-p3,golem,typescript-compiler-profiling"));
+    assert!(
+        invocations[2].contains("--features full-no-logging,golem,typescript-compiler-profiling")
+    );
+    assert!(invocations[3].contains("--features normal-p3"));
+    assert!(invocations[4].contains("--features full-p3,golem,typescript-compiler-profiling"));
+    assert!(
+        invocations[5]
+            .contains("--features full-no-logging-p3,golem,typescript-compiler-profiling")
+    );
 }
 
 #[cfg(unix)]
@@ -304,7 +311,7 @@ fn skeleton_clippy_helper_restores_the_manifest_before_late_failure_cleanup() {
         .env("PATH", path)
         .env("CARGO", &fake_cargo)
         .env("FAKE_CARGO_EXIT", "23")
-        .env("FAKE_CARGO_FAIL_ON_CALL", "4")
+        .env("FAKE_CARGO_FAIL_ON_CALL", "6")
         .env("FAKE_CARGO_LOG", &log)
         .env("FAKE_CLEANUP_LOG", &cleanup_log)
         .env("FAKE_LIVE_MANIFEST", skeleton_dir.join("Cargo.toml"))
@@ -322,7 +329,7 @@ fn skeleton_clippy_helper_restores_the_manifest_before_late_failure_cleanup() {
             .expect("fake Cargo log should exist")
             .lines()
             .count(),
-        4
+        6
     );
     assert_eq!(
         fs::read_to_string(cleanup_log)
@@ -331,4 +338,44 @@ fn skeleton_clippy_helper_restores_the_manifest_before_late_failure_cleanup() {
             .count(),
         2
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn skeleton_clippy_helper_ignores_repeated_signals_while_restoring_the_manifest() {
+    let (temp, skeleton_dir, fake_cargo) = skeleton_clippy_fixture();
+    let log = temp.path().join("cargo.log");
+    let fake_bin = temp.path().join("fake-bin");
+    fs::create_dir(&fake_bin).expect("fake binary directory should be created");
+    let fake_mv = fake_bin.join("mv");
+    fs::write(
+        &fake_mv,
+        "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"$1\" == */Cargo.toml ]]; then\n    kill -TERM \"$PPID\"\n    kill -HUP \"$PPID\"\nfi\nexec /bin/mv \"$@\"\n",
+    )
+    .expect("fake mv should be written");
+    let mut permissions = fs::metadata(&fake_mv)
+        .expect("fake mv metadata should exist")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&fake_mv, permissions).expect("fake mv should be executable");
+
+    let path = format!(
+        "{}:{}",
+        fake_bin,
+        std::env::var("PATH").expect("PATH should be set")
+    );
+    let output = Command::new("bash")
+        .arg(temp.path().join("tools/check-skeleton-clippy.sh"))
+        .env("PATH", path)
+        .env("CARGO", &fake_cargo)
+        .env("FAKE_CARGO_EXIT", "23")
+        .env("FAKE_CARGO_LOG", &log)
+        .env("FAKE_SKELETON_TARGET", skeleton_dir.join("target"))
+        .output()
+        .expect("Clippy helper should run");
+
+    assert_eq!(output.status.code(), Some(23));
+    assert!(skeleton_dir.join("Cargo.toml_").is_file());
+    assert!(!skeleton_dir.join("Cargo.toml").exists());
+    assert!(!skeleton_dir.join("target").exists());
 }
