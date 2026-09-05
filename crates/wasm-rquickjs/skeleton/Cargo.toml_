@@ -93,6 +93,7 @@ typescript-transform-runtime = ["typescript-runtime"]
 # Private test instrumentation. Individual test combinations opt into the
 # capabilities they observe; this umbrella is excluded from every runtime tier.
 test-observability = []
+typescript-compiler-profiling = ["typescript-transform-runtime", "test-observability"]
 
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]

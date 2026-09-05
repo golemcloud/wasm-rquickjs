@@ -4211,6 +4211,8 @@ struct NodePackageResolutionContext<'a, 'w> {
     warnings: &'w mut Vec<NodePackageWarning>,
     file_probe_cache: HashMap<String, bool>,
     package_json_cache: PackageJsonCache,
+    #[cfg(feature = "typescript-compiler-profiling")]
+    profile: Option<Rc<crate::internal::runtime_services::ExecutionProfile>>,
 }
 
 impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
@@ -4220,25 +4222,47 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         conditions: &'a [String],
         warnings: &'w mut Vec<NodePackageWarning>,
     ) -> Self {
-        let package_json_cache = ctx
+        let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
-            .expect("runtime services not initialized")
-            .package_json_cache
-            .clone();
+            .expect("runtime services not initialized");
+        let package_json_cache = services.package_json_cache.clone();
         Self {
             mode,
             conditions,
             warnings,
             file_probe_cache: HashMap::new(),
             package_json_cache,
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile: services.execution_profile(),
         }
     }
 
     fn normalized_is_file(&mut self, normalized: &str) -> bool {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &self.profile {
+            profile.increment("modules.fileProbe.calls");
+        }
         if let Some(cached) = self.file_probe_cache.get(normalized) {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &self.profile {
+                profile.increment("modules.fileProbe.cacheHits");
+                profile.increment(if *cached {
+                    "modules.fileProbe.found"
+                } else {
+                    "modules.fileProbe.missing"
+                });
+            }
             return *cached;
         }
         let is_file = std::path::Path::new(normalized).is_file();
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &self.profile {
+            profile.increment(if is_file {
+                "modules.fileProbe.found"
+            } else {
+                "modules.fileProbe.missing"
+            });
+        }
         self.file_probe_cache
             .insert(normalized.to_string(), is_file);
         is_file
@@ -4250,7 +4274,17 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
     }
 
     fn is_dir(&self, path: &std::path::Path) -> bool {
-        path.is_dir()
+        let is_dir = path.is_dir();
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &self.profile {
+            profile.increment("modules.directoryProbe.calls");
+            profile.increment(if is_dir {
+                "modules.directoryProbe.found"
+            } else {
+                "modules.directoryProbe.missing"
+            });
+        }
+        is_dir
     }
 
     fn with_mode<T>(
@@ -4421,10 +4455,19 @@ impl NodeModulesResolver {
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
         if let Some(cached) = resolution.package_json_cache.get(&cache_key) {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &resolution.profile {
+                profile.increment("modules.packageJson.cacheHits");
+            }
             return Ok(Some(cached));
         }
         match std::fs::read_to_string(pkg_path) {
             Ok(pkg_content) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                if let Some(profile) = &resolution.profile {
+                    profile.increment("modules.packageJson.reads");
+                    profile.add("modules.packageJson.bytes", pkg_content.len() as u64);
+                }
                 let package = Rc::new(serde_json::from_str::<PackageJson>(&pkg_content).map_err(
                     |_| NodePackageResolveError::InvalidPackageConfig {
                         path: pkg_path.to_string_lossy().into_owned(),
@@ -4436,7 +4479,17 @@ impl NodeModulesResolver {
                     .insert(cache_key, package.clone());
                 Ok(Some(package))
             }
-            Err(_) => Ok(None),
+            Err(_error) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                if let Some(profile) = &resolution.profile {
+                    profile.increment(if _error.kind() == std::io::ErrorKind::NotFound {
+                        "modules.packageJson.notFound"
+                    } else {
+                        "modules.packageJson.errors"
+                    });
+                }
+                Ok(None)
+            }
         }
     }
 
@@ -6471,6 +6524,26 @@ fn import_meta_trailing_slash_package_has_exports(
 
 impl Resolver for NodeModulesResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let profile = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .execution_profile();
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &profile {
+            profile.increment("modules.resolve.calls");
+            profile.increment(if name.starts_with('#') {
+                "modules.resolve.specifier.packageImport"
+            } else if name.starts_with('.') {
+                "modules.resolve.specifier.relative"
+            } else if name.starts_with('/') {
+                "modules.resolve.specifier.absolute"
+            } else if name.contains("://") {
+                "modules.resolve.specifier.url"
+            } else {
+                "modules.resolve.specifier.package"
+            });
+        }
         let (resolution_name, suffix) = if has_import_type_rewrite_token(name) {
             split_module_path_suffix(name)
         } else {
@@ -6489,6 +6562,10 @@ impl Resolver for NodeModulesResolver {
         )?;
         match result {
             Ok(Some(resolved)) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                if let Some(profile) = &profile {
+                    profile.increment("modules.resolve.success");
+                }
                 let suffix = append_loader_realm_param(suffix, loader_realm_param(base).as_deref());
                 let resolved = esm_package_identity_path(ctx, &resolved);
                 let resolved = if suffix.is_empty() {
@@ -6500,12 +6577,20 @@ impl Resolver for NodeModulesResolver {
                 Ok(resolved)
             }
             Ok(None) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                if let Some(profile) = &profile {
+                    profile.increment("modules.resolve.missing");
+                }
                 if package_like {
                     discard_import_type_rewrite_token(name);
                 }
                 Err(Error::new_resolving(base, name))
             }
             Err(err) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                if let Some(profile) = &profile {
+                    profile.increment("modules.resolve.errors");
+                }
                 discard_import_type_rewrite_token(name);
                 if package_like {
                     throw_esm_package_resolve_error(ctx, err, resolution_name, base)
@@ -6578,6 +6663,13 @@ fn transform_typescript_module_source<'js>(
     fs_path: &str,
     source: String,
 ) -> rquickjs::Result<String> {
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let (profile, started) = (
+        ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .execution_profile(),
+        std::time::Instant::now(),
+    );
     match crate::internal::typescript::transform_module(
         source,
         fs_path,
@@ -6593,9 +6685,25 @@ fn transform_typescript_module_source<'js>(
     ) {
         Ok(output) => {
             record_typescript_module_transform(ctx)?;
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &profile {
+                profile.increment("modules.typescriptTransform.success");
+                profile.add(
+                    "modules.typescriptTransform.micros",
+                    started.elapsed().as_micros().min(u64::MAX as u128) as u64,
+                );
+            }
             Ok(output.code)
         }
         Err(error) => {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &profile {
+                profile.increment("modules.typescriptTransform.errors");
+                profile.add(
+                    "modules.typescriptTransform.micros",
+                    started.elapsed().as_micros().min(u64::MAX as u128) as u64,
+                );
+            }
             let constructor_name = match error.kind {
                 crate::internal::typescript::TypeScriptErrorKind::Error => "Error",
                 crate::internal::typescript::TypeScriptErrorKind::SyntaxError => "SyntaxError",
@@ -9636,9 +9744,29 @@ fn read_module_source_or_throw<'js>(
     module_id: &str,
     source_path: &str,
 ) -> rquickjs::Result<String> {
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let profile = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .execution_profile();
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if let Some(profile) = &profile {
+        profile.increment("modules.sourceRead.calls");
+    }
     match std::fs::read_to_string(source_path) {
-        Ok(s) => Ok(s),
+        Ok(source) => {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &profile {
+                profile.increment("modules.sourceRead.success");
+                profile.add("modules.sourceRead.bytes", source.len() as u64);
+            }
+            Ok(source)
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &profile {
+                profile.increment("modules.sourceRead.notFound");
+            }
             let globals = ctx.globals();
             let msg = format!("Cannot find module '{}'", module_id);
             let error_ctor: Function = globals.get("Error")?;
@@ -9646,7 +9774,13 @@ fn read_module_source_or_throw<'js>(
             error_obj.set("code", "ERR_MODULE_NOT_FOUND")?;
             Err(ctx.throw(error_obj.into_value()))
         }
-        Err(_) => Err(Error::new_loading(module_id)),
+        Err(_) => {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &profile {
+                profile.increment("modules.sourceRead.errors");
+            }
+            Err(Error::new_loading(module_id))
+        }
     }
 }
 

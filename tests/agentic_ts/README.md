@@ -23,6 +23,14 @@ Run both targets from the repository root:
 tests/agentic_ts/run.sh
 ```
 
+During profiler development, validate only the shared controlled workload and
+the feature-gated execution-job profile with:
+
+```sh
+AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
+AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+```
+
 Validate every checked-in report's schema, pinned settings, workload outcomes,
 tracker reference, and P2/P3 input-hash pairing without installing Node or
 rerunning the workloads:
@@ -55,6 +63,23 @@ Each exported component invocation reuses the component instance and mounted
 workspace. Every TypeScript/compiler operation inside it uses a fresh execution
 job. Therefore QuickJS mutable state is fresh while `.tsbuildinfo`, emitted
 files, and other workspace artifacts intentionally persist.
+
+Schema-v5 reports also run the same `profile-typescript.mjs` program under
+host Node and inside a fresh QuickJS execution job. It separates TypeScript
+module import, configuration loading and parsing, program/graph construction,
+and diagnostics. Per-phase filesystem probe counts, read bytes, source-file
+classification, process memory snapshots, and host-to-job outer overhead make
+the dominant phase visible before an optimization is selected. These are
+instrumented measurements, so compare phase proportions within each target;
+the existing CLI workload remains the compatibility and end-to-end baseline.
+The feature-gated job profile additionally aggregates native module-resolution
+outcomes, file and directory probes, package metadata and module-source reads,
+TypeScript transformations, and `node:fs` read/stat/directory operations. It
+records bounded counters and byte totals rather than paths or event traces.
+The canonical cold CLI workload runs before the in-component sidecar profile,
+so the cold row retains its original ordering. Schema-v5 components use the
+non-default `typescript-compiler-profiling` feature; each report records that
+feature explicitly because the counters add instrumentation overhead.
 
 The Wasmtime host records the highest requested guest linear-memory size
 without limiting growth. With Golem's Wasmtime fork it explicitly excludes

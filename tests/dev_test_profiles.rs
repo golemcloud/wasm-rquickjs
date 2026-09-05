@@ -242,14 +242,15 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
             && args.contains("-Dwarnings")
     }));
     assert!(invocations[0].contains("clippy --manifest-path"));
-    assert!(invocations[1].contains("--features full,golem,typescript-transform-runtime"));
+    assert!(invocations[1].contains("--features full,golem,typescript-compiler-profiling"));
     assert!(
-        invocations[2].contains("--features full-no-logging,golem,typescript-transform-runtime")
+        invocations[2].contains("--features full-no-logging,golem,typescript-compiler-profiling")
     );
     assert!(invocations[3].contains("--features normal-p3"));
-    assert!(invocations[4].contains("--features full-p3,golem,typescript-transform-runtime"));
+    assert!(invocations[4].contains("--features full-p3,golem,typescript-compiler-profiling"));
     assert!(
-        invocations[5].contains("--features full-no-logging-p3,golem,typescript-transform-runtime")
+        invocations[5]
+            .contains("--features full-no-logging-p3,golem,typescript-compiler-profiling")
     );
 }
 

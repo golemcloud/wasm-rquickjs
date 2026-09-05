@@ -2,6 +2,7 @@ package quickjs:agentic-ts;
 
 world agentic-ts {
   export run-tsc: func(args: list<string>, timeout-ms: u64) -> string;
+  export profile-tsc: func(timeout-ms: u64) -> string;
   export run-entry: func(path: string) -> string;
   export run-generated: func(path: string) -> string;
   export run-cpu: func() -> string;
