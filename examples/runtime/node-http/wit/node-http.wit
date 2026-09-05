@@ -29,4 +29,5 @@ world node-http {
   export http-pipelined-max-requests: func() -> bool;
   export http-custom-connection-rejected: func() -> bool;
   export http-response-persistence: func() -> bool;
+  export http-falsy-port-uses-protocol-default: func() -> bool;
 }
