@@ -1455,7 +1455,7 @@ export class ClientRequest extends OutgoingMessage {
         const port = options.port;
         const defaultPort = options.defaultPort || (this.agent && this.agent.defaultPort);
         const protocolDefault = this.protocol === 'https:' ? 443 : 80;
-        const effectivePort = (port !== undefined && port !== null) ? Number(port) : (defaultPort || protocolDefault);
+        const effectivePort = Number(port || defaultPort || protocolDefault);
         this.path = options.path || '/';
         this.hostname = hostname;
         this.port = effectivePort;

@@ -27,4 +27,5 @@ declare module 'node-http' {
   export function httpPipelinedMaxRequests(): Promise<boolean>;
   export function httpCustomConnectionRejected(): Promise<boolean>;
   export function httpResponsePersistence(): Promise<boolean>;
+  export function httpFalsyPortUsesProtocolDefault(): Promise<boolean>;
 }
