@@ -836,6 +836,766 @@ export async function httpCloseIdleConnections() {
     });
 }
 
+function getConnectionCount(server) {
+    return new Promise((resolve, reject) => {
+        server.getConnections((error, count) => {
+            if (error) reject(error);
+            else resolve(count);
+        });
+    });
+}
+
+function waitForConnectionCount(server, expected, attempts = 25) {
+    return new Promise((resolve) => {
+        const check = () => {
+            server.getConnections((error, count) => {
+                if (error || count === expected || attempts-- === 0) {
+                    resolve(!error && count === expected);
+                } else {
+                    setTimeout(check, 20);
+                }
+            });
+        };
+        check();
+    });
+}
+
+export async function httpIdleResourceReclamation() {
+    const sockets = new Set();
+    let handled = 0;
+    const server = http.createServer((_req, res) => {
+        handled++;
+        res.end('ok');
+    });
+    server.keepAliveTimeout = 40;
+
+    const closeServer = () =>
+        new Promise((resolve) => {
+            for (const socket of sockets) socket.destroy();
+            server.closeAllConnections();
+            if (server.listening) server.close(resolve);
+            else resolve();
+        });
+
+    try {
+        await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(0, resolve);
+        });
+
+        const runBatch = async (batchSize) => {
+            const port = server.address().port;
+            await Promise.all(
+                Array.from(
+                    { length: batchSize },
+                    () =>
+                        new Promise((resolve, reject) => {
+                            let wire = '';
+                            let settled = false;
+                            const socket = net.connect({ port });
+                            sockets.add(socket);
+                            const timeout = setTimeout(
+                                () => finish(new Error('idle connection did not close')),
+                                1500
+                            );
+                            const finish = (error) => {
+                                if (settled) return;
+                                settled = true;
+                                clearTimeout(timeout);
+                                sockets.delete(socket);
+                                if (error) reject(error);
+                                else resolve();
+                            };
+                            socket.on('connect', () => {
+                                socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
+                            });
+                            socket.on('data', (chunk) => {
+                                wire += chunk.toString('latin1');
+                            });
+                            socket.on('close', () => {
+                                const responseComplete =
+                                    wire.includes('HTTP/1.1 200') &&
+                                    wire.includes('\r\nConnection: keep-alive\r\n') &&
+                                    wire.includes('\r\n\r\n') &&
+                                    wire.includes('ok');
+                                finish(
+                                    responseComplete
+                                        ? undefined
+                                        : new Error('incomplete keep-alive response')
+                                );
+                            });
+                            socket.on('error', finish);
+                        })
+                )
+            );
+            return (await getConnectionCount(server)) === 0;
+        };
+
+        const firstReclaimed = await runBatch(6);
+        const secondReclaimed = firstReclaimed && (await runBatch(6));
+        return firstReclaimed && secondReclaimed && handled === 12;
+    } catch (_error) {
+        return false;
+    } finally {
+        await closeServer();
+    }
+}
+
+export async function httpZeroKeepAliveTimeout() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let secondRequestScheduled = false;
+        let explicitCleanupRequested = false;
+        let closedBeforeExplicitCleanup = false;
+        const server = http.createServer((_req, res) => {
+            handled++;
+            if (handled === 2) {
+                res.on('finish', () => {
+                    explicitCleanupRequested = true;
+                    setImmediate(() => server.closeIdleConnections());
+                });
+            }
+            res.end(`ok-${handled}`);
+        });
+        server.keepAliveTimeout = 0;
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(overallTimeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            const complete = () => resolve(result);
+            if (server.listening) server.close(complete);
+            else complete();
+        };
+        const overallTimeout = setTimeout(() => finish(false), 2500);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write('GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!secondRequestScheduled && handled === 1 && wire.includes('ok-1')) {
+                    secondRequestScheduled = true;
+                    setTimeout(() => {
+                        if (socket.destroyed) {
+                            closedBeforeExplicitCleanup = true;
+                            finish(false);
+                            return;
+                        }
+                        socket.write('GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n');
+                    }, 120);
+                }
+            });
+            socket.on('end', () => {
+                if (!explicitCleanupRequested) closedBeforeExplicitCleanup = true;
+            });
+            socket.on('close', () => {
+                const connectionHeaders = wire.match(/\r\nConnection: keep-alive\r\n/g) || [];
+                waitForConnectionCount(server, 0).then((countReachedZero) => {
+                    finish(
+                        countReachedZero &&
+                            handled === 2 &&
+                            !closedBeforeExplicitCleanup &&
+                            connectionHeaders.length === 2 &&
+                            !wire.includes('\r\nKeep-Alive:') &&
+                            wire.includes('ok-1') &&
+                            wire.includes('ok-2')
+                    );
+                });
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpUnreadRequestBodyDisposal() {
+    const runCycle = () => new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let resumed = false;
+        let listenerRemoved = false;
+        let dumpedBody = '';
+        let sentBodyAndNextRequest = false;
+        const requestBody = 'unread-body!';
+        const server = http.createServer((req, res) => {
+            handled++;
+            if (req.url === '/early') {
+                const ignoredDataListener = () => {};
+                req.pause();
+                req.on('data', ignoredDataListener);
+                req.on('resume', () => {
+                    resumed = true;
+                    listenerRemoved = req.listenerCount('data') === 0;
+                    req.on('data', (chunk) => {
+                        dumpedBody += chunk.toString();
+                    });
+                });
+                res.end('early');
+                return;
+            }
+            res.end('next');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /early HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    `Content-Length: ${Buffer.byteLength(requestBody)}\r\n\r\n`
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!sentBodyAndNextRequest && wire.includes('early')) {
+                    sentBodyAndNextRequest = true;
+                    socket.write(
+                        requestBody +
+                        'GET /next HTTP/1.1\r\n' +
+                        'Host: localhost\r\n' +
+                        'Connection: close\r\n\r\n'
+                    );
+                }
+            });
+            socket.on('end', () => {
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const earlyBody = wire.indexOf('early', firstStatus);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', earlyBody);
+                const nextBody = wire.indexOf('next', secondStatus);
+                finish(
+                    handled === 2 &&
+                    resumed &&
+                    listenerRemoved &&
+                    dumpedBody === requestBody &&
+                    firstStatus !== -1 &&
+                    earlyBody > firstStatus &&
+                    secondStatus > earlyBody &&
+                    nextBody > secondStatus
+                );
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+
+    for (let cycle = 0; cycle < 3; cycle++) {
+        if (!await runCycle()) return false;
+    }
+    return true;
+}
+
+export async function httpServerRequestDestroy() {
+    const runIncomplete = (
+        withError,
+        listenForError = withError,
+        attachErrorListenerAfterDestroy = false,
+        attachErrorListenerOnNextTick = false
+    ) => new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let events = [];
+        let erroredMatches = false;
+        let socketErrorMatches = !withError;
+        let socketClosed = false;
+        const expectedError = new Error('destroy incomplete request');
+        const server = http.createServer((req, _res) => {
+            req.socket.on('error', (error) => {
+                socketErrorMatches = error === expectedError;
+                events.push('socket-error');
+            });
+            req.socket.on('close', () => {
+                socketClosed = true;
+                events.push('socket-close');
+            });
+            req.on('aborted', () => events.push('aborted'));
+            const onRequestError = (error) => {
+                erroredMatches = error === expectedError;
+                events.push(attachErrorListenerOnNextTick ?
+                    'nexttick-error' :
+                    attachErrorListenerAfterDestroy ? 'late-error' : 'error');
+            };
+            if (listenForError && !attachErrorListenerAfterDestroy) {
+                req.on('error', onRequestError);
+            }
+            req.on('close', () => {
+                events.push('close');
+            });
+            req.destroy(withError ? expectedError : undefined);
+            if (listenForError && attachErrorListenerAfterDestroy) {
+                if (attachErrorListenerOnNextTick) {
+                    process.nextTick(() => req.on('error', onRequestError));
+                } else {
+                    req.on('error', onRequestError);
+                }
+            }
+            if (!listenForError) {
+                erroredMatches = withError ?
+                    req.errored === expectedError : req.errored === null;
+            }
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /incomplete HTTP/1.1\r\n' +
+                    'Host: localhost\r\nContent-Length: 5\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('close', () => {
+                setImmediate(() => {
+                    server.getConnections((error, count) => {
+                        const errorEvent = attachErrorListenerOnNextTick ?
+                            'nexttick-error' :
+                            attachErrorListenerAfterDestroy ? 'late-error' : 'error';
+                        const terminalEvents = withError ?
+                            events.filter((event) => event !== 'socket-close') : events;
+                        const expectedEvents = withError ?
+                            listenForError ?
+                                `aborted,socket-error,${errorEvent},close` :
+                                'aborted,socket-error,close' :
+                            'aborted,socket-close,close';
+                        finish(
+                            !error &&
+                            count === 0 &&
+                            wire === '' &&
+                            erroredMatches &&
+                            socketErrorMatches &&
+                            socketClosed &&
+                            terminalEvents.join(',') === expectedEvents
+                        );
+                    });
+                });
+            });
+            socket.on('error', () => {});
+        });
+    });
+
+    const runCompletedError = () => new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let connections = 0;
+        let completeAtDestroy = false;
+        let errorObserved = false;
+        let requestClosed = false;
+        let requestAborted = false;
+        let sentSecond = false;
+        const expectedError = new Error('destroy completed request');
+        const server = http.createServer((req, res) => {
+            handled++;
+            if (req.url === '/first') {
+                req.on('aborted', () => {
+                    requestAborted = true;
+                });
+                req.on('error', (error) => {
+                    errorObserved = error === expectedError;
+                });
+                req.on('close', () => {
+                    requestClosed = true;
+                });
+                req.on('end', () => {
+                    completeAtDestroy = req.complete && req.readableEnded;
+                    req.destroy(expectedError);
+                    res.end('first');
+                });
+                req.resume();
+                return;
+            }
+            res.end('second');
+        });
+        server.on('connection', () => {
+            connections++;
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write('GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!sentSecond && wire.includes('first')) {
+                    sentSecond = true;
+                    socket.write(
+                        'GET /second HTTP/1.1\r\n' +
+                        'Host: localhost\r\nConnection: close\r\n\r\n'
+                    );
+                }
+            });
+            socket.on('end', () => {
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const firstBody = wire.indexOf('first', firstStatus);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', firstBody);
+                const secondBody = wire.indexOf('second', secondStatus);
+                finish(
+                    handled === 2 &&
+                    connections === 1 &&
+                    completeAtDestroy &&
+                    errorObserved &&
+                    requestClosed &&
+                    !requestAborted &&
+                    firstStatus !== -1 &&
+                    firstBody > firstStatus &&
+                    secondStatus > firstBody &&
+                    secondBody > secondStatus
+                );
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+
+    return await runIncomplete(true) &&
+        await runIncomplete(true, true, true) &&
+        await runIncomplete(true, true, true, true) &&
+        await runIncomplete(true, false) &&
+        await runIncomplete(false) &&
+        await runCompletedError();
+}
+
+export async function httpPartiallyConsumedRequestBody() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let partialRequest;
+        let firstChunk = '';
+        let unexpectedResume = false;
+        let sentRemainderAndNext = false;
+        const firstPart = 'part-';
+        const remainder = 'body!';
+        const server = http.createServer((req, res) => {
+            handled++;
+            if (req.url === '/partial') {
+                partialRequest = req;
+                req.once('data', (chunk) => {
+                    firstChunk = chunk.toString();
+                    req.pause();
+                    req.on('resume', () => {
+                        unexpectedResume = true;
+                    });
+                    res.end('early');
+                });
+                return;
+            }
+            res.end('next');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /partial HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    `Content-Length: ${Buffer.byteLength(firstPart + remainder)}\r\n\r\n` +
+                    firstPart
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!sentRemainderAndNext && wire.includes('early')) {
+                    sentRemainderAndNext = true;
+                    socket.write(
+                        remainder +
+                        'GET /next HTTP/1.1\r\n' +
+                        'Host: localhost\r\n' +
+                        'Connection: close\r\n\r\n'
+                    );
+                }
+            });
+            socket.on('end', () => {
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const earlyBody = wire.indexOf('early', firstStatus);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', earlyBody);
+                const nextBody = wire.indexOf('next', secondStatus);
+                finish(
+                    handled === 2 &&
+                    firstChunk === firstPart &&
+                    partialRequest.complete &&
+                    !unexpectedResume &&
+                    firstStatus !== -1 &&
+                    earlyBody > firstStatus &&
+                    secondStatus > earlyBody &&
+                    nextBody > secondStatus
+                );
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpResumeScheduledRequestBody() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let listenerPreserved = false;
+        let receivedBody = '';
+        let sentBodyAndNextRequest = false;
+        const requestBody = 'scheduled-body';
+        const server = http.createServer((req, res) => {
+            handled++;
+            if (req.url === '/scheduled') {
+                req.on('data', (chunk) => {
+                    receivedBody += chunk.toString();
+                });
+                req.resume();
+                res.end('early');
+                listenerPreserved = req.listenerCount('data') === 1;
+                return;
+            }
+            res.end('next');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /scheduled HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    `Content-Length: ${Buffer.byteLength(requestBody)}\r\n\r\n`
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!sentBodyAndNextRequest && wire.includes('early')) {
+                    sentBodyAndNextRequest = true;
+                    socket.write(
+                        requestBody +
+                        'GET /next HTTP/1.1\r\n' +
+                        'Host: localhost\r\n' +
+                        'Connection: close\r\n\r\n'
+                    );
+                }
+            });
+            socket.on('end', () => {
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const earlyBody = wire.indexOf('early', firstStatus);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', earlyBody);
+                const nextBody = wire.indexOf('next', secondStatus);
+                finish(
+                    handled === 2 &&
+                    listenerPreserved &&
+                    receivedBody === requestBody &&
+                    firstStatus !== -1 &&
+                    earlyBody > firstStatus &&
+                    secondStatus > earlyBody &&
+                    nextBody > secondStatus
+                );
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpCompleteUnreadRequestBody() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let wire = '';
+        let handled = 0;
+        let completeBeforeResponse = false;
+        let resumed = false;
+        let listenerRemoved = false;
+        let dumpedBody = '';
+        const requestBody = 'buffered-body';
+        const server = http.createServer((req, res) => {
+            handled++;
+            if (req.url === '/buffered') {
+                req.pause();
+                req.on('data', () => {});
+                req.on('resume', () => {
+                    resumed = true;
+                    listenerRemoved = req.listenerCount('data') === 0;
+                    req.on('data', (chunk) => {
+                        dumpedBody += chunk.toString();
+                    });
+                });
+                setImmediate(() => {
+                    completeBeforeResponse = req.complete;
+                    res.end('early');
+                });
+                return;
+            }
+            res.end('next');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /buffered HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    `Content-Length: ${Buffer.byteLength(requestBody)}\r\n\r\n` +
+                    requestBody +
+                    'GET /next HTTP/1.1\r\n' +
+                    'Host: localhost\r\nConnection: close\r\n\r\n'
+                );
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('end', () => {
+                const firstStatus = wire.indexOf('HTTP/1.1 200');
+                const earlyBody = wire.indexOf('early', firstStatus);
+                const secondStatus = wire.indexOf('HTTP/1.1 200', earlyBody);
+                const nextBody = wire.indexOf('next', secondStatus);
+                finish(
+                    handled === 2 &&
+                    completeBeforeResponse &&
+                    resumed &&
+                    listenerRemoved &&
+                    dumpedBody === requestBody &&
+                    firstStatus !== -1 &&
+                    earlyBody > firstStatus &&
+                    secondStatus > earlyBody &&
+                    nextBody > secondStatus
+                );
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpClientResponseOwnership() {
+    const server = http.createServer((_req, res) => {
+        res.end('response-body');
+    });
+    await new Promise((resolve) => server.listen(0, resolve));
+    const port = server.address().port;
+
+    const unownedDisposed = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve(result);
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+        const req = http.request({ port, path: '/unowned' });
+        req.on('error', () => finish(false));
+        req.on('close', () => {
+            const response = req._response;
+            const checkComplete = (attempts) => {
+                if (response && response.complete) {
+                    finish(response._dumped === true);
+                } else if (attempts > 0) {
+                    setTimeout(() => checkComplete(attempts - 1), 10);
+                } else {
+                    finish(false);
+                }
+            };
+            checkComplete(50);
+        });
+        req.end();
+    });
+
+    const ownedDelayed = await new Promise((resolve) => {
+        let settled = false;
+        let body = '';
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve(result);
+        };
+        const timeout = setTimeout(() => finish(false), 3000);
+        const req = http.request({ port, path: '/owned' }, (res) => {
+            const untouched = res._dumped === false && res.readableFlowing === null;
+            setTimeout(() => {
+                res.on('data', (chunk) => {
+                    body += chunk.toString();
+                });
+                res.on('end', () => {
+                    finish(untouched && body === 'response-body');
+                });
+            }, 25);
+        });
+        req.on('error', () => finish(false));
+        req.end();
+    });
+
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    return unownedDisposed && ownedDelayed;
+}
+
 export async function httpInformationalWriteAfterClose() {
     return new Promise((resolve) => {
         let settled = false;
@@ -1591,4 +2351,219 @@ export async function httpCustomConnectionRejected() {
 
     return rejectsAsynchronously && agentHookIgnoredExplicitly && destroyBeforeRejection &&
         connectDoesNotOpenSocket && plainConnectRejected;
+}
+
+export async function httpResponsePersistence() {
+    const runCase = (options) => new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let responseComplete = false;
+        let serverBehaviorMatch = true;
+        let socketEnded = false;
+        let socket;
+        const server = http.createServer((_req, res) => {
+            if (options.serverCloseBeforeCommit) {
+                server.close();
+            }
+            for (const [name, value] of options.headers || []) {
+                res.setHeader(name, value);
+            }
+            if (options.removeConnection) {
+                res.removeHeader('Connection');
+            }
+            if (options.removeFraming) {
+                res.removeHeader('Connection');
+                res.removeHeader('Content-Length');
+                res.removeHeader('Transfer-Encoding');
+            }
+            if (options.writeHeadFirst) {
+                res.writeHead(options.statusCode || 200);
+            }
+            if (options.mutateAfterWriteHead) {
+                let mutationErrors = 0;
+                try {
+                    res.setHeader('X-Late', 'rejected');
+                } catch (error) {
+                    mutationErrors += error.code === 'ERR_HTTP_HEADERS_SENT' ? 1 : 0;
+                }
+                try {
+                    res.removeHeader('Connection');
+                } catch (error) {
+                    mutationErrors += error.code === 'ERR_HTTP_HEADERS_SENT' ? 1 : 0;
+                }
+                options.headers[0][1].push('close');
+                serverBehaviorMatch = mutationErrors === 2;
+            }
+            res.end(options.noBody ? undefined : 'ok');
+        });
+        if (Object.hasOwn(options, 'keepAliveTimeout')) {
+            server.keepAliveTimeout = options.keepAliveTimeout;
+        }
+        if (Object.hasOwn(options, 'maxRequestsPerSocket')) {
+            server.maxRequestsPerSocket = options.maxRequestsPerSocket;
+        }
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            if (server.listening) {
+                server.close(() => resolve(result));
+            } else {
+                resolve(result);
+            }
+        };
+
+        const headerValues = (name) => {
+            const headerEnd = wire.indexOf('\r\n\r\n');
+            if (headerEnd === -1) return [];
+            const prefix = name.toLowerCase() + ':';
+            return wire.slice(0, headerEnd).split('\r\n')
+                .filter((line) => line.toLowerCase().startsWith(prefix))
+                .map((line) => line.slice(line.indexOf(':') + 1).trim());
+        };
+
+        const headersMatch = () => {
+            const primaryMatch = JSON.stringify(headerValues('connection')) ===
+                JSON.stringify(options.connection || []) &&
+            JSON.stringify(headerValues('keep-alive')) ===
+                JSON.stringify(options.keepAlive || []);
+            const contentLengthMatch = !Object.hasOwn(options, 'contentLength') ||
+                JSON.stringify(headerValues('content-length')) ===
+                    JSON.stringify(options.contentLength);
+            const transferEncodingMatch = !Object.hasOwn(options, 'transferEncoding') ||
+                JSON.stringify(headerValues('transfer-encoding')) ===
+                    JSON.stringify(options.transferEncoding);
+            const noChunkTerminatorMatch = !options.noChunkTerminator ||
+                !wire.slice(wire.indexOf('\r\n\r\n') + 4).includes('0\r\n\r\n');
+            return serverBehaviorMatch && primaryMatch && contentLengthMatch &&
+                transferEncodingMatch && noChunkTerminatorMatch;
+        };
+
+        const timeout = setTimeout(() => finish(false), 1500);
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(options.request ||
+                    'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n');
+            });
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                const body = wire.slice(wire.indexOf('\r\n\r\n') + 4);
+                if (!responseComplete &&
+                    wire.includes('\r\n\r\n') &&
+                    (options.noBody || body.includes('ok'))) {
+                    responseComplete = true;
+                    if (!options.expectEnd) {
+                        setTimeout(() => finish(headersMatch() && !socketEnded), 30);
+                    }
+                }
+            });
+            socket.on('end', () => {
+                socketEnded = true;
+                if (options.expectEnd) {
+                    finish(responseComplete && headersMatch());
+                } else {
+                    finish(false);
+                }
+            });
+            socket.on('error', () => finish(false));
+        });
+    });
+
+    const cases = [
+        { connection: ['keep-alive'], keepAlive: ['timeout=5'] },
+        { keepAliveTimeout: 0, connection: ['keep-alive'] },
+        { keepAliveTimeout: null, connection: ['keep-alive'] },
+        { keepAliveTimeout: undefined, connection: ['keep-alive'] },
+        { keepAliveTimeout: NaN, connection: ['keep-alive'] },
+        { keepAliveTimeout: -1, connection: ['keep-alive'], keepAlive: ['timeout=-1'] },
+        { keepAliveTimeout: 500, connection: ['keep-alive'], keepAlive: ['timeout=0'] },
+        { keepAliveTimeout: 1500, connection: ['keep-alive'], keepAlive: ['timeout=1'] },
+        { headers: [['Connection', 'keep-alive']], connection: ['keep-alive'] },
+        { headers: [['Connection', 'close']], connection: ['close'], expectEnd: true },
+        { headers: [['Connection', ['close']]], connection: ['close'], expectEnd: true },
+        {
+            headers: [['Connection', ['keep-alive', 'close']]],
+            connection: ['keep-alive', 'close'],
+            expectEnd: true,
+        },
+        {
+            headers: [['Connection', ['keep-alive', 'upgrade']]],
+            connection: ['keep-alive', 'upgrade'],
+        },
+        {
+            headers: [['Connection', 'Keep-Alive, ClOsE']],
+            connection: ['Keep-Alive, ClOsE'],
+            expectEnd: true,
+        },
+        {
+            headers: [['Connection', 'upgrade'], ['Keep-Alive', 'custom=1']],
+            connection: ['upgrade'],
+            keepAlive: ['custom=1'],
+        },
+        {
+            headers: [['Keep-Alive', 'custom=2']],
+            connection: ['keep-alive'],
+            keepAlive: ['custom=2'],
+        },
+        {
+            headers: [['Connection', ['keep-alive']]],
+            writeHeadFirst: true,
+            mutateAfterWriteHead: true,
+            connection: ['keep-alive'],
+        },
+        {
+            headers: [['Transfer-Encoding', 'chunked']],
+            statusCode: 204,
+            writeHeadFirst: true,
+            connection: ['close'],
+            transferEncoding: ['chunked'],
+            noBody: true,
+            noChunkTerminator: true,
+            expectEnd: true,
+        },
+        {
+            headers: [['Transfer-Encoding', 'chunked']],
+            statusCode: 304,
+            writeHeadFirst: true,
+            connection: ['close'],
+            transferEncoding: ['chunked'],
+            noBody: true,
+            noChunkTerminator: true,
+            expectEnd: true,
+        },
+        { removeConnection: true },
+        {
+            removeFraming: true,
+            contentLength: [],
+            transferEncoding: [],
+            expectEnd: true,
+        },
+        {
+            request: 'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n',
+            connection: ['close'],
+            expectEnd: true,
+        },
+        {
+            request: 'GET / HTTP/1.0\r\n\r\n',
+            writeHeadFirst: true,
+            connection: ['close'],
+            expectEnd: true,
+        },
+        { maxRequestsPerSocket: 1, connection: ['close'] },
+        {
+            serverCloseBeforeCommit: true,
+            connection: ['keep-alive'],
+            keepAlive: ['timeout=5'],
+            expectEnd: true,
+        },
+    ];
+
+    for (const options of cases) {
+        if (!await runCase(options)) return false;
+    }
+    return true;
 }

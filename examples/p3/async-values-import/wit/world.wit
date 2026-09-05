@@ -30,4 +30,6 @@ world async-values-import {
   export run-stream-cleanup-failure: async func() -> string;
   export run-stream-conversion-failure: async func() -> string;
   export run-sync-stream-promise-rejection: async func() -> string;
+  export run-import-checkpoint-future: async func() -> future<u32>;
+  export read-import-checkpoint-count: async func() -> u32;
 }

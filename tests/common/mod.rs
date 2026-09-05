@@ -432,6 +432,24 @@ fn test_cache_lock(name: &str, feature_combination: FeatureCombination, kind: &s
     ))
 }
 
+fn shared_runtime_target_name(
+    target: TestTarget,
+    feature_combination: FeatureCombination,
+) -> String {
+    if matches!(
+        feature_combination,
+        FeatureCombination::InternalTestExecution
+    ) {
+        format!(
+            "rt-target{}-{}",
+            target.dir_suffix(),
+            feature_combination.label()
+        )
+    } else {
+        format!("rt-target{}", target.dir_suffix())
+    }
+}
+
 fn rustc_version_verbose() -> String {
     Command::new("rustc")
         .arg("-Vv")
@@ -693,6 +711,22 @@ mod tests {
         );
 
         assert_ne!(p2, p3);
+    }
+
+    #[test]
+    fn internal_test_runtime_targets_are_isolated() {
+        assert_eq!(
+            shared_runtime_target_name(TestTarget::P3, FeatureCombination::Normal),
+            "rt-target-p3"
+        );
+        assert_ne!(
+            shared_runtime_target_name(TestTarget::P3, FeatureCombination::Normal),
+            shared_runtime_target_name(TestTarget::P3, FeatureCombination::InternalTestExecution)
+        );
+        assert_ne!(
+            shared_runtime_target_name(TestTarget::P2, FeatureCombination::InternalTestExecution),
+            shared_runtime_target_name(TestTarget::P3, FeatureCombination::InternalTestExecution)
+        );
     }
 }
 
@@ -1542,7 +1576,9 @@ impl FeatureCombination {
                 "--features",
                 "full-no-logging,golem,typescript-runtime,net-write-profiling",
             ],
-            FeatureCombination::TypeScriptRuntime => vec!["--features", "typescript-runtime"],
+            FeatureCombination::TypeScriptRuntime => {
+                vec!["--features", "typescript-runtime,test-observability"]
+            }
             FeatureCombination::TypeScriptTransformRuntime => {
                 vec!["--features", "typescript-transform-runtime"]
             }
@@ -1597,7 +1633,9 @@ impl FeatureCombination {
                     FeatureCombination::NodeCompatNetWriteProfiling => {
                         "full-no-logging-p3,golem,typescript-runtime,net-write-profiling"
                     }
-                    FeatureCombination::TypeScriptRuntime => "normal-p3,typescript-runtime",
+                    FeatureCombination::TypeScriptRuntime => {
+                        "normal-p3,typescript-runtime,test-observability"
+                    }
                     FeatureCombination::TypeScriptTransformRuntime => {
                         "normal-p3,typescript-transform-runtime"
                     }
@@ -2199,11 +2237,11 @@ impl CompiledTest {
         let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
         let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
 
-        // shared_target is relative to wrapper_crate_root.
-        // this is a _different_ shared target than the one used in the compilation tests to make
-        // sure different feature combinations do not interfere with these tests. P3 uses its own
-        // shared target so P2 and P3 artifacts never collide.
-        let shared_target_name = format!("rt-target{}", target.dir_suffix());
+        // shared_target is relative to wrapper_crate_root. Internal-test builds are isolated from
+        // normal builds because runtime group 2 compiles both variants of the same fetch example
+        // in parallel; sharing the final Cargo output would let one overwrite the other. Other
+        // feature combinations retain the common target to avoid multiplying large build trees.
+        let shared_target_name = shared_runtime_target_name(target, feature_combination);
         let shared_target = Utf8Path::new("..").join("..").join(&shared_target_name);
         let wasm_file_name = format!("{}.wasm", name.to_snake_case());
         let compiled_wasm_path = if use_shared_target {

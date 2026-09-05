@@ -15,6 +15,14 @@ world node-http {
   export http-pipelined-connection-close: func() -> bool;
   export http-pipelined-active-timeout: func() -> bool;
   export http-close-idle-connections: func() -> bool;
+  export http-idle-resource-reclamation: func() -> bool;
+  export http-zero-keep-alive-timeout: func() -> bool;
+  export http-unread-request-body-disposal: func() -> bool;
+  export http-server-request-destroy: func() -> bool;
+  export http-partially-consumed-request-body: func() -> bool;
+  export http-resume-scheduled-request-body: func() -> bool;
+  export http-complete-unread-request-body: func() -> bool;
+  export http-client-response-ownership: func() -> bool;
   export http-informational-write-after-close: func() -> bool;
   export http-max-requests-closes-socket: func() -> bool;
   export net-writev-boundaries: func() -> bool;
@@ -22,4 +30,5 @@ world node-http {
   export net-write-profile: func(chunk-size: u32, chunk-count: u32, corked: bool) -> string;
   export http-pipelined-max-requests: func() -> bool;
   export http-custom-connection-rejected: func() -> bool;
+  export http-response-persistence: func() -> bool;
 }
