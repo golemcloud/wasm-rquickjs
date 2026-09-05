@@ -73,18 +73,21 @@ pub mod native_module {
         ctx: Ctx<'_>,
         source: String,
         filename: String,
+        source_map: bool,
         module: Option<bool>,
     ) -> rquickjs::Result<String> {
         #[cfg(feature = "typescript-runtime")]
         {
             serialize_transform_result(
                 &ctx,
-                crate::internal::typescript::transform_module(source, &filename, false, module),
+                crate::internal::typescript::transform_module(
+                    source, &filename, source_map, module,
+                ),
             )
         }
         #[cfg(not(feature = "typescript-runtime"))]
         {
-            let _ = (source, filename, module);
+            let _ = (source, filename, source_map, module);
             Err(rquickjs::Exception::throw_message(
                 &ctx,
                 "TypeScript runtime support is not enabled",

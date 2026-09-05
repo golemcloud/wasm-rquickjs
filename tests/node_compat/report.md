@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3177/4387 (72.4%)
+**Primary compatibility (CI-enforced):** 3180/4388 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3177 | 72.4% | 55.3% | 46.2% |
-| 🧩 known gap | 1210 | 27.6% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3180 | 72.5% | 55.3% | 46.3% |
+| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
-| ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
+| ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3177/5750 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3180/5750 (55.3%)**.
 
 ## Inventory by Module
 
@@ -59,7 +59,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 614 | 187 | 145 | 86 | 13 | 0 | 183 | 56.3% | 43.4% |
+| other | 614 | 188 | 145 | 86 | 12 | 0 | 183 | 56.5% | 43.6% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| util | 174 | 88 | 9 | 0 | 0 | 0 | 77 | 90.7% | 90.7% |
+| util | 174 | 87 | 10 | 0 | 0 | 0 | 77 | 89.7% | 89.7% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
@@ -474,7 +474,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-snapshot-typescript.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-umd.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-warning.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
-| `test-source-map-api.js` | 9 | 8 | 0 | 0 | 1 | 0 | 0 |
+| `test-source-map-api.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-source-map-enable.js` | 23 | 23 | 0 | 0 | 0 | 0 | 0 |
 | `test-sqlite-database-sync.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-sqlite-session.js` | 14 | 13 | 1 | 0 | 0 | 0 | 0 |
@@ -584,7 +584,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-util-format.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
 | `test-util-getcallsites.js` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |
 | `test-util-inspect-getters-accessing-this.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-util-inspect.js` | 99 | 48 | 2 | 0 | 0 | 0 | 49 |
+| `test-util-inspect.js` | 99 | 47 | 3 | 0 | 0 | 0 | 49 |
 | `test-util-isDeepStrictEqual.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-promisify.js` | 19 | 0 | 0 | 0 | 0 | 0 | 19 |
 | `test-util-types.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1210)
+### known gap (1208)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -954,7 +954,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | SourceTextModule evaluation timeout does not interrupt an infinite loop | 1 | `parallel/test-vm-module-basic.js#block_02_statement_02` |
 | SourceTextModule identifiers are not incremented per VM context like Node | 1 | `parallel/test-vm-module-basic.js#block_03_check_the_generated_identifier_for_each_module` |
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
-| TypeScript transform source maps are not applied to QuickJS stack call-site locations | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | URL inspect output uses the URL string instead of Node's structured URL representation | 1 | `parallel/test-whatwg-url-custom-inspect.js` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
 | WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
@@ -1207,6 +1206,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | request/response pause-resume flow control does not complete with Node-compatible behavior | 1 | `parallel/test-http-pause.js` |
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
+| requires V8 hidden-class constructor-name recovery after the prototype constructor is detached | 1 | `parallel/test-util-inspect.js#block_73_manipulate_the_prototype_in_weird_ways` |
 | requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably | 1 | `parallel/test-gc-http-client-connaborted.js` |
 | requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably | 1 | `parallel/test-gc-net-timeout.js` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
@@ -1265,6 +1265,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | setDefaultHeaders:false still injects/default-normalizes headers (Host/Content-Length/casing/duplicates) | 1 | `parallel/test-http-dont-set-default-headers-with-set-header.js` |
 | setImmediate queue turn semantics are unstable and can trap in the timeout scheduler | 1 | `parallel/test-timers-immediate-queue.js` |
 | setInterval scheduling incorrectly includes callback execution time | 1 | `sequential/test-timers-set-interval-excludes-callback-duration.js` |
+| simulated child_process TypeScript CLI execution does not publish its transform map to util.getCallSites | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | snapshot update/read flow via node:test is incomplete in WASM child emulation | 1 | `parallel/test-runner-snapshot-file-tests.js#test_01_t_assert_filesnapshot_update_read_flow` |
 | spawn() stdio handling is incomplete: non-requested stderr stream is still created | 1 | `sequential/test-child-process-exit.js` |
 | spawn() timeout validation path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02` |
@@ -1540,7 +1541,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not expose custom HTTP reason phrases (status messages) | 1 | `parallel/test-http-response-status-message.js` |
 | wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied | 1 | `parallel/test-http-write-head.js` |
 
-### engine difference (168)
+### engine difference (167)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1574,7 +1575,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | depends on V8 native syntax and runtime flags not available in QuickJS | 1 | `parallel/test-v8-flags.js` |
 | depends on engine-specific ArrayBuffer OOM RangeError message text in skip path | 1 | `sequential/test-buffer-creation-regression.js` |
 | expects V8 heap space statistics that QuickJS does not expose | 1 | `parallel/test-v8-stats.js` |
-| native QuickJS Error.prepareStackTrace CallSite positions include the CJS wrapper offset | 1 | `parallel/test-source-map-api.js#block_03_source_map_attached_to_error` |
 | uses V8 natives syntax intrinsics (`%DebugPrint`, `%HaveSameMap`, `%CollectGarbage`) unavailable in QuickJS | 1 | `parallel/test-http-same-map.js` |
 | uses v8.getHeapSnapshot, which is V8-specific and unavailable in QuickJS | 1 | `parallel/test-http2-ping-settings-heapdump.js` |
 | v8.cachedDataVersionTag depends on V8 internals unavailable in QuickJS | 1 | `parallel/test-v8-version-tag.js` |
