@@ -1985,6 +1985,8 @@ where
     future_writer_from_js_internal(ctx, value, writer, convert)
 }
 
+type FutureWriterSlot<T, F> = Rc<RefCell<Option<(futures::channel::oneshot::Sender<T>, F)>>>;
+
 fn future_writer_from_js_internal<'js, T, R, F>(
     ctx: &Ctx<'js>,
     value: Value<'js>,
@@ -2022,8 +2024,7 @@ where
             .expect("value.is_promise() returned true but conversion to Promise failed");
         // `convert`/`tx` are single-use; a QuickJS callback must be `Fn`, so guard them behind a
         // shared cell that the fulfilled/rejected reactions take from (only one ever fires).
-        let slot: Rc<RefCell<Option<(futures::channel::oneshot::Sender<T>, F)>>> =
-            Rc::new(RefCell::new(Some((tx, convert))));
+        let slot: FutureWriterSlot<T, F> = Rc::new(RefCell::new(Some((tx, convert))));
         let slot_ok = slot.clone();
         let on_fulfilled = Function::new(ctx.clone(), move |resolved: Value<'_>| {
             if let Some((tx, convert)) = slot_ok.borrow_mut().take() {

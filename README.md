@@ -1600,6 +1600,11 @@ There are a few important things to keep in mind when working on the project:
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
 
+- Run `tools/check-skeleton-clippy.sh` to lint the supported Preview 2 and Preview 3 skeleton feature matrix. The helper
+  temporarily symlinks `Cargo.toml` to the checked-in `Cargo.toml_`, directs output to the workspace-root `target/` cache,
+  preserves that cache, and removes the symlink on exit. If a skeleton-local `target/` already exists, continue to use
+  `cleanup-skeleton.sh` before embedding the skeleton.
+
 - Runtime and node compatibility tests support opt-in caches for faster local iteration. Select Node with
   `nvm use 22.14.0`, then use the artifact and Wasmtime caches explicitly:
 

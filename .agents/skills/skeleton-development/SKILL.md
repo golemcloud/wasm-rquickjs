@@ -17,6 +17,22 @@ The skeleton's `Cargo.toml` is stored as **`Cargo.toml_`** in the repository to 
 
 ## Build / Test Cycle
 
+### Lint the complete skeleton matrix
+
+Use the repository-owned helper for Clippy rather than renaming the manifest by
+hand:
+
+```bash
+tools/check-skeleton-clippy.sh
+```
+
+It checks the supported P2/P3 default and maximal feature lanes with
+`-Dwarnings`. The helper temporarily symlinks `Cargo.toml` to the checked-in
+`Cargo.toml_`, directs output to the workspace-root `target/` cache, preserves
+that cache, and removes the symlink on exit. Run `./cleanup-skeleton.sh`
+separately if a pre-existing skeleton-local `target/` must be removed before
+embedding.
+
 ### When modifying skeleton files
 
 ```bash
