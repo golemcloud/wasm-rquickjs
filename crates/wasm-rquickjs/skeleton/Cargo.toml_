@@ -94,6 +94,9 @@ typescript-transform-runtime = ["typescript-runtime"]
 # capabilities they observe; this umbrella is excluded from every runtime tier.
 test-observability = []
 
+# Private measurement hooks for the GOL-360 TCP write/backpressure benchmark.
+net-write-profiling = []
+
 # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
 websocket = ["dep:golem-websocket"]
 

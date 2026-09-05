@@ -1,4 +1,8 @@
 use std::cell::RefCell;
+#[cfg(feature = "p2")]
+use std::time::Duration;
+#[cfg(any(feature = "p2", feature = "net-write-profiling"))]
+use std::time::Instant;
 
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
@@ -28,6 +32,10 @@ use wstd::runtime::AsyncPollable;
 //     each Node `write`. The returned future is retained so the operation is
 //     not cancelled.
 //   * `listen()` returns a `stream<tcp-socket>` of accepted connections.
+#[cfg(feature = "p2")]
+use futures::StreamExt;
+#[cfg(feature = "p2")]
+use futures::channel::mpsc;
 #[cfg(feature = "p3")]
 use futures::channel::oneshot;
 #[cfg(feature = "p3")]
@@ -72,6 +80,56 @@ pub mod native_module {
 
 // ── TcpSocket (client and accepted connections) ─────────────────────────
 
+#[cfg(feature = "net-write-profiling")]
+#[derive(Default)]
+struct TcpWriteProfile {
+    native_calls: u64,
+    requested_bytes: u64,
+    copied_bytes: u64,
+    completed_bytes: u64,
+    elapsed_ns: u64,
+    p2_check_write_calls: u64,
+    p2_capacity_waits: u64,
+    p2_capacity_wait_ns: u64,
+    p2_write_calls: u64,
+    p3_stream_write_ops: u64,
+    native_read_calls: u64,
+    requested_read_bytes: u64,
+    completed_read_bytes: u64,
+    read_elapsed_ns: u64,
+    p2_read_ops: u64,
+    p2_read_waits: u64,
+    p2_read_wait_ns: u64,
+    p3_read_ops: u64,
+}
+
+#[cfg(feature = "net-write-profiling")]
+impl TcpWriteProfile {
+    fn to_json(&self) -> String {
+        serde_json::to_string(&serde_json::json!({
+            "nativeCalls": self.native_calls,
+            "requestedBytes": self.requested_bytes,
+            "copiedBytes": self.copied_bytes,
+            "completedBytes": self.completed_bytes,
+            "elapsedNs": self.elapsed_ns,
+            "p2CheckWriteCalls": self.p2_check_write_calls,
+            "p2CapacityWaits": self.p2_capacity_waits,
+            "p2CapacityWaitNs": self.p2_capacity_wait_ns,
+            "p2WriteCalls": self.p2_write_calls,
+            "p3StreamWriteOps": self.p3_stream_write_ops,
+            "nativeReadCalls": self.native_read_calls,
+            "requestedReadBytes": self.requested_read_bytes,
+            "completedReadBytes": self.completed_read_bytes,
+            "readElapsedNs": self.read_elapsed_ns,
+            "p2ReadOps": self.p2_read_ops,
+            "p2ReadWaits": self.p2_read_waits,
+            "p2ReadWaitNs": self.p2_read_wait_ns,
+            "p3ReadOps": self.p3_read_ops,
+        }))
+        .expect("TCP write profile is serializable")
+    }
+}
+
 #[cfg(feature = "p2")]
 fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSocket> {
     let ip_family = match family {
@@ -105,6 +163,11 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             closed: false,
             generation: 0,
             waiters: 0,
+            pending_write_bytes: 0,
+            write_timeout_deadline: None,
+            write_timeout_update: None,
+            #[cfg(feature = "net-write-profiling")]
+            write_profile: TcpWriteProfile::default(),
         }),
     })
 }
@@ -121,6 +184,15 @@ struct TcpInner {
     /// Number of async tasks currently holding a pollable derived from this socket's streams.
     /// Resources must not be dropped while waiters > 0.
     waiters: u32,
+    /// Bytes not yet accepted by the WASI output stream for the active write.
+    pending_write_bytes: usize,
+    /// Deadline for the active write. JavaScript owns timeout semantics while
+    /// this native state keeps a P2 capacity wait interruptible.
+    write_timeout_deadline: Option<Instant>,
+    /// Wakes the active capacity wait when `setTimeout()` changes its deadline.
+    write_timeout_update: Option<mpsc::UnboundedSender<()>>,
+    #[cfg(feature = "net-write-profiling")]
+    write_profile: TcpWriteProfile,
 }
 
 #[cfg(feature = "p2")]
@@ -172,6 +244,9 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             family: ip_family,
             connected: false,
             closed: false,
+            pending_write_bytes: 0,
+            #[cfg(feature = "net-write-profiling")]
+            write_profile: TcpWriteProfile::default(),
         }),
     })
 }
@@ -205,6 +280,10 @@ struct TcpInner {
     family: IpAddressFamily,
     connected: bool,
     closed: bool,
+    /// Bytes not yet accepted by the WASI stream writer for the active write.
+    pending_write_bytes: usize,
+    #[cfg(feature = "net-write-profiling")]
+    write_profile: TcpWriteProfile,
 }
 
 #[derive(Trace, JsLifetime)]
@@ -432,6 +511,8 @@ impl TcpSocket {
     }
 
     pub async fn read(&self, ctx: Ctx<'_>, len: u64) -> rquickjs::Result<Option<Vec<u8>>> {
+        #[cfg(feature = "net-write-profiling")]
+        let read_started = Instant::now();
         let start_gen = {
             let inner = self.inner.borrow();
             if inner.closed {
@@ -452,6 +533,12 @@ impl TcpSocket {
             }
             inner.generation
         };
+        #[cfg(feature = "net-write-profiling")]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_profile.native_read_calls += 1;
+            inner.write_profile.requested_read_bytes += len;
+        }
 
         loop {
             let result = {
@@ -462,12 +549,27 @@ impl TcpSocket {
                     .ok_or_else(|| throw_socket_error(&ctx, "EBADF", "read", "No input stream"))?;
                 input.read(len)
             };
+            #[cfg(feature = "net-write-profiling")]
+            {
+                self.inner.borrow_mut().write_profile.p2_read_ops += 1;
+            }
 
             match result {
-                Ok(data) if !data.is_empty() => return Ok(Some(data)),
+                Ok(data) if !data.is_empty() => {
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        let mut inner = self.inner.borrow_mut();
+                        inner.write_profile.completed_read_bytes += data.len() as u64;
+                        inner.write_profile.read_elapsed_ns +=
+                            read_started.elapsed().as_nanos() as u64;
+                    }
+                    return Ok(Some(data));
+                }
                 Ok(_) => {
                     // Empty read = no data yet (connection still open).
                     // Poll the input stream and retry.
+                    #[cfg(feature = "net-write-profiling")]
+                    let wait_started = Instant::now();
                     let pollable = {
                         let mut inner = self.inner.borrow_mut();
                         let input = inner.input.as_ref().ok_or_else(|| {
@@ -482,6 +584,12 @@ impl TcpSocket {
                     {
                         let mut inner = self.inner.borrow_mut();
                         inner.waiters -= 1;
+                        #[cfg(feature = "net-write-profiling")]
+                        {
+                            inner.write_profile.p2_read_waits += 1;
+                            inner.write_profile.p2_read_wait_ns +=
+                                wait_started.elapsed().as_nanos() as u64;
+                        }
                         if inner.closed || inner.generation != start_gen {
                             inner.finalize_close_if_ready();
                             return Err(throw_socket_error(
@@ -512,7 +620,10 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
+        timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
+        #[cfg(feature = "net-write-profiling")]
+        let write_started = Instant::now();
         let data = data
             .as_bytes()
             .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
@@ -539,17 +650,149 @@ impl TcpSocket {
         };
 
         let total = data.len();
-        let mut offset = 0;
+        let (timeout_update, mut timeout_updates) = mpsc::unbounded();
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.pending_write_bytes = total;
+            inner.write_timeout_update = Some(timeout_update);
+        }
+        #[cfg(feature = "net-write-profiling")]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_profile.native_calls += 1;
+            inner.write_profile.requested_bytes += total as u64;
+            inner.write_profile.copied_bytes += total as u64;
+        }
+        // Rust owns exact native progress while a write is active. Clear it
+        // after every terminal path so the JS adapter can never observe stale
+        // bytes after an error or close.
+        let write_result: rquickjs::Result<()> = async {
+            let mut offset = 0;
+            while offset < total {
+                // Wait for write capacity
+                let permit = loop {
+                    let check = {
+                        let inner = self.inner.borrow();
+                        let output = inner.output.as_ref().ok_or_else(|| {
+                            throw_socket_error(&ctx, "EBADF", "write", "No output stream")
+                        })?;
+                        output.check_write().map_err(|e| match e {
+                            StreamError::Closed => {
+                                throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
+                            }
+                            StreamError::LastOperationFailed(e) => {
+                                let debug_message = e.to_debug_string();
+                                throw_socket_error(
+                                    &ctx,
+                                    stream_error_to_errno(&debug_message),
+                                    "write",
+                                    &format!("check_write failed: {debug_message}"),
+                                )
+                            }
+                        })?
+                    };
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        self.inner.borrow_mut().write_profile.p2_check_write_calls += 1;
+                    }
 
-        while offset < total {
-            // Wait for write capacity
-            let permit = loop {
-                let check = {
+                    if check > 0 {
+                        break check;
+                    }
+
+                    // Check an already-expired deadline before subscribing. A
+                    // timeout listener may destroy the socket, so no derived
+                    // pollable may remain alive when JavaScript is called.
+                    let checkpoint_due = self
+                        .inner
+                        .borrow()
+                        .write_timeout_deadline
+                        .is_some_and(|deadline| Instant::now() >= deadline);
+                    if checkpoint_due {
+                        self.inner.borrow_mut().write_timeout_deadline = None;
+                        if let Some(callback) = timeout_checkpoint.as_ref() {
+                            callback.call::<_, ()>(())?;
+                        }
+                        continue;
+                    }
+
+                    // No capacity — poll and retry
+                    #[cfg(feature = "net-write-profiling")]
+                    let wait_started = Instant::now();
+                    let pollable = {
+                        let mut inner = self.inner.borrow_mut();
+                        let output = inner.output.as_ref().ok_or_else(|| {
+                            throw_socket_error(&ctx, "EBADF", "write", "No output stream")
+                        })?;
+                        let p = output.subscribe();
+                        inner.waiters += 1;
+                        p
+                    };
+                    let checkpoint_due = {
+                        let capacity_wait = AsyncPollable::new(pollable).wait_for();
+                        let checkpoint_deadline = self.inner.borrow().write_timeout_deadline;
+                        let deadline_wait = async move {
+                            if let Some(deadline) = checkpoint_deadline {
+                                let remaining = deadline.saturating_duration_since(Instant::now());
+                                wstd::task::sleep(remaining.into()).await;
+                                true
+                            } else {
+                                futures::future::pending::<bool>().await
+                            }
+                        };
+                        let timeout_update = timeout_updates.next();
+                        let timeout_control = async move {
+                            futures::pin_mut!(deadline_wait, timeout_update);
+                            match futures::future::select(deadline_wait, timeout_update).await {
+                                futures::future::Either::Left((due, _update_wait)) => due,
+                                futures::future::Either::Right((_updated, _deadline_wait)) => false,
+                            }
+                        };
+                        futures::pin_mut!(capacity_wait, timeout_control);
+                        match futures::future::select(capacity_wait, timeout_control).await {
+                            futures::future::Either::Left((_, _timeout_control)) => false,
+                            futures::future::Either::Right((due, _capacity_wait)) => {
+                                // The losing capacity future leaves scope with
+                                // this match, before the waiter count can reach
+                                // zero or JavaScript closes streams.
+                                due
+                            }
+                        }
+                    };
+                    {
+                        let mut inner = self.inner.borrow_mut();
+                        inner.waiters -= 1;
+                        #[cfg(feature = "net-write-profiling")]
+                        {
+                            inner.write_profile.p2_capacity_waits += 1;
+                            inner.write_profile.p2_capacity_wait_ns +=
+                                wait_started.elapsed().as_nanos() as u64;
+                        }
+                        if inner.closed || inner.generation != start_gen {
+                            inner.finalize_close_if_ready();
+                            return Err(throw_socket_error(
+                                &ctx,
+                                "EBADF",
+                                "write",
+                                "Socket was closed or reset",
+                            ));
+                        }
+                    }
+                    if checkpoint_due {
+                        self.inner.borrow_mut().write_timeout_deadline = None;
+                        if let Some(callback) = timeout_checkpoint.as_ref() {
+                            callback.call::<_, ()>(())?;
+                        }
+                    }
+                };
+
+                let end = std::cmp::min(offset + permit as usize, total);
+                {
                     let inner = self.inner.borrow();
                     let output = inner.output.as_ref().ok_or_else(|| {
                         throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    output.check_write().map_err(|e| match e {
+                    output.write(&data[offset..end]).map_err(|e| match e {
                         StreamError::Closed => {
                             throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
                         }
@@ -559,67 +802,75 @@ impl TcpSocket {
                                 &ctx,
                                 stream_error_to_errno(&debug_message),
                                 "write",
-                                &format!("check_write failed: {debug_message}"),
+                                &format!("write failed: {debug_message}"),
                             )
                         }
-                    })?
-                };
-
-                if check > 0 {
-                    break check;
-                }
-
-                // No capacity — poll and retry
-                let pollable = {
-                    let mut inner = self.inner.borrow_mut();
-                    let output = inner.output.as_ref().ok_or_else(|| {
-                        throw_socket_error(&ctx, "EBADF", "write", "No output stream")
                     })?;
-                    let p = output.subscribe();
-                    inner.waiters += 1;
-                    p
                 };
-                AsyncPollable::new(pollable).wait_for().await;
+                #[cfg(feature = "net-write-profiling")]
                 {
-                    let mut inner = self.inner.borrow_mut();
-                    inner.waiters -= 1;
-                    if inner.closed || inner.generation != start_gen {
-                        inner.finalize_close_if_ready();
-                        return Err(throw_socket_error(
-                            &ctx,
-                            "EBADF",
-                            "write",
-                            "Socket was closed or reset",
-                        ));
+                    self.inner.borrow_mut().write_profile.p2_write_calls += 1;
+                }
+                offset = end;
+                self.inner.borrow_mut().pending_write_bytes = total - offset;
+                let checkpoint_due = self
+                    .inner
+                    .borrow()
+                    .write_timeout_deadline
+                    .is_some_and(|deadline| Instant::now() >= deadline);
+                if checkpoint_due {
+                    self.inner.borrow_mut().write_timeout_deadline = None;
+                    if let Some(callback) = timeout_checkpoint.as_ref() {
+                        callback.call::<_, ()>(())?;
                     }
                 }
-            };
+            }
+            Ok(())
+        }
+        .await;
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.pending_write_bytes = 0;
+            inner.write_timeout_deadline = None;
+            inner.write_timeout_update = None;
+        }
+        write_result?;
 
-            let end = std::cmp::min(offset + permit as usize, total);
-            {
-                let inner = self.inner.borrow();
-                let output = inner.output.as_ref().ok_or_else(|| {
-                    throw_socket_error(&ctx, "EBADF", "write", "No output stream")
-                })?;
-                output.write(&data[offset..end]).map_err(|e| match e {
-                    StreamError::Closed => {
-                        throw_socket_error(&ctx, "EPIPE", "write", "Stream closed")
-                    }
-                    StreamError::LastOperationFailed(e) => {
-                        let debug_message = e.to_debug_string();
-                        throw_socket_error(
-                            &ctx,
-                            stream_error_to_errno(&debug_message),
-                            "write",
-                            &format!("write failed: {debug_message}"),
-                        )
-                    }
-                })?;
-            };
-            offset = end;
+        #[cfg(feature = "net-write-profiling")]
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_profile.completed_bytes += total as u64;
+            inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
         }
 
         Ok(total as u32)
+    }
+
+    pub fn write_queue_size(&self) -> u64 {
+        self.inner.borrow().pending_write_bytes as u64
+    }
+
+    pub fn set_write_timeout(&self, timeout_ms: Option<u32>) {
+        let mut inner = self.inner.borrow_mut();
+        inner.write_timeout_deadline = timeout_ms
+            .filter(|timeout_ms| *timeout_ms > 0)
+            .map(|timeout_ms| Instant::now() + Duration::from_millis(timeout_ms as u64));
+        if let Some(update) = inner.write_timeout_update.as_mut() {
+            let _ = update.unbounded_send(());
+        }
+    }
+
+    pub fn write_profile(&self) -> Option<String> {
+        // rquickjs cannot cfg-remove an individual method from this methods impl.
+        // A JSON string therefore means the private profiling feature is enabled.
+        #[cfg(feature = "net-write-profiling")]
+        {
+            Some(self.inner.borrow().write_profile.to_json())
+        }
+        #[cfg(not(feature = "net-write-profiling"))]
+        {
+            None
+        }
     }
 
     pub fn shutdown(&self, ctx: Ctx<'_>, how: u32) -> rquickjs::Result<()> {
@@ -839,6 +1090,9 @@ impl TcpSocket {
         }
         inner.closed = true;
         inner.generation += 1;
+        if let Some(update) = inner.write_timeout_update.as_mut() {
+            let _ = update.unbounded_send(());
+        }
         // Shut down the socket to signal EOF to any pending read/accept pollables.
         if let Some(ref socket) = inner.socket {
             let _ = socket.shutdown(ShutdownType::Both);
@@ -856,6 +1110,9 @@ impl TcpSocket {
         let mut inner = self.inner.borrow_mut();
         inner.closed = true;
         inner.generation += 1;
+        if let Some(update) = inner.write_timeout_update.as_mut() {
+            let _ = update.unbounded_send(());
+        }
         // Drop all resources immediately, even if waiters are active.
         // The waiters will see closed=true and exit gracefully.
         inner.input = None;
@@ -985,6 +1242,8 @@ impl TcpSocket {
     }
 
     pub async fn read(&self, ctx: Ctx<'_>, len: u64) -> rquickjs::Result<Option<Vec<u8>>> {
+        #[cfg(feature = "net-write-profiling")]
+        let read_started = Instant::now();
         let (_keepalive, mut reader, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();
             if let Some(error) = inner.recv_error.take() {
@@ -1011,6 +1270,11 @@ impl TcpSocket {
                     "Socket is not connected",
                 ));
             }
+            #[cfg(feature = "net-write-profiling")]
+            {
+                inner.write_profile.native_read_calls += 1;
+                inner.write_profile.requested_read_bytes += len;
+            }
             match (inner.socket.clone(), inner.reader.take()) {
                 (Some(sock), Some(reader)) => {
                     // Register a cancel signal so `close()` / `shutdown(SHUT_RD)`
@@ -1029,6 +1293,10 @@ impl TcpSocket {
 
         let cap = if len == 0 { 16384 } else { len as usize };
         loop {
+            #[cfg(feature = "net-write-profiling")]
+            {
+                self.inner.borrow_mut().write_profile.p3_read_ops += 1;
+            }
             let (status, buf) = {
                 let read_fut = reader.read(Vec::with_capacity(cap));
                 futures::pin_mut!(read_fut);
@@ -1047,6 +1315,12 @@ impl TcpSocket {
                 StreamResult::Complete(_) if !buf.is_empty() => {
                     let mut inner = self.inner.borrow_mut();
                     inner.read_cancel = None;
+                    #[cfg(feature = "net-write-profiling")]
+                    {
+                        inner.write_profile.completed_read_bytes += buf.len() as u64;
+                        inner.write_profile.read_elapsed_ns +=
+                            read_started.elapsed().as_nanos() as u64;
+                    }
                     if !inner.closed {
                         inner.reader = Some(reader);
                     }
@@ -1094,7 +1368,10 @@ impl TcpSocket {
         &self,
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
+        _timeout_checkpoint: Option<rquickjs::Function<'js>>,
     ) -> rquickjs::Result<u32> {
+        #[cfg(feature = "net-write-profiling")]
+        let write_started = Instant::now();
         let data = data
             .as_bytes()
             .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
@@ -1118,8 +1395,17 @@ impl TcpSocket {
                     "Socket is not connected",
                 ));
             }
+            #[cfg(feature = "net-write-profiling")]
+            {
+                inner.write_profile.native_calls += 1;
+                inner.write_profile.requested_bytes += total as u64;
+                inner.write_profile.copied_bytes += total as u64;
+            }
             match (inner.socket.clone(), inner.writer.take()) {
                 (Some(sock), Some(writer)) => {
+                    // Rust owns the exact remaining byte count while JS uses
+                    // `_writeInFlight` only to select this native observation.
+                    inner.pending_write_bytes = total;
                     // Register a cancel signal so `close()` can wake a write that
                     // is blocked on stream capacity (see `read_cancel`).
                     let (cancel_tx, cancel_rx) = oneshot::channel();
@@ -1139,7 +1425,32 @@ impl TcpSocket {
         };
 
         let leftover = {
-            let write_fut = writer.write_all(data);
+            let write_fut = async {
+                // Mirror StreamWriter::write_all without copying the input, but
+                // expose progress after each actual component-stream write.
+                #[cfg(feature = "net-write-profiling")]
+                {
+                    self.inner.borrow_mut().write_profile.p3_stream_write_ops += 1;
+                }
+                let (mut status, mut buffer) = writer.write(data).await;
+                self.inner.borrow_mut().pending_write_bytes = buffer.remaining();
+                loop {
+                    match status {
+                        StreamResult::Complete(_) if buffer.remaining() > 0 => {
+                            #[cfg(feature = "net-write-profiling")]
+                            {
+                                self.inner.borrow_mut().write_profile.p3_stream_write_ops += 1;
+                            }
+                            (status, buffer) = writer.write_buf(buffer).await;
+                            self.inner.borrow_mut().pending_write_bytes = buffer.remaining();
+                            if status == StreamResult::Cancelled {
+                                status = StreamResult::Complete(0);
+                            }
+                        }
+                        _ => return buffer.into_vec(),
+                    }
+                }
+            };
             futures::pin_mut!(write_fut);
             match futures::future::select(write_fut, &mut cancel_rx).await {
                 Either::Left((leftover, _)) => leftover,
@@ -1147,6 +1458,7 @@ impl TcpSocket {
                     // Cancelled by `close()`. Dropping the in-flight write future
                     // cancels the pending stream write; dropping the writer and
                     // the keepalive `Rc` releases the socket.
+                    self.inner.borrow_mut().pending_write_bytes = 0;
                     return Err(throw_socket_error(
                         &ctx,
                         "EPIPE",
@@ -1156,29 +1468,58 @@ impl TcpSocket {
                 }
             }
         };
-        let mut inner = self.inner.borrow_mut();
-        inner.write_cancel = None;
-        if !leftover.is_empty() {
-            // The peer hung up before all bytes were accepted.
-            inner.writer = None;
-            let send_future = inner.send_future.take();
-            drop(inner);
-            if let Some(send_future) = send_future
-                && let Err(error) = send_future.await
+        let send_future = {
+            let mut inner = self.inner.borrow_mut();
+            inner.write_cancel = None;
+            inner.pending_write_bytes = 0;
+            #[cfg(feature = "net-write-profiling")]
             {
-                return Err(throw_socket_error(
-                    &ctx,
-                    error_code_to_errno(&error),
-                    "write",
-                    &format!("send failed: {error:?}"),
-                ));
+                inner.write_profile.elapsed_ns += write_started.elapsed().as_nanos() as u64;
+                inner.write_profile.completed_bytes += (total - leftover.len()) as u64;
             }
-            return Err(throw_socket_error(&ctx, "EPIPE", "write", "Stream closed"));
+            if leftover.is_empty() {
+                if !inner.closed {
+                    inner.writer = Some(writer);
+                }
+                return Ok(total as u32);
+            }
+
+            // The peer hung up before all bytes were accepted. Take the send
+            // completion future out while borrowed, then await after the
+            // RefCell guard has left scope.
+            inner.writer = None;
+            inner.send_future.take()
+        };
+        if let Some(send_future) = send_future
+            && let Err(error) = send_future.await
+        {
+            return Err(throw_socket_error(
+                &ctx,
+                error_code_to_errno(&error),
+                "write",
+                &format!("send failed: {error:?}"),
+            ));
         }
-        if !inner.closed {
-            inner.writer = Some(writer);
+        Err(throw_socket_error(&ctx, "EPIPE", "write", "Stream closed"))
+    }
+
+    pub fn write_queue_size(&self) -> u64 {
+        self.inner.borrow().pending_write_bytes as u64
+    }
+
+    pub fn set_write_timeout(&self, _timeout_ms: Option<u32>) {}
+
+    pub fn write_profile(&self) -> Option<String> {
+        // rquickjs cannot cfg-remove an individual method from this methods impl.
+        // A JSON string therefore means the private profiling feature is enabled.
+        #[cfg(feature = "net-write-profiling")]
+        {
+            Some(self.inner.borrow().write_profile.to_json())
         }
-        Ok(total as u32)
+        #[cfg(not(feature = "net-write-profiling"))]
+        {
+            None
+        }
     }
 
     pub fn shutdown(&self, ctx: Ctx<'_>, how: u32) -> rquickjs::Result<()> {
@@ -1967,6 +2308,11 @@ impl TcpListener {
                             closed: false,
                             generation: 0,
                             waiters: 0,
+                            pending_write_bytes: 0,
+                            write_timeout_deadline: None,
+                            write_timeout_update: None,
+                            #[cfg(feature = "net-write-profiling")]
+                            write_profile: TcpWriteProfile::default(),
                         }),
                     };
 
@@ -2289,6 +2635,9 @@ impl TcpListener {
                 family: client_family,
                 connected: true,
                 closed: false,
+                pending_write_bytes: 0,
+                #[cfg(feature = "net-write-profiling")]
+                write_profile: TcpWriteProfile::default(),
             }),
         };
 

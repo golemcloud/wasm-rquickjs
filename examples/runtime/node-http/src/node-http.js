@@ -1769,6 +1769,385 @@ export async function netWritevBoundaries() {
         await runBatch([32 * 1024, 32 * 1024, 1]);
 }
 
+export async function netWriteTimeoutLifecycle() {
+    const wait = (msecs) => new Promise((resolve) => setTimeout(resolve, msecs));
+
+    // Node ignores all timeout arguments after destruction. On a live socket,
+    // it replaces the timer before validating the optional listener.
+    const destroyed = new net.Socket();
+    destroyed.destroy();
+    let destroyedOrdering = false;
+    try {
+        destroyedOrdering = destroyed.setTimeout('invalid', 'invalid') === destroyed;
+    } catch (_) {}
+
+    const live = new net.Socket();
+    let scheduledTimeouts = 0;
+    let invalidCallbackCode;
+    live.on('timeout', () => { scheduledTimeouts++; });
+    try {
+        live.setTimeout(5, 'invalid');
+    } catch (error) {
+        invalidCallbackCode = error.code;
+    }
+    await wait(20);
+    live.destroy();
+    const validationOrdering = destroyedOrdering &&
+        invalidCallbackCode === 'ERR_INVALID_ARG_TYPE' && scheduledTimeouts === 1;
+
+    const invalidTypeSocket = new net.Socket();
+    let invalidTypeCode;
+    try {
+        invalidTypeSocket.setTimeout('invalid');
+    } catch (error) {
+        invalidTypeCode = error.code;
+    }
+    const invalidRangeSocket = new net.Socket();
+    let invalidRangeCode;
+    try {
+        invalidRangeSocket.setTimeout(Infinity);
+    } catch (error) {
+        invalidRangeCode = error.code;
+    }
+    const invalidValueOrdering = invalidTypeCode === 'ERR_INVALID_ARG_TYPE' &&
+        invalidTypeSocket.timeout === 'invalid' &&
+        invalidRangeCode === 'ERR_OUT_OF_RANGE' &&
+        invalidRangeSocket.timeout === Infinity;
+    invalidTypeSocket.destroy();
+    invalidRangeSocket.destroy();
+
+    // Socket timeouts share the timer duration normalizer, while retaining the
+    // unmodified public value.
+    let overflowWarning;
+    const originalEmitWarning = process.emitWarning;
+    const overflowSocket = new net.Socket();
+    try {
+        process.emitWarning = (message, type) => { overflowWarning = { message, type }; };
+        overflowSocket.setTimeout(2 ** 31);
+    } finally {
+        process.emitWarning = originalEmitWarning;
+    }
+    const normalizedOverflow = overflowSocket.timeout === 2 ** 31 &&
+        overflowWarning?.type === 'TimeoutOverflowWarning' &&
+        overflowWarning.message.includes('truncated to 2147483647');
+    overflowSocket.setTimeout(0);
+    overflowSocket.destroy();
+
+    if (!validationOrdering || !invalidValueOrdering || !normalizedOverflow) return false;
+
+    // Keep the exact queue-size policy deterministic as a supplement to the
+    // public TCP lifecycle below: decreasing progress, including draining to
+    // zero, buys another interval; an unchanged or increasing queue emits.
+    const policySocket = new net.Socket();
+    let policyPending = 64;
+    let policyResets = 0;
+    let policyTimeouts = 0;
+    policySocket._handle = {
+        writeQueueSize: 64,
+        _writeInFlight: true,
+        write_queue_size: () => policyPending,
+        close() {},
+    };
+    policySocket._lastWriteQueueSize = 64;
+    policySocket._resetTimeout = () => { policyResets++; };
+    policySocket.on('timeout', () => { policyTimeouts++; });
+    policyPending = 96;
+    policySocket._onTimeout();
+    const increasingPolicy = policyResets === 0 && policyTimeouts === 1 &&
+        policySocket._lastWriteQueueSize === 64;
+    policyPending = 32;
+    policySocket._onTimeout();
+    policyPending = 0;
+    policySocket._onTimeout();
+    policySocket._onTimeout();
+    const progressPolicy = increasingPolicy &&
+        policyResets === 2 && policyTimeouts === 2 &&
+        policySocket._lastWriteQueueSize === 0;
+    policySocket.destroy();
+    if (!progressPolicy) return false;
+
+    // Start with no timeout, then enable, disable, replace, and shorten it after
+    // a real native write is pending. A stalled timeout is advisory; the first
+    // event must leave the socket open, and a listener may explicitly rearm it.
+    const stalledWrite = await new Promise((resolve) => {
+        let client;
+        let writer;
+        let fallback;
+        let settled = false;
+        let firstWriteCallbacks = 0;
+        let secondWriteCallbacks = 0;
+        let writeErrors = 0;
+        let firstWriteCallbacksBeforeDestroy;
+        let secondWriteCallbacksBeforeDestroy;
+        let writeErrorsBeforeDestroy;
+        let timeoutCount = 0;
+        let uncaughtTimeouts = 0;
+        let openAtFirstTimeout = false;
+        let firstTimeoutElapsed = 0;
+        let secondTimeoutElapsed = 0;
+        let resumedBytes = 0;
+        let resumedThenPaused = false;
+        let writerClosed = false;
+        let writesSettled = false;
+        let settlementCheckScheduled = false;
+        const timeoutListenerError = new Error('GOL-389 timeout listener');
+        const onUncaughtException = (error) => {
+            if (error === timeoutListenerError) uncaughtTimeouts++;
+        };
+        process.once('uncaughtException', onUncaughtException);
+        const server = net.createServer((socket) => {
+            writer = socket;
+            const configuredAt = Date.now();
+            socket.on('error', () => {});
+            socket.on('close', () => {
+                writerClosed = true;
+                maybeFinish();
+            });
+            socket.on('timeout', () => {
+                timeoutCount++;
+                if (timeoutCount === 1) {
+                    openAtFirstTimeout = !socket.destroyed;
+                    firstTimeoutElapsed = Date.now() - configuredAt;
+                    client.resume();
+                    socket.setTimeout(750);
+                } else {
+                    secondTimeoutElapsed = Date.now() - configuredAt - firstTimeoutElapsed;
+                    firstWriteCallbacksBeforeDestroy = firstWriteCallbacks;
+                    secondWriteCallbacksBeforeDestroy = secondWriteCallbacks;
+                    writeErrorsBeforeDestroy = writeErrors;
+                    socket.destroy();
+                }
+            });
+            socket.once('timeout', () => { throw timeoutListenerError; });
+            const chunk = Buffer.alloc(64 * 1024 * 1024);
+            const onFirstWrite = (error) => {
+                firstWriteCallbacks++;
+                if (error) writeErrors++;
+                writesSettled = firstWriteCallbacks > 0 && secondWriteCallbacks > 0;
+                maybeFinish();
+            };
+            const onSecondWrite = (error) => {
+                secondWriteCallbacks++;
+                if (error) writeErrors++;
+                writesSettled = firstWriteCallbacks > 0 && secondWriteCallbacks > 0;
+                maybeFinish();
+            };
+            socket.write(chunk, onFirstWrite);
+            socket.write(chunk, onSecondWrite);
+            socket.setTimeout(5);
+            socket.setTimeout(0);
+            socket.setTimeout(100);
+            socket.setTimeout(25);
+        });
+        function maybeFinish() {
+            if (!writerClosed || !writesSettled || settlementCheckScheduled) return;
+            settlementCheckScheduled = true;
+            setTimeout(() => {
+                finish({
+                    timeoutCount,
+                    openAtFirstTimeout,
+                    firstTimeoutElapsed,
+                    secondTimeoutElapsed,
+                    resumedBytes,
+                    resumedThenPaused,
+                    firstWriteCallbacks,
+                    secondWriteCallbacks,
+                    writeErrors,
+                    firstWriteCallbacksBeforeDestroy,
+                    secondWriteCallbacksBeforeDestroy,
+                    writeErrorsBeforeDestroy,
+                    uncaughtTimeouts,
+                });
+            }, 10);
+        }
+        function finish(result) {
+            if (settled) return;
+            settled = true;
+            process.removeListener('uncaughtException', onUncaughtException);
+            clearTimeout(fallback);
+            if (writer) writer.destroy();
+            if (client) client.destroy();
+            server.close(() => resolve(result));
+        }
+        server.once('error', () => finish({ error: 'server' }));
+        server.listen(0, '127.0.0.1', () => {
+            client = net.connect(server.address().port, '127.0.0.1');
+            client.on('data', (chunk) => {
+                if (timeoutCount !== 1) return;
+                resumedBytes += chunk.length;
+                if (!resumedThenPaused && resumedBytes >= 64 * 1024) {
+                    resumedThenPaused = true;
+                    client.pause();
+                }
+            });
+            client.pause();
+            client.once('error', () => finish({ error: 'client' }));
+            fallback = setTimeout(() => finish({
+                error: 'fallback',
+                timeoutCount,
+                openAtFirstTimeout,
+                firstTimeoutElapsed,
+                secondTimeoutElapsed,
+                resumedBytes,
+                resumedThenPaused,
+                firstWriteCallbacks,
+                secondWriteCallbacks,
+                writeErrors,
+                firstWriteCallbacksBeforeDestroy,
+                secondWriteCallbacksBeforeDestroy,
+                writeErrorsBeforeDestroy,
+                uncaughtTimeouts,
+                writerClosed,
+                writesSettled,
+            }), 10000);
+        });
+    });
+
+    const stalledWritePassed = stalledWrite.timeoutCount === 2 &&
+        stalledWrite.openAtFirstTimeout &&
+        stalledWrite.firstTimeoutElapsed >= 50 &&
+        stalledWrite.secondTimeoutElapsed >= 650 &&
+        stalledWrite.resumedBytes >= 64 * 1024 &&
+        stalledWrite.resumedThenPaused &&
+        stalledWrite.firstWriteCallbacks === 1 &&
+        stalledWrite.secondWriteCallbacks === 1 &&
+        stalledWrite.firstWriteCallbacksBeforeDestroy +
+            stalledWrite.secondWriteCallbacksBeforeDestroy < 2 &&
+        stalledWrite.secondWriteCallbacksBeforeDestroy === 0 &&
+        stalledWrite.writeErrorsBeforeDestroy === 0 &&
+        stalledWrite.writeErrors >= 1 &&
+        stalledWrite.uncaughtTimeouts === 1 &&
+        stalledWrite.error === undefined;
+    if (!stalledWritePassed) return false;
+
+    // After a real write drains, ordinary idle timeout semantics resume.
+    const drainedWrite = await new Promise((resolve) => {
+        let client;
+        let writer;
+        let fallback;
+        let settled = false;
+        let writeComplete = false;
+        let timeoutDuringWrite = false;
+        const server = net.createServer((socket) => {
+            writer = socket;
+            socket.setTimeout(100);
+            socket.on('error', () => finish({ ok: false, reason: 'writer-error' }));
+            socket.on('timeout', () => {
+                if (!writeComplete) timeoutDuringWrite = true;
+                finish({
+                    ok: writeComplete && !timeoutDuringWrite && !socket.destroyed,
+                    reason: 'timeout',
+                    writeComplete,
+                    timeoutDuringWrite,
+                    destroyed: socket.destroyed,
+                });
+            });
+            socket.write(Buffer.alloc(1024 * 1024), (error) => {
+                if (error) return finish({ ok: false, reason: 'write-callback' });
+                writeComplete = true;
+            });
+        });
+        function finish(result) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(fallback);
+            if (writer) writer.destroy();
+            if (client) client.destroy();
+            server.close(() => resolve(result));
+        }
+        server.once('error', () => finish({ ok: false, reason: 'server-error' }));
+        server.listen(0, '127.0.0.1', () => {
+            client = net.connect(server.address().port, '127.0.0.1');
+            client.on('data', () => {
+                client.pause();
+                setTimeout(() => client.resume(), 1);
+            });
+            client.once('error', () => finish({ ok: false, reason: 'client-error' }));
+            fallback = setTimeout(() => finish({
+                ok: false,
+                reason: 'fallback',
+                writeComplete,
+                timeoutDuringWrite,
+            }), 10000);
+        });
+    });
+
+    if (!drainedWrite.ok) return false;
+    const result = validationOrdering && normalizedOverflow && progressPolicy && drainedWrite.ok &&
+        stalledWritePassed;
+    return result;
+}
+
+export async function netWriteProfile(chunkSize, chunkCount, corked) {
+    const startedAt = Date.now();
+    const expectedBytes = chunkSize * chunkCount;
+    let receivedBytes = 0;
+    let falseWrites = 0;
+    let snapshot = null;
+    let receiver = null;
+
+    const server = net.createServer((socket) => {
+        socket.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            if (!receiver && receivedBytes >= expectedBytes) {
+                receiver = socket._handle.get_write_profile();
+            }
+        });
+        socket.on('end', () => socket.end());
+    });
+
+    await new Promise((resolve, reject) => {
+        server.on('error', reject);
+        server.listen(0, resolve);
+    });
+
+    const socket = net.connect({ port: server.address().port });
+    await new Promise((resolve, reject) => {
+        socket.once('connect', resolve);
+        socket.once('error', reject);
+    });
+
+    const writeOnce = (buffer) => new Promise((resolve, reject) => {
+        if (!socket.write(buffer, (error) => error ? reject(error) : resolve())) {
+            falseWrites++;
+        }
+    });
+
+    if (corked) {
+        socket.cork();
+        const writes = [];
+        for (let index = 0; index < chunkCount; index++) {
+            writes.push(writeOnce(Buffer.alloc(chunkSize, 65 + (index % 26))));
+        }
+        socket.uncork();
+        await Promise.all(writes);
+    } else {
+        for (let index = 0; index < chunkCount; index++) {
+            await writeOnce(Buffer.alloc(chunkSize, 65 + (index % 26)));
+        }
+    }
+
+    snapshot = socket._handle.get_write_profile();
+    socket.end();
+    await new Promise((resolve, reject) => {
+        socket.once('close', resolve);
+        socket.once('error', reject);
+    });
+    await new Promise((resolve) => server.close(resolve));
+
+    return JSON.stringify({
+        chunkSize,
+        chunkCount,
+        corked,
+        expectedBytes,
+        receivedBytes,
+        falseWrites,
+        wallMs: Date.now() - startedAt,
+        receiver,
+        ...snapshot,
+    });
+}
+
 export async function httpPipelinedMaxRequests() {
     return new Promise((resolve) => {
         let settled = false;

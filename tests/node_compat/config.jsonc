@@ -2937,9 +2937,9 @@
     "parallel/test-net-write-arguments.js": {},
     "parallel/test-net-write-cb-on-destroy-before-connect.js": {},
     "parallel/test-net-write-connect-write.js": {},
-    "parallel/test-net-write-fully-async-buffer.js": { "category": "known-gap", "reason": "net write backpressure/drain handling for repeated large Buffer writes can hang in the WASM socket implementation" },
+    "parallel/test-net-write-fully-async-buffer.js": { "category": "known-gap", "reason": "isolated P2/P3 runs pass in about 54-63 seconds for 200 one-MiB writes; although a per-entry timeout is configurable, enabling this case would add excessive wall time and remain unreliable under concurrent CI load" },
     "parallel/test-net-write-fully-async-hex-string.js": { "category": "runnable" },
-    "parallel/test-net-write-slow.js": { "category": "known-gap", "reason": "net.js TCP implementation incomplete - needs event handling and API fixes" },
+    "parallel/test-net-write-slow.js": { "category": "known-gap", "reason": "receiver end is not delivered after the test's repeated pause/resume slow drain (P2 mustCall verification gets 0 calls); GOL-389 covers timeout progress separately without depending on that pre-existing EOF lifecycle gap" },
     "parallel/test-process-next-tick.js": {},
     "parallel/test-next-tick-doesnt-hang.js": {},
     "parallel/test-next-tick-fixed-queue-regression.js": {},
@@ -10463,7 +10463,7 @@
         "block_02_block_02": { "category": "known-gap", "reason": "perf_hooks.monitorEventLoopDelay is not implemented" }
       }
     },
-    "sequential/test-pipe.js": { "category": "known-gap", "reason": "HTTP request piping into a raw TCP stream with large payloads can hang in current net/http stream backpressure handling" },
+    "sequential/test-pipe.js": { "category": "known-gap", "reason": "isolated P2/P3 runs take about 91-97 seconds; although a per-entry timeout is configurable, enabling this case would add excessive CI wall time, and transport profiling attributes most of the delay outside the socket path" },
     "sequential/test-process-title.js": { "category": "known-gap", "reason": "child_process -p/process.title behavior is incomplete in WASM child emulation" },
     "sequential/test-process-warnings.js": {},
     "sequential/test-repl-timeout-throw.js": { "category": "known-gap", "reason": "child_process.spawn emulation does not support --interactive REPL sessions" },

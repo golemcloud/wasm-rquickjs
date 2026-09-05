@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` only. It does **not** run the vendo
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3177/4387 (72.4%)
+**Primary compatibility (CI-enforced):** 3180/4387 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3177 | 72.4% | 55.3% | 46.2% |
-| 🧩 known gap | 1210 | 27.6% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3180 | 72.5% | 55.3% | 46.3% |
+| 🧩 known gap | 1207 | 27.5% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 168 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3177/5750 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3180/5750 (55.3%)**.
 
 ## Inventory by Module
 
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1210)
+### known gap (1207)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -701,11 +701,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
 | inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 11 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+8) |
 | inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility | 11 | `parallel/test-whatwg-encoding-custom-textdecoder.js#block_00_test_textdecoder_utf_8_fatal_false_ignorebom_false`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_01_test_textdecoder_utf_8_fatal_false_ignorebom_true`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_02_invalid_encoders`, ... (+8) |
-| net.js TCP implementation incomplete - needs event handling and API fixes | 11 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+8) |
 | remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps | 11 | `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_00_a_mjs_b_cjs_c_mjs_a_mjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_01_b_cjs_c_mjs_a_mjs_b_cjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_02_c_mjs_a_mjs_b_cjs_c_mjs`, ... (+8) |
 | rooted symlink targets cannot be resolved inside a WASI preopen; the adapter rejects them at creation, while persistent relative symlinks are covered by runtime tests | 11 | `es-module/test-esm-preserve-symlinks-main.js`, `es-module/test-esm-preserve-symlinks.js`, `es-module/test-esm-symlink-main.js`, ... (+8) |
 | wasi:sockets UDP implementation hangs in wasmtime | 11 | `parallel/test-dgram-implicit-bind.js`, `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`, `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`, ... (+8) |
 | dgram multicast membership APIs are not implemented (ENOSYS) | 10 | `parallel/test-dgram-membership.js#block_02_addmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_03_dropmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_04_addmembership_with_invalid_multicast_address_should_throw`, ... (+7) |
+| net.js TCP implementation incomplete - needs event handling and API fixes | 10 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+7) |
 | async_hooks not fully implemented | 9 | `parallel/test-async-hooks-destroy-on-gc.js`, `parallel/test-async-hooks-disable-during-promise.js`, `parallel/test-async-hooks-disable-gc-tracking.js`, ... (+6) |
 | spawn() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 9 | `parallel/test-child-process-spawn-controller.js#block_00_block_00`, `parallel/test-child-process-spawn-controller.js#block_01_block_01`, `parallel/test-child-process-spawn-controller.js#block_02_block_02`, ... (+6) |
 | spawnSync() returns ENOSYS for non-execPath commands; Node expects ENOENT after option validation | 9 | `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`, `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`, `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`, ... (+6) |
@@ -883,7 +883,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP parser does not emit Node-compatible HPE_INVALID_TRANSFER_ENCODING clientError semantics | 1 | `parallel/test-http-server-reject-chunked-with-content-length.js` |
 | HTTP parser handling for blank request headers and 400 response framing is incomplete | 1 | `parallel/test-http-blank-header.js` |
 | HTTP parser/clientError path does not reject duplicate Content-Length with HPE_UNEXPECTED_CONTENT_LENGTH | 1 | `parallel/test-http-double-content-length.js` |
-| HTTP request piping into a raw TCP stream with large payloads can hang in current net/http stream backpressure handling | 1 | `sequential/test-pipe.js` |
 | HTTP request piping with constrained agent sockets can stall queued requests | 1 | `parallel/test-http-pipe-fs.js` |
 | HTTP request streaming/pipe backpressure behavior is not fully Node-compatible | 1 | `parallel/test-pipe-file-to-http.js` |
 | HTTP response serialization/header ordering differs from Node for first-chunk single-byte encodings | 1 | `parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js` |
@@ -1132,6 +1131,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | invalid EC private keys do not raise Node-compatible DataError | 1 | `parallel/test-webcrypto-export-import-ec.js#block_01_bad_private_keys` |
 | invalid URL parsing errors lack Node's TypeError and ERR_INVALID_URL shape | 1 | `parallel/test-whatwg-url-custom-parsing.js` |
 | invalid repeated Transfer-Encoding handling differs from Node | 1 | `parallel/test-http-transfer-encoding-repeated-chunked.js` |
+| isolated P2/P3 runs pass in about 54-63 seconds for 200 one-MiB writes; although a per-entry timeout is configurable, enabling this case would add excessive wall time and remain unreliable under concurrent CI load | 1 | `parallel/test-net-write-fully-async-buffer.js` |
+| isolated P2/P3 runs take about 91-97 seconds; although a per-entry timeout is configurable, enabling this case would add excessive CI wall time, and transport profiling attributes most of the delay outside the socket path | 1 | `sequential/test-pipe.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
@@ -1141,7 +1142,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | native rquickjs URL accessors report Rust conversion errors for invalid receivers before JS can normalize them to V8/Web IDL private-member messages | 1 | `parallel/test-whatwg-url-invalidthis.js` |
 | native rquickjs URL class property enumeration order does not match Web IDL order and descriptors are not fully configurable from JS | 1 | `parallel/test-whatwg-url-custom-properties.js` |
 | net reusePort listen option/support probing is incomplete | 1 | `parallel/test-net-reuseport.js` |
-| net write backpressure/drain handling for repeated large Buffer writes can hang in the WASM socket implementation | 1 | `parallel/test-net-write-fully-async-buffer.js` |
 | net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts | 1 | `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
@@ -1200,6 +1200,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | rawHeaders/rawTrailers duplicate-header ordering and casing are not Node-compatible | 1 | `parallel/test-http-multiple-headers.js` |
 | receiveBlockList filtering/close behavior is incomplete | 1 | `parallel/test-dgram-blocklist.js#block_02_block_02` |
 | receiveMessageOnPort() behavior and argument validation are not implemented | 1 | `parallel/test-worker-message-port-receive-message.js` |
+| receiver end is not delivered after the test's repeated pause/resume slow drain (P2 mustCall verification gets 0 calls); GOL-389 covers timeout progress separately without depending on that pre-existing EOF lifecycle gap | 1 | `parallel/test-net-write-slow.js` |
 | req.connection.setTimeout timeout/error flow on server-side connections is incomplete | 1 | `parallel/test-http-set-timeout.js` |
 | req.setTimeout() handling for actively consumed request bodies is not Node-compatible | 1 | `parallel/test-http-server-consumed-timeout.js` |
 | request drain captureRejections path hangs when request is never finalized with end() under wasi:http | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01` |
