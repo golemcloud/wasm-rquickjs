@@ -2379,6 +2379,26 @@ function compileCjs(filename, source, isPreparedTypeScript = false) {
     return _evalWithFilename(wrappedSource, filename);
 }
 
+let cjsModuleProbeExecutionDepth = 0;
+
+function withCjsModuleProbeExecution(callback) {
+    if (cjsModuleProbeExecutionDepth > 0) {
+        cjsModuleProbeExecutionDepth += 1;
+        try {
+            return callback();
+        } finally {
+            cjsModuleProbeExecutionDepth -= 1;
+        }
+    }
+
+    cjsModuleProbeExecutionDepth = 1;
+    try {
+        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_with_cjs_module_probe_session(callback);
+    } finally {
+        cjsModuleProbeExecutionDepth = 0;
+    }
+}
+
 function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire) {
     const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
     globalThis.__wasm_rquickjs_current_module = {
@@ -2388,7 +2408,9 @@ function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, chi
     const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
     globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
     try {
-        return compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);
+        return withCjsModuleProbeExecution(
+            () => compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname),
+        );
     } finally {
         globalThis.__wasm_rquickjs_current_module = previousModuleContext;
         if (previousCjsImportDir !== undefined) {

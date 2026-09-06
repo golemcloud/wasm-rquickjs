@@ -3217,7 +3217,7 @@ impl Resolver for FileUrlResolver {
         if let Some((path, suffix)) = Self::file_url_to_path_parts(name) {
             let normalized = CjsEvalResolver::normalize_path(std::path::Path::new(&path));
             let url = NodeFileResolver::module_url_for_file_specifier(name);
-            if NodeFileResolver::module_resolution_is_dir(&normalized) {
+            if NodeFileResolver::module_resolution_is_dir(ctx, &normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3231,7 +3231,7 @@ impl Resolver for FileUrlResolver {
                     url,
                 );
             }
-            if !NodeFileResolver::module_resolution_is_file(&normalized) {
+            if !NodeFileResolver::module_resolution_is_file(ctx, &normalized) {
                 discard_import_type_rewrite_token(name);
                 return NodeFileResolver::throw_module_resolution_error(
                     ctx,
@@ -3658,12 +3658,30 @@ impl NodeFileResolver {
             .unwrap_or_else(|| normalized.to_string())
     }
 
-    fn module_resolution_is_file(normalized: &str) -> bool {
-        std::path::Path::new(normalized).is_file()
+    fn module_resolution_is_file(ctx: &Ctx<'_>, normalized: &str) -> bool {
+        let services = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized");
+        module_resolution_path_matches(
+            &services.cjs_module_probe_session,
+            #[cfg(feature = "typescript-compiler-profiling")]
+            services.execution_profile().as_deref(),
+            normalized,
+            ModulePathProbeKind::File,
+        )
     }
 
-    fn module_resolution_is_dir(normalized: &str) -> bool {
-        std::path::Path::new(normalized).is_dir()
+    fn module_resolution_is_dir(ctx: &Ctx<'_>, normalized: &str) -> bool {
+        let services = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized");
+        module_resolution_path_matches(
+            &services.cjs_module_probe_session,
+            #[cfg(feature = "typescript-compiler-profiling")]
+            services.execution_profile().as_deref(),
+            normalized,
+            ModulePathProbeKind::Directory,
+        )
     }
 
     fn resolve_candidate(
@@ -3711,12 +3729,14 @@ impl NodeFileResolver {
     }
 
     fn candidate_is_file(
-        _ctx: &Ctx<'_>,
+        ctx: &Ctx<'_>,
         normalized: &str,
         semantics: FileCandidateSemantics,
     ) -> bool {
         match semantics {
-            FileCandidateSemantics::ModuleResolution => Self::module_resolution_is_file(normalized),
+            FileCandidateSemantics::ModuleResolution => {
+                Self::module_resolution_is_file(ctx, normalized)
+            }
             FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
         }
     }
@@ -4086,6 +4106,163 @@ impl PackageJsonCache {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModulePathClassification {
+    File,
+    Directory,
+}
+
+#[derive(Default)]
+struct CjsModuleProbeSessionState {
+    depth: usize,
+    entries: HashMap<String, ModulePathClassification>,
+}
+
+/// Positive filesystem classifications shared while an outer CommonJS wrapper runs.
+///
+/// Node scopes its CJS stat cache to outer module execution and never retains missing
+/// observations across independent resolutions. Keeping this state in RuntimeServices
+/// also prevents sibling QuickJS runtimes from sharing filesystem observations.
+#[derive(Clone, Default)]
+pub(crate) struct CjsModuleProbeSession(Rc<RefCell<CjsModuleProbeSessionState>>);
+
+struct ModulePathProbe {
+    classification: Option<ModulePathClassification>,
+    _session_hit: bool,
+}
+
+impl CjsModuleProbeSession {
+    fn begin(&self) {
+        let mut state = self.0.borrow_mut();
+        if state.depth == 0 {
+            state.entries.clear();
+        }
+        state.depth = state.depth.saturating_add(1);
+    }
+
+    fn end(&self) {
+        let mut state = self.0.borrow_mut();
+        if state.depth == 0 {
+            state.entries.clear();
+            return;
+        }
+        state.depth -= 1;
+        if state.depth == 0 {
+            state.entries.clear();
+        }
+    }
+
+    fn probe(&self, normalized: &str) -> ModulePathProbe {
+        {
+            let state = self.0.borrow();
+            if state.depth > 0
+                && let Some(classification) = state.entries.get(normalized)
+            {
+                return ModulePathProbe {
+                    classification: Some(*classification),
+                    _session_hit: true,
+                };
+            }
+        }
+
+        let classification = std::fs::metadata(normalized).ok().and_then(|metadata| {
+            if metadata.is_file() {
+                Some(ModulePathClassification::File)
+            } else if metadata.is_dir() {
+                Some(ModulePathClassification::Directory)
+            } else {
+                None
+            }
+        });
+
+        let mut state = self.0.borrow_mut();
+        if state.depth > 0
+            && let Some(classification) = classification
+        {
+            state.entries.insert(normalized.to_string(), classification);
+        }
+        ModulePathProbe {
+            classification,
+            _session_hit: false,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ModulePathProbeKind {
+    File,
+    Directory,
+}
+
+impl ModulePathProbeKind {
+    #[cfg(feature = "typescript-compiler-profiling")]
+    fn counter_prefix(self) -> &'static str {
+        match self {
+            Self::File => "modules.fileProbe",
+            Self::Directory => "modules.directoryProbe",
+        }
+    }
+
+    fn matches(self, classification: Option<ModulePathClassification>) -> bool {
+        matches!(
+            (self, classification),
+            (Self::File, Some(ModulePathClassification::File))
+                | (Self::Directory, Some(ModulePathClassification::Directory))
+        )
+    }
+}
+
+fn module_resolution_path_matches(
+    session: &CjsModuleProbeSession,
+    #[cfg(feature = "typescript-compiler-profiling")] profile: Option<
+        &crate::internal::runtime_services::ExecutionProfile,
+    >,
+    normalized: &str,
+    kind: ModulePathProbeKind,
+) -> bool {
+    let probe = session.probe(normalized);
+    let found = kind.matches(probe.classification);
+
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if let Some(profile) = profile {
+        let prefix = kind.counter_prefix();
+        profile.increment(&format!("{prefix}.calls"));
+        profile.increment(&format!(
+            "{prefix}.{}",
+            if found { "found" } else { "missing" }
+        ));
+        if probe._session_hit {
+            profile.increment(&format!("{prefix}.cacheHits"));
+            profile.increment(&format!("{prefix}.sessionCacheHits"));
+            profile.increment(&format!(
+                "{prefix}.sessionCacheHits{}",
+                if found { "Found" } else { "Missing" }
+            ));
+            profile.increment("modules.pathProbe.sessionHits");
+        } else {
+            profile.increment(&format!("{prefix}.systemCalls"));
+            profile.increment("modules.pathProbe.systemCalls");
+        }
+    }
+
+    found
+}
+
+fn with_cjs_module_probe_session<'js>(
+    ctx: Ctx<'js>,
+    callback: Function<'js>,
+) -> rquickjs::Result<Value<'js>> {
+    let session = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .clone();
+    session.begin();
+    let result = callback.call(());
+    session.end();
+    result
+}
+
 struct NodePackageWarning {
     message: String,
     code: &'static str,
@@ -4210,6 +4387,8 @@ struct NodePackageResolutionContext<'a, 'w> {
     conditions: &'a [String],
     warnings: &'w mut Vec<NodePackageWarning>,
     file_probe_cache: HashMap<String, bool>,
+    directory_probe_cache: HashMap<String, bool>,
+    probe_session: CjsModuleProbeSession,
     package_json_cache: PackageJsonCache,
     #[cfg(feature = "typescript-compiler-profiling")]
     profile: Option<Rc<crate::internal::runtime_services::ExecutionProfile>>,
@@ -4226,11 +4405,14 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .expect("runtime services not initialized");
         let package_json_cache = services.package_json_cache.clone();
+        let probe_session = services.cjs_module_probe_session.clone();
         Self {
             mode,
             conditions,
             warnings,
             file_probe_cache: HashMap::new(),
+            directory_probe_cache: HashMap::new(),
+            probe_session,
             package_json_cache,
             #[cfg(feature = "typescript-compiler-profiling")]
             profile: services.execution_profile(),
@@ -4238,14 +4420,16 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
     }
 
     fn normalized_is_file(&mut self, normalized: &str) -> bool {
-        #[cfg(feature = "typescript-compiler-profiling")]
-        if let Some(profile) = &self.profile {
-            profile.increment("modules.fileProbe.calls");
-        }
         if let Some(cached) = self.file_probe_cache.get(normalized) {
             #[cfg(feature = "typescript-compiler-profiling")]
             if let Some(profile) = &self.profile {
+                profile.increment("modules.fileProbe.calls");
                 profile.increment("modules.fileProbe.cacheHits");
+                profile.increment(if *cached {
+                    "modules.fileProbe.cacheHitsFound"
+                } else {
+                    "modules.fileProbe.cacheHitsMissing"
+                });
                 profile.increment(if *cached {
                     "modules.fileProbe.found"
                 } else {
@@ -4254,15 +4438,13 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
             }
             return *cached;
         }
-        let is_file = std::path::Path::new(normalized).is_file();
-        #[cfg(feature = "typescript-compiler-profiling")]
-        if let Some(profile) = &self.profile {
-            profile.increment(if is_file {
-                "modules.fileProbe.found"
-            } else {
-                "modules.fileProbe.missing"
-            });
-        }
+        let is_file = module_resolution_path_matches(
+            &self.probe_session,
+            #[cfg(feature = "typescript-compiler-profiling")]
+            self.profile.as_deref(),
+            normalized,
+            ModulePathProbeKind::File,
+        );
         self.file_probe_cache
             .insert(normalized.to_string(), is_file);
         is_file
@@ -4273,17 +4455,34 @@ impl<'a, 'w> NodePackageResolutionContext<'a, 'w> {
         self.normalized_is_file(&normalized)
     }
 
-    fn is_dir(&self, path: &std::path::Path) -> bool {
-        let is_dir = path.is_dir();
-        #[cfg(feature = "typescript-compiler-profiling")]
-        if let Some(profile) = &self.profile {
-            profile.increment("modules.directoryProbe.calls");
-            profile.increment(if is_dir {
-                "modules.directoryProbe.found"
-            } else {
-                "modules.directoryProbe.missing"
-            });
+    fn is_dir(&mut self, path: &std::path::Path) -> bool {
+        let normalized = CjsEvalResolver::normalize_path(path);
+        if let Some(cached) = self.directory_probe_cache.get(&normalized) {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &self.profile {
+                profile.increment("modules.directoryProbe.calls");
+                profile.increment("modules.directoryProbe.cacheHits");
+                profile.increment(if *cached {
+                    "modules.directoryProbe.cacheHitsFound"
+                } else {
+                    "modules.directoryProbe.cacheHitsMissing"
+                });
+                profile.increment(if *cached {
+                    "modules.directoryProbe.found"
+                } else {
+                    "modules.directoryProbe.missing"
+                });
+            }
+            return *cached;
         }
+        let is_dir = module_resolution_path_matches(
+            &self.probe_session,
+            #[cfg(feature = "typescript-compiler-profiling")]
+            self.profile.as_deref(),
+            &normalized,
+            ModulePathProbeKind::Directory,
+        );
+        self.directory_probe_cache.insert(normalized, is_dir);
         is_dir
     }
 
@@ -11265,6 +11464,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create CJS package exports resolver"),
         )
         .expect("Failed to initialize CJS package exports resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_with_cjs_module_probe_session",
+            Function::new(ctx.clone(), with_cjs_module_probe_session)
+                .expect("Failed to create scoped CJS module probe-session runner"),
+        )
+        .expect("Failed to initialize scoped CJS module probe-session runner");
 
         set_non_replaceable_global(
             &global,

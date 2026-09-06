@@ -61,6 +61,7 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_import_meta_resolve_package',
         '__wasm_rquickjs_import_meta_resolve_path',
         '__wasm_rquickjs_loader_default_resolve_package',
+        '__wasm_rquickjs_with_cjs_module_probe_session',
         '__wasm_rquickjs_cjs_resolve_package_exports',
         '__wasm_rquickjs_cjs_resolve_package_fallback',
         '__wasm_rquickjs_package_global_conditions',
@@ -81,6 +82,13 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         }, TypeError, name);
         assert.strictEqual(globalThis[name], original, name);
     }
+    const withProbeSession = globalThis.__wasm_rquickjs_with_cjs_module_probe_session;
+    assert.strictEqual(withProbeSession(() => 42), 42);
+    const probeSessionError = new Error('scoped probe-session error');
+    assert.throws(
+        () => withProbeSession(() => { throw probeSessionError; }),
+        (error) => error === probeSessionError,
+    );
     const originalExecArgv = process.execArgv;
     try {
         process.execArgv = [Symbol('ignored'), { toString: () => '--bridge-flag=value' }];
@@ -6395,6 +6403,88 @@ export const testCjsPackageJsonParseCache = async () => {
         ].join('\n'));
 
         assert.strictEqual(require(`${root}/app.cjs`), true);
+
+        const probeRoot = '/cjs-probe-session-app';
+        const probeRequire = createRequire(`${probeRoot}/entry.cjs`);
+        fs.mkdirSync(`${probeRoot}/node_modules/late-pkg`, { recursive: true });
+        fs.writeFileSync(`${probeRoot}/target.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/nested-target.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/nested-child.cjs`, [
+            'const fs = require("fs");',
+            'const Module = require("module");',
+            'fs.unlinkSync("/cjs-probe-session-app/nested-target.js");',
+            'Module._pathCache = Object.create(null);',
+            'module.exports = require.resolve("./nested-target");',
+        ].join('\n'));
+        fs.writeFileSync(`${probeRoot}/session.cjs`, [
+            'const assert = require("assert");',
+            'const fs = require("fs");',
+            'const Module = require("module");',
+            'const originalPathCache = Module._pathCache;',
+            'const originalExecArgv = process.execArgv;',
+            'try {',
+            '  process.execArgv = ["--preserve-symlinks"];',
+            '  Module._pathCache = Object.create(null);',
+            '  const first = require.resolve("./target");',
+            '  fs.unlinkSync("/cjs-probe-session-app/target.js");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("./target"), first);',
+            '  const nestedFirst = require.resolve("./nested-target");',
+            '  assert.strictEqual(require("./nested-child.cjs"), nestedFirst);',
+            '  assert.throws(() => require.resolve("./late"), { code: "MODULE_NOT_FOUND" });',
+            '  fs.writeFileSync("/cjs-probe-session-app/late.js", "module.exports = true;");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("./late"), "/cjs-probe-session-app/late.js");',
+            '  assert.throws(() => require.resolve("./late-dir"), { code: "MODULE_NOT_FOUND" });',
+            '  fs.mkdirSync("/cjs-probe-session-app/late-dir");',
+            '  fs.writeFileSync("/cjs-probe-session-app/late-dir/index.js", "module.exports = true;");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("./late-dir"), "/cjs-probe-session-app/late-dir/index.js");',
+            '  assert.throws(() => require.resolve("late-pkg"), { code: "MODULE_NOT_FOUND" });',
+            '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/package.json", JSON.stringify({ exports: "./entry.js" }));',
+            '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/entry.js", "module.exports = true;");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("late-pkg"), "/cjs-probe-session-app/node_modules/late-pkg/entry.js");',
+            '} finally {',
+            '  Module._pathCache = originalPathCache;',
+            '  process.execArgv = originalExecArgv;',
+            '}',
+            'module.exports = true;',
+        ].join('\n'));
+        assert.strictEqual(probeRequire(`${probeRoot}/session.cjs`), true);
+        const moduleBuiltin = probeRequire('module');
+        const originalPathCache = moduleBuiltin._pathCache;
+        try {
+            moduleBuiltin._pathCache = Object.create(null);
+            assert.throws(
+                () => probeRequire.resolve('./target'),
+                { code: 'MODULE_NOT_FOUND' },
+                'positive probe observations must be cleared after outer CJS execution',
+            );
+        } finally {
+            moduleBuiltin._pathCache = originalPathCache;
+        }
+
+        fs.writeFileSync(`${probeRoot}/throw-target.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/thrower.cjs`, [
+            'require.resolve("./throw-target");',
+            'throw new Error("probe-session-throw");',
+        ].join('\n'));
+        assert.throws(
+            () => probeRequire(`${probeRoot}/thrower.cjs`),
+            /probe-session-throw/,
+        );
+        fs.unlinkSync(`${probeRoot}/throw-target.js`);
+        try {
+            moduleBuiltin._pathCache = Object.create(null);
+            assert.throws(
+                () => probeRequire.resolve('./throw-target'),
+                { code: 'MODULE_NOT_FOUND' },
+                'exceptional CJS execution must clear positive probe observations',
+            );
+        } finally {
+            moduleBuiltin._pathCache = originalPathCache;
+        }
 
         fs.mkdirSync(`${root}/node_modules/cached-esm-pkg`, { recursive: true });
         fs.writeFileSync(`${root}/node_modules/cached-esm-pkg/package.json`, JSON.stringify({

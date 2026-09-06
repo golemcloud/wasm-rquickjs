@@ -84,6 +84,128 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if std::env::var_os("AGENTIC_TS_MODULE_RESOLUTION_SMOKE").is_some() {
+        let emit = timed_invoke(
+            &mut instance,
+            "run-tsc",
+            &[
+                string_list(&[
+                    "--module",
+                    "NodeNext",
+                    "--moduleResolution",
+                    "NodeNext",
+                    "--target",
+                    "ES2022",
+                    "--outDir",
+                    "dist/direct",
+                    "projects/direct.ts",
+                ]),
+                Val::U64(300_000),
+            ],
+        )
+        .await?;
+        anyhow::ensure!(
+            successful_result(&emit["result"]),
+            "failed to emit controlled JavaScript"
+        );
+
+        let mut generated = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let sample = timed_invoke(
+                &mut instance,
+                "run-generated",
+                &[Val::String("./dist/direct/direct.js".to_string())],
+            )
+            .await?;
+            anyhow::ensure!(
+                successful_result(&sample["result"])
+                    && sample.pointer("/result/value/default/answer") == Some(&json!(42))
+                    && sample.pointer("/result/value/default/state") == Some(&json!("ready")),
+                "controlled generated-JavaScript workload failed: {sample:#}"
+            );
+            validate_module_resolution_counters(&sample, false)?;
+            generated.push(sample);
+        }
+
+        let input_hashes = input_hashes()?;
+        let formatted = serde_json::to_string_pretty(&json!({
+            "schema": "module-resolution-smoke-v1",
+            "target": format!("{:?}", test_target()).to_lowercase(),
+            "iterations": iterations,
+            "inputs": {
+                "algorithm": INPUT_HASH_ALGORITHM,
+                "buildHash": input_hashes.build,
+                "benchmarkHash": input_hashes.benchmark,
+            },
+            "component": {
+                "bytes": component_size,
+                "blake3": hash_file(compiled.wasm_path())?,
+                "buildMs": millis(build_elapsed),
+                "prepareAndInstantiateMs": millis(instantiate_elapsed),
+            },
+            "emit": emit,
+            "generatedJavaScript": summarize(&generated),
+        }))?;
+        if let Ok(path) = std::env::var("AGENTIC_TS_MODULE_RESOLUTION_SMOKE_REPORT") {
+            fs::write(path, format!("{formatted}\n"))?;
+        }
+        println!("{formatted}");
+        return Ok(());
+    }
+
+    if std::env::var_os("AGENTIC_TS_CJS_GRAPH_SMOKE").is_some() {
+        prepare_cjs_graph(&instance)?;
+        let mut samples = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let sample = timed_invoke(
+                &mut instance,
+                "run-generated",
+                &[Val::String("./cjs-graph/measure.cjs".to_string())],
+            )
+            .await?;
+            anyhow::ensure!(
+                successful_result(&sample["result"])
+                    && sample.pointer("/result/value")
+                        == Some(&json!(
+                            "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
+                        )),
+                "controlled CommonJS graph failed: {sample:#}"
+            );
+            validate_module_resolution_counters(&sample, true)?;
+            samples.push(sample);
+        }
+
+        let fixture = Utf8Path::new("tests/node_modules_apps/apps/popular-pure-js");
+        let input_hashes = input_hashes()?;
+        let formatted = serde_json::to_string_pretty(&json!({
+            "schema": "cjs-graph-smoke-v1",
+            "target": format!("{:?}", test_target()).to_lowercase(),
+            "iterations": iterations,
+            "inputs": {
+                "algorithm": INPUT_HASH_ALGORITHM,
+                "buildHash": input_hashes.build,
+                "benchmarkHash": input_hashes.benchmark,
+            },
+            "fixture": {
+                "packageJsonBlake3": hash_file(&fixture.join("package.json"))?,
+                "packageLockBlake3": hash_file(&fixture.join("package-lock.json"))?,
+                "entryBlake3": hash_file(&fixture.join("test-05-ajv.cjs"))?,
+            },
+            "component": {
+                "bytes": component_size,
+                "blake3": hash_file(compiled.wasm_path())?,
+                "buildMs": millis(build_elapsed),
+                "prepareAndInstantiateMs": millis(instantiate_elapsed),
+            },
+            "commonJsGraph": summarize(&samples),
+        }))?;
+        if let Ok(path) = std::env::var("AGENTIC_TS_CJS_GRAPH_SMOKE_REPORT") {
+            fs::write(path, format!("{formatted}\n"))?;
+        }
+        println!("{formatted}");
+        return Ok(());
+    }
+
     let node_baseline = node_baseline()?;
     let node_phase_profile = node_phase_profile()?;
     let cold = timed_invoke(
@@ -999,6 +1121,31 @@ fn prepare_workspace(instance: &TestInstance) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn prepare_cjs_graph(instance: &TestInstance) -> anyhow::Result<()> {
+    let source = Utf8Path::new("tests/node_modules_apps/apps/popular-pure-js");
+    let destination = instance.temp_dir_path().join("workspace/cjs-graph");
+    copy_dir_recursive(source.as_std_path(), destination.as_std_path())?;
+    let status = Command::new("npm")
+        .args([
+            "ci",
+            "--install-links",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+        ])
+        .current_dir(&destination)
+        .status()?;
+    anyhow::ensure!(
+        status.success(),
+        "npm ci failed for the CommonJS graph smoke"
+    );
+    fs::write(
+        destination.join("measure.cjs"),
+        "module.exports = require('./test-05-ajv.cjs').run();\n",
+    )?;
+    Ok(())
+}
+
 fn environment(iterations: usize) -> anyhow::Result<Value> {
     let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
     let dirty = !command_text(Command::new("git").args([
@@ -1326,6 +1473,77 @@ fn successful_result(value: &Value) -> bool {
     value["overflowed"] == false
         && value.get("runnerError").is_none()
         && value.get("value").is_some()
+}
+
+fn profile_counter(counters: &Value, name: &str) -> u64 {
+    counters.get(name).and_then(Value::as_u64).unwrap_or(0)
+}
+
+fn validate_module_resolution_counters(
+    sample: &Value,
+    require_session_hits: bool,
+) -> anyhow::Result<()> {
+    let counters = &sample["result"]["profile"]["counters"];
+    anyhow::ensure!(
+        counters.get("modules.pathProbe.systemCalls").is_some(),
+        "module-resolution physical counters are missing: {counters:#}"
+    );
+    let mut logical_calls = 0;
+    let mut local_hits = 0;
+    let mut session_hits = 0;
+
+    for prefix in ["modules.fileProbe", "modules.directoryProbe"] {
+        let calls = profile_counter(counters, &format!("{prefix}.calls"));
+        let found = profile_counter(counters, &format!("{prefix}.found"));
+        let missing = profile_counter(counters, &format!("{prefix}.missing"));
+        anyhow::ensure!(
+            calls == found + missing,
+            "{prefix} logical calls do not match outcomes: {counters:#}"
+        );
+
+        let cache_hits = profile_counter(counters, &format!("{prefix}.cacheHits"));
+        let cache_hits_found = profile_counter(counters, &format!("{prefix}.cacheHitsFound"));
+        let cache_hits_missing = profile_counter(counters, &format!("{prefix}.cacheHitsMissing"));
+        let prefix_session_hits = profile_counter(counters, &format!("{prefix}.sessionCacheHits"));
+        let session_hits_found =
+            profile_counter(counters, &format!("{prefix}.sessionCacheHitsFound"));
+        let session_hits_missing =
+            profile_counter(counters, &format!("{prefix}.sessionCacheHitsMissing"));
+        anyhow::ensure!(
+            cache_hits == cache_hits_found + cache_hits_missing + prefix_session_hits,
+            "{prefix} cache-hit categories do not reconcile: {counters:#}"
+        );
+        anyhow::ensure!(
+            prefix_session_hits == session_hits_found + session_hits_missing,
+            "{prefix} session-hit outcomes do not reconcile: {counters:#}"
+        );
+
+        logical_calls += calls;
+        local_hits += cache_hits_found + cache_hits_missing;
+        session_hits += prefix_session_hits;
+    }
+
+    let path_system_calls = profile_counter(counters, "modules.pathProbe.systemCalls");
+    let path_session_hits = profile_counter(counters, "modules.pathProbe.sessionHits");
+    anyhow::ensure!(
+        logical_calls > 0,
+        "no module-resolution probes were recorded"
+    );
+    anyhow::ensure!(
+        session_hits == path_session_hits,
+        "shared and per-kind session hits do not reconcile: {counters:#}"
+    );
+    anyhow::ensure!(
+        logical_calls == path_system_calls + path_session_hits + local_hits,
+        "logical and physical path probes do not reconcile: {counters:#}"
+    );
+    if require_session_hits {
+        anyhow::ensure!(
+            path_session_hits > 0 && logical_calls > path_system_calls,
+            "CommonJS graph did not exercise session-cache savings: {counters:#}"
+        );
+    }
+    Ok(())
 }
 
 fn validate_termination_series(

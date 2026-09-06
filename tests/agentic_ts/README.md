@@ -31,6 +31,29 @@ AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
 AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
 ```
 
+Measure the identical emitted JavaScript module graph in five fresh execution
+jobs without running the rest of the manual suite with:
+
+```sh
+AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
+AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+```
+
+Set `AGENTIC_TS_MODULE_RESOLUTION_SMOKE_REPORT` to preserve the JSON result for
+an exact-source A/B comparison.
+
+Measure the existing Ajv CommonJS package graph in five fresh execution jobs
+with:
+
+```sh
+AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
+AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+```
+
+Set `AGENTIC_TS_CJS_GRAPH_SMOKE_REPORT` to preserve the JSON result. The smoke
+installs the locked fixture into the test's temporary workspace; it does not
+write `node_modules` into the source tree.
+
 Validate every checked-in report's schema, pinned settings, workload outcomes,
 tracker reference, and P2/P3 input-hash pairing without installing Node or
 rerunning the workloads:
