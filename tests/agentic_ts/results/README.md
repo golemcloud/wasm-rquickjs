@@ -32,19 +32,29 @@ descriptive evidence rather than a stable tail-latency estimate.
 ## GOL-350 CommonJS graph probe evidence
 
 The dated `2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
-`2026-09-07-gol-350-cjs-p3-macos-aarch64.json` reports capture five fresh Ajv
-CommonJS executions from clean commit
-`4f5c99a790c67cb3fc71f2cd1d0d8d546b434493`. They share identical build,
-benchmark, fixture, and toolchain fingerprints while retaining distinct P2/P3
-component hashes.
+`2026-09-07-gol-350-cjs-p3-macos-aarch64.json` reports capture a balanced,
+alternating comparison of five Ajv CommonJS executions with the probe session
+disabled and five with it enabled. Both reports came from clean commit
+`cd41a4267dd61578e89afc2513e2d77f9f1382d8`, use standard optimized components
+with all optional test caches disabled, and share identical build, benchmark,
+fixture, and toolchain fingerprints while retaining distinct P2/P3 component
+hashes.
 
-Every sample reconciles 428 logical path classifications into 322 physical
-metadata calls, 70 positive outer-session hits, and 36 invocation-local hits.
-Without the outer-session hits, the inferred physical count is 392, so the cache
-removes 17.9% of these calls. The 70 session hits consist of 50 file probes and 20
-classification probes. These reports use accelerated unoptimized local profiles;
-their timings are not performance comparisons. Separate generated-module P2/P3
-controls recorded zero session hits.
+Every enabled sample reconciles 428 logical path classifications into 322
+physical metadata calls, 70 positive outer-session hits, and 36 invocation-local
+hits. Every disabled sample records the same 428 logical classifications as 392
+physical calls, zero outer-session hits, and 36 invocation-local hits. The session
+therefore removes 17.9% of the physical calls in both targets: 50 file probes and
+20 classification probes.
+
+The optimized wall-clock result is mixed. P3 improved from a 719.885 ms median
+and 1.387 runs/s to 704.141 ms and 1.419 runs/s (median -2.19%, throughput
++2.31%). The noisier P2 capture moved from 1127.521 ms and 0.838 runs/s to
+1207.821 ms and 0.598 runs/s (median +7.12%, throughput -28.68%). Five samples
+are insufficient to characterize P2 latency variance, so the deterministic probe
+reduction is the supported cross-target conclusion; these timings do not establish
+a P2 speedup. Earlier generated-module zero-hit checks were local diagnostics and
+were not archived as checked-in reports.
 
 ## GOL-347 compiler profile and mitigation
 

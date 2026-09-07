@@ -50,10 +50,26 @@ The preceding schema-v4 baseline remains available as
 The exact-source GOL-350 CommonJS graph evidence is recorded in
 `results/2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
 `results/2026-09-07-gol-350-cjs-p3-macos-aarch64.json`. Both targets used clean
-commit `4f5c99a790c67cb3fc71f2cd1d0d8d546b434493`; every one of the five fresh Ajv
-samples recorded 428 logical classifications as 322 physical metadata calls,
-70 outer-session hits, and 36 invocation-local hits. The outer session therefore
-avoided 70 of the 392 physical probes inferred without it (17.9%): 50 file probes
-and 20 path-classification probes. Matching generated-module controls recorded
-zero outer-session hits on P2 and P3, confirming that the savings are specific to
-the reusable CommonJS package graph rather than baseline counter activity.
+commit `cd41a4267dd61578e89afc2513e2d77f9f1382d8`, standard optimized components,
+disabled optional test caches, and a balanced alternating series of five Ajv
+executions with the outer session disabled and five with it enabled. Every
+disabled sample records `428 = 392 system + 0 outer-session + 36
+invocation-local`; every enabled sample records `428 = 322 system + 70
+outer-session + 36 invocation-local`. The outer session therefore avoids 17.9%
+of physical probes in both targets: 50 file probes and 20 path-classification
+probes.
+
+P3 moved from a 719.885 ms median and 1.387 runs/s without the session to
+704.141 ms and 1.419 runs/s with it (median -2.19%, throughput +2.31%). The
+noisier P2 capture moved from 1127.521 ms and 0.838 runs/s to 1207.821 ms and
+0.598 runs/s (median +7.12%, throughput -28.68%). The five-sample P2 result does
+not establish a speedup; the deterministic cross-target conclusion is the exact
+probe reduction. Generated-module zero-hit checks were unarchived local
+diagnostics.
+
+Affected node-compat candidates were also run unchanged on P2 and P3:
+`test-fs-readfile` (16 passed, 1 existing Windows-only ignore),
+`test-fs-read_file` (2 passed, 1 existing Linux-specific ignore),
+`test-module-stat` (1 passed), `test-fs-rmdir` (11 passed, 4 existing
+node-internals recursive ignores), and `test-fs-unlink` (1 passed). No
+`config.jsonc` allowlist changes were needed.
