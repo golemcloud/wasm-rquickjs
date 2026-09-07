@@ -4229,14 +4229,14 @@ fn module_resolution_path_probe(
         &crate::internal::runtime_services::ExecutionProfile,
     >,
     normalized: &str,
-    kind: ModulePathProbeKind,
+    _kind: ModulePathProbeKind,
 ) -> ModulePathProbe {
     let probe = session.probe(normalized);
 
     #[cfg(feature = "typescript-compiler-profiling")]
     if let Some(profile) = profile {
-        let found = kind.matches(probe.classification);
-        let prefix = kind.counter_prefix();
+        let found = _kind.matches(probe.classification);
+        let prefix = _kind.counter_prefix();
         profile.increment(&format!("{prefix}.calls"));
         profile.increment(&format!(
             "{prefix}.{}",
