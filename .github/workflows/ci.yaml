@@ -26,6 +26,16 @@ env:
   CI_WASMTIME_FORK_FEATURES: --features use-golem-wasmtime
 
 jobs:
+  skeleton-clippy:
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+      - name: Clippy embedded skeleton
+        run: tools/check-skeleton-clippy.sh
+
   build:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:
