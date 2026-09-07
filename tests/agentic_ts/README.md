@@ -42,9 +42,8 @@ AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts 
 Set `AGENTIC_TS_MODULE_RESOLUTION_SMOKE_REPORT` to preserve the JSON result for
 an exact-source A/B comparison.
 
-Measure the existing Ajv CommonJS package graph in five alternating pairs of
-fresh execution jobs, first with the outer probe session disabled and then with
-it enabled, with:
+Measure the existing Ajv CommonJS package graph in five fresh paired executions,
+alternating which probe-session variant runs first, with:
 
 ```sh
 AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
