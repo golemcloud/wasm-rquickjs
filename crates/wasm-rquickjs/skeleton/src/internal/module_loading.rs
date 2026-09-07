@@ -4116,6 +4116,23 @@ enum ModulePathClassification {
 struct CjsModuleProbeSessionState {
     depth: usize,
     entries: HashMap<String, ModulePathClassification>,
+    #[cfg(feature = "test-observability")]
+    hit_count: u64,
+    #[cfg(feature = "test-observability")]
+    bypass_cache: bool,
+}
+
+impl CjsModuleProbeSessionState {
+    fn cache_enabled(&self) -> bool {
+        #[cfg(feature = "test-observability")]
+        {
+            !self.bypass_cache
+        }
+        #[cfg(not(feature = "test-observability"))]
+        {
+            true
+        }
+    }
 }
 
 /// Positive filesystem classifications shared while an outer CommonJS wrapper runs.
@@ -4161,16 +4178,22 @@ impl CjsModuleProbeSession {
     }
 
     fn probe(&self, normalized: &str) -> ModulePathProbe {
-        {
+        let cached = {
             let state = self.0.borrow();
-            if state.depth > 0
-                && let Some(classification) = state.entries.get(normalized)
+            (state.depth > 0 && state.cache_enabled())
+                .then(|| state.entries.get(normalized).copied())
+                .flatten()
+        };
+        if let Some(classification) = cached {
+            #[cfg(feature = "test-observability")]
             {
-                return ModulePathProbe {
-                    classification: Some(*classification),
-                    _session_hit: true,
-                };
+                let mut state = self.0.borrow_mut();
+                state.hit_count = state.hit_count.saturating_add(1);
             }
+            return ModulePathProbe {
+                classification: Some(classification),
+                _session_hit: true,
+            };
         }
 
         let classification = std::fs::metadata(normalized).ok().and_then(|metadata| {
@@ -4185,6 +4208,7 @@ impl CjsModuleProbeSession {
 
         let mut state = self.0.borrow_mut();
         if state.depth > 0
+            && state.cache_enabled()
             && let Some(classification) = classification
         {
             state.entries.insert(normalized.to_string(), classification);
@@ -4193,6 +4217,23 @@ impl CjsModuleProbeSession {
             classification,
             _session_hit: false,
         }
+    }
+
+    #[cfg(feature = "test-observability")]
+    fn hit_count(&self) -> u64 {
+        self.0.borrow().hit_count
+    }
+
+    #[cfg(feature = "test-observability")]
+    fn reset_hit_count(&self) {
+        self.0.borrow_mut().hit_count = 0;
+    }
+
+    #[cfg(feature = "test-observability")]
+    fn set_enabled(&self, enabled: bool) {
+        let mut state = self.0.borrow_mut();
+        state.bypass_cache = !enabled;
+        state.entries.clear();
     }
 }
 
@@ -4314,6 +4355,30 @@ fn with_cjs_module_probe_session<'js>(
     let result = callback.call(());
     session.end();
     result
+}
+
+#[cfg(feature = "test-observability")]
+fn cjs_module_probe_session_hit_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .hit_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_cjs_module_probe_session_hit_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .reset_hit_count();
+}
+
+#[cfg(feature = "test-observability")]
+fn set_cjs_module_probe_session_enabled(ctx: Ctx<'_>, enabled: bool) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .set_enabled(enabled);
 }
 
 struct NodePackageWarning {
@@ -11533,6 +11598,33 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create CJS module path classifier"),
         )
         .expect("Failed to initialize CJS module path classifier");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_cjs_module_probe_session_hit_count",
+            Function::new(ctx.clone(), cjs_module_probe_session_hit_count)
+                .expect("Failed to create CJS module probe-session hit counter"),
+        )
+        .expect("Failed to initialize CJS module probe-session hit counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_cjs_module_probe_session_hit_count",
+            Function::new(ctx.clone(), reset_cjs_module_probe_session_hit_count)
+                .expect("Failed to create CJS module probe-session hit counter reset"),
+        )
+        .expect("Failed to initialize CJS module probe-session hit counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
+            Function::new(ctx.clone(), set_cjs_module_probe_session_enabled)
+                .expect("Failed to create CJS module probe-session test control"),
+        )
+        .expect("Failed to initialize CJS module probe-session test control");
 
         set_non_replaceable_global(
             &global,

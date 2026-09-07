@@ -7,6 +7,7 @@
 #[path = "common/mod.rs"]
 mod common;
 
+use anyhow::Context as _;
 use camino::Utf8Path;
 use common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive, test_target};
 use serde_json::{Value, json};
@@ -152,54 +153,91 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if std::env::var_os("AGENTIC_TS_CJS_GRAPH_SMOKE").is_some() {
-        prepare_cjs_graph(&instance)?;
-        let mut samples = Vec::with_capacity(iterations);
-        for _ in 0..iterations {
-            let sample = timed_invoke(
-                &mut instance,
-                "run-generated",
-                &[Val::String("./cjs-graph/measure.cjs".to_string())],
-            )
-            .await?;
-            anyhow::ensure!(
-                successful_result(&sample["result"])
-                    && sample.pointer("/result/value")
-                        == Some(&json!(
-                            "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
-                        )),
-                "controlled CommonJS graph failed: {sample:#}"
-            );
-            validate_module_resolution_counters(&sample, true)?;
-            samples.push(sample);
+        prepare_cjs_graph(&instance).context("prepare CommonJS graph")?;
+        let mut without_probe_session = Vec::with_capacity(iterations);
+        let mut with_probe_session = Vec::with_capacity(iterations);
+        for iteration in 0..iterations {
+            let cases = if iteration % 2 == 0 {
+                [(false, "disabled"), (true, "enabled")]
+            } else {
+                [(true, "enabled"), (false, "disabled")]
+            };
+            for (enabled, suffix) in cases {
+                let sample = timed_invoke(
+                    &mut instance,
+                    "run-generated",
+                    &[Val::String(format!("./cjs-graph/measure-{suffix}.cjs"))],
+                )
+                .await
+                .with_context(|| {
+                    format!("CommonJS graph invocation with probe session {suffix}")
+                })?;
+                anyhow::ensure!(
+                    successful_result(&sample["result"])
+                        && sample.pointer("/result/value")
+                            == Some(&json!(
+                                "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
+                            )),
+                    "controlled CommonJS graph failed with probe session {suffix}: {sample:#}"
+                );
+                validate_module_resolution_counters(&sample, enabled)?;
+                if enabled {
+                    with_probe_session.push(sample);
+                } else {
+                    anyhow::ensure!(
+                        profile_counter(
+                            &sample["result"]["profile"]["counters"],
+                            "modules.pathProbe.sessionHits"
+                        ) == 0,
+                        "disabled CommonJS probe session still recorded cache hits: {sample:#}"
+                    );
+                    without_probe_session.push(sample);
+                }
+            }
         }
 
         let fixture = Utf8Path::new("tests/node_modules_apps/apps/popular-pure-js");
-        let input_hashes = input_hashes()?;
+        let input_hashes = input_hashes().context("hash CommonJS graph inputs")?;
+        let environment = environment(iterations, feature_combination.label())
+            .context("capture CommonJS graph environment")?;
+        let package_json_hash =
+            hash_file(&fixture.join("package.json")).context("hash CommonJS graph package.json")?;
+        let package_lock_hash = hash_file(&fixture.join("package-lock.json"))
+            .context("hash CommonJS graph package-lock.json")?;
+        let entry_hash =
+            hash_file(&fixture.join("test-05-ajv.cjs")).context("hash CommonJS graph entry")?;
+        let component_hash =
+            hash_file(compiled.wasm_path()).context("hash CommonJS graph component")?;
         let formatted = serde_json::to_string_pretty(&json!({
-            "schema": "cjs-graph-smoke-v1",
+            "schema": "cjs-graph-smoke-v2",
             "target": format!("{:?}", test_target()).to_lowercase(),
             "iterations": iterations,
-            "environment": environment(iterations, feature_combination.label())?,
+            "environment": environment,
             "inputs": {
                 "algorithm": INPUT_HASH_ALGORITHM,
                 "buildHash": input_hashes.build,
                 "benchmarkHash": input_hashes.benchmark,
             },
             "fixture": {
-                "packageJsonBlake3": hash_file(&fixture.join("package.json"))?,
-                "packageLockBlake3": hash_file(&fixture.join("package-lock.json"))?,
-                "entryBlake3": hash_file(&fixture.join("test-05-ajv.cjs"))?,
+                "packageJsonBlake3": package_json_hash,
+                "packageLockBlake3": package_lock_hash,
+                "entryBlake3": entry_hash,
             },
             "component": {
                 "bytes": component_size,
-                "blake3": hash_file(compiled.wasm_path())?,
+                "blake3": component_hash,
                 "buildMs": millis(build_elapsed),
                 "prepareAndInstantiateMs": millis(instantiate_elapsed),
             },
-            "commonJsGraph": summarize(&samples),
-        }))?;
+            "commonJsGraph": {
+                "withoutProbeSession": summarize(&without_probe_session),
+                "withProbeSession": summarize(&with_probe_session),
+            },
+        }))
+        .context("serialize CommonJS graph report")?;
         if let Ok(path) = std::env::var("AGENTIC_TS_CJS_GRAPH_SMOKE_REPORT") {
-            fs::write(path, format!("{formatted}\n"))?;
+            fs::write(&path, format!("{formatted}\n"))
+                .with_context(|| format!("write CommonJS graph report {path}"))?;
         }
         println!("{formatted}");
         return Ok(());
@@ -485,7 +523,7 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             .ok_or_else(|| anyhow::anyhow!("report has no filename: {path}"))?
             .to_string();
         let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
-        let is_cjs_graph = report["schema"] == "cjs-graph-smoke-v1";
+        let is_cjs_graph = report["schema"] == "cjs-graph-smoke-v2";
         if is_cjs_graph {
             validate_cjs_graph_report_metadata(&path, &report)?;
             validate_cjs_graph_report(&report)?;
@@ -617,7 +655,7 @@ fn validate_cjs_graph_report_pair(
 
 fn validate_cjs_graph_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
     anyhow::ensure!(
-        report["schema"] == "cjs-graph-smoke-v1",
+        report["schema"] == "cjs-graph-smoke-v2",
         "{path} uses an unsupported CommonJS graph schema"
     );
     anyhow::ensure!(
@@ -667,38 +705,53 @@ fn validate_cjs_graph_report(report: &Value) -> anyhow::Result<()> {
     let iterations = report["iterations"]
         .as_u64()
         .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no iteration count"))?;
-    let samples = report["commonJsGraph"]["samples"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no samples"))?;
-    anyhow::ensure!(
-        report["commonJsGraph"]["iterations"] == iterations && samples.len() as u64 == iterations,
-        "CommonJS graph summary does not contain every requested sample"
-    );
-    for sample in samples {
+    for (series_name, require_session_hits) in
+        [("withoutProbeSession", false), ("withProbeSession", true)]
+    {
+        let series = &report["commonJsGraph"][series_name];
+        let samples = series["samples"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no {series_name} samples"))?;
         anyhow::ensure!(
-            successful_result(&sample["result"])
-                && sample.pointer("/result/value")
-                    == Some(&json!(
-                        "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
-                    )),
-            "checked CommonJS graph sample failed: {sample:#}"
+            series["iterations"] == iterations && samples.len() as u64 == iterations,
+            "CommonJS graph {series_name} summary does not contain every requested sample"
         );
-        validate_module_resolution_counters(sample, true)?;
+        for sample in samples {
+            anyhow::ensure!(
+                successful_result(&sample["result"])
+                    && sample.pointer("/result/value")
+                        == Some(&json!(
+                            "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
+                        )),
+                "checked CommonJS graph {series_name} sample failed: {sample:#}"
+            );
+            validate_module_resolution_counters(sample, require_session_hits)?;
+            if !require_session_hits {
+                anyhow::ensure!(
+                    profile_counter(
+                        &sample["result"]["profile"]["counters"],
+                        "modules.pathProbe.sessionHits"
+                    ) == 0,
+                    "checked CommonJS graph disabled series recorded session hits"
+                );
+            }
+        }
     }
     Ok(())
 }
 
 fn validate_cjs_graph_regression_guards(report: &Value) -> anyhow::Result<()> {
     let mut missing_session_hits = report.clone();
-    missing_session_hits["commonJsGraph"]["samples"][0]["result"]["profile"]["counters"]["modules.pathProbe.sessionHits"] =
-        json!(0);
+    missing_session_hits["commonJsGraph"]["withProbeSession"]["samples"][0]["result"]["profile"]
+        ["counters"]["modules.pathProbe.sessionHits"] = json!(0);
     anyhow::ensure!(
         validate_cjs_graph_report(&missing_session_hits).is_err(),
         "CommonJS graph validation accepted a sample without reconciled session hits"
     );
 
     let mut failed_sample = report.clone();
-    failed_sample["commonJsGraph"]["samples"][0]["result"]["value"] = json!("FAIL");
+    failed_sample["commonJsGraph"]["withoutProbeSession"]["samples"][0]["result"]["value"] =
+        json!("FAIL");
     anyhow::ensure!(
         validate_cjs_graph_report(&failed_sample).is_err(),
         "CommonJS graph validation accepted a failed workload"
@@ -1023,7 +1076,8 @@ fn input_hashes() -> anyhow::Result<InputHashes> {
         "crates/wasm-rquickjs/skeleton/src",
         EXAMPLE_DIR,
     ] {
-        collect_input_files(source_root, Utf8Path::new(directory), &mut build_files)?;
+        collect_input_files(source_root, Utf8Path::new(directory), &mut build_files)
+            .with_context(|| format!("collect build inputs from {directory}"))?;
     }
 
     let mut benchmark_files = input_files(&[
@@ -1039,13 +1093,15 @@ fn input_hashes() -> anyhow::Result<InputHashes> {
         source_root,
         Utf8Path::new("tests/agentic_ts/projects"),
         &mut benchmark_files,
-    )?;
+    )
+    .context("collect TypeScript project benchmark inputs")?;
     for directory in [
         "tests/common",
         "crates/golem-websocket/wit",
         "crates/golem-websocket/wit-p3",
     ] {
-        collect_input_files(source_root, Utf8Path::new(directory), &mut benchmark_files)?;
+        collect_input_files(source_root, Utf8Path::new(directory), &mut benchmark_files)
+            .with_context(|| format!("collect benchmark inputs from {directory}"))?;
     }
     for required in [
         "tests/common/js_subtest_parser.rs",
@@ -1060,8 +1116,10 @@ fn input_hashes() -> anyhow::Result<InputHashes> {
     }
 
     Ok(InputHashes {
-        build: composite_hash(source_root, "build", &build_files)?,
-        benchmark: composite_hash(source_root, "benchmark", &benchmark_files)?,
+        build: composite_hash(source_root, "build", &build_files)
+            .context("hash collected build inputs")?,
+        benchmark: composite_hash(source_root, "benchmark", &benchmark_files)
+            .context("hash collected benchmark inputs")?,
     })
 }
 
@@ -1116,7 +1174,8 @@ fn composite_hash(
                     .any(|component| component.as_str() == ".."),
             "input path escapes the source root: {path}"
         );
-        let metadata = fs::symlink_metadata(source_root.join(path))?;
+        let metadata = fs::symlink_metadata(source_root.join(path))
+            .with_context(|| format!("read {domain} input metadata for {path}"))?;
         anyhow::ensure!(
             metadata.is_file() && !metadata.file_type().is_symlink(),
             "input is not a regular file: {path}"
@@ -1126,7 +1185,11 @@ fn composite_hash(
         for component in components {
             hash_part(&mut hasher, component.as_str().as_bytes());
         }
-        hash_part(&mut hasher, &fs::read(source_root.join(path))?);
+        hash_part(
+            &mut hasher,
+            &fs::read(source_root.join(path))
+                .with_context(|| format!("read {domain} input {path}"))?,
+        );
     }
     Ok(hasher.finalize().to_hex().to_string())
 }
@@ -1284,10 +1347,16 @@ fn prepare_cjs_graph(instance: &TestInstance) -> anyhow::Result<()> {
         status.success(),
         "npm ci failed for the CommonJS graph smoke"
     );
-    fs::write(
-        destination.join("measure.cjs"),
-        "module.exports = require('./test-05-ajv.cjs').run();\n",
-    )?;
+    for (suffix, enabled) in [("disabled", false), ("enabled", true)] {
+        let path = destination.join(format!("measure-{suffix}.cjs"));
+        fs::write(
+            &path,
+            format!(
+                "globalThis.__wasm_rquickjs_set_cjs_module_probe_session_enabled({enabled});\nmodule.exports = require('./test-05-ajv.cjs').run();\n"
+            ),
+        )
+        .with_context(|| format!("write CommonJS graph measurement entry {path}"))?;
+    }
     Ok(())
 }
 

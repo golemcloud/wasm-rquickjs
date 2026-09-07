@@ -62,6 +62,9 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_import_meta_resolve_path',
         '__wasm_rquickjs_loader_default_resolve_package',
         '__wasm_rquickjs_with_cjs_module_probe_session',
+        '__wasm_rquickjs_get_cjs_module_probe_session_hit_count',
+        '__wasm_rquickjs_reset_cjs_module_probe_session_hit_count',
+        '__wasm_rquickjs_set_cjs_module_probe_session_enabled',
         '__wasm_rquickjs_cjs_resolve_package_exports',
         '__wasm_rquickjs_cjs_resolve_package_fallback',
         '__wasm_rquickjs_package_global_conditions',
@@ -6428,7 +6431,9 @@ export const testCjsPackageJsonParseCache = async () => {
             'try {',
             '  process.execArgv = ["--preserve-symlinks"];',
             '  Module._pathCache = Object.create(null);',
-            '  require.resolve("./target");',
+            '  const firstTarget = require.resolve("./target");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("./target"), firstTarget);',
             '  fs.unlinkSync("/cjs-probe-session-app/target.js");',
             '  Module._pathCache = Object.create(null);',
             '  assert.throws(() => require.resolve("./target"), { code: "MODULE_NOT_FOUND" });',
@@ -6463,7 +6468,17 @@ export const testCjsPackageJsonParseCache = async () => {
             '}',
             'module.exports = true;',
         ].join('\n'));
+        const getProbeSessionHits = globalThis.__wasm_rquickjs_get_cjs_module_probe_session_hit_count;
+        const resetProbeSessionHits = globalThis.__wasm_rquickjs_reset_cjs_module_probe_session_hit_count;
+        assert.strictEqual(typeof getProbeSessionHits, 'function');
+        assert.strictEqual(typeof resetProbeSessionHits, 'function');
+        resetProbeSessionHits();
+        assert.strictEqual(getProbeSessionHits(), 0);
         assert.strictEqual(probeRequire(`${probeRoot}/session.cjs`), true);
+        assert.ok(
+            getProbeSessionHits() > 0,
+            'the outer CommonJS probe session must serve at least one repeated positive classification',
+        );
         const moduleBuiltin = probeRequire('module');
         const originalCwd = process.cwd();
         try {

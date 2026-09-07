@@ -234,7 +234,7 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
 
     let invocations = fs::read_to_string(log).expect("fake Cargo log should exist");
     let invocations = invocations.lines().collect::<Vec<_>>();
-    assert_eq!(invocations.len(), 6);
+    assert_eq!(invocations.len(), 10);
     assert!(invocations.iter().all(|args| {
         args.contains("--locked")
             && args.contains("--target wasm32-wasip2")
@@ -242,14 +242,22 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
             && args.contains("-Dwarnings")
     }));
     assert!(invocations[0].contains("clippy --manifest-path"));
-    assert!(invocations[1].contains("--features full,golem,typescript-compiler-profiling"));
+    assert!(invocations[1].contains("--features full,golem,typescript-transform-runtime"));
+    assert!(invocations[2].contains("--features full,golem,typescript-compiler-profiling"));
     assert!(
-        invocations[2].contains("--features full-no-logging,golem,typescript-compiler-profiling")
+        invocations[3].contains("--features full-no-logging,golem,typescript-transform-runtime")
     );
-    assert!(invocations[3].contains("--features normal-p3"));
-    assert!(invocations[4].contains("--features full-p3,golem,typescript-compiler-profiling"));
     assert!(
-        invocations[5]
+        invocations[4].contains("--features full-no-logging,golem,typescript-compiler-profiling")
+    );
+    assert!(invocations[5].contains("--features normal-p3"));
+    assert!(invocations[6].contains("--features full-p3,golem,typescript-transform-runtime"));
+    assert!(invocations[7].contains("--features full-p3,golem,typescript-compiler-profiling"));
+    assert!(
+        invocations[8].contains("--features full-no-logging-p3,golem,typescript-transform-runtime")
+    );
+    assert!(
+        invocations[9]
             .contains("--features full-no-logging-p3,golem,typescript-compiler-profiling")
     );
 }
