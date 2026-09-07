@@ -4,8 +4,11 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 results_dir="$repo_root/tests/typescript_transform_latency/results"
 
-if [ "${1:-}" = "--check" ]; then
+if [ "${1:-}" = "--check" ] || [ "${1:-}" = "--check-current" ]; then
     cd "$repo_root"
+    if [ "${1:-}" = "--check-current" ]; then
+        export TYPESCRIPT_TRANSFORM_LATENCY_CHECK_CURRENT=1
+    fi
     TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
         tools/dev-test.sh p2 standard typescript_transform_latency ""
     exit 0

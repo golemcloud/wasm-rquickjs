@@ -175,8 +175,12 @@ fn summarize(samples: &[Value]) -> Value {
 fn validate_checked_reports() -> anyhow::Result<()> {
     let directory = Utf8Path::new(RESULTS_DIR);
     anyhow::ensure!(directory.exists(), "checked report directory is missing");
-    let current_runtime_hash = runtime_hash()?;
-    let current_benchmark_hash = benchmark_hash()?;
+    let check_current = std::env::var_os("TYPESCRIPT_TRANSFORM_LATENCY_CHECK_CURRENT").is_some();
+    let current_hashes = if check_current {
+        Some((runtime_hash()?, benchmark_hash()?))
+    } else {
+        None
+    };
     let mut profiles = std::collections::BTreeSet::new();
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
@@ -185,12 +189,18 @@ fn validate_checked_reports() -> anyhow::Result<()> {
         }
         let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
         validate_report(&report).map_err(|error| anyhow::anyhow!("{}: {error}", path.display()))?;
-        anyhow::ensure!(
-            report["inputs"]["runtimeHash"] == current_runtime_hash
-                && report["inputs"]["benchmarkHash"] == current_benchmark_hash,
-            "{} is stale for the current source",
-            path.display()
-        );
+        if let Some((current_runtime_hash, current_benchmark_hash)) = &current_hashes {
+            anyhow::ensure!(
+                report["inputs"]["runtimeHash"] == *current_runtime_hash
+                    && report["inputs"]["benchmarkHash"] == *current_benchmark_hash,
+                "{} is stale for the current source (report runtime/benchmark: {}/{}, current: {}/{})",
+                path.display(),
+                report["inputs"]["runtimeHash"],
+                report["inputs"]["benchmarkHash"],
+                current_runtime_hash,
+                current_benchmark_hash,
+            );
+        }
         anyhow::ensure!(
             report["sizesBytes"] == json!([4096, 16384, 65536]),
             "{} does not use the calibrated requested 4/16/64 KiB size matrix",

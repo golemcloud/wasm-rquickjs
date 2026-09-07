@@ -26,6 +26,12 @@ Validate checked-in report contracts without executing workloads:
 tests/typescript_transform_latency/run.sh --check
 ```
 
+To additionally require that the historical reports were captured from the
+current runtime and benchmark inputs, use `--check-current`. This stricter check
+is expected to fail after relevant source changes until a new measurement matrix
+is intentionally captured; do not rewrite capture hashes without rerunning the
+workloads.
+
 Override the defaults with `TYPESCRIPT_TRANSFORM_LATENCY_SIZES` (a comma-separated,
 strictly increasing requested-byte target list) and
 `TYPESCRIPT_TRANSFORM_LATENCY_ITERATIONS` (at least three). Each execution-path

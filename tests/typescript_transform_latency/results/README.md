@@ -16,6 +16,12 @@ capture (`058b9042`), while the input hashes are the currentness keys. The
 validation-only source-root wiring; the recorded timings and component artifacts
 still come from the `058b9042` capture.
 
+`run.sh --check` validates the checked-in report schema and complete P2/P3 by
+strip/transform matrix without claiming that historical timings describe the
+current runtime. `run.sh --check-current` additionally compares the stored input
+hashes with the checkout. A failure there requires a deliberate new measurement
+capture, not validation-only replacement of the runtime hash.
+
 ## 2026-09-01 macOS arm64 baseline
 
 All values below are milliseconds for the requested 64-KiB profile unless noted
