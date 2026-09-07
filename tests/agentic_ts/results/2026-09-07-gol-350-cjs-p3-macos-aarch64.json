@@ -2,8 +2,8 @@
   "commonJsGraph": {
     "withProbeSession": {
       "iterations": 5,
-      "medianMs": 704.141416,
-      "p95Ms": 707.317875,
+      "medianMs": 749.671791,
+      "p95Ms": 754.228542,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 21364736,
@@ -49,26 +49,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 162.457875,
-                "initialEvaluation": 0.052917,
-                "loaderInitialization": 0.959416,
-                "processConfiguration": 0.095792,
-                "queueDelay": 0.28204199999999996,
-                "resultFormatting": 0.016875,
-                "runtimeCreation": 0.413709,
-                "teardown": 9.398583,
-                "transportWiring": 0.098458,
-                "userAwait": 528.57875,
-                "wrapperPreparation": 0.013542
+                "builtinInitialization": 178.957125,
+                "initialEvaluation": 0.065375,
+                "loaderInitialization": 1.032166,
+                "processConfiguration": 0.148,
+                "queueDelay": 0.311917,
+                "resultFormatting": 0.031625,
+                "runtimeCreation": 0.447042,
+                "teardown": 10.73625,
+                "transportWiring": 0.15975,
+                "userAwait": 556.564791,
+                "wrapperPreparation": 0.018334
               },
-              "totalMs": 702.385375,
+              "totalMs": 748.514208,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 703.328625
+          "wallMs": 749.671791
         },
         {
           "linearMemoryHighWaterBytes": 21430272,
@@ -114,26 +114,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 161.890084,
-                "initialEvaluation": 0.052583,
-                "loaderInitialization": 0.939,
-                "processConfiguration": 0.085166,
-                "queueDelay": 0.28408300000000003,
-                "resultFormatting": 0.023916,
-                "runtimeCreation": 0.389084,
-                "teardown": 9.76375,
-                "transportWiring": 0.099083,
-                "userAwait": 528.2006670000001,
-                "wrapperPreparation": 0.013542
+                "builtinInitialization": 177.17875,
+                "initialEvaluation": 0.064459,
+                "loaderInitialization": 1.035209,
+                "processConfiguration": 0.162791,
+                "queueDelay": 0.315792,
+                "resultFormatting": 0.027416999999999997,
+                "runtimeCreation": 0.462458,
+                "teardown": 10.01425,
+                "transportWiring": 0.157375,
+                "userAwait": 562.663083,
+                "wrapperPreparation": 0.01925
               },
-              "totalMs": 701.762208,
+              "totalMs": 752.13125,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 702.724791
+          "wallMs": 753.278875
         },
         {
           "linearMemoryHighWaterBytes": 21430272,
@@ -179,26 +179,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 163.011458,
-                "initialEvaluation": 0.051833,
-                "loaderInitialization": 0.940292,
-                "processConfiguration": 0.099375,
-                "queueDelay": 0.28170799999999996,
-                "resultFormatting": 0.017084000000000002,
-                "runtimeCreation": 0.393917,
-                "teardown": 9.789791,
-                "transportWiring": 0.1015,
-                "userAwait": 531.596125,
-                "wrapperPreparation": 0.013
+                "builtinInitialization": 173.94104199999998,
+                "initialEvaluation": 0.057916,
+                "loaderInitialization": 1.029416,
+                "processConfiguration": 0.195625,
+                "queueDelay": 0.301167,
+                "resultFormatting": 0.027083000000000003,
+                "runtimeCreation": 0.424834,
+                "teardown": 10.967167,
+                "transportWiring": 0.122542,
+                "userAwait": 565.8619590000001,
+                "wrapperPreparation": 0.017499999999999998
               },
-              "totalMs": 706.315625,
+              "totalMs": 752.988834,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 707.317875
+          "wallMs": 754.228542
         },
         {
           "linearMemoryHighWaterBytes": 21430272,
@@ -244,26 +244,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 162.848542,
-                "initialEvaluation": 0.052959,
-                "loaderInitialization": 0.971459,
-                "processConfiguration": 0.08858300000000001,
-                "queueDelay": 0.284333,
-                "resultFormatting": 0.021292,
-                "runtimeCreation": 0.403,
-                "teardown": 9.778,
-                "transportWiring": 0.102708,
-                "userAwait": 528.544208,
-                "wrapperPreparation": 0.014583
+                "builtinInitialization": 173.79708399999998,
+                "initialEvaluation": 0.063667,
+                "loaderInitialization": 0.99225,
+                "processConfiguration": 0.16325,
+                "queueDelay": 0.309375,
+                "resultFormatting": 0.031207999999999996,
+                "runtimeCreation": 0.425416,
+                "teardown": 11.038542,
+                "transportWiring": 0.147875,
+                "userAwait": 546.612708,
+                "wrapperPreparation": 0.018958
               },
-              "totalMs": 703.138333,
+              "totalMs": 733.635291,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 704.141416
+          "wallMs": 734.744208
         },
         {
           "linearMemoryHighWaterBytes": 21495808,
@@ -309,34 +309,34 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 161.973083,
-                "initialEvaluation": 0.052708,
-                "loaderInitialization": 0.972,
-                "processConfiguration": 0.128333,
-                "queueDelay": 0.28150000000000003,
-                "resultFormatting": 0.01675,
-                "runtimeCreation": 0.414875,
-                "teardown": 9.39525,
-                "transportWiring": 0.096459,
-                "userAwait": 531.246125,
-                "wrapperPreparation": 0.013
+                "builtinInitialization": 172.177958,
+                "initialEvaluation": 0.060667,
+                "loaderInitialization": 1.0785,
+                "processConfiguration": 0.223583,
+                "queueDelay": 0.322167,
+                "resultFormatting": 0.033791,
+                "runtimeCreation": 0.45025,
+                "teardown": 10.814292,
+                "transportWiring": 0.142042,
+                "userAwait": 558.433167,
+                "wrapperPreparation": 0.015958
               },
-              "totalMs": 704.611542,
+              "totalMs": 743.784542,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 705.600625
+          "wallMs": 744.915875
         }
       ],
-      "throughputPerSecond": 1.4191993072109326
+      "throughputPerSecond": 1.3380291767008186
     },
     "withoutProbeSession": {
       "iterations": 5,
-      "medianMs": 719.884833,
-      "p95Ms": 726.891042,
+      "medianMs": 759.7937919999999,
+      "p95Ms": 777.88775,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 21364736,
@@ -376,26 +376,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 168.243584,
-                "initialEvaluation": 0.064459,
-                "loaderInitialization": 1.6745830000000002,
-                "processConfiguration": 1.213375,
-                "queueDelay": 0.828708,
-                "resultFormatting": 0.023583,
-                "runtimeCreation": 0.6365000000000001,
-                "teardown": 9.70475,
-                "transportWiring": 0.178541,
-                "userAwait": 533.658375,
-                "wrapperPreparation": 0.026375
+                "builtinInitialization": 177.109583,
+                "initialEvaluation": 0.163709,
+                "loaderInitialization": 1.801416,
+                "processConfiguration": 1.291959,
+                "queueDelay": 0.982875,
+                "resultFormatting": 0.030375,
+                "runtimeCreation": 0.685334,
+                "teardown": 10.258292,
+                "transportWiring": 0.254417,
+                "userAwait": 580.7317079999999,
+                "wrapperPreparation": 0.078166
               },
-              "totalMs": 716.2860410000001,
+              "totalMs": 773.454542,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 719.884833
+          "wallMs": 777.88775
         },
         {
           "linearMemoryHighWaterBytes": 21430272,
@@ -435,26 +435,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 161.785834,
-                "initialEvaluation": 0.052791000000000005,
-                "loaderInitialization": 0.941375,
-                "processConfiguration": 0.106333,
-                "queueDelay": 0.276542,
-                "resultFormatting": 0.021041,
-                "runtimeCreation": 0.406708,
-                "teardown": 9.655,
-                "transportWiring": 0.097375,
-                "userAwait": 545.292959,
-                "wrapperPreparation": 0.013625000000000002
+                "builtinInitialization": 174.544542,
+                "initialEvaluation": 0.056542,
+                "loaderInitialization": 1.0112089999999998,
+                "processConfiguration": 0.173458,
+                "queueDelay": 0.293917,
+                "resultFormatting": 0.028708,
+                "runtimeCreation": 0.435541,
+                "teardown": 10.494458,
+                "transportWiring": 0.123125,
+                "userAwait": 575.0985,
+                "wrapperPreparation": 0.016833
               },
-              "totalMs": 718.6722920000001,
+              "totalMs": 762.308459,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 719.639458
+          "wallMs": 763.3825840000001
         },
         {
           "linearMemoryHighWaterBytes": 21430272,
@@ -494,26 +494,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 162.810375,
-                "initialEvaluation": 0.05275,
-                "loaderInitialization": 0.97025,
-                "processConfiguration": 0.097291,
-                "queueDelay": 0.293958,
-                "resultFormatting": 0.017833,
-                "runtimeCreation": 0.410875,
-                "teardown": 9.538167,
-                "transportWiring": 0.100125,
-                "userAwait": 551.6345,
-                "wrapperPreparation": 0.014584
+                "builtinInitialization": 173.579583,
+                "initialEvaluation": 0.0625,
+                "loaderInitialization": 1.0261669999999998,
+                "processConfiguration": 0.156583,
+                "queueDelay": 0.306708,
+                "resultFormatting": 0.029833,
+                "runtimeCreation": 0.427375,
+                "teardown": 10.637667,
+                "transportWiring": 0.152584,
+                "userAwait": 572.255917,
+                "wrapperPreparation": 0.019666
               },
-              "totalMs": 725.959958,
+              "totalMs": 758.694333,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 726.891042
+          "wallMs": 759.7937919999999
         },
         {
           "linearMemoryHighWaterBytes": 21430272,
@@ -553,26 +553,26 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 162.33108299999998,
-                "initialEvaluation": 0.052542,
-                "loaderInitialization": 0.937416,
-                "processConfiguration": 0.120459,
-                "queueDelay": 0.27675,
-                "resultFormatting": 0.016915999999999997,
-                "runtimeCreation": 0.405375,
-                "teardown": 9.326875,
-                "transportWiring": 0.100708,
-                "userAwait": 541.462667,
-                "wrapperPreparation": 0.01375
+                "builtinInitialization": 174.612417,
+                "initialEvaluation": 0.061500000000000006,
+                "loaderInitialization": 0.991875,
+                "processConfiguration": 0.253,
+                "queueDelay": 0.301167,
+                "resultFormatting": 0.028666,
+                "runtimeCreation": 0.418458,
+                "teardown": 10.540084,
+                "transportWiring": 0.142041,
+                "userAwait": 563.2837499999999,
+                "wrapperPreparation": 0.019208999999999997
               },
-              "totalMs": 715.062167,
+              "totalMs": 750.683334,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 715.979708
+          "wallMs": 751.728875
         },
         {
           "linearMemoryHighWaterBytes": 21495808,
@@ -612,42 +612,42 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 162.24333299999998,
-                "initialEvaluation": 0.051708,
-                "loaderInitialization": 0.935958,
-                "processConfiguration": 0.115709,
-                "queueDelay": 0.291709,
-                "resultFormatting": 0.016625,
-                "runtimeCreation": 0.39525,
-                "teardown": 9.629334,
-                "transportWiring": 0.095083,
-                "userAwait": 547.508208,
-                "wrapperPreparation": 0.012459
+                "builtinInitialization": 173.023875,
+                "initialEvaluation": 0.065458,
+                "loaderInitialization": 1.0082909999999998,
+                "processConfiguration": 0.171792,
+                "queueDelay": 0.291625,
+                "resultFormatting": 0.023917,
+                "runtimeCreation": 0.422084,
+                "teardown": 10.454333,
+                "transportWiring": 0.17666700000000002,
+                "userAwait": 563.15825,
+                "wrapperPreparation": 0.019458
               },
-              "totalMs": 721.3144169999999,
+              "totalMs": 748.8523339999999,
               "version": 1
             },
             "stderr": "",
             "stdout": "",
             "value": "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
           },
-          "wallMs": 722.2397090000001
+          "wallMs": 750.037208
         }
       ],
-      "throughputPerSecond": 1.387103089987134
+      "throughputPerSecond": 1.3148102137630833
     }
   },
   "component": {
-    "blake3": "d5b6093fd7a490f70c53096d89a9749649f180a6a1faa398b3f20954e5a6ef31",
-    "buildMs": 31702.269458,
-    "bytes": 155254954,
-    "prepareAndInstantiateMs": 14560.160625
+    "blake3": "601bfaa70ad6e4b3b8951bf41175fa5ffe0e81fd8bf355de1e3b9fe3a632c939",
+    "buildMs": 68048.26075,
+    "bytes": 155255415,
+    "prepareAndInstantiateMs": 18716.856667
   },
   "environment": {
     "arch": "aarch64",
     "artifactCache": null,
     "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
-    "commitHint": "cd41a4267dd61578e89afc2513e2d77f9f1382d8",
+    "commitHint": "a6ce1e3f8611606d230da19e4f5e7717c0cf4265",
     "componentFeatures": "typescript-compiler-profiling",
     "dirty": false,
     "iterations": 5,
@@ -668,7 +668,7 @@
   "inputs": {
     "algorithm": "blake3-composite-v1",
     "benchmarkHash": "fd93375aa66472286b7c897eb671eaf6f837cb1cabdb60693991542a67446039",
-    "buildHash": "edc3d0dace007a13c50802182a5fe535379decf018ce5ec8f47038c3ddd1af9e"
+    "buildHash": "171905f1fc90566d8bf3ed37c232d942c46fcfa3508044942de35fa205ee0c35"
   },
   "iterations": 5,
   "schema": "cjs-graph-smoke-v2",

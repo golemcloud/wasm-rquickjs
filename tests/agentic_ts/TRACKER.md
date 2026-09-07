@@ -50,7 +50,7 @@ The preceding schema-v4 baseline remains available as
 The exact-source GOL-350 CommonJS graph evidence is recorded in
 `results/2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
 `results/2026-09-07-gol-350-cjs-p3-macos-aarch64.json`. Both targets used clean
-commit `cd41a4267dd61578e89afc2513e2d77f9f1382d8`, standard optimized components,
+commit `a6ce1e3f8611606d230da19e4f5e7717c0cf4265`, standard optimized components,
 disabled optional test caches, and a balanced alternating series of five Ajv
 executions with the outer session disabled and five with it enabled. Every
 disabled sample records `428 = 392 system + 0 outer-session + 36
@@ -59,13 +59,12 @@ outer-session + 36 invocation-local`. The outer session therefore avoids 17.9%
 of physical probes in both targets: 50 file probes and 20 path-classification
 probes.
 
-P3 moved from a 719.885 ms median and 1.387 runs/s without the session to
-704.141 ms and 1.419 runs/s with it (median -2.19%, throughput +2.31%). The
-noisier P2 capture moved from 1127.521 ms and 0.838 runs/s to 1207.821 ms and
-0.598 runs/s (median +7.12%, throughput -28.68%). The five-sample P2 result does
-not establish a speedup; the deterministic cross-target conclusion is the exact
-probe reduction. Generated-module zero-hit checks were unarchived local
-diagnostics.
+P2 moved from a 777.863 ms median and 1.267 runs/s without the session to
+771.730 ms and 1.301 runs/s with it (median -0.79%, throughput +2.67%). P3 moved
+from a 759.794 ms median and 1.315 runs/s to 749.672 ms and 1.338 runs/s (median
+-1.33%, throughput +1.77%). Five samples are insufficient for a durable latency
+claim; the deterministic cross-target conclusion is the exact probe reduction.
+Generated-module zero-hit checks were unarchived local diagnostics.
 
 Affected node-compat candidates were also run unchanged on P2 and P3:
 `test-fs-readfile` (16 passed, 1 existing Windows-only ignore),

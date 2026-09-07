@@ -35,7 +35,7 @@ The dated `2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
 `2026-09-07-gol-350-cjs-p3-macos-aarch64.json` reports capture a balanced,
 alternating comparison of five Ajv CommonJS executions with the probe session
 disabled and five with it enabled. Both reports came from clean commit
-`cd41a4267dd61578e89afc2513e2d77f9f1382d8`, use standard optimized components
+`a6ce1e3f8611606d230da19e4f5e7717c0cf4265`, use standard optimized components
 with all optional test caches disabled, and share identical build, benchmark,
 fixture, and toolchain fingerprints while retaining distinct P2/P3 component
 hashes.
@@ -47,14 +47,14 @@ physical calls, zero outer-session hits, and 36 invocation-local hits. The sessi
 therefore removes 17.9% of the physical calls in both targets: 50 file probes and
 20 classification probes.
 
-The optimized wall-clock result is mixed. P3 improved from a 719.885 ms median
-and 1.387 runs/s to 704.141 ms and 1.419 runs/s (median -2.19%, throughput
-+2.31%). The noisier P2 capture moved from 1127.521 ms and 0.838 runs/s to
-1207.821 ms and 0.598 runs/s (median +7.12%, throughput -28.68%). Five samples
-are insufficient to characterize P2 latency variance, so the deterministic probe
-reduction is the supported cross-target conclusion; these timings do not establish
-a P2 speedup. Earlier generated-module zero-hit checks were local diagnostics and
-were not archived as checked-in reports.
+The optimized wall-clock result is directionally consistent but small. P2
+improved from a 777.863 ms median and 1.267 runs/s to 771.730 ms and 1.301 runs/s
+(median -0.79%, throughput +2.67%). P3 improved from a 759.794 ms median and
+1.315 runs/s to 749.672 ms and 1.338 runs/s (median -1.33%, throughput +1.77%).
+Five samples are insufficient for a durable latency claim, so the deterministic
+probe reduction remains the supported cross-target conclusion. Earlier
+generated-module zero-hit checks were local diagnostics and were not archived as
+checked-in reports.
 
 ## GOL-347 compiler profile and mitigation
 
