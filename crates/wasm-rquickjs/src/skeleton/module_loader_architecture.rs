@@ -638,9 +638,6 @@ fn module_loader_architecture() {
         "__wasm_rquickjs_cjs_resolve_package_fallback",
         "__wasm_rquickjs_with_cjs_module_probe_session",
         "__wasm_rquickjs_cjs_module_path_stat",
-        "__wasm_rquickjs_get_cjs_module_probe_session_hit_count",
-        "__wasm_rquickjs_reset_cjs_module_probe_session_hit_count",
-        "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
         "__wasm_rquickjs_package_global_conditions",
         "__wasm_rquickjs_build_loader_cjs_facade",
         "__wasm_rquickjs_register_loader_source_url",
@@ -658,6 +655,20 @@ fn module_loader_architecture() {
         assert!(
             rust_bridges.contains(bridge),
             "module_loading.rs must register Rust bridge {bridge}"
+        );
+    }
+    for test_bridge in [
+        "__wasm_rquickjs_get_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_reset_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
+    ] {
+        assert!(
+            rust_bridges.contains(test_bridge),
+            "module_loading.rs must register test-observability bridge {test_bridge}"
+        );
+        assert!(
+            !js_identifiers.contains(test_bridge),
+            "module.js must not depend on test-observability bridge {test_bridge}"
         );
     }
     for (target, source) in [("p2", P2_RS), ("p3", P3_RS)] {

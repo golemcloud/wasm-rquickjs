@@ -6433,7 +6433,12 @@ export const testCjsPackageJsonParseCache = async () => {
             '  Module._pathCache = Object.create(null);',
             '  const firstTarget = require.resolve("./target");',
             '  Module._pathCache = Object.create(null);',
+            '  globalThis.__wasm_rquickjs_reset_cjs_module_probe_session_hit_count();',
             '  assert.strictEqual(require.resolve("./target"), firstTarget);',
+            '  assert.ok(',
+            '    globalThis.__wasm_rquickjs_get_cjs_module_probe_session_hit_count() >= 1,',
+            '    "the repeated positive resolution must use the outer CommonJS probe session",',
+            '  );',
             '  fs.unlinkSync("/cjs-probe-session-app/target.js");',
             '  Module._pathCache = Object.create(null);',
             '  assert.throws(() => require.resolve("./target"), { code: "MODULE_NOT_FOUND" });',
@@ -6475,10 +6480,7 @@ export const testCjsPackageJsonParseCache = async () => {
         resetProbeSessionHits();
         assert.strictEqual(getProbeSessionHits(), 0);
         assert.strictEqual(probeRequire(`${probeRoot}/session.cjs`), true);
-        assert.ok(
-            getProbeSessionHits() > 0,
-            'the outer CommonJS probe session must serve at least one repeated positive classification',
-        );
+        assert.ok(getProbeSessionHits() > 0);
         const moduleBuiltin = probeRequire('module');
         const originalCwd = process.cwd();
         try {
