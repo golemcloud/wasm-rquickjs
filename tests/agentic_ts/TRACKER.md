@@ -46,3 +46,14 @@ does not measure retained memory or prove leak absence.
 The preceding schema-v4 baseline remains available as
 `results/2026-08-27-p2-macos-aarch64.json` and
 `results/2026-08-27-p3-macos-aarch64.json`.
+
+The exact-source GOL-350 CommonJS graph evidence is recorded in
+`results/2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
+`results/2026-09-07-gol-350-cjs-p3-macos-aarch64.json`. Both targets used clean
+commit `d685b24549d58bf27701a71d8cda2c948f395dbf`; every one of the five fresh Ajv
+samples recorded 428 logical classifications as 322 physical metadata calls,
+70 outer-session hits, and 36 invocation-local hits. The outer session therefore
+avoided 70 of the 392 physical probes inferred without it (17.9%): 50 file probes
+and 20 path-classification probes. Matching generated-module controls recorded
+zero outer-session hits on P2 and P3, confirming that the savings are specific to
+the reusable CommonJS package graph rather than baseline counter activity.

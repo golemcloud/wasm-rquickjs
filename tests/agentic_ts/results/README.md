@@ -29,6 +29,23 @@ to share the input hashes without resolving Git history. `run.sh
 checkout. With five samples, the reported p95 is the observed maximum; it is
 descriptive evidence rather than a stable tail-latency estimate.
 
+## GOL-350 CommonJS graph probe evidence
+
+The dated `2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
+`2026-09-07-gol-350-cjs-p3-macos-aarch64.json` reports capture five fresh Ajv
+CommonJS executions from clean commit
+`d685b24549d58bf27701a71d8cda2c948f395dbf`. They share identical build,
+benchmark, fixture, and toolchain fingerprints while retaining distinct P2/P3
+component hashes.
+
+Every sample reconciles 428 logical path classifications into 322 physical
+metadata calls, 70 positive outer-session hits, and 36 invocation-local hits.
+Without the outer-session hits, the inferred physical count is 392, so the cache
+removes 17.9% of these calls. The 70 session hits consist of 50 file probes and 20
+classification probes. These reports use accelerated unoptimized local profiles;
+their timings are not performance comparisons. Separate generated-module P2/P3
+controls recorded zero session hits.
+
 ## GOL-347 compiler profile and mitigation
 
 The 2026-09-04 schema-v5 reports add a shared TypeScript compiler-API profile
