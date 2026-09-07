@@ -54,12 +54,14 @@ recovery after every timeout and cancellation series.
 
 Follow-up disposition from the measured counters:
 
-- GOL-348 remains a targeted package-graph optimization; this compiler profile
-  has only two missing package metadata lookups, so negative caching is not the
-  material owner here.
-- GOL-350 remains useful for a representative cold `node_modules` graph. This
-  workload has one module-loader file probe; its 636 filesystem stats are
-  TypeScript compiler directory probes, not duplicate module-resolution probes.
+- GOL-348 remains a cache-lifetime and invalidation investigation; this compiler
+  profile has only two missing package metadata lookups, so negative caching is
+  not the material owner here.
+- The GOL-350 follow-up used a separate representative cold `node_modules`
+  graph because this historical workload has only one module-loader file probe;
+  its 636 filesystem stats are TypeScript compiler directory probes, not
+  duplicate module-resolution probes. GOL-350 now implements the positive-only
+  outer-CJS probe session validated by that separate graph.
 - GOL-349 remains ordered after GOL-418 and needs its overlapping `require(esm)`
   benchmark. The controlled compiler workload does not exercise that graph.
 - GOL-351 stays folded/canceled: one module-resolution call cannot make helper

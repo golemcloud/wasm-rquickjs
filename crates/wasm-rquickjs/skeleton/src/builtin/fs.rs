@@ -227,6 +227,13 @@ fn with_fs_mut<R>(
     f(&mut services.fs.borrow_mut())
 }
 
+fn invalidate_module_resolution_probes(ctx: &rquickjs::Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .invalidate();
+}
+
 fn normalize_mode_override(mode: u32) -> u32 {
     mode & MODE_PERMISSION_MASK
 }
@@ -836,6 +843,7 @@ pub mod native_module {
             if let Err(err) = std::fs::write(&resolved_path, bytes) {
                 Some(format!("Failed to write file {path:?}: {err}"))
             } else {
+                super::invalidate_module_resolution_probes(&ctx);
                 None // Success
             }
         }
@@ -855,6 +863,7 @@ pub mod native_module {
             if let Err(err) = std::fs::write(&resolved_path, bytes) {
                 Some(format!("Failed to write file {path:?}: {err}"))
             } else {
+                super::invalidate_module_resolution_probes(&ctx);
                 None // Success
             }
         } else {
@@ -868,6 +877,7 @@ pub mod native_module {
         match std::fs::remove_file(Path::new(&fs_path)) {
             Ok(_) => {
                 super::remove_mode_override_for_path(&ctx, &fs_path);
+                super::invalidate_module_resolution_probes(&ctx);
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "unlink", Some(&path))),
@@ -882,6 +892,7 @@ pub mod native_module {
             Ok(_) => {
                 super::move_mode_override_for_path(&ctx, &old_fs_path, &new_fs_path);
                 super::rename_fd_path(&ctx, &old_fs_path, &new_fs_path);
+                super::invalidate_module_resolution_probes(&ctx);
                 None
             }
             Err(err) => Some(super::make_fs_error_with_dest(
@@ -904,7 +915,10 @@ pub mod native_module {
             std::fs::create_dir(fs_path)
         };
         match result {
-            Ok(_) => None,
+            Ok(_) => {
+                super::invalidate_module_resolution_probes(&ctx);
+                None
+            }
             Err(err) => Some(format!("Failed to create directory {path:?}: {err}")),
         }
     }
@@ -962,6 +976,7 @@ pub mod native_module {
                 if creating {
                     super::set_mode_override_for_path(&ctx, &fs_path, mode as u32);
                     super::set_mode_override_for_fd(&ctx, fd, mode as u32);
+                    super::invalidate_module_resolution_probes(&ctx);
                 } else if let Some(mode_override) =
                     super::get_mode_override_for_path(&ctx, &fs_path)
                 {
@@ -1517,7 +1532,10 @@ pub mod native_module {
         let fs_src = runtime_path(&ctx, &src);
         let fs_dest = runtime_path(&ctx, &dest);
         match std::fs::copy(&fs_src, &fs_dest) {
-            Ok(_) => None,
+            Ok(_) => {
+                super::invalidate_module_resolution_probes(&ctx);
+                None
+            }
             Err(err) => Some(super::make_fs_error_with_dest(
                 &ctx,
                 &err,
@@ -1533,7 +1551,10 @@ pub mod native_module {
         let fs_existing_path = runtime_path(&ctx, &existing_path);
         let fs_new_path = runtime_path(&ctx, &new_path);
         match std::fs::hard_link(&fs_existing_path, &fs_new_path) {
-            Ok(_) => None,
+            Ok(_) => {
+                super::invalidate_module_resolution_probes(&ctx);
+                None
+            }
             Err(err) => Some(super::make_fs_error_with_dest(
                 &ctx,
                 &err,
@@ -1552,7 +1573,10 @@ pub mod native_module {
 
         let fs_path = runtime_path(&ctx, &path);
         match super::symlink_at_path(&target, &fs_path) {
-            Ok(()) => None,
+            Ok(()) => {
+                super::invalidate_module_resolution_probes(&ctx);
+                None
+            }
             Err(err) => Some(super::make_fs_error_with_dest(
                 &ctx,
                 &err,
@@ -1730,6 +1754,7 @@ pub mod native_module {
                 if !recursive || !existed_before {
                     super::set_mode_override_for_path(&ctx, &fs_path, mode);
                 }
+                super::invalidate_module_resolution_probes(&ctx);
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "mkdir", Some(&path))),
@@ -1742,6 +1767,7 @@ pub mod native_module {
         match std::fs::remove_dir(&fs_path) {
             Ok(_) => {
                 super::remove_mode_override_for_path(&ctx, &fs_path);
+                super::invalidate_module_resolution_probes(&ctx);
                 None
             }
             Err(err) => Some(super::make_fs_error(&ctx, &err, "rmdir", Some(&path))),
@@ -1760,9 +1786,18 @@ pub mod native_module {
                     } else {
                         std::fs::remove_dir(&fs_path)
                     };
+                    if recursive {
+                        // Recursive removal can delete some descendants before a later
+                        // entry fails, so its positive observations are stale even when
+                        // the overall operation returns an error.
+                        super::invalidate_module_resolution_probes(&ctx);
+                    }
                     match result {
                         Ok(_) => {
                             super::remove_mode_override_for_path(&ctx, &fs_path);
+                            if !recursive {
+                                super::invalidate_module_resolution_probes(&ctx);
+                            }
                             None
                         }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
@@ -1771,6 +1806,7 @@ pub mod native_module {
                     match std::fs::remove_file(&fs_path) {
                         Ok(_) => {
                             super::remove_mode_override_for_path(&ctx, &fs_path);
+                            super::invalidate_module_resolution_probes(&ctx);
                             None
                         }
                         Err(err) => Some(super::make_fs_error(&ctx, &err, "rm", Some(&path))),
@@ -1809,6 +1845,7 @@ pub mod native_module {
 
         match std::fs::create_dir(&dir_path) {
             Ok(_) => {
+                super::invalidate_module_resolution_probes(&ctx);
                 result.set("result", guest_path).unwrap();
             }
             Err(err) => {
@@ -1849,6 +1886,7 @@ pub mod native_module {
                 if let Err(err) = f.write_all(bytes) {
                     Some(super::make_fs_error(&ctx, &err, "appendFile", Some(&path)))
                 } else {
+                    super::invalidate_module_resolution_probes(&ctx);
                     None
                 }
             }
@@ -1869,6 +1907,7 @@ pub mod native_module {
                 if let Err(err) = f.write_all(data.as_bytes()) {
                     Some(super::make_fs_error(&ctx, &err, "appendFile", Some(&path)))
                 } else {
+                    super::invalidate_module_resolution_probes(&ctx);
                     None
                 }
             }

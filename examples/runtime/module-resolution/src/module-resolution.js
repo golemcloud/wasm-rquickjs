@@ -6425,12 +6425,12 @@ export const testCjsPackageJsonParseCache = async () => {
             'try {',
             '  process.execArgv = ["--preserve-symlinks"];',
             '  Module._pathCache = Object.create(null);',
-            '  const first = require.resolve("./target");',
+            '  require.resolve("./target");',
             '  fs.unlinkSync("/cjs-probe-session-app/target.js");',
             '  Module._pathCache = Object.create(null);',
-            '  assert.strictEqual(require.resolve("./target"), first);',
-            '  const nestedFirst = require.resolve("./nested-target");',
-            '  assert.strictEqual(require("./nested-child.cjs"), nestedFirst);',
+            '  assert.throws(() => require.resolve("./target"), { code: "MODULE_NOT_FOUND" });',
+            '  require.resolve("./nested-target");',
+            '  assert.throws(() => require("./nested-child.cjs"), { code: "MODULE_NOT_FOUND" });',
             '  assert.throws(() => require.resolve("./late"), { code: "MODULE_NOT_FOUND" });',
             '  fs.writeFileSync("/cjs-probe-session-app/late.js", "module.exports = true;");',
             '  Module._pathCache = Object.create(null);',
@@ -6466,12 +6466,12 @@ export const testCjsPackageJsonParseCache = async () => {
         }
 
         fs.writeFileSync(`${probeRoot}/throw-target.js`, 'module.exports = true;');
-        fs.writeFileSync(`${probeRoot}/thrower.cjs`, [
-            'require.resolve("./throw-target");',
-            'throw new Error("probe-session-throw");',
-        ].join('\n'));
+        const throwingModule = new moduleBuiltin.Module(`${probeRoot}/thrower.cjs`);
         assert.throws(
-            () => probeRequire(`${probeRoot}/thrower.cjs`),
+            () => throwingModule._compile(
+                'require.resolve("./throw-target"); throw new Error("probe-session-throw");',
+                `${probeRoot}/thrower.cjs`,
+            ),
             /probe-session-throw/,
         );
         fs.unlinkSync(`${probeRoot}/throw-target.js`);

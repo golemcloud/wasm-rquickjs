@@ -4120,9 +4120,9 @@ struct CjsModuleProbeSessionState {
 
 /// Positive filesystem classifications shared while an outer CommonJS wrapper runs.
 ///
-/// Node scopes its CJS stat cache to outer module execution and never retains missing
-/// observations across independent resolutions. Keeping this state in RuntimeServices
-/// also prevents sibling QuickJS runtimes from sharing filesystem observations.
+/// The cache never retains missing observations, is cleared after the outer CommonJS
+/// graph, and is invalidated by successful runtime filesystem mutations. Keeping this
+/// state in RuntimeServices also prevents sibling QuickJS runtimes from sharing probes.
 #[derive(Clone, Default)]
 pub(crate) struct CjsModuleProbeSession(Rc<RefCell<CjsModuleProbeSessionState>>);
 
@@ -4132,6 +4132,10 @@ struct ModulePathProbe {
 }
 
 impl CjsModuleProbeSession {
+    pub(crate) fn invalidate(&self) {
+        self.0.borrow_mut().entries.clear();
+    }
+
     fn begin(&self) {
         let mut state = self.0.borrow_mut();
         if state.depth == 0 {
