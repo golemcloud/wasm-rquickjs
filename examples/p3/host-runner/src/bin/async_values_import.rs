@@ -9,7 +9,10 @@
 use anyhow::{Result, anyhow};
 use futures::StreamExt;
 use futures::channel::{mpsc, oneshot};
-use p3_host_runner::util::{OneshotConsumer, OneshotProducer, PipeConsumer, PipeProducer};
+use p3_host_runner::util::{
+    BackpressureDropConsumer, OneshotConsumer, OneshotProducer, PipeConsumer, PipeProducer,
+    PrefixConsumer,
+};
 use wasmtime::component::{
     Access, Accessor, Component, FutureReader, HasSelf, Linker, StreamReader, bindgen,
 };
@@ -34,6 +37,7 @@ struct Host {
     wasi: wasmtime_wasi::WasiCtx,
     http: WasiHttpCtx,
     table: ResourceTable,
+    stored_future: Option<oneshot::Receiver<u32>>,
 }
 
 impl wasmtime_wasi::WasiView for Host {
@@ -55,7 +59,9 @@ impl WasiHttpView for Host {
     }
 }
 
-impl test::async_values_import::host::Host for Host {}
+impl test::async_values_import::host::Host for Host {
+    fn cleanup_complete(&mut self) {}
+}
 
 impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
     fn make_future<T>(mut host: Access<T, Self>, x: u32) -> FutureReader<u32> {
@@ -72,10 +78,7 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
             .expect("failed to create stream")
     }
 
-    async fn consume_future<T: Send>(
-        accessor: &Accessor<T, Self>,
-        f: FutureReader<u32>,
-    ) -> u32 {
+    async fn consume_future<T: Send>(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
         let (tx, rx) = oneshot::channel();
         accessor
             .with(|access| f.pipe(access, OneshotConsumer::new(tx)))
@@ -83,10 +86,7 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
         rx.await.expect("host future did not resolve")
     }
 
-    async fn consume_stream<T: Send>(
-        accessor: &Accessor<T, Self>,
-        s: StreamReader<u8>,
-    ) -> u32 {
+    async fn consume_stream<T: Send>(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u32 {
         let (tx, rx) = mpsc::channel::<u8>(16);
         accessor
             .with(|access| s.pipe(access, PipeConsumer::new(tx)))
@@ -94,6 +94,43 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
         rx.map(|b| b as u32)
             .fold(0u32, |acc, v| async move { acc + v })
             .await
+    }
+
+    async fn consume_stream_prefix<T: Send>(
+        accessor: &Accessor<T, Self>,
+        s: StreamReader<u8>,
+    ) -> u8 {
+        let (tx, rx) = oneshot::channel();
+        accessor
+            .with(|access| s.pipe(access, PrefixConsumer::new(tx)))
+            .expect("failed to pipe prefix stream");
+        rx.await.expect("prefix stream did not yield an item")
+    }
+
+    async fn consume_stream_with_backpressure<T: Send>(
+        accessor: &Accessor<T, Self>,
+        s: StreamReader<u8>,
+    ) {
+        accessor
+            .with(|access| s.pipe(access, BackpressureDropConsumer::default()))
+            .expect("failed to pipe backpressure stream");
+    }
+
+    async fn store_future<T: Send>(accessor: &Accessor<T, Self>, f: FutureReader<u32>) {
+        let (tx, rx) = oneshot::channel();
+        accessor
+            .with(|mut access| {
+                access.get().stored_future = Some(rx);
+                f.pipe(access, OneshotConsumer::new(tx))
+            })
+            .expect("failed to pipe stored host future");
+    }
+
+    async fn read_stored_future<T: Send>(accessor: &Accessor<T, Self>) -> u32 {
+        let rx = accessor
+            .with(|mut access| access.get().stored_future.take())
+            .expect("stored future was not set");
+        rx.await.expect("stored future did not resolve")
     }
 }
 
@@ -161,6 +198,7 @@ async fn instantiate() -> Result<(Store<Host>, AsyncValuesImport)> {
             wasi,
             http: WasiHttpCtx::new(),
             table: ResourceTable::new(),
+            stored_future: None,
         },
     );
     let bindings = AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;

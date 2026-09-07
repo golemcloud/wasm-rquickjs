@@ -3,6 +3,7 @@ import { NodeHttpClientRequest } from '__wasm_rquickjs_builtin/node_http_native'
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
+import { initializeIncomingMessage } from '__wasm_rquickjs_builtin/node_http_incoming';
 
 import { channel } from 'node:diagnostics_channel';
 import { kOutHeaders } from '__wasm_rquickjs_builtin/internal/http';
@@ -798,18 +799,9 @@ export function IncomingMessage(nativeRes, options) {
         this.httpVersionMajor = null;
         this.httpVersionMinor = null;
     }
-    this.complete = false;
+    initializeIncomingMessage(this, hasNativeResponse ? null : nativeRes);
     this.method = hasNativeResponse ? undefined : null;
     this.url = hasNativeResponse ? undefined : '';
-    this.socket = hasNativeResponse ? null : nativeRes;
-    this.client = this.socket;
-    this.trailers = {};
-    this.trailersDistinct = {};
-    this.rawTrailers = [];
-    this.aborted = false;
-    this._consuming = false;
-    this._dumped = false;
-    this._timeout = null;
 
     const joinDup = !!(options && options.joinDuplicateHeaders);
     const parsedHeaders = parseIncomingHeaders(
@@ -835,6 +827,13 @@ IncomingMessage.prototype.setTimeout = function setTimeout(ms, callback) {
     this._timeout = ms;
     if (callback) this.once('timeout', callback);
     return this;
+};
+
+IncomingMessage.prototype._dump = function _dump() {
+    if (this._dumped) return;
+    this._dumped = true;
+    this.removeAllListeners('data');
+    this.resume();
 };
 
 IncomingMessage.prototype._read = function _read(n) {
@@ -2150,7 +2149,7 @@ export class ClientRequest extends OutgoingMessage {
                 }
                 this._response = res;
                 res.req = this;
-                this.emit('response', res);
+                const responseHandled = this.emit('response', res);
 
                 if (this.aborted || this.destroyed) {
                     if (res._nativeRes && typeof res._nativeRes.discardBody === 'function') {
@@ -2159,16 +2158,8 @@ export class ClientRequest extends OutgoingMessage {
                     return;
                 }
 
-                const hasDataListeners = res.listenerCount('data') > 0;
-                const hasEndListeners = res.listenerCount('end') > 0;
-                const hasReadableListeners = res.listenerCount('readable') > 0;
-
-                if (hasDataListeners || hasEndListeners) {
-                    res.resume();
-                } else if (hasReadableListeners) {
-                    res.read(0);
-                } else {
-                    res.resume();
+                if (!responseHandled) {
+                    res._dump();
                 }
             }
 

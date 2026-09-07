@@ -29,6 +29,7 @@ p2 = ["dep:wit-bindgen", "dep:wit-bindgen-rt", "dep:wasip2", "dep:wstd", "golem-
 # `rt.drive()` scheduler driver). P3 components import the residual P2 WASI surface for `std`
 # anyway, so this adds no new host requirements.
 p3 = ["dep:wit-bindgen-p3", "dep:wasip3", "dep:wasip2", "dep:http", "golem-websocket?/p3"]
+internal-test-execution = []
 
 # Tier meta-features (cumulative). All Preview 2 tiers, since the Node.js builtin set they
 # enable is only compiled in the `p2` path.
