@@ -2,28 +2,28 @@
 
 | Workload | Node 22.14 baseline | P2 | P3 | Evidence |
 |---|---:|---:|---:|---|
-| cold `tsc --noEmit` | 0.53 s | 15.86 s | 15.83 s | wall time |
-| repeated unchanged non-incremental checks | — | 15.58 s | 15.62 s | median, no `.tsbuildinfo`, 5 fresh jobs |
-| incremental `.tsbuildinfo` checks | — | 19.22 s | 19.17 s | warm median, persisted artifact, 5 fresh jobs |
-| repeated invalid checks then recovery | — | 21.36 s | 22.25 s | warm incremental failure median, one changed file per iteration, then recovery |
-| project references/package graph | — | 23.27 s | 26.82 s | wall time, raw workspace fixture |
-| direct TypeScript execution | n/a | 0.238 s | 0.255 s | structured result and wall time |
-| TypeScript emit | n/a | 22.47 s | 23.07 s | emits the direct fixture to JavaScript; wall time |
-| generated JavaScript execution | n/a | 0.234 s | 0.248 s | structured result and wall time |
-| concurrent compiler/CPU/I/O jobs | n/a | 14.09 s | 14.48 s | warm incremental compiler plus CPU/I/O; isolated baselines in raw reports |
-| repeated timeout then recovery | n/a | 0.236 s | 0.261 s | termination median, five attempts followed by a successful job |
-| repeated cancellation then recovery | n/a | 0.253 s | 0.246 s | termination median, five attempts followed by a successful job |
+| cold `tsc --noEmit` | 0.58 s | 17.17 s | 16.03 s | wall time |
+| repeated unchanged non-incremental checks | — | 16.03 s | 15.49 s | median, no `.tsbuildinfo`, 5 fresh jobs |
+| incremental `.tsbuildinfo` checks | — | 9.73 s | 9.20 s | warm median, persisted artifact, 5 fresh jobs |
+| repeated invalid checks then recovery | — | 9.80 s | 9.19 s | warm incremental failure median, one changed file per iteration, then recovery |
+| project references/package graph | — | 16.32 s | 15.93 s | wall time, raw workspace fixture |
+| direct TypeScript execution | n/a | 0.200 s | 0.182 s | structured result and wall time |
+| TypeScript emit | n/a | 15.94 s | 15.51 s | emits the direct fixture to JavaScript; wall time |
+| generated JavaScript execution | n/a | 0.187 s | 0.184 s | structured result and wall time |
+| concurrent compiler/CPU/I/O jobs | n/a | 10.04 s | 9.80 s | warm incremental compiler plus CPU/I/O; isolated baselines in raw reports |
+| repeated timeout then recovery | n/a | 0.194 s | 0.191 s | termination median, five attempts followed by a successful job |
+| repeated cancellation then recovery | n/a | 0.189 s | 0.185 s | termination median, five attempts followed by a successful job |
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
-| phase-attributed core check | 0.63–0.64 s | 20.42 s | 20.38 s | instrumented wall time; measured compiler phases account for 19.83 s / 19.79 s |
+| phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.55 s / 19.95 s |
 
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
 fix is proposed.
 
-Baseline: 2026-09-04, Apple arm64, Node 22.14.0/npm 10.9.2/TypeScript
+Baseline: 2026-09-07, Apple arm64, Node 22.14.0/npm 10.9.2/TypeScript
 5.8.2, five repeated samples, caches disabled. The full reports are
-`results/2026-09-04-p2-macos-aarch64.json` and
-`results/2026-09-04-p3-macos-aarch64.json`. Node comparison currently covers the
+`results/2026-09-07-p2-macos-aarch64.json` and
+`results/2026-09-07-p3-macos-aarch64.json`. Node comparison currently covers the
 same cold core-project `--noEmit` command; cells marked `—` were not separately
 benchmarked on Node in this first report. These reports use dev-profile guest
 components and mirror the canonical runtime profiles: P2 with Golem's Wasmtime

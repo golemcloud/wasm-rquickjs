@@ -16,7 +16,7 @@ the WASI preview level or to the Wasmtime distribution.
 Do not compare reports produced with different prepared-component, Wasmtime,
 artifact-cache, or unoptimized settings without calling out those differences.
 
-The checked-in 2026-09-04 macOS arm64 P2/P3 reports are the five-sample
+The checked-in 2026-09-07 macOS arm64 P2/P3 reports are the five-sample
 schema-v5 baseline for GOL-347. Each report records a commit
 hint, dirty state, BLAKE3 composite hashes for build and benchmark inputs, and
 the exact optimized component hash.
@@ -58,7 +58,7 @@ checked-in reports.
 
 ## GOL-347 compiler profile and mitigation
 
-The 2026-09-04 schema-v5 reports add a shared TypeScript compiler-API profile
+The 2026-09-07 schema-v5 reports add a shared TypeScript compiler-API profile
 and feature-gated execution-job phase/counter summaries. The accepted bounded
 mitigation replaces the default path-based `readFileSync` open/stat/8 KiB read
 loop with one private native whole-file read, while file-descriptor operands and
@@ -72,13 +72,13 @@ differently ordered schema-v4 reports. QuickJS jobs are fresh, but the component
 and mounted workspace are reused and generated filesystem artifacts persist.
 
 The current reports record 68 whole-file reads for 10,961,854 bytes. The
-remaining controlled P2/P3 work is approximately 7.44/7.42 s importing
-TypeScript, 4.82/4.82 s creating the program, and 7.55/7.54 s computing
+remaining controlled P2/P3 work is approximately 7.52/7.44 s importing
+TypeScript, 4.97/4.88 s creating the program, and 8.07/7.63 s computing
 diagnostics. Runtime creation, loader setup, process setup, transport wiring,
 and wrapper preparation together remain under 5 ms.
 
-The reports also record 157,680,677-byte P2 and 155,016,474-byte P3 optimized
-components, 35.29/34.62 s builds, and 20.99/21.10 s preparation plus
+The reports also record 157,965,864-byte P2 and 155,255,439-byte P3 optimized
+components, 37.75/29.98 s builds, and 16.67/14.86 s preparation plus
 instantiation. These are per-component costs rather than the owner of repeated
 fresh-job compiler latency. Repeated jobs show zero within-series variation in
 the monotone linear-memory high-water mark and at most 8,744 bytes of terminal
