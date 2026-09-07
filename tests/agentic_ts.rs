@@ -39,12 +39,10 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let build_started = Instant::now();
-    let compiled = CompiledTest::new_with_features(
-        Utf8Path::new(EXAMPLE_DIR),
-        true,
-        FeatureCombination::TypeScriptCompilerProfiling,
-    )
-    .await?;
+    let feature_combination = FeatureCombination::TypeScriptCompilerProfiling;
+    let compiled =
+        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, feature_combination)
+            .await?;
     let build_elapsed = build_started.elapsed();
     let component_size = fs::metadata(compiled.wasm_path())?.len();
 
@@ -181,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
             "schema": "cjs-graph-smoke-v1",
             "target": format!("{:?}", test_target()).to_lowercase(),
             "iterations": iterations,
+            "environment": environment(iterations, feature_combination.label())?,
             "inputs": {
                 "algorithm": INPUT_HASH_ALGORITHM,
                 "buildHash": input_hashes.build,
@@ -396,7 +395,7 @@ async fn main() -> anyhow::Result<()> {
         ],
     )?;
 
-    let environment = environment(iterations)?;
+    let environment = environment(iterations, feature_combination.label())?;
     let input_hashes = input_hashes()?;
     let report = json!({
         "schemaVersion": 5,
@@ -474,6 +473,7 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
         Some(input_hashes()?)
     };
     let mut reports = BTreeMap::new();
+    let mut cjs_graph_reports = BTreeMap::new();
     for entry in fs::read_dir(&directory)? {
         let path = camino::Utf8PathBuf::from_path_buf(entry?.path())
             .map_err(|path| anyhow::anyhow!("non-UTF-8 report path: {}", path.display()))?;
@@ -485,9 +485,16 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             .ok_or_else(|| anyhow::anyhow!("report has no filename: {path}"))?
             .to_string();
         let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
-        validate_report_metadata(&path, &report)?;
-        validate_report(&report)?;
-        validate_regression_guards(&report)?;
+        let is_cjs_graph = report["schema"] == "cjs-graph-smoke-v1";
+        if is_cjs_graph {
+            validate_cjs_graph_report_metadata(&path, &report)?;
+            validate_cjs_graph_report(&report)?;
+            validate_cjs_graph_regression_guards(&report)?;
+        } else {
+            validate_report_metadata(&path, &report)?;
+            validate_report(&report)?;
+            validate_regression_guards(&report)?;
+        }
         let check_current = reports_to_check.remove(&path);
         if check_current {
             validate_current_inputs(&path, &report, current_input_hashes.as_ref().unwrap())?;
@@ -496,7 +503,11 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             tracker.contains(&filename) || (allow_untracked_reports && check_current),
             "TRACKER.md does not reference {filename}"
         );
-        reports.insert(filename, report);
+        if is_cjs_graph {
+            cjs_graph_reports.insert(filename, report);
+        } else {
+            reports.insert(filename, report);
+        }
     }
     anyhow::ensure!(!reports.is_empty(), "no checked-in reports found");
     anyhow::ensure!(
@@ -525,6 +536,27 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
     anyhow::ensure!(
         paired == reports.len(),
         "every checked-in report must belong to a P2/P3 pair"
+    );
+
+    anyhow::ensure!(
+        !cjs_graph_reports.is_empty(),
+        "checked reports must include the GOL-350 CommonJS graph P2/P3 evidence"
+    );
+    let mut paired_cjs_graphs = 0;
+    for (filename, p2) in cjs_graph_reports
+        .iter()
+        .filter(|(filename, _)| filename.contains("-p2-"))
+    {
+        let p3_filename = filename.replacen("-p2-", "-p3-", 1);
+        let p3 = cjs_graph_reports
+            .get(&p3_filename)
+            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        validate_cjs_graph_report_pair(filename, &p3_filename, p2, p3)?;
+        paired_cjs_graphs += 2;
+    }
+    anyhow::ensure!(
+        paired_cjs_graphs == cjs_graph_reports.len(),
+        "every checked-in CommonJS graph report must belong to a P2/P3 pair"
     );
     Ok(())
 }
@@ -557,6 +589,119 @@ fn validate_report_pair(
     anyhow::ensure!(
         p2.pointer("/component/blake3") != p3.pointer("/component/blake3"),
         "paired reports {p2_filename} and {p3_filename} use the same component digest"
+    );
+    Ok(())
+}
+
+fn validate_cjs_graph_report_pair(
+    p2_filename: &str,
+    p3_filename: &str,
+    p2: &Value,
+    p3: &Value,
+) -> anyhow::Result<()> {
+    validate_report_pair(p2_filename, p3_filename, p2, p3)?;
+    for field in [
+        "/schema",
+        "/iterations",
+        "/fixture/packageJsonBlake3",
+        "/fixture/packageLockBlake3",
+        "/fixture/entryBlake3",
+    ] {
+        anyhow::ensure!(
+            p2.pointer(field) == p3.pointer(field),
+            "paired CommonJS graph reports {p2_filename} and {p3_filename} disagree at {field}"
+        );
+    }
+    Ok(())
+}
+
+fn validate_cjs_graph_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["schema"] == "cjs-graph-smoke-v1",
+        "{path} uses an unsupported CommonJS graph schema"
+    );
+    anyhow::ensure!(
+        report["environment"]["node"] == "22.14.0"
+            && report["environment"]["npm"] == "10.9.2"
+            && report["environment"]["typescript"] == "5.8.2"
+            && report["environment"]["componentFeatures"] == "typescript-compiler-profiling"
+            && report["environment"]["iterations"] == report["iterations"]
+            && report["iterations"].as_u64().unwrap_or(0) >= 5,
+        "{path} does not use the pinned CommonJS graph settings"
+    );
+    let target = report["target"]
+        .as_str()
+        .filter(|target| matches!(*target, "p2" | "p3"))
+        .ok_or_else(|| anyhow::anyhow!("{path} has no supported target"))?;
+    let os = report["environment"]["os"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no OS"))?;
+    let arch = report["environment"]["arch"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no architecture"))?;
+    let filename = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no filename"))?;
+    anyhow::ensure!(
+        filename.ends_with(&format!("-gol-350-cjs-{target}-{os}-{arch}.json")),
+        "{path} filename does not match its workload, target, and host metadata"
+    );
+    anyhow::ensure!(
+        report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
+            && is_blake3_hash(&report["inputs"]["buildHash"])
+            && is_blake3_hash(&report["inputs"]["benchmarkHash"])
+            && is_blake3_hash(&report["fixture"]["packageJsonBlake3"])
+            && is_blake3_hash(&report["fixture"]["packageLockBlake3"])
+            && is_blake3_hash(&report["fixture"]["entryBlake3"])
+            && is_blake3_hash(&report["component"]["blake3"])
+            && report["environment"]["commitHint"]
+                .as_str()
+                .is_some_and(|commit| !commit.is_empty())
+            && report["environment"]["dirty"] == false,
+        "{path} has incomplete or dirty CommonJS graph provenance"
+    );
+    Ok(())
+}
+
+fn validate_cjs_graph_report(report: &Value) -> anyhow::Result<()> {
+    let iterations = report["iterations"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no iteration count"))?;
+    let samples = report["commonJsGraph"]["samples"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no samples"))?;
+    anyhow::ensure!(
+        report["commonJsGraph"]["iterations"] == iterations && samples.len() as u64 == iterations,
+        "CommonJS graph summary does not contain every requested sample"
+    );
+    for sample in samples {
+        anyhow::ensure!(
+            successful_result(&sample["result"])
+                && sample.pointer("/result/value")
+                    == Some(&json!(
+                        "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
+                    )),
+            "checked CommonJS graph sample failed: {sample:#}"
+        );
+        validate_module_resolution_counters(sample, true)?;
+    }
+    Ok(())
+}
+
+fn validate_cjs_graph_regression_guards(report: &Value) -> anyhow::Result<()> {
+    let mut missing_session_hits = report.clone();
+    missing_session_hits["commonJsGraph"]["samples"][0]["result"]["profile"]["counters"]["modules.pathProbe.sessionHits"] =
+        json!(0);
+    anyhow::ensure!(
+        validate_cjs_graph_report(&missing_session_hits).is_err(),
+        "CommonJS graph validation accepted a sample without reconciled session hits"
+    );
+
+    let mut failed_sample = report.clone();
+    failed_sample["commonJsGraph"]["samples"][0]["result"]["value"] = json!("FAIL");
+    anyhow::ensure!(
+        validate_cjs_graph_report(&failed_sample).is_err(),
+        "CommonJS graph validation accepted a failed workload"
     );
     Ok(())
 }
@@ -1146,7 +1291,7 @@ fn prepare_cjs_graph(instance: &TestInstance) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn environment(iterations: usize) -> anyhow::Result<Value> {
+fn environment(iterations: usize, component_features: &str) -> anyhow::Result<Value> {
     let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
     let dirty = !command_text(Command::new("git").args([
         "-C",
@@ -1168,7 +1313,7 @@ fn environment(iterations: usize) -> anyhow::Result<Value> {
         "node": command_text(Command::new("node").args(["-p", "process.versions.node"]))?,
         "npm": command_text(Command::new("npm").arg("--version"))?,
         "typescript": command_text(Command::new("node").args(["-p", "require('./tests/agentic_ts/node_modules/typescript/package.json').version"]))?,
-        "componentFeatures": "typescript-compiler-profiling",
+        "componentFeatures": component_features,
         "iterations": iterations,
         "artifactCache": std::env::var("WASM_RQUICKJS_TEST_ARTIFACT_CACHE").ok(),
         "wasmtimeCache": std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").ok(),
@@ -1492,7 +1637,11 @@ fn validate_module_resolution_counters(
     let mut local_hits = 0;
     let mut session_hits = 0;
 
-    for prefix in ["modules.fileProbe", "modules.directoryProbe"] {
+    for prefix in [
+        "modules.fileProbe",
+        "modules.directoryProbe",
+        "modules.classificationProbe",
+    ] {
         let calls = profile_counter(counters, &format!("{prefix}.calls"));
         let found = profile_counter(counters, &format!("{prefix}.found"));
         let missing = profile_counter(counters, &format!("{prefix}.missing"));

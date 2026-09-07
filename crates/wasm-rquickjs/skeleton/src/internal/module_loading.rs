@@ -3901,7 +3901,7 @@ impl Resolver for NodeFileResolver {
         };
 
         let normalized = CjsEvalResolver::normalize_path(&candidate);
-        if std::path::Path::new(&normalized).is_dir() {
+        if Self::module_resolution_is_dir(ctx, &normalized) {
             discard_import_type_rewrite_token(name);
             return Self::throw_module_resolution_error(
                 ctx,
@@ -4120,9 +4120,13 @@ struct CjsModuleProbeSessionState {
 
 /// Positive filesystem classifications shared while an outer CommonJS wrapper runs.
 ///
-/// The cache never retains missing observations, is cleared after the outer CommonJS
-/// graph, and is invalidated by successful runtime filesystem mutations. Keeping this
-/// state in RuntimeServices also prevents sibling QuickJS runtimes from sharing probes.
+/// Node's internal `Module._stat` cache retains positive observations during an
+/// outer main-module compile. This runtime also brackets an outer `createRequire()`
+/// graph so real ESM-to-CJS package workloads benefit, but deliberately invalidates
+/// observations after filesystem mutations instead of exposing Node's stale result.
+/// Missing observations are never retained, and sibling QuickJS runtimes never share
+/// this RuntimeServices-owned state. Rust depth keeps the private runner reentrant;
+/// the normal JS adapter crosses the bridge only at its own outermost depth.
 #[derive(Clone, Default)]
 pub(crate) struct CjsModuleProbeSession(Rc<RefCell<CjsModuleProbeSessionState>>);
 
@@ -4196,6 +4200,7 @@ impl CjsModuleProbeSession {
 enum ModulePathProbeKind {
     File,
     Directory,
+    Classification,
 }
 
 impl ModulePathProbeKind {
@@ -4204,6 +4209,7 @@ impl ModulePathProbeKind {
         match self {
             Self::File => "modules.fileProbe",
             Self::Directory => "modules.directoryProbe",
+            Self::Classification => "modules.classificationProbe",
         }
     }
 
@@ -4212,23 +4218,24 @@ impl ModulePathProbeKind {
             (self, classification),
             (Self::File, Some(ModulePathClassification::File))
                 | (Self::Directory, Some(ModulePathClassification::Directory))
+                | (Self::Classification, Some(_))
         )
     }
 }
 
-fn module_resolution_path_matches(
+fn module_resolution_path_probe(
     session: &CjsModuleProbeSession,
     #[cfg(feature = "typescript-compiler-profiling")] profile: Option<
         &crate::internal::runtime_services::ExecutionProfile,
     >,
     normalized: &str,
     kind: ModulePathProbeKind,
-) -> bool {
+) -> ModulePathProbe {
     let probe = session.probe(normalized);
-    let found = kind.matches(probe.classification);
 
     #[cfg(feature = "typescript-compiler-profiling")]
     if let Some(profile) = profile {
+        let found = kind.matches(probe.classification);
         let prefix = kind.counter_prefix();
         profile.increment(&format!("{prefix}.calls"));
         profile.increment(&format!(
@@ -4249,7 +4256,49 @@ fn module_resolution_path_matches(
         }
     }
 
-    found
+    probe
+}
+
+fn module_resolution_path_matches(
+    session: &CjsModuleProbeSession,
+    #[cfg(feature = "typescript-compiler-profiling")] profile: Option<
+        &crate::internal::runtime_services::ExecutionProfile,
+    >,
+    normalized: &str,
+    kind: ModulePathProbeKind,
+) -> bool {
+    kind.matches(
+        module_resolution_path_probe(
+            session,
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile,
+            normalized,
+            kind,
+        )
+        .classification,
+    )
+}
+
+fn cjs_module_path_stat(ctx: Ctx<'_>, filename: String) -> i32 {
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    let Ok(resolved) = services.process.resolve_path(std::path::Path::new(&filename)) else {
+        return -2;
+    };
+    let normalized = resolved.to_string_lossy();
+    let probe = module_resolution_path_probe(
+        &services.cjs_module_probe_session,
+        #[cfg(feature = "typescript-compiler-profiling")]
+        services.execution_profile().as_deref(),
+        &normalized,
+        ModulePathProbeKind::Classification,
+    );
+    match probe.classification {
+        Some(ModulePathClassification::File) => 0,
+        Some(ModulePathClassification::Directory) => 1,
+        None => -2,
+    }
 }
 
 fn with_cjs_module_probe_session<'js>(
@@ -4563,7 +4612,7 @@ impl NodeModulesResolver {
                 && dir.file_name().is_some_and(|name| name == "node_modules");
             if !skip_nested_node_modules {
                 let package_path = dir.join("node_modules").join(package_name);
-                if package_path.is_dir()
+                if resolution.is_dir(&package_path)
                     && let Some(resolved) = Self::try_resolve_package_directory(
                         base,
                         name,
@@ -5334,7 +5383,7 @@ impl NodeModulesResolver {
             return Some(resolved);
         }
 
-        if !target_path.is_dir() {
+        if !resolution.is_dir(target_path) {
             return None;
         }
 
@@ -6666,7 +6715,7 @@ fn import_meta_trailing_slash_package_has_exports(
     package_name: &str,
 ) -> Result<bool, NodePackageResolveError> {
     let mut warnings = Vec::new();
-    let resolution = NodePackageResolutionContext::new(
+    let mut resolution = NodePackageResolutionContext::new(
         ctx,
         NodePackageResolveMode::EsmImport,
         &[],
@@ -6702,7 +6751,7 @@ fn import_meta_trailing_slash_package_has_exports(
     let mut dir = base_dir.to_path_buf();
     loop {
         let package_path = dir.join("node_modules").join(package_name);
-        if package_path.is_dir() {
+        if resolution.is_dir(&package_path) {
             let pkg_path = package_path.join("package.json");
             return NodeModulesResolver::read_package_json_optional_with_context(
                 &pkg_path,
@@ -11476,6 +11525,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create scoped CJS module probe-session runner"),
         )
         .expect("Failed to initialize scoped CJS module probe-session runner");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_cjs_module_path_stat",
+            Function::new(ctx.clone(), cjs_module_path_stat)
+                .expect("Failed to create CJS module path classifier"),
+        )
+        .expect("Failed to initialize CJS module path classifier");
 
         set_non_replaceable_global(
             &global,

@@ -38,6 +38,11 @@ loop with one private native whole-file read, while file-descriptor operands and
 custom flags retain the existing path.
 The reports record the `typescript-compiler-profiling` component feature, and
 the canonical cold CLI workload runs before the in-component profiling sidecar.
+Only that cold Node row executes the same command and is directly comparable.
+Later schema-v5 P2/P3 workloads include profiling instrumentation, run after the
+sidecar in a fixed order, and are not absolute comparisons with Node or the
+differently ordered schema-v4 reports. QuickJS jobs are fresh, but the component
+and mounted workspace are reused and generated filesystem artifacts persist.
 
 The current reports record 68 whole-file reads for 10,961,854 bytes. The
 remaining controlled P2/P3 work is approximately 7.44/7.42 s importing
@@ -48,9 +53,12 @@ and wrapper preparation together remain under 5 ms.
 The reports also record 157,680,677-byte P2 and 155,016,474-byte P3 optimized
 components, 35.29/34.62 s builds, and 20.99/21.10 s preparation plus
 instantiation. These are per-component costs rather than the owner of repeated
-fresh-job compiler latency. Repeated jobs retain zero linear-memory high-water
-growth, at most 8,744 bytes of observed QuickJS heap variation, and successful
-recovery after every timeout and cancellation series.
+fresh-job compiler latency. Repeated jobs show zero within-series variation in
+the monotone linear-memory high-water mark and at most 8,744 bytes of terminal
+live-heap spread, plus successful recovery after every timeout and cancellation
+series. The linear plateau sits below the higher peak already reserved by the
+profiling sidecar; neither observation measures retained memory or proves leak
+absence.
 
 Follow-up disposition from the measured counters:
 

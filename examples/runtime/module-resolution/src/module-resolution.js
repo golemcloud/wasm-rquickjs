@@ -6409,6 +6409,9 @@ export const testCjsPackageJsonParseCache = async () => {
         fs.mkdirSync(`${probeRoot}/node_modules/late-pkg`, { recursive: true });
         fs.writeFileSync(`${probeRoot}/target.js`, 'module.exports = true;');
         fs.writeFileSync(`${probeRoot}/nested-target.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/rename-target.js`, 'module.exports = true;');
+        fs.mkdirSync(`${probeRoot}/recursive-target`, { recursive: true });
+        fs.writeFileSync(`${probeRoot}/recursive-target/child.js`, 'module.exports = true;');
         fs.writeFileSync(`${probeRoot}/nested-child.cjs`, [
             'const fs = require("fs");',
             'const Module = require("module");',
@@ -6445,6 +6448,15 @@ export const testCjsPackageJsonParseCache = async () => {
             '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/entry.js", "module.exports = true;");',
             '  Module._pathCache = Object.create(null);',
             '  assert.strictEqual(require.resolve("late-pkg"), "/cjs-probe-session-app/node_modules/late-pkg/entry.js");',
+            '  require.resolve("./rename-target");',
+            '  fs.renameSync("/cjs-probe-session-app/rename-target.js", "/cjs-probe-session-app/renamed-target.js");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("./rename-target"), { code: "MODULE_NOT_FOUND" });',
+            '  assert.strictEqual(require.resolve("./renamed-target"), "/cjs-probe-session-app/renamed-target.js");',
+            '  require.resolve("./recursive-target/child");',
+            '  fs.rmSync("/cjs-probe-session-app/recursive-target", { recursive: true });',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("./recursive-target/child"), { code: "MODULE_NOT_FOUND" });',
             '} finally {',
             '  Module._pathCache = originalPathCache;',
             '  process.execArgv = originalExecArgv;',
@@ -6453,6 +6465,15 @@ export const testCjsPackageJsonParseCache = async () => {
         ].join('\n'));
         assert.strictEqual(probeRequire(`${probeRoot}/session.cjs`), true);
         const moduleBuiltin = probeRequire('module');
+        const originalCwd = process.cwd();
+        try {
+            process.chdir(probeRoot);
+            assert.strictEqual(moduleBuiltin._stat('.'), 1);
+            assert.strictEqual(moduleBuiltin._stat('..'), 1);
+            assert.strictEqual(moduleBuiltin._stat('renamed-target.js'), 0);
+        } finally {
+            process.chdir(originalCwd);
+        }
         const originalPathCache = moduleBuiltin._pathCache;
         try {
             moduleBuiltin._pathCache = Object.create(null);

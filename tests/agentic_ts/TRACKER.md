@@ -13,7 +13,7 @@
 | concurrent compiler/CPU/I/O jobs | n/a | 14.09 s | 14.48 s | warm incremental compiler plus CPU/I/O; isolated baselines in raw reports |
 | repeated timeout then recovery | n/a | 0.236 s | 0.261 s | termination median, five attempts followed by a successful job |
 | repeated cancellation then recovery | n/a | 0.253 s | 0.246 s | termination median, five attempts followed by a successful job |
-| repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | max linear growth / max fresh-runtime heap variation |
+| repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
 | phase-attributed core check | 0.63–0.64 s | 20.42 s | 20.38 s | instrumented wall time; measured compiler phases account for 19.83 s / 19.79 s |
 
 Update this tracker from a dated report only. Stable runtime defects belong in
@@ -32,6 +32,16 @@ baseline; comparing them does not isolate the preview level or Wasmtime
 distribution. Schema-v5 rows use the recorded
 `typescript-compiler-profiling` component feature, and the cold CLI workload
 runs before the in-component profiler sidecar.
+
+Only the cold Node row runs the same command and is directly comparable. The
+schema-v5 P2/P3 values include profiling instrumentation and are not absolute
+comparisons with Node or the differently ordered schema-v4 reports. Workloads
+run in the fixed report order inside one reused component and mounted workspace:
+each QuickJS execution job is fresh, while generated filesystem artifacts
+intentionally persist. The zero repeated-job linear-memory variation is a
+within-series plateau below the monotone instance high-water mark already
+reserved by the profiling sidecar; together with terminal live-heap spread it
+does not measure retained memory or prove leak absence.
 
 The preceding schema-v4 baseline remains available as
 `results/2026-08-27-p2-macos-aarch64.json` and

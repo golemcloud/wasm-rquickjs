@@ -67,8 +67,8 @@ input hashes:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
-  tests/agentic_ts/results/2026-08-27-p2-macos-aarch64.json \
-  tests/agentic_ts/results/2026-08-27-p3-macos-aarch64.json
+  tests/agentic_ts/results/2026-09-04-p2-macos-aarch64.json \
+  tests/agentic_ts/results/2026-09-04-p3-macos-aarch64.json
 ```
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
