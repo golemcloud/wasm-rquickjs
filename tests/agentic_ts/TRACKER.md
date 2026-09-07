@@ -50,7 +50,7 @@ The preceding schema-v4 baseline remains available as
 The exact-source GOL-350 CommonJS graph evidence is recorded in
 `results/2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
 `results/2026-09-07-gol-350-cjs-p3-macos-aarch64.json`. Both targets used clean
-commit `d685b24549d58bf27701a71d8cda2c948f395dbf`; every one of the five fresh Ajv
+commit `4f5c99a790c67cb3fc71f2cd1d0d8d546b434493`; every one of the five fresh Ajv
 samples recorded 428 logical classifications as 322 physical metadata calls,
 70 outer-session hits, and 36 invocation-local hits. The outer session therefore
 avoided 70 of the 392 physical probes inferred without it (17.9%): 50 file probes

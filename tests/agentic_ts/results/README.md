@@ -34,7 +34,7 @@ descriptive evidence rather than a stable tail-latency estimate.
 The dated `2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
 `2026-09-07-gol-350-cjs-p3-macos-aarch64.json` reports capture five fresh Ajv
 CommonJS executions from clean commit
-`d685b24549d58bf27701a71d8cda2c948f395dbf`. They share identical build,
+`4f5c99a790c67cb3fc71f2cd1d0d8d546b434493`. They share identical build,
 benchmark, fixture, and toolchain fingerprints while retaining distinct P2/P3
 component hashes.
 
