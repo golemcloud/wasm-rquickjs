@@ -1064,10 +1064,11 @@ impl<B: HttpBody> TracedHttpBody<B> {
         side: &'static str,
         server_connection: Option<Arc<HttpConnectionState>>,
     ) -> Self {
+        let is_end_stream = inner.is_end_stream();
         let expected_body_bytes = (side == "server-response")
             .then(|| inner.size_hint().exact())
             .flatten();
-        let body = Self {
+        let mut body = Self {
             inner: Box::pin(inner),
             trace,
             request,
@@ -1095,6 +1096,9 @@ impl<B: HttpBody> TracedHttpBody<B> {
                     0,
                 );
             }
+        }
+        if is_end_stream {
+            body.record_terminal("eof");
         }
         body
     }
@@ -2045,12 +2049,38 @@ mod tests {
     }
 
     #[test]
-    fn http_lifecycle_empty_body_drop_is_terminal() {
+    fn http_lifecycle_empty_bodies_record_eof_without_polling() {
         let trace = HttpLifecycleTrace::new();
-        let body = http_body_util::Empty::<bytes::Bytes>::new();
-        drop(TracedHttpBody::new(body, trace.clone(), 1, "request", None));
+        for (request, side) in [(1, "request"), (2, "response"), (3, "server-request")] {
+            drop(TracedHttpBody::new(
+                http_body_util::Empty::<bytes::Bytes>::new(),
+                trace.clone(),
+                request,
+                side,
+                None,
+            ));
+        }
+
+        let server_connection = TracedTestServerConnection {
+            state: Arc::new(HttpConnectionState::new(trace.clone(), 17)),
+        };
+        record_test_server_connection(4, Some(&server_connection));
+        drop(TracedHttpBody::new(
+            http_body_util::Empty::<bytes::Bytes>::new(),
+            trace.clone(),
+            4,
+            "server-response",
+            Some(server_connection.state),
+        ));
 
         let snapshot = trace.snapshot();
+        assert!(snapshot.contains("request=1 phase=request-eof"));
+        assert!(snapshot.contains("request=2 phase=response-eof"));
+        assert!(snapshot.contains("request=3 phase=server-request-eof"));
+        assert!(snapshot.contains("request=4 phase=server-response-eof"));
+        assert!(snapshot.contains("request=4 phase=server-request-connection detail=17"));
+        assert!(snapshot.contains("request=4 phase=server-response-body-expected-bytes detail=0"));
+        assert!(snapshot.contains("request=4 phase=server-response-body-polled-bytes detail=0"));
         assert!(!snapshot.contains("drop-before-terminal"));
     }
 
