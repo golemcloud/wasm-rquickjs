@@ -2563,10 +2563,9 @@ impl TcpListener {
             futures::pin_mut!(accept_fut);
             match futures::future::select(accept_fut, &mut cancel_rx).await {
                 Either::Left((accepted, _)) => accepted,
-                Either::Right((_, accept_fut)) => {
-                    // Cancelled by `close()`. Dropping the in-flight stream read
-                    // and the keepalive `Rc` releases the listener socket.
-                    drop(accept_fut);
+                Either::Right(_) => {
+                    // Returning drops the in-flight stream read and the keepalive
+                    // `Rc`, releasing the listener socket after `close()`.
                     return Err(throw_socket_error(
                         &ctx,
                         "EBADF",

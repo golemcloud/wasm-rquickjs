@@ -203,6 +203,9 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnectionWithStore<Host
             ws_mock_p3::golem::websocket::client::Error,
         >,
     > {
+        // Keep the host import pending for one turn so receive/close ownership and
+        // cancellation paths are exercised instead of always completing inline.
+        tokio::task::yield_now().await;
         Ok(Err(ws_mock_p3::golem::websocket::client::Error::Closed(
             None,
         )))
