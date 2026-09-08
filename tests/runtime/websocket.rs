@@ -86,3 +86,15 @@ async fn websocket_send_snapshot_and_close_order(
     )
     .await
 }
+
+#[test]
+async fn websocket_receive_close_reentrancy(
+    #[tagged_as("websocket")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    run_and_assert_frames(
+        compiled,
+        "test-receive-close-reentrancy",
+        vec![WsSentMessage::Close(None, None)],
+    )
+    .await
+}
