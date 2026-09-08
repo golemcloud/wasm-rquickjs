@@ -39,6 +39,7 @@ world module-resolution {
   export test-require-esm-error-handling: func() -> bool;
   export test-require-esm-tla-retry: func() -> bool;
   export test-require-esm-rejection-tracking: func() -> bool;
+  export test-unhandled-rejection-turn-ordering: func() -> bool;
   export test-require-esm-cycle-guards: func() -> bool;
   export test-cjs-esm-default-snapshot-timing: func() -> bool;
   export test-esm-symlink-module-identity: func() -> bool;

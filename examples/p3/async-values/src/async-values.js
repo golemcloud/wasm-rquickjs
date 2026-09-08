@@ -9,6 +9,23 @@ export async function runFuture() {
   return 42;
 }
 
+const checkpointReason = new Error('raw future checkpoint');
+let checkpointCount = 0;
+process.on('unhandledRejection', (reason) => {
+  if (reason === checkpointReason) checkpointCount += 1;
+});
+
+// The unrelated rejection must be reported at the raw future export boundary,
+// before the host can make its next call into JavaScript.
+export async function runCheckpointFuture() {
+  Promise.reject(checkpointReason);
+  return 7;
+}
+
+export function readCheckpointCount() {
+  return checkpointCount;
+}
+
 // Returns a component `stream<u8>` to the host. Returning an async-iterable (here an async
 // generator) drives the component stream one item at a time.
 export async function runStream() {
@@ -53,8 +70,19 @@ class StreamingConstructor {
   }
 }
 
+class DeferredStreamingConstructor {
+  constructor() {
+    // The constructor itself returns synchronously. The end-of-turn checkpoint must still notice
+    // that its microtask creates a component stream writer and reject the synchronous operation.
+    Promise.resolve().then(() => {
+      this.wrapped = WrappedStream.wrap(Array.from({ length: 64 }, (_, index) => index));
+    });
+  }
+}
+
 export const constructorApi = {
   StreamingConstructor,
+  DeferredStreamingConstructor,
 };
 
 // Returns future/stream readers nested in a record. The wrapper must return the record to the host

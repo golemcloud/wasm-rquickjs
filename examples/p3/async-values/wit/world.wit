@@ -28,6 +28,10 @@ interface constructor-api {
   resource streaming-constructor {
     constructor();
   }
+
+  resource deferred-streaming-constructor {
+    constructor();
+  }
 }
 
 world async-values {
@@ -37,6 +41,8 @@ world async-values {
   export constructor-api;
 
   export run-future: async func() -> future<u32>;
+  export run-checkpoint-future: async func() -> future<u32>;
+  export read-checkpoint-count: async func() -> u32;
   export run-stream: async func() -> stream<u8>;
   export run-sibling-streams: async func() -> tuple<stream<u8>, stream<u8>>;
   export run-wrapped-sibling-streams: async func() -> tuple<wrapped-stream, wrapped-stream>;

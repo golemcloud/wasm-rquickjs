@@ -98,6 +98,7 @@ export async function run() {
     });
     return JSON.stringify({
         processFeature: process.features.typescript,
+        transformObservability: typeof globalThis.__wasm_rquickjs_get_typescript_module_transform_count,
         transformedModule,
         executionEntry: executionEntry.value,
         commonJsExecutionEntry: commonJsExecutionEntry.value,

@@ -13,6 +13,7 @@ interface api {
     increment: func(by: u32) -> u32;
     get: func() -> u32;
     %static-zero: static func() -> u32;
+    checkpoint-count: static func() -> u32;
     increment-async: async func(by: u32) -> u32;
   }
 }

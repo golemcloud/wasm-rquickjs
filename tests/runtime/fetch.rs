@@ -1,5 +1,10 @@
-use crate::common::test_server::{start_abort_test_server, start_test_server};
-use crate::common::{CompiledTest, TestTarget, invoke_and_capture_output, test_target};
+use crate::common::test_server::{
+    ResponseBodyServerEvent, start_abort_test_server, start_response_body_abort_test_server,
+    start_test_server,
+};
+use crate::common::{
+    CompiledTest, FeatureCombination, TestTarget, invoke_and_capture_output, test_target,
+};
 use camino::Utf8Path;
 
 use test_r::{test, test_dep};
@@ -13,6 +18,14 @@ async fn compiled_fetch() -> CompiledTest {
     CompiledTest::new(path, true)
         .await
         .expect("Failed to compile fetch")
+}
+
+#[test_dep(tagged_as = "fetch_internal", scope = Cloneable)]
+async fn compiled_fetch_internal() -> CompiledTest {
+    let path = Utf8Path::new("examples/runtime/fetch");
+    CompiledTest::new_with_features(path, true, FeatureCombination::InternalTestExecution)
+        .await
+        .expect("Failed to compile fetch with internal test instrumentation")
 }
 
 #[test]
@@ -1014,7 +1027,75 @@ async fn fetch_abort_response_body(
     assert_eq!(
         result?,
         Some(Val::Bool(true)),
-        "response body consumption after abort must reject with AbortError. Output:\n{output}"
+        "response body consumption after abort must reject with the exact abort reason. Output:\n{output}"
     );
+    Ok(())
+}
+
+#[test]
+async fn fetch_abort_pending_response_body(
+    #[tagged_as("fetch_internal")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (port, _server, mut released) = start_response_body_abort_test_server().await;
+    for test_case in 0..21u8 {
+        let wasm_path = compiled.wasm_path().to_path_buf();
+        let mut invocation = tokio::spawn(async move {
+            invoke_and_capture_output(
+                &wasm_path,
+                None,
+                "abort-pending-response-body",
+                &[Val::U16(port), Val::U8(test_case)],
+            )
+            .await
+        });
+        assert_eq!(
+            tokio::time::timeout(ABORT_REQUEST_ARRIVAL_TIMEOUT, released.recv())
+                .await
+                .expect("request did not connect to the pending response fixture")
+                .expect("pending response fixture stopped before accepting the request"),
+            ResponseBodyServerEvent::Connected,
+        );
+        assert_eq!(
+            tokio::time::timeout(ABORT_REQUEST_ARRIVAL_TIMEOUT, released.recv())
+                .await
+                .expect("request did not send headers to the pending response fixture")
+                .expect("pending response fixture stopped before sending the response head"),
+            ResponseBodyServerEvent::HeadSent,
+        );
+        let release = async {
+            assert_eq!(
+                tokio::time::timeout(std::time::Duration::from_secs(5), released.recv())
+                    .await
+                    .unwrap_or_else(|_| panic!(
+                        "server did not observe release for response body case {test_case}"
+                    ))
+                    .expect("response body test server stopped before observing release"),
+                ResponseBodyServerEvent::Released,
+            );
+        };
+        tokio::pin!(release);
+        if matches!(test_case, 6 | 12 | 13 | 14 | 18 | 19) {
+            // These fixtures close their own finite/truncated connection. Their Released event
+            // validates server sequencing, but is not evidence that guest disposal caused release.
+            release.await;
+        } else {
+            tokio::select! {
+                () = &mut release => {}
+                result = &mut invocation => panic!(
+                    "response body case {test_case} completed before releasing its native body: {result:?}"
+                ),
+            }
+        }
+        let (result, output) = tokio::time::timeout(std::time::Duration::from_secs(10), invocation)
+            .await
+            .unwrap_or_else(|_| {
+                panic!("response body case {test_case} kept the invocation alive")
+            })?;
+        assert_eq!(
+            result?,
+            Some(Val::Bool(true)),
+            "response body case {test_case} must satisfy the abort/GC contract. Output:\n{output}"
+        );
+    }
     Ok(())
 }
