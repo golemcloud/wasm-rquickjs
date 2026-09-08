@@ -23,6 +23,37 @@ Run both targets from the repository root:
 tests/agentic_ts/run.sh
 ```
 
+During profiler development, validate only the shared controlled workload and
+the feature-gated execution-job profile with:
+
+```sh
+AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
+AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+```
+
+Measure the identical emitted JavaScript module graph in five fresh execution
+jobs without running the rest of the manual suite with:
+
+```sh
+AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
+AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+```
+
+Set `AGENTIC_TS_MODULE_RESOLUTION_SMOKE_REPORT` to preserve the JSON result for
+an exact-source A/B comparison.
+
+Measure the existing Ajv CommonJS package graph in five fresh paired executions,
+alternating which probe-session variant runs first, with:
+
+```sh
+AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
+AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+```
+
+Set `AGENTIC_TS_CJS_GRAPH_SMOKE_REPORT` to preserve the JSON result. The smoke
+installs the locked fixture into the test's temporary workspace; it does not
+write `node_modules` into the source tree.
+
 Validate every checked-in report's schema, pinned settings, workload outcomes,
 tracker reference, and P2/P3 input-hash pairing without installing Node or
 rerunning the workloads:
@@ -36,8 +67,8 @@ input hashes:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
-  tests/agentic_ts/results/2026-08-27-p2-macos-aarch64.json \
-  tests/agentic_ts/results/2026-08-27-p3-macos-aarch64.json
+  tests/agentic_ts/results/2026-09-07-p2-macos-aarch64.json \
+  tests/agentic_ts/results/2026-09-07-p3-macos-aarch64.json
 ```
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
@@ -55,6 +86,23 @@ Each exported component invocation reuses the component instance and mounted
 workspace. Every TypeScript/compiler operation inside it uses a fresh execution
 job. Therefore QuickJS mutable state is fresh while `.tsbuildinfo`, emitted
 files, and other workspace artifacts intentionally persist.
+
+Schema-v5 reports also run the same `profile-typescript.mjs` program under
+host Node and inside a fresh QuickJS execution job. It separates TypeScript
+module import, configuration loading and parsing, program/graph construction,
+and diagnostics. Per-phase filesystem probe counts, read bytes, source-file
+classification, process memory snapshots, and host-to-job outer overhead make
+the dominant phase visible before an optimization is selected. These are
+instrumented measurements, so compare phase proportions within each target;
+the existing CLI workload remains the compatibility and end-to-end baseline.
+The feature-gated job profile additionally aggregates native module-resolution
+outcomes, file and directory probes, package metadata and module-source reads,
+TypeScript transformations, and `node:fs` read/stat/directory operations. It
+records bounded counters and byte totals rather than paths or event traces.
+The canonical cold CLI workload runs before the in-component sidecar profile,
+so the cold row retains its original ordering. Schema-v5 components use the
+non-default `typescript-compiler-profiling` feature; each report records that
+feature explicitly because the counters add instrumentation overhead.
 
 The Wasmtime host records the highest requested guest linear-memory size
 without limiting growth. With Golem's Wasmtime fork it explicitly excludes

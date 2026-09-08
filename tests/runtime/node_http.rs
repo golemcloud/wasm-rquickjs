@@ -479,6 +479,22 @@ async fn node_http_custom_connection_rejected(
 }
 
 #[test]
+async fn node_http_falsy_port_uses_protocol_default(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-falsy-port-uses-protocol-default",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_response_persistence(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

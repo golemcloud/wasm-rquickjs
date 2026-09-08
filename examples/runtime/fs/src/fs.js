@@ -1,7 +1,8 @@
-import {readFile, readFileSync, writeFile, writeFileSync, rename, renameSync, mkdir, mkdirSync, unlink, unlinkSync} from "node:fs";
+import {closeSync, mkdir, mkdirSync, openSync, readFile, readFileSync, rename, renameSync, unlink, unlinkSync, writeFile, writeFileSync} from "node:fs";
 import {cwd, argv, env} from "node:process";
 import {env as env2} from "process"; // validating that node:process is also registered as 'process'
 import * as fsPromises from "node:fs/promises";
+import {Buffer} from "node:buffer";
 
 export const run = () => {
     console.log("Current working directory:", cwd());
@@ -33,6 +34,56 @@ export const runAsync = async () => {
                 console.error("Error writing file:", error);
             }
         });
+    });
+};
+
+export const testReadFileSyncFastPath = () => {
+    const binaryPath = "/test/read-file-sync-fast-path.bin";
+    const emptyPath = "/test/read-file-sync-empty.bin";
+    const missingPath = "/test/read-file-sync-missing.bin";
+    const directoryPath = "/test/read-file-sync-directory";
+    const bytes = Buffer.from([0x00, 0x41, 0xff, 0xc3, 0x28, 0xef, 0xbb, 0xbf]);
+    writeFileSync(binaryPath, bytes);
+    writeFileSync(emptyPath, Buffer.alloc(0));
+    mkdirSync(directoryPath);
+
+    const captureError = operation => {
+        try {
+            operation();
+            return {threw: false};
+        } catch (error) {
+            return {
+                threw: true,
+                code: error.code,
+                syscall: error.syscall,
+                hasPath: "path" in error,
+                path: error.path,
+                message: error.message,
+            };
+        }
+    };
+    const fd = openSync(binaryPath, "r");
+    let fdHex;
+    try {
+        fdHex = readFileSync(fd).toString("hex");
+    } finally {
+        closeSync(fd);
+    }
+    return JSON.stringify({
+        expectedHex: bytes.toString("hex"),
+        bufferHex: readFileSync(binaryPath).toString("hex"),
+        utf8: readFileSync(binaryPath, "utf8"),
+        expectedUtf8: bytes.toString("utf8"),
+        latin1: readFileSync(binaryPath, "latin1"),
+        expectedLatin1: bytes.toString("latin1"),
+        emptyLength: readFileSync(emptyPath).length,
+        urlHex: readFileSync(new URL(`file://${binaryPath}`)).toString("hex"),
+        bufferPathHex: readFileSync(Buffer.from(binaryPath)).toString("hex"),
+        customFlagHex: readFileSync(binaryPath, {flag: "r+"}).toString("hex"),
+        fdHex,
+        missing: captureError(() => readFileSync(missingPath)),
+        directory: captureError(() => readFileSync(directoryPath)),
+        tooLarge: captureError(() => readFileSync("/test/read-file-sync-too-large.bin")),
     });
 };
 

@@ -14,4 +14,5 @@ declare module 'fs' {
   export function testMkdirCallbackRecursive(): Promise<void>;
   export function testUnlinkSync(): Promise<void>;
   export function testUnlinkCallback(): Promise<void>;
+  export function testReadFileSyncFastPath(): Promise<string>;
 }

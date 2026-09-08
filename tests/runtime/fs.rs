@@ -1,6 +1,7 @@
 use crate::common::{CompiledTest, TestInstance};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
+use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "fs", scope = Cloneable)]
 async fn compiled_fs() -> CompiledTest {
@@ -42,6 +43,69 @@ async fn fs_async(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<
 
     assert_eq!(output, "test file contents\n");
     assert_eq!(result_file, "test file contents - Processed by test");
+    Ok(())
+}
+
+#[test]
+async fn fs_read_file_sync_fast_path(
+    #[tagged_as("fs")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    let too_large = instance
+        .temp_dir_path()
+        .join("test")
+        .join("read-file-sync-too-large.bin");
+    std::fs::create_dir_all(too_large.parent().unwrap())?;
+    std::fs::File::create(&too_large)?.set_len(i32::MAX as u64 + 1)?;
+
+    let result = instance
+        .invoke(None, "test-read-file-sync-fast-path", &[])
+        .await?;
+    let Some(Val::String(result)) = result else {
+        anyhow::bail!("unexpected fast-path test result: {result:?}");
+    };
+    let result: serde_json::Value = serde_json::from_str(&result)?;
+    let expected_hex = &result["expectedHex"];
+    for field in [
+        "bufferHex",
+        "urlHex",
+        "bufferPathHex",
+        "customFlagHex",
+        "fdHex",
+    ] {
+        assert_eq!(&result[field], expected_hex, "mismatch for {field}");
+    }
+    assert_eq!(result["utf8"], result["expectedUtf8"]);
+    assert_eq!(result["latin1"], result["expectedLatin1"]);
+    assert_eq!(result["emptyLength"], 0);
+    assert_eq!(result["missing"]["code"], "ENOENT");
+    assert_eq!(result["missing"]["syscall"], "open");
+    assert_eq!(
+        result["missing"]["path"],
+        "/test/read-file-sync-missing.bin"
+    );
+    assert!(
+        result["missing"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("open '/test/read-file-sync-missing.bin'")
+    );
+    assert_eq!(result["directory"]["code"], "EISDIR");
+    assert_eq!(result["directory"]["syscall"], "read");
+    assert_eq!(result["directory"]["hasPath"], false);
+    assert!(
+        !result["directory"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("/test/read-file-sync-directory")
+    );
+    assert!(
+        result["directory"]["message"]
+            .as_str()
+            .unwrap()
+            .ends_with(", read")
+    );
+    assert_eq!(result["tooLarge"]["code"], "ERR_FS_FILE_TOO_LARGE");
     Ok(())
 }
 

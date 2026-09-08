@@ -1525,6 +1525,7 @@ pub enum FeatureCombination {
     InternalTestExecution,
     TypeScriptRuntime,
     TypeScriptTransformRuntime,
+    TypeScriptCompilerProfiling,
     Full,
     FullNoLogging,
     Golem,
@@ -1546,6 +1547,7 @@ impl FeatureCombination {
             Self::InternalTestExecution => "internal-test-execution",
             Self::TypeScriptRuntime => "typescript-runtime",
             Self::TypeScriptTransformRuntime => "typescript-transform-runtime",
+            Self::TypeScriptCompilerProfiling => "typescript-compiler-profiling",
             Self::Full => "full",
             Self::FullNoLogging => "full-no-logging",
             Self::Golem => "golem",
@@ -1572,6 +1574,9 @@ impl FeatureCombination {
             }
             FeatureCombination::TypeScriptTransformRuntime => {
                 vec!["--features", "typescript-transform-runtime"]
+            }
+            FeatureCombination::TypeScriptCompilerProfiling => {
+                vec!["--features", "typescript-compiler-profiling"]
             }
             FeatureCombination::Full => {
                 vec!["--no-default-features", "--features", "full"]
@@ -1625,6 +1630,9 @@ impl FeatureCombination {
                     }
                     FeatureCombination::TypeScriptTransformRuntime => {
                         "normal-p3,typescript-transform-runtime"
+                    }
+                    FeatureCombination::TypeScriptCompilerProfiling => {
+                        "normal-p3,typescript-compiler-profiling"
                     }
                     FeatureCombination::Full => "full-p3",
                     FeatureCombination::FullNoLogging => "full-no-logging-p3",

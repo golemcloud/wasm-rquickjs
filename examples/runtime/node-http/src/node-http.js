@@ -1,4 +1,5 @@
 import * as http from 'node:http';
+import * as https from 'node:https';
 import * as net from 'node:net';
 import { EventEmitter } from 'node:events';
 
@@ -2187,4 +2188,33 @@ export async function httpResponsePersistence() {
         if (!await runCase(options)) return false;
     }
     return true;
+}
+
+export async function httpFalsyPortUsesProtocolDefault() {
+    const httpAgent = new http.Agent();
+    httpAgent.defaultPort = 8081;
+    const httpsAgent = new https.Agent();
+    httpsAgent.defaultPort = 8443;
+    const cases = [
+        [http.request({ hostname: 'example.invalid', port: '' }), 80],
+        [https.request({ hostname: 'example.invalid', port: '' }), 443],
+        [http.request({ hostname: 'example.invalid', port: 0 }), 80],
+        [https.request({ hostname: 'example.invalid', port: 0 }), 443],
+        [http.request({ hostname: 'example.invalid', port: null }), 80],
+        [http.request({ hostname: 'example.invalid', port: false }), 80],
+        [http.request({ hostname: 'example.invalid', port: NaN }), 80],
+        [http.request({ hostname: 'example.invalid', port: '0' }), 0],
+        [https.request({ hostname: 'example.invalid', port: '0' }), 0],
+        [http.request({ hostname: 'example.invalid', port: '', defaultPort: 8080 }), 8080],
+        [http.request({ hostname: 'example.invalid', port: '', agent: httpAgent }), 8081],
+        [https.request({ hostname: 'example.invalid', port: '', agent: httpsAgent }), 8443],
+    ];
+
+    const matches = cases.every(([request, expectedPort]) => request.port === expectedPort);
+    await Promise.all(cases.map(([request]) => new Promise((resolve) => {
+        request.on('error', () => {});
+        request.once('close', resolve);
+        request.destroy();
+    })));
+    return matches;
 }
