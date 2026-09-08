@@ -2,7 +2,7 @@
 
 | Workload | Node 22.14 baseline | P2 | P3 | Evidence |
 |---|---:|---:|---:|---|
-| cold `tsc --noEmit` | 0.58 s | 17.17 s | 16.03 s | wall time |
+| cold `tsc --noEmit` | 0.57–0.58 s | 17.17 s | 16.03 s | wall time |
 | repeated unchanged non-incremental checks | — | 16.03 s | 15.49 s | median, no `.tsbuildinfo`, 5 fresh jobs |
 | incremental `.tsbuildinfo` checks | — | 9.73 s | 9.20 s | warm median, persisted artifact, 5 fresh jobs |
 | repeated invalid checks then recovery | — | 9.80 s | 9.19 s | warm incremental failure median, one changed file per iteration, then recovery |
@@ -14,7 +14,7 @@
 | repeated timeout then recovery | n/a | 0.194 s | 0.191 s | termination median, five attempts followed by a successful job |
 | repeated cancellation then recovery | n/a | 0.189 s | 0.185 s | termination median, five attempts followed by a successful job |
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
-| phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.55 s / 19.95 s |
+| phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.56 s / 19.96 s |
 
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
@@ -33,15 +33,20 @@ distribution. Schema-v5 rows use the recorded
 `typescript-compiler-profiling` component feature, and the cold CLI workload
 runs before the in-component profiler sidecar.
 
+The September 7 reports replace the September 4 reports at a later combined
+GOL-347/GOL-350 source snapshot. Several timings moved materially, especially
+the incremental rows; without a controlled A/B, those changes are not
+attributed to one implementation change.
+
 Only the cold Node row runs the same command and is directly comparable. The
 schema-v5 P2/P3 values include profiling instrumentation and are not absolute
 comparisons with Node or the differently ordered schema-v4 reports. Workloads
 run in the fixed report order inside one reused component and mounted workspace:
 each QuickJS execution job is fresh, while generated filesystem artifacts
 intentionally persist. The zero repeated-job linear-memory variation is a
-within-series plateau below the monotone instance high-water mark already
-reserved by the profiling sidecar; together with terminal live-heap spread it
-does not measure retained memory or prove leak absence.
+within-series plateau that does not exceed the monotone instance high-water
+mark already reached by the profiling sidecar; together with terminal live-heap
+spread it does not measure retained memory or prove leak absence.
 
 The preceding schema-v4 baseline remains available as
 `results/2026-08-27-p2-macos-aarch64.json` and

@@ -70,6 +70,10 @@ Later schema-v5 P2/P3 workloads include profiling instrumentation, run after the
 sidecar in a fixed order, and are not absolute comparisons with Node or the
 differently ordered schema-v4 reports. QuickJS jobs are fresh, but the component
 and mounted workspace are reused and generated filesystem artifacts persist.
+The September 7 reports replace the September 4 pair at a later combined
+GOL-347/GOL-350 source snapshot. Several timings moved materially, especially
+the incremental rows; the refresh is not a controlled A/B and does not
+attribute those movements to one implementation change.
 
 The current reports record 68 whole-file reads for 10,961,854 bytes. The
 remaining controlled P2/P3 work is approximately 7.52/7.44 s importing
@@ -83,7 +87,7 @@ instantiation. These are per-component costs rather than the owner of repeated
 fresh-job compiler latency. Repeated jobs show zero within-series variation in
 the monotone linear-memory high-water mark and at most 8,744 bytes of terminal
 live-heap spread, plus successful recovery after every timeout and cancellation
-series. The linear plateau sits below the higher peak already reserved by the
+series. The linear plateau does not exceed the peak already reached by the
 profiling sidecar; neither observation measures retained memory or proves leak
 absence.
 
@@ -93,10 +97,11 @@ Follow-up disposition from the measured counters:
   profile has only two missing package metadata lookups, so negative caching is
   not the material owner here.
 - The GOL-350 follow-up used a separate representative cold `node_modules`
-  graph because this historical workload has only one module-loader file probe;
-  its 636 filesystem stats are TypeScript compiler directory probes, not
-  duplicate module-resolution probes. GOL-350 now implements the positive-only
-  outer-CJS probe session validated by that separate graph.
+  graph because this workload has only five module-loader path probes (three
+  file probes and two directory probes); its 636 filesystem stats are TypeScript
+  compiler directory probes, not duplicate module-resolution probes. GOL-350
+  now implements the positive-only outer-CJS probe session validated by that
+  separate graph.
 - GOL-349 remains ordered after GOL-418 and needs its overlapping `require(esm)`
   benchmark. The controlled compiler workload does not exercise that graph.
 - GOL-351 stays folded/canceled: one module-resolution call cannot make helper
