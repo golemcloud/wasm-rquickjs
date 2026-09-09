@@ -26,8 +26,13 @@ that both targets used the same build and benchmark inputs.
 `run.sh --check` validates every historical report and requires each P2/P3 pair
 to share the input hashes without resolving Git history. `run.sh
 --check-current` additionally compares selected reports with the current
-checkout. With five samples, the reported p95 is the observed maximum; it is
-descriptive evidence rather than a stable tail-latency estimate.
+checkout. CI performs that currentness check against the exact report-bearing
+tree. For a pull-request synthetic merge or an ordinary two-parent merge push,
+that tree is the second parent; unrelated first-parent changes must not rewrite
+a historical measurement. Direct and squash pushes are checked against their
+resulting `HEAD`, while ambiguous merge pushes fail closed. With five samples,
+the reported p95 is the observed maximum; it is descriptive evidence rather
+than a stable tail-latency estimate.
 
 ## GOL-350 CommonJS graph probe evidence
 
