@@ -152,3 +152,15 @@ async fn url_test9(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::
     assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn url_test10(#[tagged_as("url")] compiled_test: &CompiledTest) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test10", &[]).await;
+    let r = r?;
+
+    println!("Output:\n{}", output);
+
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
