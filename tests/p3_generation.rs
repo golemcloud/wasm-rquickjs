@@ -1596,8 +1596,9 @@ fn p3_generated_crate_builds_with_exported_resource() -> anyhow::Result<()> {
                 constructor(initial: u32);
                 increment: func(by: u32) -> u32;
                 get: func() -> u32;
+                add-other: func(other: borrow<counter>) -> u32;
                 %static-zero: static func() -> u32;
-                increment-async: async func(by: u32) -> u32;
+                increment-async: async func(by: u32, other: borrow<counter>) -> u32;
                 make-async: static async func(initial: u32) -> u32;
               }
             }
@@ -1618,12 +1619,15 @@ fn p3_generated_crate_builds_with_exported_resource() -> anyhow::Result<()> {
               get() {
                 return this.value;
               }
+              addOther(other) {
+                return this.value + other.value;
+              }
               static staticZero() {
                 return 0;
               }
-              async incrementAsync(by) {
+              async incrementAsync(by, other) {
                 await Promise.resolve();
-                this.value += by;
+                this.value += by + other.value;
                 return this.value;
               }
               static async makeAsync(initial) {

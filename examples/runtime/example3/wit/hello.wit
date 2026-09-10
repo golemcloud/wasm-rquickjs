@@ -8,6 +8,8 @@ interface iface {
     constructor(name: string);
     /// Gets the name passed to the constructor
     get-name: func() -> string;
+    /// Compares this instance with another borrowed instance
+    compare-with: func(other: borrow<hello>) -> s32;
     /// Example of a static method
     compare: static func(h1: borrow<hello>, h2: borrow<hello>) -> s32;
     /// Example of a static method taking owned handles

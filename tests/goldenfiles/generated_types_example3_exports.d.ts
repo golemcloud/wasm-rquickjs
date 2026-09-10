@@ -18,6 +18,10 @@ declare module 'example3' {
        */
       getName(): Promise<string>;
       /**
+       * Compares this instance with another borrowed instance
+       */
+      compareWith(other: Hello): Promise<number>;
+      /**
        * Example of a static method
        */
       static compare(h1: Hello, h2: Hello): Promise<number>;

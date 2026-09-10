@@ -7,6 +7,10 @@ class Hello {
         return this.name;
     }
 
+    compareWith(other) {
+        return Hello.compare(this, other);
+    }
+
     static compare(h1, h2) {
         if (h1.name === h2.name) {
             return 0;

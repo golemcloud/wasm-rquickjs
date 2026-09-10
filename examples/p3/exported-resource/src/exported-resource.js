@@ -25,6 +25,10 @@ class Counter {
     return this.value;
   }
 
+  addOther(other) {
+    return this.value + other.value;
+  }
+
   static staticZero() {
     return 0;
   }
@@ -33,11 +37,12 @@ class Counter {
     return constructorCheckpointCount;
   }
 
-  async incrementAsync(by) {
+  async incrementAsync(by, other) {
+    const otherValue = other.value;
     // A genuine async step to prove the async method path awaits the JS Promise.
     await Promise.resolve();
     this.value += by;
-    return this.value;
+    return this.value + otherValue;
   }
 }
 

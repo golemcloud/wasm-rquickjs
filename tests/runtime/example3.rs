@@ -54,6 +54,16 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
         .await;
     let name2 = name2?;
 
+    let (method_compare, _) = test_instance
+        .invoke_and_capture_output(
+            Some("quickjs:example3/iface"),
+            "[method]hello.compare-with",
+            &[Val::Resource(h1), Val::Resource(h2)],
+        )
+        .await;
+
+    let method_compare = method_compare?;
+
     let (compare, _) = test_instance
         .invoke_and_capture_output(
             Some("quickjs:example3/iface"),
@@ -89,6 +99,7 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
 
     assert_eq!(name1, Some(Val::String("user1".to_string())));
     assert_eq!(name2, Some(Val::String("user2".to_string())));
+    assert_eq!(method_compare, Some(Val::S32(-1)));
     assert_eq!(compare, Some(Val::S32(-1)));
     assert_eq!(name3, Some(Val::String("user1 & user2".to_string())));
 

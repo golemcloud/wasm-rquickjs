@@ -686,14 +686,19 @@ fn generate_exported_resource_function_impl(
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(|((param, export_param), import_param)| {
+        .enumerate()
+        .map(|(index, ((param, export_param), import_param))| {
             let param_name = &param.name;
             let param_type = &param.ty;
-            if matches!(
+            let is_method = matches!(
                 function.kind,
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_)
-            ) && type_borrows_resource(context, param_type, resource_type_id)?
-            {
+            );
+            if is_method && index == 0 {
+                anyhow::ensure!(
+                    type_borrows_resource(context, param_type, resource_type_id)?,
+                    "Exported resource method receiver must be its first parameter"
+                );
                 Ok(ProcessedParameter {
                     ident: Ident::new(param_name, Span::call_site()),
                     wrapped_type: None,

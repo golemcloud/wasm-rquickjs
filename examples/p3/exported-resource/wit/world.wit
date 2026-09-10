@@ -12,9 +12,10 @@ interface api {
     constructor(initial: u32);
     increment: func(by: u32) -> u32;
     get: func() -> u32;
+    add-other: func(other: borrow<counter>) -> u32;
     %static-zero: static func() -> u32;
     checkpoint-count: static func() -> u32;
-    increment-async: async func(by: u32) -> u32;
+    increment-async: async func(by: u32, other: borrow<counter>) -> u32;
   }
 }
 

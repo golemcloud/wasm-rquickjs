@@ -145,11 +145,12 @@ fn add_wasi_logging_stub(linker: &mut Linker<Host>) -> Result<()> {
 }
 
 /// Constructs the exported `counter`, exercises every method shape, drops it, and returns the
-/// six observed values: the checkpoint count after each construction, followed by
-/// `increment(5)`, `get()`, `staticZero()`, and `incrementAsync(100)`.
+/// seven observed values: the checkpoint count after each construction, followed by
+/// `increment(5)`, `get()`, `addOther(self)`, `staticZero()`, and
+/// `incrementAsync(100, self)`.
 async fn drive_exported_counter(
     component_path: &Utf8Path,
-) -> Result<(u32, u32, u32, u32, u32, u32)> {
+) -> Result<(u32, u32, u32, u32, u32, u32, u32)> {
     let engine = engine()?;
     let component = Component::from_file(&engine, component_path)?;
     let linker = base_linker(&engine)?;
@@ -165,6 +166,7 @@ async fn drive_exported_counter(
     let instance;
     let after_increment;
     let value;
+    let added_self;
     let zero;
     let first_checkpoint_count;
     {
@@ -174,6 +176,9 @@ async fn drive_exported_counter(
         first_checkpoint_count = counter.call_checkpoint_count(&mut store).await?;
         after_increment = counter.call_increment(&mut store, instance, 5).await?;
         value = counter.call_get(&mut store, instance).await?;
+        added_self = counter
+            .call_add_other(&mut store, instance, instance)
+            .await?;
         zero = counter.call_static_zero(&mut store).await?;
     }
 
@@ -195,7 +200,7 @@ async fn drive_exported_counter(
             let api = bindings.test_exported_res_api();
             let counter = api.counter();
             counter
-                .call_increment_async(accessor, async_instance, 100)
+                .call_increment_async(accessor, async_instance, 100, async_instance)
                 .await
         })
         .await??;
@@ -204,6 +209,7 @@ async fn drive_exported_counter(
     Ok((
         after_increment,
         value,
+        added_self,
         zero,
         after_async,
         first_checkpoint_count,
@@ -300,18 +306,24 @@ fn p3_exported_resource_roundtrip() {
     let (
         after_increment,
         value,
+        added_self,
         zero,
         after_async,
         first_checkpoint_count,
         second_checkpoint_count,
     ) = block_on_with_timeout(120, drive_exported_counter(&wasm));
 
-    // JS: new Counter(10); increment(5) -> 15; get() -> 15; staticZero() -> 0;
-    //     new Counter(15).incrementAsync(100) -> 115.
+    // JS: new Counter(10); increment(5) -> 15; get() -> 15; addOther(self) -> 30;
+    //     staticZero() -> 0;
+    //     new Counter(15).incrementAsync(100, self) -> 130.
     assert_eq!(after_increment, 15, "increment(5) should return 15");
     assert_eq!(value, 15, "get() should return 15");
+    assert_eq!(added_self, 30, "addOther(self) should return 30");
     assert_eq!(zero, 0, "staticZero() should return 0");
-    assert_eq!(after_async, 115, "incrementAsync(100) should return 115");
+    assert_eq!(
+        after_async, 130,
+        "incrementAsync(100, self) should return 130"
+    );
     assert_eq!(first_checkpoint_count, 1);
     assert_eq!(second_checkpoint_count, 2);
 }
