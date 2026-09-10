@@ -186,6 +186,66 @@ async fn drive_exported_counter(
     // drained at the next JS entry point).
     instance.resource_drop_async(&mut store).await?;
 
+    {
+        let api = bindings.test_exported_res_api();
+        let counter = api.counter();
+
+        let original = counter.call_constructor(&mut store, 20).await?;
+        let identity = counter.call_identity(&mut store, original).await?;
+        assert_eq!(counter.call_get(&mut store, identity).await?, 20);
+        identity.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 30).await?;
+        let alias = counter.call_alias(&mut store, original).await?;
+        original.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, alias).await?, 30);
+        alias.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 40).await?;
+        let alias = counter.call_alias(&mut store, original).await?;
+        alias.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, original).await?, 40);
+        original.resource_drop_async(&mut store).await?;
+
+        let stashed = counter.call_constructor(&mut store, 50).await?;
+        counter.call_stash(&mut store, stashed).await?;
+        let recovered = counter.call_take(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, recovered).await?, 50);
+        recovered.resource_drop_async(&mut store).await?;
+
+        let failing = counter.call_constructor(&mut store, 60).await?;
+        assert_eq!(
+            counter.call_stash_and_fail(&mut store, failing).await?,
+            Err("expected failure".to_string())
+        );
+        let recovered = counter.call_take(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, recovered).await?, 60);
+        recovered.resource_drop_async(&mut store).await?;
+    }
+
+    let async_identity_source = {
+        let api = bindings.test_exported_res_api();
+        api.counter().call_constructor(&mut store, 25).await?
+    };
+    let identity_bindings = &bindings;
+    let async_identity = store
+        .run_concurrent(async move |accessor| -> Result<_> {
+            identity_bindings
+                .test_exported_res_api()
+                .counter()
+                .call_identity_async(accessor, async_identity_source)
+                .await
+        })
+        .await??;
+    {
+        let api = bindings.test_exported_res_api();
+        assert_eq!(
+            api.counter().call_get(&mut store, async_identity).await?,
+            25
+        );
+    }
+    async_identity.resource_drop_async(&mut store).await?;
+
     let async_instance;
     let second_checkpoint_count;
     {
@@ -325,5 +385,5 @@ fn p3_exported_resource_roundtrip() {
         "incrementAsync(100, self) should return 130"
     );
     assert_eq!(first_checkpoint_count, 1);
-    assert_eq!(second_checkpoint_count, 2);
+    assert_eq!(second_checkpoint_count, 8);
 }

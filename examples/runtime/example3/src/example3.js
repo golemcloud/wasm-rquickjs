@@ -1,3 +1,5 @@
+let stashedHello;
+
 class Hello {
     constructor(name) {
         this.name = name;
@@ -23,6 +25,32 @@ class Hello {
 
     static merge(h1, h2) {
         return new Hello(`${h1.name} & ${h2.name}`);
+    }
+
+    static async identity(value) {
+        await Promise.resolve();
+        return value;
+    }
+
+    static alias(value) {
+        return value;
+    }
+
+    static stash(value) {
+        Object.freeze(value);
+        stashedHello = value;
+    }
+
+    static stashAndFail(value) {
+        Object.freeze(value);
+        stashedHello = value;
+        throw "expected failure";
+    }
+
+    static take() {
+        const value = stashedHello;
+        stashedHello = undefined;
+        return value;
     }
 }
 

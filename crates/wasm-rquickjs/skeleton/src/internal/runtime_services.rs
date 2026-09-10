@@ -7,6 +7,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
@@ -95,6 +96,7 @@ pub(crate) struct RuntimeServices {
     pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
     pub(crate) next_execution_job_id: Cell<usize>,
     pub(crate) execution_enabled: Cell<bool>,
+    pub(crate) exported_resources: ExportedResourceLedger,
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) execution_profile: Option<Rc<ExecutionProfile>>,
 }
@@ -112,10 +114,199 @@ impl Default for RuntimeServices {
             execution_jobs: RefCell::default(),
             next_execution_job_id: Cell::new(1),
             execution_enabled: Cell::new(true),
+            exported_resources: ExportedResourceLedger::default(),
             #[cfg(feature = "typescript-compiler-profiling")]
             execution_profile: None,
         }
     }
+}
+
+/// Native ownership state for JavaScript objects exposed as component-model resources.
+///
+/// Every live host `own<T>` handle contributes one owner. The JavaScript resource table keeps
+/// the object reachable while at least one owner remains; borrowed handles do not affect this
+/// ledger. The ledger is runtime userdata so P2 and P3 share exactly the same lifecycle rules.
+pub(crate) struct ExportedResourceLedger {
+    next_id: Cell<usize>,
+    owners: RefCell<HashMap<usize, NonZeroUsize>>,
+}
+
+impl Default for ExportedResourceLedger {
+    fn default() -> Self {
+        Self {
+            next_id: Cell::new(1),
+            owners: RefCell::default(),
+        }
+    }
+}
+
+impl ExportedResourceLedger {
+    fn acquire_new(&self) -> usize {
+        let id = self.next_id.get();
+        self.next_id
+            .set(id.checked_add(1).expect("exported resource id overflow"));
+        let previous = self
+            .owners
+            .borrow_mut()
+            .insert(id, NonZeroUsize::new(1).unwrap());
+        debug_assert!(previous.is_none());
+        id
+    }
+
+    fn retain(&self, id: usize) -> bool {
+        let mut owners = self.owners.borrow_mut();
+        let Some(count) = owners.get_mut(&id) else {
+            return false;
+        };
+        *count = NonZeroUsize::new(
+            count
+                .get()
+                .checked_add(1)
+                .expect("exported resource owner count overflow"),
+        )
+        .unwrap();
+        true
+    }
+
+    fn release(&self, id: usize) -> Option<bool> {
+        let mut owners = self.owners.borrow_mut();
+        let count = owners.get_mut(&id)?;
+        if count.get() == 1 {
+            owners.remove(&id);
+            Some(true)
+        } else {
+            *count = NonZeroUsize::new(count.get() - 1).unwrap();
+            Some(false)
+        }
+    }
+
+    fn discard(&self, id: usize) {
+        self.owners.borrow_mut().remove(&id);
+    }
+
+    fn contains(&self, id: usize) -> bool {
+        self.owners.borrow().contains_key(&id)
+    }
+
+    fn owner_count(&self, id: usize) -> Option<usize> {
+        self.owners.borrow().get(&id).map(|count| count.get())
+    }
+}
+
+fn exported_resource_id<'js>(
+    resource_ids: &rquickjs::Object<'js>,
+    resource: &rquickjs::Object<'js>,
+) -> rquickjs::Result<Option<usize>> {
+    let get: rquickjs::Function = resource_ids.get("get")?;
+    get.call((
+        rquickjs::function::This(resource_ids.clone()),
+        resource.clone(),
+    ))
+}
+
+fn set_exported_resource_id<'js>(
+    resource_ids: &rquickjs::Object<'js>,
+    resource: &rquickjs::Object<'js>,
+    id: usize,
+) -> rquickjs::Result<()> {
+    let set: rquickjs::Function = resource_ids.get("set")?;
+    let _: rquickjs::Value = set.call((
+        rquickjs::function::This(resource_ids.clone()),
+        resource.clone(),
+        id,
+    ))?;
+    Ok(())
+}
+
+fn delete_exported_resource_id<'js>(
+    resource_ids: &rquickjs::Object<'js>,
+    resource: &rquickjs::Object<'js>,
+) -> rquickjs::Result<()> {
+    let delete: rquickjs::Function = resource_ids.get("delete")?;
+    let _: bool = delete.call((
+        rquickjs::function::This(resource_ids.clone()),
+        resource.clone(),
+    ))?;
+    Ok(())
+}
+
+pub(crate) fn acquire_exported_resource<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    resource: rquickjs::Object<'js>,
+    table_name: &str,
+    id_map_name: &str,
+) -> rquickjs::Result<usize> {
+    let services = ctx
+        .userdata::<RuntimeServices>()
+        .expect("runtime services not initialized");
+    let ledger = &services.exported_resources;
+    let resource_table: rquickjs::Object = ctx.globals().get(table_name)?;
+    let resource_ids: rquickjs::Object = ctx.globals().get(id_map_name)?;
+
+    if let Some(id) = exported_resource_id(&resource_ids, &resource)? {
+        let registered = resource_table.get::<_, rquickjs::Object>(id.to_string());
+        if ledger.contains(id)
+            && registered
+                .as_ref()
+                .is_ok_and(|registered| registered == &resource)
+        {
+            assert!(ledger.retain(id));
+            return Ok(id);
+        }
+
+        // Recover defensively from partially initialized state without mutating the resource
+        // object itself. A WeakMap remains writable even when the resource is frozen or sealed.
+        delete_exported_resource_id(&resource_ids, &resource)?;
+        if registered
+            .as_ref()
+            .is_ok_and(|registered| registered == &resource)
+        {
+            resource_table.remove(id.to_string())?;
+        }
+    }
+
+    let id = ledger.acquire_new();
+    if let Err(error) = resource_table.set(id.to_string(), resource.clone()) {
+        ledger.discard(id);
+        return Err(error);
+    }
+    if let Err(error) = set_exported_resource_id(&resource_ids, &resource, id) {
+        let _ = resource_table.remove(id.to_string());
+        ledger.discard(id);
+        return Err(error);
+    }
+    Ok(id)
+}
+
+pub(crate) fn release_exported_resource(
+    ctx: &rquickjs::Ctx<'_>,
+    id: usize,
+    table_name: &str,
+    id_map_name: &str,
+) -> rquickjs::Result<()> {
+    let services = ctx
+        .userdata::<RuntimeServices>()
+        .expect("runtime services not initialized");
+    let owner_count = services.exported_resources.owner_count(id).ok_or_else(|| {
+        rquickjs::Error::new_from_js_message(
+            "live exported resource",
+            "released exported resource",
+            format!("resource id {id} has no owner"),
+        )
+    })?;
+    if owner_count > 1 {
+        assert_eq!(services.exported_resources.release(id), Some(false));
+        return Ok(());
+    }
+
+    let resource_table: rquickjs::Object = ctx.globals().get(table_name)?;
+    let resource_ids: rquickjs::Object = ctx.globals().get(id_map_name)?;
+    if let Ok(resource) = resource_table.get::<_, rquickjs::Object>(id.to_string()) {
+        delete_exported_resource_id(&resource_ids, &resource)?;
+    }
+    resource_table.remove(id.to_string())?;
+    assert_eq!(services.exported_resources.release(id), Some(true));
+    Ok(())
 }
 
 pub(crate) struct FsServices {

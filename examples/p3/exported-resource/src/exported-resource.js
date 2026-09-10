@@ -6,6 +6,7 @@
 // `async func` method (`incrementAsync`) returns a Promise.
 const constructorRejection = new Error('constructor checkpoint');
 let constructorCheckpointCount = 0;
+let stashedCounter;
 process.on('unhandledRejection', (reason) => {
   if (reason === constructorRejection) constructorCheckpointCount += 1;
 });
@@ -35,6 +36,36 @@ class Counter {
 
   static checkpointCount() {
     return constructorCheckpointCount;
+  }
+
+  static identity(value) {
+    return value;
+  }
+
+  static async identityAsync(value) {
+    await Promise.resolve();
+    return value;
+  }
+
+  static alias(value) {
+    return value;
+  }
+
+  static stash(value) {
+    Object.freeze(value);
+    stashedCounter = value;
+  }
+
+  static stashAndFail(value) {
+    Object.freeze(value);
+    stashedCounter = value;
+    throw "expected failure";
+  }
+
+  static take() {
+    const value = stashedCounter;
+    stashedCounter = undefined;
+    return value;
   }
 
   async incrementAsync(by, other) {

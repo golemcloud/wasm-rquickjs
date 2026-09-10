@@ -1598,6 +1598,12 @@ fn p3_generated_crate_builds_with_exported_resource() -> anyhow::Result<()> {
                 get: func() -> u32;
                 add-other: func(other: borrow<counter>) -> u32;
                 %static-zero: static func() -> u32;
+                identity: static func(value: own<counter>) -> counter;
+                identity-async: static async func(value: own<counter>) -> counter;
+                alias: static func(value: borrow<counter>) -> counter;
+                stash: static func(value: own<counter>);
+                stash-and-fail: static func(value: own<counter>) -> result<_, string>;
+                take: static func() -> counter;
                 increment-async: async func(by: u32, other: borrow<counter>) -> u32;
                 make-async: static async func(initial: u32) -> u32;
               }
@@ -1624,6 +1630,28 @@ fn p3_generated_crate_builds_with_exported_resource() -> anyhow::Result<()> {
               }
               static staticZero() {
                 return 0;
+              }
+              static identity(value) {
+                return value;
+              }
+              static async identityAsync(value) {
+                await Promise.resolve();
+                return value;
+              }
+              static alias(value) {
+                return value;
+              }
+              static stash(value) {
+                Object.freeze(value);
+                globalThis.stashedCounter = value;
+              }
+              static stashAndFail(value) {
+                Object.freeze(value);
+                globalThis.stashedCounter = value;
+                throw "expected failure";
+              }
+              static take() {
+                return globalThis.stashedCounter;
               }
               async incrementAsync(by, other) {
                 await Promise.resolve();

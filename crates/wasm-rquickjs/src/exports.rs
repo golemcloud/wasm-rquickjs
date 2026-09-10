@@ -417,17 +417,7 @@ fn generate_guest_impl(
                         )
                     })?;
 
-                    let already_registered = resource.contains_key(crate::internal::RESOURCE_ID_KEY)?;
-                    let resource_id: usize = if already_registered {
-                        // This resource instance is already registered in the resource table
-                        resource.get(crate::internal::RESOURCE_ID_KEY)?
-                    } else {
-                        // This is a new resource instance, we need to store it in the resource table
-                        let resource_table: rquickjs::Object = ctx.globals().get(crate::internal::RESOURCE_TABLE_NAME)?;
-                        let resource_id = crate::internal::get_free_resource_id();
-                        resource_table.set(resource_id.to_string(), resource)?;
-                        resource_id
-                    };
+                    let resource_id = crate::internal::acquire_js_resource(ctx, resource)?;
 
                     Ok(#owned_wrapper::new(#resource_name_ident { resource_id }))
                 }
