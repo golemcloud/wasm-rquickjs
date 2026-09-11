@@ -18,9 +18,12 @@ interface api {
     identity: static func(value: own<counter>) -> counter;
     identity-async: static async func(value: own<counter>) -> counter;
     alias: static func(value: borrow<counter>) -> counter;
+    duplicate: static func(value: borrow<counter>) -> tuple<counter, counter>;
     stash: static func(value: own<counter>);
     stash-and-fail: static func(value: own<counter>) -> result<_, string>;
+    stash-and-fail-async: static async func(value: own<counter>) -> result<_, string>;
     take: static func() -> counter;
+    resource-count: static func() -> u32;
     increment-async: async func(by: u32, other: borrow<counter>) -> u32;
   }
 }

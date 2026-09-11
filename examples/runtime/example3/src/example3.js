@@ -36,6 +36,10 @@ class Hello {
         return value;
     }
 
+    static duplicate(value) {
+        return [value, value];
+    }
+
     static stash(value) {
         Object.freeze(value);
         stashedHello = value;
@@ -47,10 +51,21 @@ class Hello {
         throw "expected failure";
     }
 
+    static async stashAndFailAsync(value) {
+        Object.freeze(value);
+        stashedHello = value;
+        await Promise.resolve();
+        throw "expected async failure";
+    }
+
     static take() {
         const value = stashedHello;
         stashedHello = undefined;
         return value;
+    }
+
+    static resourceCount() {
+        return Object.keys(globalThis.__wasm_rquickjs_resources).length;
     }
 }
 

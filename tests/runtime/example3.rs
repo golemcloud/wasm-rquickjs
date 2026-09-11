@@ -38,6 +38,47 @@ async fn invoke_hello_static_resource(
     Ok(resource)
 }
 
+async fn invoke_hello_static_resource_pair(
+    test_instance: &mut TestInstance,
+    name: &str,
+    args: &[Val],
+) -> anyhow::Result<(ResourceAny, ResourceAny)> {
+    let (result, _) = test_instance
+        .invoke_and_capture_output(Some("quickjs:example3/iface"), name, args)
+        .await;
+    let Some(Val::Tuple(resources)) = result? else {
+        panic!("Expected a resource tuple")
+    };
+    let mut resources = resources.into_iter();
+    let Some(Val::Resource(first)) = resources.next() else {
+        panic!("Expected the first resource handle")
+    };
+    let Some(Val::Resource(second)) = resources.next() else {
+        panic!("Expected the second resource handle")
+    };
+    assert!(resources.next().is_none(), "Expected exactly two resources");
+    Ok((first, second))
+}
+
+async fn invoke_hello_static_u32(
+    test_instance: &mut TestInstance,
+    name: &str,
+) -> anyhow::Result<u32> {
+    // P2 host drops are consumed by a concurrent dropper after a JS entry completes. The first
+    // diagnostic call provides that entry; the second observes the settled resource table.
+    let _ = test_instance
+        .invoke_and_capture_output(Some("quickjs:example3/iface"), name, &[])
+        .await
+        .0?;
+    let (result, _) = test_instance
+        .invoke_and_capture_output(Some("quickjs:example3/iface"), name, &[])
+        .await;
+    let Some(Val::U32(value)) = result? else {
+        panic!("Expected a u32 result")
+    };
+    Ok(value)
+}
+
 async fn hello_name(
     test_instance: &mut TestInstance,
     resource: ResourceAny,
@@ -175,6 +216,36 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
     );
     test_instance.drop_resource(alias).await?;
 
+    let original = construct_hello(&mut test_instance, "duplicate first first").await?;
+    let (first, second) = invoke_hello_static_resource_pair(
+        &mut test_instance,
+        "[static]hello.duplicate",
+        &[Val::Resource(original)],
+    )
+    .await?;
+    test_instance.drop_resource(original).await?;
+    test_instance.drop_resource(first).await?;
+    assert_eq!(
+        hello_name(&mut test_instance, second).await?,
+        "duplicate first first"
+    );
+    test_instance.drop_resource(second).await?;
+
+    let original = construct_hello(&mut test_instance, "duplicate second first").await?;
+    let (first, second) = invoke_hello_static_resource_pair(
+        &mut test_instance,
+        "[static]hello.duplicate",
+        &[Val::Resource(original)],
+    )
+    .await?;
+    test_instance.drop_resource(original).await?;
+    test_instance.drop_resource(second).await?;
+    assert_eq!(
+        hello_name(&mut test_instance, first).await?,
+        "duplicate second first"
+    );
+    test_instance.drop_resource(first).await?;
+
     let original = construct_hello(&mut test_instance, "drop alias first").await?;
     let alias = invoke_hello_static_resource(
         &mut test_instance,
@@ -224,6 +295,42 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
         "recovered after failure"
     );
     test_instance.drop_resource(recovered).await?;
+
+    let failing = construct_hello(&mut test_instance, "recovered after async failure").await?;
+    let (failure, _) = test_instance
+        .invoke_and_capture_output(
+            Some("quickjs:example3/iface"),
+            "[static]hello.stash-and-fail-async",
+            &[Val::Resource(failing)],
+        )
+        .await;
+    assert_eq!(
+        failure?,
+        Some(Val::Result(Err(Some(Box::new(Val::String(
+            "expected async failure".to_string()
+        ))))))
+    );
+    let recovered =
+        invoke_hello_static_resource(&mut test_instance, "[static]hello.take", &[]).await?;
+    assert_eq!(
+        hello_name(&mut test_instance, recovered).await?,
+        "recovered after async failure"
+    );
+    test_instance.drop_resource(recovered).await?;
+
+    let baseline =
+        invoke_hello_static_u32(&mut test_instance, "[static]hello.resource-count").await?;
+    let tracked = construct_hello(&mut test_instance, "tracked").await?;
+    assert_eq!(
+        invoke_hello_static_u32(&mut test_instance, "[static]hello.resource-count").await?,
+        baseline + 1
+    );
+    test_instance.drop_resource(tracked).await?;
+    assert_eq!(
+        invoke_hello_static_u32(&mut test_instance, "[static]hello.resource-count").await?,
+        baseline,
+        "the final host drop must remove the resource table entry"
+    );
 
     Ok(())
 }

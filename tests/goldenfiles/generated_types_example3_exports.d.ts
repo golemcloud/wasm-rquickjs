@@ -38,6 +38,10 @@ declare module 'example3' {
        */
       static alias(value: Hello): Promise<Hello>;
       /**
+       * Creates two owned handles for the same JavaScript object
+       */
+      static duplicate(value: Hello): Promise<[Hello, Hello]>;
+      /**
        * Retains a transferred object in JavaScript after its final host handle is dropped
        */
       static stash(value: Hello): Promise<void>;
@@ -47,9 +51,18 @@ declare module 'example3' {
        */
       static stashAndFail(value: Hello): Promise<void>;
       /**
+       * Retains a transferred object and asynchronously returns an expected error
+       * @throws string
+       */
+      static stashAndFailAsync(value: Hello): Promise<void>;
+      /**
        * Returns the object retained by `stash`
        */
       static take(): Promise<Hello>;
+      /**
+       * Reports the number of live entries in the exported-resource table
+       */
+      static resourceCount(): Promise<number>;
     }
     export class HelloWithStaticCreate {
       static create(name: string): Promise<HelloWithStaticCreate>;

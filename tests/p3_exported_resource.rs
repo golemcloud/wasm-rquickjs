@@ -207,6 +207,20 @@ async fn drive_exported_counter(
         assert_eq!(counter.call_get(&mut store, original).await?, 40);
         original.resource_drop_async(&mut store).await?;
 
+        let original = counter.call_constructor(&mut store, 45).await?;
+        let (first, second) = counter.call_duplicate(&mut store, original).await?;
+        original.resource_drop_async(&mut store).await?;
+        first.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, second).await?, 45);
+        second.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 46).await?;
+        let (first, second) = counter.call_duplicate(&mut store, original).await?;
+        original.resource_drop_async(&mut store).await?;
+        second.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, first).await?, 46);
+        first.resource_drop_async(&mut store).await?;
+
         let stashed = counter.call_constructor(&mut store, 50).await?;
         counter.call_stash(&mut store, stashed).await?;
         let recovered = counter.call_take(&mut store).await?;
@@ -221,6 +235,16 @@ async fn drive_exported_counter(
         let recovered = counter.call_take(&mut store).await?;
         assert_eq!(counter.call_get(&mut store, recovered).await?, 60);
         recovered.resource_drop_async(&mut store).await?;
+
+        let baseline = counter.call_resource_count(&mut store).await?;
+        let tracked = counter.call_constructor(&mut store, 70).await?;
+        assert_eq!(counter.call_resource_count(&mut store).await?, baseline + 1);
+        tracked.resource_drop_async(&mut store).await?;
+        assert_eq!(
+            counter.call_resource_count(&mut store).await?,
+            baseline,
+            "the final host drop must remove the resource table entry"
+        );
     }
 
     let async_identity_source = {
@@ -245,6 +269,29 @@ async fn drive_exported_counter(
         );
     }
     async_identity.resource_drop_async(&mut store).await?;
+
+    let async_failure_source = {
+        let api = bindings.test_exported_res_api();
+        api.counter().call_constructor(&mut store, 80).await?
+    };
+    let failure_bindings = &bindings;
+    let async_failure = store
+        .run_concurrent(async move |accessor| -> Result<_> {
+            failure_bindings
+                .test_exported_res_api()
+                .counter()
+                .call_stash_and_fail_async(accessor, async_failure_source)
+                .await
+        })
+        .await??;
+    assert_eq!(async_failure, Err("expected async failure".to_string()));
+    {
+        let api = bindings.test_exported_res_api();
+        let counter = api.counter();
+        let recovered = counter.call_take(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, recovered).await?, 80);
+        recovered.resource_drop_async(&mut store).await?;
+    }
 
     let async_instance;
     let second_checkpoint_count;
@@ -385,5 +432,7 @@ fn p3_exported_resource_roundtrip() {
         "incrementAsync(100, self) should return 130"
     );
     assert_eq!(first_checkpoint_count, 1);
-    assert_eq!(second_checkpoint_count, 8);
+    // The lifecycle matrix constructs twelve counters before the second checkpoint read; every
+    // constructor intentionally queues one rejection observed by the shared handler.
+    assert_eq!(second_checkpoint_count, 12);
 }

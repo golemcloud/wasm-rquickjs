@@ -51,6 +51,10 @@ class Counter {
     return value;
   }
 
+  static duplicate(value) {
+    return [value, value];
+  }
+
   static stash(value) {
     Object.freeze(value);
     stashedCounter = value;
@@ -62,10 +66,21 @@ class Counter {
     throw "expected failure";
   }
 
+  static async stashAndFailAsync(value) {
+    Object.freeze(value);
+    stashedCounter = value;
+    await Promise.resolve();
+    throw "expected async failure";
+  }
+
   static take() {
     const value = stashedCounter;
     stashedCounter = undefined;
     return value;
+  }
+
+  static resourceCount() {
+    return Object.keys(globalThis.__wasm_rquickjs_resources).length;
   }
 
   async incrementAsync(by, other) {

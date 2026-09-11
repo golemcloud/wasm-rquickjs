@@ -18,12 +18,18 @@ interface iface {
     identity: static func(value: own<hello>) -> hello;
     /// Creates another owned handle for the same JavaScript object
     alias: static func(value: borrow<hello>) -> hello;
+    /// Creates two owned handles for the same JavaScript object
+    duplicate: static func(value: borrow<hello>) -> tuple<hello, hello>;
     /// Retains a transferred object in JavaScript after its final host handle is dropped
     stash: static func(value: own<hello>);
     /// Retains a transferred object and returns an expected error
     stash-and-fail: static func(value: own<hello>) -> result<_, string>;
+    /// Retains a transferred object and asynchronously returns an expected error
+    stash-and-fail-async: static func(value: own<hello>) -> result<_, string>;
     /// Returns the object retained by `stash`
     take: static func() -> hello;
+    /// Reports the number of live entries in the exported-resource table
+    resource-count: static func() -> u32;
   }
 
   resource hello-with-static-create {
