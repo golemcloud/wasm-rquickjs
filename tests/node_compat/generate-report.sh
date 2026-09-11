@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SUITE_DIR="${SCRIPT_DIR}/suite"
 
-if [ ! -d "${SUITE_DIR}" ]; then
+if [ ! -f "${SUITE_DIR}/NODE_VERSION" ]; then
   echo "Error: vendored test suite not found at ${SUITE_DIR}"
   echo "Run ./tests/node_compat/vendor.sh first."
   exit 1
@@ -23,7 +23,7 @@ fi
 
 cd "${REPO_ROOT}"
 
-echo "==> Generating report from config.jsonc..."
-cargo test --release --test node_compat_report -- --nocapture
+echo "==> Generating report from config.jsonc and pinned vendored Node.js sources..."
+cargo test --release --test node_compat_report -- generate_node_compat_config_report --nocapture
 
 echo "==> Report written to tests/node_compat/report.md"

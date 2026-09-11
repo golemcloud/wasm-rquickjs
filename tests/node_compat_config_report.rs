@@ -1,8 +1,9 @@
 //! Node.js compatibility inventory report generator.
 //!
-//! This report is generated only from tests/node_compat/config.jsonc. It does not compile or run
-//! the node compatibility runner itself. Entries classified as `runnable` are treated as passing
-//! because the node compatibility PR test runs them and fails CI if any of them fail.
+//! This report is generated from tests/node_compat/config.jsonc plus the pinned vendored Node.js
+//! sources used to detect tests that rely on Node internals. It does not compile or run the node
+//! compatibility runner itself. Entries classified as `runnable` are treated as passing because
+//! the node compatibility PR test runs them and fails CI if any of them fail.
 //!
 //! Usage:
 //!   cargo test --test node_compat_report -- --nocapture
@@ -14,10 +15,11 @@ test_r::enable!();
 #[allow(dead_code)]
 mod common;
 
+use camino_tempfile::Utf8TempDir;
 use common::js_subtest_parser::{BlockKind, SubtestDiscovery, discover_subtests_with_options};
 use common::{
     NodeCompatCategory, NodeCompatTestEntry, classify_test, load_node_compat_config,
-    strip_jsonc_comments,
+    load_node_compat_config_with_suite_root, strip_jsonc_comments,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -145,8 +147,9 @@ fn render_node_compat_config_report() -> anyhow::Result<(String, CategoryCounts)
         "Source: `{CONFIG_PATH}` | Engine: wasm-rquickjs (QuickJS)\n\n"
     ));
     report.push_str(
-        "This report is generated from `config.jsonc` only. It does **not** run the vendored \
-         tests itself. Entries classified as `runnable` are reported as passing because the \
+        "This report is generated from `config.jsonc` and the pinned vendored Node.js sources \
+         used to detect tests that rely on Node internals. It does **not** run the vendored tests \
+         itself. Entries classified as `runnable` are reported as passing because the \
          `node_compat` PR test executes runnable entries and fails CI if any of them fail.\n\n",
     );
 
@@ -157,6 +160,110 @@ fn render_node_compat_config_report() -> anyhow::Result<(String, CategoryCounts)
     push_missing_reasons(&mut report, &missing_reasons);
 
     Ok((report, counts))
+}
+
+#[test]
+fn node_compat_config_requires_vendored_suite() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::new()?;
+    let error = fixture.load().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("vendored Node.js test suite is unavailable"),
+        "{error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn node_compat_config_requires_matching_vendored_version() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::new()?;
+    fixture.write_suite_version("22.13.0")?;
+    let error = fixture.load().unwrap_err();
+    assert!(error.to_string().contains("version mismatch"), "{error:#}");
+    assert!(error.to_string().contains("22.14.0"), "{error:#}");
+    Ok(())
+}
+
+#[test]
+fn node_compat_config_requires_source_for_implicit_classification() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::with_implicit_entry()?;
+    fixture.write_suite_version("22.14.0")?;
+    let error = fixture.load().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("cannot classify node-compat entry"),
+        "{error:#}"
+    );
+    Ok(())
+}
+
+#[test]
+fn node_compat_config_classifies_from_vendored_source() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::with_implicit_entry()?;
+    fixture.write_suite_version("22.14.0")?;
+    fixture.write_source("// Flags: --expose-internals\n'use strict';\n")?;
+    let entries = fixture.load()?;
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].category, NodeCompatCategory::NodeInternals);
+    Ok(())
+}
+
+struct NodeCompatConfigFixture {
+    _temp: Utf8TempDir,
+    config_path: camino::Utf8PathBuf,
+    suite_root: camino::Utf8PathBuf,
+}
+
+impl NodeCompatConfigFixture {
+    fn new() -> anyhow::Result<Self> {
+        Self::create(false)
+    }
+
+    fn with_implicit_entry() -> anyhow::Result<Self> {
+        Self::create(true)
+    }
+
+    fn create(with_implicit_entry: bool) -> anyhow::Result<Self> {
+        let temp = Utf8TempDir::new()?;
+        let config_path = temp.path().join("config.jsonc");
+        let suite_root = temp.path().join("suite");
+        let tests = if with_implicit_entry {
+            r#"{"parallel/test-internal.js": {}}"#
+        } else {
+            "{}"
+        };
+        fs::write(
+            &config_path,
+            format!(r#"{{"nodeVersion": "22.14.0", "tests": {tests}}}"#),
+        )?;
+        Ok(Self {
+            _temp: temp,
+            config_path,
+            suite_root,
+        })
+    }
+
+    fn write_suite_version(&self, version: &str) -> anyhow::Result<()> {
+        fs::create_dir_all(&self.suite_root)?;
+        fs::write(self.suite_root.join("NODE_VERSION"), format!("{version}\n"))?;
+        Ok(())
+    }
+
+    fn write_source(&self, source: &str) -> anyhow::Result<()> {
+        let source_path = self.suite_root.join("parallel/test-internal.js");
+        fs::create_dir_all(source_path.parent().unwrap())?;
+        fs::write(source_path, source)?;
+        Ok(())
+    }
+
+    fn load(&self) -> anyhow::Result<Vec<NodeCompatTestEntry>> {
+        load_node_compat_config_with_suite_root(
+            self.config_path.as_str(),
+            self.suite_root.as_std_path(),
+        )
+    }
 }
 
 #[test]

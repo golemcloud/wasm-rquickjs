@@ -38,6 +38,12 @@ This sparse-checkouts `test/parallel/`, `test/sequential/`, `test/es-module/`,
 specified tag. The `suite/` directory is gitignored — each
 developer runs the vendor script to populate it.
 
+Configuration loading and report generation inspect these pinned sources to
+distinguish public API coverage from tests that rely on Node.js internals. They
+fail when the suite is absent, a source required for implicit classification is
+missing, or the vendored version differs from `config.jsonc`; this prevents
+missing classification inputs from silently changing the compatibility totals.
+
 ## Config Format
 
 `config.jsonc` is an allowlist of tests expected to pass. Only listed tests
