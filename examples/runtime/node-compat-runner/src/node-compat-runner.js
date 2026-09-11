@@ -162,6 +162,9 @@ function applyTestFlagsToProcess(testPath) {
     for (var i = 0; i < flags.length; i++) {
         globalThis.process.execArgv.push(flags[i]);
     }
+    if (typeof globalThis.__wasm_rquickjs_configure_source_maps_from_startup_args === 'function') {
+        globalThis.__wasm_rquickjs_configure_source_maps_from_startup_args(flags);
+    }
     globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromFlags(flags);
     return flags;
 }
