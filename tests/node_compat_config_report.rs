@@ -5,8 +5,11 @@
 //! compatibility runner itself. Entries classified as `runnable` are treated as passing because
 //! the node compatibility PR test runs them and fails CI if any of them fail.
 //!
-//! Usage:
-//!   cargo test --test node_compat_report -- --nocapture
+//! Run the read-only report contracts with:
+//!   cargo test --test node_compat_report
+//!
+//! Regenerate the report with:
+//!   ./tests/node_compat/generate-report.sh
 //!
 //! The report is written to tests/node_compat/report.md
 
@@ -83,6 +86,7 @@ impl CategoryCounts {
 }
 
 #[test]
+#[ignore = "explicit report-generation command; default harness execution is read-only"]
 fn generate_node_compat_config_report() -> anyhow::Result<()> {
     let (report, counts) = render_node_compat_config_report()?;
     fs::write(REPORT_PATH, &report)?;
@@ -104,12 +108,13 @@ fn generate_node_compat_config_report() -> anyhow::Result<()> {
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn node_compat_config_report_is_current() -> anyhow::Result<()> {
     let (expected, _) = render_node_compat_config_report()?;
     let actual = fs::read_to_string(REPORT_PATH)?;
     assert_eq!(
         actual, expected,
-        "{REPORT_PATH} is stale; run `cargo test --test node_compat_report -- generate_node_compat_config_report`"
+        "{REPORT_PATH} is stale; run `./tests/node_compat/generate-report.sh`"
     );
     Ok(())
 }
@@ -163,6 +168,7 @@ fn render_node_compat_config_report() -> anyhow::Result<(String, CategoryCounts)
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn node_compat_config_requires_vendored_suite() -> anyhow::Result<()> {
     let fixture = NodeCompatConfigFixture::new()?;
     let error = fixture.load().unwrap_err();
@@ -176,6 +182,7 @@ fn node_compat_config_requires_vendored_suite() -> anyhow::Result<()> {
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn node_compat_config_requires_matching_vendored_version() -> anyhow::Result<()> {
     let fixture = NodeCompatConfigFixture::new()?;
     fixture.write_suite_version("22.13.0")?;
@@ -186,6 +193,7 @@ fn node_compat_config_requires_matching_vendored_version() -> anyhow::Result<()>
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn node_compat_config_requires_source_for_implicit_classification() -> anyhow::Result<()> {
     let fixture = NodeCompatConfigFixture::with_implicit_entry()?;
     fixture.write_suite_version("22.14.0")?;
@@ -200,6 +208,7 @@ fn node_compat_config_requires_source_for_implicit_classification() -> anyhow::R
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn node_compat_config_classifies_from_vendored_source() -> anyhow::Result<()> {
     let fixture = NodeCompatConfigFixture::with_implicit_entry()?;
     fixture.write_suite_version("22.14.0")?;
@@ -267,6 +276,7 @@ impl NodeCompatConfigFixture {
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn module_related_node_compat_entries_are_configured() -> anyhow::Result<()> {
     let entries = load_node_compat_config(CONFIG_PATH)?;
     let configured: BTreeSet<_> = entries.into_iter().map(|entry| entry.path).collect();
@@ -287,6 +297,7 @@ fn module_related_node_compat_entries_are_configured() -> anyhow::Result<()> {
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
     let entries = load_node_compat_config(CONFIG_PATH)?;
     let module_entrypoints = collect_module_related_entrypoints()?;
@@ -318,6 +329,7 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn module_known_gap_deferrals_require_an_exact_reason() {
     let accepted = "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source";
     assert!(is_accepted_module_known_gap_reason(Some(accepted)));
@@ -327,6 +339,7 @@ fn module_known_gap_deferrals_require_an_exact_reason() {
 }
 
 #[test]
+#[test_r::tag(report_contract)]
 fn vm_split_fixtures_include_top_level_executable_statements() -> anyhow::Result<()> {
     for (path, expected_count) in [
         ("parallel/test-vm-basic.js", 10),

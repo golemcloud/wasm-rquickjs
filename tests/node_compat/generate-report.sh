@@ -24,6 +24,6 @@ fi
 cd "${REPO_ROOT}"
 
 echo "==> Generating report from config.jsonc and pinned vendored Node.js sources..."
-cargo test --release --test node_compat_report -- generate_node_compat_config_report --nocapture
+cargo test --release --test node_compat_report -- --include-ignored generate_node_compat_config_report --nocapture
 
 echo "==> Report written to tests/node_compat/report.md"
