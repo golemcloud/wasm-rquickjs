@@ -33,6 +33,8 @@ use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 use std::future::Future;
 use std::pin::Pin;
+#[cfg(feature = "net-write-profiling")]
+use std::time::Instant;
 use url::Url;
 use wasip3::http::types::{ErrorCode, Fields, Method, Request, Response, Scheme, Trailers};
 
@@ -276,7 +278,21 @@ impl NodeHttpClientRequest {
                 // `write_all` returns any bytes it could not deliver; dropping the writer closes
                 // the request body stream and dropping the trailers writer resolves it to the
                 // default `Ok(None)` (no trailers).
+                #[cfg(feature = "net-write-profiling")]
+                let body_len = body.len();
+                #[cfg(feature = "net-write-profiling")]
+                let write_started_at = Instant::now();
                 let _remaining = body_tx.write_all(body).await;
+                #[cfg(feature = "net-write-profiling")]
+                eprintln!(
+                    "[node-http-write-profile]{}",
+                    serde_json::json!({
+                        "bytes": body_len,
+                        "completedBytes": body_len - _remaining.len(),
+                        "writeAllCalls": 1,
+                        "elapsedNs": write_started_at.elapsed().as_nanos() as u64,
+                    })
+                );
                 drop(body_tx);
                 drop(trailers_tx);
             };

@@ -1,10 +1,9 @@
 import { setTimeout, setInterval, setImmediate, clearTimeout, clearInterval, clearImmediate } from '__wasm_rquickjs_builtin/timeout';
 import { setTimeout as pSetTimeout, setImmediate as pSetImmediate, setInterval as pSetInterval } from 'node:timers/promises';
+import { getTimerDuration } from '__wasm_rquickjs_builtin/internal/timers';
 
 export { setTimeout, setInterval, setImmediate, clearTimeout, clearInterval, clearImmediate };
 export const promises = { setTimeout: pSetTimeout, setImmediate: pSetImmediate, setInterval: pSetInterval };
-
-const TIMEOUT_MAX = 2 ** 31 - 1;
 
 function emitWarning(msg, type, code) {
     if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
@@ -18,15 +17,7 @@ function emitWarning(msg, type, code) {
 
 export function enroll(item, msecs) {
     emitWarning('timers.enroll() is deprecated. Please use setTimeout instead.', 'DeprecationWarning', 'DEP0095');
-    const delay = +msecs;
-    if (delay > TIMEOUT_MAX) {
-        emitWarning(`${msecs} does not fit into a 32-bit signed integer.\nTimer duration was truncated to ${TIMEOUT_MAX}.`, 'TimeoutOverflowWarning');
-        item._idleTimeout = TIMEOUT_MAX;
-    } else if (!(delay >= 1)) {
-        item._idleTimeout = 1;
-    } else {
-        item._idleTimeout = Math.trunc(delay);
-    }
+    item._idleTimeout = getTimerDuration(msecs, 'msecs');
     item._idleStart = Date.now();
 }
 
