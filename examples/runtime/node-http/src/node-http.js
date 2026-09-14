@@ -1837,8 +1837,9 @@ export async function netWriteTimeoutLifecycle() {
     if (!validationOrdering || !invalidValueOrdering || !normalizedOverflow) return false;
 
     // Keep the exact queue-size policy deterministic as a supplement to the
-    // public TCP lifecycle below: decreasing progress, including draining to
-    // zero, buys another interval; an unchanged or increasing queue emits.
+    // public TCP lifecycle below: any changed sample, including an increase or
+    // draining to zero, denotes write activity and buys another interval;
+    // only an unchanged sample emits.
     const policySocket = new net.Socket();
     let policyPending = 64;
     let policyResets = 0;
@@ -1854,15 +1855,15 @@ export async function netWriteTimeoutLifecycle() {
     policySocket.on('timeout', () => { policyTimeouts++; });
     policyPending = 96;
     policySocket._onTimeout();
-    const increasingPolicy = policyResets === 0 && policyTimeouts === 1 &&
-        policySocket._lastWriteQueueSize === 64;
+    const increasingProgress = policyResets === 1 && policyTimeouts === 0 &&
+        policySocket._lastWriteQueueSize === 96;
     policyPending = 32;
     policySocket._onTimeout();
     policyPending = 0;
     policySocket._onTimeout();
     policySocket._onTimeout();
-    const progressPolicy = increasingPolicy &&
-        policyResets === 2 && policyTimeouts === 2 &&
+    const progressPolicy = increasingProgress &&
+        policyResets === 3 && policyTimeouts === 1 &&
         policySocket._lastWriteQueueSize === 0;
     policySocket.destroy();
     if (!progressPolicy) return false;
