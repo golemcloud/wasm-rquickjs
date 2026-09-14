@@ -3073,6 +3073,7 @@ fn node_compat_category_from_entry(
     path: &str,
     entry: &serde_json::Value,
     inherited: Option<NodeCompatCategory>,
+    suite_root: &std::path::Path,
 ) -> anyhow::Result<NodeCompatCategory> {
     if let Some(category) = entry.get("category").and_then(|v| v.as_str()) {
         return NodeCompatCategory::from_config_value(category);
@@ -3090,7 +3091,7 @@ fn node_compat_category_from_entry(
         let reason = entry.get("reason").and_then(|v| v.as_str()).unwrap_or("");
         return Ok(if is_unevaluated_node_compat_reason(reason) {
             NodeCompatCategory::Unevaluated
-        } else if uses_node_internals(path) {
+        } else if uses_node_internals(suite_root, path)? {
             NodeCompatCategory::NodeInternals
         } else {
             NodeCompatCategory::KnownGap
@@ -3103,7 +3104,7 @@ fn node_compat_category_from_entry(
         return Ok(category);
     }
 
-    if uses_node_internals(path) {
+    if uses_node_internals(suite_root, path)? {
         Ok(NodeCompatCategory::NodeInternals)
     } else {
         Ok(NodeCompatCategory::Runnable)
@@ -3111,9 +3112,27 @@ fn node_compat_category_from_entry(
 }
 
 pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestEntry>> {
+    let config_path = std::path::Path::new(path);
+    let suite_root = config_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("suite");
+    load_node_compat_config_with_suite_root(path, &suite_root)
+}
+
+pub fn load_node_compat_config_with_suite_root(
+    path: &str,
+    suite_root: &std::path::Path,
+) -> anyhow::Result<Vec<NodeCompatTestEntry>> {
     let content = fs::read_to_string(path)?;
     let json_str = strip_jsonc_comments(&content);
     let value: serde_json::Value = serde_json::from_str(&json_str)?;
+
+    let expected_node_version = value
+        .get("nodeVersion")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| anyhow!("config.jsonc missing string 'nodeVersion'"))?;
+    validate_node_compat_suite(suite_root, expected_node_version)?;
 
     let tests_obj = value
         .get("tests")
@@ -3122,7 +3141,7 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
 
     let mut tests = Vec::new();
     for (path, opts) in tests_obj {
-        let category = node_compat_category_from_entry(path, opts, None)?;
+        let category = node_compat_category_from_entry(path, opts, None, suite_root)?;
         let reason = opts
             .get("reason")
             .and_then(|v| v.as_str())
@@ -3145,8 +3164,12 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
         let mut subtests = Vec::new();
         if let Some(subtests_obj) = opts.get("subtests").and_then(|v| v.as_object()) {
             for (subtest_name, subtest_opts) in subtests_obj {
-                let sub_category =
-                    node_compat_category_from_entry(path, subtest_opts, Some(category))?;
+                let sub_category = node_compat_category_from_entry(
+                    path,
+                    subtest_opts,
+                    Some(category),
+                    suite_root,
+                )?;
                 let sub_reason = subtest_opts
                     .get("reason")
                     .and_then(|v| v.as_str())
@@ -3181,6 +3204,27 @@ pub fn load_node_compat_config(path: &str) -> anyhow::Result<Vec<NodeCompatTestE
     }
 
     Ok(tests)
+}
+
+fn validate_node_compat_suite(
+    suite_root: &std::path::Path,
+    expected_node_version: &str,
+) -> anyhow::Result<()> {
+    let version_path = suite_root.join("NODE_VERSION");
+    let actual_node_version = fs::read_to_string(&version_path).map_err(|error| {
+        anyhow!(
+            "vendored Node.js test suite is unavailable at {}: {error}; run ./tests/node_compat/vendor.sh {expected_node_version}",
+            version_path.display()
+        )
+    })?;
+    let actual_node_version = actual_node_version.trim();
+    if actual_node_version != expected_node_version {
+        return Err(anyhow!(
+            "vendored Node.js test suite version mismatch at {}: config requires {expected_node_version}, found {actual_node_version:?}; run ./tests/node_compat/vendor.sh {expected_node_version}",
+            version_path.display()
+        ));
+    }
+    Ok(())
 }
 
 pub fn load_node_modules_apps_config(path: &str) -> anyhow::Result<Vec<NodeModulesAppEntry>> {
@@ -5182,19 +5226,21 @@ pub fn classify_test(filename: &str) -> &str {
 ///
 /// Detects patterns like `// Flags: --expose-internals`, `require('internal/...')`,
 /// and `internalBinding(...)` in the test source code.
-pub fn uses_node_internals(test_path: &str) -> bool {
-    let file_path = format!("tests/node_compat/suite/{test_path}");
-    let content = match fs::read_to_string(&file_path) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
+fn uses_node_internals(suite_root: &std::path::Path, test_path: &str) -> anyhow::Result<bool> {
+    let file_path = suite_root.join(test_path);
+    let content = fs::read_to_string(&file_path).map_err(|error| {
+        anyhow!(
+            "cannot classify node-compat entry {test_path:?}: vendored source {} is unavailable: {error}; re-run ./tests/node_compat/vendor.sh",
+            file_path.display()
+        )
+    })?;
     // Only check the first 50 lines for the Flags comment (it's always near the top)
     let header: String = content.lines().take(50).collect::<Vec<_>>().join("\n");
     if header.contains("--expose-internals") {
-        return true;
+        return Ok(true);
     }
     // Check the full file for internal requires/bindings
-    content.contains("require('internal/")
+    Ok(content.contains("require('internal/")
         || content.contains("require(\"internal/")
-        || content.contains("internalBinding(")
+        || content.contains("internalBinding("))
 }
