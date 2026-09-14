@@ -103,6 +103,10 @@ name = "agentic_ts"
 harness = false
 
 [[test]]
+name = "typescript_transform_latency"
+harness = false
+
+[[test]]
 name = "migrate_config_split"
 harness = false
 

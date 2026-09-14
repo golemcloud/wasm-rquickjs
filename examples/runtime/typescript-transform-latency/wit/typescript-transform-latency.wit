@@ -1,0 +1,7 @@
+package quickjs:typescript-transform-latency;
+
+world typescript-transform-latency {
+  export measure-case: func(kind: string, source-bytes: u64, sample: u64) -> string;
+  export probe-controls: func(source-bytes: u64) -> string;
+  export probe-concurrency: func(source-bytes: u64) -> string;
+}

@@ -2,7 +2,7 @@
 
 Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
-This report is generated from `config.jsonc` only. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
+This report is generated from `config.jsonc` and the pinned vendored Node.js sources used to detect tests that rely on Node internals. It does **not** run the vendored tests itself. Entries classified as `runnable` are reported as passing because the `node_compat` PR test executes runnable entries and fails CI if any of them fail.
 
 ## Summary
 

@@ -40,9 +40,15 @@ run_clippy p2-default
 run_clippy p2-maximal \
     --no-default-features \
     --features full,golem,typescript-transform-runtime
+run_clippy p2-maximal-profiling \
+    --no-default-features \
+    --features full,golem,typescript-compiler-profiling
 run_clippy p2-maximal-no-logging \
     --no-default-features \
     --features full-no-logging,golem,typescript-transform-runtime
+run_clippy p2-maximal-no-logging-profiling \
+    --no-default-features \
+    --features full-no-logging,golem,typescript-compiler-profiling
 
 run_clippy p3-default \
     --no-default-features \
@@ -50,6 +56,12 @@ run_clippy p3-default \
 run_clippy p3-maximal \
     --no-default-features \
     --features full-p3,golem,typescript-transform-runtime
+run_clippy p3-maximal-profiling \
+    --no-default-features \
+    --features full-p3,golem,typescript-compiler-profiling
 run_clippy p3-maximal-no-logging \
     --no-default-features \
     --features full-no-logging-p3,golem,typescript-transform-runtime
+run_clippy p3-maximal-no-logging-profiling \
+    --no-default-features \
+    --features full-no-logging-p3,golem,typescript-compiler-profiling

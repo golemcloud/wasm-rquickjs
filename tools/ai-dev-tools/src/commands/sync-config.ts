@@ -54,7 +54,7 @@ export async function syncConfigCommand(
     console.error(
       `Error: Report not found at ${REPORT_PATH}\n` +
         `Run the report generator first:\n` +
-        `  cargo test --test node_compat_report -- --nocapture`,
+        `  ./tests/node_compat/generate-report.sh`,
     );
     process.exit(1);
   }

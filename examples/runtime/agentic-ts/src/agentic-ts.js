@@ -1,6 +1,8 @@
 import { runJavaScript, startJavaScript } from 'wasm-rquickjs:execution';
 
 const TSC = '/workspace/node_modules/typescript/lib/tsc.js';
+const TYPESCRIPT = '/workspace/node_modules/typescript/lib/typescript.js';
+const TYPESCRIPT_PROFILER = '/workspace/profile-typescript.mjs';
 
 function stringify(value) {
     return JSON.stringify(value);
@@ -32,6 +34,24 @@ export async function runTsc(args, timeoutMs) {
                 } finally {
                     process.exit = originalExit;
                 }
+            `,
+        }));
+    } catch (error) {
+        return stringify({ runnerError: { name: error.name, message: error.message } });
+    }
+}
+
+export async function profileTsc(timeoutMs) {
+    try {
+        return stringify(await runJavaScript({
+            cwd: '/workspace',
+            timeoutMs: Number(timeoutMs),
+            source: `
+                const { profileTypeScript } = await import(${JSON.stringify(TYPESCRIPT_PROFILER)});
+                return profileTypeScript({
+                    typescriptPath: ${JSON.stringify(TYPESCRIPT)},
+                    projectPath: '/workspace/projects/core/tsconfig.json',
+                });
             `,
         }));
     } catch (error) {

@@ -820,11 +820,10 @@ function getPackageScopeInfo(filename) {
 }
 
 function isPathDirectory(filename) {
-    try {
-        return fsModule.statSync(filename).isDirectory();
-    } catch (_) {
-        return false;
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat !== 'function') {
+        throw new Error('Internal CJS module path classifier is not initialized');
     }
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat(filename) === 1;
 }
 
 function loadAsFile(candidate, skipExact) {
@@ -2379,6 +2378,29 @@ function compileCjs(filename, source, isPreparedTypeScript = false) {
     return _evalWithFilename(wrappedSource, filename);
 }
 
+// Rust owns the probe-session state and cache. This JS depth only prevents a
+// nested require() graph from adding another native callback frame; in normal
+// operation JS depth > 0 corresponds to one active Rust session.
+let cjsModuleProbeExecutionDepth = 0;
+
+function withCjsModuleProbeExecution(callback) {
+    if (cjsModuleProbeExecutionDepth > 0) {
+        cjsModuleProbeExecutionDepth += 1;
+        try {
+            return callback();
+        } finally {
+            cjsModuleProbeExecutionDepth -= 1;
+        }
+    }
+
+    cjsModuleProbeExecutionDepth = 1;
+    try {
+        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_with_cjs_module_probe_session(callback);
+    } finally {
+        cjsModuleProbeExecutionDepth = 0;
+    }
+}
+
 function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire) {
     const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
     globalThis.__wasm_rquickjs_current_module = {
@@ -2388,7 +2410,9 @@ function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, chi
     const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
     globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
     try {
-        return compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);
+        return withCjsModuleProbeExecution(
+            () => compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname),
+        );
     } finally {
         globalThis.__wasm_rquickjs_current_module = previousModuleContext;
         if (previousCjsImportDir !== undefined) {
@@ -4598,14 +4622,10 @@ function _initPaths() {
 _initPaths();
 
 function _stat(filename) {
-    try {
-        const st = fsModule.statSync(filename);
-        if (st.isDirectory()) return 1;
-        if (st.isFile()) return 0;
-        return -2;
-    } catch (e) {
-        return -2;
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat !== 'function') {
+        throw new Error('Internal CJS module path classifier is not initialized');
     }
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat(filename);
 }
 
 function runMain() {
