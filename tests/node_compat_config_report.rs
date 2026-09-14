@@ -6,7 +6,7 @@
 //! the node compatibility PR test runs them and fails CI if any of them fail.
 //!
 //! Run the read-only report contracts with:
-//!   cargo test --test node_compat_report
+//!   cargo test --test node_compat_report -- ':tag:report_contract'
 //!
 //! Regenerate the report with:
 //!   ./tests/node_compat/generate-report.sh
