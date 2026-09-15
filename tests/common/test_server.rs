@@ -188,6 +188,14 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                 }),
             )
             .route(
+                "/json-echo",
+                post(async move |Json(body): Json<serde_json::Value>| {
+                    // For accepted JSON requests, extraction drains and validates the body before
+                    // this handler builds the response.
+                    Json(body)
+                }),
+            )
+            .route(
                 "/echo-referer",
                 post(async move |headers: HeaderMap, _body: Bytes| {
                     // This endpoint tests request-header policy, not early responses. Consume the

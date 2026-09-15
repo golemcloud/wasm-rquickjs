@@ -245,7 +245,8 @@ async fn xhr_post_with_json_body(
     println!("{output}");
 
     assert!(output.contains("XMLHttpRequest test 12: POST with JSON body"));
-    assert!(output.contains("JSON POST status:") || output.contains("ReadyState changed"));
+    assert!(output.contains("JSON POST status: 200"));
+    assert!(output.contains("JSON response matched request: true"));
 
     Ok(())
 }
