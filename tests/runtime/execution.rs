@@ -2,15 +2,106 @@ use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output}
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 
+#[path = "../../crates/wasm-rquickjs/skeleton/src/builtin/execution_timeout.rs"]
+mod execution_timeout;
+
+#[test]
+fn timeout_sampler_uses_sparse_clock_reads() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut now = started;
+    let mut reads = 0;
+    for _ in 0..200_000 {
+        now += std::time::Duration::from_micros(10);
+        if sampler.expired(|| {
+            reads += 1;
+            now
+        }) {
+            assert!(now >= started + timeout);
+            assert!(reads <= 30, "too many clock reads: {reads}");
+            assert!(sampler.expired(|| panic!("expired sampler read the clock again")));
+            return;
+        }
+    }
+    panic!("continuing CPU work never observed the deadline");
+}
+
+#[test]
+fn timeout_sampler_adapts_to_changed_interrupt_rate() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut now = started;
+    let mut reads = 0;
+    for interrupt in 0..200_000 {
+        now += std::time::Duration::from_micros(if interrupt < 50_000 { 10 } else { 100 });
+        if sampler.expired(|| {
+            reads += 1;
+            now
+        }) {
+            assert!(now >= started + timeout);
+            assert!(reads < 50, "too many clock reads: {reads}");
+            return;
+        }
+    }
+    panic!("continuing CPU work never observed the deadline after rate change");
+}
+
+#[test]
+fn timeout_sampler_does_not_check_at_completion() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut reads = 0;
+    for _ in 0..63 {
+        assert!(!sampler.expired(|| {
+            reads += 1;
+            started + timeout * 2
+        }));
+    }
+    assert_eq!(reads, 0);
+}
+
 #[test_dep(tagged_as = "execution", scope = Cloneable)]
 async fn compiled_execution() -> CompiledTest {
+    CompiledTest::new_with_features(
+        Utf8Path::new("examples/runtime/execution"),
+        true,
+        FeatureCombination::InternalTestExecution,
+    )
+    .await
+    .expect("Failed to compile execution")
+}
+
+#[test_dep(tagged_as = "execution_normal", scope = Cloneable)]
+async fn compiled_execution_normal() -> CompiledTest {
     CompiledTest::new_with_features(
         Utf8Path::new("examples/runtime/execution"),
         true,
         FeatureCombination::Normal,
     )
     .await
-    .expect("Failed to compile execution")
+    .expect("Failed to compile normal execution")
+}
+
+#[test]
+async fn execution_normal_timeout_smoke(
+    #[tagged_as("execution_normal")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
+    let Some(wasmtime::component::Val::String(json)) = result? else {
+        anyhow::bail!("expected JSON string result");
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    assert_eq!(report["tightLoopTimeoutError"], "execution job timed out");
+    assert_eq!(report["finiteCpuValue"], "done");
+    assert!(report.get("tightLoopTimeoutClockReads").is_none());
+    assert!(report.get("finiteCpuClockReads").is_none());
+    Ok(())
 }
 
 #[test]
@@ -67,6 +158,21 @@ async fn execution_isolation(
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
     assert_eq!(report["timeoutError"], "execution job timed out");
     assert_eq!(report["tightLoopTimeoutError"], "execution job timed out");
+    println!(
+        "timeout clock reads: tight loop={}, finite CPU={}",
+        report["tightLoopTimeoutClockReads"], report["finiteCpuClockReads"]
+    );
+    assert!(
+        report["tightLoopTimeoutClockReads"]
+            .as_u64()
+            .is_some_and(|reads| (1..=30).contains(&reads))
+    );
+    assert_eq!(report["finiteCpuValue"], "done");
+    assert!(
+        report["finiteCpuClockReads"]
+            .as_u64()
+            .is_some_and(|reads| reads <= 10)
+    );
     assert_eq!(
         report["cpuBeforeSuspendTimeoutError"],
         "execution job timed out"
