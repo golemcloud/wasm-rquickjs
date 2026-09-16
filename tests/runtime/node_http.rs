@@ -1,5 +1,5 @@
 use crate::common::test_server::start_test_server;
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
@@ -8,6 +8,16 @@ use wasmtime::component::Val;
 async fn compiled_node_http() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/node-http");
     CompiledTest::new(path, true)
+        .await
+        .expect("Failed to compile node_http")
+}
+
+#[test_dep(tagged_as = "node_http_profiling", scope = Cloneable)]
+async fn compiled_node_http_profiling() -> CompiledTest {
+    let path = Utf8Path::new("examples/runtime/node-http");
+    // The ordinary and profiling dependencies coexist in group8. Keep their
+    // component artifacts separate so one feature set cannot overwrite the other.
+    CompiledTest::new_with_features(path, false, FeatureCombination::NetWriteProfiling)
         .await
         .expect("Failed to compile node_http")
 }
@@ -260,6 +270,22 @@ async fn node_http_pipelined_active_timeout(
 }
 
 #[test]
+async fn net_write_timeout_lifecycle(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "net-write-timeout-lifecycle",
+        &[],
+    )
+    .await;
+    assert!(output.is_empty(), "unexpected output: {output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_close_idle_connections(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -443,6 +469,60 @@ async fn node_net_writev_boundaries(
         invoke_and_capture_output(compiled.wasm_path(), None, "net-writev-boundaries", &[]).await;
     println!("{output}");
     assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_net_write_profile(
+    #[tagged_as("node_http_profiling")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    for (chunk_size, chunk_count) in [
+        (4 * 1024, 16),
+        (4 * 1024, 256),
+        (64 * 1024, 4),
+        (64 * 1024 + 1, 4),
+        (1024 * 1024, 2),
+    ] {
+        for corked in [false, true] {
+            let (result, output) = invoke_and_capture_output(
+                compiled.wasm_path(),
+                None,
+                "net-write-profile",
+                &[
+                    Val::U32(chunk_size),
+                    Val::U32(chunk_count),
+                    Val::Bool(corked),
+                ],
+            )
+            .await;
+            println!("{output}");
+            let Some(Val::String(profile)) = result? else {
+                anyhow::bail!("net-write-profile did not return a JSON string");
+            };
+            let profile: serde_json::Value = serde_json::from_str(&profile)?;
+            assert_eq!(profile["expectedBytes"], profile["receivedBytes"]);
+            assert_eq!(
+                profile["native"]["requestedBytes"],
+                profile["expectedBytes"]
+            );
+            assert_eq!(
+                profile["native"]["completedBytes"],
+                profile["expectedBytes"]
+            );
+            assert_eq!(
+                profile["receiver"]["native"]["completedReadBytes"],
+                profile["expectedBytes"]
+            );
+            assert!(profile["js"]["nativeCrossings"].as_u64().unwrap() > 0);
+            assert!(
+                profile["receiver"]["js"]["nativeReadCrossings"]
+                    .as_u64()
+                    .unwrap()
+                    > 0
+            );
+            println!("{}", serde_json::to_string_pretty(&profile)?);
+        }
+    }
     Ok(())
 }
 

@@ -1544,7 +1544,7 @@ pub fn strip_jsonc_comments(input: &str) -> String {
     result
 }
 
-fn truthy_env(name: &str) -> bool {
+pub(crate) fn truthy_env(name: &str) -> bool {
     std::env::var(name)
         .map(|value| {
             matches!(
@@ -3641,6 +3641,8 @@ pub enum FeatureCombination {
     Lite,
     Normal,
     InternalTestExecution,
+    NetWriteProfiling,
+    NodeCompatNetWriteProfiling,
     TypeScriptRuntime,
     TypeScriptTransformRuntime,
     TypeScriptCompilerProfiling,
@@ -3663,6 +3665,8 @@ impl FeatureCombination {
             Self::Lite => "lite",
             Self::Normal => "normal",
             Self::InternalTestExecution => "internal-test-execution",
+            Self::NetWriteProfiling => "net-write-profiling",
+            Self::NodeCompatNetWriteProfiling => "node-compat-net-write-profiling",
             Self::TypeScriptRuntime => "typescript-runtime",
             Self::TypeScriptTransformRuntime => "typescript-transform-runtime",
             Self::TypeScriptCompilerProfiling => "typescript-compiler-profiling",
@@ -3687,6 +3691,14 @@ impl FeatureCombination {
             FeatureCombination::InternalTestExecution => {
                 vec!["--features", "internal-test-execution"]
             }
+            FeatureCombination::NetWriteProfiling => {
+                vec!["--features", "net-write-profiling"]
+            }
+            FeatureCombination::NodeCompatNetWriteProfiling => vec![
+                "--no-default-features",
+                "--features",
+                "full-no-logging,golem,typescript-runtime,net-write-profiling",
+            ],
             FeatureCombination::TypeScriptRuntime => {
                 vec!["--features", "typescript-runtime,test-observability"]
             }
@@ -3743,6 +3755,10 @@ impl FeatureCombination {
                     FeatureCombination::InternalTestExecution => {
                         "normal-p3,internal-test-execution"
                     }
+                    FeatureCombination::NetWriteProfiling => "normal-p3,net-write-profiling",
+                    FeatureCombination::NodeCompatNetWriteProfiling => {
+                        "full-no-logging-p3,golem,typescript-runtime,net-write-profiling"
+                    }
                     FeatureCombination::TypeScriptRuntime => {
                         "normal-p3,typescript-runtime,test-observability"
                     }
@@ -3774,6 +3790,7 @@ impl FeatureCombination {
                 | FeatureCombination::FullWithGolem
                 | FeatureCombination::FullNoLoggingWithGolem
                 | FeatureCombination::FullNoLoggingWithGolemAndTypeScript
+                | FeatureCombination::NodeCompatNetWriteProfiling
         )
     }
 }

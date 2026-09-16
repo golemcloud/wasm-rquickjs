@@ -32,13 +32,14 @@ struct FullPreparedComponent(Arc<GolemPreparedComponent>);
 #[test_dep(tagged_as = "node_compat_full_compiled", scope = Cloneable)]
 async fn compiled_node_compat_full() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/node-compat-runner");
-    CompiledTest::new_with_features(
-        path,
-        true,
-        common::FeatureCombination::FullNoLoggingWithGolemAndTypeScript,
-    )
-    .await
-    .expect("Failed to compile node-compat-runner")
+    let feature_combination = if common::truthy_env("WASM_RQUICKJS_TEST_NET_WRITE_PROFILING") {
+        common::FeatureCombination::NodeCompatNetWriteProfiling
+    } else {
+        common::FeatureCombination::FullNoLoggingWithGolemAndTypeScript
+    };
+    CompiledTest::new_with_features(path, true, feature_combination)
+        .await
+        .expect("Failed to compile node-compat-runner")
 }
 
 /// Each worker materialises its own `FullPreparedComponent` (which owns
