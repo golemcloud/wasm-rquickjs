@@ -188,8 +188,18 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                 }),
             )
             .route(
+                "/json-echo",
+                post(async move |Json(body): Json<serde_json::Value>| {
+                    // For accepted JSON requests, extraction drains and validates the body before
+                    // this handler builds the response.
+                    Json(body)
+                }),
+            )
+            .route(
                 "/echo-referer",
-                post(async move |headers: HeaderMap| {
+                post(async move |headers: HeaderMap, _body: Bytes| {
+                    // This endpoint tests request-header policy, not early responses. Consume the
+                    // request body before replying so response delivery cannot race body completion.
                     let referer = headers
                         .get("referer")
                         .and_then(|h| h.to_str().ok())
@@ -202,7 +212,9 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
             )
             .route(
                 "/echo-credentials",
-                post(async move |headers: HeaderMap| {
+                post(async move |headers: HeaderMap, _body: Bytes| {
+                    // Like /echo-referer, keep the fixture focused on header semantics by
+                    // consuming the request body before constructing the response.
                     let authorization = headers
                         .get("authorization")
                         .and_then(|h| h.to_str().ok())

@@ -4324,7 +4324,10 @@ fn cjs_module_path_stat(ctx: Ctx<'_>, filename: String) -> i32 {
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized");
-    let Ok(resolved) = services.process.resolve_path(std::path::Path::new(&filename)) else {
+    let Ok(resolved) = services
+        .process
+        .resolve_path(std::path::Path::new(&filename))
+    else {
         return -2;
     };
     let normalized = resolved.to_string_lossy();
@@ -6987,10 +6990,11 @@ fn transform_typescript_module_source<'js>(
             .execution_profile(),
         std::time::Instant::now(),
     );
+    let source_map = crate::internal::typescript::source_maps_enabled(ctx);
     match crate::internal::typescript::transform_module(
         source,
         fs_path,
-        false,
+        source_map,
         match std::path::Path::new(fs_path)
             .extension()
             .and_then(|extension| extension.to_str())
@@ -7010,7 +7014,7 @@ fn transform_typescript_module_source<'js>(
                     started.elapsed().as_micros().min(u64::MAX as u128) as u64,
                 );
             }
-            Ok(output.code)
+            Ok(output.into_code_with_inline_source_map())
         }
         Err(error) => {
             #[cfg(feature = "typescript-compiler-profiling")]
@@ -9176,7 +9180,7 @@ fn analyze_cjs_reexport_specifier_names(
                     let Ok(output) = crate::internal::typescript::transform_module(
                         original_source.clone(),
                         &child_filename,
-                        false,
+                        crate::internal::typescript::source_maps_enabled(ctx),
                         match std::path::Path::new(&child_filename)
                             .extension()
                             .and_then(|extension| extension.to_str())
@@ -9188,18 +9192,19 @@ fn analyze_cjs_reexport_specifier_names(
                     ) else {
                         continue;
                     };
+                    let prepared_source = output.into_code_with_inline_source_map();
                     if let Some(graph) = prepared_typescript.as_deref_mut() {
                         let _ = record_typescript_module_transform(ctx);
                         graph.insert(
                             child_filename.clone(),
                             PreparedCjsTypeScript {
                                 original_source,
-                                prepared_source: output.code.clone(),
+                                prepared_source: prepared_source.clone(),
                                 export_names: Vec::new(),
                             },
                         );
                     }
-                    output.code
+                    prepared_source
                 }
             } else {
                 source
@@ -11800,6 +11805,18 @@ fn declare_esm_file_module_from_source<'js>(
         source,
         processed.dynamic_import_binding_names.as_ref(),
     );
+    if let Ok(register_source_map) =
+        globals.get::<_, Function>("__wasm_rquickjs_register_transformed_source_map")
+    {
+        register_source_map.call::<_, ()>((
+            fs_abs_path.as_str(),
+            injected.as_str(),
+            module_id,
+            1,
+            0,
+            true,
+        ))?;
+    }
     match declare_module_with_import_meta(ctx, module_id, &injected, &init) {
         Ok(module) => {
             if has_top_level_await {
