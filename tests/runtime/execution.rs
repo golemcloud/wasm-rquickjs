@@ -2,6 +2,70 @@ use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output}
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 
+#[path = "../../crates/wasm-rquickjs/skeleton/src/builtin/execution_timeout.rs"]
+mod execution_timeout;
+
+#[test]
+fn timeout_sampler_uses_sparse_clock_reads() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut now = started;
+    let mut reads = 0;
+    for _ in 0..200_000 {
+        now += std::time::Duration::from_micros(10);
+        if sampler.expired(|| {
+            reads += 1;
+            now
+        }) {
+            assert!(now >= started + timeout);
+            assert!(reads <= 30, "too many clock reads: {reads}");
+            assert!(sampler.expired(|| panic!("expired sampler read the clock again")));
+            return;
+        }
+    }
+    panic!("continuing CPU work never observed the deadline");
+}
+
+#[test]
+fn timeout_sampler_adapts_to_changed_interrupt_rate() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut now = started;
+    let mut reads = 0;
+    for interrupt in 0..200_000 {
+        now += std::time::Duration::from_micros(if interrupt < 50_000 { 10 } else { 100 });
+        if sampler.expired(|| {
+            reads += 1;
+            now
+        }) {
+            assert!(now >= started + timeout);
+            assert!(reads < 50, "too many clock reads: {reads}");
+            return;
+        }
+    }
+    panic!("continuing CPU work never observed the deadline after rate change");
+}
+
+#[test]
+fn timeout_sampler_does_not_check_at_completion() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut reads = 0;
+    for _ in 0..63 {
+        assert!(!sampler.expired(|| {
+            reads += 1;
+            started + timeout * 2
+        }));
+    }
+    assert_eq!(reads, 0);
+}
+
 #[test_dep(tagged_as = "execution", scope = Cloneable)]
 async fn compiled_execution() -> CompiledTest {
     CompiledTest::new_with_features(

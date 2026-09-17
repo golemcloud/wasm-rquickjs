@@ -17,6 +17,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::Poll;
 use std::time::{Duration, Instant};
 
+#[path = "execution_timeout.rs"]
+mod execution_timeout;
+use execution_timeout::ExecutionTimeoutSampler;
+
 const MAX_ACTIVE_JOBS: usize = 8;
 const MAX_TIMEOUT_MS: u64 = u64::MAX / 1_000_000;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
@@ -483,9 +487,17 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     // The public timeout budget starts when user code begins, after runtime and
     // builtin initialization. The interrupt handler is also needed for tight
     // loops that cannot cooperatively yield to the timer future.
-    let deadline = options
-        .timeout_ms
-        .and_then(|ms| Instant::now().checked_add(Duration::from_millis(ms)));
+    let timeout = options.timeout_ms.and_then(|ms| {
+        let started_at = Instant::now();
+        let duration = Duration::from_millis(ms);
+        started_at
+            .checked_add(duration)
+            .map(|deadline| (started_at, deadline, duration))
+    });
+    let deadline = timeout.map(|(_, deadline, _)| deadline);
+    let mut timeout_sampler = timeout.map(|(started_at, deadline, duration)| {
+        ExecutionTimeoutSampler::new(started_at, deadline, duration)
+    });
     let cancelled = job.cancel.clone();
     let timed_out = job.timed_out.clone();
     runtime
@@ -494,7 +506,9 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             if cancelled.load(Ordering::Relaxed) {
                 return true;
             }
-            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            if timeout_sampler.as_mut().is_some_and(|sampler| {
+                sampler.expired(Instant::now)
+            }) {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
             }

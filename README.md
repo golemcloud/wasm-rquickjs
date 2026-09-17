@@ -660,8 +660,13 @@ Options accept exactly one of `entry: string` or inline `source: string`, plus `
 inline `source` and defaults to JavaScript. With the generated crate's `typescript-runtime`
 feature enabled, TypeScript entry files are selected by their `.ts`, `.mts`, or `.cts` extension,
 and inline jobs can select `language: "typescript"`.
-Output and completion wake the parent without periodic polling. CPU deadlines start
-after child-runtime initialization and are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
+Output and completion wake the parent without periodic polling. Timeout budgets start
+after child-runtime initialization. An async wait observes deadlines while jobs yield; for
+non-yielding JavaScript, the QuickJS interrupt handler samples the clock at an adaptive stride
+targeting one check per 10% of `timeoutMs` during steady CPU work. This is a best-effort budget,
+not an exact cutoff or a maximum-overrun guarantee. A job that finishes between checks can
+succeed after its literal deadline; no extra clock check occurs at completion. Entry modules run
+for their side effects; an exported
 `default` function (or `run` function when there is no default function) is invoked and awaited.
 Relative entry paths and imports resolve from `cwd`. Inline `source` is an async function body:
 top-level `await` and `return` are supported, while static `import`/`export` declarations are not.
@@ -673,7 +678,8 @@ With `overflow: "terminate"`, exceeding either stream's bound rejects the job. W
 `overflow: "truncate"`, execution continues, captured output is bounded, and `overflowed` is
 `true` when either stream exceeded the bound.
 Cancellation is cooperative for queued or yielding code and cannot preempt a tight loop already
-running on the same thread; use a positive `timeoutMs` when that guarantee is required. A job that
+running on the same thread; a positive `timeoutMs` is the best-effort escape mechanism for such a
+loop. Cancellation remains a guest-local flag check on every QuickJS interrupt. A job that
 never settles must be cancelled or given a timeout before the enclosing component invocation can
 finish. A runtime accepts at
 most eight active jobs, and child executions cannot recursively create more execution jobs.
