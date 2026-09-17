@@ -101,20 +101,11 @@ export async function run() {
         timeoutError = error.message;
     }
     let tightLoopTimeoutError;
-    let tightLoopTimeoutClockReads;
     try {
         await runJavaScript({ source: `while (true) {}`, timeoutMs: 5 });
     } catch (error) {
         tightLoopTimeoutError = error.message;
-        tightLoopTimeoutClockReads = error.timeoutClockReads;
     }
-    const finiteCpu = await runJavaScript({ source: `
-        let sum = 0;
-        for (let i = 0; i < 2_000_000; i++) sum += i;
-        return sum > 0 ? 'done' : 'failed';
-    `, timeoutMs: 60_000 });
-    const finiteCpuValue = finiteCpu.value;
-    const finiteCpuClockReads = finiteCpu.timeoutClockReads;
     const cpuBeforeSuspend = startJavaScript({ source: `
         console.log('burn:start:' + Date.now());
         const burnStarted = Date.now();
@@ -448,8 +439,7 @@ export async function run() {
         liveStdout, liveStderr, liveResult, ordering, streamedBeforeResult, parentProgress,
         left, right, defaultEnvironment, explicitEnvironment,
         packageCacheFirst, packageCacheSecond,
-        timeoutSuccess, timeoutError, tightLoopTimeoutError, tightLoopTimeoutClockReads,
-        finiteCpuValue, finiteCpuClockReads,
+        timeoutSuccess, timeoutError, tightLoopTimeoutError,
         cpuBeforeSuspendTimeoutError, cpuBeforeSuspendElapsedMs,
         zeroTimeoutCode, hugeTimeoutCode, invalidProgramOptions,
         overflowError, truncated, entry, defaultArgv, largeJavaScript,

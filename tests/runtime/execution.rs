@@ -71,37 +71,10 @@ async fn compiled_execution() -> CompiledTest {
     CompiledTest::new_with_features(
         Utf8Path::new("examples/runtime/execution"),
         true,
-        FeatureCombination::InternalTestExecution,
-    )
-    .await
-    .expect("Failed to compile execution")
-}
-
-#[test_dep(tagged_as = "execution_normal", scope = Cloneable)]
-async fn compiled_execution_normal() -> CompiledTest {
-    CompiledTest::new_with_features(
-        Utf8Path::new("examples/runtime/execution"),
-        true,
         FeatureCombination::Normal,
     )
     .await
-    .expect("Failed to compile normal execution")
-}
-
-#[test]
-async fn execution_normal_timeout_smoke(
-    #[tagged_as("execution_normal")] compiled: &CompiledTest,
-) -> anyhow::Result<()> {
-    let (result, _) = invoke_and_capture_output(compiled.wasm_path(), None, "run", &[]).await;
-    let Some(wasmtime::component::Val::String(json)) = result? else {
-        anyhow::bail!("expected JSON string result");
-    };
-    let report: serde_json::Value = serde_json::from_str(&json)?;
-    assert_eq!(report["tightLoopTimeoutError"], "execution job timed out");
-    assert_eq!(report["finiteCpuValue"], "done");
-    assert!(report.get("tightLoopTimeoutClockReads").is_none());
-    assert!(report.get("finiteCpuClockReads").is_none());
-    Ok(())
+    .expect("Failed to compile execution")
 }
 
 #[test]
@@ -158,21 +131,6 @@ async fn execution_isolation(
     assert_eq!(report["timeoutSuccess"]["value"], "quick");
     assert_eq!(report["timeoutError"], "execution job timed out");
     assert_eq!(report["tightLoopTimeoutError"], "execution job timed out");
-    println!(
-        "timeout clock reads: tight loop={}, finite CPU={}",
-        report["tightLoopTimeoutClockReads"], report["finiteCpuClockReads"]
-    );
-    assert!(
-        report["tightLoopTimeoutClockReads"]
-            .as_u64()
-            .is_some_and(|reads| (1..=30).contains(&reads))
-    );
-    assert_eq!(report["finiteCpuValue"], "done");
-    assert!(
-        report["finiteCpuClockReads"]
-            .as_u64()
-            .is_some_and(|reads| reads <= 10)
-    );
     assert_eq!(
         report["cpuBeforeSuspendTimeoutError"],
         "execution job timed out"

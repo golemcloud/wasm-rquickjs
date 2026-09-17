@@ -89,16 +89,11 @@ export function startJavaScript(options) {
       if (!state.done) continue;
       settled = true;
       stdout.end(); stderr.end(); forget_job(id);
-      if (state.error !== null) {
-        const error = new Error(state.error);
-        if (state.timeoutClockReads !== undefined) error.timeoutClockReads = state.timeoutClockReads;
-        rejectResult(error);
-      }
+      if (state.error !== null) rejectResult(new Error(state.error));
       else {
         try {
           const completed = { value: deserializeFromTransport(state.value), overflowed: state.overflowed };
           if (state.profile !== undefined) completed.profile = state.profile;
-          if (state.timeoutClockReads !== undefined) completed.timeoutClockReads = state.timeoutClockReads;
           resolveResult(completed);
         }
         catch (error) { rejectResult(error); }

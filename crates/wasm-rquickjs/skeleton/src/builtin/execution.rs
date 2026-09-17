@@ -14,8 +14,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "internal-test-execution")]
-use std::sync::atomic::AtomicU64;
 use std::task::Poll;
 use std::time::{Duration, Instant};
 
@@ -69,8 +67,6 @@ pub(crate) struct ExecutionJob {
     cancel: Arc<AtomicBool>,
     overflowed: Arc<AtomicBool>,
     timed_out: Arc<AtomicBool>,
-    #[cfg(feature = "internal-test-execution")]
-    timeout_clock_reads: Arc<AtomicU64>,
     forgotten: AtomicBool,
     completion: RefCell<Option<Result<String, String>>>,
     event_waker: AtomicWaker,
@@ -94,8 +90,6 @@ impl ExecutionJob {
             cancel: Arc::new(AtomicBool::new(false)),
             overflowed: Arc::new(AtomicBool::new(false)),
             timed_out: Arc::new(AtomicBool::new(false)),
-            #[cfg(feature = "internal-test-execution")]
-            timeout_clock_reads: Arc::new(AtomicU64::new(0)),
             forgotten: AtomicBool::new(false),
             completion: RefCell::default(),
             event_waker: AtomicWaker::new(),
@@ -216,8 +210,6 @@ struct PollResult {
     value: Option<String>,
     error: Option<String>,
     overflowed: bool,
-    #[cfg(feature = "internal-test-execution")]
-    timeout_clock_reads: u64,
     #[cfg(feature = "typescript-compiler-profiling")]
     #[serde(skip_serializing_if = "Option::is_none")]
     profile: Option<ExecutionProfileSnapshot>,
@@ -340,8 +332,6 @@ pub mod native_module {
             value,
             error,
             overflowed: job.overflowed.load(Ordering::Relaxed),
-            #[cfg(feature = "internal-test-execution")]
-            timeout_clock_reads: job.timeout_clock_reads.load(Ordering::Relaxed),
             #[cfg(feature = "typescript-compiler-profiling")]
             profile: job.profile.borrow_mut().take(),
         })
@@ -510,8 +500,6 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     });
     let cancelled = job.cancel.clone();
     let timed_out = job.timed_out.clone();
-    #[cfg(feature = "internal-test-execution")]
-    let timeout_clock_reads = job.timeout_clock_reads.clone();
     runtime
         .rt
         .set_interrupt_handler(Some(Box::new(move || {
@@ -519,11 +507,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
                 return true;
             }
             if timeout_sampler.as_mut().is_some_and(|sampler| {
-                sampler.expired(|| {
-                    #[cfg(feature = "internal-test-execution")]
-                    timeout_clock_reads.fetch_add(1, Ordering::Relaxed);
-                    Instant::now()
-                })
+                sampler.expired(Instant::now)
             }) {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
