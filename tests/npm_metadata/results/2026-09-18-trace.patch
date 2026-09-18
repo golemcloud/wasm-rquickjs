@@ -1,0 +1,330 @@
+diff --git a/crates/wasm-rquickjs/skeleton/src/builtin/fs.rs b/crates/wasm-rquickjs/skeleton/src/builtin/fs.rs
+index fd45d400..f804b0f8 100644
+--- a/crates/wasm-rquickjs/skeleton/src/builtin/fs.rs
++++ b/crates/wasm-rquickjs/skeleton/src/builtin/fs.rs
+@@ -644,6 +644,20 @@ pub mod native_module {
+     const MAX_STACK_DEPTH_FOR_READDIR: isize = 384;
+     const STACK_DEPTH_SCAN_LIMIT: isize = 1024;
+ 
++    #[rquickjs::function]
++    pub fn trace_cjs_canonicalization(ctx: Ctx<'_>, path: String) {
++        #[cfg(feature = "typescript-compiler-profiling")]
++        if let Some(profile) = ctx
++            .userdata::<crate::internal::runtime_services::RuntimeServices>()
++            .expect("runtime services not initialized")
++            .execution_profile()
++        {
++            profile.trace_path("cjsCanonicalization", &path);
++        }
++        #[cfg(not(feature = "typescript-compiler-profiling"))]
++        let _ = (ctx, path);
++    }
++
+     #[cfg(feature = "typescript-compiler-profiling")]
+     fn profile_fs(ctx: &Ctx<'_>, operation: &str, outcome: Option<&str>, bytes: usize) {
+         let profile = ctx
+@@ -1492,6 +1506,14 @@ pub mod native_module {
+         }
+ 
+         let absolute_path = runtime_path(&ctx, &path);
++        #[cfg(feature = "typescript-compiler-profiling")]
++        if let Some(profile) = ctx
++            .userdata::<crate::internal::runtime_services::RuntimeServices>()
++            .expect("runtime services not initialized")
++            .execution_profile()
++        {
++            profile.trace_path("fsRealpath", &absolute_path);
++        }
+         match super::canonicalize_guest_path(&absolute_path) {
+             Ok(resolved_path) => {
+                 #[cfg(feature = "typescript-compiler-profiling")]
+diff --git a/crates/wasm-rquickjs/skeleton/src/builtin/module.js b/crates/wasm-rquickjs/skeleton/src/builtin/module.js
+index d4a64f89..e02c4256 100644
+--- a/crates/wasm-rquickjs/skeleton/src/builtin/module.js
++++ b/crates/wasm-rquickjs/skeleton/src/builtin/module.js
+@@ -63,6 +63,7 @@ import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/
+ import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
+ import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
+ import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
++import { trace_cjs_canonicalization as traceCjsCanonicalization } from '__wasm_rquickjs_builtin/fs_native';
+ import {
+     transform_typescript as transformTypeScriptNative,
+     transform_typescript_module as transformTypeScriptModuleNative,
+@@ -736,6 +737,7 @@ function shouldPreserveSymlinks(isMainModuleLoad) {
+ 
+ function toCjsCanonicalFilename(filename, isMainModuleLoad) {
+     if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
++    traceCjsCanonicalization(filename);
+     return fsModule.realpathSync.native(filename);
+ }
+ 
+diff --git a/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs b/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs
+index 8bc1f59e..c1e955b6 100644
+--- a/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs
++++ b/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs
+@@ -4294,6 +4294,12 @@ fn module_resolution_path_probe(
+         } else {
+             profile.increment(&format!("{prefix}.systemCalls"));
+             profile.increment("modules.pathProbe.systemCalls");
++            if matches!(
++                _kind,
++                ModulePathProbeKind::File | ModulePathProbeKind::Directory
++            ) {
++                profile.trace_path("physicalModuleProbe", normalized);
++            }
+         }
+     }
+ 
+@@ -4807,6 +4813,9 @@ impl NodeModulesResolver {
+                     } else {
+                         "modules.packageJson.errors"
+                     });
++                    if _error.kind() == std::io::ErrorKind::NotFound {
++                        profile.trace_path("missingPackageJson", &cache_key);
++                    }
+                 }
+                 Ok(None)
+             }
+diff --git a/crates/wasm-rquickjs/skeleton/src/internal/runtime_services.rs b/crates/wasm-rquickjs/skeleton/src/internal/runtime_services.rs
+index 050f369c..8d22e200 100644
+--- a/crates/wasm-rquickjs/skeleton/src/internal/runtime_services.rs
++++ b/crates/wasm-rquickjs/skeleton/src/internal/runtime_services.rs
+@@ -21,6 +21,30 @@ pub(crate) struct ExecutionProfileSnapshot {
+     pub(crate) phases_ms: BTreeMap<String, f64>,
+     pub(crate) total_ms: f64,
+     pub(crate) counters: BTreeMap<String, u64>,
++    pub(crate) path_trace: BTreeMap<String, PathTraceSummary>,
++}
++
++#[cfg(feature = "typescript-compiler-profiling")]
++const PATH_TRACE_LIMIT: usize = 16_384;
++
++#[cfg(feature = "typescript-compiler-profiling")]
++#[derive(Default)]
++struct PathTrace {
++    calls: u64,
++    overflow_calls: u64,
++    paths: BTreeMap<String, u64>,
++}
++
++#[cfg(feature = "typescript-compiler-profiling")]
++#[derive(serde::Serialize)]
++#[serde(rename_all = "camelCase")]
++pub(crate) struct PathTraceSummary {
++    calls: u64,
++    distinct_paths: usize,
++    repeat_calls: u64,
++    revisited_paths: usize,
++    overflow_calls: u64,
++    path_limit: usize,
+ }
+ 
+ #[cfg(feature = "typescript-compiler-profiling")]
+@@ -29,6 +53,7 @@ pub(crate) struct ExecutionProfile {
+     last_phase: Cell<Instant>,
+     phases: RefCell<BTreeMap<String, Duration>>,
+     counters: RefCell<BTreeMap<String, u64>>,
++    path_trace: RefCell<BTreeMap<&'static str, PathTrace>>,
+ }
+ 
+ #[cfg(feature = "typescript-compiler-profiling")]
+@@ -39,6 +64,7 @@ impl ExecutionProfile {
+             last_phase: Cell::new(Instant::now()),
+             phases: RefCell::default(),
+             counters: RefCell::default(),
++            path_trace: RefCell::default(),
+         }
+     }
+ 
+@@ -64,6 +90,19 @@ impl ExecutionProfile {
+         *counter = counter.saturating_add(value);
+     }
+ 
++    pub(crate) fn trace_path(&self, category: &'static str, path: &str) {
++        let mut trace = self.path_trace.borrow_mut();
++        let entry = trace.entry(category).or_default();
++        entry.calls = entry.calls.saturating_add(1);
++        if let Some(count) = entry.paths.get_mut(path) {
++            *count = count.saturating_add(1);
++        } else if entry.paths.len() < PATH_TRACE_LIMIT {
++            entry.paths.insert(path.to_owned(), 1);
++        } else {
++            entry.overflow_calls = entry.overflow_calls.saturating_add(1);
++        }
++    }
++
+     pub(crate) fn snapshot(&self) -> ExecutionProfileSnapshot {
+         let phases = self.phases.borrow();
+         let queue_delay = phases.get("queueDelay").copied().unwrap_or_default();
+@@ -75,6 +114,28 @@ impl ExecutionProfile {
+                 .collect(),
+             total_ms: (queue_delay + self.started.elapsed()).as_secs_f64() * 1000.0,
+             counters: self.counters.borrow().clone(),
++            path_trace: self
++                .path_trace
++                .borrow()
++                .iter()
++                .map(|(category, trace)| {
++                    (
++                        category.to_string(),
++                        PathTraceSummary {
++                            calls: trace.calls,
++                            distinct_paths: trace.paths.len(),
++                            repeat_calls: trace.paths.values().map(|count| count - 1).sum(),
++                            revisited_paths: trace
++                                .paths
++                                .values()
++                                .filter(|count| **count > 1)
++                                .count(),
++                            overflow_calls: trace.overflow_calls,
++                            path_limit: PATH_TRACE_LIMIT,
++                        },
++                    )
++                })
++                .collect(),
+         }
+     }
+ }
+diff --git a/tests/npm_metadata.rs b/tests/npm_metadata.rs
+index 6a24a1d6..895c8660 100644
+--- a/tests/npm_metadata.rs
++++ b/tests/npm_metadata.rs
+@@ -35,6 +35,10 @@ fn target_name() -> &'static str {
+     }
+ }
+ 
++fn trace_mode() -> bool {
++    std::env::var("NPM_METADATA_TRACE").as_deref() == Ok("1")
++}
++
+ fn command(command: &mut Command) -> anyhow::Result<String> {
+     let output = command.output()?;
+     ensure!(
+@@ -206,7 +210,7 @@ async fn sample(
+         )
+         .await?,
+     ];
+-    if operation != "version" {
++    if operation != "version" && !trace_mode() {
+         samples.push(
+             measure(
+                 &mut instance,
+@@ -245,10 +249,14 @@ async fn measure(
+     let result: Value = serde_json::from_str(&encoded)?;
+     let success = result["value"]["exitCode"] == 0 && result.get("runnerError").is_none();
+     let installed = if operation == "ci" {
+-        instance
+-            .temp_dir_path()
+-            .join("workspace/node_modules/@types/lodash-es/package.json")
+-            .exists()
++        PACKAGES.iter().all(|(short, _)| {
++            instance
++                .temp_dir_path()
++                .join(format!(
++                    "workspace/node_modules/@types/{short}/package.json"
++                ))
++                .exists()
++        })
+     } else {
+         false
+     };
+@@ -264,6 +272,49 @@ async fn measure(
+         .lines()
+         .filter(|line| line.starts_with("npm http cache "))
+         .count();
++    if trace_mode() {
++        ensure!(success, "npm {operation} failed");
++        ensure!(
++            operation != "ci" || installed,
++            "npm ci did not install both packages"
++        );
++        let profile = &result["profile"];
++        let counters = &profile["counters"];
++        let trace = &profile["pathTrace"];
++        let calls = |category: &str| trace[category]["calls"].as_u64().unwrap_or_default();
++        let counter = |name: &str| counters[name].as_u64().unwrap_or_default();
++        ensure!(
++            calls("physicalModuleProbe")
++                == counter("modules.fileProbe.systemCalls")
++                    + counter("modules.directoryProbe.systemCalls"),
++            "module probes did not reconcile"
++        );
++        ensure!(
++            calls("missingPackageJson") == counter("modules.packageJson.notFound"),
++            "missing package reads did not reconcile"
++        );
++        ensure!(
++            calls("fsRealpath") == counter("filesystem.realpath.calls"),
++            "realpath calls did not reconcile"
++        );
++        for category in [
++            "physicalModuleProbe",
++            "missingPackageJson",
++            "fsRealpath",
++            "cjsCanonicalization",
++        ] {
++            ensure!(
++                trace[category]["overflowCalls"] == 0,
++                "trace overflow in {category}"
++            );
++        }
++        return Ok(
++            json!({"sequence": sequence, "operation": operation, "registry": "local",
++            "cache": "cold", "success": true, "installed": installed, "wallMs": wall_ms,
++            "processCpuMs": cpu_ms, "localHttpRequests": count,
++            "counters": counters, "pathTrace": trace}),
++        );
++    }
+     Ok(
+         json!({"sequence": sequence, "operation": operation, "registry": if local {"local"} else {"npmjs"},
+         "cache": cache, "success": success && (operation != "ci" || installed), "installed": installed, "wallMs": wall_ms,
+@@ -294,6 +345,9 @@ async fn main() -> anyhow::Result<()> {
+         iterations > 0 && iterations <= 20,
+         "iterations must be 1..=20"
+     );
++    if trace_mode() {
++        ensure!(iterations == 3, "trace requires three iterations");
++    }
+     let compiled = CompiledTest::new_with_features(
+         Utf8Path::new("examples/runtime/npm-compat"),
+         true,
+@@ -307,6 +361,30 @@ async fn main() -> anyhow::Result<()> {
+     let (local, server, requests) = local_registry(pack_dir.path()).await?;
+     let mut samples = Vec::new();
+     for iteration in 0..iterations {
++        if trace_mode() {
++            for operation in ["version", "view", "ci"] {
++                let next = samples.len();
++                let value = sample(
++                    &prepared,
++                    operation,
++                    &local,
++                    true,
++                    next,
++                    Some(requests.as_ref()),
++                )
++                .await?
++                .remove(0);
++                eprintln!(
++                    "{} local {} cold: success={} wall={}ms",
++                    target_name(),
++                    operation,
++                    value["success"],
++                    value["wallMs"]
++                );
++                samples.push(value);
++            }
++            continue;
++        }
+         // Alternate the order to limit drift, never run invocations concurrently.
+         for local_first in [iteration % 2 == 1, iteration % 2 == 0] {
+             let (url, count) = if local_first {
+@@ -332,7 +410,7 @@ async fn main() -> anyhow::Result<()> {
+         }
+     }
+     server.abort();
+-    let report = json!({"schema": "npm-metadata-v1", "revision": command(Command::new("git").args(["rev-parse", "HEAD"]))?,
++    let report = json!({"schema": if trace_mode() {"npm-metadata-path-trace-v1"} else {"npm-metadata-v1"}, "revision": command(Command::new("git").args(["rev-parse", "HEAD"]))?,
+         "target": target_name(), "node": "22.14.0", "npm": "10.9.2",
+         "componentFeature": "typescript-compiler-profiling", "iterations": iterations, "samples": samples});
+     let output = serde_json::to_string_pretty(&report)?;

@@ -20,3 +20,31 @@ The local registry is a controlled HTTP transport, not a network latency
 baseline. Without `NPM_METADATA_RUN=1`, the test target exits without building
 the component or using the network. Public npmjs.org results must never be used
 as CI timing gates.
+
+## Reproduce the cold path trace
+
+The dated trace patch is a measurement tool, not a runtime change. Start from
+this branch with a clean worktree, use the pinned Node/npm installation,
+and apply it only for the measurement. It adds bounded per-job path-frequency
+counters and emits aggregate counts without path strings.
+
+```sh
+git apply --check tests/npm_metadata/results/2026-09-18-trace.patch
+git apply tests/npm_metadata/results/2026-09-18-trace.patch
+NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
+  NPM_METADATA_REPORT=/tmp/npm-metadata-trace-p2.json \
+  tools/dev-test.sh p2 standard npm_metadata ''
+NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
+  NPM_METADATA_REPORT=/tmp/npm-metadata-trace-p3.json \
+  tools/dev-test.sh p3 standard npm_metadata ''
+git apply --reverse tests/npm_metadata/results/2026-09-18-trace.patch
+git diff --exit-code -- crates/wasm-rquickjs/skeleton tests/npm_metadata.rs
+python3 tests/npm_metadata/results/validate_trace.py
+```
+
+The validator checks the checked-in raw trace results against the fixed
+baseline. The two reproduction commands write separate `/tmp` files and do
+not overwrite those checked-in observations. Both targets require a local
+loopback listener and one pre-timing fetch of the pinned tarballs. The trace
+has no warm or public-registry rows, and its timings should not be mixed with
+the original baseline.
