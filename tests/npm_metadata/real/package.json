@@ -1,0 +1,9 @@
+{
+  "name": "npm-metadata-real",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@types/lodash": "4.17.12",
+    "@types/lodash-es": "4.17.12"
+  }
+}
