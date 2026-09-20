@@ -6552,6 +6552,60 @@ export const testCjsPackageJsonParseCache = async () => {
     }
 };
 
+export const testCjsLoaderRealpathCache = async () => {
+    try {
+        const root = '/cjs-loader-realpath-cache-app';
+        const link = `${root}/link.js`;
+        const firstTarget = `${root}/first.js`;
+        const secondTarget = `${root}/second.js`;
+        const lateTarget = `${root}/late.js`;
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(firstTarget, 'module.exports = "first";');
+        fs.writeFileSync(secondTarget, 'module.exports = "second";');
+        fs.symlinkSync('first.js', link);
+
+        const require = createRequire(`${root}/entry.cjs`);
+        const Module = require('node:module');
+        const originalPathCache = Module._pathCache;
+        const originalExecArgv = process.execArgv.slice();
+        const getHits = globalThis.__wasm_rquickjs_get_loader_realpath_cache_hit_count;
+        const resetHits = globalThis.__wasm_rquickjs_reset_loader_realpath_cache_hit_count;
+        const testRealpath = globalThis.__wasm_rquickjs_test_loader_realpath;
+        assert.strictEqual(typeof getHits, 'function');
+        assert.strictEqual(typeof resetHits, 'function');
+        assert.strictEqual(typeof testRealpath, 'function');
+        try {
+            Module._pathCache = Object.create(null);
+            resetHits();
+            assert.strictEqual(require.resolve(link), firstTarget);
+            fs.unlinkSync(link);
+            fs.symlinkSync('second.js', link);
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(link), firstTarget);
+            assert.ok(getHits() > 0, 'the repeated loader realpath must use the runtime cache');
+            assert.strictEqual(fs.realpathSync.native(link), secondTarget);
+
+            process.execArgv.push('--preserve-symlinks');
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(link), link);
+
+            assert.strictEqual(testRealpath(lateTarget), undefined);
+            fs.writeFileSync(lateTarget, 'module.exports = "late";');
+            assert.strictEqual(testRealpath(lateTarget), lateTarget);
+        } finally {
+            Module._pathCache = originalPathCache;
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) {
+                process.execArgv.push(arg);
+            }
+        }
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
 export const testCjsPackageReexportNamedExports = async () => {
     try {
         fs.mkdirSync('/cjs-package-reexport-app/node_modules/pkg', { recursive: true });

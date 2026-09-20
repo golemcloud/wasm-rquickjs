@@ -310,10 +310,53 @@ fn rename_fd_path(ctx: &rquickjs::Ctx<'_>, old_path: &str, new_path: &str) {
 }
 
 pub(super) fn realpath_for_module_resolution(
-    _ctx: &rquickjs::Ctx<'_>,
+    ctx: &rquickjs::Ctx<'_>,
     path: &str,
 ) -> Option<String> {
-    canonicalize_guest_path(path).ok()
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let profile = services.execution_profile();
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if let Some(profile) = &profile {
+        profile.increment("modules.realpath.calls");
+    }
+
+    if let Some(resolved) = services.loader_realpath_cache.borrow().get(path).cloned()
+    {
+        #[cfg(feature = "test-observability")]
+        services.record_loader_realpath_cache_hit();
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &profile {
+            profile.increment("modules.realpath.cacheHits");
+        }
+        return Some(resolved);
+    }
+
+    let resolved = canonicalize_guest_path(path);
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if let Some(profile) = &profile {
+        profile.increment("modules.realpath.systemCalls");
+        profile.increment("filesystem.realpath.calls");
+        profile.increment(match &resolved {
+            Ok(_) => "filesystem.realpath.success",
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                "filesystem.realpath.notFound"
+            }
+            Err(_) => "filesystem.realpath.errors",
+        });
+    }
+    match resolved {
+        Ok(resolved) => {
+            services
+                .loader_realpath_cache
+                .borrow_mut()
+                .insert(path.to_string(), resolved.clone());
+            Some(resolved)
+        }
+        Err(_) => None,
+    }
 }
 
 fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
@@ -1470,6 +1513,11 @@ pub mod native_module {
             Ok(_) => None,
             Err(err) => Some(super::make_fs_error(&ctx, &err, "access", Some(&path))),
         }
+    }
+
+    #[rquickjs::function]
+    pub fn fs_loader_realpath(ctx: Ctx<'_>, path: String) -> Option<String> {
+        super::realpath_for_module_resolution(&ctx, &path)
     }
 
     #[rquickjs::function]

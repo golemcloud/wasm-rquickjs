@@ -659,8 +659,11 @@ fn module_loader_architecture() {
     }
     for test_bridge in [
         "__wasm_rquickjs_get_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_get_loader_realpath_cache_hit_count",
         "__wasm_rquickjs_reset_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_reset_loader_realpath_cache_hit_count",
         "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
+        "__wasm_rquickjs_test_loader_realpath",
     ] {
         assert!(
             rust_bridges.contains(test_bridge),

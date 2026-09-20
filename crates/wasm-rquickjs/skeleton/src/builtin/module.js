@@ -2,6 +2,7 @@ import * as pathModule from 'node:path';
 import * as pathPosix from 'node:path/posix';
 import * as pathWin32 from 'node:path/win32';
 import * as fsModule from 'node:fs';
+import * as fsNative from '__wasm_rquickjs_builtin/fs_native';
 import * as util from 'node:util';
 import * as buffer from 'node:buffer';
 import * as os from 'node:os';
@@ -736,7 +737,8 @@ function shouldPreserveSymlinks(isMainModuleLoad) {
 
 function toCjsCanonicalFilename(filename, isMainModuleLoad) {
     if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
-    return fsModule.realpathSync.native(filename);
+    const resolved = fsNative.fs_loader_realpath(filename);
+    return resolved == null ? fsModule.realpathSync.native(filename) : resolved;
 }
 
 function tryReadFile(filename) {

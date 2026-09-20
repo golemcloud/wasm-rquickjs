@@ -4384,6 +4384,25 @@ fn set_cjs_module_probe_session_enabled(ctx: Ctx<'_>, enabled: bool) {
         .set_enabled(enabled);
 }
 
+#[cfg(feature = "test-observability")]
+fn loader_realpath_cache_hit_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_cache_hit_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_cache_hit_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_cache_hit_count();
+}
+
+#[cfg(feature = "test-observability")]
+fn test_loader_realpath(ctx: Ctx<'_>, path: String) -> Option<String> {
+    crate::builtin::realpath_for_module_resolution(&ctx, &path)
+}
+
 struct NodePackageWarning {
     message: String,
     code: &'static str,
@@ -11630,6 +11649,33 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create CJS module probe-session test control"),
         )
         .expect("Failed to initialize CJS module probe-session test control");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_cache_hit_count",
+            Function::new(ctx.clone(), loader_realpath_cache_hit_count)
+                .expect("Failed to create loader realpath cache hit counter"),
+        )
+        .expect("Failed to initialize loader realpath cache hit counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_cache_hit_count",
+            Function::new(ctx.clone(), reset_loader_realpath_cache_hit_count)
+                .expect("Failed to create loader realpath cache hit counter reset"),
+        )
+        .expect("Failed to initialize loader realpath cache hit counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_test_loader_realpath",
+            Function::new(ctx.clone(), test_loader_realpath)
+                .expect("Failed to create loader realpath test bridge"),
+        )
+        .expect("Failed to initialize loader realpath test bridge");
 
         set_non_replaceable_global(
             &global,
