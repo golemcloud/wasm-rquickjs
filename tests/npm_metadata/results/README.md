@@ -48,3 +48,14 @@ not overwrite those checked-in observations. Both targets require a local
 loopback listener and one pre-timing fetch of the pinned tarballs. The trace
 has no warm or public-registry rows, and its timings should not be mixed with
 the original baseline.
+
+## Cache experiments
+
+The follow-up [cache experiment report](2026-09-21-cache-experiments.md)
+records independent and combined five-pair measurements for the graph-scoped
+missing `package.json` cache and runtime-scoped positive loader realpath cache.
+Its six raw reports can be checked with:
+
+```sh
+python3 tests/npm_metadata/results/validate_cache_experiments.py
+```

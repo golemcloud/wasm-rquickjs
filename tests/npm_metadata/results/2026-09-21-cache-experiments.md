@@ -1,0 +1,103 @@
+# npm loader cache experiments — 2026-09-21
+
+The path-frequency trace from 2026-09-18 showed material repetition in two
+loader call sites: 69–70% of missing optional `package.json` reads and 83–88%
+of CommonJS canonicalization realpaths revisited a path within one execution
+job. This follow-up tested each cache independently, retained both candidates,
+and measured the combined production behavior.
+
+The production commits are `6897f208` for graph-scoped missing package
+metadata and `fc42de34` for runtime-scoped positive loader realpaths. Combined
+HEAD was `a492849a`. Each experiment temporarily added a profiling-only switch
+to compare control and candidate in the same optimized component. Those
+switches and their npm fixture exports were removed after measurement; they
+are absent from the production commits.
+
+## Method
+
+Each target ran five alternating control/candidate pairs for `npm --version`,
+`npm view`, and cold `npm ci`. Runs were serial and used Node 22.14.0/npm
+10.9.2, the deterministic local registry, and a fresh Wasmtime store,
+component instance, QuickJS runtime, workspace, and npm cache per invocation.
+Every command succeeded. Every `ci` installed both pinned packages and made
+two local tarball requests; every `view` made one metadata request. No trace
+overflow or raw path was emitted.
+
+The timings use the instrumented development component and host process CPU,
+so the filesystem call counts are the primary decision signal. Times below
+are five-sample medians in seconds.
+
+## Independent negative package metadata cache
+
+Missing metadata is cached only while an outer CommonJS resolution graph is
+active. It is cleared when the graph returns or throws and after guest
+filesystem mutations. Only `NotFound` is retained; parse errors and other I/O
+errors are retried. The shorter lifetime explains why the remaining physical
+misses are slightly above the distinct-path counts from the earlier whole-job
+trace.
+
+| Target / command | Missing reads control → candidate | Wall control → candidate | CPU control → candidate |
+| --- | ---: | ---: | ---: |
+| P2 `--version` | 204 → 96 (-52.9%) | 0.781 → 0.774 | 0.788 → 0.782 |
+| P2 `view` | 1,768 → 596 (-66.3%) | 5.948 → 5.906 | 6.032 → 5.991 |
+| P2 `ci` | 2,645 → 847 (-68.0%) | 10.091 → 9.864 | 10.152 → 9.944 |
+| P3 `--version` | 204 → 96 (-52.9%) | 0.826 → 0.801 | 0.833 → 0.807 |
+| P3 `view` | 1,768 → 596 (-66.3%) | 6.296 → 6.234 | 6.318 → 6.283 |
+| P3 `ci` | 2,645 → 847 (-68.0%) | 10.864 → 10.541 | 10.705 → 10.454 |
+
+The candidate exceeded the 50% `view`/`ci` call-reduction gate on both targets
+and had no median CPU regression.
+
+## Independent loader realpath cache
+
+Successful loader canonicalizations are cached for one QuickJS runtime, which
+matches Node 22.14's stale positive realpath behavior. Failed canonicalizations
+are not cached. `--preserve-symlinks` and `--preserve-symlinks-main` bypass the
+cache, and public `node:fs` realpath APIs remain uncached and observe current
+filesystem state.
+
+The control counts are 14–15 calls above the older trace because the candidate
+routes previously uncounted Rust loader canonicalizations through the same
+owner as CommonJS JavaScript. In every sample,
+`modules.realpath.calls = cacheHits + systemCalls`, and physical
+`filesystem.realpath.calls` equals `modules.realpath.systemCalls`.
+
+| Target / command | Physical realpaths control → candidate | Wall control → candidate | CPU control → candidate |
+| --- | ---: | ---: | ---: |
+| P2 `--version` | 426 → 77 (-81.9%) | 0.804 → 0.591 | 0.810 → 0.585 |
+| P2 `view` | 3,545 → 475 (-86.6%) | 6.610 → 3.969 | 6.335 → 3.965 |
+| P2 `ci` | 5,007 → 614 (-87.7%) | 11.323 → 7.828 | 11.115 → 7.652 |
+| P3 `--version` | 426 → 77 (-81.9%) | 0.947 → 0.621 | 0.897 → 0.613 |
+| P3 `view` | 3,545 → 475 (-86.6%) | 6.294 → 5.001 | 6.261 → 4.405 |
+| P3 `ci` | 5,007 → 614 (-87.7%) | 12.314 → 7.665 | 11.782 → 7.511 |
+
+The candidate exceeded the 75% physical-call reduction gate for every command
+and improved median CPU by 27.8–37.4% on P2 and 29.6–36.3% on P3.
+
+## Combined production candidates
+
+| Target / command | Missing reads control → candidate | Physical realpaths control → candidate | Wall control → candidate | CPU control → candidate |
+| --- | ---: | ---: | ---: | ---: |
+| P2 `--version` | 204 → 96 | 426 → 77 | 0.848 → 0.626 | 0.836 → 0.612 |
+| P2 `view` | 1,768 → 596 | 3,545 → 475 | 7.195 → 4.756 | 7.061 → 4.549 |
+| P2 `ci` | 2,645 → 847 | 5,007 → 614 | 13.468 → 8.004 | 12.390 → 7.763 |
+| P3 `--version` | 204 → 96 | 426 → 77 | 0.886 → 0.736 | 0.865 → 0.707 |
+| P3 `view` | 1,768 → 596 | 3,545 → 475 | 6.259 → 4.158 | 6.187 → 4.099 |
+| P3 `ci` | 2,645 → 847 | 5,007 → 614 | 11.423 → 7.570 | 11.314 → 7.507 |
+
+The combined candidates preserve the independent call reductions. Median CPU
+improved 35.6% for P2 `view`, 37.3% for P2 `ci`, 33.7% for P3 `view`, and
+33.6% for P3 `ci`.
+
+Raw reports:
+
+- [negative package JSON P2](2026-09-21-negative-package-json-p2.json) and
+  [P3](2026-09-21-negative-package-json-p3.json)
+- [loader realpath P2](2026-09-21-loader-realpath-p2.json) and
+  [P3](2026-09-21-loader-realpath-p3.json)
+- [combined P2](2026-09-21-loader-caches-p2.json) and
+  [P3](2026-09-21-loader-caches-p3.json)
+
+Run `python3 tests/npm_metadata/results/validate_cache_experiments.py` to check
+sample success, installation and HTTP invariants, exact counter totals,
+reconciliation equations, and the accepted reduction and CPU gates.
