@@ -659,6 +659,7 @@ fn module_loader_architecture() {
     }
     for test_bridge in [
         "__wasm_rquickjs_get_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count",
         "__wasm_rquickjs_get_loader_realpath_cache_hit_count",
         "__wasm_rquickjs_reset_cjs_module_probe_session_hit_count",
         "__wasm_rquickjs_reset_loader_realpath_cache_hit_count",

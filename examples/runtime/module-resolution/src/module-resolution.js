@@ -6410,6 +6410,8 @@ export const testCjsPackageJsonParseCache = async () => {
         const probeRoot = '/cjs-probe-session-app';
         const probeRequire = createRequire(`${probeRoot}/entry.cjs`);
         fs.mkdirSync(`${probeRoot}/node_modules/late-pkg`, { recursive: true });
+        fs.mkdirSync(`${probeRoot}/node_modules/invalid-pkg`, { recursive: true });
+        fs.writeFileSync(`${probeRoot}/node_modules/invalid-pkg/package.json`, '{ invalid json');
         fs.writeFileSync(`${probeRoot}/target.js`, 'module.exports = true;');
         fs.writeFileSync(`${probeRoot}/nested-target.js`, 'module.exports = true;');
         fs.writeFileSync(`${probeRoot}/rename-target.js`, 'module.exports = true;');
@@ -6454,6 +6456,16 @@ export const testCjsPackageJsonParseCache = async () => {
             '  Module._pathCache = Object.create(null);',
             '  assert.strictEqual(require.resolve("./late-dir"), "/cjs-probe-session-app/late-dir/index.js");',
             '  assert.throws(() => require.resolve("late-pkg"), { code: "MODULE_NOT_FOUND" });',
+            '  Module._pathCache = Object.create(null);',
+            '  const missingPackageHitsBefore = globalThis.__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count();',
+            '  assert.throws(() => require.resolve("late-pkg"), { code: "MODULE_NOT_FOUND" });',
+            '  assert.ok(',
+            '    globalThis.__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count() > missingPackageHitsBefore,',
+            '    "the repeated missing package metadata lookup must use the outer CommonJS session",',
+            '  );',
+            '  assert.throws(() => require.resolve("invalid-pkg"), { code: "ERR_INVALID_PACKAGE_CONFIG" });',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("invalid-pkg"), { code: "ERR_INVALID_PACKAGE_CONFIG" });',
             '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/package.json", JSON.stringify({ exports: "./entry.js" }));',
             '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/entry.js", "module.exports = true;");',
             '  Module._pathCache = Object.create(null);',
@@ -6474,8 +6486,10 @@ export const testCjsPackageJsonParseCache = async () => {
             'module.exports = true;',
         ].join('\n'));
         const getProbeSessionHits = globalThis.__wasm_rquickjs_get_cjs_module_probe_session_hit_count;
+        const getMissingPackageHits = globalThis.__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count;
         const resetProbeSessionHits = globalThis.__wasm_rquickjs_reset_cjs_module_probe_session_hit_count;
         assert.strictEqual(typeof getProbeSessionHits, 'function');
+        assert.strictEqual(typeof getMissingPackageHits, 'function');
         assert.strictEqual(typeof resetProbeSessionHits, 'function');
         resetProbeSessionHits();
         assert.strictEqual(getProbeSessionHits(), 0);

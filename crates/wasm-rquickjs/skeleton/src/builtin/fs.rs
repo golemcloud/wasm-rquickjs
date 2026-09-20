@@ -228,10 +228,20 @@ fn with_fs_mut<R>(
 }
 
 fn invalidate_module_resolution_probes(ctx: &rquickjs::Ctx<'_>) {
-    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
-        .expect("runtime services not initialized")
-        .cjs_module_probe_session
-        .invalidate();
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    let _missing_package_json = services.cjs_module_probe_session.invalidate();
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if _missing_package_json > 0
+        && let Some(profile) = services.execution_profile()
+    {
+        profile.increment("modules.packageJson.negativeCacheInvalidations");
+        profile.add(
+            "modules.packageJson.negativeCacheInvalidatedEntries",
+            _missing_package_json as u64,
+        );
+    }
 }
 
 fn normalize_mode_override(mode: u32) -> u32 {
