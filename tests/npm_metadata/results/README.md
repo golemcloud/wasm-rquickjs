@@ -39,12 +39,10 @@ NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
   tools/dev-test.sh p3 standard npm_metadata ''
 git apply --reverse tests/npm_metadata/results/2026-09-18-trace.patch
 git diff --exit-code -- crates/wasm-rquickjs/skeleton tests/npm_metadata.rs
-python3 tests/npm_metadata/results/validate_trace.py
 ```
 
-The validator checks the checked-in raw trace results against the fixed
-baseline. The two reproduction commands write separate `/tmp` files and do
-not overwrite those checked-in observations. Both targets require a local
-loopback listener and one pre-timing fetch of the pinned tarballs. The trace
-has no warm or public-registry rows, and its timings should not be mixed with
-the original baseline.
+The two reproduction commands write separate `/tmp` files and do not
+overwrite the checked-in observations. Both targets require a local loopback
+listener and one pre-timing fetch of the pinned tarballs. The trace has no warm
+or public-registry rows, and its timings should not be mixed with the original
+baseline.
