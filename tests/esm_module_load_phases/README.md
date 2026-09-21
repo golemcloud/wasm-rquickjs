@@ -30,8 +30,11 @@ executing workloads with:
 tests/esm_module_load_phases/run.sh --check
 ```
 
-The 2026-09-21 capture attributes virtually all of the delay to the CJS-global
-preflight scan and module-prologue injection. Each consumes about 5.2–5.4 seconds
-for the whitespace-preserving 64-KiB source, while QuickJS declaration, filesystem
-resolution, evaluation, and the unresolved residual are sub-millisecond. See the
-results README for the exact medians and interpretation.
+The 2026-09-21 baseline capture attributed virtually all of the delay to the
+CJS-global preflight scan and module-prologue injection. Each consumed about
+5.2–5.4 seconds for the whitespace-preserving 64-KiB source, while QuickJS
+declaration, filesystem resolution, evaluation, and the unresolved residual were
+sub-millisecond. A narrowed production change now bulk-skips contiguous ASCII
+whitespace in those scanners. The retained exact-revision candidate reports reduce
+the P2/P3 end-to-end medians from 10.66/11.06 seconds to 192/197 milliseconds. See
+the results README for the exact medians and interpretation.
