@@ -6,12 +6,18 @@ of CommonJS canonicalization realpaths revisited a path within one execution
 job. This follow-up tested each cache independently, retained both candidates,
 and measured the combined production behavior.
 
-The production commits are `6897f208` for graph-scoped missing package
+The initial production commits are `6897f208` for graph-scoped missing package
 metadata and `fc42de34` for runtime-scoped positive loader realpaths. Combined
 HEAD was `a492849a`. Each experiment temporarily added a profiling-only switch
 to compare control and candidate in the same optimized component. Those
-switches and their npm fixture exports were removed after measurement; they
-are absent from the production commits.
+switches and their npm fixture exports were removed after measurement.
+
+Review then identified that Node keeps CommonJS and ESM realpath state
+separate, and that ESM source reads must continue to bypass canonicalization
+under `--preserve-symlinks`. Commit `f88f62e8` split the cache domains, fixed
+the preserve path, and removed a duplicate physical realpath on failed
+CommonJS canonicalization. The final candidate was measured again at that
+exact commit.
 
 ## Method
 
@@ -74,7 +80,7 @@ owner as CommonJS JavaScript. In every sample,
 The candidate exceeded the 75% physical-call reduction gate for every command
 and improved median CPU by 27.8–37.4% on P2 and 29.6–36.3% on P3.
 
-## Combined production candidates
+## Initial combined prototype
 
 | Target / command | Missing reads control → candidate | Physical realpaths control → candidate | Wall control → candidate | CPU control → candidate |
 | --- | ---: | ---: | ---: | ---: |
@@ -89,6 +95,32 @@ The combined candidates preserve the independent call reductions. Median CPU
 improved 35.6% for P2 `view`, 37.3% for P2 `ci`, 33.7% for P3 `view`, and
 33.6% for P3 `ci`.
 
+## Reviewed production candidate
+
+After the cache-domain correction, each target ran three more iterations with
+the standard harness at exact revision `f88f62e8`. The table below uses only
+the serial, fresh-state, cold local-registry rows. The standard reports also
+retain their public-registry and warm observations, but those are outside this
+comparison. Every local command succeeded, every `ci` installed both pinned
+packages, HTTP counts were 0/1/2 as expected, no trace overflow occurred, and
+both package-metadata and realpath counter equations reconciled.
+
+| Target / command | Missing reads control → final | Physical realpaths control → final | Final wall median | Final CPU median |
+| --- | ---: | ---: | ---: | ---: |
+| P2 `--version` | 204 → 96 (-52.9%) | 426 → 78 (-81.7%) | 0.566 | 0.563 |
+| P2 `view` | 1,768 → 596 (-66.3%) | 3,545 → 477 (-86.5%) | 3.849 | 3.725 |
+| P2 `ci` | 2,645 → 847 (-68.0%) | 5,007 → 616 (-87.7%) | 8.389 | 8.043 |
+| P3 `--version` | 204 → 96 (-52.9%) | 426 → 78 (-81.7%) | 0.560 | 0.559 |
+| P3 `view` | 1,768 → 596 (-66.3%) | 3,545 → 477 (-86.5%) | 3.631 | 3.620 |
+| P3 `ci` | 2,645 → 847 (-68.0%) | 5,007 → 616 (-87.7%) | 7.882 | 7.784 |
+
+Separating the two Node loader domains costs one physical realpath for
+`--version` and two for `view`/`ci` compared with the initial combined
+prototype. The final candidate still clears the 75% realpath reduction gate
+for every command and the 50% missing-metadata reduction gate for `view` and
+`ci`. Timing is reported as an observation from the final run; the physical
+call counts remain the comparison invariant.
+
 Raw reports:
 
 - [negative package JSON P2](2026-09-21-negative-package-json-p2.json) and
@@ -97,6 +129,8 @@ Raw reports:
   [P3](2026-09-21-loader-realpath-p3.json)
 - [combined P2](2026-09-21-loader-caches-p2.json) and
   [P3](2026-09-21-loader-caches-p3.json)
+- reviewed candidate [P2](2026-09-21-loader-caches-final-p2.json) and
+  [P3](2026-09-21-loader-caches-final-p3.json)
 
 Run `python3 tests/npm_metadata/results/validate_cache_experiments.py` to check
 sample success, installation and HTTP invariants, exact counter totals,

@@ -54,7 +54,8 @@ the original baseline.
 The follow-up [cache experiment report](2026-09-21-cache-experiments.md)
 records independent and combined five-pair measurements for the graph-scoped
 missing `package.json` cache and runtime-scoped positive loader realpath cache.
-Its six raw reports can be checked with:
+It also records the final three-iteration P2/P3 candidate after review split
+the CommonJS and ESM cache domains. Its eight raw reports can be checked with:
 
 ```sh
 python3 tests/npm_metadata/results/validate_cache_experiments.py

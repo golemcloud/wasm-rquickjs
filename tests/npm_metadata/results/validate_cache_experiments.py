@@ -14,6 +14,8 @@ BASELINE_MISSES = {"version": 204, "view": 1768, "ci": 2645}
 CACHED_MISSES = {"version": 96, "view": 596, "ci": 847}
 REALPATH_CALLS = {"version": 426, "view": 3545, "ci": 5007}
 CACHED_REALPATH_CALLS = {"version": 77, "view": 475, "ci": 614}
+FINAL_REALPATH_CALLS = {"version": 78, "view": 477, "ci": 616}
+FINAL_REVISION = "f88f62e8750c60c8c288d8316c54e36cb0d2049c"
 
 
 def load(family: str, target: str) -> dict:
@@ -35,6 +37,18 @@ def rows(report: dict, operation: str, variant: str) -> list[dict]:
         if sample["operation"] == operation and sample["variant"] == variant
     ]
     assert len(result) == 5
+    return result
+
+
+def final_rows(report: dict, operation: str) -> list[dict]:
+    result = [
+        sample
+        for sample in report["samples"]
+        if sample["operation"] == operation
+        and sample["registry"] == "local"
+        and sample["cache"] == "cold"
+    ]
+    assert len(result) == 3
     return result
 
 
@@ -109,6 +123,58 @@ def validate_realpath(report: dict) -> None:
         assert median(candidate, "processCpuMs") <= median(control, "processCpuMs") * 1.03
 
 
+def validate_final(target: str) -> None:
+    path = ROOT / f"2026-09-21-loader-caches-final-{target}.json"
+    report = json.loads(path.read_text())
+    assert report["schema"] == "npm-metadata-v1"
+    assert report["revision"] == FINAL_REVISION
+    assert report["target"] == target
+    assert report["node"] == "22.14.0"
+    assert report["npm"] == "10.9.2"
+    assert report["iterations"] == 3
+    assert len(report["samples"]) == 30
+    assert sorted(sample["sequence"] for sample in report["samples"]) == list(range(30))
+    assert all(sample["success"] is True for sample in report["samples"])
+    assert all(sample["result"]["overflowed"] is False for sample in report["samples"])
+
+    for operation in OPERATIONS:
+        samples = final_rows(report, operation)
+        assert {sample["localHttpRequests"] for sample in samples} == {
+            EXPECTED_HTTP[operation]
+        }
+        assert all(sample["installed"] is (operation == "ci") for sample in samples)
+        assert {counter(sample, "modules.packageJson.notFound") for sample in samples} == {
+            CACHED_MISSES[operation]
+        }
+        assert {counter(sample, "filesystem.realpath.calls") for sample in samples} == {
+            FINAL_REALPATH_CALLS[operation]
+        }
+        for sample in samples:
+            package_calls = counter(sample, "modules.packageJson.calls")
+            package_accounted = sum(
+                counter(sample, name)
+                for name in (
+                    "modules.packageJson.cacheHits",
+                    "modules.packageJson.negativeCacheHits",
+                    "modules.packageJson.reads",
+                    "modules.packageJson.notFound",
+                    "modules.packageJson.errors",
+                )
+            )
+            assert package_calls == package_accounted
+            realpath_calls = counter(sample, "modules.realpath.calls")
+            realpath_hits = counter(sample, "modules.realpath.cacheHits")
+            realpath_system_calls = counter(sample, "modules.realpath.systemCalls")
+            assert realpath_calls == realpath_hits + realpath_system_calls
+            assert counter(sample, "filesystem.realpath.calls") == realpath_system_calls
+
+        if operation in ("view", "ci"):
+            missing_reduction = 1 - CACHED_MISSES[operation] / BASELINE_MISSES[operation]
+            assert missing_reduction >= 0.50
+        realpath_reduction = 1 - FINAL_REALPATH_CALLS[operation] / REALPATH_CALLS[operation]
+        assert realpath_reduction >= 0.75
+
+
 def main() -> None:
     for target in TARGETS:
         negative = load("negative-package-json", target)
@@ -126,6 +192,8 @@ def main() -> None:
         validate_common(combined)
         validate_package_json(combined)
         validate_realpath(combined)
+
+        validate_final(target)
 
     print("validated npm loader cache experiments")
 
