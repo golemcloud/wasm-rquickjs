@@ -58,9 +58,11 @@ and had no median CPU regression.
 
 Successful loader canonicalizations are cached for one QuickJS runtime, which
 matches Node 22.14's stale positive realpath behavior. Failed canonicalizations
-are not cached. `--preserve-symlinks` and `--preserve-symlinks-main` bypass the
-cache, and public `node:fs` realpath APIs remain uncached and observe current
-filesystem state.
+are not cached. `--preserve-symlinks` bypasses both loader caches, while
+`--preserve-symlinks-main` bypasses CommonJS main-module canonicalization.
+Public `node:fs` realpath APIs remain uncached and observe current filesystem
+state. ESM main-entry handling for `--preserve-symlinks-main` remains a known
+gap.
 
 The control counts are 14–15 calls above the older trace because the candidate
 routes previously uncounted Rust loader canonicalizations through the same
@@ -120,6 +122,18 @@ prototype. The final candidate still clears the 75% realpath reduction gate
 for every command and the 50% missing-metadata reduction gate for `view` and
 `ci`. Timing is reported as an observation from the final run; the physical
 call counts remain the comparison invariant.
+
+## Node compatibility candidates
+
+No node-compat inventory entry changes in this work. The runnable
+`es-module/test-esm-preserve-symlinks-not-found*.mjs` and
+`parallel/test-module-main-{extension-lookup,fail,preserve-symlinks-fail}.js`
+cases remain enabled. The ESM preserve-symlinks, symlink-main, circular
+symlink, and symlinked-peer-module cases remain known gaps because their
+vendored fixtures require rooted symlink targets that cannot be resolved
+inside a WASI preopen. Persistent relative symlinks, cache-domain isolation,
+retargeting, and retry behavior are covered by the module-resolution runtime
+test instead.
 
 Raw reports:
 

@@ -6582,6 +6582,7 @@ export const testCjsLoaderRealpathCache = async () => {
         const Module = require('node:module');
         const originalPathCache = Module._pathCache;
         const originalExecArgv = process.execArgv.slice();
+        const originalCwd = process.cwd();
         const getHits = globalThis.__wasm_rquickjs_get_loader_realpath_cache_hit_count;
         const resetHits = globalThis.__wasm_rquickjs_reset_loader_realpath_cache_hit_count;
         const getSystemCalls = globalThis.__wasm_rquickjs_get_loader_realpath_system_call_count;
@@ -6618,6 +6619,17 @@ export const testCjsLoaderRealpathCache = async () => {
             assert.strictEqual(canonicalizeCjs(lateTarget), lateTarget);
             assert.strictEqual(getSystemCalls(), 2, 'failed CJS canonicalizations must remain retryable');
 
+            const relativeRoot = '/loader-realpath-relative-input';
+            fs.mkdirSync(relativeRoot, { recursive: true });
+            fs.writeFileSync(`${relativeRoot}/target.js`, 'module.exports = true;');
+            process.chdir(relativeRoot);
+            assert.strictEqual(
+                canonicalizeCjs('./nested/../target.js'),
+                `${relativeRoot}/target.js`,
+                'relative loader paths must resolve against process.cwd() before cache lookup',
+            );
+            process.chdir(originalCwd);
+
             const esmThenCjsRoot = '/loader-realpath-esm-then-cjs';
             fs.mkdirSync(esmThenCjsRoot, { recursive: true });
             fs.writeFileSync(`${esmThenCjsRoot}/first.mjs`, 'export default "first";');
@@ -6651,6 +6663,7 @@ export const testCjsLoaderRealpathCache = async () => {
             fs.symlinkSync('second.mjs', `${preserveEsmRoot}/link.mjs`);
             assert.strictEqual((await import(`${preserveEsmRoot}/link.mjs?preserved-second`)).default, 'second');
         } finally {
+            process.chdir(originalCwd);
             Module._pathCache = originalPathCache;
             process.execArgv.length = 0;
             for (const arg of originalExecArgv) {

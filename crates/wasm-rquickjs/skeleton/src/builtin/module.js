@@ -738,7 +738,10 @@ function shouldPreserveSymlinks(isMainModuleLoad) {
 
 function toCjsCanonicalFilename(filename, isMainModuleLoad) {
     if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
-    const outcome = fsNative.fs_loader_realpath(filename);
+    // Node resolves against process.cwd() before consulting its loader realpath
+    // cache. Keep the native bridge limited to absolute, normalized guest paths.
+    const normalized = pathModule.resolve(filename);
+    const outcome = fsNative.fs_loader_realpath(normalized);
     if (outcome.error) throw createFsSystemError(outcome.error);
     return outcome.result;
 }

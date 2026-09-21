@@ -330,6 +330,12 @@ pub(super) fn realpath_for_module_resolution(
     path: &str,
     domain: ModuleLoaderRealpathDomain,
 ) -> std::io::Result<String> {
+    // Wizer has no guest preopens. Touching wasi-libc's lazy preopen cache here
+    // would snapshot the empty build-time filesystem into every runtime.
+    if crate::internal::is_wizer_active() {
+        return Err(wizer_enoent_io());
+    }
+
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized");

@@ -4896,16 +4896,16 @@ impl NodeModulesResolver {
                     .insert(cache_key, package.clone());
                 Ok(Some(package))
             }
-            Err(_error) => {
+            Err(error) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
                 if let Some(profile) = &resolution.profile {
-                    profile.increment(if _error.kind() == std::io::ErrorKind::NotFound {
+                    profile.increment(if error.kind() == std::io::ErrorKind::NotFound {
                         "modules.packageJson.notFound"
                     } else {
                         "modules.packageJson.errors"
                     });
                 }
-                if _error.kind() == std::io::ErrorKind::NotFound
+                if error.kind() == std::io::ErrorKind::NotFound
                     && resolution
                         .probe_session
                         .remember_missing_package_json(cache_key)
