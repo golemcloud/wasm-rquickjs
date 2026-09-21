@@ -179,11 +179,18 @@ mod zlib {
 #[path = "builtin/websocket.rs"]
 mod websocket;
 
-pub(crate) fn realpath_for_module_resolution(
+pub(crate) fn realpath_for_cjs_module_resolution(
     ctx: &rquickjs::Ctx<'_>,
     path: &str,
-) -> Option<String> {
-    fs::realpath_for_module_resolution(ctx, path)
+) -> std::io::Result<String> {
+    fs::realpath_for_module_resolution(ctx, path, fs::ModuleLoaderRealpathDomain::CommonJs)
+}
+
+pub(crate) fn realpath_for_esm_module_resolution(
+    ctx: &rquickjs::Ctx<'_>,
+    path: &str,
+) -> std::io::Result<String> {
+    fs::realpath_for_module_resolution(ctx, path, fs::ModuleLoaderRealpathDomain::Esm)
 }
 
 /// Registers builtin native and JavaScript module names with the resolver.

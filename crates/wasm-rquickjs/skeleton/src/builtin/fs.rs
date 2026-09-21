@@ -319,10 +319,17 @@ fn rename_fd_path(ctx: &rquickjs::Ctx<'_>, old_path: &str, new_path: &str) {
     });
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum ModuleLoaderRealpathDomain {
+    CommonJs,
+    Esm,
+}
+
 pub(super) fn realpath_for_module_resolution(
     ctx: &rquickjs::Ctx<'_>,
     path: &str,
-) -> Option<String> {
+    domain: ModuleLoaderRealpathDomain,
+) -> std::io::Result<String> {
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized");
@@ -333,18 +340,31 @@ pub(super) fn realpath_for_module_resolution(
         profile.increment("modules.realpath.calls");
     }
 
-    if let Some(resolved) = services.loader_realpath_cache.borrow().get(path).cloned()
-    {
+    let cached = match domain {
+        ModuleLoaderRealpathDomain::CommonJs => services
+            .cjs_loader_realpath_cache
+            .borrow()
+            .get(path)
+            .cloned(),
+        ModuleLoaderRealpathDomain::Esm => services
+            .esm_loader_realpath_cache
+            .borrow()
+            .get(path)
+            .cloned(),
+    };
+    if let Some(resolved) = cached {
         #[cfg(feature = "test-observability")]
         services.record_loader_realpath_cache_hit();
         #[cfg(feature = "typescript-compiler-profiling")]
         if let Some(profile) = &profile {
             profile.increment("modules.realpath.cacheHits");
         }
-        return Some(resolved);
+        return Ok(resolved);
     }
 
     let resolved = canonicalize_guest_path(path);
+    #[cfg(feature = "test-observability")]
+    services.record_loader_realpath_system_call();
     #[cfg(feature = "typescript-compiler-profiling")]
     if let Some(profile) = &profile {
         profile.increment("modules.realpath.systemCalls");
@@ -357,16 +377,23 @@ pub(super) fn realpath_for_module_resolution(
             Err(_) => "filesystem.realpath.errors",
         });
     }
-    match resolved {
-        Ok(resolved) => {
-            services
-                .loader_realpath_cache
-                .borrow_mut()
-                .insert(path.to_string(), resolved.clone());
-            Some(resolved)
+    if let Ok(resolved) = &resolved {
+        match domain {
+            ModuleLoaderRealpathDomain::CommonJs => {
+                services
+                    .cjs_loader_realpath_cache
+                    .borrow_mut()
+                    .insert(path.to_string(), resolved.clone());
+            }
+            ModuleLoaderRealpathDomain::Esm => {
+                services
+                    .esm_loader_realpath_cache
+                    .borrow_mut()
+                    .insert(path.to_string(), resolved.clone());
+            }
         }
-        Err(_) => None,
     }
+    resolved
 }
 
 fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
@@ -1526,8 +1553,22 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn fs_loader_realpath(ctx: Ctx<'_>, path: String) -> Option<String> {
-        super::realpath_for_module_resolution(&ctx, &path)
+    pub fn fs_loader_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        let result = Object::new(ctx.clone()).unwrap();
+        match super::realpath_for_module_resolution(
+            &ctx,
+            &path,
+            super::ModuleLoaderRealpathDomain::CommonJs,
+        ) {
+            Ok(resolved) => result.set("result", resolved).unwrap(),
+            Err(error) => result
+                .set(
+                    "error",
+                    super::make_fs_error(&ctx, &error, "realpath", Some(&path)),
+                )
+                .unwrap(),
+        }
+        result
     }
 
     #[rquickjs::function]

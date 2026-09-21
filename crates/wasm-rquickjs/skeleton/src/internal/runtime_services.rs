@@ -89,9 +89,12 @@ pub(crate) struct RuntimeServices {
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub(crate) package_json_cache: super::module_loading::PackageJsonCache,
     pub(crate) cjs_module_probe_session: super::module_loading::CjsModuleProbeSession,
-    pub(crate) loader_realpath_cache: RefCell<HashMap<String, String>>,
+    pub(crate) cjs_loader_realpath_cache: RefCell<HashMap<String, String>>,
+    pub(crate) esm_loader_realpath_cache: RefCell<HashMap<String, String>>,
     #[cfg(feature = "test-observability")]
     loader_realpath_cache_hit_count: Cell<u64>,
+    #[cfg(feature = "test-observability")]
+    loader_realpath_system_call_count: Cell<u64>,
     pub(crate) process: ProcessServices,
     pub(crate) fs: RefCell<FsServices>,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
@@ -109,9 +112,12 @@ impl Default for RuntimeServices {
             node_package_deprecation_warnings: RefCell::default(),
             package_json_cache: Default::default(),
             cjs_module_probe_session: Default::default(),
-            loader_realpath_cache: RefCell::default(),
+            cjs_loader_realpath_cache: RefCell::default(),
+            esm_loader_realpath_cache: RefCell::default(),
             #[cfg(feature = "test-observability")]
             loader_realpath_cache_hit_count: Cell::new(0),
+            #[cfg(feature = "test-observability")]
+            loader_realpath_system_call_count: Cell::new(0),
             process: ProcessServices::default(),
             fs: RefCell::new(FsServices::default()),
             output: RefCell::new(Rc::new(ComponentOutputSink)),
@@ -309,6 +315,25 @@ impl RuntimeServices {
     #[cfg(feature = "test-observability")]
     pub(crate) fn reset_loader_realpath_cache_hit_count(&self) {
         self.loader_realpath_cache_hit_count.set(0);
+    }
+
+    #[cfg(feature = "test-observability")]
+    pub(crate) fn record_loader_realpath_system_call(&self) {
+        self.loader_realpath_system_call_count.set(
+            self.loader_realpath_system_call_count
+                .get()
+                .saturating_add(1),
+        );
+    }
+
+    #[cfg(feature = "test-observability")]
+    pub(crate) fn loader_realpath_system_call_count(&self) -> u64 {
+        self.loader_realpath_system_call_count.get()
+    }
+
+    #[cfg(feature = "test-observability")]
+    pub(crate) fn reset_loader_realpath_system_call_count(&self) {
+        self.loader_realpath_system_call_count.set(0);
     }
 
     pub(crate) fn output_sink(&self) -> Rc<dyn RuntimeOutputSink> {

@@ -54,6 +54,7 @@ import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
+import { createSystemError as createFsSystemError } from '__wasm_rquickjs_builtin/internal/fs/shared';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
 import * as internalUtil from '__wasm_rquickjs_builtin/internal/util';
@@ -737,8 +738,17 @@ function shouldPreserveSymlinks(isMainModuleLoad) {
 
 function toCjsCanonicalFilename(filename, isMainModuleLoad) {
     if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
-    const resolved = fsNative.fs_loader_realpath(filename);
-    return resolved == null ? fsModule.realpathSync.native(filename) : resolved;
+    const outcome = fsNative.fs_loader_realpath(filename);
+    if (outcome.error) throw createFsSystemError(outcome.error);
+    return outcome.result;
+}
+
+if (testObservabilityEnabledNative()) {
+    Object.defineProperty(globalThis, '__wasm_rquickjs_test_cjs_canonical_filename', {
+        value: filename => toCjsCanonicalFilename(filename, false),
+        writable: false,
+        configurable: false,
+    });
 }
 
 function tryReadFile(filename) {

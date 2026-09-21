@@ -3338,8 +3338,12 @@ impl Loader for StaticRegisteredFileUrlLoader {
             return Err(Error::new_loading(path));
         };
         let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
-        let source_path = crate::builtin::realpath_for_module_resolution(ctx, &fs_path)
-            .unwrap_or_else(|| fs_path.clone());
+        let source_path = if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
+            fs_path.clone()
+        } else {
+            crate::builtin::realpath_for_esm_module_resolution(ctx, &fs_path)
+                .unwrap_or_else(|_| fs_path.clone())
+        };
         declare_esm_file_module(
             ctx,
             path,
@@ -3654,8 +3658,8 @@ impl NodeFileResolver {
         if preserve_symlinks {
             return normalized.to_string();
         }
-        crate::builtin::realpath_for_module_resolution(ctx, normalized)
-            .unwrap_or_else(|| normalized.to_string())
+        crate::builtin::realpath_for_esm_module_resolution(ctx, normalized)
+            .unwrap_or_else(|_| normalized.to_string())
     }
 
     fn module_resolution_is_file(ctx: &Ctx<'_>, normalized: &str) -> bool {
@@ -4450,8 +4454,17 @@ fn reset_loader_realpath_cache_hit_count(ctx: Ctx<'_>) {
 }
 
 #[cfg(feature = "test-observability")]
-fn test_loader_realpath(ctx: Ctx<'_>, path: String) -> Option<String> {
-    crate::builtin::realpath_for_module_resolution(&ctx, &path)
+fn loader_realpath_system_call_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_system_call_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_system_call_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_system_call_count();
 }
 
 struct NodePackageWarning {
@@ -9187,7 +9200,8 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
 }
 
 fn canonical_cjs_analysis_path(ctx: &Ctx<'_>, path: &str) -> String {
-    crate::builtin::realpath_for_module_resolution(ctx, path).unwrap_or_else(|| path.to_string())
+    crate::builtin::realpath_for_cjs_module_resolution(ctx, path)
+        .unwrap_or_else(|_| path.to_string())
 }
 
 #[derive(Clone)]
@@ -10151,8 +10165,12 @@ fn module_filesystem_path(path: &str) -> &str {
 
 fn module_source_filesystem_path(ctx: &Ctx<'_>, path: &str) -> String {
     let fs_path = module_filesystem_path(path);
-    crate::builtin::realpath_for_module_resolution(ctx, fs_path)
-        .unwrap_or_else(|| fs_path.to_string())
+    if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
+        fs_path.to_string()
+    } else {
+        crate::builtin::realpath_for_esm_module_resolution(ctx, fs_path)
+            .unwrap_or_else(|_| fs_path.to_string())
+    }
 }
 
 fn read_module_source_or_throw<'js>(
@@ -11755,11 +11773,20 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         #[cfg(feature = "test-observability")]
         set_non_replaceable_global(
             &global,
-            "__wasm_rquickjs_test_loader_realpath",
-            Function::new(ctx.clone(), test_loader_realpath)
-                .expect("Failed to create loader realpath test bridge"),
+            "__wasm_rquickjs_get_loader_realpath_system_call_count",
+            Function::new(ctx.clone(), loader_realpath_system_call_count)
+                .expect("Failed to create loader realpath system-call counter"),
         )
-        .expect("Failed to initialize loader realpath test bridge");
+        .expect("Failed to initialize loader realpath system-call counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_system_call_count",
+            Function::new(ctx.clone(), reset_loader_realpath_system_call_count)
+                .expect("Failed to create loader realpath system-call counter reset"),
+        )
+        .expect("Failed to initialize loader realpath system-call counter reset");
 
         set_non_replaceable_global(
             &global,

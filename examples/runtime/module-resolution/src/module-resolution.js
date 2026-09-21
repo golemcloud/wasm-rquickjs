@@ -6584,10 +6584,14 @@ export const testCjsLoaderRealpathCache = async () => {
         const originalExecArgv = process.execArgv.slice();
         const getHits = globalThis.__wasm_rquickjs_get_loader_realpath_cache_hit_count;
         const resetHits = globalThis.__wasm_rquickjs_reset_loader_realpath_cache_hit_count;
-        const testRealpath = globalThis.__wasm_rquickjs_test_loader_realpath;
+        const getSystemCalls = globalThis.__wasm_rquickjs_get_loader_realpath_system_call_count;
+        const resetSystemCalls = globalThis.__wasm_rquickjs_reset_loader_realpath_system_call_count;
+        const canonicalizeCjs = globalThis.__wasm_rquickjs_test_cjs_canonical_filename;
         assert.strictEqual(typeof getHits, 'function');
         assert.strictEqual(typeof resetHits, 'function');
-        assert.strictEqual(typeof testRealpath, 'function');
+        assert.strictEqual(typeof getSystemCalls, 'function');
+        assert.strictEqual(typeof resetSystemCalls, 'function');
+        assert.strictEqual(typeof canonicalizeCjs, 'function');
         try {
             Module._pathCache = Object.create(null);
             resetHits();
@@ -6602,10 +6606,50 @@ export const testCjsLoaderRealpathCache = async () => {
             process.execArgv.push('--preserve-symlinks');
             Module._pathCache = Object.create(null);
             assert.strictEqual(require.resolve(link), link);
+            process.execArgv.pop();
 
-            assert.strictEqual(testRealpath(lateTarget), undefined);
+            resetSystemCalls();
+            assert.throws(
+                () => canonicalizeCjs(lateTarget),
+                error => error && error.code === 'ENOENT' && error.syscall === 'realpath' && error.path === lateTarget,
+            );
+            assert.strictEqual(getSystemCalls(), 1, 'a failed CJS canonicalization must use one physical realpath');
             fs.writeFileSync(lateTarget, 'module.exports = "late";');
-            assert.strictEqual(testRealpath(lateTarget), lateTarget);
+            assert.strictEqual(canonicalizeCjs(lateTarget), lateTarget);
+            assert.strictEqual(getSystemCalls(), 2, 'failed CJS canonicalizations must remain retryable');
+
+            const esmThenCjsRoot = '/loader-realpath-esm-then-cjs';
+            fs.mkdirSync(esmThenCjsRoot, { recursive: true });
+            fs.writeFileSync(`${esmThenCjsRoot}/first.mjs`, 'export default "first";');
+            fs.writeFileSync(`${esmThenCjsRoot}/second.mjs`, 'export default "second";');
+            fs.symlinkSync('first.mjs', `${esmThenCjsRoot}/link.mjs`);
+            assert.strictEqual((await import(`${esmThenCjsRoot}/link.mjs?esm-first`)).default, 'first');
+            fs.unlinkSync(`${esmThenCjsRoot}/link.mjs`);
+            fs.symlinkSync('second.mjs', `${esmThenCjsRoot}/link.mjs`);
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(`${esmThenCjsRoot}/link.mjs`), `${esmThenCjsRoot}/second.mjs`);
+
+            const cjsThenEsmRoot = '/loader-realpath-cjs-then-esm';
+            fs.mkdirSync(cjsThenEsmRoot, { recursive: true });
+            fs.writeFileSync(`${cjsThenEsmRoot}/first.mjs`, 'export default "first";');
+            fs.writeFileSync(`${cjsThenEsmRoot}/second.mjs`, 'export default "second";');
+            fs.symlinkSync('first.mjs', `${cjsThenEsmRoot}/link.mjs`);
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(`${cjsThenEsmRoot}/link.mjs`), `${cjsThenEsmRoot}/first.mjs`);
+            fs.unlinkSync(`${cjsThenEsmRoot}/link.mjs`);
+            fs.symlinkSync('second.mjs', `${cjsThenEsmRoot}/link.mjs`);
+            assert.strictEqual((await import(`${cjsThenEsmRoot}/link.mjs?esm-second`)).default, 'second');
+
+            const preserveEsmRoot = '/loader-realpath-preserve-esm';
+            fs.mkdirSync(preserveEsmRoot, { recursive: true });
+            fs.writeFileSync(`${preserveEsmRoot}/first.mjs`, 'export default "first";');
+            fs.writeFileSync(`${preserveEsmRoot}/second.mjs`, 'export default "second";');
+            fs.symlinkSync('first.mjs', `${preserveEsmRoot}/link.mjs`);
+            process.execArgv.push('--preserve-symlinks');
+            assert.strictEqual((await import(`${preserveEsmRoot}/link.mjs?preserved-first`)).default, 'first');
+            fs.unlinkSync(`${preserveEsmRoot}/link.mjs`);
+            fs.symlinkSync('second.mjs', `${preserveEsmRoot}/link.mjs`);
+            assert.strictEqual((await import(`${preserveEsmRoot}/link.mjs?preserved-second`)).default, 'second');
         } finally {
             Module._pathCache = originalPathCache;
             process.execArgv.length = 0;
