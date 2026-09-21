@@ -5,15 +5,15 @@
       "sourceBytes": 4096,
       "summary": {
         "iterations": 3,
-        "maximumMs": 2.8125,
-        "medianMs": 1.3137919999971928,
+        "maximumMs": 2.858874999998079,
+        "medianMs": 1.363666999997804,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 12713984,
-            "outerWallMs": 6.7685,
+            "outerWallMs": 6.832625,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 2.8125,
+              "elapsedMs": 2.858874999998079,
               "kind": "api",
               "outputBytes": 4190,
               "overflowed": false,
@@ -22,10 +22,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 12713984,
-            "outerWallMs": 1.716709,
+            "outerWallMs": 1.804209,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 1.3137919999971928,
+              "elapsedMs": 1.363666999997804,
               "kind": "api",
               "outputBytes": 4190,
               "overflowed": false,
@@ -34,10 +34,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 12713984,
-            "outerWallMs": 1.750125,
+            "outerWallMs": 1.690666,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 1.2838750000009895,
+              "elapsedMs": 1.3262499999982538,
               "kind": "api",
               "outputBytes": 4190,
               "overflowed": false,
@@ -52,15 +52,15 @@
       "sourceBytes": 4096,
       "summary": {
         "iterations": 3,
-        "maximumMs": 179.4529169999987,
-        "medianMs": 177.03862500000105,
+        "maximumMs": 186.213541000001,
+        "medianMs": 185.17562499999983,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 19791872,
-            "outerWallMs": 179.97770799999998,
+            "outerWallMs": 186.773709,
             "result": {
               "actualSourceBytes": 4158,
-              "elapsedMs": 179.4529169999987,
+              "elapsedMs": 186.213541000001,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -69,10 +69,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19791872,
-            "outerWallMs": 177.79329099999998,
+            "outerWallMs": 185.827875,
             "result": {
               "actualSourceBytes": 4158,
-              "elapsedMs": 177.03862500000105,
+              "elapsedMs": 185.17562499999983,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -81,10 +81,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19857408,
-            "outerWallMs": 176.123333,
+            "outerWallMs": 185.498583,
             "result": {
               "actualSourceBytes": 4158,
-              "elapsedMs": 175.4695410000022,
+              "elapsedMs": 184.8742080000011,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -99,15 +99,15 @@
       "sourceBytes": 4096,
       "summary": {
         "iterations": 3,
-        "maximumMs": 240.53275000000212,
-        "medianMs": 233.4834999999985,
+        "maximumMs": 201.1929999999993,
+        "medianMs": 195.9875839999986,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 19857408,
-            "outerWallMs": 241.21241600000002,
+            "outerWallMs": 196.028916,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 240.53275000000212,
+              "elapsedMs": 195.3485830000027,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -116,10 +116,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19857408,
-            "outerWallMs": 232.325625,
+            "outerWallMs": 196.60091599999998,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 231.68325000000183,
+              "elapsedMs": 195.9875839999986,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -128,10 +128,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19857408,
-            "outerWallMs": 234.099375,
+            "outerWallMs": 202.064875,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 233.4834999999985,
+              "elapsedMs": 201.1929999999993,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -146,15 +146,15 @@
       "sourceBytes": 4096,
       "summary": {
         "iterations": 3,
-        "maximumMs": 233.76287500000035,
-        "medianMs": 232.2203750000008,
+        "maximumMs": 197.1912500000035,
+        "medianMs": 196.89695899999788,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 19857408,
-            "outerWallMs": 232.59750000000003,
+            "outerWallMs": 198.204458,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 231.90233300000185,
+              "elapsedMs": 197.1912500000035,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -163,10 +163,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19922944,
-            "outerWallMs": 234.40866699999998,
+            "outerWallMs": 197.61525,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 233.76287500000035,
+              "elapsedMs": 196.89695899999788,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -175,10 +175,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19922944,
-            "outerWallMs": 232.883833,
+            "outerWallMs": 196.92570800000001,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 232.2203750000008,
+              "elapsedMs": 196.16649999999936,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -193,15 +193,15 @@
       "sourceBytes": 4096,
       "summary": {
         "iterations": 3,
-        "maximumMs": 225.7798330000005,
-        "medianMs": 223.20129200000156,
+        "maximumMs": 186.82470900000044,
+        "medianMs": 186.5649999999987,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 19922944,
-            "outerWallMs": 231.21975,
+            "outerWallMs": 197.422166,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 221.40541700000176,
+              "elapsedMs": 186.82470900000044,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -210,10 +210,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19922944,
-            "outerWallMs": 235.66079200000001,
+            "outerWallMs": 197.552875,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 225.7798330000005,
+              "elapsedMs": 186.5649999999987,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -222,10 +222,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19922944,
-            "outerWallMs": 233.233625,
+            "outerWallMs": 196.12937499999998,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 223.20129200000156,
+              "elapsedMs": 185.66233400000056,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -240,15 +240,15 @@
       "sourceBytes": 4096,
       "summary": {
         "iterations": 3,
-        "maximumMs": 188.64387499999975,
-        "medianMs": 185.1655419999988,
+        "maximumMs": 200.5219589999997,
+        "medianMs": 196.3740829999988,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 19988480,
-            "outerWallMs": 185.551625,
+            "outerWallMs": 197.1715,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 184.875,
+              "elapsedMs": 196.3740829999988,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -257,10 +257,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19988480,
-            "outerWallMs": 185.728167,
+            "outerWallMs": 196.74712499999998,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 185.1655419999988,
+              "elapsedMs": 195.99879200000032,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -269,10 +269,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19988480,
-            "outerWallMs": 189.265458,
+            "outerWallMs": 201.514958,
             "result": {
               "actualSourceBytes": 4190,
-              "elapsedMs": 188.64387499999975,
+              "elapsedMs": 200.5219589999997,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 4096,
@@ -287,15 +287,15 @@
       "sourceBytes": 16384,
       "summary": {
         "iterations": 3,
-        "maximumMs": 5.141000000001441,
-        "medianMs": 5.073875000000044,
+        "maximumMs": 5.212916999998924,
+        "medianMs": 5.17174999999952,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 19988480,
-            "outerWallMs": 6.0369589999999995,
+            "outerWallMs": 6.464292,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 5.073875000000044,
+              "elapsedMs": 5.17174999999952,
               "kind": "api",
               "outputBytes": 16464,
               "overflowed": false,
@@ -304,10 +304,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19988480,
-            "outerWallMs": 5.81775,
+            "outerWallMs": 6.270084000000001,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 5.023333999999522,
+              "elapsedMs": 5.212916999998924,
               "kind": "api",
               "outputBytes": 16464,
               "overflowed": false,
@@ -316,10 +316,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 19988480,
-            "outerWallMs": 5.978084,
+            "outerWallMs": 6.345375000000001,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 5.141000000001441,
+              "elapsedMs": 5.128875000000335,
               "kind": "api",
               "outputBytes": 16464,
               "overflowed": false,
@@ -334,15 +334,15 @@
       "sourceBytes": 16384,
       "summary": {
         "iterations": 3,
-        "maximumMs": 180.59100000000035,
-        "medianMs": 180.36149999999907,
+        "maximumMs": 183.96645799999897,
+        "medianMs": 180.6208749999987,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 20381696,
-            "outerWallMs": 181.308834,
+            "outerWallMs": 185.076417,
             "result": {
               "actualSourceBytes": 16432,
-              "elapsedMs": 180.36149999999907,
+              "elapsedMs": 183.96645799999897,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -351,10 +351,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20447232,
-            "outerWallMs": 181.64274999999998,
+            "outerWallMs": 181.654708,
             "result": {
               "actualSourceBytes": 16432,
-              "elapsedMs": 180.59100000000035,
+              "elapsedMs": 180.6208749999987,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -363,10 +363,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20447232,
-            "outerWallMs": 180.27575000000002,
+            "outerWallMs": 180.852125,
             "result": {
               "actualSourceBytes": 16432,
-              "elapsedMs": 179.28062500000124,
+              "elapsedMs": 179.86099999999897,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -381,15 +381,15 @@
       "sourceBytes": 16384,
       "summary": {
         "iterations": 3,
-        "maximumMs": 886.687833,
-        "medianMs": 884.9723750000012,
+        "maximumMs": 213.65304200000173,
+        "medianMs": 213.5292499999996,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 20447232,
-            "outerWallMs": 886.06425,
+            "outerWallMs": 214.213083,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 884.9723750000012,
+              "elapsedMs": 213.1588329999995,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -398,10 +398,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20447232,
-            "outerWallMs": 883.250958,
+            "outerWallMs": 214.44116599999998,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 882.0329170000005,
+              "elapsedMs": 213.5292499999996,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -410,10 +410,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 887.795333,
+            "outerWallMs": 214.623292,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 886.687833,
+              "elapsedMs": 213.65304200000173,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -428,15 +428,15 @@
       "sourceBytes": 16384,
       "summary": {
         "iterations": 3,
-        "maximumMs": 892.1905420000003,
-        "medianMs": 886.969000000001,
+        "maximumMs": 215.6702499999992,
+        "medianMs": 214.360541,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 888.15375,
+            "outerWallMs": 214.45558400000002,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 886.969000000001,
+              "elapsedMs": 213.49608300000185,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -445,10 +445,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 885.556208,
+            "outerWallMs": 216.70837500000002,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 884.4373749999995,
+              "elapsedMs": 215.6702499999992,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -457,10 +457,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 893.329583,
+            "outerWallMs": 215.506708,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 892.1905420000003,
+              "elapsedMs": 214.360541,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -475,15 +475,15 @@
       "sourceBytes": 16384,
       "summary": {
         "iterations": 3,
-        "maximumMs": 868.8227080000015,
-        "medianMs": 863.2075839999998,
+        "maximumMs": 180.1694580000003,
+        "medianMs": 180.11474999999882,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 905.9969580000001,
+            "outerWallMs": 217.99420899999998,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 868.8227080000015,
+              "elapsedMs": 180.1694580000003,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -492,10 +492,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 900.459458,
+            "outerWallMs": 216.46320899999998,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 863.2075839999998,
+              "elapsedMs": 180.11474999999882,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -504,10 +504,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20512768,
-            "outerWallMs": 895.595167,
+            "outerWallMs": 216.1195,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 859.436334,
+              "elapsedMs": 180.05662499999926,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -522,15 +522,15 @@
       "sourceBytes": 16384,
       "summary": {
         "iterations": 3,
-        "maximumMs": 231.87358399999903,
-        "medianMs": 226.81904100000065,
+        "maximumMs": 219.82745799999975,
+        "medianMs": 216.8705000000009,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 20578304,
-            "outerWallMs": 232.99575000000002,
+            "outerWallMs": 216.780833,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 231.87358399999903,
+              "elapsedMs": 215.71737500000015,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -539,10 +539,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20578304,
-            "outerWallMs": 227.865916,
+            "outerWallMs": 220.79475000000002,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 226.81904100000065,
+              "elapsedMs": 219.82745799999975,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -551,10 +551,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20643840,
-            "outerWallMs": 223.991209,
+            "outerWallMs": 217.842625,
             "result": {
               "actualSourceBytes": 16464,
-              "elapsedMs": 222.98604200000045,
+              "elapsedMs": 216.8705000000009,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 16384,
@@ -569,15 +569,15 @@
       "sourceBytes": 65536,
       "summary": {
         "iterations": 3,
-        "maximumMs": 19.93570899999941,
-        "medianMs": 19.902208000001337,
+        "maximumMs": 19.18933300000208,
+        "medianMs": 19.111957999999504,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 20643840,
-            "outerWallMs": 22.288124999999997,
+            "outerWallMs": 21.431792,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 19.93570899999941,
+              "elapsedMs": 19.18933300000208,
               "kind": "api",
               "outputBytes": 65634,
               "overflowed": false,
@@ -586,10 +586,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20643840,
-            "outerWallMs": 22.049916999999997,
+            "outerWallMs": 21.001792,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 19.81316700000025,
+              "elapsedMs": 18.864665999999488,
               "kind": "api",
               "outputBytes": 65634,
               "overflowed": false,
@@ -598,10 +598,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 20643840,
-            "outerWallMs": 22.166124999999997,
+            "outerWallMs": 21.210666,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 19.902208000001337,
+              "elapsedMs": 19.111957999999504,
               "kind": "api",
               "outputBytes": 65634,
               "overflowed": false,
@@ -616,15 +616,15 @@
       "sourceBytes": 65536,
       "summary": {
         "iterations": 3,
-        "maximumMs": 205.3623750000006,
-        "medianMs": 204.17949999999837,
+        "maximumMs": 193.58237500000175,
+        "medianMs": 192.8331249999992,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 206.008834,
+            "outerWallMs": 195.815792,
             "result": {
               "actualSourceBytes": 65602,
-              "elapsedMs": 203.64708299999984,
+              "elapsedMs": 193.58237500000175,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -633,10 +633,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 206.657,
+            "outerWallMs": 195.342542,
             "result": {
               "actualSourceBytes": 65602,
-              "elapsedMs": 204.17949999999837,
+              "elapsedMs": 192.8331249999992,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -645,10 +645,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 207.824,
+            "outerWallMs": 195.226208,
             "result": {
               "actualSourceBytes": 65602,
-              "elapsedMs": 205.3623750000006,
+              "elapsedMs": 192.68662500000028,
               "kind": "inline",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -663,15 +663,15 @@
       "sourceBytes": 65536,
       "summary": {
         "iterations": 3,
-        "maximumMs": 10898.214582999995,
-        "medianMs": 10897.922459,
+        "maximumMs": 329.61004200000025,
+        "medianMs": 325.9599999999991,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 10900.400917,
+            "outerWallMs": 328.297791,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10897.922459,
+              "elapsedMs": 325.9599999999991,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -680,10 +680,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 10900.870833,
+            "outerWallMs": 327.084958,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10898.214582999995,
+              "elapsedMs": 324.82383299999856,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -692,10 +692,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 10866.751750000001,
+            "outerWallMs": 331.909375,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10863.860834,
+              "elapsedMs": 329.61004200000025,
               "kind": "entry",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -710,15 +710,15 @@
       "sourceBytes": 65536,
       "summary": {
         "iterations": 3,
-        "maximumMs": 11349.588374999992,
-        "medianMs": 11265.031542000012,
+        "maximumMs": 328.9059589999997,
+        "medianMs": 325.08408299999974,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 10811.032875,
+            "outerWallMs": 326.91225000000003,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10808.263875000004,
+              "elapsedMs": 324.44887500000186,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -727,10 +727,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 11353.816834,
+            "outerWallMs": 331.535333,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 11349.588374999992,
+              "elapsedMs": 328.9059589999997,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -739,10 +739,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 11271.985208,
+            "outerWallMs": 327.50600000000003,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 11265.031542000012,
+              "elapsedMs": 325.08408299999974,
               "kind": "esm",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -757,15 +757,15 @@
       "sourceBytes": 65536,
       "summary": {
         "iterations": 3,
-        "maximumMs": 10883.9695,
-        "medianMs": 10859.981040999992,
+        "maximumMs": 189.1610000000001,
+        "medianMs": 188.89304099999936,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 11030.346792,
+            "outerWallMs": 328.701458,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10883.9695,
+              "elapsedMs": 188.88533300000017,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -774,10 +774,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 11002.550082999998,
+            "outerWallMs": 329.77991699999995,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10859.981040999992,
+              "elapsedMs": 189.1610000000001,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -786,10 +786,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 10830.505374999999,
+            "outerWallMs": 329.266292,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 10688.431166000024,
+              "elapsedMs": 188.89304099999936,
               "kind": "prepared-esm",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -804,15 +804,15 @@
       "sourceBytes": 65536,
       "summary": {
         "iterations": 3,
-        "maximumMs": 337.93074999999953,
-        "medianMs": 334.9285839999793,
+        "maximumMs": 331.2283329999991,
+        "medianMs": 330.9397919999992,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 332.96575,
+            "outerWallMs": 333.57966700000003,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 330.4291249999951,
+              "elapsedMs": 331.2283329999991,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -821,10 +821,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 340.60133399999995,
+            "outerWallMs": 333.245625,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 337.93074999999953,
+              "elapsedMs": 330.9397919999992,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -833,10 +833,10 @@
           },
           {
             "linearMemoryHighWaterBytes": 22282240,
-            "outerWallMs": 337.37987499999997,
+            "outerWallMs": 331.83750000000003,
             "result": {
               "actualSourceBytes": 65634,
-              "elapsedMs": 334.9285839999793,
+              "elapsedMs": 329.5143339999995,
               "kind": "cjs",
               "overflowed": false,
               "requestedSourceBytes": 65536,
@@ -848,37 +848,37 @@
     }
   ],
   "component": {
-    "blake3": "f2a97f1f5b9dc3b0706796161beb7f94e7bfc114058394b6f34fef7608592a09",
-    "buildMs": 59015.987833,
-    "bytes": 172174365,
-    "instantiateMs": 14599.361083
+    "blake3": "9e7ff11ea1f2c832fb57eeb06aeb9a0e1e18fa13f22b9f63035ab5f97e121740",
+    "buildMs": 29495.421625,
+    "bytes": 172175994,
+    "instantiateMs": 14294.210416
   },
   "concurrencyAtLargestSize": {
     "linearMemoryHighWaterBytes": 22544384,
-    "outerWallMs": 25.807042,
+    "outerWallMs": 26.96975,
     "result": {
-      "baselineTimerMs": 2.3731250000128057,
-      "elapsedMs": 21.438957999984268,
-      "incrementalSiblingDelayMs": 19.05662499999744,
+      "baselineTimerMs": 2.691665999998804,
+      "elapsedMs": 22.169207999999344,
+      "incrementalSiblingDelayMs": 19.465167000000292,
       "outputBytes": 65634,
       "requestedMs": 1,
-      "siblingIssuedMs": 21.429750000010245,
-      "transformMs": 19.11699999999837
+      "siblingIssuedMs": 22.156832999999097,
+      "transformMs": 19.48108299999876
     }
   },
   "controlsAtLargestSize": {
     "linearMemoryHighWaterBytes": 22544384,
-    "outerWallMs": 391.908209,
+    "outerWallMs": 390.371125,
     "result": {
       "cancellation": {
         "cancelled": true,
-        "completedMs": 195.86687499997788,
-        "issuedMs": 187.78308299998753,
+        "completedMs": 195.88845899999976,
+        "issuedMs": 187.035167,
         "message": "execution job cancelled",
         "requestedMs": 1
       },
       "timeout": {
-        "completedMs": 193.8571670000092,
+        "completedMs": 192.2898750000004,
         "message": "execution job timed out",
         "timedOut": true
       }
@@ -888,7 +888,7 @@
     "arch": "aarch64",
     "artifactCache": null,
     "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
-    "commitHint": "8bbdc5f32abf10322fe256b08ad0076dc165b1ae",
+    "commitHint": "012a07cc553ec91ab308e071ab8622358f5cfec1",
     "dirty": false,
     "os": "macos",
     "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
@@ -897,7 +897,7 @@
   },
   "inputs": {
     "benchmarkHash": "bccc8d574c50193654300d836469eb52a13a895f08860614ec07f523e2f3630c",
-    "runtimeHash": "de91efe35fa8ee258eee4e61bccf51450380a6b8c186b8255e6292095af4eae6"
+    "runtimeHash": "242cc8726fad9a244984ee6a65ef40e05a648ffdb3d191fba426affff17a0e65"
   },
   "iterations": 3,
   "mode": "strip",
