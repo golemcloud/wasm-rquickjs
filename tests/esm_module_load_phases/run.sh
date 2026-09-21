@@ -47,7 +47,8 @@ case "$arch" in
 esac
 
 mkdir -p "$results_dir"
-report="$results_dir/$(date +%Y-%m-%d)-$target-$platform-$arch.json"
+default_report="$results_dir/$(date +%Y-%m-%d)-$target-$platform-$arch.json"
+report=${ESM_MODULE_LOAD_PHASES_REPORT:-$default_report}
 (
     cd "$worktree"
     ESM_MODULE_LOAD_PHASES_MEASURE=1 \

@@ -2184,6 +2184,10 @@ fn collect_declared_cjs_globals_in_esm(source: &str) -> Vec<String> {
     let mut i = 0usize;
     let mut declared = Vec::<String>::new();
     while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
@@ -2241,6 +2245,10 @@ fn find_bare_cjs_global_in_esm_among(
             scopes.pop();
         }
 
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
@@ -7207,6 +7215,14 @@ fn skip_ws_comments(source: &str, pos: usize) -> usize {
     skip_ws_comments_impl::<false>(source, pos).0
 }
 
+fn skip_ascii_whitespace(source: &str, mut pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    pos
+}
+
 fn skip_ws_comments_with_line_terminator(source: &str, pos: usize) -> (usize, bool) {
     skip_ws_comments_impl::<true>(source, pos)
 }
@@ -8959,6 +8975,10 @@ where
     let bytes = source.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_non_code(source, i, skip_regex) {
             i = next;
             continue;
@@ -8985,6 +9005,10 @@ where
     let mut i = 0usize;
     let mut brace_depth = 0usize;
     while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_non_code(source, i, skip_regex) {
             i = next;
             continue;
@@ -12705,6 +12729,19 @@ import "./dep.js" withあ;
             "function* module() { yield 1; } export default module;",
             None,
         );
+    }
+
+    #[test]
+    fn dense_whitespace_keeps_esm_scanner_results() {
+        let padding = " \n\t\r".repeat(16_384);
+        let source = format!("{padding}export default 42;");
+
+        assert_cjs_global(&source, None);
+        assert!(collect_declared_cjs_globals_in_esm(&source).is_empty());
+        assert_eq!(rewrite_import_meta_main(&source, "false"), source);
+
+        let with_require = format!("{padding}export default require;");
+        assert_cjs_global(&with_require, Some("require"));
     }
 
     #[test]
