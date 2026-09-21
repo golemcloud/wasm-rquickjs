@@ -137,17 +137,8 @@ inside a WASI preopen. Persistent relative symlinks, cache-domain isolation,
 retargeting, and retry behavior are covered by the module-resolution runtime
 test instead.
 
-Raw reports:
-
-- [negative package JSON P2](2026-09-21-negative-package-json-p2.json) and
-  [P3](2026-09-21-negative-package-json-p3.json)
-- [loader realpath P2](2026-09-21-loader-realpath-p2.json) and
-  [P3](2026-09-21-loader-realpath-p3.json)
-- [combined P2](2026-09-21-loader-caches-p2.json) and
-  [P3](2026-09-21-loader-caches-p3.json)
-- reviewed candidate [P2](2026-09-21-loader-caches-final-p2.json) and
-  [P3](2026-09-21-loader-caches-final-p3.json)
-
-Run `python3 tests/npm_metadata/results/validate_cache_experiments.py` to check
-sample success, installation and HTTP invariants, exact counter totals,
-reconciliation equations, and the accepted reduction and CPU gates.
+Retained raw reports: reviewed candidate
+[P2](2026-09-21-loader-caches-final-p2.json) and
+[P3](2026-09-21-loader-caches-final-p3.json). The intermediate prototype
+samples are summarized in the aggregate tables above rather than retained
+sample by sample.
