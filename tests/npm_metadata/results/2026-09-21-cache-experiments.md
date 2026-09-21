@@ -16,8 +16,10 @@ Review then identified that Node keeps CommonJS and ESM realpath state
 separate, and that ESM source reads must continue to bypass canonicalization
 under `--preserve-symlinks`. Commit `f88f62e8` split the cache domains, fixed
 the preserve path, and removed a duplicate physical realpath on failed
-CommonJS canonicalization. The final candidate was measured again at that
-exact commit.
+CommonJS canonicalization. Commit `8d030cf7` then restored build-time Wizer
+filesystem isolation, normalized relative CommonJS loader inputs against the
+working directory, and added the missing DTS export. The final candidate was
+measured again at that exact commit.
 
 ## Method
 
@@ -100,7 +102,7 @@ improved 35.6% for P2 `view`, 37.3% for P2 `ci`, 33.7% for P3 `view`, and
 ## Reviewed production candidate
 
 After the cache-domain correction, each target ran three more iterations with
-the standard harness at exact revision `f88f62e8`. The table below uses only
+the standard harness at exact revision `8d030cf7`. The table below uses only
 the serial, fresh-state, cold local-registry rows. The standard reports also
 retain their public-registry and warm observations, but those are outside this
 comparison. Every local command succeeded, every `ci` installed both pinned
@@ -109,12 +111,12 @@ both package-metadata and realpath counter equations reconciled.
 
 | Target / command | Missing reads control → final | Physical realpaths control → final | Final wall median | Final CPU median |
 | --- | ---: | ---: | ---: | ---: |
-| P2 `--version` | 204 → 96 (-52.9%) | 426 → 78 (-81.7%) | 0.566 | 0.563 |
-| P2 `view` | 1,768 → 596 (-66.3%) | 3,545 → 477 (-86.5%) | 3.849 | 3.725 |
-| P2 `ci` | 2,645 → 847 (-68.0%) | 5,007 → 616 (-87.7%) | 8.389 | 8.043 |
-| P3 `--version` | 204 → 96 (-52.9%) | 426 → 78 (-81.7%) | 0.560 | 0.559 |
-| P3 `view` | 1,768 → 596 (-66.3%) | 3,545 → 477 (-86.5%) | 3.631 | 3.620 |
-| P3 `ci` | 2,645 → 847 (-68.0%) | 5,007 → 616 (-87.7%) | 7.882 | 7.784 |
+| P2 `--version` | 204 → 96 (-52.9%) | 426 → 78 (-81.7%) | 0.582 | 0.570 |
+| P2 `view` | 1,768 → 596 (-66.3%) | 3,545 → 477 (-86.5%) | 3.963 | 3.923 |
+| P2 `ci` | 2,645 → 847 (-68.0%) | 5,007 → 616 (-87.7%) | 6.974 | 6.944 |
+| P3 `--version` | 204 → 96 (-52.9%) | 426 → 78 (-81.7%) | 0.592 | 0.590 |
+| P3 `view` | 1,768 → 596 (-66.3%) | 3,545 → 477 (-86.5%) | 4.376 | 4.233 |
+| P3 `ci` | 2,645 → 847 (-68.0%) | 5,007 → 616 (-87.7%) | 7.965 | 7.533 |
 
 Separating the two Node loader domains costs one physical realpath for
 `--version` and two for `view`/`ci` compared with the initial combined
