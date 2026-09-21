@@ -3338,8 +3338,12 @@ impl Loader for StaticRegisteredFileUrlLoader {
             return Err(Error::new_loading(path));
         };
         let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
-        let source_path = crate::builtin::realpath_for_module_resolution(ctx, &fs_path)
-            .unwrap_or_else(|| fs_path.clone());
+        let source_path = if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
+            fs_path.clone()
+        } else {
+            crate::builtin::realpath_for_esm_module_resolution(ctx, &fs_path)
+                .unwrap_or_else(|_| fs_path.clone())
+        };
         declare_esm_file_module(
             ctx,
             path,
@@ -3654,8 +3658,8 @@ impl NodeFileResolver {
         if preserve_symlinks {
             return normalized.to_string();
         }
-        crate::builtin::realpath_for_module_resolution(ctx, normalized)
-            .unwrap_or_else(|| normalized.to_string())
+        crate::builtin::realpath_for_esm_module_resolution(ctx, normalized)
+            .unwrap_or_else(|_| normalized.to_string())
     }
 
     fn module_resolution_is_file(ctx: &Ctx<'_>, normalized: &str) -> bool {
@@ -4116,8 +4120,11 @@ enum ModulePathClassification {
 struct CjsModuleProbeSessionState {
     depth: usize,
     entries: HashMap<String, ModulePathClassification>,
+    missing_package_json: HashSet<String>,
     #[cfg(feature = "test-observability")]
     hit_count: u64,
+    #[cfg(feature = "test-observability")]
+    missing_package_json_hit_count: u64,
     #[cfg(feature = "test-observability")]
     bypass_cache: bool,
 }
@@ -4141,9 +4148,11 @@ impl CjsModuleProbeSessionState {
 /// outer main-module compile. This runtime also brackets an outer `createRequire()`
 /// graph so real ESM-to-CJS package workloads benefit, but deliberately invalidates
 /// observations after filesystem mutations instead of exposing Node's stale result.
-/// Missing observations are never retained, and sibling QuickJS runtimes never share
-/// this RuntimeServices-owned state. Rust depth keeps the private runner reentrant;
-/// the normal JS adapter crosses the bridge only at its own outermost depth.
+/// Missing path classifications are never retained. Missing package metadata is retained only
+/// for the same outer graph and cleared after filesystem mutations, so packages created by the
+/// running program become visible. Sibling QuickJS runtimes never share this RuntimeServices-owned
+/// state. Rust depth keeps the private runner reentrant; the normal JS adapter crosses the bridge
+/// only at its own outermost depth.
 #[derive(Clone, Default)]
 pub(crate) struct CjsModuleProbeSession(Rc<RefCell<CjsModuleProbeSessionState>>);
 
@@ -4153,14 +4162,19 @@ struct ModulePathProbe {
 }
 
 impl CjsModuleProbeSession {
-    pub(crate) fn invalidate(&self) {
-        self.0.borrow_mut().entries.clear();
+    pub(crate) fn invalidate(&self) -> usize {
+        let mut state = self.0.borrow_mut();
+        state.entries.clear();
+        let missing_package_json = state.missing_package_json.len();
+        state.missing_package_json.clear();
+        missing_package_json
     }
 
     fn begin(&self) {
         let mut state = self.0.borrow_mut();
         if state.depth == 0 {
             state.entries.clear();
+            state.missing_package_json.clear();
         }
         state.depth = state.depth.saturating_add(1);
     }
@@ -4169,12 +4183,37 @@ impl CjsModuleProbeSession {
         let mut state = self.0.borrow_mut();
         if state.depth == 0 {
             state.entries.clear();
+            state.missing_package_json.clear();
             return;
         }
         state.depth -= 1;
         if state.depth == 0 {
             state.entries.clear();
+            state.missing_package_json.clear();
         }
+    }
+
+    fn missing_package_json_cached(&self, normalized: &str) -> bool {
+        #[cfg(feature = "test-observability")]
+        let mut state = self.0.borrow_mut();
+        #[cfg(not(feature = "test-observability"))]
+        let state = self.0.borrow();
+        let enabled = state.depth > 0 && state.cache_enabled();
+        let hit = enabled && state.missing_package_json.contains(normalized);
+        #[cfg(feature = "test-observability")]
+        if hit {
+            state.missing_package_json_hit_count =
+                state.missing_package_json_hit_count.saturating_add(1);
+        }
+        hit
+    }
+
+    fn remember_missing_package_json(&self, normalized: String) -> bool {
+        let mut state = self.0.borrow_mut();
+        if state.depth == 0 || !state.cache_enabled() {
+            return false;
+        }
+        state.missing_package_json.insert(normalized)
     }
 
     fn probe(&self, normalized: &str) -> ModulePathProbe {
@@ -4226,7 +4265,14 @@ impl CjsModuleProbeSession {
 
     #[cfg(feature = "test-observability")]
     fn reset_hit_count(&self) {
-        self.0.borrow_mut().hit_count = 0;
+        let mut state = self.0.borrow_mut();
+        state.hit_count = 0;
+        state.missing_package_json_hit_count = 0;
+    }
+
+    #[cfg(feature = "test-observability")]
+    fn missing_package_json_hit_count(&self) -> u64 {
+        self.0.borrow().missing_package_json_hit_count
     }
 
     #[cfg(feature = "test-observability")]
@@ -4234,6 +4280,7 @@ impl CjsModuleProbeSession {
         let mut state = self.0.borrow_mut();
         state.bypass_cache = !enabled;
         state.entries.clear();
+        state.missing_package_json.clear();
     }
 }
 
@@ -4377,11 +4424,47 @@ fn reset_cjs_module_probe_session_hit_count(ctx: Ctx<'_>) {
 }
 
 #[cfg(feature = "test-observability")]
+fn cjs_missing_package_json_cache_hit_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .missing_package_json_hit_count()
+}
+
+#[cfg(feature = "test-observability")]
 fn set_cjs_module_probe_session_enabled(ctx: Ctx<'_>, enabled: bool) {
     ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized")
         .cjs_module_probe_session
         .set_enabled(enabled);
+}
+
+#[cfg(feature = "test-observability")]
+fn loader_realpath_cache_hit_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_cache_hit_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_cache_hit_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_cache_hit_count();
+}
+
+#[cfg(feature = "test-observability")]
+fn loader_realpath_system_call_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_system_call_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_system_call_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_system_call_count();
 }
 
 struct NodePackageWarning {
@@ -4774,12 +4857,26 @@ impl NodeModulesResolver {
         resolution: &NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &resolution.profile {
+            profile.increment("modules.packageJson.calls");
+        }
         if let Some(cached) = resolution.package_json_cache.get(&cache_key) {
             #[cfg(feature = "typescript-compiler-profiling")]
             if let Some(profile) = &resolution.profile {
                 profile.increment("modules.packageJson.cacheHits");
             }
             return Ok(Some(cached));
+        }
+        if resolution
+            .probe_session
+            .missing_package_json_cached(&cache_key)
+        {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &resolution.profile {
+                profile.increment("modules.packageJson.negativeCacheHits");
+            }
+            return Ok(None);
         }
         match std::fs::read_to_string(pkg_path) {
             Ok(pkg_content) => {
@@ -4799,14 +4896,24 @@ impl NodeModulesResolver {
                     .insert(cache_key, package.clone());
                 Ok(Some(package))
             }
-            Err(_error) => {
+            Err(error) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
                 if let Some(profile) = &resolution.profile {
-                    profile.increment(if _error.kind() == std::io::ErrorKind::NotFound {
+                    profile.increment(if error.kind() == std::io::ErrorKind::NotFound {
                         "modules.packageJson.notFound"
                     } else {
                         "modules.packageJson.errors"
                     });
+                }
+                if error.kind() == std::io::ErrorKind::NotFound
+                    && resolution
+                        .probe_session
+                        .remember_missing_package_json(cache_key)
+                {
+                    #[cfg(feature = "typescript-compiler-profiling")]
+                    if let Some(profile) = &resolution.profile {
+                        profile.increment("modules.packageJson.negativeCacheEntries");
+                    }
                 }
                 Ok(None)
             }
@@ -9093,7 +9200,8 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
 }
 
 fn canonical_cjs_analysis_path(ctx: &Ctx<'_>, path: &str) -> String {
-    crate::builtin::realpath_for_module_resolution(ctx, path).unwrap_or_else(|| path.to_string())
+    crate::builtin::realpath_for_cjs_module_resolution(ctx, path)
+        .unwrap_or_else(|_| path.to_string())
 }
 
 #[derive(Clone)]
@@ -10057,8 +10165,12 @@ fn module_filesystem_path(path: &str) -> &str {
 
 fn module_source_filesystem_path(ctx: &Ctx<'_>, path: &str) -> String {
     let fs_path = module_filesystem_path(path);
-    crate::builtin::realpath_for_module_resolution(ctx, fs_path)
-        .unwrap_or_else(|| fs_path.to_string())
+    if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
+        fs_path.to_string()
+    } else {
+        crate::builtin::realpath_for_esm_module_resolution(ctx, fs_path)
+            .unwrap_or_else(|_| fs_path.to_string())
+    }
 }
 
 fn read_module_source_or_throw<'js>(
@@ -11625,11 +11737,56 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         #[cfg(feature = "test-observability")]
         set_non_replaceable_global(
             &global,
+            "__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count",
+            Function::new(ctx.clone(), cjs_missing_package_json_cache_hit_count)
+                .expect("Failed to create CJS missing package metadata hit counter"),
+        )
+        .expect("Failed to initialize CJS missing package metadata hit counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
             "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
             Function::new(ctx.clone(), set_cjs_module_probe_session_enabled)
                 .expect("Failed to create CJS module probe-session test control"),
         )
         .expect("Failed to initialize CJS module probe-session test control");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_cache_hit_count",
+            Function::new(ctx.clone(), loader_realpath_cache_hit_count)
+                .expect("Failed to create loader realpath cache hit counter"),
+        )
+        .expect("Failed to initialize loader realpath cache hit counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_cache_hit_count",
+            Function::new(ctx.clone(), reset_loader_realpath_cache_hit_count)
+                .expect("Failed to create loader realpath cache hit counter reset"),
+        )
+        .expect("Failed to initialize loader realpath cache hit counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_system_call_count",
+            Function::new(ctx.clone(), loader_realpath_system_call_count)
+                .expect("Failed to create loader realpath system-call counter"),
+        )
+        .expect("Failed to initialize loader realpath system-call counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_system_call_count",
+            Function::new(ctx.clone(), reset_loader_realpath_system_call_count)
+                .expect("Failed to create loader realpath system-call counter reset"),
+        )
+        .expect("Failed to initialize loader realpath system-call counter reset");
 
         set_non_replaceable_global(
             &global,

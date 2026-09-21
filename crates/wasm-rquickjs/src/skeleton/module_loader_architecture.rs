@@ -6,6 +6,7 @@ use quote::ToTokens;
 const MODULE_JS: &str = include_str!("../../skeleton/src/builtin/module.js");
 const MODULE_LOADING_RS: &str = include_str!("../../skeleton/src/internal/module_loading.rs");
 const RUNTIME_SERVICES_RS: &str = include_str!("../../skeleton/src/internal/runtime_services.rs");
+const FS_RS: &str = include_str!("../../skeleton/src/builtin/fs.rs");
 const P2_RS: &str = include_str!("../../skeleton/src/internal/p2.rs");
 const P3_RS: &str = include_str!("../../skeleton/src/internal/p3.rs");
 
@@ -659,7 +660,12 @@ fn module_loader_architecture() {
     }
     for test_bridge in [
         "__wasm_rquickjs_get_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count",
+        "__wasm_rquickjs_get_loader_realpath_cache_hit_count",
+        "__wasm_rquickjs_get_loader_realpath_system_call_count",
         "__wasm_rquickjs_reset_cjs_module_probe_session_hit_count",
+        "__wasm_rquickjs_reset_loader_realpath_cache_hit_count",
+        "__wasm_rquickjs_reset_loader_realpath_system_call_count",
         "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
     ] {
         assert!(
@@ -692,6 +698,24 @@ fn module_loader_architecture() {
         );
     }
     assert_no_import_meta_mutation(&js_tokens);
+}
+
+#[test]
+fn module_loader_realpath_checks_wizer_before_filesystem_access() {
+    let start = FS_RS
+        .find("pub(super) fn realpath_for_module_resolution")
+        .expect("loader realpath helper must exist");
+    let body = &FS_RS[start..];
+    let guard = body
+        .find("crate::internal::is_wizer_active()")
+        .expect("loader realpath helper must retain the Wizer filesystem guard");
+    let filesystem_access = body
+        .find("canonicalize_guest_path(path)")
+        .expect("loader realpath helper must canonicalize uncached paths");
+    assert!(
+        guard < filesystem_access,
+        "loader realpath must check Wizer state before filesystem access"
+    );
 }
 
 #[test]
