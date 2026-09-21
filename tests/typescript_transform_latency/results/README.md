@@ -10,11 +10,9 @@ Each configured size is a requested source-byte target. Generated declarations a
 case-specific suffixes can make the actual source slightly larger; samples in the
 requested 64-KiB profile contain 65,602–65,637 source bytes.
 
-The reports' `environment.commitHint` records the checkout used for the workload
-capture (`058b9042`), while the input hashes are the currentness keys. The
-`benchmarkHash` was refreshed after capture only because `run.sh` gained
-validation-only source-root wiring; the recorded timings and component artifacts
-still come from the `058b9042` capture.
+The reports' `environment.commitHint` records the exact consolidated npm-loader
+candidate used for the workload capture (`8bbdc5f3`), while the runtime and
+benchmark input hashes are the currentness keys.
 
 `run.sh --check` validates the checked-in report schema and complete P2/P3 by
 strip/transform matrix without claiming that historical timings describe the
@@ -22,29 +20,35 @@ current runtime. `run.sh --check-current` additionally compares the stored input
 hashes with the checkout. A failure there requires a deliberate new measurement
 capture, not validation-only replacement of the runtime hash.
 
-## 2026-09-01 macOS arm64 baseline
+## 2026-09-21 macOS arm64 baseline
 
 All values below are milliseconds for the requested 64-KiB profile unless noted
 otherwise.
 
 | Target/mode | Direct API median / max | Inline median | Entry median | ESM median | Prepared ESM median | CJS median |
 |---|---:|---:|---:|---:|---:|---:|
-| P2 strip | 19.46 / 20.50 | 202.95 | 11,040.89 | 11,094.26 | 10,944.89 | 372.51 |
-| P2 transform | 18.99 / 19.03 | 200.90 | 322.43 | 323.80 | 198.70 | 343.44 |
-| P3 strip | 19.62 / 20.77 | 207.63 | 11,036.76 | 11,169.50 | 10,934.69 | 366.03 |
-| P3 transform | 18.28 / 18.78 | 210.57 | 356.63 | 341.15 | 191.91 | 355.45 |
+| P2 strip | 19.49 / 19.52 | 197.21 | 10,945.91 | 11,324.12 | 11,088.28 | 371.14 |
+| P2 transform | 24.77 / 25.73 | 244.56 | 439.50 | 370.64 | 307.44 | 843.67 |
+| P3 strip | 19.90 / 19.94 | 204.18 | 10,897.92 | 11,265.03 | 10,859.98 | 334.93 |
+| P3 transform | 17.54 / 17.65 | 196.31 | 316.13 | 316.76 | 175.63 | 314.23 |
 
-The same-runtime 1 ms timer was delayed by 18.90–22.10 ms while the synchronous
-public transform API ran. A 1 ms execution timeout completed in 205.53–208.59 ms;
-the cancellation callback was issued in 194.94–204.99 ms and completed in
-203.84–214.18 ms. Those execution-control values include fresh runtime startup and
+The same-runtime 1 ms timer was delayed by 17.82–20.55 ms while the synchronous
+public transform API ran. A 1 ms execution timeout completed in 193.86–218.45 ms;
+the cancellation callback was issued in 187.78–210.80 ms and completed in
+195.87–221.79 ms. Those execution-control values include fresh runtime startup and
 must not be described as native-transform time or preemption.
 
-The highest observed guest linear-memory reservation was 22,544,384 bytes. This is
+The highest observed guest linear-memory reservation was 22,609,920 bytes. This is
 an instance-wide monotone high-water mark, not retained memory. Strip-mode prepared
 ESM reproduces nearly all of the end-to-end ESM delay after transformation has
 already finished, while similarly sized inputs with the same dense stripped padding
-complete inline in about 203 ms and through CommonJS in about 370 ms. The separate
+complete inline in 197–204 ms and through CommonJS in 335–371 ms. The separate
 bottleneck is therefore in the ESM module-loading path, not generic compilation of
 whitespace-preserving output; GOL-347 owns its phase-level profiling and measured
 mitigation.
+
+The P2 transform-mode execution rows were noisier than the other profiles, including
+three 64-KiB CommonJS samples spanning 621–1,381 ms. This serial refresh is not a
+controlled cross-date A/B, so those movements are descriptive and are not attributed
+to the npm-loader cache change. The stable cross-target result is the roughly
+11-second strip-mode ESM path reproduced after transformation has already completed.
