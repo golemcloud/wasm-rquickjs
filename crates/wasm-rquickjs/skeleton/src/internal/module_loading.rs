@@ -8975,10 +8975,6 @@ where
     let bytes = source.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
-        if bytes[i].is_ascii_whitespace() {
-            i = skip_ascii_whitespace(source, i);
-            continue;
-        }
         if let Some(next) = skip_non_code(source, i, skip_regex) {
             i = next;
             continue;
@@ -9005,10 +9001,6 @@ where
     let mut i = 0usize;
     let mut brace_depth = 0usize;
     while i < bytes.len() {
-        if bytes[i].is_ascii_whitespace() {
-            i = skip_ascii_whitespace(source, i);
-            continue;
-        }
         if let Some(next) = skip_non_code(source, i, skip_regex) {
             i = next;
             continue;
@@ -11872,6 +11864,9 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
 }
 
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
+    if !source.contains("import") {
+        return source.to_string();
+    }
     let mut spans = Vec::new();
     let _ = scan_code_positions(source, true, |i, _| {
         if let Some(end) = parse_import_meta_main_span(source, i) {
