@@ -1673,8 +1673,18 @@ function registerSourceMapForCjs(filename, source, moduleObject, options = undef
     }
 
     const sourceText = String(source);
-    const url = extractSourceMapURL(sourceText);
-    if (url === undefined) {
+    if (sourceText.indexOf('sourceMappingURL=') === -1) {
+        delete registry[filename];
+        return;
+    }
+    // TypeScript builds already carry SWC, so they use its lexer for exact
+    // directive detection. Other builds retain the JS scanner rather than
+    // shipping the TypeScript parser solely for source-map registration.
+    const nativeExtractor = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_extract_source_map_url;
+    const url = typeof nativeExtractor === 'function'
+        ? nativeExtractor(sourceText)
+        : extractSourceMapURL(sourceText);
+    if (url === undefined || url === null || url === '') {
         delete registry[filename];
         return;
     }
