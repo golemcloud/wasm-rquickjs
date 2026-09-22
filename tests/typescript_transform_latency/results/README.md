@@ -10,11 +10,9 @@ Each configured size is a requested source-byte target. Generated declarations a
 case-specific suffixes can make the actual source slightly larger; samples in the
 requested 64-KiB profile contain 65,602–65,637 source bytes.
 
-The reports' `environment.commitHint` records the checkout used for the workload
-capture (`058b9042`), while the input hashes are the currentness keys. The
-`benchmarkHash` was refreshed after capture only because `run.sh` gained
-validation-only source-root wiring; the recorded timings and component artifacts
-still come from the `058b9042` capture.
+The reports' `environment.commitHint` records the exact ESM whitespace-scan
+candidate used for the workload capture (`012a07cc`), while the runtime and
+benchmark input hashes are the currentness keys.
 
 `run.sh --check` validates the checked-in report schema and complete P2/P3 by
 strip/transform matrix without claiming that historical timings describe the
@@ -22,29 +20,29 @@ current runtime. `run.sh --check-current` additionally compares the stored input
 hashes with the checkout. A failure there requires a deliberate new measurement
 capture, not validation-only replacement of the runtime hash.
 
-## 2026-09-01 macOS arm64 baseline
+## 2026-09-21 macOS arm64 candidate
 
 All values below are milliseconds for the requested 64-KiB profile unless noted
 otherwise.
 
 | Target/mode | Direct API median / max | Inline median | Entry median | ESM median | Prepared ESM median | CJS median |
 |---|---:|---:|---:|---:|---:|---:|
-| P2 strip | 19.46 / 20.50 | 202.95 | 11,040.89 | 11,094.26 | 10,944.89 | 372.51 |
-| P2 transform | 18.99 / 19.03 | 200.90 | 322.43 | 323.80 | 198.70 | 343.44 |
-| P3 strip | 19.62 / 20.77 | 207.63 | 11,036.76 | 11,169.50 | 10,934.69 | 366.03 |
-| P3 transform | 18.28 / 18.78 | 210.57 | 356.63 | 341.15 | 191.91 | 355.45 |
+| P2 strip | 18.88 / 18.95 | 193.52 | 325.43 | 329.13 | 190.68 | 331.21 |
+| P2 transform | 17.63 / 17.65 | 196.22 | 315.67 | 315.02 | 176.35 | 313.67 |
+| P3 strip | 19.11 / 19.19 | 192.83 | 325.96 | 325.08 | 188.89 | 330.94 |
+| P3 transform | 17.65 / 17.85 | 196.13 | 316.10 | 314.39 | 175.94 | 313.02 |
 
-The same-runtime 1 ms timer was delayed by 18.90–22.10 ms while the synchronous
-public transform API ran. A 1 ms execution timeout completed in 205.53–208.59 ms;
-the cancellation callback was issued in 194.94–204.99 ms and completed in
-203.84–214.18 ms. Those execution-control values include fresh runtime startup and
+The same-runtime 1 ms timer was delayed by 16.51–19.47 ms while the synchronous
+public transform API ran. A 1 ms execution timeout completed in 192.29–194.39 ms;
+the cancellation callback was issued in 185.90–190.03 ms and completed in
+193.95–198.23 ms. Those execution-control values include fresh runtime startup and
 must not be described as native-transform time or preemption.
 
-The highest observed guest linear-memory reservation was 22,544,384 bytes. This is
-an instance-wide monotone high-water mark, not retained memory. Strip-mode prepared
-ESM reproduces nearly all of the end-to-end ESM delay after transformation has
-already finished, while similarly sized inputs with the same dense stripped padding
-complete inline in about 203 ms and through CommonJS in about 370 ms. The separate
-bottleneck is therefore in the ESM module-loading path, not generic compilation of
-whitespace-preserving output; GOL-347 owns its phase-level profiling and measured
-mitigation.
+The highest observed guest linear-memory reservation was 22,609,920 bytes. This is
+an instance-wide monotone high-water mark, not retained memory. The preceding
+baseline's requested 64-KiB strip-mode prepared-ESM medians were 11,088.28 ms for P2
+and 10,859.98 ms for P3. After the whitespace-scan change they are 190.68 ms and
+188.89 ms, reductions of 98.28% and 98.26%. Entry and ordinary ESM paths now track
+the approximately 313–331 ms CommonJS range instead of taking roughly 11 seconds.
+The phase experiment retains the raw P2/P3 attribution samples and documents the
+two source scanners responsible for the baseline delay.

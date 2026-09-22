@@ -112,6 +112,10 @@ name = "typescript_transform_latency"
 harness = false
 
 [[test]]
+name = "esm_module_load_phases"
+harness = false
+
+[[test]]
 name = "migrate_config_split"
 harness = false
 
