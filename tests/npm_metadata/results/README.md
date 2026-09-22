@@ -23,12 +23,16 @@ as CI timing gates.
 
 ## Reproduce the cold path trace
 
-The dated trace patch is a measurement tool, not a runtime change. Start from
-this branch with a clean worktree, use the pinned Node/npm installation,
-and apply it only for the measurement. It adds bounded per-job path-frequency
-counters and emits aggregate counts without path strings.
+The dated trace patch is a measurement tool, not a runtime change. It applies
+to the 2026-09-18 baseline revision `9619718a1c444dd490d6075494de91918c712734`,
+not to the current branch head. Create a clean worktree at that revision, use
+the pinned Node/npm installation, and apply it only for the measurement. It
+adds bounded per-job path-frequency counters and emits aggregate counts
+without path strings.
 
 ```sh
+git worktree add --detach ../wasm-rquickjs-npm-trace-baseline 9619718a1c444dd490d6075494de91918c712734
+cd ../wasm-rquickjs-npm-trace-baseline
 git apply --check tests/npm_metadata/results/2026-09-18-trace.patch
 git apply tests/npm_metadata/results/2026-09-18-trace.patch
 NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
@@ -39,6 +43,8 @@ NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
   tools/dev-test.sh p3 standard npm_metadata ''
 git apply --reverse tests/npm_metadata/results/2026-09-18-trace.patch
 git diff --exit-code -- crates/wasm-rquickjs/skeleton tests/npm_metadata.rs
+cd -
+git worktree remove ../wasm-rquickjs-npm-trace-baseline
 ```
 
 The two reproduction commands write separate `/tmp` files and do not
