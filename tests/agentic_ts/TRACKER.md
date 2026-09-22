@@ -16,6 +16,31 @@
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
 | phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.56 s / 19.96 s |
 
+## Consolidated-source recapture — 2026-09-22
+
+The [P2](results/2026-09-22-p2-macos-aarch64.json) and
+[P3](results/2026-09-22-p3-macos-aarch64.json) reports measure
+the clean consolidated #154 source revision `5349e9ea` with Node 22.14.0,
+npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and optional test caches disabled.
+Their build and benchmark input hashes match across targets. These are a new
+current-source baseline, not a controlled A/B with the September 7 reports;
+source, Rust toolchain, and measurement date changed together.
+The cold CLI and host Node rows each have one observation per target; the
+repeated-job rows have five samples per target.
+
+| Workload | Node 22.14 P2 / P3 | P2 | P3 |
+|---|---:|---:|---:|
+| cold `tsc --noEmit` | 0.631 / 0.623 s | 19.17 s | 19.22 s |
+| repeated unchanged non-incremental checks | — | 18.95 s | 19.18 s |
+| warm incremental `.tsbuildinfo` checks | — | 12.43 s | 12.34 s |
+
+The separate instrumented compiler-API profile spends 11.67/11.75 s importing
+TypeScript, 5.08/5.00 s creating the program, and 7.93/8.15 s computing
+diagnostics (P2/P3). Its 25.34/27.00 s outer wall is not directly comparable
+to the cold CLI row. No isolated effect of the npm loader caches or ESM scanner
+fix is claimed. The next experiment should attribute the TypeScript import
+phase on this exact source before selecting a mitigation.
+
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
 fix is proposed.

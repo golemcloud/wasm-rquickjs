@@ -1,0 +1,3034 @@
+{
+  "component": {
+    "blake3": "6cba3255a4f5ae183ae00793f57412c5a3119a86ba51ecb3d08ee85103624eb2",
+    "buildMs": 49176.405584,
+    "bytes": 176109175,
+    "path": "tmp/rt-target/wasm32-wasip2/debug/agentic_ts.optimized.wasm",
+    "prepareAndInstantiateMs": 16508.492583
+  },
+  "environment": {
+    "arch": "aarch64",
+    "artifactCache": null,
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "commitHint": "5349e9eabd84509fdb2f2807d30c57961c5ffa5d",
+    "componentFeatures": "typescript-compiler-profiling",
+    "dirty": false,
+    "iterations": 5,
+    "node": "22.14.0",
+    "npm": "10.9.2",
+    "os": "macos",
+    "preparedComponentCache": null,
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "typescript": "5.8.2",
+    "unoptimized": null,
+    "wasmtimeCache": null
+  },
+  "inputs": {
+    "algorithm": "blake3-composite-v1",
+    "benchmarkHash": "62c3baad63d1f965fa09a77fd853acb38fdae3ded395b41f88417773b9776ae7",
+    "buildHash": "95ceedfc8b22747d708d73fc18f45b7cf43695eb142e62fb815aac61b6735894"
+  },
+  "nodeBaseline": {
+    "exitCode": 0,
+    "stderr": "",
+    "stdout": "",
+    "wallMs": 630.748792
+  },
+  "notes": [
+    "manual local measurement; no CI threshold",
+    "fresh QuickJS execution job per compiler/run operation",
+    "workspace and .tsbuildinfo persist within the component instance"
+  ],
+  "phaseProfiles": {
+    "interpretation": "the shared TypeScript API profiler runs a no-emit core-project check; compare phase proportions within a target because instrumentation overhead differs between Node and QuickJS",
+    "node": {
+      "outerOverheadMs": 37.6965009999999,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "diagnostics": {
+            "config": 0,
+            "optionsAndGlobal": 0,
+            "semantic": 0,
+            "syntactic": 0,
+            "total": 0
+          },
+          "exitCode": 0,
+          "graph": {
+            "rootFiles": 1,
+            "sourceFiles": {
+              "projectSources": 1,
+              "typescriptLibDeclarations": 63
+            },
+            "totalSourceFiles": 64
+          },
+          "io": {
+            "configParse": {
+              "directoryExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "fileExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "getSourceFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 1,
+                "entries": 1
+              },
+              "readFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            },
+            "configRead": {
+              "directoryExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "fileExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "getSourceFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 0,
+                "entries": 0
+              },
+              "readFile": {
+                "bytes": 325,
+                "calls": 1,
+                "hits": 1,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            },
+            "diagnostics": {
+              "directoryExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "fileExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "getSourceFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 0,
+                "entries": 0
+              },
+              "readFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            },
+            "programCreate": {
+              "directoryExists": {
+                "calls": 881,
+                "hits": 6,
+                "misses": 875
+              },
+              "fileExists": {
+                "calls": 6,
+                "hits": 2,
+                "misses": 4
+              },
+              "getSourceFile": {
+                "bytes": 1892121,
+                "calls": 64,
+                "hits": 64,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 0,
+                "entries": 0
+              },
+              "readFile": {
+                "bytes": 3839,
+                "calls": 2,
+                "hits": 2,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            }
+          },
+          "phasesMs": {
+            "configParse": 2.259625,
+            "configRead": 2.7076250000000073,
+            "diagnostics": 314.68449999999996,
+            "import": 186.350125,
+            "measuredTotal": 639.362166,
+            "optionsAndGlobalDiagnostics": 51.801207999999974,
+            "programCreate": 133.115166,
+            "semanticDiagnostics": 262.81883400000004,
+            "syntacticDiagnostics": 0.06125000000002956,
+            "unclassified": 0.24512500000008688
+          },
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 33003,
+              "external": 1892362,
+              "heapTotal": 135118848,
+              "heapUsed": 104265048,
+              "rss": 238731264
+            },
+            "afterToolLoad": {
+              "arrayBuffers": 16659,
+              "external": 1876018,
+              "heapTotal": 39223296,
+              "heapUsed": 32423880,
+              "rss": 137854976
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 17762,
+              "external": 1498826,
+              "heapTotal": 5324800,
+              "heapUsed": 4014600,
+              "rss": 41091072
+            }
+          }
+        }
+      },
+      "wallMs": 677.0586669999999
+    },
+    "wasm": {
+      "linearMemoryHighWaterBytes": 220069888,
+      "outerOverheadMs": 651.9066669999993,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.readFileNative.bytes": 10961854,
+            "filesystem.readFileNative.calls": 69,
+            "filesystem.readFileNative.notFound": 1,
+            "filesystem.readFileNative.success": 68,
+            "filesystem.readdir.calls": 2,
+            "filesystem.readdir.entries": 4,
+            "filesystem.readdir.success": 2,
+            "filesystem.realpath.calls": 5,
+            "filesystem.realpath.success": 5,
+            "filesystem.stat.calls": 636,
+            "filesystem.stat.notFound": 503,
+            "filesystem.stat.success": 133,
+            "modules.directoryProbe.calls": 2,
+            "modules.directoryProbe.missing": 2,
+            "modules.directoryProbe.systemCalls": 2,
+            "modules.fileProbe.calls": 3,
+            "modules.fileProbe.found": 3,
+            "modules.fileProbe.systemCalls": 3,
+            "modules.packageJson.bytes": 3615,
+            "modules.packageJson.cacheHits": 1,
+            "modules.packageJson.calls": 4,
+            "modules.packageJson.notFound": 2,
+            "modules.packageJson.reads": 1,
+            "modules.pathProbe.systemCalls": 5,
+            "modules.realpath.cacheHits": 4,
+            "modules.realpath.calls": 7,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 1,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.sourceRead.bytes": 9072216,
+            "modules.sourceRead.calls": 2,
+            "modules.sourceRead.success": 2
+          },
+          "phasesMs": {
+            "builtinInitialization": 171.42216599999998,
+            "initialEvaluation": 0.093792,
+            "loaderInitialization": 1.946834,
+            "processConfiguration": 0.1785,
+            "queueDelay": 0.621792,
+            "resultFormatting": 0.050417,
+            "runtimeCreation": 0.47225,
+            "teardown": 406.975917,
+            "transportWiring": 0.192959,
+            "userAwait": 24757.458833,
+            "wrapperPreparation": 0.016666
+          },
+          "totalMs": 25339.497209,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "diagnostics": {
+            "config": 0,
+            "optionsAndGlobal": 0,
+            "semantic": 0,
+            "syntactic": 0,
+            "total": 0
+          },
+          "exitCode": 0,
+          "graph": {
+            "rootFiles": 1,
+            "sourceFiles": {
+              "projectSources": 1,
+              "typescriptLibDeclarations": 63
+            },
+            "totalSourceFiles": 64
+          },
+          "io": {
+            "configParse": {
+              "directoryExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "fileExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "getSourceFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 1,
+                "entries": 1
+              },
+              "readFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            },
+            "configRead": {
+              "directoryExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "fileExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "getSourceFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 0,
+                "entries": 0
+              },
+              "readFile": {
+                "bytes": 325,
+                "calls": 1,
+                "hits": 1,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            },
+            "diagnostics": {
+              "directoryExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "fileExists": {
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "getSourceFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 0,
+                "entries": 0
+              },
+              "readFile": {
+                "bytes": 0,
+                "calls": 0,
+                "hits": 0,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            },
+            "programCreate": {
+              "directoryExists": {
+                "calls": 629,
+                "hits": 130,
+                "misses": 499
+              },
+              "fileExists": {
+                "calls": 6,
+                "hits": 2,
+                "misses": 4
+              },
+              "getSourceFile": {
+                "bytes": 1892121,
+                "calls": 64,
+                "hits": 64,
+                "misses": 0
+              },
+              "readDirectory": {
+                "calls": 0,
+                "entries": 0
+              },
+              "readFile": {
+                "bytes": 3839,
+                "calls": 2,
+                "hits": 2,
+                "misses": 0
+              },
+              "realpath": {
+                "calls": 0
+              }
+            }
+          },
+          "phasesMs": {
+            "configParse": 2.4952919999996084,
+            "configRead": 1.7745839999988675,
+            "diagnostics": 7925.341958999998,
+            "import": 11674.142291,
+            "measuredTotal": 24691.84575,
+            "optionsAndGlobalDiagnostics": 1088.3354580000014,
+            "programCreate": 5081.994833999997,
+            "semanticDiagnostics": 6836.844334000001,
+            "syntacticDiagnostics": 0.10933400000067196,
+            "unclassified": 6.096790000006877
+          },
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 0,
+              "external": 41808384,
+              "heapTotal": 125640524,
+              "heapUsed": 125640524,
+              "rss": 25450464
+            },
+            "afterToolLoad": {
+              "arrayBuffers": 0,
+              "external": 1203936,
+              "heapTotal": 38923151,
+              "heapUsed": 38923151,
+              "rss": 1683112
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 0,
+              "external": 293616,
+              "heapTotal": 6120042,
+              "heapUsed": 6120042,
+              "rss": 414456
+            }
+          }
+        }
+      },
+      "wallMs": 25343.752417
+    }
+  },
+  "schemaVersion": 5,
+  "target": "p2",
+  "wasmLinearMemoryHighWaterBytes": 220069888,
+  "workloads": {
+    "cancellations": {
+      "attempts": {
+        "iterations": 5,
+        "medianMs": 212.466375,
+        "p95Ms": 213.455084,
+        "samples": [
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "cancelled": true,
+              "latencyMs": 11.18445800000336,
+              "message": "execution job cancelled",
+              "name": "Error"
+            },
+            "wallMs": 213.455084
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "cancelled": true,
+              "latencyMs": 10.86137499997858,
+              "message": "execution job cancelled",
+              "name": "Error"
+            },
+            "wallMs": 208.058208
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "cancelled": true,
+              "latencyMs": 11.393250000022816,
+              "message": "execution job cancelled",
+              "name": "Error"
+            },
+            "wallMs": 212.864125
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "cancelled": true,
+              "latencyMs": 10.644250000012107,
+              "message": "execution job cancelled",
+              "name": "Error"
+            },
+            "wallMs": 212.466375
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "cancelled": true,
+              "latencyMs": 11.314958999981172,
+              "message": "execution job cancelled",
+              "name": "Error"
+            },
+            "wallMs": 211.12175
+          }
+        ],
+        "throughputPerSecond": 4.726051843378468
+      },
+      "recovery": {
+        "linearMemoryHighWaterBytes": 220069888,
+        "outerOverheadMs": null,
+        "result": {
+          "overflowed": false,
+          "profile": {
+            "counters": {
+              "filesystem.realpath.calls": 3,
+              "filesystem.realpath.success": 3,
+              "modules.directoryProbe.calls": 3,
+              "modules.directoryProbe.found": 1,
+              "modules.directoryProbe.missing": 2,
+              "modules.directoryProbe.systemCalls": 3,
+              "modules.fileProbe.calls": 3,
+              "modules.fileProbe.found": 3,
+              "modules.fileProbe.systemCalls": 3,
+              "modules.packageJson.bytes": 1214,
+              "modules.packageJson.cacheHits": 1,
+              "modules.packageJson.calls": 5,
+              "modules.packageJson.notFound": 2,
+              "modules.packageJson.reads": 2,
+              "modules.pathProbe.systemCalls": 6,
+              "modules.realpath.cacheHits": 2,
+              "modules.realpath.calls": 5,
+              "modules.realpath.systemCalls": 3,
+              "modules.resolve.calls": 2,
+              "modules.resolve.missing": 1,
+              "modules.resolve.specifier.absolute": 1,
+              "modules.resolve.specifier.package": 1,
+              "modules.resolve.success": 1,
+              "modules.sourceRead.bytes": 2934,
+              "modules.sourceRead.calls": 2,
+              "modules.sourceRead.success": 2,
+              "modules.typescriptTransform.micros": 726,
+              "modules.typescriptTransform.success": 1
+            },
+            "phasesMs": {
+              "builtinInitialization": 189.244083,
+              "initialEvaluation": 0.06995799999999999,
+              "loaderInitialization": 1.09775,
+              "processConfiguration": 0.453042,
+              "queueDelay": 0.357541,
+              "resultFormatting": 0.045125,
+              "runtimeCreation": 0.4773329999999999,
+              "teardown": 10.722292,
+              "transportWiring": 0.183542,
+              "userAwait": 16.843875,
+              "wrapperPreparation": 0.022125
+            },
+            "totalMs": 219.551583,
+            "version": 1
+          },
+          "stderr": "",
+          "stdout": "",
+          "value": {
+            "answer": 42,
+            "state": "ready"
+          }
+        },
+        "wallMs": 221.228375
+      }
+    },
+    "coldNoEmit": {
+      "linearMemoryHighWaterBytes": 152961024,
+      "outerOverheadMs": 466.2189999999973,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.close.calls": 1,
+            "filesystem.close.success": 1,
+            "filesystem.open.calls": 1,
+            "filesystem.open.success": 1,
+            "filesystem.readFileNative.bytes": 8068066,
+            "filesystem.readFileNative.calls": 71,
+            "filesystem.readFileNative.notFound": 2,
+            "filesystem.readFileNative.success": 69,
+            "filesystem.readdir.calls": 2,
+            "filesystem.readdir.entries": 4,
+            "filesystem.readdir.success": 2,
+            "filesystem.realpath.calls": 5,
+            "filesystem.realpath.success": 5,
+            "filesystem.stat.calls": 87,
+            "filesystem.stat.notFound": 75,
+            "filesystem.stat.success": 12,
+            "modules.directoryProbe.calls": 1,
+            "modules.directoryProbe.missing": 1,
+            "modules.directoryProbe.systemCalls": 1,
+            "modules.fileProbe.calls": 4,
+            "modules.fileProbe.found": 4,
+            "modules.fileProbe.systemCalls": 4,
+            "modules.packageJson.bytes": 3615,
+            "modules.packageJson.cacheHits": 2,
+            "modules.packageJson.calls": 6,
+            "modules.packageJson.negativeCacheEntries": 1,
+            "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+            "modules.packageJson.negativeCacheInvalidations": 1,
+            "modules.packageJson.notFound": 3,
+            "modules.packageJson.reads": 1,
+            "modules.pathProbe.systemCalls": 5,
+            "modules.realpath.cacheHits": 8,
+            "modules.realpath.calls": 11,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 1,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.sourceRead.bytes": 267,
+            "modules.sourceRead.calls": 1,
+            "modules.sourceRead.success": 1
+          },
+          "phasesMs": {
+            "builtinInitialization": 172.75995899999998,
+            "initialEvaluation": 0.838167,
+            "loaderInitialization": 1.654541,
+            "processConfiguration": 5.981375,
+            "queueDelay": 0.767333,
+            "resultFormatting": 0.118292,
+            "runtimeCreation": 0.47125,
+            "teardown": 239.569083,
+            "transportWiring": 0.205291,
+            "userAwait": 18732.667166,
+            "wrapperPreparation": 0.026542
+          },
+          "totalMs": 19155.234750000003,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 0,
+              "external": 24863472,
+              "heapTotal": 87392225,
+              "heapUsed": 87392225,
+              "rss": 14128400
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 0,
+              "external": 292368,
+              "heapTotal": 6094420,
+              "heapUsed": 6094420,
+              "rss": 412816
+            }
+          },
+          "toolAndCompilerMs": 18699.230875
+        }
+      },
+      "wallMs": 19165.449875
+    },
+    "concurrent": {
+      "contended": {
+        "linearMemoryHighWaterBytes": 220069888,
+        "outerOverheadMs": null,
+        "result": {
+          "compiler": {
+            "completedMs": 20989.739124999964,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.readFileNative.bytes": 8079840,
+                  "filesystem.readFileNative.calls": 72,
+                  "filesystem.readFileNative.notFound": 1,
+                  "filesystem.readFileNative.success": 71,
+                  "filesystem.readdir.calls": 2,
+                  "filesystem.readdir.entries": 5,
+                  "filesystem.readdir.success": 2,
+                  "filesystem.realpath.calls": 5,
+                  "filesystem.realpath.success": 5,
+                  "filesystem.stat.calls": 87,
+                  "filesystem.stat.notFound": 75,
+                  "filesystem.stat.success": 12,
+                  "modules.directoryProbe.calls": 1,
+                  "modules.directoryProbe.missing": 1,
+                  "modules.directoryProbe.systemCalls": 1,
+                  "modules.fileProbe.calls": 4,
+                  "modules.fileProbe.found": 4,
+                  "modules.fileProbe.systemCalls": 4,
+                  "modules.packageJson.bytes": 3615,
+                  "modules.packageJson.cacheHits": 2,
+                  "modules.packageJson.calls": 6,
+                  "modules.packageJson.negativeCacheEntries": 1,
+                  "modules.packageJson.notFound": 3,
+                  "modules.packageJson.reads": 1,
+                  "modules.pathProbe.systemCalls": 5,
+                  "modules.realpath.cacheHits": 8,
+                  "modules.realpath.calls": 11,
+                  "modules.realpath.systemCalls": 3,
+                  "modules.resolve.calls": 1,
+                  "modules.resolve.missing": 1,
+                  "modules.resolve.specifier.absolute": 1,
+                  "modules.sourceRead.bytes": 267,
+                  "modules.sourceRead.calls": 1,
+                  "modules.sourceRead.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 183.108541,
+                  "initialEvaluation": 0.158625,
+                  "loaderInitialization": 1.0505829999999998,
+                  "processConfiguration": 0.196542,
+                  "queueDelay": 0.871542,
+                  "resultFormatting": 0.097417,
+                  "runtimeCreation": 0.43391700000000005,
+                  "teardown": 137.505083,
+                  "transportWiring": 0.328542,
+                  "userAwait": 20663.878333,
+                  "wrapperPreparation": 0.040542
+                },
+                "totalMs": 20987.80675,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "",
+              "value": {
+                "exitCode": 0
+              }
+            },
+            "startedMs": 0.007249999966006726,
+            "wallMs": 20989.731875
+          },
+          "cpu": {
+            "completedMs": 21732.940541999997,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {},
+                "phasesMs": {
+                  "builtinInitialization": 188.151667,
+                  "initialEvaluation": 288.486916,
+                  "loaderInitialization": 2.318042,
+                  "processConfiguration": 1.2021659999999998,
+                  "queueDelay": 20989.314208,
+                  "resultFormatting": 0.05466699999999999,
+                  "runtimeCreation": 0.499792,
+                  "teardown": 15.800499999999998,
+                  "transportWiring": 0.24445800000000004,
+                  "userAwait": 0.434292,
+                  "wrapperPreparation": 0.015459
+                },
+                "totalMs": 21486.568916,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "",
+              "value": 21
+            },
+            "startedMs": 0.429874999972526,
+            "wallMs": 21732.510667000024
+          },
+          "elapsedMs": 21732.971666999976,
+          "io": {
+            "completedMs": 21732.952916999988,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.close.calls": 1,
+                  "filesystem.close.success": 1,
+                  "filesystem.fstat.calls": 1,
+                  "filesystem.fstat.success": 1,
+                  "filesystem.open.calls": 1,
+                  "filesystem.open.success": 1,
+                  "filesystem.read.bytes": 273,
+                  "filesystem.read.calls": 2,
+                  "filesystem.read.success": 2,
+                  "filesystem.readdir.calls": 1,
+                  "filesystem.readdir.entries": 3,
+                  "filesystem.readdir.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 209.800042,
+                  "initialEvaluation": 0.17508300000000002,
+                  "loaderInitialization": 1.0109590000000002,
+                  "processConfiguration": 0.263541,
+                  "queueDelay": 21486.405959,
+                  "resultFormatting": 0.020959,
+                  "runtimeCreation": 0.464125,
+                  "teardown": 14.0355,
+                  "transportWiring": 0.5280830000000001,
+                  "userAwait": 16.765458,
+                  "wrapperPreparation": 0.039959
+                },
+                "totalMs": 21729.602167,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "",
+              "value": {
+                "bytes": 273,
+                "files": [
+                  "app",
+                  "core",
+                  "direct.ts"
+                ]
+              }
+            },
+            "startedMs": 0.705541999952402,
+            "wallMs": 21732.247375000035
+          }
+        },
+        "wallMs": 21733.930540999998
+      },
+      "cpuBaseline": {
+        "linearMemoryHighWaterBytes": 220069888,
+        "outerOverheadMs": null,
+        "result": {
+          "overflowed": false,
+          "profile": {
+            "counters": {},
+            "phasesMs": {
+              "builtinInitialization": 184.066,
+              "initialEvaluation": 275.423708,
+              "loaderInitialization": 1.048334,
+              "processConfiguration": 0.916583,
+              "queueDelay": 0.332625,
+              "resultFormatting": 0.017458,
+              "runtimeCreation": 0.433708,
+              "teardown": 10.393667,
+              "transportWiring": 0.207,
+              "userAwait": 0.179709,
+              "wrapperPreparation": 0.019875
+            },
+            "totalMs": 473.1852080000001,
+            "version": 1
+          },
+          "stderr": "",
+          "stdout": "",
+          "value": 21
+        },
+        "wallMs": 474.8615
+      },
+      "interpretation": "all jobs were submitted together; compare sibling completion with isolated baselines to identify overlap or serialization",
+      "ioBaseline": {
+        "linearMemoryHighWaterBytes": 220069888,
+        "outerOverheadMs": null,
+        "result": {
+          "overflowed": false,
+          "profile": {
+            "counters": {
+              "filesystem.close.calls": 1,
+              "filesystem.close.success": 1,
+              "filesystem.fstat.calls": 1,
+              "filesystem.fstat.success": 1,
+              "filesystem.open.calls": 1,
+              "filesystem.open.success": 1,
+              "filesystem.read.bytes": 273,
+              "filesystem.read.calls": 2,
+              "filesystem.read.success": 2,
+              "filesystem.readdir.calls": 1,
+              "filesystem.readdir.entries": 3,
+              "filesystem.readdir.success": 1
+            },
+            "phasesMs": {
+              "builtinInitialization": 185.451959,
+              "initialEvaluation": 0.101375,
+              "loaderInitialization": 1.025375,
+              "processConfiguration": 0.164125,
+              "queueDelay": 0.307,
+              "resultFormatting": 0.069583,
+              "runtimeCreation": 0.432916,
+              "teardown": 11.1265,
+              "transportWiring": 0.323083,
+              "userAwait": 2.8384579999999997,
+              "wrapperPreparation": 0.016167
+            },
+            "totalMs": 201.892,
+            "version": 1
+          },
+          "stderr": "",
+          "stdout": "",
+          "value": {
+            "bytes": 273,
+            "files": [
+              "app",
+              "core",
+              "direct.ts"
+            ]
+          }
+        },
+        "wallMs": 203.359
+      }
+    },
+    "directTypeScript": {
+      "linearMemoryHighWaterBytes": 220069888,
+      "outerOverheadMs": null,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.realpath.calls": 3,
+            "filesystem.realpath.success": 3,
+            "modules.directoryProbe.calls": 3,
+            "modules.directoryProbe.found": 1,
+            "modules.directoryProbe.missing": 2,
+            "modules.directoryProbe.systemCalls": 3,
+            "modules.fileProbe.calls": 3,
+            "modules.fileProbe.found": 3,
+            "modules.fileProbe.systemCalls": 3,
+            "modules.packageJson.bytes": 1214,
+            "modules.packageJson.cacheHits": 1,
+            "modules.packageJson.calls": 5,
+            "modules.packageJson.notFound": 2,
+            "modules.packageJson.reads": 2,
+            "modules.pathProbe.systemCalls": 6,
+            "modules.realpath.cacheHits": 2,
+            "modules.realpath.calls": 5,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 2,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.resolve.specifier.package": 1,
+            "modules.resolve.success": 1,
+            "modules.sourceRead.bytes": 2934,
+            "modules.sourceRead.calls": 2,
+            "modules.sourceRead.success": 2,
+            "modules.typescriptTransform.micros": 3323,
+            "modules.typescriptTransform.success": 1
+          },
+          "phasesMs": {
+            "builtinInitialization": 178.647083,
+            "initialEvaluation": 0.068625,
+            "loaderInitialization": 1.922583,
+            "processConfiguration": 0.171542,
+            "queueDelay": 0.66,
+            "resultFormatting": 0.068166,
+            "runtimeCreation": 0.464292,
+            "teardown": 9.996209,
+            "transportWiring": 0.194334,
+            "userAwait": 19.446709,
+            "wrapperPreparation": 0.019416
+          },
+          "totalMs": 211.820833,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "answer": 42,
+          "state": "ready"
+        }
+      },
+      "wallMs": 213.793584
+    },
+    "emitDirect": {
+      "linearMemoryHighWaterBytes": 220069888,
+      "outerOverheadMs": 510.0185429999874,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.close.calls": 1,
+            "filesystem.close.success": 1,
+            "filesystem.open.calls": 2,
+            "filesystem.open.notFound": 1,
+            "filesystem.open.success": 1,
+            "filesystem.readFileNative.bytes": 8069546,
+            "filesystem.readFileNative.calls": 71,
+            "filesystem.readFileNative.notFound": 1,
+            "filesystem.readFileNative.success": 70,
+            "filesystem.realpath.calls": 4,
+            "filesystem.realpath.success": 4,
+            "filesystem.stat.calls": 84,
+            "filesystem.stat.notFound": 72,
+            "filesystem.stat.success": 12,
+            "modules.directoryProbe.calls": 1,
+            "modules.directoryProbe.missing": 1,
+            "modules.directoryProbe.systemCalls": 1,
+            "modules.fileProbe.calls": 4,
+            "modules.fileProbe.found": 4,
+            "modules.fileProbe.systemCalls": 4,
+            "modules.packageJson.bytes": 3615,
+            "modules.packageJson.cacheHits": 2,
+            "modules.packageJson.calls": 6,
+            "modules.packageJson.negativeCacheEntries": 1,
+            "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+            "modules.packageJson.negativeCacheInvalidations": 1,
+            "modules.packageJson.notFound": 3,
+            "modules.packageJson.reads": 1,
+            "modules.pathProbe.systemCalls": 5,
+            "modules.realpath.cacheHits": 8,
+            "modules.realpath.calls": 11,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 1,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.sourceRead.bytes": 267,
+            "modules.sourceRead.calls": 1,
+            "modules.sourceRead.success": 1
+          },
+          "phasesMs": {
+            "builtinInitialization": 181.518417,
+            "initialEvaluation": 1.6876669999999998,
+            "loaderInitialization": 0.972708,
+            "processConfiguration": 0.13466699999999998,
+            "queueDelay": 0.3,
+            "resultFormatting": 0.222542,
+            "runtimeCreation": 0.434917,
+            "teardown": 281.539375,
+            "transportWiring": 0.233666,
+            "userAwait": 19853.93625,
+            "wrapperPreparation": 0.0265
+          },
+          "totalMs": 20321.135083,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 0,
+              "external": 24746832,
+              "heapTotal": 86795939,
+              "heapUsed": 86795939,
+              "rss": 14038528
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 0,
+              "external": 292368,
+              "heapTotal": 6094698,
+              "heapUsed": 6094698,
+              "rss": 412864
+            }
+          },
+          "toolAndCompilerMs": 19817.030916000014
+        }
+      },
+      "wallMs": 20327.049459
+    },
+    "generatedJavaScript": {
+      "linearMemoryHighWaterBytes": 220069888,
+      "outerOverheadMs": null,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.readFileNative.bytes": 3255,
+            "filesystem.readFileNative.calls": 2,
+            "filesystem.readFileNative.success": 2,
+            "filesystem.realpath.calls": 3,
+            "filesystem.realpath.success": 3,
+            "filesystem.stat.calls": 1,
+            "filesystem.stat.success": 1,
+            "modules.directoryProbe.calls": 1,
+            "modules.directoryProbe.missing": 1,
+            "modules.directoryProbe.systemCalls": 1,
+            "modules.fileProbe.cacheHits": 6,
+            "modules.fileProbe.cacheHitsMissing": 6,
+            "modules.fileProbe.calls": 23,
+            "modules.fileProbe.found": 3,
+            "modules.fileProbe.missing": 20,
+            "modules.fileProbe.systemCalls": 17,
+            "modules.packageJson.bytes": 1214,
+            "modules.packageJson.cacheHits": 3,
+            "modules.packageJson.calls": 15,
+            "modules.packageJson.negativeCacheEntries": 4,
+            "modules.packageJson.negativeCacheHits": 2,
+            "modules.packageJson.notFound": 8,
+            "modules.packageJson.reads": 2,
+            "modules.pathProbe.systemCalls": 18,
+            "modules.realpath.cacheHits": 6,
+            "modules.realpath.calls": 9,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 1,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.sourceRead.bytes": 510,
+            "modules.sourceRead.calls": 1,
+            "modules.sourceRead.success": 1
+          },
+          "phasesMs": {
+            "builtinInitialization": 186.431458,
+            "initialEvaluation": 0.06583399999999999,
+            "loaderInitialization": 2.509709,
+            "processConfiguration": 0.31275,
+            "queueDelay": 0.5904159999999999,
+            "resultFormatting": 0.024,
+            "runtimeCreation": 0.489916,
+            "teardown": 10.641083,
+            "transportWiring": 0.231625,
+            "userAwait": 11.515583,
+            "wrapperPreparation": 0.020458
+          },
+          "totalMs": 212.912208,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "default": {
+            "answer": 42,
+            "state": "ready"
+          }
+        }
+      },
+      "wallMs": 214.924333
+    },
+    "incrementalCold": {
+      "linearMemoryHighWaterBytes": 220069888,
+      "outerOverheadMs": 461.1739170000001,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.close.calls": 1,
+            "filesystem.close.success": 1,
+            "filesystem.open.calls": 1,
+            "filesystem.open.success": 1,
+            "filesystem.readFileNative.bytes": 8068066,
+            "filesystem.readFileNative.calls": 71,
+            "filesystem.readFileNative.notFound": 2,
+            "filesystem.readFileNative.success": 69,
+            "filesystem.readdir.calls": 2,
+            "filesystem.readdir.entries": 4,
+            "filesystem.readdir.success": 2,
+            "filesystem.realpath.calls": 5,
+            "filesystem.realpath.success": 5,
+            "filesystem.stat.calls": 87,
+            "filesystem.stat.notFound": 75,
+            "filesystem.stat.success": 12,
+            "modules.directoryProbe.calls": 1,
+            "modules.directoryProbe.missing": 1,
+            "modules.directoryProbe.systemCalls": 1,
+            "modules.fileProbe.calls": 4,
+            "modules.fileProbe.found": 4,
+            "modules.fileProbe.systemCalls": 4,
+            "modules.packageJson.bytes": 3615,
+            "modules.packageJson.cacheHits": 2,
+            "modules.packageJson.calls": 6,
+            "modules.packageJson.negativeCacheEntries": 1,
+            "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+            "modules.packageJson.negativeCacheInvalidations": 1,
+            "modules.packageJson.notFound": 3,
+            "modules.packageJson.reads": 1,
+            "modules.pathProbe.systemCalls": 5,
+            "modules.realpath.cacheHits": 8,
+            "modules.realpath.calls": 11,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 1,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.sourceRead.bytes": 267,
+            "modules.sourceRead.calls": 1,
+            "modules.sourceRead.success": 1
+          },
+          "phasesMs": {
+            "builtinInitialization": 173.3675,
+            "initialEvaluation": 1.29025,
+            "loaderInitialization": 1.124459,
+            "processConfiguration": 0.14725,
+            "queueDelay": 0.301792,
+            "resultFormatting": 0.091583,
+            "runtimeCreation": 0.4425829999999999,
+            "teardown": 248.031458,
+            "transportWiring": 0.401166,
+            "userAwait": 19174.441917,
+            "wrapperPreparation": 0.044792
+          },
+          "totalMs": 19599.758709,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 0,
+              "external": 24863472,
+              "heapTotal": 87392677,
+              "heapUsed": 87392677,
+              "rss": 14128432
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 0,
+              "external": 292368,
+              "heapTotal": 6094586,
+              "heapUsed": 6094586,
+              "rss": 412840
+            }
+          },
+          "toolAndCompilerMs": 19141.282125
+        }
+      },
+      "wallMs": 19602.456042
+    },
+    "incrementalFreshJobs": {
+      "iterations": 5,
+      "medianMs": 12427.401625,
+      "p95Ms": 12609.274625,
+      "samples": [
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 324.4429999999902,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8079528,
+                "filesystem.readFileNative.calls": 71,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 70,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 179.005167,
+                "initialEvaluation": 1.422667,
+                "loaderInitialization": 1.461,
+                "processConfiguration": 0.148083,
+                "queueDelay": 0.475,
+                "resultFormatting": 0.034749999999999996,
+                "runtimeCreation": 0.426584,
+                "teardown": 124.608083,
+                "transportWiring": 0.209166,
+                "userAwait": 11967.892083,
+                "wrapperPreparation": 0.022292
+              },
+              "totalMs": 12275.749625,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12129936,
+                  "heapTotal": 64553532,
+                  "heapUsed": 64553532,
+                  "rss": 6190880
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094586,
+                  "heapUsed": 6094586,
+                  "rss": 412840
+                }
+              },
+              "toolAndCompilerMs": 11952.992667000011
+            }
+          },
+          "wallMs": 12277.435667000002
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 304.7682919999788,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8079528,
+                "filesystem.readFileNative.calls": 71,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 70,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 174.504667,
+                "initialEvaluation": 0.902417,
+                "loaderInitialization": 0.945958,
+                "processConfiguration": 0.273708,
+                "queueDelay": 0.294084,
+                "resultFormatting": 0.043333,
+                "runtimeCreation": 0.428167,
+                "teardown": 111.200083,
+                "transportWiring": 0.1315,
+                "userAwait": 11968.235292,
+                "wrapperPreparation": 0.018583
+              },
+              "totalMs": 12257.024792,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12129936,
+                  "heapTotal": 64553532,
+                  "heapUsed": 64553532,
+                  "rss": 6190880
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094586,
+                  "heapUsed": 6094586,
+                  "rss": 412840
+                }
+              },
+              "toolAndCompilerMs": 11953.83841700002
+            }
+          },
+          "wallMs": 12258.606709
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 325.88804100000016,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8079528,
+                "filesystem.readFileNative.calls": 71,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 70,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 172.118,
+                "initialEvaluation": 0.694292,
+                "loaderInitialization": 1.0465,
+                "processConfiguration": 0.157667,
+                "queueDelay": 0.32137499999999997,
+                "resultFormatting": 0.044375,
+                "runtimeCreation": 0.422083,
+                "teardown": 126.541917,
+                "transportWiring": 0.121,
+                "userAwait": 12116.579416,
+                "wrapperPreparation": 0.017833
+              },
+              "totalMs": 12418.141625,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12129936,
+                  "heapTotal": 64553532,
+                  "heapUsed": 64553532,
+                  "rss": 6190880
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094586,
+                  "heapUsed": 6094586,
+                  "rss": 412840
+                }
+              },
+              "toolAndCompilerMs": 12101.513584
+            }
+          },
+          "wallMs": 12427.401625
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 348.425750000004,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8079528,
+                "filesystem.readFileNative.calls": 71,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 70,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 188.442083,
+                "initialEvaluation": 1.56675,
+                "loaderInitialization": 4.1032079999999995,
+                "processConfiguration": 0.262167,
+                "queueDelay": 0.630334,
+                "resultFormatting": 0.099875,
+                "runtimeCreation": 0.773292,
+                "teardown": 129.02237499999998,
+                "transportWiring": 0.411459,
+                "userAwait": 12277.723375,
+                "wrapperPreparation": 0.024208
+              },
+              "totalMs": 12603.134042000002,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12129936,
+                  "heapTotal": 64553532,
+                  "heapUsed": 64553532,
+                  "rss": 6190880
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094586,
+                  "heapUsed": 6094586,
+                  "rss": 412840
+                }
+              },
+              "toolAndCompilerMs": 12260.848874999996
+            }
+          },
+          "wallMs": 12609.274625
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 324.1668750000117,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8079528,
+                "filesystem.readFileNative.calls": 71,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 70,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 177.194083,
+                "initialEvaluation": 1.61775,
+                "loaderInitialization": 1.168625,
+                "processConfiguration": 0.376958,
+                "queueDelay": 0.534375,
+                "resultFormatting": 0.059041,
+                "runtimeCreation": 0.5369590000000001,
+                "teardown": 124.221417,
+                "transportWiring": 0.157584,
+                "userAwait": 12153.991709,
+                "wrapperPreparation": 0.019791
+              },
+              "totalMs": 12459.956417,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12129936,
+                  "heapTotal": 64553532,
+                  "heapUsed": 64553532,
+                  "rss": 6190880
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094586,
+                  "heapUsed": 6094586,
+                  "rss": 412840
+                }
+              },
+              "toolAndCompilerMs": 12138.342249999989
+            }
+          },
+          "wallMs": 12462.509125
+        }
+      ],
+      "throughputPerSecond": 0.0805993655744965
+    },
+    "invalidThenValid": {
+      "failedChecks": {
+        "iterations": 5,
+        "medianMs": 12690.46775,
+        "p95Ms": 12744.9275,
+        "samples": [
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": 348.9157499999965,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.close.calls": 1,
+                  "filesystem.close.success": 1,
+                  "filesystem.open.calls": 1,
+                  "filesystem.open.success": 1,
+                  "filesystem.readFileNative.bytes": 8079567,
+                  "filesystem.readFileNative.calls": 72,
+                  "filesystem.readFileNative.notFound": 1,
+                  "filesystem.readFileNative.success": 71,
+                  "filesystem.readdir.calls": 2,
+                  "filesystem.readdir.entries": 5,
+                  "filesystem.readdir.success": 2,
+                  "filesystem.realpath.calls": 5,
+                  "filesystem.realpath.success": 5,
+                  "filesystem.stat.calls": 87,
+                  "filesystem.stat.notFound": 75,
+                  "filesystem.stat.success": 12,
+                  "modules.directoryProbe.calls": 1,
+                  "modules.directoryProbe.missing": 1,
+                  "modules.directoryProbe.systemCalls": 1,
+                  "modules.fileProbe.calls": 4,
+                  "modules.fileProbe.found": 4,
+                  "modules.fileProbe.systemCalls": 4,
+                  "modules.packageJson.bytes": 3615,
+                  "modules.packageJson.cacheHits": 2,
+                  "modules.packageJson.calls": 6,
+                  "modules.packageJson.negativeCacheEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidations": 1,
+                  "modules.packageJson.notFound": 3,
+                  "modules.packageJson.reads": 1,
+                  "modules.pathProbe.systemCalls": 5,
+                  "modules.realpath.cacheHits": 8,
+                  "modules.realpath.calls": 11,
+                  "modules.realpath.systemCalls": 3,
+                  "modules.resolve.calls": 1,
+                  "modules.resolve.missing": 1,
+                  "modules.resolve.specifier.absolute": 1,
+                  "modules.sourceRead.bytes": 267,
+                  "modules.sourceRead.calls": 1,
+                  "modules.sourceRead.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 196.790625,
+                  "initialEvaluation": 1.260833,
+                  "loaderInitialization": 1.893875,
+                  "processConfiguration": 0.182375,
+                  "queueDelay": 0.710958,
+                  "resultFormatting": 0.036958,
+                  "runtimeCreation": 0.505,
+                  "teardown": 128.053958,
+                  "transportWiring": 0.17666700000000002,
+                  "userAwait": 12411.773542,
+                  "wrapperPreparation": 0.025167
+                },
+                "totalMs": 12741.47675,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "projects/core/src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
+              "value": {
+                "exitCode": 2,
+                "quickJsMemory": {
+                  "afterCompiler": {
+                    "arrayBuffers": 0,
+                    "external": 12188304,
+                    "heapTotal": 64658480,
+                    "heapUsed": 64658480,
+                    "rss": 6229928
+                  },
+                  "beforeToolLoad": {
+                    "arrayBuffers": 0,
+                    "external": 292368,
+                    "heapTotal": 6094420,
+                    "heapUsed": 6094420,
+                    "rss": 412816
+                  }
+                },
+                "toolAndCompilerMs": 12396.011750000003
+              }
+            },
+            "wallMs": 12744.9275
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": 345.45000100000834,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.close.calls": 1,
+                  "filesystem.close.success": 1,
+                  "filesystem.open.calls": 1,
+                  "filesystem.open.success": 1,
+                  "filesystem.readFileNative.bytes": 8079938,
+                  "filesystem.readFileNative.calls": 72,
+                  "filesystem.readFileNative.notFound": 1,
+                  "filesystem.readFileNative.success": 71,
+                  "filesystem.readdir.calls": 2,
+                  "filesystem.readdir.entries": 5,
+                  "filesystem.readdir.success": 2,
+                  "filesystem.realpath.calls": 5,
+                  "filesystem.realpath.success": 5,
+                  "filesystem.stat.calls": 87,
+                  "filesystem.stat.notFound": 75,
+                  "filesystem.stat.success": 12,
+                  "modules.directoryProbe.calls": 1,
+                  "modules.directoryProbe.missing": 1,
+                  "modules.directoryProbe.systemCalls": 1,
+                  "modules.fileProbe.calls": 4,
+                  "modules.fileProbe.found": 4,
+                  "modules.fileProbe.systemCalls": 4,
+                  "modules.packageJson.bytes": 3615,
+                  "modules.packageJson.cacheHits": 2,
+                  "modules.packageJson.calls": 6,
+                  "modules.packageJson.negativeCacheEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidations": 1,
+                  "modules.packageJson.notFound": 3,
+                  "modules.packageJson.reads": 1,
+                  "modules.pathProbe.systemCalls": 5,
+                  "modules.realpath.cacheHits": 8,
+                  "modules.realpath.calls": 11,
+                  "modules.realpath.systemCalls": 3,
+                  "modules.resolve.calls": 1,
+                  "modules.resolve.missing": 1,
+                  "modules.resolve.specifier.absolute": 1,
+                  "modules.sourceRead.bytes": 267,
+                  "modules.sourceRead.calls": 1,
+                  "modules.sourceRead.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 180.005959,
+                  "initialEvaluation": 1.006375,
+                  "loaderInitialization": 1.569333,
+                  "processConfiguration": 0.171875,
+                  "queueDelay": 0.382,
+                  "resultFormatting": 0.125166,
+                  "runtimeCreation": 0.480833,
+                  "teardown": 137.945375,
+                  "transportWiring": 0.237541,
+                  "userAwait": 12201.982125,
+                  "wrapperPreparation": 0.019084
+                },
+                "totalMs": 12524.102125,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "projects/core/src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
+              "value": {
+                "exitCode": 2,
+                "quickJsMemory": {
+                  "afterCompiler": {
+                    "arrayBuffers": 0,
+                    "external": 12190272,
+                    "heapTotal": 64667224,
+                    "heapUsed": 64667224,
+                    "rss": 6230848
+                  },
+                  "beforeToolLoad": {
+                    "arrayBuffers": 0,
+                    "external": 292368,
+                    "heapTotal": 6094420,
+                    "heapUsed": 6094420,
+                    "rss": 412816
+                  }
+                },
+                "toolAndCompilerMs": 12181.236540999991
+              }
+            },
+            "wallMs": 12526.686542
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": 344.6031660000044,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.close.calls": 1,
+                  "filesystem.close.success": 1,
+                  "filesystem.open.calls": 1,
+                  "filesystem.open.success": 1,
+                  "filesystem.readFileNative.bytes": 8079938,
+                  "filesystem.readFileNative.calls": 72,
+                  "filesystem.readFileNative.notFound": 1,
+                  "filesystem.readFileNative.success": 71,
+                  "filesystem.readdir.calls": 2,
+                  "filesystem.readdir.entries": 5,
+                  "filesystem.readdir.success": 2,
+                  "filesystem.realpath.calls": 5,
+                  "filesystem.realpath.success": 5,
+                  "filesystem.stat.calls": 87,
+                  "filesystem.stat.notFound": 75,
+                  "filesystem.stat.success": 12,
+                  "modules.directoryProbe.calls": 1,
+                  "modules.directoryProbe.missing": 1,
+                  "modules.directoryProbe.systemCalls": 1,
+                  "modules.fileProbe.calls": 4,
+                  "modules.fileProbe.found": 4,
+                  "modules.fileProbe.systemCalls": 4,
+                  "modules.packageJson.bytes": 3615,
+                  "modules.packageJson.cacheHits": 2,
+                  "modules.packageJson.calls": 6,
+                  "modules.packageJson.negativeCacheEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidations": 1,
+                  "modules.packageJson.notFound": 3,
+                  "modules.packageJson.reads": 1,
+                  "modules.pathProbe.systemCalls": 5,
+                  "modules.realpath.cacheHits": 8,
+                  "modules.realpath.calls": 11,
+                  "modules.realpath.systemCalls": 3,
+                  "modules.resolve.calls": 1,
+                  "modules.resolve.missing": 1,
+                  "modules.resolve.specifier.absolute": 1,
+                  "modules.sourceRead.bytes": 267,
+                  "modules.sourceRead.calls": 1,
+                  "modules.sourceRead.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 176.567541,
+                  "initialEvaluation": 1.228291,
+                  "loaderInitialization": 1.113083,
+                  "processConfiguration": 0.198167,
+                  "queueDelay": 0.471875,
+                  "resultFormatting": 0.142166,
+                  "runtimeCreation": 0.480792,
+                  "teardown": 141.572542,
+                  "transportWiring": 0.378709,
+                  "userAwait": 12362.728334,
+                  "wrapperPreparation": 0.0485
+                },
+                "totalMs": 12685.025709,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "projects/core/src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
+              "value": {
+                "exitCode": 2,
+                "quickJsMemory": {
+                  "afterCompiler": {
+                    "arrayBuffers": 0,
+                    "external": 12190272,
+                    "heapTotal": 64667224,
+                    "heapUsed": 64667224,
+                    "rss": 6230848
+                  },
+                  "beforeToolLoad": {
+                    "arrayBuffers": 0,
+                    "external": 292368,
+                    "heapTotal": 6094420,
+                    "heapUsed": 6094420,
+                    "rss": 412816
+                  }
+                },
+                "toolAndCompilerMs": 12345.864583999995
+              }
+            },
+            "wallMs": 12690.46775
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": 357.2659170000097,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.close.calls": 1,
+                  "filesystem.close.success": 1,
+                  "filesystem.open.calls": 1,
+                  "filesystem.open.success": 1,
+                  "filesystem.readFileNative.bytes": 8079938,
+                  "filesystem.readFileNative.calls": 72,
+                  "filesystem.readFileNative.notFound": 1,
+                  "filesystem.readFileNative.success": 71,
+                  "filesystem.readdir.calls": 2,
+                  "filesystem.readdir.entries": 5,
+                  "filesystem.readdir.success": 2,
+                  "filesystem.realpath.calls": 5,
+                  "filesystem.realpath.success": 5,
+                  "filesystem.stat.calls": 87,
+                  "filesystem.stat.notFound": 75,
+                  "filesystem.stat.success": 12,
+                  "modules.directoryProbe.calls": 1,
+                  "modules.directoryProbe.missing": 1,
+                  "modules.directoryProbe.systemCalls": 1,
+                  "modules.fileProbe.calls": 4,
+                  "modules.fileProbe.found": 4,
+                  "modules.fileProbe.systemCalls": 4,
+                  "modules.packageJson.bytes": 3615,
+                  "modules.packageJson.cacheHits": 2,
+                  "modules.packageJson.calls": 6,
+                  "modules.packageJson.negativeCacheEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidations": 1,
+                  "modules.packageJson.notFound": 3,
+                  "modules.packageJson.reads": 1,
+                  "modules.pathProbe.systemCalls": 5,
+                  "modules.realpath.cacheHits": 8,
+                  "modules.realpath.calls": 11,
+                  "modules.realpath.systemCalls": 3,
+                  "modules.resolve.calls": 1,
+                  "modules.resolve.missing": 1,
+                  "modules.resolve.specifier.absolute": 1,
+                  "modules.sourceRead.bytes": 267,
+                  "modules.sourceRead.calls": 1,
+                  "modules.sourceRead.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 179.583375,
+                  "initialEvaluation": 0.972291,
+                  "loaderInitialization": 1.713458,
+                  "processConfiguration": 0.15729200000000002,
+                  "queueDelay": 0.5171250000000001,
+                  "resultFormatting": 0.108,
+                  "runtimeCreation": 0.449209,
+                  "teardown": 143.77716600000002,
+                  "transportWiring": 0.189666,
+                  "userAwait": 12367.730334000002,
+                  "wrapperPreparation": 0.021709
+                },
+                "totalMs": 12695.370375,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "projects/core/src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
+              "value": {
+                "exitCode": 2,
+                "quickJsMemory": {
+                  "afterCompiler": {
+                    "arrayBuffers": 0,
+                    "external": 12190272,
+                    "heapTotal": 64667224,
+                    "heapUsed": 64667224,
+                    "rss": 6230848
+                  },
+                  "beforeToolLoad": {
+                    "arrayBuffers": 0,
+                    "external": 292368,
+                    "heapTotal": 6094420,
+                    "heapUsed": 6094420,
+                    "rss": 412816
+                  }
+                },
+                "toolAndCompilerMs": 12341.88479099999
+              }
+            },
+            "wallMs": 12699.150708
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": 363.0651669999952,
+            "result": {
+              "overflowed": false,
+              "profile": {
+                "counters": {
+                  "filesystem.close.calls": 1,
+                  "filesystem.close.success": 1,
+                  "filesystem.open.calls": 1,
+                  "filesystem.open.success": 1,
+                  "filesystem.readFileNative.bytes": 8079938,
+                  "filesystem.readFileNative.calls": 72,
+                  "filesystem.readFileNative.notFound": 1,
+                  "filesystem.readFileNative.success": 71,
+                  "filesystem.readdir.calls": 2,
+                  "filesystem.readdir.entries": 5,
+                  "filesystem.readdir.success": 2,
+                  "filesystem.realpath.calls": 5,
+                  "filesystem.realpath.success": 5,
+                  "filesystem.stat.calls": 87,
+                  "filesystem.stat.notFound": 75,
+                  "filesystem.stat.success": 12,
+                  "modules.directoryProbe.calls": 1,
+                  "modules.directoryProbe.missing": 1,
+                  "modules.directoryProbe.systemCalls": 1,
+                  "modules.fileProbe.calls": 4,
+                  "modules.fileProbe.found": 4,
+                  "modules.fileProbe.systemCalls": 4,
+                  "modules.packageJson.bytes": 3615,
+                  "modules.packageJson.cacheHits": 2,
+                  "modules.packageJson.calls": 6,
+                  "modules.packageJson.negativeCacheEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+                  "modules.packageJson.negativeCacheInvalidations": 1,
+                  "modules.packageJson.notFound": 3,
+                  "modules.packageJson.reads": 1,
+                  "modules.pathProbe.systemCalls": 5,
+                  "modules.realpath.cacheHits": 8,
+                  "modules.realpath.calls": 11,
+                  "modules.realpath.systemCalls": 3,
+                  "modules.resolve.calls": 1,
+                  "modules.resolve.missing": 1,
+                  "modules.resolve.specifier.absolute": 1,
+                  "modules.sourceRead.bytes": 267,
+                  "modules.sourceRead.calls": 1,
+                  "modules.sourceRead.success": 1
+                },
+                "phasesMs": {
+                  "builtinInitialization": 186.098792,
+                  "initialEvaluation": 1.593583,
+                  "loaderInitialization": 1.873833,
+                  "processConfiguration": 0.443375,
+                  "queueDelay": 0.6423340000000001,
+                  "resultFormatting": 0.032833,
+                  "runtimeCreation": 0.472542,
+                  "teardown": 145.616458,
+                  "transportWiring": 2.641375,
+                  "userAwait": 12206.378459,
+                  "wrapperPreparation": 0.06975
+                },
+                "totalMs": 12545.974875,
+                "version": 1
+              },
+              "stderr": "",
+              "stdout": "projects/core/src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
+              "value": {
+                "exitCode": 2,
+                "quickJsMemory": {
+                  "afterCompiler": {
+                    "arrayBuffers": 0,
+                    "external": 12190272,
+                    "heapTotal": 64667224,
+                    "heapUsed": 64667224,
+                    "rss": 6230848
+                  },
+                  "beforeToolLoad": {
+                    "arrayBuffers": 0,
+                    "external": 292368,
+                    "heapTotal": 6094420,
+                    "heapUsed": 6094420,
+                    "rss": 412816
+                  }
+                },
+                "toolAndCompilerMs": 12185.818792000004
+              }
+            },
+            "wallMs": 12548.883958999999
+          }
+        ],
+        "throughputPerSecond": 0.07910126226777563
+      },
+      "recovery": {
+        "linearMemoryHighWaterBytes": 220069888,
+        "outerOverheadMs": 335.9904169999645,
+        "result": {
+          "overflowed": false,
+          "profile": {
+            "counters": {
+              "filesystem.close.calls": 1,
+              "filesystem.close.success": 1,
+              "filesystem.open.calls": 1,
+              "filesystem.open.success": 1,
+              "filesystem.readFileNative.bytes": 8079930,
+              "filesystem.readFileNative.calls": 72,
+              "filesystem.readFileNative.notFound": 1,
+              "filesystem.readFileNative.success": 71,
+              "filesystem.readdir.calls": 2,
+              "filesystem.readdir.entries": 5,
+              "filesystem.readdir.success": 2,
+              "filesystem.realpath.calls": 5,
+              "filesystem.realpath.success": 5,
+              "filesystem.stat.calls": 87,
+              "filesystem.stat.notFound": 75,
+              "filesystem.stat.success": 12,
+              "modules.directoryProbe.calls": 1,
+              "modules.directoryProbe.missing": 1,
+              "modules.directoryProbe.systemCalls": 1,
+              "modules.fileProbe.calls": 4,
+              "modules.fileProbe.found": 4,
+              "modules.fileProbe.systemCalls": 4,
+              "modules.packageJson.bytes": 3615,
+              "modules.packageJson.cacheHits": 2,
+              "modules.packageJson.calls": 6,
+              "modules.packageJson.negativeCacheEntries": 1,
+              "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+              "modules.packageJson.negativeCacheInvalidations": 1,
+              "modules.packageJson.notFound": 3,
+              "modules.packageJson.reads": 1,
+              "modules.pathProbe.systemCalls": 5,
+              "modules.realpath.cacheHits": 8,
+              "modules.realpath.calls": 11,
+              "modules.realpath.systemCalls": 3,
+              "modules.resolve.calls": 1,
+              "modules.resolve.missing": 1,
+              "modules.resolve.specifier.absolute": 1,
+              "modules.sourceRead.bytes": 267,
+              "modules.sourceRead.calls": 1,
+              "modules.sourceRead.success": 1
+            },
+            "phasesMs": {
+              "builtinInitialization": 178.207625,
+              "initialEvaluation": 0.863542,
+              "loaderInitialization": 0.986167,
+              "processConfiguration": 0.220666,
+              "queueDelay": 0.397167,
+              "resultFormatting": 0.095875,
+              "runtimeCreation": 0.493333,
+              "teardown": 129.863791,
+              "transportWiring": 0.32787499999999997,
+              "userAwait": 13007.182375,
+              "wrapperPreparation": 0.038792
+            },
+            "totalMs": 13318.810542,
+            "version": 1
+          },
+          "stderr": "",
+          "stdout": "",
+          "value": {
+            "exitCode": 0,
+            "quickJsMemory": {
+              "afterCompiler": {
+                "arrayBuffers": 0,
+                "external": 12167232,
+                "heapTotal": 64629314,
+                "heapUsed": 64629314,
+                "rss": 6214696
+              },
+              "beforeToolLoad": {
+                "arrayBuffers": 0,
+                "external": 292368,
+                "heapTotal": 6094420,
+                "heapUsed": 6094420,
+                "rss": 412816
+              }
+            },
+            "toolAndCompilerMs": 12985.964833000036
+          }
+        },
+        "wallMs": 13321.95525
+      }
+    },
+    "memoryPlateau": {
+      "quickJsHeap": {
+        "allowedVariationBytes": 1048576,
+        "failedCompilerJobs": {
+          "afterCompiler": {
+            "maximumBytes": 64667224,
+            "minimumBytes": 64658480,
+            "samples": [
+              64658480,
+              64667224,
+              64667224,
+              64667224,
+              64667224
+            ],
+            "variationBytes": 8744
+          },
+          "beforeToolLoad": {
+            "maximumBytes": 6094420,
+            "minimumBytes": 6094420,
+            "samples": [
+              6094420,
+              6094420,
+              6094420,
+              6094420,
+              6094420
+            ],
+            "variationBytes": 0
+          }
+        },
+        "interpretation": "before-tool-load samples compare fresh runtimes; after-compiler samples describe heap usage immediately before each runtime is dropped",
+        "unchangedCompilerJobs": {
+          "afterCompiler": {
+            "maximumBytes": 87177832,
+            "minimumBytes": 87177832,
+            "samples": [
+              87177832,
+              87177832,
+              87177832,
+              87177832,
+              87177832
+            ],
+            "variationBytes": 0
+          },
+          "beforeToolLoad": {
+            "maximumBytes": 6094381,
+            "minimumBytes": 6094381,
+            "samples": [
+              6094381,
+              6094381,
+              6094381,
+              6094381,
+              6094381
+            ],
+            "variationBytes": 0
+          }
+        },
+        "warmedIncrementalCompilerJobs": {
+          "afterCompiler": {
+            "maximumBytes": 64553532,
+            "minimumBytes": 64553532,
+            "samples": [
+              64553532,
+              64553532,
+              64553532,
+              64553532,
+              64553532
+            ],
+            "variationBytes": 0
+          },
+          "beforeToolLoad": {
+            "maximumBytes": 6094586,
+            "minimumBytes": 6094586,
+            "samples": [
+              6094586,
+              6094586,
+              6094586,
+              6094586,
+              6094586
+            ],
+            "variationBytes": 0
+          }
+        }
+      },
+      "wasmLinearMemory": {
+        "cancelledJobs": {
+          "growthBytes": 0,
+          "maximumBytes": 220069888,
+          "minimumBytes": 220069888,
+          "samples": [
+            220069888,
+            220069888,
+            220069888,
+            220069888,
+            220069888
+          ]
+        },
+        "failedCompilerJobs": {
+          "growthBytes": 0,
+          "maximumBytes": 220069888,
+          "minimumBytes": 220069888,
+          "samples": [
+            220069888,
+            220069888,
+            220069888,
+            220069888,
+            220069888
+          ]
+        },
+        "interpretation": "descriptive instance-wide monotone high-water observations; they show where the reserved peak grows but cannot identify allocations that remain within an earlier peak",
+        "otherWorkloadCheckpoints": [
+          {
+            "bytes": 152961024,
+            "label": "coldNoEmit"
+          },
+          {
+            "bytes": 220069888,
+            "label": "phaseProfile"
+          },
+          {
+            "bytes": 220069888,
+            "label": "incrementalCold"
+          },
+          {
+            "bytes": 220069888,
+            "label": "invalidRecovery"
+          },
+          {
+            "bytes": 220069888,
+            "label": "projectReferences"
+          },
+          {
+            "bytes": 220069888,
+            "label": "directTypeScript"
+          },
+          {
+            "bytes": 220069888,
+            "label": "emitDirect"
+          },
+          {
+            "bytes": 220069888,
+            "label": "generatedJavaScript"
+          },
+          {
+            "bytes": 220069888,
+            "label": "cpuBaseline"
+          },
+          {
+            "bytes": 220069888,
+            "label": "ioBaseline"
+          },
+          {
+            "bytes": 220069888,
+            "label": "concurrent"
+          },
+          {
+            "bytes": 220069888,
+            "label": "timeoutRecovery"
+          },
+          {
+            "bytes": 220069888,
+            "label": "cancellationRecovery"
+          }
+        ],
+        "timedOutJobs": {
+          "growthBytes": 0,
+          "maximumBytes": 220069888,
+          "minimumBytes": 220069888,
+          "samples": [
+            220069888,
+            220069888,
+            220069888,
+            220069888,
+            220069888
+          ]
+        },
+        "unchangedCompilerJobs": {
+          "growthBytes": 0,
+          "maximumBytes": 220069888,
+          "minimumBytes": 220069888,
+          "samples": [
+            220069888,
+            220069888,
+            220069888,
+            220069888,
+            220069888
+          ]
+        },
+        "warmedIncrementalCompilerJobs": {
+          "growthBytes": 0,
+          "maximumBytes": 220069888,
+          "minimumBytes": 220069888,
+          "samples": [
+            220069888,
+            220069888,
+            220069888,
+            220069888,
+            220069888
+          ]
+        }
+      }
+    },
+    "projectReferences": {
+      "linearMemoryHighWaterBytes": 220069888,
+      "outerOverheadMs": 559.0911249999772,
+      "result": {
+        "overflowed": false,
+        "profile": {
+          "counters": {
+            "filesystem.close.calls": 8,
+            "filesystem.close.success": 8,
+            "filesystem.open.calls": 10,
+            "filesystem.open.notFound": 2,
+            "filesystem.open.success": 8,
+            "filesystem.readFileNative.bytes": 8082574,
+            "filesystem.readFileNative.calls": 78,
+            "filesystem.readFileNative.notFound": 1,
+            "filesystem.readFileNative.success": 77,
+            "filesystem.readdir.calls": 4,
+            "filesystem.readdir.entries": 8,
+            "filesystem.readdir.success": 4,
+            "filesystem.realpath.calls": 8,
+            "filesystem.realpath.success": 8,
+            "filesystem.stat.calls": 115,
+            "filesystem.stat.notFound": 93,
+            "filesystem.stat.success": 22,
+            "modules.directoryProbe.calls": 1,
+            "modules.directoryProbe.missing": 1,
+            "modules.directoryProbe.systemCalls": 1,
+            "modules.fileProbe.calls": 4,
+            "modules.fileProbe.found": 4,
+            "modules.fileProbe.systemCalls": 4,
+            "modules.packageJson.bytes": 3615,
+            "modules.packageJson.cacheHits": 2,
+            "modules.packageJson.calls": 6,
+            "modules.packageJson.negativeCacheEntries": 1,
+            "modules.packageJson.negativeCacheInvalidatedEntries": 1,
+            "modules.packageJson.negativeCacheInvalidations": 1,
+            "modules.packageJson.notFound": 3,
+            "modules.packageJson.reads": 1,
+            "modules.pathProbe.systemCalls": 5,
+            "modules.realpath.cacheHits": 8,
+            "modules.realpath.calls": 11,
+            "modules.realpath.systemCalls": 3,
+            "modules.resolve.calls": 1,
+            "modules.resolve.missing": 1,
+            "modules.resolve.specifier.absolute": 1,
+            "modules.sourceRead.bytes": 267,
+            "modules.sourceRead.calls": 1,
+            "modules.sourceRead.success": 1
+          },
+          "phasesMs": {
+            "builtinInitialization": 225.176833,
+            "initialEvaluation": 1.240459,
+            "loaderInitialization": 1.969375,
+            "processConfiguration": 0.471042,
+            "queueDelay": 0.6456670000000001,
+            "resultFormatting": 0.119541,
+            "runtimeCreation": 0.519292,
+            "teardown": 287.878792,
+            "transportWiring": 0.247542,
+            "userAwait": 19607.905875,
+            "wrapperPreparation": 0.026041
+          },
+          "totalMs": 20126.325584,
+          "version": 1
+        },
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 0,
+              "external": 25401504,
+              "heapTotal": 88945643,
+              "heapUsed": 88945643,
+              "rss": 14503568
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 0,
+              "external": 292368,
+              "heapTotal": 6094366,
+              "heapUsed": 6094366,
+              "rss": 412808
+            }
+          },
+          "toolAndCompilerMs": 19570.16312500002
+        }
+      },
+      "wallMs": 20129.254249999998
+    },
+    "timeouts": {
+      "attempts": {
+        "iterations": 5,
+        "medianMs": 289.52133299999997,
+        "p95Ms": 310.724416,
+        "samples": [
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "message": "execution job timed out",
+              "name": "Error",
+              "timedOut": true
+            },
+            "wallMs": 289.52133299999997
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "message": "execution job timed out",
+              "name": "Error",
+              "timedOut": true
+            },
+            "wallMs": 240.07999999999998
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "message": "execution job timed out",
+              "name": "Error",
+              "timedOut": true
+            },
+            "wallMs": 265.214333
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "message": "execution job timed out",
+              "name": "Error",
+              "timedOut": true
+            },
+            "wallMs": 310.724416
+          },
+          {
+            "linearMemoryHighWaterBytes": 220069888,
+            "outerOverheadMs": null,
+            "result": {
+              "message": "execution job timed out",
+              "name": "Error",
+              "timedOut": true
+            },
+            "wallMs": 293.008542
+          }
+        ],
+        "throughputPerSecond": 3.5751349035684297
+      },
+      "recovery": {
+        "linearMemoryHighWaterBytes": 220069888,
+        "outerOverheadMs": null,
+        "result": {
+          "overflowed": false,
+          "profile": {
+            "counters": {
+              "filesystem.realpath.calls": 3,
+              "filesystem.realpath.success": 3,
+              "modules.directoryProbe.calls": 3,
+              "modules.directoryProbe.found": 1,
+              "modules.directoryProbe.missing": 2,
+              "modules.directoryProbe.systemCalls": 3,
+              "modules.fileProbe.calls": 3,
+              "modules.fileProbe.found": 3,
+              "modules.fileProbe.systemCalls": 3,
+              "modules.packageJson.bytes": 1214,
+              "modules.packageJson.cacheHits": 1,
+              "modules.packageJson.calls": 5,
+              "modules.packageJson.notFound": 2,
+              "modules.packageJson.reads": 2,
+              "modules.pathProbe.systemCalls": 6,
+              "modules.realpath.cacheHits": 2,
+              "modules.realpath.calls": 5,
+              "modules.realpath.systemCalls": 3,
+              "modules.resolve.calls": 2,
+              "modules.resolve.missing": 1,
+              "modules.resolve.specifier.absolute": 1,
+              "modules.resolve.specifier.package": 1,
+              "modules.resolve.success": 1,
+              "modules.sourceRead.bytes": 2934,
+              "modules.sourceRead.calls": 2,
+              "modules.sourceRead.success": 2,
+              "modules.typescriptTransform.micros": 3168,
+              "modules.typescriptTransform.success": 1
+            },
+            "phasesMs": {
+              "builtinInitialization": 200.221709,
+              "initialEvaluation": 0.064542,
+              "loaderInitialization": 1.342666,
+              "processConfiguration": 0.4715,
+              "queueDelay": 0.313834,
+              "resultFormatting": 0.027167,
+              "runtimeCreation": 0.433292,
+              "teardown": 10.588875,
+              "transportWiring": 0.218666,
+              "userAwait": 25.683458,
+              "wrapperPreparation": 0.02075
+            },
+            "totalMs": 239.435,
+            "version": 1
+          },
+          "stderr": "",
+          "stdout": "",
+          "value": {
+            "answer": 42,
+            "state": "ready"
+          }
+        },
+        "wallMs": 240.841083
+      }
+    },
+    "unchangedFreshJobs": {
+      "iterations": 5,
+      "medianMs": 18946.877583999998,
+      "p95Ms": 19175.117,
+      "samples": [
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 447.86699999999473,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8067927,
+                "filesystem.readFileNative.calls": 70,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 69,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 171.224417,
+                "initialEvaluation": 0.706334,
+                "loaderInitialization": 1.2641250000000002,
+                "processConfiguration": 0.14595799999999998,
+                "queueDelay": 0.364375,
+                "resultFormatting": 0.033042,
+                "runtimeCreation": 0.42225,
+                "teardown": 238.896375,
+                "transportWiring": 0.13104100000000002,
+                "userAwait": 18399.364040999997,
+                "wrapperPreparation": 0.017499999999999998
+              },
+              "totalMs": 18812.613667,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24823104,
+                  "heapTotal": 87177832,
+                  "heapUsed": 87177832,
+                  "rss": 14106016
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094381,
+                  "heapUsed": 6094381,
+                  "rss": 412808
+                }
+              },
+              "toolAndCompilerMs": 18366.334667000003
+            }
+          },
+          "wallMs": 18814.201666999998
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 497.57450000000244,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8067927,
+                "filesystem.readFileNative.calls": 70,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 69,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 173.74641699999998,
+                "initialEvaluation": 0.795,
+                "loaderInitialization": 0.957875,
+                "processConfiguration": 0.156917,
+                "queueDelay": 0.309375,
+                "resultFormatting": 0.194292,
+                "runtimeCreation": 0.413833,
+                "teardown": 277.823667,
+                "transportWiring": 0.12875,
+                "userAwait": 18716.577458,
+                "wrapperPreparation": 0.018333
+              },
+              "totalMs": 19171.225875,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24823104,
+                  "heapTotal": 87177832,
+                  "heapUsed": 87177832,
+                  "rss": 14106016
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094381,
+                  "heapUsed": 6094381,
+                  "rss": 412808
+                }
+              },
+              "toolAndCompilerMs": 18677.542499999996
+            }
+          },
+          "wallMs": 19175.117
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 455.7980009999992,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8067927,
+                "filesystem.readFileNative.calls": 70,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 69,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 179.202541,
+                "initialEvaluation": 0.8708750000000001,
+                "loaderInitialization": 1.609584,
+                "processConfiguration": 0.244625,
+                "queueDelay": 0.6243340000000001,
+                "resultFormatting": 0.045916,
+                "runtimeCreation": 0.433916,
+                "teardown": 237.15,
+                "transportWiring": 0.154,
+                "userAwait": 18604.490292,
+                "wrapperPreparation": 0.019542
+              },
+              "totalMs": 19024.913584,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24823104,
+                  "heapTotal": 87177832,
+                  "heapUsed": 87177832,
+                  "rss": 14106016
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094381,
+                  "heapUsed": 6094381,
+                  "rss": 412808
+                }
+              },
+              "toolAndCompilerMs": 18570.988916
+            }
+          },
+          "wallMs": 19026.786916999998
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 454.5509579999998,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8067927,
+                "filesystem.readFileNative.calls": 70,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 69,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 173.09370900000002,
+                "initialEvaluation": 0.928792,
+                "loaderInitialization": 0.979667,
+                "processConfiguration": 0.165291,
+                "queueDelay": 0.283792,
+                "resultFormatting": 0.092792,
+                "runtimeCreation": 0.438917,
+                "teardown": 242.174042,
+                "transportWiring": 0.194458,
+                "userAwait": 18497.214791,
+                "wrapperPreparation": 0.021125
+              },
+              "totalMs": 18915.682917,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24823104,
+                  "heapTotal": 87177832,
+                  "heapUsed": 87177832,
+                  "rss": 14106016
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094381,
+                  "heapUsed": 6094381,
+                  "rss": 412808
+                }
+              },
+              "toolAndCompilerMs": 18463.935209000003
+            }
+          },
+          "wallMs": 18918.486167000003
+        },
+        {
+          "linearMemoryHighWaterBytes": 220069888,
+          "outerOverheadMs": 458.1701679999933,
+          "result": {
+            "overflowed": false,
+            "profile": {
+              "counters": {
+                "filesystem.readFileNative.bytes": 8067927,
+                "filesystem.readFileNative.calls": 70,
+                "filesystem.readFileNative.notFound": 1,
+                "filesystem.readFileNative.success": 69,
+                "filesystem.readdir.calls": 2,
+                "filesystem.readdir.entries": 4,
+                "filesystem.readdir.success": 2,
+                "filesystem.realpath.calls": 5,
+                "filesystem.realpath.success": 5,
+                "filesystem.stat.calls": 87,
+                "filesystem.stat.notFound": 75,
+                "filesystem.stat.success": 12,
+                "modules.directoryProbe.calls": 1,
+                "modules.directoryProbe.missing": 1,
+                "modules.directoryProbe.systemCalls": 1,
+                "modules.fileProbe.calls": 4,
+                "modules.fileProbe.found": 4,
+                "modules.fileProbe.systemCalls": 4,
+                "modules.packageJson.bytes": 3615,
+                "modules.packageJson.cacheHits": 2,
+                "modules.packageJson.calls": 6,
+                "modules.packageJson.negativeCacheEntries": 1,
+                "modules.packageJson.notFound": 3,
+                "modules.packageJson.reads": 1,
+                "modules.pathProbe.systemCalls": 5,
+                "modules.realpath.cacheHits": 8,
+                "modules.realpath.calls": 11,
+                "modules.realpath.systemCalls": 3,
+                "modules.resolve.calls": 1,
+                "modules.resolve.missing": 1,
+                "modules.resolve.specifier.absolute": 1,
+                "modules.sourceRead.bytes": 267,
+                "modules.sourceRead.calls": 1,
+                "modules.sourceRead.success": 1
+              },
+              "phasesMs": {
+                "builtinInitialization": 173.109333,
+                "initialEvaluation": 0.740875,
+                "loaderInitialization": 1.922458,
+                "processConfiguration": 0.170667,
+                "queueDelay": 0.627542,
+                "resultFormatting": 0.049542,
+                "runtimeCreation": 0.44975,
+                "teardown": 245.708458,
+                "transportWiring": 0.156833,
+                "userAwait": 18521.335583,
+                "wrapperPreparation": 0.017584
+              },
+              "totalMs": 18944.491542,
+              "version": 1
+            },
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24823104,
+                  "heapTotal": 87177832,
+                  "heapUsed": 87177832,
+                  "rss": 14106016
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 292368,
+                  "heapTotal": 6094381,
+                  "heapUsed": 6094381,
+                  "rss": 412808
+                }
+              },
+              "toolAndCompilerMs": 18488.707416000005
+            }
+          },
+          "wallMs": 18946.877583999998
+        }
+      ],
+      "throughputPerSecond": 0.05269732894150695
+    }
+  }
+}

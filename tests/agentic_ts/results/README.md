@@ -34,6 +34,30 @@ resulting `HEAD`, while ambiguous merge pushes fail closed. With five samples,
 the reported p95 is the observed maximum; it is descriptive evidence rather
 than a stable tail-latency estimate.
 
+## Consolidated-source compiler recapture
+
+The [2026-09-22 P2](2026-09-22-p2-macos-aarch64.json) and
+[P3](2026-09-22-p3-macos-aarch64.json) reports were captured from clean
+consolidated #154 revision `5349e9eabd84509fdb2f2807d30c57961c5ffa5d`.
+They use the pinned Node 22.14.0/npm 10.9.2/TypeScript 5.8.2 fixture, five
+repeated-job samples, Rust 1.98.1, and disabled optional test caches. The cold
+CLI and host Node baselines each have one observation per target. Build and
+benchmark input hashes agree across P2/P3; report validation and exact
+currentness passed.
+
+Cold `tsc --noEmit` took 19.17/19.22 s (P2/P3), while the same host Node command
+took 0.631/0.623 s. Repeated unchanged checks had 18.95/19.18 s medians and
+warm incremental checks had 12.43/12.34 s medians. In the separately
+instrumented compiler-API profile, TypeScript import took 11.67/11.75 s,
+program creation 5.08/5.00 s, and diagnostics 7.93/8.15 s. Its larger outer
+wall must not be compared directly to the cold CLI row.
+
+The September 7 reports used an earlier source and Rust toolchain; this
+recapture is descriptive, not an isolated regression or speedup claim for the
+npm loader caches or stripped-ESM fix. The compiler fixture still makes only
+one module-resolution call, so the next useful experiment is to attribute
+the TypeScript import phase rather than extend a broad loader cache.
+
 ## GOL-350 CommonJS graph probe evidence
 
 The dated `2026-09-07-gol-350-cjs-p2-macos-aarch64.json` and
@@ -80,7 +104,7 @@ GOL-347/GOL-350 source snapshot. Several timings moved materially, especially
 the incremental rows; the refresh is not a controlled A/B and does not
 attribute those movements to one implementation change.
 
-The current reports record 68 whole-file reads for 10,961,854 bytes. The
+The September 7 reports record 68 whole-file reads for 10,961,854 bytes. The
 remaining controlled P2/P3 work is approximately 7.52/7.44 s importing
 TypeScript, 4.97/4.88 s creating the program, and 8.07/7.63 s computing
 diagnostics. Runtime creation, loader setup, process setup, transport wiring,
