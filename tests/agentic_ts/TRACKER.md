@@ -16,6 +16,53 @@
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
 | phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.56 s / 19.96 s |
 
+## Native CJS source-map extraction — 2026-09-22
+
+The [P2](results/2026-09-22-p2-macos-aarch64.json) and
+[P3](results/2026-09-22-p3-macos-aarch64.json) reports measure the candidate
+that moves CJS `sourceMappingURL` extraction from JavaScript to the existing
+native SWC lexer when the TypeScript runtime is enabled. They use Node 22.14.0,
+npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and disabled optional test caches.
+Their build and benchmark input hashes match across targets, and report
+validation plus exact currentness pass. The reports record the clean parent
+`74253b41` as their commit hint and `dirty: true`; the composite input hashes
+identify the measured candidate source exactly.
+
+The controlled baseline is the parent version of these same report paths at
+`74253b41`, which measured clean consolidated source `5349e9ea`. The cold CLI
+and host Node rows each have one observation per target; repeated-job rows have
+five samples. The isolated P3 recapture replaced an earlier run whose host and
+guest samples were visibly affected by machine contention.
+
+| Workload | P2 baseline → candidate | P3 baseline → candidate |
+|---|---:|---:|
+| cold `tsc --noEmit` | 19.17 → 16.72 s (-2.44 s, -12.7%) | 19.22 → 16.90 s (-2.32 s, -12.1%) |
+| repeated unchanged checks | 18.95 → 16.83 s (-11.2%) | 19.18 → 17.07 s (-11.0%) |
+| warm incremental checks | 12.43 → 9.99 s (-19.6%) | 12.34 → 10.20 s (-17.4%) |
+| profiled TypeScript API import | 11.67 → 8.07 s (-30.9%) | 11.75 → 8.31 s (-29.3%) |
+
+One-off phase attribution found that JavaScript source-map extraction owned
+2.57–2.83 s while loading the large TypeScript CommonJS source; the native
+lexer reduced that phase to 0.24–0.33 s. Temporary diagnostic traces and the
+startup-only harness were removed after selecting the implementation. The
+retained reports confirm the effect at the exported compiler boundary and in
+the shared TypeScript API profiler. The API profiler imports `typescript.js`,
+so its phase value is supporting attribution rather than a direct timing of the
+CLI's `_tsc.js` load.
+
+The candidate clears both experiment gates on both targets: more than one
+second and more than 10% saved in the cold exported CLI workload. The optimized
+components grow by 405,519 bytes (0.23%) on P2 and 402,662 bytes (0.23%) on P3.
+Focused public-boundary coverage verifies real line-comment directives, marker
+text inside strings and templates, Node's U+2003 separator and U+2028 line
+terminator, an empty last directive, and the no-marker fast path.
+
+This optimization is intentionally TypeScript-feature-only because those builds
+already carry SWC. Non-TypeScript and VM builds retain the existing JavaScript
+scanner rather than shipping SWC solely for source-map registration. Review
+found pre-existing regex-literal heuristic gaps in that fallback; a durable
+tokenizer owner is a proposed deferred follow-up, not part of this speedup claim.
+
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
 fix is proposed.

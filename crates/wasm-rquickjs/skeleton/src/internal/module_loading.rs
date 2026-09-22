@@ -11660,6 +11660,18 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         )
         .expect("Failed to initialize CJS source preparer");
 
+        #[cfg(feature = "typescript-runtime")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_extract_source_map_url",
+            Function::new(
+                ctx.clone(),
+                super::typescript::extract_source_map_url,
+            )
+            .expect("Failed to create source map URL extractor"),
+        )
+        .expect("Failed to initialize source map URL extractor");
+
         set_non_replaceable_global(
             &global,
             "__wasm_rquickjs_module_has_exec_argv_flag",

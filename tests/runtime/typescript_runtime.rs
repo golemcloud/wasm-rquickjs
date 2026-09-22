@@ -394,6 +394,10 @@ async fn typescript_transform_runtime_is_immutable(
         "disabled source-map support unexpectedly remapped the stack: {disabled_stack}"
     );
     assert_eq!(report["errorConstructorsStable"], true);
+    assert_eq!(report["nativeSourceMapCommentFound"], true);
+    assert_eq!(report["nativeSourceMapFakeCommentsIgnored"], true);
+    assert_eq!(report["nativeSourceMapNoMarkerIgnored"], true);
+    assert_eq!(report["nativeSourceMapEmptyLastClears"], true);
     assert_eq!(
         report["cjsSourceMapsReclaimed"], true,
         "CJS source maps were retained after their modules were reclaimed: retained={}",
