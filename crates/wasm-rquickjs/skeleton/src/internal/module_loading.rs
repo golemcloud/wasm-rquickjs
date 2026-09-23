@@ -7043,6 +7043,33 @@ impl Resolver for NodeModulesResolver {
 /// This enables ESM modules to import CJS packages from `node_modules`.
 struct CjsCompatLoader;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CjsCompatFormatPolicy {
+    CommonJs,
+    Esm,
+    DetectFromSource,
+}
+
+fn cjs_compat_format_policy(
+    has_cached_cjs_typescript: bool,
+    fs_path: &str,
+    is_cjs_ext: bool,
+    is_module_package_js: bool,
+    is_commonjs_package_js: bool,
+) -> CjsCompatFormatPolicy {
+    if has_cached_cjs_typescript || fs_path.ends_with(".cts") || is_cjs_ext {
+        CjsCompatFormatPolicy::CommonJs
+    } else if fs_path.ends_with(".mts") {
+        CjsCompatFormatPolicy::Esm
+    } else if is_commonjs_package_js {
+        CjsCompatFormatPolicy::CommonJs
+    } else if is_module_package_js {
+        CjsCompatFormatPolicy::Esm
+    } else {
+        CjsCompatFormatPolicy::DetectFromSource
+    }
+}
+
 #[cfg(feature = "typescript-runtime")]
 fn is_typescript_module_path(path: &str) -> bool {
     matches!(
@@ -9781,19 +9808,26 @@ impl Loader for CjsCompatLoader {
         let url = path_to_file_url(path);
         let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
 
-        let cjs_url = url.clone();
-        let has_esm_syntax = force_module
-            || raw_typescript_looks_esm
-            || (!is_typescript
-                && (source_looks_like_esm(&source)
-                    || has_cjs_wrapper_lexical_redeclaration(&source)));
         // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
-        let is_cjs = has_cached_cjs_typescript
-            || fs_path.ends_with(".cts")
-            || is_cjs_ext
-            || (!fs_path.ends_with(".mts")
-                && (is_commonjs_package_js || (!is_module_package_js && !has_esm_syntax)));
+        let is_cjs = match cjs_compat_format_policy(
+            has_cached_cjs_typescript,
+            fs_path,
+            is_cjs_ext,
+            is_module_package_js,
+            is_commonjs_package_js,
+        ) {
+            CjsCompatFormatPolicy::CommonJs => true,
+            CjsCompatFormatPolicy::Esm => false,
+            CjsCompatFormatPolicy::DetectFromSource => {
+                let has_esm_syntax = force_module
+                    || raw_typescript_looks_esm
+                    || (!is_typescript
+                        && (source_looks_like_esm(&source)
+                            || has_cjs_wrapper_lexical_redeclaration(&source)));
+                !has_esm_syntax
+            }
+        };
         if !is_cjs {
             let preflight_mode = if fs_path.ends_with(".js") && is_module_package_js {
                 EsmFilePreflightMode::PackageTypeModuleJs
@@ -9809,6 +9843,7 @@ impl Loader for CjsCompatLoader {
                 preflight_mode,
             );
         }
+        let cjs_url = url;
 
         let cjs_conditions = NodeModulesResolver::conditions_from_global(
             ctx,
@@ -12150,6 +12185,38 @@ impl Loader for JsonFileLoader {
 #[cfg(test)]
 mod cjs_export_analyzer_tests {
     use super::*;
+
+    #[test]
+    fn cjs_compat_format_policy_preserves_fixed_format_precedence() {
+        assert_eq!(
+            cjs_compat_format_policy(true, "/app/value.mts", false, true, false),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.cts", false, true, false),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.cjs", true, true, false),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.mts", false, false, true),
+            CjsCompatFormatPolicy::Esm
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.js", false, false, true),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.js", false, true, false),
+            CjsCompatFormatPolicy::Esm
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.js", false, false, false),
+            CjsCompatFormatPolicy::DetectFromSource
+        );
+    }
 
     #[test]
     fn data_url_separator_uses_first_comma() {
