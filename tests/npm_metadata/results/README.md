@@ -10,6 +10,23 @@ NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=3 NPM_METADATA_REPORT=tests/npm_metad
   tools/dev-test.sh p3 standard npm_metadata ''
 ```
 
+Use the explicit `release` profile for a local production-build diagnostic. It
+compiles both the host benchmark harness and generated guest component with
+Cargo's release profile while retaining the same fresh-state measurement
+semantics:
+
+```sh
+NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=5 NPM_METADATA_REPORT=/tmp/npm-release-p2.json \
+  tools/dev-test.sh p2 release npm_metadata ''
+NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=5 NPM_METADATA_REPORT=/tmp/npm-release-p3.json \
+  tools/dev-test.sh p3 release npm_metadata ''
+```
+
+The current `npm-metadata-v1` schema does not record enough build provenance to
+serve as the checked release baseline. Do not check in or compare these
+diagnostic outputs as release evidence until the report records and validates
+the host/component profiles, component digest, and build inputs.
+
 Set `PATH` to the pinned Node installation first. The runner fetches the two
 lockfile-pinned tarballs once before timing and serves the same bytes from the
 local registry. Each cold invocation gets a fresh component instance, guest

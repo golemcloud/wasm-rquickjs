@@ -14,12 +14,36 @@ struct Plan {
     command_args: Vec<String>,
 }
 
+fn remove_release_overrides(command: &mut Command) {
+    for (name, _) in std::env::vars() {
+        if matches!(
+            name.as_str(),
+            "CARGO_BUILD_RUSTFLAGS"
+                | "CARGO_ENCODED_RUSTFLAGS"
+                | "CARGO_HOME"
+                | "RUSTC"
+                | "RUSTC_WRAPPER"
+                | "RUSTC_WORKSPACE_WRAPPER"
+                | "RUSTFLAGS"
+        ) || name.starts_with("CARGO_PROFILE_RELEASE_")
+            || (name.starts_with("CARGO_TARGET_") && name.ends_with("_RUSTFLAGS"))
+        {
+            command.env_remove(name);
+        }
+    }
+}
+
 fn plan(target: &str, profile: &str) -> Plan {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let output = Command::new("bash")
+    let mut command = Command::new("bash");
+    command
         .arg(repo_root.join("tools/dev-test.sh"))
         .args([target, profile, "runtime", "profile_probe"])
-        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1")
+        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+    if profile == "release" {
+        remove_release_overrides(&mut command);
+    }
+    let output = command
         .output()
         .expect("dev-test profile planning should run");
 
@@ -84,6 +108,8 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
         };
         assert_eq!(feature_list(&standard), expected_standard_features);
         assert_eq!(value(&standard, "artifact_cache"), "0");
+        assert_eq!(value(&standard, "component_profile"), "dev");
+        assert_eq!(value(&standard, "host_release"), "false");
         assert_eq!(value(&standard, "locked_builds"), "0");
         assert_eq!(value(&standard, "precompile_component"), "0");
         assert_eq!(value(&standard, "prepared_component_cache"), "0");
@@ -92,6 +118,22 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
         assert!(!standard.command_args.iter().any(|arg| arg == "--locked"));
         assert!(
             !standard
+                .command_args
+                .iter()
+                .any(|arg| arg == "--test-threads")
+        );
+
+        let release = plan(target, "release");
+        assert_eq!(feature_list(&release), expected_standard_features);
+        assert_eq!(value(&release, "artifact_cache"), "0");
+        assert_eq!(value(&release, "component_profile"), "release");
+        assert_eq!(value(&release, "host_release"), "true");
+        assert_eq!(value(&release, "locked_builds"), "1");
+        assert_eq!(value(&release, "unoptimized"), "0");
+        assert!(release.command_args.iter().any(|arg| arg == "--release"));
+        assert!(release.command_args.iter().any(|arg| arg == "--locked"));
+        assert!(
+            !release
                 .command_args
                 .iter()
                 .any(|arg| arg == "--test-threads")
@@ -127,6 +169,77 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
                 .any(|args| args == ["--test-threads", "8"])
         );
     }
+}
+
+#[test]
+fn release_profile_rejects_inherited_compiler_overrides() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (variable, value) in [
+        ("CARGO_PROFILE_RELEASE_OPT_LEVEL", "0"),
+        ("RUSTFLAGS", "-Copt-level=0"),
+    ] {
+        let mut command = Command::new("bash");
+        command
+            .arg(repo_root.join("tools/dev-test.sh"))
+            .args(["p3", "release", "agentic_ts", ""])
+            .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+        remove_release_overrides(&mut command);
+        let output = command
+            .env(variable, value)
+            .output()
+            .expect("release profile planning should run");
+
+        assert!(
+            !output.status.success(),
+            "{variable} was unexpectedly accepted"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(variable) && stderr.contains("rejects inherited"),
+            "unexpected rejection for {variable}: {stderr}"
+        );
+    }
+
+    let cargo_home = Utf8TempDir::new().expect("temporary Cargo home should be created");
+    fs::write(
+        cargo_home.path().join("config.toml"),
+        "[profile.release]\nopt-level = 0\n",
+    )
+    .expect("temporary Cargo config should be written");
+    let mut command = Command::new("bash");
+    command
+        .arg(repo_root.join("tools/dev-test.sh"))
+        .args(["p3", "release", "agentic_ts", ""])
+        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+    remove_release_overrides(&mut command);
+    let output = command
+        .env("CARGO_HOME", cargo_home.path())
+        .output()
+        .expect("release profile planning should run");
+    assert!(
+        !output.status.success(),
+        "redirected CARGO_HOME was accepted"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("CARGO_HOME"),
+        "redirected Cargo config rejection did not identify CARGO_HOME"
+    );
+
+    let mut command = Command::new("bash");
+    command
+        .arg(repo_root.join("tools/dev-test.sh"))
+        .args(["p3", "release", "agentic_ts", ""])
+        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+    remove_release_overrides(&mut command);
+    let output = command
+        .env("RUSTC", "/tmp/not-the-pinned-rustc")
+        .output()
+        .expect("release profile planning should run");
+    assert!(!output.status.success(), "alternate RUSTC was accepted");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("RUSTC"),
+        "alternate compiler rejection did not identify RUSTC"
+    );
 }
 
 #[test]

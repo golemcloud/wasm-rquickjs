@@ -23,6 +23,14 @@ Run both targets from the repository root:
 tests/agentic_ts/run.sh
 ```
 
+The default command intentionally reproduces the historical development-profile
+reports. For production-oriented host/P2/P3 comparisons, compile both the test
+host and generated guest component with their real Cargo release profiles:
+
+```sh
+tests/agentic_ts/run.sh --release
+```
+
 During profiler development, validate only the shared controlled workload and
 the feature-gated execution-job profile with:
 

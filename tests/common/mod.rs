@@ -237,6 +237,7 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnectionWithStore<Host
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
 
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
+const TEST_COMPONENT_PROFILE_ENV: &str = "WASM_RQUICKJS_TEST_COMPONENT_PROFILE";
 const TEST_DROP_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_DROP_CACHE";
 const TEST_LOCKED_BUILDS_ENV: &str = "WASM_RQUICKJS_TEST_LOCKED_BUILDS";
 const TEST_PREPARED_COMPONENT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE";
@@ -1559,6 +1560,42 @@ pub(crate) fn test_artifact_cache_enabled() -> bool {
     truthy_env(TEST_ARTIFACT_CACHE_ENV)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TestComponentProfile {
+    Dev,
+    Release,
+}
+
+impl TestComponentProfile {
+    fn from_env() -> anyhow::Result<Self> {
+        match std::env::var(TEST_COMPONENT_PROFILE_ENV) {
+            Err(std::env::VarError::NotPresent) => Ok(Self::Dev),
+            Ok(value) if value == "dev" => Ok(Self::Dev),
+            Ok(value) if value == "release" => Ok(Self::Release),
+            Ok(value) => Err(anyhow!(
+                "unsupported {TEST_COMPONENT_PROFILE_ENV} value {value:?}; expected dev or release"
+            )),
+            Err(error) => Err(anyhow!(
+                "could not read {TEST_COMPONENT_PROFILE_ENV}: {error}"
+            )),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Dev => "dev",
+            Self::Release => "release",
+        }
+    }
+
+    fn cargo_output_directory(self) -> &'static str {
+        match self {
+            Self::Dev => "debug",
+            Self::Release => "release",
+        }
+    }
+}
+
 fn test_drop_cache_enabled() -> bool {
     truthy_env(TEST_DROP_CACHE_ENV)
 }
@@ -1681,6 +1718,7 @@ fn cache_stamp_signature(
         "RUSTC",
         "RUSTFLAGS",
         "RUSTUP_TOOLCHAIN",
+        TEST_COMPONENT_PROFILE_ENV,
     ] {
         if let Ok(value) = std::env::var(env_name) {
             signature.push_str(env_name);
@@ -4349,6 +4387,7 @@ impl CompiledTest {
     ) -> anyhow::Result<CompiledTest> {
         drop_test_artifact_cache_once();
         let target = test_target();
+        let component_profile = TestComponentProfile::from_env()?;
         let name = path.file_name().unwrap();
         // P2 and P3 builds of the same example never share an output tree.
         let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
@@ -4365,16 +4404,17 @@ impl CompiledTest {
             Utf8Path::new("tmp")
                 .join(&shared_target_name)
                 .join("wasm32-wasip2")
-                .join("debug")
+                .join(component_profile.cargo_output_directory())
                 .join(&wasm_file_name)
         } else {
             wrapper_crate_root
                 .join("target")
                 .join("wasm32-wasip2")
-                .join("debug")
+                .join(component_profile.cargo_output_directory())
                 .join(&wasm_file_name)
         };
-        let compile_stamp = test_cache_stamp(name, feature_combination, "compile");
+        let compile_cache_kind = format!("compile-{}", component_profile.label());
+        let compile_stamp = test_cache_stamp(name, feature_combination, &compile_cache_kind);
         let compile_inputs = vec![
             path.to_path_buf(),
             Utf8Path::new("crates").join("wasm-rquickjs").join("src"),
@@ -4399,6 +4439,7 @@ impl CompiledTest {
                 ("target", "wasm32-wasip2".to_string()),
                 ("generation_target", format!("{target:?}")),
                 ("use_shared_target", use_shared_target.to_string()),
+                ("component_profile", component_profile.label().to_string()),
                 (
                     "cargo_args",
                     feature_combination.cargo_args_for_target(target).join("|"),
@@ -4433,7 +4474,7 @@ impl CompiledTest {
             Some(TestCacheLock::acquire(test_cache_lock(
                 name,
                 feature_combination,
-                "compile",
+                &compile_cache_kind,
             ))?)
         } else {
             None
@@ -4486,13 +4527,18 @@ impl CompiledTest {
         let build_wrapper = |offline: bool| -> std::io::Result<_> {
             let mut command = Command::new("cargo");
             command.arg("build");
+            if component_profile == TestComponentProfile::Release {
+                command.arg("--release");
+            }
             if locked_build {
                 command.arg("--locked");
             }
             if offline {
                 command.arg("--offline");
             }
-            if feature_combination.includes_crypto_full() {
+            if component_profile == TestComponentProfile::Dev
+                && feature_combination.includes_crypto_full()
+            {
                 command
                     .arg("--config")
                     .arg("profile.dev.package.rsa.opt-level=3")

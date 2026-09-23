@@ -9,7 +9,9 @@ mod common;
 
 use anyhow::Context as _;
 use camino::Utf8Path;
-use common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive, test_target};
+use common::{
+    CompiledTest, FeatureCombination, TestInstance, TestTarget, copy_dir_recursive, test_target,
+};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -616,6 +618,8 @@ fn validate_report_pair(
         "/environment/npm",
         "/environment/typescript",
         "/environment/componentFeatures",
+        "/environment/componentCargoProfile",
+        "/environment/harnessCargoProfile",
         "/environment/rustc",
         "/environment/cargo",
     ] {
@@ -793,6 +797,14 @@ fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<(
         filename.ends_with(&format!("-{target}-{os}-{arch}.json")),
         "{path} filename does not match its target and host metadata"
     );
+    if filename.contains("-release-") {
+        anyhow::ensure!(
+            report["environment"]["componentCargoProfile"] == "release"
+                && report["environment"]["harnessCargoProfile"] == "release"
+                && is_blake3_hash(&report["environment"]["hostDependencyGraph"]["lockBlake3"]),
+            "{path} is labeled as a release measurement without release profiles and a pinned host graph"
+        );
+    }
     anyhow::ensure!(
         report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
             && is_blake3_hash(&report["inputs"]["buildHash"])
@@ -1362,6 +1374,10 @@ fn prepare_cjs_graph(instance: &TestInstance) -> anyhow::Result<()> {
 
 fn environment(iterations: usize, component_features: &str) -> anyhow::Result<Value> {
     let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
+    let host_lock_blake3 = std::env::var("WASM_RQUICKJS_TEST_HOST_LOCKFILE")
+        .ok()
+        .map(|path| hash_file(Utf8Path::new(&path)))
+        .transpose()?;
     let dirty = !command_text(Command::new("git").args([
         "-C",
         &source_root,
@@ -1383,6 +1399,13 @@ fn environment(iterations: usize, component_features: &str) -> anyhow::Result<Va
         "npm": command_text(Command::new("npm").arg("--version"))?,
         "typescript": command_text(Command::new("node").args(["-p", "require('./tests/agentic_ts/node_modules/typescript/package.json').version"]))?,
         "componentFeatures": component_features,
+        "componentCargoProfile": std::env::var("WASM_RQUICKJS_TEST_COMPONENT_PROFILE")
+            .unwrap_or_else(|_| "dev".to_string()),
+        "harnessCargoProfile": if cfg!(debug_assertions) { "dev" } else { "release" },
+        "hostDependencyGraph": {
+            "kind": if test_target() == TestTarget::P2 { "p2-shadow" } else { "workspace" },
+            "lockBlake3": host_lock_blake3,
+        },
         "iterations": iterations,
         "artifactCache": std::env::var("WASM_RQUICKJS_TEST_ARTIFACT_CACHE").ok(),
         "wasmtimeCache": std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").ok(),

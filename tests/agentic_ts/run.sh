@@ -33,6 +33,18 @@ if [ "${1:-}" = "--check-current" ]; then
     exit 0
 fi
 
+measurement_profile=standard
+report_label=
+if [ "${1:-}" = "--release" ]; then
+    measurement_profile=release
+    report_label=-release
+    shift
+fi
+if [ "$#" -ne 0 ]; then
+    echo "usage: tests/agentic_ts/run.sh [--release|--check|--check-current <report>...]" >&2
+    exit 2
+fi
+
 platform=$(node -p 'process.platform')
 arch=$(node -p 'process.arch')
 case "$platform" in
@@ -59,13 +71,13 @@ fi
 mkdir -p "$results_dir"
 generated_reports=""
 for target in p2 p3; do
-    report="$results_dir/$(date +%Y-%m-%d)-$target-$platform-$arch.json"
+    report="$results_dir/$(date +%Y-%m-%d)${report_label}-$target-$platform-$arch.json"
     (
         cd "$repo_root"
         AGENTIC_TS_ITERATIONS="$iterations" \
         AGENTIC_TS_REPORT="$report" \
         AGENTIC_TS_SOURCE_ROOT="$repo_root" \
-        tools/dev-test.sh "$target" standard agentic_ts ""
+        tools/dev-test.sh "$target" "$measurement_profile" agentic_ts ""
     )
     generated_reports="${generated_reports}${report}\n"
 done
