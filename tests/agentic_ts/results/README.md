@@ -34,46 +34,50 @@ resulting `HEAD`, while ambiguous merge pushes fail closed. With five samples,
 the reported p95 is the observed maximum; it is descriptive evidence rather
 than a stable tail-latency estimate.
 
-## Native CJS source-map extraction
+## Consolidated TypeScript module-loading candidate
 
-The [2026-09-22 P2](2026-09-22-p2-macos-aarch64.json) and
-[P3](2026-09-22-p3-macos-aarch64.json) reports capture the candidate that uses
-the existing native SWC lexer to extract CJS `sourceMappingURL` directives when
-the TypeScript runtime is enabled. They use the pinned Node 22.14.0/npm
-10.9.2/TypeScript 5.8.2 fixture, five repeated-job samples, Rust 1.98.1, and
-disabled optional test caches. Build and benchmark input hashes agree across
-P2/P3; report validation and exact currentness pass. The reports retain parent
-commit hint `74253b411f932fd9cccf92488bc63e9278372271` and record `dirty: true`;
-their composite input hashes identify the measured candidate source.
+The [2026-09-23 P2](2026-09-23-p2-macos-aarch64.json) and
+[P3](2026-09-23-p3-macos-aarch64.json) reports are the retained final pair for
+the consolidated candidate at clean source revision `a2490392`. They use the
+pinned Node 22.14.0/npm 10.9.2/TypeScript 5.8.2 fixture, five repeated-job
+samples, Rust 1.98.1, and disabled optional test caches. Their build and
+benchmark input hashes agree across P2/P3; report validation and exact
+currentness pass.
 
-The controlled baseline is the parent version of the same report files at
-`74253b41`, which measured clean consolidated source `5349e9ea`. Cold
-`tsc --noEmit` improves from 19.17 to 16.72 s on P2 (-2.44 s, -12.7%) and from
-19.22 to 16.90 s on the isolated P3 recapture (-2.32 s, -12.1%). Repeated
-unchanged medians improve from 18.95 to 16.83 s on P2 and from 19.18 to
-17.07 s on P3. Warm incremental medians improve from 12.43 to 9.99 s and from
-12.34 to 10.20 s, respectively.
+The first accepted step moved CJS `sourceMappingURL` extraction to the existing
+native SWC lexer for TypeScript-feature builds. Against the controlled parent
+source at `74253b41`, the intermediate candidate reduced cold `tsc --noEmit`
+from 19.17 to 16.72 s on P2 (-12.7%) and from 19.22 to 16.90 s on P3 (-12.1%).
+Repeated unchanged medians improved 11.2%/11.0%, warm incremental medians
+improved 19.6%/17.4%, and the separately instrumented TypeScript API import
+phase improved 30.9%/29.3%. One-off startup diagnostics attributed 2.57–2.83 s
+to the old JavaScript source-map scan and 0.24–0.33 s to the native replacement.
+The intermediate raw pair and temporary startup traces are summarized here
+rather than retained.
 
-In the separately instrumented compiler-API profile, TypeScript import drops
-from 11.67 to 8.07 s on P2 (-30.9%) and from 11.75 to 8.31 s on P3 (-29.3%).
-The profiler imports `typescript.js`, not the CLI's `_tsc.js`, so that phase is
-supporting attribution and its larger outer wall must not be compared directly
-to the cold CLI row. One-off startup diagnostics attributed 2.57–2.83 s to the
-old JavaScript source-map scan and 0.24–0.33 s to the native replacement; the
-temporary traces and startup-only harness were not retained.
+The final source-preparation step dispatches CommonJS export parsers only at
+accepted leading bytes and advances the direct-`eval`, import-attribute, and
+template-expression scanners between relevant sentinel bytes. Its dedicated
+five-sample comparison reduced the TypeScript API import median from 8.33 to
+4.22 s on P2 (-49.3%) and from 8.49 to 4.22 s on P3 (-50.3%). The retained final
+reports independently record 4.19 s and 4.16 s import phases. The profiler
+imports `typescript.js`, not the CLI's `_tsc.js`, so these values support
+module-load attribution and are not direct cold-CLI timings.
 
-The candidate therefore clears both experiment gates on both targets: more than
-one second and more than 10% saved in the cold exported CLI workload. Optimized
-component size grows by 405,519 bytes (0.23%) on P2 and 402,662 bytes (0.23%) on
-P3. Public runtime coverage verifies a real line-comment source map with Node's
-U+2003 separator and U+2028 line terminator, marker text inside strings and
-templates, an empty last directive, and the no-marker fast path.
+The final optimized component is 418,411 bytes (0.24%) larger than the original
+P2 baseline and 416,021 bytes (0.24%) larger on P3. Public runtime coverage
+verifies a real line-comment source map with Node's U+2003 separator and U+2028
+line terminator, marker text inside strings and templates, an empty last
+directive, the no-marker fast path, CommonJS source preparation, and import
+attributes. The native source-map path remains TypeScript-feature-only because
+those builds already carry SWC; non-TypeScript and VM builds retain the existing
+JavaScript scanner.
 
-The native path is intentionally limited to TypeScript-feature builds, which
-already carry SWC. Non-TypeScript and VM builds retain the existing JavaScript
-scanner; its pre-existing regex-literal heuristic gaps require a durable
-tokenizer owner and are tracked as a proposed deferred follow-up rather than as
-part of this performance result.
+Timings remain indicative local measurements rather than thresholds. In
+particular, the retained P2 one-shot cold row coincided with a similarly slow
+host-Node baseline, so it is not used for an additional end-to-end claim. The
+dedicated paired import experiment is the evidence for the final scanner
+optimization.
 
 ## GOL-350 CommonJS graph probe evidence
 
