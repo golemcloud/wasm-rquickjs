@@ -289,6 +289,25 @@ fn agentic_ts_release_runner_rejects_node_environment_overrides() {
 }
 
 #[test]
+fn agentic_ts_runner_uses_one_date_for_the_report_pair() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let runner = fs::read_to_string(repo_root.join("tests/agentic_ts/run.sh"))
+        .expect("agentic TypeScript runner should be readable");
+
+    assert_eq!(
+        runner.matches("measurement_date=$(date +%Y-%m-%d)").count(),
+        1,
+        "the report-pair date should be captured exactly once"
+    );
+    assert!(
+        runner.contains(
+            "report=\"$results_dir/${measurement_date}${report_label}-$target-$platform-$arch.json\""
+        ),
+        "both report paths should use the captured measurement date"
+    );
+}
+
+#[test]
 fn wasmtime_fork_transform_supports_copied_manifests_and_new_patch_crates() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let temp = Utf8TempDir::new().expect("temporary directory should be created");

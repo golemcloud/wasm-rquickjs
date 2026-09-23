@@ -84,9 +84,10 @@ fi
 )
 
 mkdir -p "$results_dir"
+measurement_date=$(date +%Y-%m-%d)
 generated_reports=""
 for target in p2 p3; do
-    report="$results_dir/$(date +%Y-%m-%d)${report_label}-$target-$platform-$arch.json"
+    report="$results_dir/${measurement_date}${report_label}-$target-$platform-$arch.json"
     (
         cd "$repo_root"
         if [ "$release_baseline" = true ]; then
