@@ -1365,8 +1365,24 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
             let samples = series["samples"]
                 .as_array()
                 .with_context(|| format!("missing {side} {group}/{series_name} samples"))?;
+            let summary = summarize_release(samples);
+            let summary_fields_match = ["medianMs", "p95Ms", "throughputPerSecond"]
+                .into_iter()
+                .all(|field| {
+                    let Some(stored) = series[field].as_f64() else {
+                        return false;
+                    };
+                    let expected = summary[field]
+                        .as_f64()
+                        .expect("recomputed npm summary field is numeric");
+                    let tolerance = f64::EPSILON * expected.abs().max(1.0) * 8.0;
+                    stored.is_finite() && (stored - expected).abs() <= tolerance
+                });
             ensure!(
-                samples.len() == iterations && series == &summarize_release(samples),
+                samples.len() == iterations
+                    && series.as_object().is_some_and(|series| series.len() == 5)
+                    && series["iterations"] == summary["iterations"]
+                    && summary_fields_match,
                 "{side} {group}/{series_name} summary does not reconcile"
             );
             for sample in samples {
@@ -1471,6 +1487,12 @@ fn validate_release_regression_guards(report: &Value) -> anyhow::Result<()> {
     ensure!(
         validate_release_report(&false_algorithm).is_err(),
         "npm release validator accepted an incorrect input hash algorithm"
+    );
+    let mut false_summary = report.clone();
+    false_summary["host"]["metadata"]["cold"]["throughputPerSecond"] = json!(1.0);
+    ensure!(
+        validate_release_report(&false_summary).is_err(),
+        "npm release validator accepted an incorrect throughput summary"
     );
     let mut failed = report.clone();
     failed["host"]["metadata"]["cold"]["samples"][0]["success"] = json!(false);
