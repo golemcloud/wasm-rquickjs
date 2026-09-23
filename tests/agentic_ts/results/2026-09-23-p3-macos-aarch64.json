@@ -1,16 +1,16 @@
 {
   "component": {
-    "blake3": "6a2489ff88eef78edb27137ea24455bacb37e7fdcf7bf4c345b8a30800a81142",
-    "buildMs": 34202.703624999995,
-    "bytes": 173164314,
+    "blake3": "085d7eeb2576b727d412ae3f9a769f0185c62dbf1bf1267bd6e8f13d2847dc24",
+    "buildMs": 35307.220209,
+    "bytes": 173237283,
     "path": "tmp/rt-target-p3/wasm32-wasip2/debug/agentic_ts.optimized.wasm",
-    "prepareAndInstantiateMs": 16457.204916
+    "prepareAndInstantiateMs": 18453.056125
   },
   "environment": {
     "arch": "aarch64",
     "artifactCache": null,
     "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
-    "commitHint": "a249039254e0535969dd28adf23ca1dbb48fc56b",
+    "commitHint": "dd689c8c9b12791a79b86c7020266a4b096edfa9",
     "componentFeatures": "typescript-compiler-profiling",
     "dirty": false,
     "iterations": 5,
@@ -26,13 +26,13 @@
   "inputs": {
     "algorithm": "blake3-composite-v1",
     "benchmarkHash": "62c3baad63d1f965fa09a77fd853acb38fdae3ded395b41f88417773b9776ae7",
-    "buildHash": "b43f1dfe9b3fff00a390082c0641a2d44af305b35a7a3901a6743b27e7b2a84e"
+    "buildHash": "4d987a2a2c7c8b2bf6c8abdd3d8c213645b389bf20577fb1941563893e795901"
   },
   "nodeBaseline": {
     "exitCode": 0,
     "stderr": "",
     "stdout": "",
-    "wallMs": 633.9522079999999
+    "wallMs": 591.157709
   },
   "notes": [
     "manual local measurement; no CI threshold",
@@ -42,7 +42,7 @@
   "phaseProfiles": {
     "interpretation": "the shared TypeScript API profiler runs a no-emit core-project check; compare phase proportions within a target because instrumentation overhead differs between Node and QuickJS",
     "node": {
-      "outerOverheadMs": 43.34304200000008,
+      "outerOverheadMs": 42.43150000000003,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -191,47 +191,47 @@
             }
           },
           "phasesMs": {
-            "configParse": 2.4291670000000067,
-            "configRead": 2.9789580000000058,
-            "diagnostics": 334.12100000000004,
-            "import": 191.518625,
-            "measuredTotal": 676.005875,
-            "optionsAndGlobalDiagnostics": 49.06933299999997,
-            "programCreate": 144.700167,
-            "semanticDiagnostics": 284.99033299999996,
-            "syntacticDiagnostics": 0.05754100000001472,
-            "unclassified": 0.2579579999999737
+            "configParse": 2.260874999999998,
+            "configRead": 3.241500000000002,
+            "diagnostics": 325.03620900000004,
+            "import": 189.768708,
+            "measuredTotal": 656.7093329999999,
+            "optionsAndGlobalDiagnostics": 51.62091699999996,
+            "programCreate": 136.102709,
+            "semanticDiagnostics": 273.35470899999996,
+            "syntacticDiagnostics": 0.05804200000000037,
+            "unclassified": 0.2993319999998221
           },
           "quickJsMemory": {
             "afterCompiler": {
               "arrayBuffers": 33003,
               "external": 1892362,
-              "heapTotal": 135905280,
-              "heapUsed": 103675928,
-              "rss": 241238016
+              "heapTotal": 134856704,
+              "heapUsed": 103897552,
+              "rss": 239255552
             },
             "afterToolLoad": {
               "arrayBuffers": 16659,
               "external": 1876018,
               "heapTotal": 39223296,
-              "heapUsed": 32677976,
-              "rss": 139083776
+              "heapUsed": 32434928,
+              "rss": 138690560
             },
             "beforeToolLoad": {
               "arrayBuffers": 17762,
               "external": 1498826,
               "heapTotal": 5324800,
               "heapUsed": 3999432,
-              "rss": 41140224
+              "rss": 41107456
             }
           }
         }
       },
-      "wallMs": 719.348917
+      "wallMs": 699.1408329999999
     },
     "wasm": {
       "linearMemoryHighWaterBytes": 211025920,
-      "outerOverheadMs": 685.1959999999999,
+      "outerOverheadMs": 650.5471660000003,
       "result": {
         "overflowed": false,
         "profile": {
@@ -270,19 +270,19 @@
             "modules.sourceRead.success": 2
           },
           "phasesMs": {
-            "builtinInitialization": 180.960708,
-            "initialEvaluation": 0.102958,
-            "loaderInitialization": 2.437125,
-            "processConfiguration": 0.267167,
-            "queueDelay": 0.8515830000000001,
-            "resultFormatting": 0.089916,
-            "runtimeCreation": 0.444083,
-            "teardown": 420.633542,
-            "transportWiring": 0.482459,
-            "userAwait": 17457.897792,
-            "wrapperPreparation": 0.021
+            "builtinInitialization": 176.096375,
+            "initialEvaluation": 0.108875,
+            "loaderInitialization": 1.05425,
+            "processConfiguration": 0.229,
+            "queueDelay": 0.30425,
+            "resultFormatting": 0.027041000000000003,
+            "runtimeCreation": 0.424833,
+            "teardown": 400.169084,
+            "transportWiring": 0.16899999999999998,
+            "userAwait": 16562.791708999997,
+            "wrapperPreparation": 0.026375
           },
-          "totalMs": 18064.311666,
+          "totalMs": 17141.442958,
           "version": 1
         },
         "stderr": "",
@@ -431,16 +431,16 @@
             }
           },
           "phasesMs": {
-            "configParse": 2.3474999999998545,
-            "configRead": 1.890832999997656,
-            "diagnostics": 8062.799000000003,
-            "import": 4163.994542,
-            "measuredTotal": 17384.532458,
-            "optionsAndGlobalDiagnostics": 1119.1289999999972,
-            "programCreate": 5147.505000000001,
-            "semanticDiagnostics": 6943.5251249999965,
-            "syntacticDiagnostics": 0.10683300000164309,
-            "unclassified": 5.995582999999897
+            "configParse": 2.637125000001106,
+            "configRead": 2.547207999999955,
+            "diagnostics": 7992.837542000001,
+            "import": 3450.059374999999,
+            "measuredTotal": 16494.63325,
+            "optionsAndGlobalDiagnostics": 1085.3763330000002,
+            "programCreate": 5040.604416999999,
+            "semanticDiagnostics": 6907.324542000002,
+            "syntacticDiagnostics": 0.07883299999957671,
+            "unclassified": 5.947582999999213
           },
           "quickJsMemory": {
             "afterCompiler": {
@@ -467,7 +467,7 @@
           }
         }
       },
-      "wallMs": 18069.728458
+      "wallMs": 17145.180416
     }
   },
   "schemaVersion": 5,
@@ -477,66 +477,66 @@
     "cancellations": {
       "attempts": {
         "iterations": 5,
-        "medianMs": 201.273958,
-        "p95Ms": 205.408292,
+        "medianMs": 204.209834,
+        "p95Ms": 218.23141700000002,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 211025920,
             "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 10.051834000012605,
+              "latencyMs": 10.42112499999348,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 200.9955
+            "wallMs": 204.45525
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
             "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 10.168958999973256,
+              "latencyMs": 10.50404100000742,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 205.408292
+            "wallMs": 203.75104199999998
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
             "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 10.11804200001643,
+              "latencyMs": 9.659167000005256,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 201.545625
+            "wallMs": 204.209834
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
             "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 9.78858299998683,
+              "latencyMs": 9.693624999985332,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 200.25324999999998
+            "wallMs": 202.15566700000002
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
             "outerOverheadMs": null,
             "result": {
               "cancelled": true,
-              "latencyMs": 9.297291999973822,
+              "latencyMs": 10.272332999971695,
               "message": "execution job cancelled",
               "name": "Error"
             },
-            "wallMs": 201.273958
+            "wallMs": 218.23141700000002
           }
         ],
-        "throughputPerSecond": 4.9530616917454635
+        "throughputPerSecond": 4.841193318909224
       },
       "recovery": {
         "linearMemoryHighWaterBytes": 211025920,
@@ -571,23 +571,23 @@
               "modules.sourceRead.bytes": 2934,
               "modules.sourceRead.calls": 2,
               "modules.sourceRead.success": 2,
-              "modules.typescriptTransform.micros": 924,
+              "modules.typescriptTransform.micros": 1691,
               "modules.typescriptTransform.success": 1
             },
             "phasesMs": {
-              "builtinInitialization": 177.45308300000002,
-              "initialEvaluation": 0.058541,
-              "loaderInitialization": 1.110458,
-              "processConfiguration": 0.202417,
-              "queueDelay": 0.481875,
-              "resultFormatting": 0.017583,
-              "runtimeCreation": 0.508667,
-              "teardown": 9.435625,
-              "transportWiring": 0.136792,
-              "userAwait": 11.711417,
-              "wrapperPreparation": 0.023125
+              "builtinInitialization": 228.459667,
+              "initialEvaluation": 0.06595799999999999,
+              "loaderInitialization": 1.125208,
+              "processConfiguration": 0.240958,
+              "queueDelay": 0.316834,
+              "resultFormatting": 0.015208,
+              "runtimeCreation": 0.4273340000000001,
+              "teardown": 9.570792,
+              "transportWiring": 0.16245800000000002,
+              "userAwait": 21.549709,
+              "wrapperPreparation": 0.022417
             },
-            "totalMs": 201.171084,
+            "totalMs": 261.993959,
             "version": 1
           },
           "stderr": "",
@@ -597,12 +597,12 @@
             "state": "ready"
           }
         },
-        "wallMs": 202.452459
+        "wallMs": 263.312
       }
     },
     "coldNoEmit": {
       "linearMemoryHighWaterBytes": 152961024,
-      "outerOverheadMs": 495.2833339999979,
+      "outerOverheadMs": 462.59699999999975,
       "result": {
         "overflowed": false,
         "profile": {
@@ -649,19 +649,19 @@
             "modules.sourceRead.success": 1
           },
           "phasesMs": {
-            "builtinInitialization": 180.419583,
-            "initialEvaluation": 0.974417,
-            "loaderInitialization": 1.927375,
-            "processConfiguration": 1.239458,
-            "queueDelay": 0.920875,
-            "resultFormatting": 0.12125,
-            "runtimeCreation": 0.576542,
-            "teardown": 263.439958,
-            "transportWiring": 0.22775,
-            "userAwait": 14127.634167,
-            "wrapperPreparation": 0.018875000000000003
+            "builtinInitialization": 177.526542,
+            "initialEvaluation": 0.967083,
+            "loaderInitialization": 1.733166,
+            "processConfiguration": 1.10325,
+            "queueDelay": 0.753166,
+            "resultFormatting": 0.063667,
+            "runtimeCreation": 0.5676249999999999,
+            "teardown": 245.160375,
+            "transportWiring": 0.194958,
+            "userAwait": 13852.59625,
+            "wrapperPreparation": 0.017209000000000002
           },
-          "totalMs": 14577.682333,
+          "totalMs": 14280.741083,
           "version": 1
         },
         "stderr": "",
@@ -684,10 +684,10 @@
               "rss": 412824
             }
           },
-          "toolAndCompilerMs": 14088.445916
+          "toolAndCompilerMs": 13821.987792
         }
       },
-      "wallMs": 14583.729249999999
+      "wallMs": 14284.584792
     },
     "concurrent": {
       "contended": {
@@ -695,7 +695,7 @@
         "outerOverheadMs": null,
         "result": {
           "compiler": {
-            "completedMs": 7371.9119170000195,
+            "completedMs": 8338.10354099999,
             "result": {
               "overflowed": false,
               "profile": {
@@ -735,19 +735,19 @@
                   "modules.sourceRead.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 180.369208,
-                  "initialEvaluation": 0.137166,
-                  "loaderInitialization": 0.963583,
-                  "processConfiguration": 0.202709,
-                  "queueDelay": 0.837334,
-                  "resultFormatting": 0.028875,
-                  "runtimeCreation": 0.426375,
-                  "teardown": 152.671959,
-                  "transportWiring": 0.246875,
-                  "userAwait": 7034.448875,
-                  "wrapperPreparation": 0.028417
+                  "builtinInitialization": 253.654417,
+                  "initialEvaluation": 0.30374999999999996,
+                  "loaderInitialization": 1.13575,
+                  "processConfiguration": 0.364583,
+                  "queueDelay": 1.115417,
+                  "resultFormatting": 0.030042000000000003,
+                  "runtimeCreation": 0.429292,
+                  "teardown": 133.28320799999997,
+                  "transportWiring": 0.471875,
+                  "userAwait": 7946.395166,
+                  "wrapperPreparation": 0.041041999999999995
                 },
-                "totalMs": 7370.484624999999,
+                "totalMs": 8337.266917,
                 "version": 1
               },
               "stderr": "",
@@ -756,41 +756,41 @@
                 "exitCode": 0
               }
             },
-            "startedMs": 0.008084000000962988,
-            "wallMs": 7371.903833000019
+            "startedMs": 0.006582999980309978,
+            "wallMs": 8338.09695800001
           },
           "cpu": {
-            "completedMs": 8027.052750000003,
+            "completedMs": 9004.875457999995,
             "result": {
               "overflowed": false,
               "profile": {
                 "counters": {},
                 "phasesMs": {
-                  "builtinInitialization": 180.717625,
-                  "initialEvaluation": 270.79229100000003,
-                  "loaderInitialization": 0.964042,
-                  "processConfiguration": 0.244875,
-                  "queueDelay": 7371.371083999999,
-                  "resultFormatting": 0.014,
-                  "runtimeCreation": 0.461917,
-                  "teardown": 9.399792,
-                  "transportWiring": 0.166625,
-                  "userAwait": 0.142667,
-                  "wrapperPreparation": 0.017124999999999998
+                  "builtinInitialization": 179.590333,
+                  "initialEvaluation": 276.176584,
+                  "loaderInitialization": 1.056875,
+                  "processConfiguration": 0.200875,
+                  "queueDelay": 8337.682499999999,
+                  "resultFormatting": 0.016082999999999997,
+                  "runtimeCreation": 0.509292,
+                  "teardown": 10.731042,
+                  "transportWiring": 0.154459,
+                  "userAwait": 0.145833,
+                  "wrapperPreparation": 0.013041
                 },
-                "totalMs": 7834.331792000001,
+                "totalMs": 8806.318334,
                 "version": 1
               },
               "stderr": "",
               "stdout": "",
               "value": 21
             },
-            "startedMs": 0.5403750000114087,
-            "wallMs": 8026.512374999991
+            "startedMs": 0.4107910000020638,
+            "wallMs": 9004.464666999993
           },
-          "elapsedMs": 8027.090167000017,
+          "elapsedMs": 9004.902582999988,
           "io": {
-            "completedMs": 8027.065792000008,
+            "completedMs": 9004.88499999998,
             "result": {
               "overflowed": false,
               "profile": {
@@ -809,19 +809,19 @@
                   "filesystem.readdir.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 177.452459,
-                  "initialEvaluation": 0.122459,
-                  "loaderInitialization": 1.070292,
-                  "processConfiguration": 0.217708,
-                  "queueDelay": 7834.335208,
-                  "resultFormatting": 0.008749999999999999,
-                  "runtimeCreation": 0.545333,
-                  "teardown": 8.977166,
-                  "transportWiring": 0.155,
-                  "userAwait": 2.457125,
-                  "wrapperPreparation": 0.020541
+                  "builtinInitialization": 183.623292,
+                  "initialEvaluation": 0.223292,
+                  "loaderInitialization": 1.040917,
+                  "processConfiguration": 0.240583,
+                  "queueDelay": 8806.167959,
+                  "resultFormatting": 0.009375,
+                  "runtimeCreation": 0.451708,
+                  "teardown": 9.149041,
+                  "transportWiring": 0.13975,
+                  "userAwait": 2.160917,
+                  "wrapperPreparation": 0.014291
                 },
-                "totalMs": 8025.389999999999,
+                "totalMs": 9003.252084,
                 "version": 1
               },
               "stderr": "",
@@ -835,11 +835,11 @@
                 ]
               }
             },
-            "startedMs": 0.7937090000195894,
-            "wallMs": 8026.272082999989
+            "startedMs": 0.6704160000081174,
+            "wallMs": 9004.214583999972
           }
         },
-        "wallMs": 8027.939125
+        "wallMs": 9005.483208
       },
       "cpuBaseline": {
         "linearMemoryHighWaterBytes": 211025920,
@@ -849,26 +849,26 @@
           "profile": {
             "counters": {},
             "phasesMs": {
-              "builtinInitialization": 185.902833,
-              "initialEvaluation": 275.0355,
-              "loaderInitialization": 1.0635,
-              "processConfiguration": 0.3015,
-              "queueDelay": 0.45725,
-              "resultFormatting": 0.013625000000000002,
-              "runtimeCreation": 0.537792,
-              "teardown": 9.932917,
-              "transportWiring": 0.167042,
-              "userAwait": 0.13574999999999998,
-              "wrapperPreparation": 0.015
+              "builtinInitialization": 185.541625,
+              "initialEvaluation": 271.928333,
+              "loaderInitialization": 0.973667,
+              "processConfiguration": 1.262,
+              "queueDelay": 0.298125,
+              "resultFormatting": 0.027917,
+              "runtimeCreation": 0.420833,
+              "teardown": 9.013458,
+              "transportWiring": 0.233416,
+              "userAwait": 0.140375,
+              "wrapperPreparation": 0.025042
             },
-            "totalMs": 473.603334,
+            "totalMs": 469.903958,
             "version": 1
           },
           "stderr": "",
           "stdout": "",
           "value": 21
         },
-        "wallMs": 474.7785
+        "wallMs": 471.890667
       },
       "interpretation": "all jobs were submitted together; compare sibling completion with isolated baselines to identify overlap or serialization",
       "ioBaseline": {
@@ -892,19 +892,19 @@
               "filesystem.readdir.success": 1
             },
             "phasesMs": {
-              "builtinInitialization": 180.124584,
-              "initialEvaluation": 0.0955,
-              "loaderInitialization": 1.0305,
-              "processConfiguration": 0.372541,
-              "queueDelay": 0.325042,
-              "resultFormatting": 0.008791,
-              "runtimeCreation": 0.438167,
-              "teardown": 10.518084,
-              "transportWiring": 0.148916,
-              "userAwait": 1.793084,
-              "wrapperPreparation": 0.012
+              "builtinInitialization": 219.859334,
+              "initialEvaluation": 0.08491599999999999,
+              "loaderInitialization": 1.029834,
+              "processConfiguration": 8.763166,
+              "queueDelay": 2.401542,
+              "resultFormatting": 0.017583,
+              "runtimeCreation": 0.4345,
+              "teardown": 12.310125,
+              "transportWiring": 0.1155,
+              "userAwait": 16.761959,
+              "wrapperPreparation": 0.011625
             },
-            "totalMs": 194.991792,
+            "totalMs": 261.835792,
             "version": 1
           },
           "stderr": "",
@@ -918,7 +918,7 @@
             ]
           }
         },
-        "wallMs": 196.61175
+        "wallMs": 263.125833
       }
     },
     "directTypeScript": {
@@ -954,23 +954,23 @@
             "modules.sourceRead.bytes": 2934,
             "modules.sourceRead.calls": 2,
             "modules.sourceRead.success": 2,
-            "modules.typescriptTransform.micros": 6563,
+            "modules.typescriptTransform.micros": 3227,
             "modules.typescriptTransform.success": 1
           },
           "phasesMs": {
-            "builtinInitialization": 188.426709,
-            "initialEvaluation": 0.073666,
-            "loaderInitialization": 1.089416,
-            "processConfiguration": 0.384375,
-            "queueDelay": 0.29825,
-            "resultFormatting": 0.056625,
-            "runtimeCreation": 0.427417,
-            "teardown": 9.669125,
-            "transportWiring": 0.193,
-            "userAwait": 23.637875,
-            "wrapperPreparation": 0.022875
+            "builtinInitialization": 172.985209,
+            "initialEvaluation": 0.05425,
+            "loaderInitialization": 1.02575,
+            "processConfiguration": 0.173416,
+            "queueDelay": 0.325459,
+            "resultFormatting": 0.029833,
+            "runtimeCreation": 0.433417,
+            "teardown": 8.734167,
+            "transportWiring": 0.111416,
+            "userAwait": 15.664417,
+            "wrapperPreparation": 0.016125
           },
-          "totalMs": 224.365708,
+          "totalMs": 199.572209,
           "version": 1
         },
         "stderr": "",
@@ -980,11 +980,11 @@
           "state": "ready"
         }
       },
-      "wallMs": 225.893541
+      "wallMs": 200.76012500000002
     },
     "emitDirect": {
       "linearMemoryHighWaterBytes": 211025920,
-      "outerOverheadMs": 512.1187919999793,
+      "outerOverheadMs": 492.719707999986,
       "result": {
         "overflowed": false,
         "profile": {
@@ -1028,19 +1028,19 @@
             "modules.sourceRead.success": 1
           },
           "phasesMs": {
-            "builtinInitialization": 185.797208,
-            "initialEvaluation": 1.4605,
-            "loaderInitialization": 0.943,
-            "processConfiguration": 0.2325,
-            "queueDelay": 0.280291,
-            "resultFormatting": 0.038291000000000006,
-            "runtimeCreation": 0.395292,
-            "teardown": 283.953667,
-            "transportWiring": 0.216667,
-            "userAwait": 13942.28725,
-            "wrapperPreparation": 0.029792
+            "builtinInitialization": 172.708375,
+            "initialEvaluation": 0.7613340000000001,
+            "loaderInitialization": 0.988791,
+            "processConfiguration": 0.109417,
+            "queueDelay": 0.298083,
+            "resultFormatting": 0.077333,
+            "runtimeCreation": 0.410959,
+            "teardown": 275.720458,
+            "transportWiring": 0.143458,
+            "userAwait": 16301.686875,
+            "wrapperPreparation": 0.016875
           },
-          "totalMs": 14415.690583,
+          "totalMs": 16753.064,
           "version": 1
         },
         "stderr": "",
@@ -1063,10 +1063,10 @@
               "rss": 412872
             }
           },
-          "toolAndCompilerMs": 13905.29908300002
+          "toolAndCompilerMs": 16263.539458000014
         }
       },
-      "wallMs": 14417.417875
+      "wallMs": 16756.259166
     },
     "generatedJavaScript": {
       "linearMemoryHighWaterBytes": 211025920,
@@ -1110,19 +1110,19 @@
             "modules.sourceRead.success": 1
           },
           "phasesMs": {
-            "builtinInitialization": 186.704833,
-            "initialEvaluation": 0.178542,
-            "loaderInitialization": 1.236333,
-            "processConfiguration": 0.166209,
-            "queueDelay": 0.366375,
-            "resultFormatting": 0.017416,
-            "runtimeCreation": 0.4646249999999999,
-            "teardown": 9.174917,
-            "transportWiring": 0.391333,
-            "userAwait": 10.949875,
-            "wrapperPreparation": 0.12929200000000002
+            "builtinInitialization": 193.425083,
+            "initialEvaluation": 0.070333,
+            "loaderInitialization": 2.408916,
+            "processConfiguration": 0.282417,
+            "queueDelay": 0.667333,
+            "resultFormatting": 0.031541,
+            "runtimeCreation": 0.470292,
+            "teardown": 14.632875,
+            "transportWiring": 0.27379200000000004,
+            "userAwait": 49.232334,
+            "wrapperPreparation": 0.021
           },
-          "totalMs": 209.811792,
+          "totalMs": 261.55091699999997,
           "version": 1
         },
         "stderr": "",
@@ -1134,11 +1134,11 @@
           }
         }
       },
-      "wallMs": 211.564416
+      "wallMs": 263.67037500000004
     },
     "incrementalCold": {
       "linearMemoryHighWaterBytes": 211025920,
-      "outerOverheadMs": 463.0086660000088,
+      "outerOverheadMs": 500.3057500000068,
       "result": {
         "overflowed": false,
         "profile": {
@@ -1185,19 +1185,19 @@
             "modules.sourceRead.success": 1
           },
           "phasesMs": {
-            "builtinInitialization": 183.125458,
-            "initialEvaluation": 0.780625,
-            "loaderInitialization": 1.9335,
-            "processConfiguration": 0.287125,
-            "queueDelay": 0.559458,
-            "resultFormatting": 0.027958,
-            "runtimeCreation": 0.46,
-            "teardown": 241.404958,
-            "transportWiring": 0.233125,
-            "userAwait": 13830.475417,
-            "wrapperPreparation": 0.015875
+            "builtinInitialization": 211.576583,
+            "initialEvaluation": 1.24525,
+            "loaderInitialization": 1.836041,
+            "processConfiguration": 0.361334,
+            "queueDelay": 0.8336669999999999,
+            "resultFormatting": 0.049459,
+            "runtimeCreation": 0.477959,
+            "teardown": 248.488833,
+            "transportWiring": 0.31033299999999997,
+            "userAwait": 14298.982541,
+            "wrapperPreparation": 0.022459
           },
-          "totalMs": 14259.347083,
+          "totalMs": 14764.250042,
           "version": 1
         },
         "stderr": "",
@@ -1220,19 +1220,19 @@
               "rss": 412848
             }
           },
-          "toolAndCompilerMs": 13798.220166999992
+          "toolAndCompilerMs": 14266.190374999993
         }
       },
-      "wallMs": 14261.228833000001
+      "wallMs": 14766.496125
     },
     "incrementalFreshJobs": {
       "iterations": 5,
-      "medianMs": 7695.527125,
-      "p95Ms": 10731.563167,
+      "medianMs": 8186.917458,
+      "p95Ms": 15910.032333000001,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 315.3847089999981,
+          "outerOverheadMs": 318.71416699999827,
           "result": {
             "overflowed": false,
             "profile": {
@@ -1272,19 +1272,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 177.64070900000002,
-                "initialEvaluation": 0.794958,
-                "loaderInitialization": 0.967917,
-                "processConfiguration": 0.190541,
-                "queueDelay": 0.299458,
-                "resultFormatting": 0.09825,
-                "runtimeCreation": 0.407667,
-                "teardown": 116.672417,
-                "transportWiring": 0.16908299999999998,
-                "userAwait": 7022.114375,
-                "wrapperPreparation": 0.020166999999999997
+                "builtinInitialization": 178.982833,
+                "initialEvaluation": 1.319875,
+                "loaderInitialization": 1.232708,
+                "processConfiguration": 0.193292,
+                "queueDelay": 0.357292,
+                "resultFormatting": 0.027917,
+                "runtimeCreation": 0.411417,
+                "teardown": 119.467208,
+                "transportWiring": 0.304125,
+                "userAwait": 6997.684833,
+                "wrapperPreparation": 0.034666999999999996
               },
-              "totalMs": 7319.454333000001,
+              "totalMs": 7300.0585,
               "version": 1
             },
             "stderr": "",
@@ -1307,14 +1307,14 @@
                   "rss": 412848
                 }
               },
-              "toolAndCompilerMs": 7006.416958000002
+              "toolAndCompilerMs": 6982.970625000002
             }
           },
-          "wallMs": 7321.801667
+          "wallMs": 7301.684792
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 317.18016699999134,
+          "outerOverheadMs": 325.4048329999823,
           "result": {
             "overflowed": false,
             "profile": {
@@ -1354,19 +1354,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 175.527291,
-                "initialEvaluation": 0.878,
-                "loaderInitialization": 2.040708,
-                "processConfiguration": 0.208042,
-                "queueDelay": 0.547917,
-                "resultFormatting": 0.028249999999999997,
-                "runtimeCreation": 0.436542,
-                "teardown": 119.273459,
-                "transportWiring": 0.676917,
-                "userAwait": 6961.35675,
-                "wrapperPreparation": 0.018583
+                "builtinInitialization": 180.602042,
+                "initialEvaluation": 0.888291,
+                "loaderInitialization": 0.985125,
+                "processConfiguration": 0.212708,
+                "queueDelay": 0.338708,
+                "resultFormatting": 0.095166,
+                "runtimeCreation": 0.417125,
+                "teardown": 124.636334,
+                "transportWiring": 0.156083,
+                "userAwait": 7875.760959,
+                "wrapperPreparation": 0.017459
               },
-              "totalMs": 7261.254875,
+              "totalMs": 8184.2615,
               "version": 1
             },
             "stderr": "",
@@ -1389,14 +1389,14 @@
                   "rss": 412848
                 }
               },
-              "toolAndCompilerMs": 6946.877625000008
+              "toolAndCompilerMs": 7861.512625000018
             }
           },
-          "wallMs": 7264.057792
+          "wallMs": 8186.917458
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 450.4734579999913,
+          "outerOverheadMs": 325.78170800000316,
           "result": {
             "overflowed": false,
             "profile": {
@@ -1436,19 +1436,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 266.837208,
-                "initialEvaluation": 1.121375,
-                "loaderInitialization": 1.996125,
-                "processConfiguration": 0.311333,
-                "queueDelay": 0.540209,
-                "resultFormatting": 0.103792,
-                "runtimeCreation": 0.444375,
-                "teardown": 149.619416,
-                "transportWiring": 0.574167,
-                "userAwait": 8760.659708000001,
-                "wrapperPreparation": 0.054042
+                "builtinInitialization": 176.243708,
+                "initialEvaluation": 0.736792,
+                "loaderInitialization": 2.12425,
+                "processConfiguration": 0.224875,
+                "queueDelay": 0.519583,
+                "resultFormatting": 0.056791,
+                "runtimeCreation": 0.425584,
+                "teardown": 125.627542,
+                "transportWiring": 0.221083,
+                "userAwait": 7038.86475,
+                "wrapperPreparation": 0.015167
               },
-              "totalMs": 9182.822334,
+              "totalMs": 7345.09875,
               "version": 1
             },
             "stderr": "",
@@ -1471,14 +1471,14 @@
                   "rss": 412848
                 }
               },
-              "toolAndCompilerMs": 8738.46783400001
+              "toolAndCompilerMs": 7021.386832999997
             }
           },
-          "wallMs": 9188.941292000001
+          "wallMs": 7347.168541
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 402.008874999985,
+          "outerOverheadMs": 457.4534999999996,
           "result": {
             "overflowed": false,
             "profile": {
@@ -1518,19 +1518,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 198.076375,
-                "initialEvaluation": 1.080708,
-                "loaderInitialization": 1.800958,
-                "processConfiguration": 0.26766700000000004,
-                "queueDelay": 0.6585,
-                "resultFormatting": 0.149875,
-                "runtimeCreation": 0.461375,
-                "teardown": 162.66691699999998,
-                "transportWiring": 0.573625,
-                "userAwait": 10352.60725,
-                "wrapperPreparation": 0.024792
+                "builtinInitialization": 174.390458,
+                "initialEvaluation": 0.9825,
+                "loaderInitialization": 0.966667,
+                "processConfiguration": 0.201792,
+                "queueDelay": 0.285584,
+                "resultFormatting": 0.097666,
+                "runtimeCreation": 0.423666,
+                "teardown": 233.173167,
+                "transportWiring": 0.12999999999999998,
+                "userAwait": 8153.629000000001,
+                "wrapperPreparation": 0.025667
               },
-              "totalMs": 10718.832292,
+              "totalMs": 8564.799125,
               "version": 1
             },
             "stderr": "",
@@ -1553,14 +1553,14 @@
                   "rss": 412848
                 }
               },
-              "toolAndCompilerMs": 10329.554292000015
+              "toolAndCompilerMs": 8122.784583000001
             }
           },
-          "wallMs": 10731.563167
+          "wallMs": 8580.238083
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 398.02849999999216,
+          "outerOverheadMs": 686.350249000001,
           "result": {
             "overflowed": false,
             "profile": {
@@ -1600,19 +1600,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 216.278917,
-                "initialEvaluation": 1.195417,
-                "loaderInitialization": 6.531625,
-                "processConfiguration": 0.555542,
-                "queueDelay": 1.693333,
-                "resultFormatting": 0.247542,
-                "runtimeCreation": 0.566875,
-                "teardown": 140.943375,
-                "transportWiring": 0.49712499999999993,
-                "userAwait": 7317.929416,
-                "wrapperPreparation": 0.022958
+                "builtinInitialization": 251.282791,
+                "initialEvaluation": 1.194334,
+                "loaderInitialization": 6.80125,
+                "processConfiguration": 1.62425,
+                "queueDelay": 3.990874999999999,
+                "resultFormatting": 0.08712500000000001,
+                "runtimeCreation": 1.710084,
+                "teardown": 383.4241669999999,
+                "transportWiring": 0.29562499999999997,
+                "userAwait": 15254.574833,
+                "wrapperPreparation": 0.022875
               },
-              "totalMs": 7686.612166,
+              "totalMs": 15905.190334,
               "version": 1
             },
             "stderr": "",
@@ -1635,23 +1635,23 @@
                   "rss": 412848
                 }
               },
-              "toolAndCompilerMs": 7297.498625000007
+              "toolAndCompilerMs": 15223.682084
             }
           },
-          "wallMs": 7695.527125
+          "wallMs": 15910.032333000001
         }
       ],
-      "throughputPerSecond": 0.11847810314721303
+      "throughputPerSecond": 0.10565007916319122
     },
     "invalidThenValid": {
       "failedChecks": {
         "iterations": 5,
-        "medianMs": 8430.612207999999,
-        "p95Ms": 11658.657333000001,
+        "medianMs": 7984.708291999999,
+        "p95Ms": 10054.297375,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 211025920,
-            "outerOverheadMs": 379.4037499999886,
+            "outerOverheadMs": 511.8553329999904,
             "result": {
               "overflowed": false,
               "profile": {
@@ -1697,19 +1697,19 @@
                   "modules.sourceRead.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 189.781708,
-                  "initialEvaluation": 1.043875,
-                  "loaderInitialization": 2.532834,
-                  "processConfiguration": 0.207583,
-                  "queueDelay": 1.208959,
-                  "resultFormatting": 0.074917,
-                  "runtimeCreation": 0.679166,
-                  "teardown": 157.40116600000002,
-                  "transportWiring": 0.241,
-                  "userAwait": 11300.88625,
-                  "wrapperPreparation": 0.018042
+                  "builtinInitialization": 348.055667,
+                  "initialEvaluation": 2.208458,
+                  "loaderInitialization": 4.337792,
+                  "processConfiguration": 0.809833,
+                  "queueDelay": 3.2555,
+                  "resultFormatting": 0.039458,
+                  "runtimeCreation": 1.439291,
+                  "teardown": 124.25075,
+                  "transportWiring": 3.725792,
+                  "userAwait": 9559.24325,
+                  "wrapperPreparation": 0.049375
                 },
-                "totalMs": 11654.240375,
+                "totalMs": 10047.473,
                 "version": 1
               },
               "stderr": "",
@@ -1732,14 +1732,14 @@
                     "rss": 412824
                   }
                 },
-                "toolAndCompilerMs": 11279.253583000012
+                "toolAndCompilerMs": 9542.44204200001
               }
             },
-            "wallMs": 11658.657333000001
+            "wallMs": 10054.297375
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
-            "outerOverheadMs": 396.28870800000186,
+            "outerOverheadMs": 335.6092920000119,
             "result": {
               "overflowed": false,
               "profile": {
@@ -1785,19 +1785,19 @@
                   "modules.sourceRead.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 240.453292,
-                  "initialEvaluation": 3.051916,
-                  "loaderInitialization": 1.956583,
-                  "processConfiguration": 0.34212499999999996,
-                  "queueDelay": 0.6015,
-                  "resultFormatting": 0.030625,
-                  "runtimeCreation": 0.678875,
-                  "teardown": 130.319125,
-                  "transportWiring": 0.314,
-                  "userAwait": 7725.624459000001,
-                  "wrapperPreparation": 0.022792
+                  "builtinInitialization": 181.711667,
+                  "initialEvaluation": 0.79975,
+                  "loaderInitialization": 1.218584,
+                  "processConfiguration": 0.144708,
+                  "queueDelay": 0.383917,
+                  "resultFormatting": 0.041584,
+                  "runtimeCreation": 0.435416,
+                  "teardown": 131.939,
+                  "transportWiring": 0.13037500000000002,
+                  "userAwait": 8458.506833,
+                  "wrapperPreparation": 0.016208
                 },
-                "totalMs": 8103.474332999999,
+                "totalMs": 8775.438542,
                 "version": 1
               },
               "stderr": "",
@@ -1820,14 +1820,14 @@
                     "rss": 412824
                   }
                 },
-                "toolAndCompilerMs": 7709.691791999998
+                "toolAndCompilerMs": 8442.334582999989
               }
             },
-            "wallMs": 8105.9805
+            "wallMs": 8777.943875
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
-            "outerOverheadMs": 359.3946670000096,
+            "outerOverheadMs": 511.33750100000543,
             "result": {
               "overflowed": false,
               "profile": {
@@ -1873,19 +1873,19 @@
                   "modules.sourceRead.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 180.879958,
-                  "initialEvaluation": 1.114,
-                  "loaderInitialization": 1.0785,
-                  "processConfiguration": 0.192375,
-                  "queueDelay": 0.36125,
-                  "resultFormatting": 0.038083,
-                  "runtimeCreation": 0.427208,
-                  "teardown": 154.39125,
-                  "transportWiring": 0.141292,
-                  "userAwait": 7708.924667,
-                  "wrapperPreparation": 0.018458
+                  "builtinInitialization": 178.25570800000003,
+                  "initialEvaluation": 0.928291,
+                  "loaderInitialization": 1.477167,
+                  "processConfiguration": 0.194792,
+                  "queueDelay": 0.379917,
+                  "resultFormatting": 0.7872079999999999,
+                  "runtimeCreation": 0.476,
+                  "teardown": 143.439292,
+                  "transportWiring": 0.301958,
+                  "userAwait": 7503.988667,
+                  "wrapperPreparation": 0.020084
                 },
-                "totalMs": 8047.629792000001,
+                "totalMs": 7832.042708999999,
                 "version": 1
               },
               "stderr": "",
@@ -1908,14 +1908,14 @@
                     "rss": 412824
                   }
                 },
-                "toolAndCompilerMs": 7691.017832999991
+                "toolAndCompilerMs": 7473.370790999994
               }
             },
-            "wallMs": 8050.4125
+            "wallMs": 7984.708291999999
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
-            "outerOverheadMs": 413.92370799998844,
+            "outerOverheadMs": 377.5087919999878,
             "result": {
               "overflowed": false,
               "profile": {
@@ -1961,19 +1961,19 @@
                   "modules.sourceRead.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 207.675709,
-                  "initialEvaluation": 0.999125,
-                  "loaderInitialization": 1.488583,
-                  "processConfiguration": 0.247583,
-                  "queueDelay": 0.739084,
-                  "resultFormatting": 0.067958,
-                  "runtimeCreation": 0.4767920000000001,
-                  "teardown": 172.85066700000002,
-                  "transportWiring": 0.247958,
-                  "userAwait": 8066.130292000001,
-                  "wrapperPreparation": 0.02925
+                  "builtinInitialization": 188.41075,
+                  "initialEvaluation": 0.7963749999999999,
+                  "loaderInitialization": 2.1146670000000003,
+                  "processConfiguration": 14.2815,
+                  "queueDelay": 0.6595000000000001,
+                  "resultFormatting": 0.073334,
+                  "runtimeCreation": 1.533,
+                  "teardown": 128.43183299999998,
+                  "transportWiring": 0.24425,
+                  "userAwait": 7290.559708,
+                  "wrapperPreparation": 0.018833000000000003
                 },
-                "totalMs": 8451.115542,
+                "totalMs": 7627.239708,
                 "version": 1
               },
               "stderr": "",
@@ -1996,14 +1996,14 @@
                     "rss": 412824
                   }
                 },
-                "toolAndCompilerMs": 8044.727000000013
+                "toolAndCompilerMs": 7270.835167000012
               }
             },
-            "wallMs": 8458.650708000001
+            "wallMs": 7648.343959
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
-            "outerOverheadMs": 412.43329099998664,
+            "outerOverheadMs": 335.1127080000142,
             "result": {
               "overflowed": false,
               "profile": {
@@ -2049,19 +2049,19 @@
                   "modules.sourceRead.success": 1
                 },
                 "phasesMs": {
-                  "builtinInitialization": 212.102459,
-                  "initialEvaluation": 1.307167,
-                  "loaderInitialization": 2.591417,
-                  "processConfiguration": 2.023208,
-                  "queueDelay": 0.892792,
-                  "resultFormatting": 0.031875,
-                  "runtimeCreation": 0.5676249999999999,
-                  "teardown": 166.79825,
-                  "transportWiring": 0.18425,
-                  "userAwait": 8040.761207999999,
-                  "wrapperPreparation": 0.023791
+                  "builtinInitialization": 180.053334,
+                  "initialEvaluation": 0.844083,
+                  "loaderInitialization": 1.2322920000000002,
+                  "processConfiguration": 0.17966600000000002,
+                  "queueDelay": 0.33891699999999997,
+                  "resultFormatting": 0.024791,
+                  "runtimeCreation": 0.494833,
+                  "teardown": 133.441709,
+                  "transportWiring": 0.198875,
+                  "userAwait": 7390.224709,
+                  "wrapperPreparation": 0.016082999999999997
                 },
-                "totalMs": 8427.335625,
+                "totalMs": 7707.098792,
                 "version": 1
               },
               "stderr": "",
@@ -2084,17 +2084,17 @@
                     "rss": 412824
                   }
                 },
-                "toolAndCompilerMs": 8018.178917000012
+                "toolAndCompilerMs": 7373.974874999985
               }
             },
-            "wallMs": 8430.612207999999
+            "wallMs": 7709.0875829999995
           }
         ],
-        "throughputPerSecond": 0.1118460308773862
+        "throughputPerSecond": 0.11855538531890598
       },
       "recovery": {
         "linearMemoryHighWaterBytes": 211025920,
-        "outerOverheadMs": 499.35654100001557,
+        "outerOverheadMs": 333.7094159999979,
         "result": {
           "overflowed": false,
           "profile": {
@@ -2140,19 +2140,19 @@
               "modules.sourceRead.success": 1
             },
             "phasesMs": {
-              "builtinInitialization": 192.369333,
-              "initialEvaluation": 1.36775,
-              "loaderInitialization": 1.018708,
-              "processConfiguration": 0.3865420000000001,
-              "queueDelay": 0.313625,
-              "resultFormatting": 0.72175,
-              "runtimeCreation": 0.424542,
-              "teardown": 235.372625,
-              "transportWiring": 0.167417,
-              "userAwait": 8452.775666000001,
-              "wrapperPreparation": 0.033
+              "builtinInitialization": 179.369833,
+              "initialEvaluation": 0.765083,
+              "loaderInitialization": 0.980458,
+              "processConfiguration": 0.145042,
+              "queueDelay": 0.315334,
+              "resultFormatting": 0.0435,
+              "runtimeCreation": 0.427959,
+              "teardown": 130.528708,
+              "transportWiring": 0.125,
+              "userAwait": 6974.017374999999,
+              "wrapperPreparation": 0.014167
             },
-            "totalMs": 8885.113709000001,
+            "totalMs": 7286.784,
             "version": 1
           },
           "stderr": "",
@@ -2175,10 +2175,10 @@
                 "rss": 412824
               }
             },
-            "toolAndCompilerMs": 8392.327541999985
+            "toolAndCompilerMs": 6954.811625000002
           }
         },
-        "wallMs": 8891.684083
+        "wallMs": 7288.521041
       }
     },
     "memoryPlateau": {
@@ -2384,7 +2384,7 @@
     },
     "projectReferences": {
       "linearMemoryHighWaterBytes": 211025920,
-      "outerOverheadMs": 589.7566240000051,
+      "outerOverheadMs": 468.5084999999999,
       "result": {
         "overflowed": false,
         "profile": {
@@ -2431,19 +2431,19 @@
             "modules.sourceRead.success": 1
           },
           "phasesMs": {
-            "builtinInitialization": 239.062125,
-            "initialEvaluation": 1.919917,
-            "loaderInitialization": 3.1437079999999997,
-            "processConfiguration": 0.513,
-            "queueDelay": 1.248292,
-            "resultFormatting": 0.033541,
-            "runtimeCreation": 1.026,
-            "teardown": 301.017084,
-            "transportWiring": 0.472792,
-            "userAwait": 15616.307792,
-            "wrapperPreparation": 0.062791
+            "builtinInitialization": 170.350792,
+            "initialEvaluation": 0.696416,
+            "loaderInitialization": 1.175667,
+            "processConfiguration": 0.167083,
+            "queueDelay": 0.355666,
+            "resultFormatting": 0.026041,
+            "runtimeCreation": 0.423583,
+            "teardown": 255.93329199999997,
+            "transportWiring": 0.1395,
+            "userAwait": 14316.539459,
+            "wrapperPreparation": 0.014167
           },
-          "totalMs": 16164.8605,
+          "totalMs": 14745.87,
           "version": 1
         },
         "stderr": "",
@@ -2466,16 +2466,16 @@
               "rss": 412816
             }
           },
-          "toolAndCompilerMs": 15577.958291999996
+          "toolAndCompilerMs": 14279.576917
         }
       },
-      "wallMs": 16167.714916
+      "wallMs": 14748.085417
     },
     "timeouts": {
       "attempts": {
         "iterations": 5,
-        "medianMs": 216.627916,
-        "p95Ms": 217.900625,
+        "medianMs": 215.872417,
+        "p95Ms": 227.28983399999998,
         "samples": [
           {
             "linearMemoryHighWaterBytes": 211025920,
@@ -2485,7 +2485,7 @@
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 211.77083299999998
+            "wallMs": 227.28983399999998
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
@@ -2495,7 +2495,7 @@
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 217.150167
+            "wallMs": 212.599084
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
@@ -2505,7 +2505,7 @@
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 216.627916
+            "wallMs": 219.004791
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
@@ -2515,7 +2515,7 @@
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 217.900625
+            "wallMs": 214.812167
           },
           {
             "linearMemoryHighWaterBytes": 211025920,
@@ -2525,10 +2525,10 @@
               "name": "Error",
               "timedOut": true
             },
-            "wallMs": 215.370125
+            "wallMs": 215.872417
           }
         ],
-        "throughputPerSecond": 4.634694896264526
+        "throughputPerSecond": 4.588931361906271
       },
       "recovery": {
         "linearMemoryHighWaterBytes": 211025920,
@@ -2563,23 +2563,23 @@
               "modules.sourceRead.bytes": 2934,
               "modules.sourceRead.calls": 2,
               "modules.sourceRead.success": 2,
-              "modules.typescriptTransform.micros": 827,
+              "modules.typescriptTransform.micros": 2487,
               "modules.typescriptTransform.success": 1
             },
             "phasesMs": {
-              "builtinInitialization": 176.40883399999998,
-              "initialEvaluation": 0.065375,
-              "loaderInitialization": 1.0406669999999998,
-              "processConfiguration": 0.237541,
-              "queueDelay": 0.317875,
-              "resultFormatting": 0.012292,
-              "runtimeCreation": 0.456292,
-              "teardown": 9.103583,
-              "transportWiring": 0.14616600000000002,
-              "userAwait": 12.708292,
-              "wrapperPreparation": 0.020375
+              "builtinInitialization": 186.947958,
+              "initialEvaluation": 0.065333,
+              "loaderInitialization": 1.00925,
+              "processConfiguration": 0.165667,
+              "queueDelay": 0.28008299999999997,
+              "resultFormatting": 0.017625000000000002,
+              "runtimeCreation": 0.415208,
+              "teardown": 9.413958,
+              "transportWiring": 0.138917,
+              "userAwait": 13.885875,
+              "wrapperPreparation": 0.018167
             },
-            "totalMs": 200.540792,
+            "totalMs": 212.387042,
             "version": 1
           },
           "stderr": "",
@@ -2589,17 +2589,17 @@
             "state": "ready"
           }
         },
-        "wallMs": 201.560541
+        "wallMs": 213.473625
       }
     },
     "unchangedFreshJobs": {
       "iterations": 5,
-      "medianMs": 14387.856917000001,
-      "p95Ms": 14657.3325,
+      "medianMs": 14743.523958000002,
+      "p95Ms": 15236.399333,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 478.79033300000447,
+          "outerOverheadMs": 736.0646660000039,
           "result": {
             "overflowed": false,
             "profile": {
@@ -2639,19 +2639,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 179.110458,
-                "initialEvaluation": 1.159667,
-                "loaderInitialization": 2.36525,
-                "processConfiguration": 0.368208,
-                "queueDelay": 0.5460839999999999,
-                "resultFormatting": 0.116834,
-                "runtimeCreation": 0.458709,
-                "teardown": 257.165166,
-                "transportWiring": 0.324417,
-                "userAwait": 13766.520416,
-                "wrapperPreparation": 0.02875
+                "builtinInitialization": 176.244833,
+                "initialEvaluation": 0.7994159999999999,
+                "loaderInitialization": 1.073041,
+                "processConfiguration": 0.250709,
+                "queueDelay": 0.324875,
+                "resultFormatting": 6.326916,
+                "runtimeCreation": 0.475125,
+                "teardown": 443.643834,
+                "transportWiring": 0.121667,
+                "userAwait": 14602.986834,
+                "wrapperPreparation": 0.014875
               },
-              "totalMs": 14208.368,
+              "totalMs": 15232.463042,
               "version": 1
             },
             "stderr": "",
@@ -2674,14 +2674,14 @@
                   "rss": 412816
                 }
               },
-              "toolAndCompilerMs": 13732.272666999996
+              "toolAndCompilerMs": 14500.334666999996
             }
           },
-          "wallMs": 14211.063
+          "wallMs": 15236.399333
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 470.58641699999134,
+          "outerOverheadMs": 560.4237499999981,
           "result": {
             "overflowed": false,
             "profile": {
@@ -2721,19 +2721,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 176.88899999999998,
-                "initialEvaluation": 1.227125,
-                "loaderInitialization": 1.3825420000000002,
-                "processConfiguration": 0.396708,
-                "queueDelay": 0.394875,
-                "resultFormatting": 0.027416999999999997,
-                "runtimeCreation": 0.428125,
-                "teardown": 254.20150000000004,
-                "transportWiring": 0.244375,
-                "userAwait": 14061.70225,
-                "wrapperPreparation": 0.028833
+                "builtinInitialization": 204.801708,
+                "initialEvaluation": 4.425125,
+                "loaderInitialization": 2.639667,
+                "processConfiguration": 0.916083,
+                "queueDelay": 0.816458,
+                "resultFormatting": 0.066333,
+                "runtimeCreation": 0.481458,
+                "teardown": 310.33062500000005,
+                "transportWiring": 0.30233400000000005,
+                "userAwait": 14215.616292,
+                "wrapperPreparation": 0.021416
               },
-              "totalMs": 14496.9665,
+              "totalMs": 14740.485207999998,
               "version": 1
             },
             "stderr": "",
@@ -2756,14 +2756,14 @@
                   "rss": 412816
                 }
               },
-              "toolAndCompilerMs": 14028.154250000009
+              "toolAndCompilerMs": 14183.100208000003
             }
           },
-          "wallMs": 14498.740667
+          "wallMs": 14743.523958000002
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 464.2035419999993,
+          "outerOverheadMs": 491.2253750000036,
           "result": {
             "overflowed": false,
             "profile": {
@@ -2803,19 +2803,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 178.578791,
-                "initialEvaluation": 0.997,
-                "loaderInitialization": 0.978584,
-                "processConfiguration": 0.24825,
-                "queueDelay": 0.371792,
-                "resultFormatting": 0.094708,
-                "runtimeCreation": 0.492041,
-                "teardown": 244.29183300000005,
-                "transportWiring": 0.26475,
-                "userAwait": 13958.138667,
-                "wrapperPreparation": 0.037792
+                "builtinInitialization": 201.461,
+                "initialEvaluation": 1.409041,
+                "loaderInitialization": 1.545125,
+                "processConfiguration": 0.2335,
+                "queueDelay": 0.3796250000000001,
+                "resultFormatting": 0.0365,
+                "runtimeCreation": 0.4776669999999999,
+                "teardown": 250.429958,
+                "transportWiring": 0.4118750000000001,
+                "userAwait": 14004.203167,
+                "wrapperPreparation": 0.026167
               },
-              "totalMs": 14384.630375,
+              "totalMs": 14460.715499999998,
               "version": 1
             },
             "stderr": "",
@@ -2838,14 +2838,14 @@
                   "rss": 412816
                 }
               },
-              "toolAndCompilerMs": 13923.653375000002
+              "toolAndCompilerMs": 13971.202791999996
             }
           },
-          "wallMs": 14387.856917000001
+          "wallMs": 14462.428167
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 469.4242920000088,
+          "outerOverheadMs": 469.20312499999636,
           "result": {
             "overflowed": false,
             "profile": {
@@ -2885,19 +2885,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 179.226917,
-                "initialEvaluation": 1.071333,
-                "loaderInitialization": 1.874834,
-                "processConfiguration": 0.251291,
-                "queueDelay": 0.5671660000000001,
-                "resultFormatting": 0.679917,
-                "runtimeCreation": 0.455833,
-                "teardown": 247.30725,
-                "transportWiring": 0.322792,
-                "userAwait": 14222.004667,
-                "wrapperPreparation": 0.040707999999999994
+                "builtinInitialization": 181.565708,
+                "initialEvaluation": 0.740167,
+                "loaderInitialization": 1.031,
+                "processConfiguration": 0.13208299999999998,
+                "queueDelay": 0.302625,
+                "resultFormatting": 0.088833,
+                "runtimeCreation": 0.411584,
+                "teardown": 249.298917,
+                "transportWiring": 0.13583399999999998,
+                "userAwait": 14070.2965,
+                "wrapperPreparation": 0.016291
               },
-              "totalMs": 14653.9715,
+              "totalMs": 14504.09575,
               "version": 1
             },
             "stderr": "",
@@ -2920,14 +2920,14 @@
                   "rss": 412816
                 }
               },
-              "toolAndCompilerMs": 14187.908207999992
+              "toolAndCompilerMs": 14036.880625000003
             }
           },
-          "wallMs": 14657.3325
+          "wallMs": 14506.08375
         },
         {
           "linearMemoryHighWaterBytes": 211025920,
-          "outerOverheadMs": 481.1133340000051,
+          "outerOverheadMs": 547.4570420000109,
           "result": {
             "overflowed": false,
             "profile": {
@@ -2967,19 +2967,19 @@
                 "modules.sourceRead.success": 1
               },
               "phasesMs": {
-                "builtinInitialization": 179.753917,
-                "initialEvaluation": 0.993583,
-                "loaderInitialization": 2.35775,
-                "processConfiguration": 0.503542,
-                "queueDelay": 0.66475,
-                "resultFormatting": 0.196209,
-                "runtimeCreation": 0.487625,
-                "teardown": 254.518333,
-                "transportWiring": 0.26483300000000004,
-                "userAwait": 13923.819,
-                "wrapperPreparation": 0.018625
+                "builtinInitialization": 180.354583,
+                "initialEvaluation": 1.1603329999999998,
+                "loaderInitialization": 1.343333,
+                "processConfiguration": 0.27995899999999996,
+                "queueDelay": 0.370292,
+                "resultFormatting": 0.169459,
+                "runtimeCreation": 0.441125,
+                "teardown": 321.131416,
+                "transportWiring": 0.375375,
+                "userAwait": 14334.105625,
+                "wrapperPreparation": 0.036375000000000005
               },
-              "totalMs": 14363.75675,
+              "totalMs": 14839.924209,
               "version": 1
             },
             "stderr": "",
@@ -3002,13 +3002,13 @@
                   "rss": 412816
                 }
               },
-              "toolAndCompilerMs": 13886.036957999995
+              "toolAndCompilerMs": 14296.181124999988
             }
           },
-          "wallMs": 14367.150292
+          "wallMs": 14843.638167
         }
       ],
-      "throughputPerSecond": 0.06932683591963025
+      "throughputPerSecond": 0.06775795517481624
     }
   }
 }

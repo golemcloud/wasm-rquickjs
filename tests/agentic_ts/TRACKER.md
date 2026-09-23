@@ -20,7 +20,7 @@
 
 The retained final [P2](results/2026-09-23-p2-macos-aarch64.json) and
 [P3](results/2026-09-23-p3-macos-aarch64.json) reports measure clean source
-`a2490392` with Node 22.14.0, npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and
+`dd689c8c` with Node 22.14.0, npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and
 disabled optional test caches. Their build and benchmark input hashes match
 across targets, and report validation plus exact currentness pass.
 
@@ -42,7 +42,7 @@ after selecting the implementation. The source-map candidate cleared both
 experiment gates on both targets: more than one second and more than 10% saved
 in the cold exported CLI workload.
 
-The final source-preparation step dispatches CommonJS export parsers only at
+The source-preparation scanner step dispatches CommonJS export parsers only at
 accepted leading bytes and advances the direct-`eval`, import-attribute, and
 template-expression scanners between relevant sentinel bytes. A dedicated
 five-sample comparison measured:
@@ -52,12 +52,21 @@ five-sample comparison measured:
 | profiled TypeScript API import | 8.33 → 4.22 s (-49.3%) | 8.49 → 4.22 s (-50.3%) |
 | incremental profiler rerun | 5.43 → 4.22 s (-22.3%) | 5.42 → 4.22 s (-22.2%) |
 
-The retained final reports independently record 4.19 s and 4.16 s import
-phases. The API profiler imports `typescript.js`, not the CLI's `_tsc.js`, so
-these values support module-load attribution rather than a direct cold-CLI
-comparison. The final components are 0.24% larger than the original controlled
-baseline. The retained P2 one-shot cold row coincided with a similarly slow
-host-Node baseline and is not used for another end-to-end claim.
+The final known-format step classifies `.cjs`/`.cts`, `.mts`, explicit package
+types, and default-type `node_modules` files before consulting source syntax.
+Only ambiguous inputs run the ESM-syntax and CommonJS-wrapper lexical scans.
+It preserves the existing cached-TypeScript and `force_module` precedence. A
+second dedicated five-sample comparison reduced the TypeScript API import
+median from 4.22 to 3.47 s on P2 (-17.9%) and from 4.22 to 3.44 s on P3
+(-18.4%). The retained final reports independently record 3.47 s and 3.45 s
+import phases.
+
+The API profiler imports `typescript.js`, not the CLI's `_tsc.js`, so these
+values support module-load attribution rather than a direct cold-CLI
+comparison. Other compiler phases and end-to-end rows vary between local runs;
+they are not used to claim the same percentage for full `tsc` workloads. The
+final components are 492,525 bytes (0.28%) larger on P2 and 488,990 bytes
+(0.28%) larger on P3 than the original controlled candidate baseline.
 
 Focused public-boundary coverage verifies real line-comment directives, marker
 text inside strings and templates, Node's U+2003 separator and U+2028 line
@@ -65,7 +74,9 @@ terminator, an empty last directive, the no-marker fast path, CommonJS source
 preparation, and import attributes. The native path is intentionally
 TypeScript-feature-only because those builds already carry SWC. Non-TypeScript
 and VM builds retain the existing JavaScript scanner; its pre-existing
-regex-literal heuristic gaps remain a proposed deferred follow-up.
+regex-literal heuristic gaps remain a proposed deferred follow-up. P2/P3
+TypeScript runtime coverage also verifies `.mts`, `.cts`, ambiguous `.ts`,
+cached CommonJS TypeScript, and explicit CommonJS/module package precedence.
 
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation

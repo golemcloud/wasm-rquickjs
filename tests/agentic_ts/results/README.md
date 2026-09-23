@@ -38,7 +38,7 @@ than a stable tail-latency estimate.
 
 The [2026-09-23 P2](2026-09-23-p2-macos-aarch64.json) and
 [P3](2026-09-23-p3-macos-aarch64.json) reports are the retained final pair for
-the consolidated candidate at clean source revision `a2490392`. They use the
+the consolidated candidate at clean source revision `dd689c8c`. They use the
 pinned Node 22.14.0/npm 10.9.2/TypeScript 5.8.2 fixture, five repeated-job
 samples, Rust 1.98.1, and disabled optional test caches. Their build and
 benchmark input hashes agree across P2/P3; report validation and exact
@@ -55,29 +55,37 @@ to the old JavaScript source-map scan and 0.24–0.33 s to the native replacemen
 The intermediate raw pair and temporary startup traces are summarized here
 rather than retained.
 
-The final source-preparation step dispatches CommonJS export parsers only at
+The source-preparation scanner step dispatches CommonJS export parsers only at
 accepted leading bytes and advances the direct-`eval`, import-attribute, and
 template-expression scanners between relevant sentinel bytes. Its dedicated
 five-sample comparison reduced the TypeScript API import median from 8.33 to
-4.22 s on P2 (-49.3%) and from 8.49 to 4.22 s on P3 (-50.3%). The retained final
-reports independently record 4.19 s and 4.16 s import phases. The profiler
-imports `typescript.js`, not the CLI's `_tsc.js`, so these values support
-module-load attribution and are not direct cold-CLI timings.
+4.22 s on P2 (-49.3%) and from 8.49 to 4.22 s on P3 (-50.3%).
 
-The final optimized component is 418,411 bytes (0.24%) larger than the original
-P2 baseline and 416,021 bytes (0.24%) larger on P3. Public runtime coverage
-verifies a real line-comment source map with Node's U+2003 separator and U+2028
-line terminator, marker text inside strings and templates, an empty last
-directive, the no-marker fast path, CommonJS source preparation, and import
-attributes. The native source-map path remains TypeScript-feature-only because
-those builds already carry SWC; non-TypeScript and VM builds retain the existing
-JavaScript scanner.
+The final known-format step classifies fixed extensions and package policies
+before consulting source syntax, so only ambiguous inputs run the ESM-syntax
+and CommonJS-wrapper lexical scans. Its dedicated five-sample comparison
+reduced the TypeScript API import median from 4.22 to 3.47 s on P2 (-17.9%) and
+from 4.22 to 3.44 s on P3 (-18.4%). The retained final reports independently
+record 3.47 s and 3.45 s import phases. The profiler imports `typescript.js`,
+not the CLI's `_tsc.js`, so these values support module-load attribution and
+are not direct cold-CLI timings. Other compiler phases and end-to-end rows vary
+between local runs and are not used to claim the same percentage for full
+`tsc` workloads.
 
-Timings remain indicative local measurements rather than thresholds. In
-particular, the retained P2 one-shot cold row coincided with a similarly slow
-host-Node baseline, so it is not used for an additional end-to-end claim. The
-dedicated paired import experiment is the evidence for the final scanner
-optimization.
+The final optimized component is 492,525 bytes (0.28%) larger than the original
+P2 controlled candidate and 488,990 bytes (0.28%) larger on P3. Public runtime
+coverage verifies a real line-comment source map with Node's U+2003 separator
+and U+2028 line terminator, marker text inside strings and templates, an empty
+last directive, the no-marker fast path, CommonJS source preparation, and
+import attributes. P2/P3 TypeScript runtime coverage also verifies `.mts`,
+`.cts`, ambiguous `.ts`, cached CommonJS TypeScript, and explicit
+CommonJS/module package precedence. The native source-map path remains
+TypeScript-feature-only because those builds already carry SWC; non-TypeScript
+and VM builds retain the existing JavaScript scanner.
+
+Timings remain indicative local measurements rather than thresholds. The
+dedicated paired import experiments are the evidence for the two final scanner
+and classification optimizations.
 
 ## GOL-350 CommonJS graph probe evidence
 
