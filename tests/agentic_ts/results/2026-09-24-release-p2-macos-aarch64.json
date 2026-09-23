@@ -1,0 +1,843 @@
+{
+  "component": {
+    "blake3": "0558bead7bbee3b866e856c58a2b7820d8ebe081675245d668a447d96c854c6a",
+    "buildMs": 28924.278084,
+    "bytes": 17123204,
+    "initialPrepareAndInstantiateMs": 442.219792,
+    "path": "tmp/rt-target/wasm32-wasip2/release/agentic_ts.optimized.wasm"
+  },
+  "environment": {
+    "arch": "aarch64",
+    "artifactCache": null,
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "commitHint": "19ed7840f7b9d5ccd3229cac7bc3b1f7711016d9",
+    "componentCargoProfile": "release",
+    "componentFeatures": "typescript-transform-runtime",
+    "dirty": false,
+    "harnessCargoProfile": "release",
+    "hostDependencyGraph": {
+      "kind": "p2-shadow",
+      "lockBlake3": "ff03c4e062c993240170d442de1c18d6cb17f5f85cea7d65950b884bbb9f84af"
+    },
+    "iterations": 5,
+    "lockedBuilds": "1",
+    "node": "22.14.0",
+    "npm": "10.9.2",
+    "os": "macos",
+    "preparedComponentCache": null,
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "typescript": "5.8.2",
+    "unoptimized": null,
+    "wasmtimeCache": null
+  },
+  "fixture": {
+    "description": "the checked-in single-source core TypeScript project",
+    "name": "small",
+    "project": "projects/core/tsconfig.check.json",
+    "seriesArguments": {
+      "coldAndRepeated": [
+        "--noEmit",
+        "-p",
+        "projects/core/tsconfig.check.json"
+      ],
+      "incremental": [
+        "--noEmit",
+        "--incremental",
+        "--tsBuildInfoFile",
+        ".cache/release-baseline.tsbuildinfo",
+        "-p",
+        "projects/core/tsconfig.check.json"
+      ]
+    }
+  },
+  "host": {
+    "coldFreshProcessState": {
+      "iterations": 5,
+      "medianMs": 552.830542,
+      "p95Ms": 594.0185,
+      "samples": [
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 594.0185
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 552.830542
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 481.530083
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 560.344375
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 475.32725
+        }
+      ],
+      "throughputPerSecond": 1.8768411224898773
+    },
+    "environmentPolicy": {
+      "mode": "clear",
+      "provided": [
+        "HOME",
+        "PATH"
+      ]
+    },
+    "incrementalFreshProcesses": {
+      "iterations": 5,
+      "medianMs": 190.533292,
+      "p95Ms": 210.58970900000003,
+      "samples": [
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 210.58970900000003
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 193.130584
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 190.533292
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 188.377375
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 185.744792
+        }
+      ],
+      "throughputPerSecond": 5.163285005508895
+    },
+    "incrementalSeed": {
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0
+        }
+      },
+      "wallMs": 461.883458
+    },
+    "repeatedUnchangedFreshProcesses": {
+      "iterations": 5,
+      "medianMs": 423.38541699999996,
+      "p95Ms": 476.296125,
+      "samples": [
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 476.296125
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 415.004292
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 422.01558300000005
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 434.059625
+        },
+        {
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0
+            }
+          },
+          "wallMs": 423.38541699999996
+        }
+      ],
+      "throughputPerSecond": 2.303339659805817
+    }
+  },
+  "inputs": {
+    "algorithm": "blake3-composite-v1",
+    "benchmarkHash": "3c228f402f1c47d78fa27a6da1e520f26f70802936a0e52c2b93b7cffe9a49b5",
+    "buildHash": "4d987a2a2c7c8b2bf6c8abdd3d8c213645b389bf20577fb1941563893e795901"
+  },
+  "memory": {
+    "allowedQuickJsHeapVariationBytes": 1048576,
+    "incrementalQuickJsHeap": {
+      "afterCompiler": {
+        "maximumBytes": 58373275,
+        "minimumBytes": 58373275,
+        "samples": [
+          58373275,
+          58373275,
+          58373275,
+          58373275,
+          58373275
+        ],
+        "variationBytes": 0
+      },
+      "beforeToolLoad": {
+        "maximumBytes": 6092806,
+        "minimumBytes": 6092806,
+        "samples": [
+          6092806,
+          6092806,
+          6092806,
+          6092806,
+          6092806
+        ],
+        "variationBytes": 0
+      }
+    },
+    "interpretation": "fresh-job QuickJS terminal heaps are a reclamation guard; Wasm linear memory is a monotone instance-wide high-water observation",
+    "repeatedUnchangedQuickJsHeap": {
+      "afterCompiler": {
+        "maximumBytes": 81003033,
+        "minimumBytes": 81003033,
+        "samples": [
+          81003033,
+          81003033,
+          81003033,
+          81003033,
+          81003033
+        ],
+        "variationBytes": 0
+      },
+      "beforeToolLoad": {
+        "maximumBytes": 6092630,
+        "minimumBytes": 6092630,
+        "samples": [
+          6092630,
+          6092630,
+          6092630,
+          6092630,
+          6092630
+        ],
+        "variationBytes": 0
+      }
+    },
+    "reusedInstanceLinearMemoryHighWaterBytes": 152109056
+  },
+  "notes": [
+    "manual local release measurement; no CI timing threshold",
+    "production TypeScript transform feature; profiling-only filesystem counters disabled",
+    "host commands use fresh Node processes; Wasm commands use fresh QuickJS jobs",
+    "cold logical state uses fresh workspaces and Wasm instances outside the timed boundary",
+    "only the incremental series preserves its explicit .tsbuildinfo"
+  ],
+  "schema": "agentic-ts-release-baseline-v1",
+  "target": "p2",
+  "timingBoundary": {
+    "host": "Node process spawn through exit; fresh-workspace preparation is excluded",
+    "wasm": "run-tsc export invocation through result; component instantiation and fresh-workspace preparation are excluded"
+  },
+  "wasm": {
+    "coldFreshJobState": {
+      "iterations": 5,
+      "medianMs": 5649.540333,
+      "p95Ms": 5795.097167,
+      "samples": [
+        {
+          "linearMemoryHighWaterBytes": 151781376,
+          "outerOverheadMs": 245.41283300000032,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5404.1275
+            }
+          },
+          "wallMs": 5649.540333
+        },
+        {
+          "linearMemoryHighWaterBytes": 151781376,
+          "outerOverheadMs": 245.03074899999956,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5535.633042
+            }
+          },
+          "wallMs": 5780.663791
+        },
+        {
+          "linearMemoryHighWaterBytes": 151781376,
+          "outerOverheadMs": 232.96600000000035,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5337.8817500000005
+            }
+          },
+          "wallMs": 5570.847750000001
+        },
+        {
+          "linearMemoryHighWaterBytes": 151781376,
+          "outerOverheadMs": 231.60833299999922,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5563.488834000001
+            }
+          },
+          "wallMs": 5795.097167
+        },
+        {
+          "linearMemoryHighWaterBytes": 151781376,
+          "outerOverheadMs": 230.74199899999985,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5361.454084
+            }
+          },
+          "wallMs": 5592.196083
+        }
+      ],
+      "throughputPerSecond": 0.17612861821145442
+    },
+    "incrementalFreshJobs": {
+      "iterations": 5,
+      "medianMs": 2696.000625,
+      "p95Ms": 2769.925083,
+      "samples": [
+        {
+          "linearMemoryHighWaterBytes": 152109056,
+          "outerOverheadMs": 157.81995900000038,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12127296,
+                  "heapTotal": 58373275,
+                  "heapUsed": 58373275,
+                  "rss": 6188872
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092806,
+                  "heapUsed": 6092806,
+                  "rss": 412448
+                }
+              },
+              "toolAndCompilerMs": 2580.027166
+            }
+          },
+          "wallMs": 2737.8471250000002
+        },
+        {
+          "linearMemoryHighWaterBytes": 152109056,
+          "outerOverheadMs": 151.94987500000116,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12127296,
+                  "heapTotal": 58373275,
+                  "heapUsed": 58373275,
+                  "rss": 6188872
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092806,
+                  "heapUsed": 6092806,
+                  "rss": 412448
+                }
+              },
+              "toolAndCompilerMs": 2541.029999999999
+            }
+          },
+          "wallMs": 2692.979875
+        },
+        {
+          "linearMemoryHighWaterBytes": 152109056,
+          "outerOverheadMs": 152.71220799999674,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12127296,
+                  "heapTotal": 58373275,
+                  "heapUsed": 58373275,
+                  "rss": 6188872
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092806,
+                  "heapUsed": 6092806,
+                  "rss": 412448
+                }
+              },
+              "toolAndCompilerMs": 2543.2884170000034
+            }
+          },
+          "wallMs": 2696.000625
+        },
+        {
+          "linearMemoryHighWaterBytes": 152109056,
+          "outerOverheadMs": 151.91533299999764,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12127296,
+                  "heapTotal": 58373275,
+                  "heapUsed": 58373275,
+                  "rss": 6188872
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092806,
+                  "heapUsed": 6092806,
+                  "rss": 412448
+                }
+              },
+              "toolAndCompilerMs": 2534.5310420000023
+            }
+          },
+          "wallMs": 2686.446375
+        },
+        {
+          "linearMemoryHighWaterBytes": 152109056,
+          "outerOverheadMs": 155.1981250000008,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 12127296,
+                  "heapTotal": 58373275,
+                  "heapUsed": 58373275,
+                  "rss": 6188872
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092806,
+                  "heapUsed": 6092806,
+                  "rss": 412448
+                }
+              },
+              "toolAndCompilerMs": 2614.7269579999993
+            }
+          },
+          "wallMs": 2769.925083
+        }
+      ],
+      "throughputPerSecond": 0.36810179762864037
+    },
+    "incrementalSeed": {
+      "linearMemoryHighWaterBytes": 152109056,
+      "outerOverheadMs": 247.27404199999728,
+      "result": {
+        "overflowed": false,
+        "stderr": "",
+        "stdout": "",
+        "value": {
+          "exitCode": 0,
+          "quickJsMemory": {
+            "afterCompiler": {
+              "arrayBuffers": 0,
+              "external": 24855984,
+              "heapTotal": 81202525,
+              "heapUsed": 81202525,
+              "rss": 14123696
+            },
+            "beforeToolLoad": {
+              "arrayBuffers": 0,
+              "external": 291696,
+              "heapTotal": 6092806,
+              "heapUsed": 6092806,
+              "rss": 412448
+            }
+          },
+          "toolAndCompilerMs": 5602.384250000003
+        }
+      },
+      "wallMs": 5849.658292
+    },
+    "repeatedUnchangedFreshJobs": {
+      "iterations": 5,
+      "medianMs": 5527.6909160000005,
+      "p95Ms": 5675.825667,
+      "samples": [
+        {
+          "linearMemoryHighWaterBytes": 151781376,
+          "outerOverheadMs": 233.59949999999935,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5442.226167000001
+            }
+          },
+          "wallMs": 5675.825667
+        },
+        {
+          "linearMemoryHighWaterBytes": 151846912,
+          "outerOverheadMs": 230.5044170000001,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5275.874333
+            }
+          },
+          "wallMs": 5506.37875
+        },
+        {
+          "linearMemoryHighWaterBytes": 151846912,
+          "outerOverheadMs": 232.88612499999545,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5290.352125000005
+            }
+          },
+          "wallMs": 5523.23825
+        },
+        {
+          "linearMemoryHighWaterBytes": 151846912,
+          "outerOverheadMs": 230.700082999997,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5296.9908330000035
+            }
+          },
+          "wallMs": 5527.6909160000005
+        },
+        {
+          "linearMemoryHighWaterBytes": 151912448,
+          "outerOverheadMs": 244.5160420000011,
+          "result": {
+            "overflowed": false,
+            "stderr": "",
+            "stdout": "",
+            "value": {
+              "exitCode": 0,
+              "quickJsMemory": {
+                "afterCompiler": {
+                  "arrayBuffers": 0,
+                  "external": 24822192,
+                  "heapTotal": 81003033,
+                  "heapUsed": 81003033,
+                  "rss": 14105392
+                },
+                "beforeToolLoad": {
+                  "arrayBuffers": 0,
+                  "external": 291696,
+                  "heapTotal": 6092630,
+                  "heapUsed": 6092630,
+                  "rss": 412424
+                }
+              },
+              "toolAndCompilerMs": 5376.526582999999
+            }
+          },
+          "wallMs": 5621.042625
+        }
+      ],
+      "throughputPerSecond": 0.1795062960276653
+    }
+  }
+}

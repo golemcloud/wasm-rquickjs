@@ -16,6 +16,40 @@
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
 | phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.56 s / 19.96 s |
 
+## Production release baseline — 2026-09-24
+
+The retained [P2](results/2026-09-24-release-p2-macos-aarch64.json) and
+[P3](results/2026-09-24-release-p3-macos-aarch64.json) reports establish the
+matched production baseline at clean source `19ed7840`. Both the host harness
+and generated component use locked Cargo release builds, the component uses the
+production `typescript-transform-runtime` feature, and all optional test caches
+are disabled. Each cell below is a five-sample median. The host and Wasm sides
+run the exact same TypeScript 5.8.2 CLI arguments with fresh processes or
+QuickJS jobs; only the incremental series preserves its independently isolated
+`.tsbuildinfo`.
+
+| Series | P2 host → Wasm | P3 host → Wasm | `8 × host + 1 s` goal |
+|---|---:|---:|---:|
+| cold fresh logical state | 0.553 → 5.650 s (10.22×) | 0.501 → 5.546 s (11.07×) | miss by 0.227 / 0.539 s |
+| repeated unchanged, fresh jobs | 0.423 → 5.528 s (13.06×) | 0.422 → 5.516 s (13.07×) | miss by 1.141 / 1.141 s |
+| warm incremental, fresh jobs | 0.191 → 2.696 s (14.15×) | 0.189 → 2.665 s (14.09×) | miss by 0.172 / 0.152 s |
+
+The measured boundary is Node process spawn through exit on the host and the
+`run-tsc` export invocation through result in Wasm. Workspace copying and
+component preparation/instantiation are excluded from both workload medians.
+Every sample completed successfully without output overflow. P2 and P3 each
+reached a 145.06 MiB reused-instance Wasm linear-memory high-water mark, with
+zero variation in the repeated and incremental terminal QuickJS heap samples.
+This is the first matched production baseline, so its absolute memory values
+seed the 10% regression gate for subsequent candidates rather than claiming a
+historical release-memory improvement.
+
+All three series still miss the practical-performance envelope. The small
+fixture points most strongly at fresh-job compiler/module startup: repeated
+non-incremental work is effectively as expensive as cold work, while preserving
+TypeScript's explicit incremental artifact roughly halves Wasm time but leaves
+a much larger host-relative ratio.
+
 ## Consolidated TypeScript module loading — 2026-09-23
 
 The retained final [P2](results/2026-09-23-p2-macos-aarch64.json) and

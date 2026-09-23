@@ -34,6 +34,34 @@ resulting `HEAD`, while ambiguous merge pushes fail closed. With five samples,
 the reported p95 is the observed maximum; it is descriptive evidence rather
 than a stable tail-latency estimate.
 
+## Production release baseline
+
+The [2026-09-24 P2](2026-09-24-release-p2-macos-aarch64.json) and
+[P3](2026-09-24-release-p3-macos-aarch64.json) reports are the first matched
+production release pair, measured from clean source `19ed7840`. The host
+harness and generated components are locked Cargo release builds, the component
+uses `typescript-transform-runtime` rather than the profiling feature, and the
+optional artifact, Wasmtime, prepared-component, and unoptimized test settings
+are all disabled. Distinct P2/P3 component hashes, matching build/benchmark
+input hashes, exact currentness, five samples per series, successful results,
+memory evidence, and pair invariants pass validation.
+
+Cold medians are 0.553 s host versus 5.650 s P2 and 0.501 s host versus
+5.546 s P3. Repeated unchanged medians are 0.423 s versus 5.528 s and 0.422 s
+versus 5.516 s. Warm incremental medians are 0.191 s versus 2.696 s and
+0.189 s versus 2.665 s. Against the practical `8 × host + 1 s` target, P2/P3
+miss by 0.227/0.539 s cold, 1.141/1.141 s repeated, and 0.172/0.152 s
+incremental. The reused-instance linear-memory high-water mark is 145.06 MiB
+on both targets; this pair seeds the release-memory regression baseline.
+
+Host timing covers Node process spawn through exit. Wasm timing covers the
+`run-tsc` export invocation through its result. Fresh-workspace preparation and
+component preparation/instantiation are outside those boundaries. Cold means
+fresh logical execution state, not a physical-disk-cold machine. The repeated
+and incremental series use fresh host processes and fresh QuickJS jobs; only
+the incremental series preserves its explicitly named `.tsbuildinfo` in a
+separate host or Wasm workspace.
+
 ## Consolidated TypeScript module-loading candidate
 
 The [2026-09-23 P2](2026-09-23-p2-macos-aarch64.json) and
