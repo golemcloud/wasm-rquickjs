@@ -1256,12 +1256,14 @@ fn process_import_attrs(
             continue;
         }
 
-        if let Some(ch) = source[i..].chars().next() {
-            result.push(ch);
-            i += ch.len_utf8();
-        } else {
-            break;
-        }
+        let start = i;
+        let next = next_char_boundary(source, i);
+        i = bytes[next..]
+            .iter()
+            .position(|byte| matches!(byte, b'i' | b'\'' | b'"' | b'`' | b'/'))
+            .map(|offset| next + offset)
+            .unwrap_or(len);
+        result.push_str(&source[start..i]);
     }
 
     ProcessedStaticImportAttrs {
@@ -9074,18 +9076,24 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     let mut analysis = CjsExportAnalysis::default();
     let mut require_bindings = HashMap::<String, String>::new();
     let statement_starts = statement_starts(source);
-    let _ = scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
-        if let Some((name, next)) = parse_export_member(source, i) {
+    let _ = scan_code_positions_with_brace_depth(source, true, |i, current, brace_depth| {
+        let starts_export_target = matches!(current, b'e' | b'm');
+        if starts_export_target
+            && let Some((name, next)) = parse_export_member(source, i)
+        {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
             return ControlFlow::Continue(Some(next));
         }
-        if let Some((name, next)) = parse_define_property_export(source, i) {
+        if current == b'O'
+            && let Some((name, next)) = parse_define_property_export(source, i)
+        {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
             return ControlFlow::Continue(Some(next));
         }
         if brace_depth == 0
+            && matches!(current, b'c' | b'l' | b'v')
             && statement_starts.get(i).copied().unwrap_or(false)
             && let Some((binding, specifier, next)) = parse_require_binding(source, i)
         {
@@ -9093,19 +9101,25 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
             return ControlFlow::Continue(Some(next));
         }
         if brace_depth == 0
+            && is_ident_start(current)
             && let Some((specifier, next)) = parse_export_star_reexport(source, i)
         {
             analysis.is_cjs = true;
             add_unique(&mut analysis.reexports, specifier);
             return ControlFlow::Continue(Some(next));
         }
-        if let Some((specifier, next)) = parse_module_exports_reexport(source, i) {
+        if current == b'm'
+            && let Some((specifier, next)) = parse_module_exports_reexport(source, i)
+        {
             analysis.is_cjs = true;
             analysis.reexports.clear();
             add_unique(&mut analysis.reexports, specifier);
             return ControlFlow::Continue(Some(next));
         }
-        if let Some((exports, reexports, next)) = parse_module_exports_object_literal(source, i) {
+        if current == b'm'
+            && let Some((exports, reexports, next)) =
+                parse_module_exports_object_literal(source, i)
+        {
             analysis.is_cjs = true;
             analysis.reexports.clear();
             for name in exports {
@@ -9116,11 +9130,14 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
             }
             return ControlFlow::Continue(Some(next));
         }
-        if let Some(next) = parse_module_exports_assignment(source, i) {
+        if current == b'm'
+            && let Some(next) = parse_module_exports_assignment(source, i)
+        {
             analysis.is_cjs = true;
             return ControlFlow::Continue(Some(next));
         }
         if brace_depth == 0
+            && current == b'O'
             && statement_starts.get(i).copied().unwrap_or(false)
             && let Some((specifier, next)) =
                 parse_object_keys_reexport(source, i, &require_bindings)
@@ -10854,6 +10871,16 @@ fn rewrite_cjs_direct_eval(
             i = next;
             continue;
         }
+        if bytes[i] != b'e' {
+            let Some(next) = bytes[i + 1..]
+                .iter()
+                .position(|byte| matches!(byte, b'e' | b'\'' | b'"' | b'`' | b'/'))
+            else {
+                break;
+            };
+            i += next + 1;
+            continue;
+        }
         let Some(eval_end) = parse_ident_name(source, i, "eval") else {
             i = next_char_boundary(source, i);
             continue;
@@ -10953,7 +10980,12 @@ fn rewrite_cjs_template_expressions(
                 i = next;
                 continue;
             }
-            i = next_char_boundary(source, i);
+            let next = next_char_boundary(source, i);
+            i = bytes[next..]
+                .iter()
+                .position(|byte| matches!(byte, b'\'' | b'"' | b'`' | b'/'))
+                .map(|offset| next + offset)
+                .unwrap_or(bytes.len());
             continue;
         }
         i += 1;
