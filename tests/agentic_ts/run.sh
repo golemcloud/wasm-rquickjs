@@ -35,14 +35,29 @@ fi
 
 measurement_profile=standard
 report_label=
+release_baseline=false
 if [ "${1:-}" = "--release" ]; then
     measurement_profile=release
     report_label=-release
+    release_baseline=true
     shift
 fi
 if [ "$#" -ne 0 ]; then
     echo "usage: tests/agentic_ts/run.sh [--release|--check|--check-current <report>...]" >&2
     exit 2
+fi
+
+if [ "$release_baseline" = true ]; then
+    node_overrides=
+    for variable in NODE_COMPILE_CACHE NODE_DEBUG NODE_DEBUG_NATIVE NODE_ENV NODE_INSPECT_RESUME_ON_START NODE_OPTIONS NODE_PATH NODE_PENDING_DEPRECATION; do
+        if printenv "$variable" >/dev/null 2>&1; then
+            node_overrides="${node_overrides}${node_overrides:+ }$variable"
+        fi
+    done
+    if [ -n "$node_overrides" ]; then
+        echo "release measurement rejects inherited Node configuration: $node_overrides" >&2
+        exit 2
+    fi
 fi
 
 platform=$(node -p 'process.platform')
@@ -74,6 +89,9 @@ for target in p2 p3; do
     report="$results_dir/$(date +%Y-%m-%d)${report_label}-$target-$platform-$arch.json"
     (
         cd "$repo_root"
+        if [ "$release_baseline" = true ]; then
+            export AGENTIC_TS_RELEASE_BASELINE=1
+        fi
         AGENTIC_TS_ITERATIONS="$iterations" \
         AGENTIC_TS_REPORT="$report" \
         AGENTIC_TS_SOURCE_ROOT="$repo_root" \

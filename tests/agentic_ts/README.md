@@ -31,6 +31,20 @@ host and generated guest component with their real Cargo release profiles:
 tests/agentic_ts/run.sh --release
 ```
 
+Release mode uses the production `typescript-transform-runtime` component,
+without the profiling-only filesystem counters. It records matched host and
+Wasm series for cold runs with fresh workspaces, unchanged runs in fresh
+processes/jobs, and warmed incremental runs that preserve only their explicit
+`.tsbuildinfo`. The counter-heavy development report remains the attribution
+sidecar for choosing optimizations; do not mix its absolute timings with the
+release envelope.
+
+Host timings start at Node process spawn; Wasm timings start at the exported
+`run-tsc` invocation. Fresh-workspace copying and component instantiation are
+outside both command timings. Release mode clears the host child environment
+and supplies only controlled `HOME` and `PATH` values, matching the guest job's
+environmental isolation.
+
 During profiler development, validate only the shared controlled workload and
 the feature-gated execution-job profile with:
 

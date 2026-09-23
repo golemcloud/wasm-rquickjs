@@ -33,6 +33,21 @@ fn remove_release_overrides(command: &mut Command) {
     }
 }
 
+fn remove_node_overrides(command: &mut Command) {
+    for name in [
+        "NODE_COMPILE_CACHE",
+        "NODE_DEBUG",
+        "NODE_DEBUG_NATIVE",
+        "NODE_ENV",
+        "NODE_INSPECT_RESUME_ON_START",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_PENDING_DEPRECATION",
+    ] {
+        command.env_remove(name);
+    }
+}
+
 fn plan(target: &str, profile: &str) -> Plan {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut command = Command::new("bash");
@@ -240,6 +255,37 @@ fn release_profile_rejects_inherited_compiler_overrides() {
         String::from_utf8_lossy(&output.stderr).contains("RUSTC"),
         "alternate compiler rejection did not identify RUSTC"
     );
+}
+
+#[test]
+fn agentic_ts_release_runner_rejects_node_environment_overrides() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (variable, value) in [
+        ("NODE_OPTIONS", "--trace-warnings"),
+        ("NODE_COMPILE_CACHE", "/tmp/node-compile-cache"),
+        ("NODE_ENV", "production"),
+    ] {
+        let mut command = Command::new("sh");
+        command
+            .arg(repo_root.join("tests/agentic_ts/run.sh"))
+            .arg("--release")
+            .current_dir(repo_root);
+        remove_node_overrides(&mut command);
+        let output = command
+            .env(variable, value)
+            .output()
+            .expect("release runner guard should execute");
+
+        assert!(
+            !output.status.success(),
+            "{variable} was unexpectedly accepted"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(variable) && stderr.contains("rejects inherited Node"),
+            "unexpected rejection for {variable}: {stderr}"
+        );
+    }
 }
 
 #[test]

@@ -41,8 +41,13 @@ async fn main() -> anyhow::Result<()> {
         "AGENTIC_TS_ITERATIONS must be at least 5 to assess a warmed plateau"
     );
 
+    let release_baseline = std::env::var_os("AGENTIC_TS_RELEASE_BASELINE").is_some();
     let build_started = Instant::now();
-    let feature_combination = FeatureCombination::TypeScriptCompilerProfiling;
+    let feature_combination = if release_baseline {
+        FeatureCombination::TypeScriptTransformRuntime
+    } else {
+        FeatureCombination::TypeScriptCompilerProfiling
+    };
     let compiled =
         CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, feature_combination)
             .await?;
@@ -53,6 +58,19 @@ async fn main() -> anyhow::Result<()> {
     let mut instance = TestInstance::new_with_memory_tracking(compiled.wasm_path()).await?;
     let instantiate_elapsed = instantiate_started.elapsed();
     prepare_workspace(&instance)?;
+
+    if release_baseline {
+        return run_release_baseline(
+            &compiled,
+            &mut instance,
+            iterations,
+            build_elapsed,
+            instantiate_elapsed,
+            component_size,
+            feature_combination,
+        )
+        .await;
+    }
 
     if std::env::var_os("AGENTIC_TS_PROFILE_SMOKE").is_some() {
         let mut node = Vec::with_capacity(iterations);
@@ -501,6 +519,433 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn run_release_baseline(
+    compiled: &CompiledTest,
+    instance: &mut TestInstance,
+    iterations: usize,
+    build_elapsed: Duration,
+    instantiate_elapsed: Duration,
+    component_size: u64,
+    feature_combination: FeatureCombination,
+) -> anyhow::Result<()> {
+    const CHECK_ARGS: &[&str] = &["--noEmit", "-p", "projects/core/tsconfig.check.json"];
+    const INCREMENTAL_ARGS: &[&str] = &[
+        "--noEmit",
+        "--incremental",
+        "--tsBuildInfoFile",
+        ".cache/release-baseline.tsbuildinfo",
+        "-p",
+        "projects/core/tsconfig.check.json",
+    ];
+
+    anyhow::ensure!(
+        feature_combination.label() == "typescript-transform-runtime",
+        "release baseline must use the production TypeScript feature"
+    );
+    let node_executable = command_text(Command::new("which").arg("node"))?;
+
+    let mut host_cold = Vec::with_capacity(iterations);
+    let mut wasm_cold = Vec::with_capacity(iterations);
+    for iteration in 0..iterations {
+        if iteration % 2 == 0 {
+            host_cold.push(fresh_host_tsc(&node_executable, CHECK_ARGS)?);
+            wasm_cold.push(fresh_wasm_tsc(compiled.wasm_path(), CHECK_ARGS).await?);
+        } else {
+            wasm_cold.push(fresh_wasm_tsc(compiled.wasm_path(), CHECK_ARGS).await?);
+            host_cold.push(fresh_host_tsc(&node_executable, CHECK_ARGS)?);
+        }
+    }
+
+    let host_workspace = camino_tempfile::Utf8TempDir::new()?;
+    prepare_host_workspace(host_workspace.path())?;
+    let mut host_repeated = Vec::with_capacity(iterations);
+    let mut wasm_repeated = Vec::with_capacity(iterations);
+    for iteration in 0..iterations {
+        if iteration % 2 == 0 {
+            host_repeated.push(host_tsc(
+                &node_executable,
+                host_workspace.path(),
+                CHECK_ARGS,
+            )?);
+            wasm_repeated.push(wasm_tsc(instance, CHECK_ARGS).await?);
+        } else {
+            wasm_repeated.push(wasm_tsc(instance, CHECK_ARGS).await?);
+            host_repeated.push(host_tsc(
+                &node_executable,
+                host_workspace.path(),
+                CHECK_ARGS,
+            )?);
+        }
+    }
+
+    let host_incremental_seed =
+        host_tsc(&node_executable, host_workspace.path(), INCREMENTAL_ARGS)?;
+    let wasm_incremental_seed = wasm_tsc(instance, INCREMENTAL_ARGS).await?;
+    let mut host_incremental = Vec::with_capacity(iterations);
+    let mut wasm_incremental = Vec::with_capacity(iterations);
+    for iteration in 0..iterations {
+        if iteration % 2 == 0 {
+            host_incremental.push(host_tsc(
+                &node_executable,
+                host_workspace.path(),
+                INCREMENTAL_ARGS,
+            )?);
+            wasm_incremental.push(wasm_tsc(instance, INCREMENTAL_ARGS).await?);
+        } else {
+            wasm_incremental.push(wasm_tsc(instance, INCREMENTAL_ARGS).await?);
+            host_incremental.push(host_tsc(
+                &node_executable,
+                host_workspace.path(),
+                INCREMENTAL_ARGS,
+            )?);
+        }
+    }
+
+    let environment = environment(iterations, feature_combination.label())?;
+    let input_hashes = input_hashes()?;
+    let report = json!({
+        "schema": "agentic-ts-release-baseline-v1",
+        "environment": environment,
+        "inputs": {
+            "algorithm": INPUT_HASH_ALGORITHM,
+            "buildHash": input_hashes.build,
+            "benchmarkHash": input_hashes.benchmark,
+        },
+        "target": format!("{:?}", test_target()).to_lowercase(),
+        "fixture": {
+            "name": "small",
+            "project": "projects/core/tsconfig.check.json",
+            "description": "the checked-in single-source core TypeScript project",
+            "seriesArguments": {
+                "coldAndRepeated": CHECK_ARGS,
+                "incremental": INCREMENTAL_ARGS,
+            },
+        },
+        "component": {
+            "path": compiled.wasm_path().as_str(),
+            "bytes": component_size,
+            "blake3": hash_file(compiled.wasm_path())?,
+            "buildMs": millis(build_elapsed),
+            "initialPrepareAndInstantiateMs": millis(instantiate_elapsed),
+        },
+        "host": {
+            "environmentPolicy": {
+                "mode": "clear",
+                "provided": ["HOME", "PATH"],
+            },
+            "coldFreshProcessState": summarize(&host_cold),
+            "repeatedUnchangedFreshProcesses": summarize(&host_repeated),
+            "incrementalSeed": host_incremental_seed,
+            "incrementalFreshProcesses": summarize(&host_incremental),
+        },
+        "wasm": {
+            "coldFreshJobState": summarize(&wasm_cold),
+            "repeatedUnchangedFreshJobs": summarize(&wasm_repeated),
+            "incrementalSeed": wasm_incremental_seed,
+            "incrementalFreshJobs": summarize(&wasm_incremental),
+        },
+        "timingBoundary": {
+            "host": "Node process spawn through exit; fresh-workspace preparation is excluded",
+            "wasm": "run-tsc export invocation through result; component instantiation and fresh-workspace preparation are excluded",
+        },
+        "memory": {
+            "allowedQuickJsHeapVariationBytes": ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
+            "repeatedUnchangedQuickJsHeap": quickjs_heap_series(&wasm_repeated)?,
+            "incrementalQuickJsHeap": quickjs_heap_series(&wasm_incremental)?,
+            "reusedInstanceLinearMemoryHighWaterBytes": instance.linear_memory_high_water_bytes(),
+            "interpretation": "fresh-job QuickJS terminal heaps are a reclamation guard; Wasm linear memory is a monotone instance-wide high-water observation",
+        },
+        "notes": [
+            "manual local release measurement; no CI timing threshold",
+            "production TypeScript transform feature; profiling-only filesystem counters disabled",
+            "host commands use fresh Node processes; Wasm commands use fresh QuickJS jobs",
+            "cold logical state uses fresh workspaces and Wasm instances outside the timed boundary",
+            "only the incremental series preserves its explicit .tsbuildinfo",
+        ],
+    });
+
+    validate_release_baseline_report(&report)?;
+    let formatted = serde_json::to_string_pretty(&report)?;
+    if let Ok(path) = std::env::var("AGENTIC_TS_REPORT") {
+        fs::write(path, format!("{formatted}\n"))?;
+    }
+    println!("{formatted}");
+    Ok(())
+}
+
+async fn fresh_wasm_tsc(wasm_path: &Utf8Path, args: &[&str]) -> anyhow::Result<Value> {
+    let mut instance = TestInstance::new_with_memory_tracking(wasm_path).await?;
+    prepare_workspace(&instance)?;
+    wasm_tsc(&mut instance, args).await
+}
+
+async fn wasm_tsc(instance: &mut TestInstance, args: &[&str]) -> anyhow::Result<Value> {
+    timed_invoke(instance, "run-tsc", &[string_list(args), Val::U64(300_000)]).await
+}
+
+fn fresh_host_tsc(node_executable: &str, args: &[&str]) -> anyhow::Result<Value> {
+    let workspace = camino_tempfile::Utf8TempDir::new()?;
+    prepare_host_workspace(workspace.path())?;
+    host_tsc(node_executable, workspace.path(), args)
+}
+
+fn host_tsc(node_executable: &str, workspace: &Utf8Path, args: &[&str]) -> anyhow::Result<Value> {
+    let started = Instant::now();
+    let output = Command::new(node_executable)
+        .current_dir(workspace)
+        .arg("node_modules/typescript/lib/tsc.js")
+        .args(args)
+        .env_clear()
+        .env("HOME", workspace.join(".home"))
+        .env("PATH", workspace.join("node_modules/.bin"))
+        .output()?;
+    Ok(json!({
+        "wallMs": millis(started.elapsed()),
+        "result": {
+            "value": { "exitCode": output.status.code() },
+            "stdout": String::from_utf8_lossy(&output.stdout),
+            "stderr": String::from_utf8_lossy(&output.stderr),
+            "overflowed": false,
+        },
+    }))
+}
+
+fn prepare_host_workspace(workspace: &Utf8Path) -> anyhow::Result<()> {
+    let source = Utf8Path::new(SUITE_DIR);
+    fs::create_dir_all(workspace)?;
+    for file in ["package.json", "package-lock.json", "tsconfig.json"] {
+        fs::copy(source.join(file), workspace.join(file))?;
+    }
+    for directory in ["node_modules", "projects"] {
+        copy_dir_recursive(
+            source.join(directory).as_std_path(),
+            workspace.join(directory).as_std_path(),
+        )?;
+    }
+    fs::create_dir_all(workspace.join(".home"))?;
+    fs::create_dir_all(workspace.join(".cache"))?;
+    Ok(())
+}
+
+fn validate_release_baseline_report(report: &Value) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["schema"] == "agentic-ts-release-baseline-v1",
+        "unsupported release baseline schema"
+    );
+    let iterations = report["environment"]["iterations"]
+        .as_u64()
+        .filter(|iterations| *iterations >= 5)
+        .ok_or_else(|| anyhow::anyhow!("release baseline needs at least five iterations"))?;
+    anyhow::ensure!(
+        report["fixture"]["name"] == "small"
+            && report["fixture"]["project"] == "projects/core/tsconfig.check.json"
+            && report["fixture"]["seriesArguments"]["coldAndRepeated"]
+                == json!(["--noEmit", "-p", "projects/core/tsconfig.check.json"])
+            && report["fixture"]["seriesArguments"]["incremental"]
+                == json!([
+                    "--noEmit",
+                    "--incremental",
+                    "--tsBuildInfoFile",
+                    ".cache/release-baseline.tsbuildinfo",
+                    "-p",
+                    "projects/core/tsconfig.check.json"
+                ])
+            && report["environment"]["componentFeatures"] == "typescript-transform-runtime"
+            && report["environment"]["componentCargoProfile"] == "release"
+            && report["environment"]["harnessCargoProfile"] == "release"
+            && report["host"]["environmentPolicy"]["mode"] == "clear"
+            && report["host"]["environmentPolicy"]["provided"] == json!(["HOME", "PATH"])
+            && report["timingBoundary"]["host"]
+                .as_str()
+                .is_some_and(|value| value.contains("excluded"))
+            && report["timingBoundary"]["wasm"]
+                .as_str()
+                .is_some_and(|value| value.contains("excluded")),
+        "release baseline does not identify the small production-profile fixture"
+    );
+
+    fn validate_series(
+        series: &Value,
+        label: &str,
+        iterations: u64,
+        require_linear_memory: bool,
+    ) -> anyhow::Result<()> {
+        let samples = series["samples"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("{label} has no samples"))?;
+        anyhow::ensure!(
+            series["iterations"] == iterations && samples.len() as u64 == iterations,
+            "{label} does not contain the declared sample count"
+        );
+        for sample in samples {
+            anyhow::ensure!(
+                successful_result(&sample["result"])
+                    && sample.pointer("/result/value/exitCode") == Some(&json!(0))
+                    && sample["wallMs"]
+                        .as_f64()
+                        .is_some_and(|duration| duration.is_finite() && duration >= 0.0),
+                "{label} contains a failed or invalid sample: {sample:#}"
+            );
+            if require_linear_memory {
+                anyhow::ensure!(
+                    sample["linearMemoryHighWaterBytes"]
+                        .as_u64()
+                        .is_some_and(|bytes| bytes > 0),
+                    "{label} sample has no Wasm memory observation"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    for (path, label, require_linear_memory) in [
+        (
+            "/host/coldFreshProcessState",
+            "host cold release series",
+            false,
+        ),
+        (
+            "/host/repeatedUnchangedFreshProcesses",
+            "host repeated release series",
+            false,
+        ),
+        (
+            "/host/incrementalFreshProcesses",
+            "host incremental release series",
+            false,
+        ),
+        ("/wasm/coldFreshJobState", "Wasm cold release series", true),
+        (
+            "/wasm/repeatedUnchangedFreshJobs",
+            "Wasm repeated release series",
+            true,
+        ),
+        (
+            "/wasm/incrementalFreshJobs",
+            "Wasm incremental release series",
+            true,
+        ),
+    ] {
+        validate_series(
+            report
+                .pointer(path)
+                .ok_or_else(|| anyhow::anyhow!("missing {label}"))?,
+            label,
+            iterations,
+            require_linear_memory,
+        )?;
+    }
+
+    for (path, label) in [
+        ("/host/incrementalSeed", "host incremental seed"),
+        ("/wasm/incrementalSeed", "Wasm incremental seed"),
+    ] {
+        let sample = report
+            .pointer(path)
+            .ok_or_else(|| anyhow::anyhow!("missing {label}"))?;
+        anyhow::ensure!(
+            successful_result(&sample["result"])
+                && sample.pointer("/result/value/exitCode") == Some(&json!(0)),
+            "{label} failed: {sample:#}"
+        );
+    }
+
+    anyhow::ensure!(
+        report["memory"]["allowedQuickJsHeapVariationBytes"]
+            == ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
+        "release baseline changed the QuickJS heap-variation limit"
+    );
+    for (group, series_path) in [
+        (
+            "repeatedUnchangedQuickJsHeap",
+            "/wasm/repeatedUnchangedFreshJobs/samples",
+        ),
+        (
+            "incrementalQuickJsHeap",
+            "/wasm/incrementalFreshJobs/samples",
+        ),
+    ] {
+        let samples = report
+            .pointer(series_path)
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("missing release samples for {group}"))?;
+        anyhow::ensure!(
+            report["memory"][group] == quickjs_heap_series(samples)?,
+            "release baseline QuickJS heap summary does not reconcile for {group}"
+        );
+        for point in ["beforeToolLoad", "afterCompiler"] {
+            anyhow::ensure!(
+                report["memory"][group][point]["samples"]
+                    .as_array()
+                    .is_some_and(|samples| samples.len() as u64 == iterations)
+                    && report["memory"][group][point]["variationBytes"]
+                        .as_u64()
+                        .is_some_and(|variation| variation <= ALLOWED_QUICKJS_HEAP_VARIATION_BYTES),
+                "release baseline QuickJS heap varied unexpectedly for {group}/{point}"
+            );
+        }
+    }
+    anyhow::ensure!(
+        report["memory"]["reusedInstanceLinearMemoryHighWaterBytes"]
+            .as_u64()
+            .is_some_and(|bytes| bytes > 0),
+        "release baseline has no Wasm memory observation"
+    );
+    Ok(())
+}
+
+fn validate_release_baseline_regression_guards(report: &Value) -> anyhow::Result<()> {
+    let mut failed_host = report.clone();
+    failed_host["host"]["coldFreshProcessState"]["samples"][0]["result"]["value"]["exitCode"] =
+        json!(1);
+    anyhow::ensure!(
+        validate_release_baseline_report(&failed_host).is_err(),
+        "release validator accepted a failed host sample"
+    );
+
+    let mut failed_wasm = report.clone();
+    failed_wasm["wasm"]["coldFreshJobState"]["samples"][0]["result"]["value"]["exitCode"] =
+        json!(1);
+    anyhow::ensure!(
+        validate_release_baseline_report(&failed_wasm).is_err(),
+        "release validator accepted a failed Wasm sample"
+    );
+
+    let mut missing_sample = report.clone();
+    missing_sample["host"]["repeatedUnchangedFreshProcesses"]["samples"]
+        .as_array_mut()
+        .expect("validated report has repeated host samples")
+        .pop();
+    anyhow::ensure!(
+        validate_release_baseline_report(&missing_sample).is_err(),
+        "release validator accepted a missing sample"
+    );
+
+    let mut failed_seed = report.clone();
+    failed_seed["wasm"]["incrementalSeed"]["result"]["value"]["exitCode"] = json!(1);
+    anyhow::ensure!(
+        validate_release_baseline_report(&failed_seed).is_err(),
+        "release validator accepted a failed incremental seed"
+    );
+
+    let mut false_heap = report.clone();
+    false_heap["memory"]["incrementalQuickJsHeap"]["afterCompiler"]["variationBytes"] =
+        json!(u64::MAX);
+    anyhow::ensure!(
+        validate_release_baseline_report(&false_heap).is_err(),
+        "release validator accepted an unreconciled heap summary"
+    );
+
+    let mut missing_memory = report.clone();
+    missing_memory["wasm"]["coldFreshJobState"]["samples"][0]["linearMemoryHighWaterBytes"] =
+        Value::Null;
+    anyhow::ensure!(
+        validate_release_baseline_report(&missing_memory).is_err(),
+        "release validator accepted a sample without memory evidence"
+    );
+    Ok(())
+}
+
 fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()> {
     validate_composite_hash_contract()?;
     validate_report_path_contract()?;
@@ -514,6 +959,7 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
     };
     let mut reports = BTreeMap::new();
     let mut cjs_graph_reports = BTreeMap::new();
+    let mut release_baseline_reports = BTreeMap::new();
     for entry in fs::read_dir(&directory)? {
         let path = camino::Utf8PathBuf::from_path_buf(entry?.path())
             .map_err(|path| anyhow::anyhow!("non-UTF-8 report path: {}", path.display()))?;
@@ -526,10 +972,15 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             .to_string();
         let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
         let is_cjs_graph = report["schema"] == "cjs-graph-smoke-v2";
+        let is_release_baseline = report["schema"] == "agentic-ts-release-baseline-v1";
         if is_cjs_graph {
             validate_cjs_graph_report_metadata(&path, &report)?;
             validate_cjs_graph_report(&report)?;
             validate_cjs_graph_regression_guards(&report)?;
+        } else if is_release_baseline {
+            validate_release_baseline_metadata(&path, &report)?;
+            validate_release_baseline_report(&report)?;
+            validate_release_baseline_regression_guards(&report)?;
         } else {
             validate_report_metadata(&path, &report)?;
             validate_report(&report)?;
@@ -545,6 +996,8 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
         );
         if is_cjs_graph {
             cjs_graph_reports.insert(filename, report);
+        } else if is_release_baseline {
+            release_baseline_reports.insert(filename, report);
         } else {
             reports.insert(filename, report);
         }
@@ -598,6 +1051,30 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
         paired_cjs_graphs == cjs_graph_reports.len(),
         "every checked-in CommonJS graph report must belong to a P2/P3 pair"
     );
+
+    let mut paired_release_baselines = 0;
+    for (filename, p2) in release_baseline_reports
+        .iter()
+        .filter(|(filename, _)| filename.contains("-p2-"))
+    {
+        let p3_filename = filename.replacen("-p2-", "-p3-", 1);
+        let p3 = release_baseline_reports
+            .get(&p3_filename)
+            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        validate_release_baseline_pair(filename, &p3_filename, p2, p3)?;
+        let mut duplicate_component = p3.clone();
+        duplicate_component["component"]["blake3"] = p2["component"]["blake3"].clone();
+        anyhow::ensure!(
+            validate_release_baseline_pair(filename, &p3_filename, p2, &duplicate_component)
+                .is_err(),
+            "paired release-baseline guard accepted an identical P2/P3 component digest"
+        );
+        paired_release_baselines += 2;
+    }
+    anyhow::ensure!(
+        paired_release_baselines == release_baseline_reports.len(),
+        "every checked-in release baseline must belong to a P2/P3 pair"
+    );
     Ok(())
 }
 
@@ -620,6 +1097,7 @@ fn validate_report_pair(
         "/environment/componentFeatures",
         "/environment/componentCargoProfile",
         "/environment/harnessCargoProfile",
+        "/environment/lockedBuilds",
         "/environment/rustc",
         "/environment/cargo",
     ] {
@@ -654,6 +1132,82 @@ fn validate_cjs_graph_report_pair(
             "paired CommonJS graph reports {p2_filename} and {p3_filename} disagree at {field}"
         );
     }
+    Ok(())
+}
+
+fn validate_release_baseline_pair(
+    p2_filename: &str,
+    p3_filename: &str,
+    p2: &Value,
+    p3: &Value,
+) -> anyhow::Result<()> {
+    validate_report_pair(p2_filename, p3_filename, p2, p3)?;
+    for field in ["/schema", "/fixture/name", "/fixture/project"] {
+        anyhow::ensure!(
+            p2.pointer(field) == p3.pointer(field),
+            "paired release baselines {p2_filename} and {p3_filename} disagree at {field}"
+        );
+    }
+    Ok(())
+}
+
+fn validate_release_baseline_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
+    let target = report["target"]
+        .as_str()
+        .filter(|target| matches!(*target, "p2" | "p3"))
+        .ok_or_else(|| anyhow::anyhow!("{path} has no supported target"))?;
+    let os = report["environment"]["os"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no OS"))?;
+    let arch = report["environment"]["arch"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no architecture"))?;
+    let filename = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no filename"))?;
+    anyhow::ensure!(
+        filename.contains("-release-")
+            && filename.ends_with(&format!("-{target}-{os}-{arch}.json")),
+        "{path} filename does not identify a release target and host"
+    );
+    anyhow::ensure!(
+        report["environment"]["node"] == "22.14.0"
+            && report["environment"]["npm"] == "10.9.2"
+            && report["environment"]["typescript"] == "5.8.2"
+            && report["environment"]["dirty"] == false
+            && report["environment"]["lockedBuilds"] == "1"
+            && report["environment"]["artifactCache"].is_null()
+            && report["environment"]["wasmtimeCache"].is_null()
+            && report["environment"]["preparedComponentCache"].is_null()
+            && report["environment"]["unoptimized"].is_null(),
+        "{path} does not use the pinned clean-state release settings"
+    );
+    let expected_lock_kind = if target == "p2" {
+        "p2-shadow"
+    } else {
+        "workspace"
+    };
+    anyhow::ensure!(
+        report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
+            && is_blake3_hash(&report["inputs"]["buildHash"])
+            && is_blake3_hash(&report["inputs"]["benchmarkHash"])
+            && is_blake3_hash(&report["component"]["blake3"])
+            && report["component"]["bytes"]
+                .as_u64()
+                .is_some_and(|bytes| bytes > 0)
+            && report["environment"]["hostDependencyGraph"]["kind"] == expected_lock_kind
+            && is_blake3_hash(&report["environment"]["hostDependencyGraph"]["lockBlake3"])
+            && report["environment"]["commitHint"]
+                .as_str()
+                .is_some_and(|commit| !commit.is_empty())
+            && report["environment"]["rustc"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty())
+            && report["environment"]["cargo"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty()),
+        "{path} has incomplete release provenance"
+    );
     Ok(())
 }
 
@@ -973,6 +1527,36 @@ fn summarize(samples: &[Value]) -> Value {
     })
 }
 
+fn quickjs_heap_series(samples: &[Value]) -> anyhow::Result<Value> {
+    fn values_at(samples: &[Value], point: &str) -> anyhow::Result<Vec<u64>> {
+        samples
+            .iter()
+            .map(|sample| {
+                sample
+                    .pointer(&format!("/result/value/quickJsMemory/{point}/heapUsed"))
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow::anyhow!("missing QuickJS heap sample at {point}"))
+            })
+            .collect()
+    }
+
+    fn summarize_values(values: Vec<u64>) -> Value {
+        let minimum = values.iter().copied().min().unwrap_or(0);
+        let maximum = values.iter().copied().max().unwrap_or(0);
+        json!({
+            "samples": values,
+            "minimumBytes": minimum,
+            "maximumBytes": maximum,
+            "variationBytes": maximum - minimum,
+        })
+    }
+
+    Ok(json!({
+        "beforeToolLoad": summarize_values(values_at(samples, "beforeToolLoad")?),
+        "afterCompiler": summarize_values(values_at(samples, "afterCompiler")?),
+    }))
+}
+
 fn memory_plateau(
     unchanged: &[Value],
     incremental: &[Value],
@@ -997,36 +1581,6 @@ fn memory_plateau(
             "minimumBytes": minimum,
             "maximumBytes": maximum,
             "growthBytes": maximum - minimum,
-        }))
-    }
-
-    fn quickjs_heap_series(samples: &[Value]) -> anyhow::Result<Value> {
-        fn values_at(samples: &[Value], point: &str) -> anyhow::Result<Vec<u64>> {
-            samples
-                .iter()
-                .map(|sample| {
-                    sample
-                        .pointer(&format!("/result/value/quickJsMemory/{point}/heapUsed"))
-                        .and_then(Value::as_u64)
-                        .ok_or_else(|| anyhow::anyhow!("missing QuickJS heap sample at {point}"))
-                })
-                .collect()
-        }
-
-        fn summarize_values(values: Vec<u64>) -> Value {
-            let minimum = values.iter().copied().min().unwrap_or(0);
-            let maximum = values.iter().copied().max().unwrap_or(0);
-            json!({
-                "samples": values,
-                "minimumBytes": minimum,
-                "maximumBytes": maximum,
-                "variationBytes": maximum - minimum,
-            })
-        }
-
-        Ok(json!({
-            "beforeToolLoad": summarize_values(values_at(samples, "beforeToolLoad")?),
-            "afterCompiler": summarize_values(values_at(samples, "afterCompiler")?),
         }))
     }
 
@@ -1402,6 +1956,7 @@ fn environment(iterations: usize, component_features: &str) -> anyhow::Result<Va
         "componentCargoProfile": std::env::var("WASM_RQUICKJS_TEST_COMPONENT_PROFILE")
             .unwrap_or_else(|_| "dev".to_string()),
         "harnessCargoProfile": if cfg!(debug_assertions) { "dev" } else { "release" },
+        "lockedBuilds": std::env::var("WASM_RQUICKJS_TEST_LOCKED_BUILDS").ok(),
         "hostDependencyGraph": {
             "kind": if test_target() == TestTarget::P2 { "p2-shadow" } else { "workspace" },
             "lockBlake3": host_lock_blake3,
