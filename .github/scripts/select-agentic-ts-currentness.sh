@@ -53,18 +53,30 @@ case "$event_name" in
         ;;
 esac
 
-reports_to_check=()
+agentic_reports_to_check=()
+npm_reports_to_check=()
 reports_count=0
 if [[ -n "$diff_base" ]]; then
     report_list=$(mktemp)
     trap 'rm -f "$report_list"' EXIT
     if ! git diff --name-only --diff-filter=ACMR "$diff_base" HEAD \
-        -- 'tests/agentic_ts/results/*.json' >"$report_list"; then
-        echo "failed to select changed agentic TypeScript reports" >&2
+        -- 'tests/agentic_ts/results/*.json' 'tests/npm_metadata/results/*.json' >"$report_list"; then
+        echo "failed to select changed performance reports" >&2
         exit 1
     fi
     while IFS= read -r report; do
-        reports_to_check+=("$report")
+        case "$report" in
+            tests/agentic_ts/results/*.json)
+                agentic_reports_to_check+=("$report")
+                ;;
+            tests/npm_metadata/results/*.json)
+                npm_reports_to_check+=("$report")
+                ;;
+            *)
+                echo "unexpected performance report path: $report" >&2
+                exit 1
+                ;;
+        esac
         reports_count=$((reports_count + 1))
     done <"$report_list"
 fi
@@ -80,7 +92,12 @@ fi
 
 echo "source-ref=$source_ref"
 echo "reports-to-check<<AGENTIC_TS_REPORTS"
-if [[ $reports_count -gt 0 ]]; then
-    printf '%s\n' "${reports_to_check[@]}"
+if [[ ${#agentic_reports_to_check[@]} -gt 0 ]]; then
+    printf '%s\n' "${agentic_reports_to_check[@]}"
 fi
 echo "AGENTIC_TS_REPORTS"
+echo "npm-reports-to-check<<NPM_METADATA_REPORTS"
+if [[ ${#npm_reports_to_check[@]} -gt 0 ]]; then
+    printf '%s\n' "${npm_reports_to_check[@]}"
+fi
+echo "NPM_METADATA_REPORTS"

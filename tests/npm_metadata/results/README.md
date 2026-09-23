@@ -1,5 +1,39 @@
 # Manual npm metadata measurements
 
+## Matched production release baseline
+
+`tests/npm_metadata/run.sh --release` produces the checked production evidence
+pair. It uses the pinned Node 22.14.0/npm 10.9.2 toolchain, locked host and guest
+release builds, and the production `normal` component feature. Five iterations
+compare the same deterministic loopback registry on host Node and Wasm:
+
+- a fresh-root, fresh-cache `npm view @types/lodash-es@4.17.12 version`; and
+- `npm ci --offline` after an untimed seed populated an otherwise isolated
+  tarball cache, with `node_modules` removed outside the timed boundary.
+
+Each sample records exact output, success/overflow state, authoritative local
+registry request counts, npm HTTP log counts, install identities, unchanged
+lockfile evidence, and (for Wasm) linear-memory high-water observations captured
+outside the timed invocation. Reports also fingerprint the copied npm tool tree,
+fixture and tarball bytes, source/build inputs, host dependency graph, component,
+profiles, toolchain, and cache settings. Public npmjs.org timings and npm
+`--version` startup rows are intentionally excluded from the v2 release schema.
+
+Run the contract without workloads or network access with:
+
+```sh
+tests/npm_metadata/run.sh --check
+tests/npm_metadata/run.sh --check-current tests/npm_metadata/results/YYYY-MM-DD-release-p2-OS-ARCH.json \
+  tests/npm_metadata/results/YYYY-MM-DD-release-p3-OS-ARCH.json
+```
+
+No `npm-metadata-v2` report is accepted as current unless both target reports
+match the source input hashes and form one distinct P2/P3 pair. The dated final
+pair and its measured goal status are documented here only after that validation
+passes from a clean source commit.
+
+## Historical diagnostics
+
 The dated JSON files are raw observations, not CI pass/fail thresholds. Run one
 target at a time with the pinned Node 22.14.0/npm 10.9.2 installation:
 

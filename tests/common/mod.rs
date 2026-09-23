@@ -4000,6 +4000,19 @@ impl TestInstance {
         .await
     }
 
+    pub async fn from_prepared_with_memory_tracking(
+        prepared: &PreparedComponent,
+    ) -> anyhow::Result<Self> {
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            None,
+            true,
+        )
+        .await
+    }
+
     pub async fn from_golem_prepared(prepared: &GolemPreparedComponent) -> anyhow::Result<Self> {
         Self::from_parts(
             &prepared.engine,

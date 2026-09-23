@@ -308,6 +308,56 @@ fn agentic_ts_runner_uses_one_date_for_the_report_pair() {
 }
 
 #[test]
+fn npm_metadata_release_runner_rejects_node_environment_overrides() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (variable, value) in [
+        ("NODE_OPTIONS", "--trace-warnings"),
+        ("NODE_COMPILE_CACHE", "/tmp/node-compile-cache"),
+        ("NODE_ENV", "production"),
+    ] {
+        let mut command = Command::new("sh");
+        command
+            .arg(repo_root.join("tests/npm_metadata/run.sh"))
+            .arg("--release")
+            .current_dir(repo_root);
+        remove_node_overrides(&mut command);
+        let output = command
+            .env(variable, value)
+            .output()
+            .expect("release runner guard should execute");
+
+        assert!(
+            !output.status.success(),
+            "{variable} was unexpectedly accepted"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(variable) && stderr.contains("rejects inherited Node"),
+            "unexpected rejection for {variable}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn npm_metadata_runner_uses_one_date_for_the_report_pair() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let runner = fs::read_to_string(repo_root.join("tests/npm_metadata/run.sh"))
+        .expect("npm metadata runner should be readable");
+
+    assert_eq!(
+        runner.matches("measurement_date=$(date +%Y-%m-%d)").count(),
+        1,
+        "the report-pair date should be captured exactly once"
+    );
+    assert!(
+        runner.contains(
+            "report=\"$results_dir/${measurement_date}-release-$target-$platform-$arch.json\""
+        ),
+        "both report paths should use the captured measurement date"
+    );
+}
+
+#[test]
 fn wasmtime_fork_transform_supports_copied_manifests_and_new_patch_crates() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let temp = Utf8TempDir::new().expect("temporary directory should be created");

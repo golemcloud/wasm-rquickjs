@@ -10,6 +10,7 @@ git -C "$fixture" init -q -b main
 git -C "$fixture" config user.email ci-test@example.invalid
 git -C "$fixture" config user.name 'CI contract test'
 mkdir -p "$fixture/tests/agentic_ts/results"
+mkdir -p "$fixture/tests/npm_metadata/results"
 printf 'base\n' >"$fixture/build-input.txt"
 git -C "$fixture" add build-input.txt
 git -C "$fixture" commit -qm base
@@ -17,7 +18,8 @@ base=$(git -C "$fixture" rev-parse HEAD)
 
 git -C "$fixture" switch -qc report-branch
 printf '{}\n' >"$fixture/tests/agentic_ts/results/report.json"
-git -C "$fixture" add tests/agentic_ts/results/report.json
+printf '{}\n' >"$fixture/tests/npm_metadata/results/report.json"
+git -C "$fixture" add tests/agentic_ts/results/report.json tests/npm_metadata/results/report.json
 git -C "$fixture" commit -qm report
 report_head=$(git -C "$fixture" rev-parse HEAD)
 
@@ -31,16 +33,22 @@ assert_plan() {
     local event_name=$1
     local before=$2
     local expected_source=$3
-    local expected_report=$4
-    local expected_pr_head=${5:-}
+    local expected_agentic_report=$4
+    local expected_npm_report=$5
+    local expected_pr_head=${6:-}
     local plan
     plan=$(cd "$fixture" && "$selector" "$event_name" "$before" "$expected_pr_head")
     grep -Fxq "source-ref=$expected_source" <<<"$plan"
-    grep -Fxq "$expected_report" <<<"$plan"
+    if [[ -n "$expected_agentic_report" ]]; then
+        grep -Fxq "$expected_agentic_report" <<<"$plan"
+    fi
+    if [[ -n "$expected_npm_report" ]]; then
+        grep -Fxq "$expected_npm_report" <<<"$plan"
+    fi
 }
 
-assert_plan pull_request '' "$report_head" tests/agentic_ts/results/report.json "$report_head"
-assert_plan push "$main_parent" "$report_head" tests/agentic_ts/results/report.json
+assert_plan pull_request '' "$report_head" tests/agentic_ts/results/report.json tests/npm_metadata/results/report.json "$report_head"
+assert_plan push "$main_parent" "$report_head" tests/agentic_ts/results/report.json tests/npm_metadata/results/report.json
 [[ "$(git -C "$fixture" rev-parse HEAD^2)" == "$report_head" ]]
 if (cd "$fixture" && "$selector" pull_request '' "$base") >/dev/null 2>&1; then
     echo "mismatched pull-request head unexpectedly passed" >&2
@@ -53,15 +61,20 @@ fi
 
 previous=$(git -C "$fixture" rev-parse HEAD)
 printf '{}\n' >"$fixture/tests/agentic_ts/results/direct.json"
-git -C "$fixture" add tests/agentic_ts/results/direct.json
+printf '{}\n' >"$fixture/tests/npm_metadata/results/direct.json"
+git -C "$fixture" add tests/agentic_ts/results/direct.json tests/npm_metadata/results/direct.json
 git -C "$fixture" commit -qm direct-push
 direct_head=$(git -C "$fixture" rev-parse HEAD)
-assert_plan push "$previous" "$direct_head" tests/agentic_ts/results/direct.json
+assert_plan push "$previous" "$direct_head" tests/agentic_ts/results/direct.json tests/npm_metadata/results/direct.json
 
 zero_plan=$(cd "$fixture" && "$selector" push 0000000000000000000000000000000000000000)
 grep -Fqx "source-ref=$(git -C "$fixture" rev-parse HEAD)" <<<"$zero_plan"
 if grep -Fqx tests/agentic_ts/results/direct.json <<<"$zero_plan"; then
     echo "zero-before push unexpectedly selected a current report" >&2
+    exit 1
+fi
+if grep -Fqx tests/npm_metadata/results/direct.json <<<"$zero_plan"; then
+    echo "zero-before push unexpectedly selected a current npm report" >&2
     exit 1
 fi
 
