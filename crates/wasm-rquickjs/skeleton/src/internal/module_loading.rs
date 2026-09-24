@@ -4129,7 +4129,7 @@ enum ModulePathClassification {
 #[derive(Default)]
 struct CjsModuleProbeSessionState {
     depth: usize,
-    entries: HashMap<String, Option<ModulePathClassification>>,
+    entries: HashMap<String, ModulePathClassification>,
     missing_package_json: HashSet<String>,
     #[cfg(feature = "test-observability")]
     hit_count: u64,
@@ -4152,17 +4152,17 @@ impl CjsModuleProbeSessionState {
     }
 }
 
-/// Filesystem classifications shared while an outer CommonJS wrapper runs.
+/// Positive filesystem classifications shared while an outer CommonJS wrapper runs.
 ///
 /// Node's internal `Module._stat` cache retains positive observations during an
 /// outer main-module compile. This runtime also brackets an outer `createRequire()`
 /// graph so real ESM-to-CJS package workloads benefit, but deliberately invalidates
 /// observations after filesystem mutations instead of exposing Node's stale result.
-/// Missing paths and package metadata are retained only for the same outer graph and cleared after
-/// filesystem mutations, so files and packages created by the running program become visible.
-/// Sibling QuickJS runtimes never share this RuntimeServices-owned state. Rust depth keeps the
-/// private runner reentrant; the normal JS adapter crosses the bridge only at its own outermost
-/// depth.
+/// Missing path classifications are never retained. Missing package metadata is retained only
+/// for the same outer graph and cleared after filesystem mutations, so packages created by the
+/// running program become visible. Sibling QuickJS runtimes never share this RuntimeServices-owned
+/// state. Rust depth keeps the private runner reentrant; the normal JS adapter crosses the bridge
+/// only at its own outermost depth.
 #[derive(Clone, Default)]
 pub(crate) struct CjsModuleProbeSession(Rc<RefCell<CjsModuleProbeSessionState>>);
 
@@ -4229,11 +4229,9 @@ impl CjsModuleProbeSession {
     fn probe(&self, normalized: &str) -> ModulePathProbe {
         let cached = {
             let state = self.0.borrow();
-            if state.depth > 0 && state.cache_enabled() {
-                state.entries.get(normalized).copied()
-            } else {
-                None
-            }
+            (state.depth > 0 && state.cache_enabled())
+                .then(|| state.entries.get(normalized).copied())
+                .flatten()
         };
         if let Some(classification) = cached {
             #[cfg(feature = "test-observability")]
@@ -4242,7 +4240,7 @@ impl CjsModuleProbeSession {
                 state.hit_count = state.hit_count.saturating_add(1);
             }
             return ModulePathProbe {
-                classification,
+                classification: Some(classification),
                 _session_hit: true,
             };
         }
@@ -4258,7 +4256,10 @@ impl CjsModuleProbeSession {
         });
 
         let mut state = self.0.borrow_mut();
-        if state.depth > 0 && state.cache_enabled() {
+        if state.depth > 0
+            && state.cache_enabled()
+            && let Some(classification) = classification
+        {
             state.entries.insert(normalized.to_string(), classification);
         }
         ModulePathProbe {
