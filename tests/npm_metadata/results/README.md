@@ -32,25 +32,29 @@ match the source input hashes and form one distinct P2/P3 pair. The dated final
 pair and its measured goal status are documented here only after that validation
 passes from a clean source commit.
 
-### 2026-09-24 small-fixture baseline
+### 2026-09-24 retained small-fixture measurement
 
 The final [P2](2026-09-24-release-p2-macos-aarch64.json) and
 [P3](2026-09-24-release-p3-macos-aarch64.json) reports measure exact clean
-source revision `fae34bd988c6129bdcf5d4b9848bca2a6ca78ffc`. All 60 host/Wasm
+source revision `59146d1562172ecdb206ba38ac15d99503556a14`. All 60 host/Wasm
 samples succeeded; none overflowed, every registry counter reconciled with zero
 unexpected requests, and every `npm ci` produced the exact install tree without
 changing the rewritten lockfile.
 
 | Target / workload | Host median | Wasm median | Wasm / host | Goal ceiling | Status |
 | --- | ---: | ---: | ---: | ---: | --- |
-| P2 cold metadata | 200.022 ms | 1,332.059 ms | 6.66x | 1,100.065 ms (`3x + 0.5s`) | misses by 231.995 ms |
-| P3 cold metadata | 176.856 ms | 1,277.538 ms | 7.22x | 1,030.567 ms (`3x + 0.5s`) | misses by 246.970 ms |
-| P2 warm-tarball `npm ci` | 250.263 ms | 2,718.971 ms | 10.86x | 1,500.525 ms (`2x + 1s`) | misses by 1,218.446 ms |
-| P3 warm-tarball `npm ci` | 252.123 ms | 2,503.777 ms | 9.93x | 1,504.247 ms (`2x + 1s`) | misses by 999.531 ms |
+| P2 cold metadata | 226.499 ms | 1,100.028 ms | 4.86x | 1,179.497 ms (`3x + 0.5s`) | meets by 79.470 ms |
+| P3 cold metadata | 291.300 ms | 1,160.110 ms | 3.98x | 1,373.900 ms (`3x + 0.5s`) | meets by 213.790 ms |
+| P2 warm-tarball `npm ci` | 270.155 ms | 2,355.914 ms | 8.72x | 1,540.310 ms (`2x + 1s`) | misses by 815.604 ms |
+| P3 warm-tarball `npm ci` | 270.565 ms | 2,369.258 ms | 8.76x | 1,541.130 ms (`2x + 1s`) | misses by 828.129 ms |
 
-Peak observed Wasm linear-memory high-water was 52.75 MiB for P2 and
-48.125 MiB for P3. This pair establishes the production memory anchor; the
-10% regression gate applies to later candidates compared with these values.
+Peak observed Wasm linear-memory high-water was 53.8125 MiB for P2 and
+47.125 MiB for P3. Compared with the pre-optimization production anchors at
+revision `fae34bd9` (52.75 MiB and 48.125 MiB), that is +2.0% for P2 and -2.1%
+for P3, within the 10% regression gate. Host metadata timings were noisier than
+the Wasm rows, so the absolute medians and the same-machine control observations
+in the [follow-up report](2026-09-24-release-cache-followups.md) remain important
+alongside the formula status.
 
 ## Historical diagnostics
 
@@ -133,3 +137,8 @@ It also records the final three-iteration P2/P3 candidate after review split
 the CommonJS and ESM cache domains. Only the final reviewed P2/P3 raw reports
 are retained; the prototype samples remain summarized in the report's
 aggregate tables.
+
+The later [release-cache follow-up](2026-09-24-release-cache-followups.md)
+records directory-prefix realpath reuse, graph-scoped missing CJS path probes,
+the final matched release pair, and the bytecode/lazy-loading/path-normalization
+experiments that were measured and rejected.
