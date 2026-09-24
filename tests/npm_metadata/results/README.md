@@ -32,6 +32,26 @@ match the source input hashes and form one distinct P2/P3 pair. The dated final
 pair and its measured goal status are documented here only after that validation
 passes from a clean source commit.
 
+### 2026-09-24 small-fixture baseline
+
+The final [P2](2026-09-24-release-p2-macos-aarch64.json) and
+[P3](2026-09-24-release-p3-macos-aarch64.json) reports measure exact clean
+source revision `fae34bd988c6129bdcf5d4b9848bca2a6ca78ffc`. All 60 host/Wasm
+samples succeeded; none overflowed, every registry counter reconciled with zero
+unexpected requests, and every `npm ci` produced the exact install tree without
+changing the rewritten lockfile.
+
+| Target / workload | Host median | Wasm median | Wasm / host | Goal ceiling | Status |
+| --- | ---: | ---: | ---: | ---: | --- |
+| P2 cold metadata | 200.022 ms | 1,332.059 ms | 6.66x | 1,100.065 ms (`3x + 0.5s`) | misses by 231.995 ms |
+| P3 cold metadata | 176.856 ms | 1,277.538 ms | 7.22x | 1,030.567 ms (`3x + 0.5s`) | misses by 246.970 ms |
+| P2 warm-tarball `npm ci` | 250.263 ms | 2,718.971 ms | 10.86x | 1,500.525 ms (`2x + 1s`) | misses by 1,218.446 ms |
+| P3 warm-tarball `npm ci` | 252.123 ms | 2,503.777 ms | 9.93x | 1,504.247 ms (`2x + 1s`) | misses by 999.531 ms |
+
+Peak observed Wasm linear-memory high-water was 52.75 MiB for P2 and
+48.125 MiB for P3. This pair establishes the production memory anchor; the
+10% regression gate applies to later candidates compared with these values.
+
 ## Historical diagnostics
 
 The dated JSON files are raw observations, not CI pass/fail thresholds. Run one
