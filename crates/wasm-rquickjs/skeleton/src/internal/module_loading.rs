@@ -9029,6 +9029,10 @@ where
     let bytes = source.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_non_code(source, i, skip_regex) {
             i = next;
             continue;
@@ -9055,6 +9059,10 @@ where
     let mut i = 0usize;
     let mut brace_depth = 0usize;
     while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_non_code(source, i, skip_regex) {
             i = next;
             continue;
