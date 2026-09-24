@@ -71,6 +71,89 @@ host-adjusted overhead was 5,240.345 versus 5,243.194 ms cold, 5,239.413 versus
 unchanged. The candidate was reverted with a normal commit; its raw reports are
 not retained.
 
+Two whole-guest LLVM profile experiments were also rejected. Changing the
+skeleton release profile from size optimization to `opt-level = 2` grew the P2
+component from 17,123,349 to 20,131,015 bytes (+17.6%). Against the retained
+pair, host-adjusted cold and repeated overhead worsened by 127 and 115 ms;
+incremental improved by only 10 ms. `opt-level = 3` grew the component to
+20,536,838 bytes (+19.9%) while cold was neutral, repeated worsened by 177 ms,
+and incremental worsened by 24 ms. Memory was unchanged in both diagnostics.
+Both profile edits were reverted and their raw reports are not retained.
+
+Optimizing only the QuickJS/rquickjs native package did not produce a durable
+tradeoff either. A package-specific `opt-level = 3` grew the P2 component by
+about 244 KiB (1.4%): one adjacent run improved cold overhead by 362 ms and
+incremental overhead by 57 ms, but repeated unchanged overhead regressed, and
+a second candidate run made the repeated median 255 ms slower than the same
+control. Package-specific `opt-level = 2` grew the component by about 220 KiB
+(1.3%). Two runs put cold overhead on opposite sides of the retained baseline;
+the clean rerun improved it by 98 ms but worsened repeated and incremental
+overhead by 135 and 62 ms. Linear-memory high-water was unchanged throughout.
+The overrides were reverted and the diagnostic reports are not retained.
+
+An upstream-isolated QuickJS diagnostic enabled its GCC label-based direct
+bytecode dispatch for WASI instead of the default switch loop. Clang accepted
+the extension, but the resulting Wasm control flow was slower: host-adjusted
+repeated overhead rose by 310 ms and incremental overhead by 147 ms, while the
+cold series developed 8.9--14.3 s tails. Component size increased by only
+9,158 bytes and memory was unchanged, so neither explains the regression. The
+temporary dependency override and lockfile change were removed; direct
+dispatch and its raw report are not retained.
+
+Enabling `-msimd128` for the QuickJS C build was also rejected after a
+five-sample P2 release screen. The generated component did contain SIMD
+instructions, but host-adjusted cold, repeated, and incremental overhead rose
+by 172, 280, and 109 ms against the retained baseline. Linear-memory high-water
+was unchanged and component size increased by only 183 bytes. Because every
+TypeScript series regressed, npm and P3 follow-ups were not run; the temporary
+report is not retained.
+
+Enabling rquickjs's `disable-assertions` feature removed QuickJS C assertions
+and dump scaffolding. In an immediate P2 TypeScript candidate/control pair it
+reduced host-adjusted cold, repeated, and incremental overhead by 112, 143,
+and 169 ms (2.1%, 2.6%, and 6.3%), reduced the component by about 143 KiB
+(0.84%), and did not increase memory. The global candidate was nevertheless
+rejected after npm A/B/A: its clean second candidate leg made metadata overhead
+106 ms (10.9%) slower than the adjacent control, while warm-tarball `npm ci`
+was neutral at 12 ms faster. That metadata loss would consume the entire
+remaining target margin. Assertions therefore remain enabled; P3 was not run
+and the diagnostic reports are not retained.
+
+An upstream-isolated follow-up disabled only QuickJS's inactive dump
+instrumentation while preserving all assertions. It retained most of the size
+benefit and improved TypeScript host-adjusted cold, repeated, and incremental
+overhead by 271, 105, and 45 ms against the retained baseline. It also retained
+the npm conflict: against the adjacent assertions-enabled control, metadata
+overhead was 159 ms slower and warm-tarball `npm ci` was neutral within noise.
+The patch and raw reports were removed. This narrows the workload split to the
+dump-code removal/code layout rather than assertion evaluation itself.
+
+A temporary P2 bytecode-cache prototype isolated a larger opportunity and its
+constraints. Compiling the 9,065,703-byte `typescript.js` CommonJS wrapper took
+826--912 ms, while loading source-stripped serialized QuickJS bytecode took
+51--61 ms. Against an adjacent control, that version improved cold, repeated,
+and incremental Wasm medians by 305, 252, and 140 ms with only a 9.2 KiB
+component increase. It was rejected because omitting source text changes the
+observable `Function.prototype.toString()` result. A source-preserving version
+passed targeted content-invalidation and source-observability checks, but its
+20,164,115-byte serialized artifact raised linear-memory high-water from
+152,109,056 to 172,294,144 bytes (+13.3%), above the 10% budget. GOL-663 tracks
+a compact semantics-preserving design; all prototype code and raw reports were
+removed.
+
+A separate P2 diagnostic ran Binaryen `wasm-opt -O3` over the large embedded
+core module after Wizer, with Binaryen limited to four workers. An immediate
+A/B/A TypeScript sequence reduced the component from 17,123,442 bytes to about
+14,944,500 bytes (-12.7%) with unchanged 152,109,056-byte linear-memory high
+water. Relative to the adjacent control, host-adjusted overhead improved by
+42–87 ms cold (0.8–1.7%), 138–308 ms repeated (2.6–5.8%), and 77–81 ms
+incremental (3.0–3.1%). The result is a real but modest whole-program
+optimization opportunity. It is not retained here because the prototype
+required an undeclared system `wasm-opt`; adopting it needs an explicit
+cross-platform build and binary-distribution design plus P2/P3 compatibility
+coverage. GOL-661 tracks that production integration. Raw diagnostic reports
+remain outside the repository.
+
 ## Consolidated TypeScript module-loading candidate
 
 The [2026-09-23 P2](2026-09-23-p2-macos-aarch64.json) and

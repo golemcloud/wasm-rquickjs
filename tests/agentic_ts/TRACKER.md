@@ -20,7 +20,7 @@
 
 The retained [P2](results/2026-09-24-release-p2-macos-aarch64.json) and
 [P3](results/2026-09-24-release-p3-macos-aarch64.json) reports establish the
-matched production baseline at clean source `19ed7840`. Both the host harness
+matched production baseline at clean source `968657ac`. Both the host harness
 and generated component use locked Cargo release builds, the component uses the
 production `typescript-transform-runtime` feature, and all optional test caches
 are disabled. Each cell below is a five-sample median. The host and Wasm sides
@@ -30,9 +30,9 @@ QuickJS jobs; only the incremental series preserves its independently isolated
 
 | Series | P2 host → Wasm | P3 host → Wasm | `8 × host + 1 s` goal |
 |---|---:|---:|---:|
-| cold fresh logical state | 0.553 → 5.650 s (10.22×) | 0.501 → 5.546 s (11.07×) | miss by 0.227 / 0.539 s |
-| repeated unchanged, fresh jobs | 0.423 → 5.528 s (13.06×) | 0.422 → 5.516 s (13.07×) | miss by 1.141 / 1.141 s |
-| warm incremental, fresh jobs | 0.191 → 2.696 s (14.15×) | 0.189 → 2.665 s (14.09×) | miss by 0.172 / 0.152 s |
+| cold fresh logical state | 0.530 → 5.773 s (10.90×) | 0.528 → 5.879 s (11.14×) | miss by 0.534 / 0.658 s |
+| repeated unchanged, fresh jobs | 0.445 → 5.617 s (12.63×) | 0.459 → 5.621 s (12.25×) | miss by 1.059 / 0.951 s |
+| warm incremental, fresh jobs | 0.196 → 2.729 s (13.91×) | 0.200 → 2.830 s (14.16×) | miss by 0.159 / 0.231 s |
 
 The measured boundary is Node process spawn through exit on the host and the
 `run-tsc` export invocation through result in Wasm. Workspace copying and
