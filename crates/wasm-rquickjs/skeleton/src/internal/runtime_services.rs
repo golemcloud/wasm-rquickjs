@@ -95,6 +95,12 @@ pub(crate) struct RuntimeServices {
     loader_realpath_cache_hit_count: Cell<u64>,
     #[cfg(feature = "test-observability")]
     loader_realpath_system_call_count: Cell<u64>,
+    #[cfg(feature = "test-observability")]
+    loader_realpath_segment_call_count: Cell<u64>,
+    #[cfg(feature = "test-observability")]
+    loader_realpath_prefix_cache_hit_count: Cell<u64>,
+    #[cfg(feature = "test-observability")]
+    loader_realpath_segment_system_call_count: Cell<u64>,
     pub(crate) process: ProcessServices,
     pub(crate) fs: RefCell<FsServices>,
     output: RefCell<Rc<dyn RuntimeOutputSink>>,
@@ -118,6 +124,12 @@ impl Default for RuntimeServices {
             loader_realpath_cache_hit_count: Cell::new(0),
             #[cfg(feature = "test-observability")]
             loader_realpath_system_call_count: Cell::new(0),
+            #[cfg(feature = "test-observability")]
+            loader_realpath_segment_call_count: Cell::new(0),
+            #[cfg(feature = "test-observability")]
+            loader_realpath_prefix_cache_hit_count: Cell::new(0),
+            #[cfg(feature = "test-observability")]
+            loader_realpath_segment_system_call_count: Cell::new(0),
             process: ProcessServices::default(),
             fs: RefCell::new(FsServices::default()),
             output: RefCell::new(Rc::new(ComponentOutputSink)),
@@ -334,6 +346,37 @@ impl RuntimeServices {
     #[cfg(feature = "test-observability")]
     pub(crate) fn reset_loader_realpath_system_call_count(&self) {
         self.loader_realpath_system_call_count.set(0);
+    }
+
+    #[cfg(feature = "test-observability")]
+    pub(crate) fn record_loader_realpath_segment(&self, prefix_cache_hit: bool) {
+        self.loader_realpath_segment_call_count.set(
+            self.loader_realpath_segment_call_count
+                .get()
+                .saturating_add(1),
+        );
+        let counter = if prefix_cache_hit {
+            &self.loader_realpath_prefix_cache_hit_count
+        } else {
+            &self.loader_realpath_segment_system_call_count
+        };
+        counter.set(counter.get().saturating_add(1));
+    }
+
+    #[cfg(feature = "test-observability")]
+    pub(crate) fn loader_realpath_segment_counts(&self) -> (u64, u64, u64) {
+        (
+            self.loader_realpath_segment_call_count.get(),
+            self.loader_realpath_prefix_cache_hit_count.get(),
+            self.loader_realpath_segment_system_call_count.get(),
+        )
+    }
+
+    #[cfg(feature = "test-observability")]
+    pub(crate) fn reset_loader_realpath_segment_counts(&self) {
+        self.loader_realpath_segment_call_count.set(0);
+        self.loader_realpath_prefix_cache_hit_count.set(0);
+        self.loader_realpath_segment_system_call_count.set(0);
     }
 
     pub(crate) fn output_sink(&self) -> Rc<dyn RuntimeOutputSink> {

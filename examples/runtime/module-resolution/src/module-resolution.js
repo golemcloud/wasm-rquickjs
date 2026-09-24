@@ -6587,13 +6587,53 @@ export const testCjsLoaderRealpathCache = async () => {
         const resetHits = globalThis.__wasm_rquickjs_reset_loader_realpath_cache_hit_count;
         const getSystemCalls = globalThis.__wasm_rquickjs_get_loader_realpath_system_call_count;
         const resetSystemCalls = globalThis.__wasm_rquickjs_reset_loader_realpath_system_call_count;
+        const getSegmentCounts = globalThis.__wasm_rquickjs_get_loader_realpath_segment_counts;
+        const resetSegmentCounts = globalThis.__wasm_rquickjs_reset_loader_realpath_segment_counts;
         const canonicalizeCjs = globalThis.__wasm_rquickjs_test_cjs_canonical_filename;
+        const canonicalizeEsm = globalThis.__wasm_rquickjs_test_esm_canonical_filename;
         assert.strictEqual(typeof getHits, 'function');
         assert.strictEqual(typeof resetHits, 'function');
         assert.strictEqual(typeof getSystemCalls, 'function');
         assert.strictEqual(typeof resetSystemCalls, 'function');
+        assert.strictEqual(typeof getSegmentCounts, 'function');
+        assert.strictEqual(typeof resetSegmentCounts, 'function');
         assert.strictEqual(typeof canonicalizeCjs, 'function');
+        assert.strictEqual(typeof canonicalizeEsm, 'function');
         try {
+            const prefixRoot = `${root}/prefix-cache/shared`;
+            fs.mkdirSync(prefixRoot, { recursive: true });
+            for (const name of ['cjs-first.js', 'cjs-second.js', 'esm-first.mjs', 'esm-second.mjs']) {
+                fs.writeFileSync(`${prefixRoot}/${name}`, '');
+            }
+
+            resetSegmentCounts();
+            assert.strictEqual(canonicalizeCjs(`${prefixRoot}/cjs-first.js`), `${prefixRoot}/cjs-first.js`);
+            const cjsFirst = getSegmentCounts();
+            assert.ok(cjsFirst.calls > 1, 'a fresh runtime must inspect the first path prefixes');
+            assert.strictEqual(cjsFirst.prefixCacheHits, 0, 'the first unique CJS path must not inherit prefix state');
+            assert.strictEqual(cjsFirst.calls, cjsFirst.prefixCacheHits + cjsFirst.systemCalls);
+
+            assert.strictEqual(canonicalizeCjs(`${prefixRoot}/cjs-second.js`), `${prefixRoot}/cjs-second.js`);
+            const cjsSecond = getSegmentCounts();
+            const cjsSecondSystemCalls = cjsSecond.systemCalls - cjsFirst.systemCalls;
+            assert.ok(cjsSecond.prefixCacheHits > cjsFirst.prefixCacheHits, 'a sibling CJS path must reuse confirmed prefixes');
+            assert.ok(cjsSecondSystemCalls < cjsFirst.systemCalls, 'prefix reuse must reduce segment metadata calls');
+            assert.strictEqual(cjsSecond.calls, cjsSecond.prefixCacheHits + cjsSecond.systemCalls);
+
+            resetSegmentCounts();
+            assert.strictEqual(canonicalizeEsm(`${prefixRoot}/esm-first.mjs`), `${prefixRoot}/esm-first.mjs`);
+            const esmFirst = getSegmentCounts();
+            assert.ok(esmFirst.calls > 1);
+            assert.strictEqual(esmFirst.prefixCacheHits, 0, 'ESM must not reuse CJS prefix entries');
+            assert.strictEqual(esmFirst.calls, esmFirst.prefixCacheHits + esmFirst.systemCalls);
+
+            assert.strictEqual(canonicalizeEsm(`${prefixRoot}/esm-second.mjs`), `${prefixRoot}/esm-second.mjs`);
+            const esmSecond = getSegmentCounts();
+            const esmSecondSystemCalls = esmSecond.systemCalls - esmFirst.systemCalls;
+            assert.ok(esmSecond.prefixCacheHits > esmFirst.prefixCacheHits, 'a sibling ESM path must reuse confirmed prefixes');
+            assert.ok(esmSecondSystemCalls < esmFirst.systemCalls, 'ESM prefix reuse must reduce segment metadata calls');
+            assert.strictEqual(esmSecond.calls, esmSecond.prefixCacheHits + esmSecond.systemCalls);
+
             Module._pathCache = Object.create(null);
             resetHits();
             assert.strictEqual(require.resolve(link), firstTarget);

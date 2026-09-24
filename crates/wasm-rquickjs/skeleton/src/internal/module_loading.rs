@@ -4477,6 +4477,31 @@ fn reset_loader_realpath_system_call_count(ctx: Ctx<'_>) {
         .reset_loader_realpath_system_call_count();
 }
 
+#[cfg(feature = "test-observability")]
+fn loader_realpath_segment_counts(ctx: Ctx<'_>) -> rquickjs::Result<Object<'_>> {
+    let counts = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_segment_counts();
+    let result = Object::new(ctx)?;
+    result.set("calls", counts.0)?;
+    result.set("prefixCacheHits", counts.1)?;
+    result.set("systemCalls", counts.2)?;
+    Ok(result)
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_segment_counts(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_segment_counts();
+}
+
+#[cfg(feature = "test-observability")]
+fn test_esm_canonical_filename(ctx: Ctx<'_>, path: String) -> Option<String> {
+    crate::builtin::realpath_for_esm_module_resolution(&ctx, &path).ok()
+}
+
 struct NodePackageWarning {
     message: String,
     code: &'static str,
@@ -11882,6 +11907,33 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create loader realpath system-call counter reset"),
         )
         .expect("Failed to initialize loader realpath system-call counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_segment_counts",
+            Function::new(ctx.clone(), loader_realpath_segment_counts)
+                .expect("Failed to create loader realpath segment counters"),
+        )
+        .expect("Failed to initialize loader realpath segment counters");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_segment_counts",
+            Function::new(ctx.clone(), reset_loader_realpath_segment_counts)
+                .expect("Failed to create loader realpath segment counter reset"),
+        )
+        .expect("Failed to initialize loader realpath segment counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_test_esm_canonical_filename",
+            Function::new(ctx.clone(), test_esm_canonical_filename)
+                .expect("Failed to create ESM canonical filename test helper"),
+        )
+        .expect("Failed to initialize ESM canonical filename test helper");
 
         set_non_replaceable_global(
             &global,
