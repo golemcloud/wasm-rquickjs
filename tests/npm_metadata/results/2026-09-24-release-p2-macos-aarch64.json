@@ -1,16 +1,16 @@
 {
   "component": {
-    "blake3": "22121ba265227234aebbd27e8dd92379cd992906662095941d91b269f04b5fdb",
-    "buildMs": 16773.859,
-    "bytes": 13634599,
-    "initialPrepareMs": 251.31654199999997,
+    "blake3": "2ecec79431ab31ba172c1fba78beea000af12d6e1b23ffe97ebc94ac41c77125",
+    "buildMs": 16425.686875,
+    "bytes": 13635500,
+    "initialPrepareMs": 245.510958,
     "path": "tmp/rt-target/wasm32-wasip2/release/npm_compat.optimized.wasm"
   },
   "environment": {
     "arch": "aarch64",
     "artifactCache": null,
     "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
-    "commitHint": "fae34bd988c6129bdcf5d4b9848bca2a6ca78ffc",
+    "commitHint": "831632c61e49eedb69b635f25f75f5bf5c89f6b3",
     "componentCargoProfile": "release",
     "componentFeatures": "normal",
     "dirty": false,
@@ -88,8 +88,8 @@
     "metadata": {
       "cold": {
         "iterations": 5,
-        "medianMs": 200.02154099999998,
-        "p95Ms": 396.03279200000003,
+        "medianMs": 156.7235,
+        "p95Ms": 194.663833,
         "samples": [
           {
             "cache": "cold",
@@ -109,7 +109,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 12ms (cache miss)\n",
+              "stderr": "npm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 12ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -118,7 +118,7 @@
             "sequence": 0,
             "side": "host",
             "success": true,
-            "wallMs": 200.02154099999998
+            "wallMs": 194.663833
           },
           {
             "cache": "cold",
@@ -138,7 +138,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 14ms (cache miss)\n",
+              "stderr": "npm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 13ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -147,7 +147,7 @@
             "sequence": 1,
             "side": "host",
             "success": true,
-            "wallMs": 367.07875
+            "wallMs": 149.434083
           },
           {
             "cache": "cold",
@@ -167,7 +167,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 13ms (cache miss)\n",
+              "stderr": "npm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 12ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -176,7 +176,7 @@
             "sequence": 2,
             "side": "host",
             "success": true,
-            "wallMs": 160.775333
+            "wallMs": 144.748875
           },
           {
             "cache": "cold",
@@ -196,7 +196,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 13ms (cache miss)\n",
+              "stderr": "npm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 11ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -205,7 +205,7 @@
             "sequence": 3,
             "side": "host",
             "success": true,
-            "wallMs": 396.03279200000003
+            "wallMs": 162.459667
           },
           {
             "cache": "cold",
@@ -225,7 +225,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 12ms (cache miss)\n",
+              "stderr": "npm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 12ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -234,17 +234,17 @@
             "sequence": 4,
             "side": "host",
             "success": true,
-            "wallMs": 143.99362499999998
+            "wallMs": 156.7235
           }
         ],
-        "throughputPerSecond": 3.9435223213746684
+        "throughputPerSecond": 6.187889385160642
       }
     },
     "warmTarballCi": {
       "seeds": {
         "iterations": 5,
-        "medianMs": 262.065084,
-        "p95Ms": 285.021584,
+        "medianMs": 247.97549999999998,
+        "p95Ms": 263.932791,
         "samples": [
           {
             "cache": "seed",
@@ -272,7 +272,7 @@
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -280,8 +280,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 1ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 30ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 72ms (cache miss)\n",
-              "stdout": "\nadded 2 packages in 214ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 1ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 30ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 75ms (cache miss)\n",
+              "stdout": "\nadded 2 packages in 212ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -289,7 +289,7 @@
             "sequence": 0,
             "side": "host",
             "success": true,
-            "wallMs": 262.065084
+            "wallMs": 263.932791
           },
           {
             "cache": "seed",
@@ -317,7 +317,7 @@
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -325,8 +325,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 31ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 74ms (cache miss)\n",
-              "stdout": "\nadded 2 packages in 230ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 28ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 66ms (cache miss)\n",
+              "stdout": "\nadded 2 packages in 184ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -334,7 +334,7 @@
             "sequence": 1,
             "side": "host",
             "success": true,
-            "wallMs": 285.021584
+            "wallMs": 231.875708
           },
           {
             "cache": "seed",
@@ -362,7 +362,7 @@
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -370,8 +370,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 32ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 73ms (cache miss)\n",
-              "stdout": "\nadded 2 packages in 204ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 1ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 28ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 64ms (cache miss)\n",
+              "stdout": "\nadded 2 packages in 180ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -379,7 +379,7 @@
             "sequence": 2,
             "side": "host",
             "success": true,
-            "wallMs": 254.453458
+            "wallMs": 227.741625
           },
           {
             "cache": "seed",
@@ -407,7 +407,7 @@
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -415,8 +415,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 32ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 75ms (cache miss)\n",
-              "stdout": "\nadded 2 packages in 235ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 31ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 70ms (cache miss)\n",
+              "stdout": "\nadded 2 packages in 199ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -424,7 +424,7 @@
             "sequence": 3,
             "side": "host",
             "success": true,
-            "wallMs": 283.532291
+            "wallMs": 247.97549999999998
           },
           {
             "cache": "seed",
@@ -452,7 +452,7 @@
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -460,8 +460,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 29ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 71ms (cache miss)\n",
-              "stdout": "\nadded 2 packages in 190ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 31ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 71ms (cache miss)\n",
+              "stdout": "\nadded 2 packages in 205ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -469,15 +469,15 @@
             "sequence": 4,
             "side": "host",
             "success": true,
-            "wallMs": 237.396875
+            "wallMs": 254.894875
           }
         ],
-        "throughputPerSecond": 3.7808061255156917
+        "throughputPerSecond": 4.076905110504027
       },
       "timed": {
         "iterations": 5,
-        "medianMs": 250.26270900000003,
-        "p95Ms": 257.14741699999996,
+        "medianMs": 248.08725,
+        "p95Ms": 251.227208,
         "samples": [
           {
             "cache": "warm-tarball",
@@ -505,7 +505,7 @@
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -513,7 +513,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
               "stdout": "\nadded 2 packages in 199ms\n",
               "value": {
                 "exitCode": 0
@@ -522,7 +522,7 @@
             "sequence": 0,
             "side": "host",
             "success": true,
-            "wallMs": 251.776291
+            "wallMs": 251.227208
           },
           {
             "cache": "warm-tarball",
@@ -550,7 +550,7 @@
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -558,8 +558,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
-              "stdout": "\nadded 2 packages in 198ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stdout": "\nadded 2 packages in 181ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -567,7 +567,7 @@
             "sequence": 1,
             "side": "host",
             "success": true,
-            "wallMs": 250.26270900000003
+            "wallMs": 232.750333
           },
           {
             "cache": "warm-tarball",
@@ -595,7 +595,7 @@
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -603,8 +603,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
-              "stdout": "\nadded 2 packages in 202ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stdout": "\nadded 2 packages in 177ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -612,7 +612,7 @@
             "sequence": 2,
             "side": "host",
             "success": true,
-            "wallMs": 257.14741699999996
+            "wallMs": 226.661709
           },
           {
             "cache": "warm-tarball",
@@ -640,7 +640,7 @@
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -648,8 +648,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
-              "stdout": "\nadded 2 packages in 182ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stdout": "\nadded 2 packages in 199ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -657,7 +657,7 @@
             "sequence": 3,
             "side": "host",
             "success": true,
-            "wallMs": 235.128166
+            "wallMs": 250.811666
           },
           {
             "cache": "warm-tarball",
@@ -685,7 +685,7 @@
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -693,8 +693,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
-              "stdout": "\nadded 2 packages in 181ms\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stdout": "\nadded 2 packages in 195ms\n",
               "value": {
                 "exitCode": 0
               }
@@ -702,48 +702,48 @@
             "sequence": 4,
             "side": "host",
             "success": true,
-            "wallMs": 230.24349999999998
+            "wallMs": 248.08725
           }
         ],
-        "throughputPerSecond": 4.083105627583366
+        "throughputPerSecond": 4.133809201354296
       }
     }
   },
   "inputs": {
     "algorithm": "blake3-composite-v1",
     "benchmarkHash": "435283613a522c3b8097d7688192712458b1095ed8400f7e4b83236e487e2c9f",
-    "buildHash": "541ebb45d245ace08db3c7a9b1d6dcb237bfcfca793c3ae35ffc8f7f24958262"
+    "buildHash": "4ca764fa04184ebf0072026d3f32fea65da05868f3d4ab43359ec3cb30dc6d88"
   },
   "memory": {
     "interpretation": "per-sample Wasm linear-memory values are monotone instance high-water observations read after the timed invocation",
-    "maxWasmLinearMemoryHighWaterBytes": 55312384,
+    "maxWasmLinearMemoryHighWaterBytes": 57933824,
     "series": {
       "ciSeeds": {
         "linearMemoryHighWater": {
-          "maximumBytes": 37683200,
-          "minimumBytes": 37683200,
+          "maximumBytes": 37748736,
+          "minimumBytes": 37748736,
           "samples": [
-            37683200,
-            37683200,
-            37683200,
-            37683200,
-            37683200
+            37748736,
+            37748736,
+            37748736,
+            37748736,
+            37748736
           ],
           "variationBytes": 0
         }
       },
       "ciWarmTarball": {
         "linearMemoryHighWater": {
-          "maximumBytes": 55312384,
-          "minimumBytes": 55312384,
+          "maximumBytes": 57933824,
+          "minimumBytes": 52887552,
           "samples": [
-            55312384,
-            55312384,
-            55312384,
-            55312384,
-            55312384
+            57933824,
+            57933824,
+            52887552,
+            52887552,
+            57933824
           ],
-          "variationBytes": 0
+          "variationBytes": 5046272
         }
       },
       "metadataCold": {
@@ -779,8 +779,8 @@
     "metadata": {
       "cold": {
         "iterations": 5,
-        "medianMs": 1332.0594999999998,
-        "p95Ms": 1651.4268749999999,
+        "medianMs": 1069.3069580000001,
+        "p95Ms": 1230.496958,
         "samples": [
           {
             "cache": "cold",
@@ -800,7 +800,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 13ms (cache miss)\n",
+              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 8ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -809,7 +809,7 @@
             "sequence": 0,
             "side": "wasm",
             "success": true,
-            "wallMs": 1382.827791
+            "wallMs": 1106.537292
           },
           {
             "cache": "cold",
@@ -829,7 +829,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 8ms (cache miss)\n",
+              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 7ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -838,7 +838,7 @@
             "sequence": 1,
             "side": "wasm",
             "success": true,
-            "wallMs": 1651.4268749999999
+            "wallMs": 1014.0134999999999
           },
           {
             "cache": "cold",
@@ -858,7 +858,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 8ms (cache miss)\n",
+              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 7ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -867,7 +867,7 @@
             "sequence": 2,
             "side": "wasm",
             "success": true,
-            "wallMs": 1314.739792
+            "wallMs": 1013.053958
           },
           {
             "cache": "cold",
@@ -887,7 +887,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 9ms (cache miss)\n",
+              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 8ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -896,7 +896,7 @@
             "sequence": 3,
             "side": "wasm",
             "success": true,
-            "wallMs": 1291.3436250000002
+            "wallMs": 1230.496958
           },
           {
             "cache": "cold",
@@ -916,7 +916,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types%2flodash-es 7ms (cache miss)\n",
+              "stderr": "Warning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types%2flodash-es 7ms (cache miss)\n",
               "stdout": "4.17.12\n",
               "value": {
                 "exitCode": 0
@@ -925,17 +925,17 @@
             "sequence": 4,
             "side": "wasm",
             "success": true,
-            "wallMs": 1332.0594999999998
+            "wallMs": 1069.3069580000001
           }
         ],
-        "throughputPerSecond": 0.717113437734952
+        "throughputPerSecond": 0.920232639832139
       }
     },
     "warmTarballCi": {
       "seeds": {
         "iterations": 5,
-        "medianMs": 2681.587417,
-        "p95Ms": 2754.7855,
+        "medianMs": 2398.153083,
+        "p95Ms": 2756.751958,
         "samples": [
           {
             "cache": "seed",
@@ -956,14 +956,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 37683200,
+            "linearMemoryHighWaterBytes": 37748736,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 2,
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -971,7 +971,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 317ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 865ms (cache miss)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 330ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 899ms (cache miss)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -980,7 +980,7 @@
             "sequence": 0,
             "side": "wasm",
             "success": true,
-            "wallMs": 2533.015792
+            "wallMs": 2306.6340419999997
           },
           {
             "cache": "seed",
@@ -1001,14 +1001,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 37683200,
+            "linearMemoryHighWaterBytes": 37748736,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 2,
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -1016,7 +1016,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 358ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 966ms (cache miss)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 316ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 862ms (cache miss)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -1025,7 +1025,7 @@
             "sequence": 1,
             "side": "wasm",
             "success": true,
-            "wallMs": 2754.7855
+            "wallMs": 2213.4701250000003
           },
           {
             "cache": "seed",
@@ -1046,14 +1046,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 37683200,
+            "linearMemoryHighWaterBytes": 37748736,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 2,
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -1061,7 +1061,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 341ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 926ms (cache miss)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 1ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 364ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 1039ms (cache miss)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -1070,7 +1070,7 @@
             "sequence": 2,
             "side": "wasm",
             "success": true,
-            "wallMs": 2685.337875
+            "wallMs": 2496.1249580000003
           },
           {
             "cache": "seed",
@@ -1091,14 +1091,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 37683200,
+            "linearMemoryHighWaterBytes": 37748736,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 2,
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -1106,8 +1106,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 353ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 950ms (cache miss)\n",
-              "stdout": "\nadded 2 packages in 2s\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 389ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 1039ms (cache miss)\n",
+              "stdout": "\nadded 2 packages in 3s\n",
               "value": {
                 "exitCode": 0
               }
@@ -1115,7 +1115,7 @@
             "sequence": 3,
             "side": "wasm",
             "success": true,
-            "wallMs": 2681.587417
+            "wallMs": 2756.751958
           },
           {
             "cache": "seed",
@@ -1136,14 +1136,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 37683200,
+            "linearMemoryHighWaterBytes": 37748736,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 2,
               "total": 2,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 2,
@@ -1151,7 +1151,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 1ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 319ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 904ms (cache miss)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\nWarning [WASM_RQUICKJS_HTTP_AGENT_TRANSPORT]: Custom node:http Agent createConnection hooks are ignored; outbound requests use wasi:http\n    at emitWarning (node:process:873:19)\n    at _initializeCustomConnection (node:http:1624:17)\n    at ClientRequest (node:http:1542:42)\n    at request (node:http:2264:16)\n    at /tool/npm/node_modules/minipass-fetch/lib/index.js:98:22\n    at Promise (native)\n    at fetch (/tool/npm/node_modules/minipass-fetch/lib/index.js:55:14)\n    at /tool/npm/node_modules/make-fetch-happen/lib/remote.js:59:29\n    at /tool/npm/node_modules/promise-retry/index.js:29:27\n    at apply (native)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 339ms (cache miss)\nnpm http fetch GET 200 http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 903ms (cache miss)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -1160,15 +1160,15 @@
             "sequence": 4,
             "side": "wasm",
             "success": true,
-            "wallMs": 2661.2885
+            "wallMs": 2398.153083
           }
         ],
-        "throughputPerSecond": 0.3754877092327571
+        "throughputPerSecond": 0.4108080587894162
       },
       "timed": {
         "iterations": 5,
-        "medianMs": 2718.971125,
-        "p95Ms": 3027.994542,
+        "medianMs": 2272.384,
+        "p95Ms": 2594.0852090000003,
         "samples": [
           {
             "cache": "warm-tarball",
@@ -1189,14 +1189,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 55312384,
+            "linearMemoryHighWaterBytes": 57933824,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 0,
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -1204,8 +1204,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
-              "stdout": "\nadded 2 packages in 3s\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
               }
@@ -1213,7 +1213,7 @@
             "sequence": 0,
             "side": "wasm",
             "success": true,
-            "wallMs": 2793.866333
+            "wallMs": 2272.384
           },
           {
             "cache": "warm-tarball",
@@ -1234,14 +1234,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 55312384,
+            "linearMemoryHighWaterBytes": 57933824,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 0,
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -1249,7 +1249,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -1258,7 +1258,7 @@
             "sequence": 1,
             "side": "wasm",
             "success": true,
-            "wallMs": 2692.4560829999996
+            "wallMs": 2203.51
           },
           {
             "cache": "warm-tarball",
@@ -1279,14 +1279,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 55312384,
+            "linearMemoryHighWaterBytes": 52887552,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 0,
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -1294,8 +1294,8 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
-              "stdout": "\nadded 2 packages in 3s\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
               }
@@ -1303,7 +1303,7 @@
             "sequence": 2,
             "side": "wasm",
             "success": true,
-            "wallMs": 3027.994542
+            "wallMs": 2594.0852090000003
           },
           {
             "cache": "warm-tarball",
@@ -1324,14 +1324,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 55312384,
+            "linearMemoryHighWaterBytes": 52887552,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 0,
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -1339,7 +1339,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -1348,7 +1348,7 @@
             "sequence": 3,
             "side": "wasm",
             "success": true,
-            "wallMs": 2667.4652920000003
+            "wallMs": 2536.117791
           },
           {
             "cache": "warm-tarball",
@@ -1369,14 +1369,14 @@
                 "lodash-es"
               ]
             },
-            "linearMemoryHighWaterBytes": 55312384,
+            "linearMemoryHighWaterBytes": 57933824,
             "localHttpRequests": {
               "metadata": 0,
               "tarballs": 0,
               "total": 0,
               "unexpected": 0
             },
-            "lockfileBlake3": "a55b1e537f6536982b1c070881f2c6c2c555cb2ddfd86b172b606ea59290f933",
+            "lockfileBlake3": "874dc797172a1dd99f70457cd0aa7757916030dc154e7258df5dd1bbbde58c53",
             "lockfileUnchanged": true,
             "npmHttpCacheLogLines": 2,
             "npmHttpFetchLogLines": 0,
@@ -1384,7 +1384,7 @@
             "registry": "local",
             "result": {
               "overflowed": false,
-              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:64021/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:64021/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
+              "stderr": "npm http cache @types/lodash-es@http://127.0.0.1:51066/@types/lodash-es/-/lodash-es-4.17.12.tgz 0ms (cache hit)\nnpm http cache @types/lodash@http://127.0.0.1:51066/@types/lodash/-/lodash-4.17.12.tgz 0ms (cache hit)\n",
               "stdout": "\nadded 2 packages in 2s\n",
               "value": {
                 "exitCode": 0
@@ -1393,10 +1393,10 @@
             "sequence": 4,
             "side": "wasm",
             "success": true,
-            "wallMs": 2718.971125
+            "wallMs": 2266.711959
           }
         ],
-        "throughputPerSecond": 0.35969273499897625
+        "throughputPerSecond": 0.421130333796016
       }
     }
   }
