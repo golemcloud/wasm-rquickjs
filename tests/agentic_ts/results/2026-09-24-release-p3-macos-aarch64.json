@@ -1,16 +1,16 @@
 {
   "component": {
-    "blake3": "92f5ca83651af40f4e7322e31c7d6da96faa439a0d0bd0f2b811a13ee43d824c",
-    "buildMs": 27907.314875,
-    "bytes": 17070201,
-    "initialPrepareAndInstantiateMs": 405.22675000000004,
+    "blake3": "acf49c6ecd1a26e5c071edb920b147e5b64266bc062e04865f35a67be76c61dd",
+    "buildMs": 45955.091,
+    "bytes": 17073738,
+    "initialPrepareAndInstantiateMs": 697.92575,
     "path": "tmp/rt-target-p3/wasm32-wasip2/release/agentic_ts.optimized.wasm"
   },
   "environment": {
     "arch": "aarch64",
     "artifactCache": null,
     "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
-    "commitHint": "19ed7840f7b9d5ccd3229cac7bc3b1f7711016d9",
+    "commitHint": "968657ac65369956eb36c0e71331978b599d01f3",
     "componentCargoProfile": "release",
     "componentFeatures": "typescript-transform-runtime",
     "dirty": false,
@@ -53,8 +53,8 @@
   "host": {
     "coldFreshProcessState": {
       "iterations": 5,
-      "medianMs": 500.938458,
-      "p95Ms": 551.679167,
+      "medianMs": 527.6079169999999,
+      "p95Ms": 663.7178329999999,
       "samples": [
         {
           "result": {
@@ -65,7 +65,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 551.679167
+          "wallMs": 663.7178329999999
         },
         {
           "result": {
@@ -76,7 +76,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 465.52425
+          "wallMs": 653.5785
         },
         {
           "result": {
@@ -87,7 +87,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 474.03675
+          "wallMs": 527.6079169999999
         },
         {
           "result": {
@@ -98,7 +98,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 503.542542
+          "wallMs": 489.501958
         },
         {
           "result": {
@@ -109,10 +109,10 @@
               "exitCode": 0
             }
           },
-          "wallMs": 500.938458
+          "wallMs": 487.17850000000004
         }
       ],
-      "throughputPerSecond": 2.0034289351363266
+      "throughputPerSecond": 1.772053834082517
     },
     "environmentPolicy": {
       "mode": "clear",
@@ -123,8 +123,8 @@
     },
     "incrementalFreshProcesses": {
       "iterations": 5,
-      "medianMs": 189.149833,
-      "p95Ms": 192.34799999999998,
+      "medianMs": 199.846667,
+      "p95Ms": 212.742417,
       "samples": [
         {
           "result": {
@@ -135,7 +135,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 188.193208
+          "wallMs": 193.509125
         },
         {
           "result": {
@@ -146,7 +146,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 192.34799999999998
+          "wallMs": 199.846667
         },
         {
           "result": {
@@ -157,7 +157,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 189.090334
+          "wallMs": 193.96895899999998
         },
         {
           "result": {
@@ -168,7 +168,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 189.149833
+          "wallMs": 212.742417
         },
         {
           "result": {
@@ -179,10 +179,10 @@
               "exitCode": 0
             }
           },
-          "wallMs": 189.54525
+          "wallMs": 210.935
         }
       ],
-      "throughputPerSecond": 5.272445029158598
+      "throughputPerSecond": 4.945587812033257
     },
     "incrementalSeed": {
       "result": {
@@ -193,12 +193,12 @@
           "exitCode": 0
         }
       },
-      "wallMs": 456.528041
+      "wallMs": 448.144208
     },
     "repeatedUnchangedFreshProcesses": {
       "iterations": 5,
-      "medianMs": 421.953708,
-      "p95Ms": 472.503042,
+      "medianMs": 458.809333,
+      "p95Ms": 509.27287499999994,
       "samples": [
         {
           "result": {
@@ -209,7 +209,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 472.503042
+          "wallMs": 509.27287499999994
         },
         {
           "result": {
@@ -220,7 +220,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 426.885084
+          "wallMs": 449.217084
         },
         {
           "result": {
@@ -231,7 +231,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 421.69258399999995
+          "wallMs": 451.55075
         },
         {
           "result": {
@@ -242,7 +242,7 @@
               "exitCode": 0
             }
           },
-          "wallMs": 421.33379199999996
+          "wallMs": 458.809333
         },
         {
           "result": {
@@ -253,16 +253,16 @@
               "exitCode": 0
             }
           },
-          "wallMs": 421.953708
+          "wallMs": 461.08004200000005
         }
       ],
-      "throughputPerSecond": 2.310142967771644
+      "throughputPerSecond": 2.145987141131742
     }
   },
   "inputs": {
     "algorithm": "blake3-composite-v1",
-    "benchmarkHash": "3c228f402f1c47d78fa27a6da1e520f26f70802936a0e52c2b93b7cffe9a49b5",
-    "buildHash": "4d987a2a2c7c8b2bf6c8abdd3d8c213645b389bf20577fb1941563893e795901"
+    "benchmarkHash": "83240c125d02fa0385ee734ad01b46c13791b5e934ec23d7769a3428c78853fb",
+    "buildHash": "b6dc0740af89f34925880dbe5d6af18c461a77c74fad00bfbde1f3454b318f6f"
   },
   "memory": {
     "allowedQuickJsHeapVariationBytes": 1048576,
@@ -337,12 +337,12 @@
   "wasm": {
     "coldFreshJobState": {
       "iterations": 5,
-      "medianMs": 5546.019666,
-      "p95Ms": 5900.112166,
+      "medianMs": 5879.134167,
+      "p95Ms": 6183.10225,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 236.1674579999999,
+          "outerOverheadMs": 269.6725829999996,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -365,14 +365,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5309.852208
+              "toolAndCompilerMs": 5913.429667
             }
           },
-          "wallMs": 5546.019666
+          "wallMs": 6183.10225
         },
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 231.60704200000055,
+          "outerOverheadMs": 275.03729199999907,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -395,14 +395,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5283.612916
+              "toolAndCompilerMs": 5852.478708000001
             }
           },
-          "wallMs": 5515.219958000001
+          "wallMs": 6127.516
         },
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 240.5883759999997,
+          "outerOverheadMs": 257.672458,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -425,14 +425,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5431.609166
+              "toolAndCompilerMs": 5471.729125
             }
           },
-          "wallMs": 5672.197542
+          "wallMs": 5729.401583
         },
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 248.78899900000033,
+          "outerOverheadMs": 262.6911260000006,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -455,14 +455,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5651.323167
+              "toolAndCompilerMs": 5616.4430409999995
             }
           },
-          "wallMs": 5900.112166
+          "wallMs": 5879.134167
         },
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 234.75845800000025,
+          "outerOverheadMs": 263.9972909999997,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -485,22 +485,22 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5303.887375
+              "toolAndCompilerMs": 5430.888292
             }
           },
-          "wallMs": 5538.6458330000005
+          "wallMs": 5694.885582999999
         }
       ],
-      "throughputPerSecond": 0.17747995747991263
+      "throughputPerSecond": 0.16883883693024646
     },
     "incrementalFreshJobs": {
       "iterations": 5,
-      "medianMs": 2665.378167,
-      "p95Ms": 2680.0991249999997,
+      "medianMs": 2829.79575,
+      "p95Ms": 2909.927417,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 152109056,
-          "outerOverheadMs": 148.39224999999396,
+          "outerOverheadMs": 159.2252920000019,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -523,14 +523,14 @@
                   "rss": 412480
                 }
               },
-              "toolAndCompilerMs": 2524.171375000006
+              "toolAndCompilerMs": 2588.112957999998
             }
           },
-          "wallMs": 2672.563625
+          "wallMs": 2747.33825
         },
         {
           "linearMemoryHighWaterBytes": 152109056,
-          "outerOverheadMs": 148.25179100000878,
+          "outerOverheadMs": 158.28458299999556,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -553,14 +553,14 @@
                   "rss": 412480
                 }
               },
-              "toolAndCompilerMs": 2531.847333999991
+              "toolAndCompilerMs": 2639.8202500000043
             }
           },
-          "wallMs": 2680.0991249999997
+          "wallMs": 2798.104833
         },
         {
           "linearMemoryHighWaterBytes": 152109056,
-          "outerOverheadMs": 148.77979199999618,
+          "outerOverheadMs": 167.4270420000057,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -583,14 +583,14 @@
                   "rss": 412480
                 }
               },
-              "toolAndCompilerMs": 2515.8950420000037
+              "toolAndCompilerMs": 2662.3687079999945
             }
           },
-          "wallMs": 2664.674834
+          "wallMs": 2829.79575
         },
         {
           "linearMemoryHighWaterBytes": 152109056,
-          "outerOverheadMs": 149.3493750000025,
+          "outerOverheadMs": 174.67550099999835,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -613,14 +613,14 @@
                   "rss": 412480
                 }
               },
-              "toolAndCompilerMs": 2516.0287919999973
+              "toolAndCompilerMs": 2681.313666000002
             }
           },
-          "wallMs": 2665.378167
+          "wallMs": 2855.989167
         },
         {
           "linearMemoryHighWaterBytes": 152109056,
-          "outerOverheadMs": 148.10666700000638,
+          "outerOverheadMs": 181.82845799998995,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -643,17 +643,17 @@
                   "rss": 412480
                 }
               },
-              "toolAndCompilerMs": 2512.0583329999936
+              "toolAndCompilerMs": 2728.09895900001
             }
           },
-          "wallMs": 2660.165
+          "wallMs": 2909.927417
         }
       ],
-      "throughputPerSecond": 0.37473167101679056
+      "throughputPerSecond": 0.35357789746014506
     },
     "incrementalSeed": {
       "linearMemoryHighWaterBytes": 152109056,
-      "outerOverheadMs": 232.94304199999715,
+      "outerOverheadMs": 246.62633299999834,
       "result": {
         "overflowed": false,
         "stderr": "",
@@ -676,19 +676,19 @@
               "rss": 412480
             }
           },
-          "toolAndCompilerMs": 5437.268041000003
+          "toolAndCompilerMs": 5467.336792000002
         }
       },
-      "wallMs": 5670.211083
+      "wallMs": 5713.963125
     },
     "repeatedUnchangedFreshJobs": {
       "iterations": 5,
-      "medianMs": 5516.466,
-      "p95Ms": 5778.2855,
+      "medianMs": 5621.409083,
+      "p95Ms": 5905.139084,
       "samples": [
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 233.07154199999968,
+          "outerOverheadMs": 261.149875000001,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -711,14 +711,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5297.2798330000005
+              "toolAndCompilerMs": 5643.989208999999
             }
           },
-          "wallMs": 5530.351375
+          "wallMs": 5905.139084
         },
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 226.34679200000028,
+          "outerOverheadMs": 243.64720800000305,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -741,14 +741,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5250.30775
+              "toolAndCompilerMs": 5377.7618749999965
             }
           },
-          "wallMs": 5476.654542
+          "wallMs": 5621.409083
         },
         {
           "linearMemoryHighWaterBytes": 151846912,
-          "outerOverheadMs": 228.96016699999927,
+          "outerOverheadMs": 241.074125000001,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -771,14 +771,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5549.325333000001
+              "toolAndCompilerMs": 5347.9259999999995
             }
           },
-          "wallMs": 5778.2855
+          "wallMs": 5589.0001250000005
         },
         {
           "linearMemoryHighWaterBytes": 151912448,
-          "outerOverheadMs": 226.80754100000195,
+          "outerOverheadMs": 248.66708400000516,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -801,14 +801,14 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5289.658458999998
+              "toolAndCompilerMs": 5376.833374999995
             }
           },
-          "wallMs": 5516.466
+          "wallMs": 5625.500459
         },
         {
           "linearMemoryHighWaterBytes": 151912448,
-          "outerOverheadMs": 232.69283300000643,
+          "outerOverheadMs": 248.0657499999934,
           "result": {
             "overflowed": false,
             "stderr": "",
@@ -831,13 +831,13 @@
                   "rss": 412456
                 }
               },
-              "toolAndCompilerMs": 5255.662916999994
+              "toolAndCompilerMs": 5348.951833000006
             }
           },
-          "wallMs": 5488.355750000001
+          "wallMs": 5597.017583
         }
       ],
-      "throughputPerSecond": 0.1799201021583951
+      "throughputPerSecond": 0.17644111426194958
     }
   }
 }
