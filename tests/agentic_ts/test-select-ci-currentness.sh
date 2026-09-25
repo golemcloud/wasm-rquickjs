@@ -87,8 +87,8 @@ assert_plan() {
 
 assert_no_report_selection() {
     local plan=$1
-    [[ "$plan" == *$'reports-to-check<<AGENTIC_TS_REPORTS\nAGENTIC_TS_REPORTS'* ]]
-    [[ "$plan" == *$'npm-reports-to-check<<NPM_METADATA_REPORTS\nNPM_METADATA_REPORTS'* ]]
+    [[ "$plan" == *$'reports-to-check<<AGENTIC_TS_REPORTS\nAGENTIC_TS_REPORTS'* \
+        && "$plan" == *$'npm-reports-to-check<<NPM_METADATA_REPORTS\nNPM_METADATA_REPORTS'* ]]
 }
 
 assert_plan pull_request '' "$report_head" "$report_source" \
