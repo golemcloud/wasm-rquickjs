@@ -85,6 +85,12 @@ assert_plan() {
     done
 }
 
+assert_no_report_selection() {
+    local plan=$1
+    [[ "$plan" == *$'reports-to-check<<AGENTIC_TS_REPORTS\nAGENTIC_TS_REPORTS'* ]]
+    [[ "$plan" == *$'npm-reports-to-check<<NPM_METADATA_REPORTS\nNPM_METADATA_REPORTS'* ]]
+}
+
 assert_plan pull_request '' "$report_head" "$report_source" \
     tests/agentic_ts/results/report-p2-result.json \
     tests/agentic_ts/results/report-p3-result.json \
@@ -134,9 +140,15 @@ printf '%s %s\n' \
     >"$fixture/tests/npm_metadata/results/current-reports.txt"
 git -C "$fixture" add tests
 git -C "$fixture" commit -qm new-main-reports
+new_main_head=$(git -C "$fixture" rev-parse HEAD)
 git -C "$fixture" merge -q --no-ff stale-pr -m stale-pr-merge
 assert_plan pull_request '' "$stale_pr_head" "$new_main_report_source" '' '' '' '' \
     "$stale_pr_head"
+stale_pr_plan=$(cd "$fixture" && "$selector" pull_request '' "$stale_pr_head")
+assert_no_report_selection "$stale_pr_plan"
+assert_plan push "$new_main_head" "$stale_pr_head" "$new_main_report_source" '' '' '' ''
+stale_push_plan=$(cd "$fixture" && "$selector" push "$new_main_head")
+assert_no_report_selection "$stale_push_plan"
 if git -C "$fixture" merge-base --is-ancestor "$new_main_report_source" "$stale_pr_head"; then
     echo "concurrent main report source unexpectedly belongs to the stale PR" >&2
     exit 1

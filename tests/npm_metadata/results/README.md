@@ -30,6 +30,8 @@ tests/npm_metadata/run.sh --check-current \
 
 The currentness command requires Git and `jq`; it recomputes source hashes from
 a temporary pristine worktree at the exact revision in `current-reports.txt`.
+That revision must already exist in the local clone; the command does not fetch
+missing history.
 
 No `npm-metadata-v2` report is accepted as current unless both target reports
 match the source input hashes and form one distinct P2/P3 pair. The dated final

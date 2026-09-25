@@ -94,7 +94,8 @@ tests/agentic_ts/run.sh --check-current \
   tests/agentic_ts/results/2026-09-24-release-p3-macos-aarch64.json
 ```
 
-The currentness command requires Git and `jq`.
+The currentness command requires Git and `jq`. The exact measured commit must
+already exist in the local clone; the command does not fetch missing history.
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
 writes raw JSON reports under `tests/agentic_ts/results/`. Timings are

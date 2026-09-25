@@ -25,6 +25,7 @@ if [ "${1:-}" = "--check-current" ]; then
 
     manifest="$results_dir/current-reports.txt"
     source_ref=
+    reports_to_check=
     for report in "$@"; do
         manifest_report=${report#"$repo_root"/}
         manifest_report=${manifest_report#./}
@@ -47,6 +48,12 @@ if [ "${1:-}" = "--check-current" ]; then
             exit 2
         fi
         source_ref=$report_source_ref
+        if [ -n "$reports_to_check" ]; then
+            reports_to_check="$reports_to_check
+$manifest_report"
+        else
+            reports_to_check=$manifest_report
+        fi
     done
     if ! git -C "$repo_root" cat-file -e "$source_ref^{commit}" 2>/dev/null; then
         echo "current report source commit is unavailable: $source_ref" >&2
@@ -62,7 +69,6 @@ if [ "${1:-}" = "--check-current" ]; then
     trap cleanup_current_source EXIT HUP INT TERM
     git -C "$repo_root" worktree add --quiet --detach "$source_root" "$source_ref"
 
-    reports_to_check=$(printf '%s\n' "$@")
     (
         cd "$repo_root"
         AGENTIC_TS_VALIDATE_REPORTS=1 \
