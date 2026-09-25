@@ -42,6 +42,7 @@ http = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
 indoc = { workspace = true }
+libc = "0.2"
 pretty_assertions = "1.4.1"
 rand = { workspace = true }
 serde = { workspace = true }
@@ -103,7 +104,15 @@ name = "agentic_ts"
 harness = false
 
 [[test]]
+name = "npm_metadata"
+harness = false
+
+[[test]]
 name = "typescript_transform_latency"
+harness = false
+
+[[test]]
+name = "esm_module_load_phases"
 harness = false
 
 [[test]]

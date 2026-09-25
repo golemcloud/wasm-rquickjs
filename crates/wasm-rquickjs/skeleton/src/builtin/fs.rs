@@ -228,10 +228,20 @@ fn with_fs_mut<R>(
 }
 
 fn invalidate_module_resolution_probes(ctx: &rquickjs::Ctx<'_>) {
-    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
-        .expect("runtime services not initialized")
-        .cjs_module_probe_session
-        .invalidate();
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    let _missing_package_json = services.cjs_module_probe_session.invalidate();
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if _missing_package_json > 0
+        && let Some(profile) = services.execution_profile()
+    {
+        profile.increment("modules.packageJson.negativeCacheInvalidations");
+        profile.add(
+            "modules.packageJson.negativeCacheInvalidatedEntries",
+            _missing_package_json as u64,
+        );
+    }
 }
 
 fn normalize_mode_override(mode: u32) -> u32 {
@@ -309,14 +319,99 @@ fn rename_fd_path(ctx: &rquickjs::Ctx<'_>, old_path: &str, new_path: &str) {
     });
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum ModuleLoaderRealpathDomain {
+    CommonJs,
+    Esm,
+}
+
 pub(super) fn realpath_for_module_resolution(
-    _ctx: &rquickjs::Ctx<'_>,
+    ctx: &rquickjs::Ctx<'_>,
     path: &str,
-) -> Option<String> {
-    canonicalize_guest_path(path).ok()
+    domain: ModuleLoaderRealpathDomain,
+) -> std::io::Result<String> {
+    // Wizer has no guest preopens. Touching wasi-libc's lazy preopen cache here
+    // would snapshot the empty build-time filesystem into every runtime.
+    if crate::internal::is_wizer_active() {
+        return Err(wizer_enoent_io());
+    }
+
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    #[cfg(feature = "typescript-compiler-profiling")]
+    let profile = services.execution_profile();
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if let Some(profile) = &profile {
+        profile.increment("modules.realpath.calls");
+    }
+
+    let cache = match domain {
+        ModuleLoaderRealpathDomain::CommonJs => &services.cjs_loader_realpath_cache,
+        ModuleLoaderRealpathDomain::Esm => &services.esm_loader_realpath_cache,
+    };
+    let cached = cache.borrow().get(path).cloned();
+    if let Some(resolved) = cached {
+        #[cfg(feature = "test-observability")]
+        services.record_loader_realpath_cache_hit();
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &profile {
+            profile.increment("modules.realpath.cacheHits");
+        }
+        return Ok(resolved);
+    }
+
+    let resolved = canonicalize_guest_path_with_cache(
+        path,
+        Some(cache),
+        #[cfg(feature = "typescript-compiler-profiling")]
+        profile.as_deref(),
+        #[cfg(feature = "test-observability")]
+        Some(&services),
+    );
+    #[cfg(feature = "test-observability")]
+    services.record_loader_realpath_system_call();
+    #[cfg(feature = "typescript-compiler-profiling")]
+    if let Some(profile) = &profile {
+        profile.increment("modules.realpath.systemCalls");
+        profile.increment("filesystem.realpath.calls");
+        profile.increment(match &resolved {
+            Ok(_) => "filesystem.realpath.success",
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                "filesystem.realpath.notFound"
+            }
+            Err(_) => "filesystem.realpath.errors",
+        });
+    }
+    if let Ok(resolved) = &resolved {
+        cache
+            .borrow_mut()
+            .insert(path.to_string(), resolved.clone());
+    }
+    resolved
 }
 
 fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
+    canonicalize_guest_path_with_cache(
+        path,
+        None,
+        #[cfg(feature = "typescript-compiler-profiling")]
+        None,
+        #[cfg(feature = "test-observability")]
+        None,
+    )
+}
+
+fn canonicalize_guest_path_with_cache(
+    path: &str,
+    cache: Option<&std::cell::RefCell<std::collections::HashMap<String, String>>>,
+    #[cfg(feature = "typescript-compiler-profiling")] profile: Option<
+        &crate::internal::runtime_services::ExecutionProfile,
+    >,
+    #[cfg(feature = "test-observability")] observability: Option<
+        &crate::internal::runtime_services::RuntimeServices,
+    >,
+) -> std::io::Result<String> {
     if !path.starts_with('/') {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -349,6 +444,35 @@ fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
         }
 
         let current = format!("/{}", resolved.join("/"));
+        // Node's loader-only realpath cache also remembers confirmed non-symlink
+        // prefixes. Reusing those entries avoids walking shared package-directory
+        // prefixes for every resolved module while public realpath calls stay fresh.
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = profile {
+            profile.increment("modules.realpath.segmentCalls");
+        }
+        let known_hard = cache.is_some_and(|cache| {
+            cache
+                .borrow()
+                .get(&current)
+                .is_some_and(|cached| cached == &current)
+        });
+        #[cfg(feature = "test-observability")]
+        if let Some(observability) = observability {
+            observability.record_loader_realpath_segment(known_hard);
+        }
+        if known_hard {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = profile {
+                profile.increment("modules.realpath.prefixCacheHits");
+            }
+            index += 1;
+            continue;
+        }
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = profile {
+            profile.increment("modules.realpath.segmentSystemCalls");
+        }
         let metadata = std::fs::symlink_metadata(&current)?;
         if metadata.is_symlink() {
             symlink_count += 1;
@@ -371,6 +495,9 @@ fn canonicalize_guest_path(path: &str) -> std::io::Result<String> {
             todo.extend(remaining);
             index = 0;
         } else {
+            if let Some(cache) = cache {
+                cache.borrow_mut().insert(current.clone(), current);
+            }
             index += 1;
         }
     }
@@ -1470,6 +1597,25 @@ pub mod native_module {
             Ok(_) => None,
             Err(err) => Some(super::make_fs_error(&ctx, &err, "access", Some(&path))),
         }
+    }
+
+    #[rquickjs::function]
+    pub fn fs_loader_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        let result = Object::new(ctx.clone()).unwrap();
+        match super::realpath_for_module_resolution(
+            &ctx,
+            &path,
+            super::ModuleLoaderRealpathDomain::CommonJs,
+        ) {
+            Ok(resolved) => result.set("result", resolved).unwrap(),
+            Err(error) => result
+                .set(
+                    "error",
+                    super::make_fs_error(&ctx, &error, "realpath", Some(&path)),
+                )
+                .unwrap(),
+        }
+        result
     }
 
     #[rquickjs::function]

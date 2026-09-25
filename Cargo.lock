@@ -3528,6 +3528,7 @@ dependencies = [
  "http-body",
  "http-body-util",
  "indoc",
+ "libc",
  "oxc_allocator",
  "oxc_ast",
  "oxc_parser",

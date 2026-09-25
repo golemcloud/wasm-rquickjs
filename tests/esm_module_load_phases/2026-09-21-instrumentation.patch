@@ -1,0 +1,212 @@
+diff --git a/crates/wasm-rquickjs/skeleton/Cargo.toml_ b/crates/wasm-rquickjs/skeleton/Cargo.toml_
+index a163394d..be9ff9b2 100644
+--- a/crates/wasm-rquickjs/skeleton/Cargo.toml_
++++ b/crates/wasm-rquickjs/skeleton/Cargo.toml_
+@@ -93,7 +93,7 @@ typescript-transform-runtime = ["typescript-runtime"]
+ # Private test instrumentation. Individual test combinations opt into the
+ # capabilities they observe; this umbrella is excluded from every runtime tier.
+ test-observability = []
+-typescript-compiler-profiling = ["typescript-transform-runtime", "test-observability"]
++typescript-compiler-profiling = ["typescript-runtime", "test-observability"]
+ 
+ # WebSocket support via the target-specific `golem:websocket@1.5.0` bindings.
+ websocket = ["dep:golem-websocket"]
+diff --git a/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs b/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs
+index 85e18a7b..988f3c2b 100644
+--- a/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs
++++ b/crates/wasm-rquickjs/skeleton/src/internal/module_loading.rs
+@@ -22,8 +22,52 @@ use std::hash::BuildHasher;
+ use std::ops::ControlFlow;
+ use std::rc::Rc;
+ use std::sync::atomic::{AtomicUsize, Ordering};
++#[cfg(feature = "typescript-compiler-profiling")]
++use std::time::Instant;
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
++#[cfg(feature = "typescript-compiler-profiling")]
++struct EsmPhaseTimer {
++    profile: Option<Rc<crate::internal::runtime_services::ExecutionProfile>>,
++    phase: &'static str,
++    started: Instant,
++}
++
++#[cfg(feature = "typescript-compiler-profiling")]
++impl EsmPhaseTimer {
++    fn new(ctx: &Ctx<'_>, phase: &'static str) -> Self {
++        let profile = ctx
++            .userdata::<crate::internal::runtime_services::RuntimeServices>()
++            .expect("runtime services not initialized")
++            .execution_profile();
++        Self {
++            profile,
++            phase,
++            started: Instant::now(),
++        }
++    }
++}
++
++#[cfg(feature = "typescript-compiler-profiling")]
++impl Drop for EsmPhaseTimer {
++    fn drop(&mut self) {
++        if let Some(profile) = &self.profile {
++            profile.increment(&format!("{}.calls", self.phase));
++            profile.add(
++                &format!("{}.micros", self.phase),
++                self.started.elapsed().as_micros().min(u128::from(u64::MAX)) as u64,
++            );
++        }
++    }
++}
++
++macro_rules! esm_phase_timer {
++    ($ctx:expr, $phase:literal) => {
++        #[cfg(feature = "typescript-compiler-profiling")]
++        let _esm_phase_timer = EsmPhaseTimer::new($ctx, $phase);
++    };
++}
++
+ pub(crate) const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_meta_resolve_global = globalThis;
+ function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
+   baseUrl = String(baseUrl);
+@@ -3856,6 +3900,7 @@ impl NodeFileResolver {
+ 
+ impl Resolver for NodeFileResolver {
+     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
++        esm_phase_timer!(ctx, "esm.nodeFileResolve");
+         if name.contains("://") || name.starts_with("node:") {
+             return Err(Error::new_resolving(base, name));
+         }
+@@ -10178,6 +10223,7 @@ fn read_module_source_or_throw<'js>(
+     module_id: &str,
+     source_path: &str,
+ ) -> rquickjs::Result<String> {
++    esm_phase_timer!(ctx, "esm.importMetaLoader.sourceRead");
+     #[cfg(feature = "typescript-compiler-profiling")]
+     let profile = ctx
+         .userdata::<crate::internal::runtime_services::RuntimeServices>()
+@@ -11934,47 +11980,74 @@ fn declare_esm_file_module_from_source<'js>(
+ ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
+     let fs_abs_path = ensure_absolute_path(fs_path);
+     let module_abs_path = ensure_absolute_path(module_id);
+-    let processed = process_static_import_attrs(&raw_source, module_id);
++    let processed = {
++        esm_phase_timer!(ctx, "esm.importMetaLoader.importAttrs");
++        process_static_import_attrs(&raw_source, module_id)
++    };
+     let source = &processed.source;
+     let init = file_import_meta_init(url, fs_abs_path.clone());
+-    let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &init.url);
+-
+     let globals = ctx.globals();
+-    if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
+-        && let Ok(cached_error) = cache.get::<_, Value>(module_id)
+-        && !cached_error.is_undefined()
+     {
+-        return Err(ctx.throw(cached_error));
++        esm_phase_timer!(ctx, "esm.importMetaLoader.cjsGlobalPreflight");
++        let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &init.url);
++        if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
++            && let Ok(cached_error) = cache.get::<_, Value>(module_id)
++            && !cached_error.is_undefined()
++        {
++            return Err(ctx.throw(cached_error));
++        }
++        if let Some(error_source) =
++            esm_file_preflight_error_module_source(source, preflight_mode, raw_cjs_global_messages)
++        {
++            return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
++        }
+     }
+-
+-    if let Some(error_source) =
+-        esm_file_preflight_error_module_source(source, preflight_mode, raw_cjs_global_messages)
+     {
+-        return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
+-    }
+-    if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, source) {
+-        return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
++        esm_phase_timer!(ctx, "esm.importMetaLoader.namedImportDiagnostics");
++        if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, source) {
++            return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
++        }
+     }
+ 
+-    let has_top_level_await = source_has_top_level_await(source, true);
+-    let injected = inject_module_source_prologue(
+-        init.filename.as_deref(),
+-        source,
+-        processed.dynamic_import_binding_names.as_ref(),
+-    );
+-    if let Ok(register_source_map) =
+-        globals.get::<_, Function>("__wasm_rquickjs_register_transformed_source_map")
++    let has_top_level_await = {
++        esm_phase_timer!(ctx, "esm.importMetaLoader.topLevelAwaitScan");
++        source_has_top_level_await(source, true)
++    };
++    let injected = {
++        esm_phase_timer!(ctx, "esm.importMetaLoader.prologueInjection");
++        inject_module_source_prologue(
++            init.filename.as_deref(),
++            source,
++            processed.dynamic_import_binding_names.as_ref(),
++        )
++    };
+     {
+-        register_source_map.call::<_, ()>((
+-            fs_abs_path.as_str(),
+-            injected.as_str(),
+-            module_id,
+-            1,
+-            0,
+-            true,
+-        ))?;
++        esm_phase_timer!(ctx, "esm.importMetaLoader.sourceMapRegistration");
++        if let Ok(register_source_map) =
++            globals.get::<_, Function>("__wasm_rquickjs_register_transformed_source_map")
++        {
++            register_source_map.call::<_, ()>((
++                fs_abs_path.as_str(),
++                injected.as_str(),
++                module_id,
++                1,
++                0,
++                true,
++            ))?;
++        }
+     }
+-    match declare_module_with_import_meta(ctx, module_id, &injected, &init) {
++    let declared = {
++        esm_phase_timer!(ctx, "esm.importMetaLoader.quickjsDeclare");
++        Module::declare(ctx.clone(), module_id, injected.as_bytes().to_vec())
++    };
++    let declared = declared.and_then(|module| {
++        {
++            esm_phase_timer!(ctx, "esm.importMetaLoader.importMetaInit");
++            initialize_module_import_meta(ctx, &module, &init)?;
++        }
++        Ok(module)
++    });
++    match declared {
+         Ok(module) => {
+             if has_top_level_await {
+                 mark_async_esm_module(ctx, &globals, &module_abs_path, &init.url)?;
+@@ -12013,6 +12086,7 @@ impl Loader for ImportMetaLoader {
+         ctx: &Ctx<'js>,
+         path: &str,
+     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
++        esm_phase_timer!(ctx, "esm.importMetaLoader.total");
+         let fs_path = module_filesystem_path(path);
+         let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
+         if !fs_path.ends_with(".mjs") && !is_extensionless {
+@@ -12032,7 +12106,10 @@ impl Loader for ImportMetaLoader {
+             return throw_import_attr_type_incompatible(ctx);
+         }
+ 
+-        let source_path = module_source_filesystem_path(ctx, path);
++        let source_path = {
++            esm_phase_timer!(ctx, "esm.importMetaLoader.realpath");
++            module_source_filesystem_path(ctx, path)
++        };
+         declare_esm_file_module(
+             ctx,
+             path,

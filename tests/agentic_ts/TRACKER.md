@@ -16,6 +16,110 @@
 | repeated-job memory observations | n/a | 0 B / 8,744 B | 0 B / 8,744 B | within-series monotone high-water variation / terminal live-heap spread; not retained-memory measurement |
 | phase-attributed core check | 0.64–0.67 s | 21.20 s | 20.56 s | instrumented wall time; measured compiler phases account for 20.56 s / 19.96 s |
 
+## Production release baseline — 2026-09-24
+
+The retained [P2](results/2026-09-24-release-p2-macos-aarch64.json) and
+[P3](results/2026-09-24-release-p3-macos-aarch64.json) reports establish the
+current matched production baseline at clean source `968657ac`. Both the host
+harness and generated component use locked Cargo release builds, the component
+uses the production `typescript-transform-runtime` feature, and all optional
+test caches are disabled. Each cell below is a five-sample median. The host and
+Wasm sides run the exact same TypeScript 5.8.2 CLI arguments with fresh
+processes or QuickJS jobs; only the incremental series preserves its
+independently isolated `.tsbuildinfo`.
+
+| Series | P2 host → Wasm | P3 host → Wasm | `8 × host + 1 s` goal |
+|---|---:|---:|---:|
+| cold fresh logical state | 0.530 → 5.773 s (10.90×) | 0.528 → 5.879 s (11.14×) | miss by 0.534 / 0.658 s |
+| repeated unchanged, fresh jobs | 0.445 → 5.617 s (12.63×) | 0.459 → 5.621 s (12.25×) | miss by 1.059 / 0.951 s |
+| warm incremental, fresh jobs | 0.196 → 2.729 s (13.91×) | 0.200 → 2.830 s (14.16×) | miss by 0.159 / 0.231 s |
+
+The measured boundary is Node process spawn through exit on the host and the
+`run-tsc` export invocation through result in Wasm. Workspace copying and
+component preparation/instantiation are excluded from both workload medians.
+Every sample completed successfully without output overflow. P2 and P3 each
+reached a 145.06 MiB reused-instance Wasm linear-memory high-water mark, with
+zero variation in the repeated and incremental terminal QuickJS heap samples.
+Its absolute memory values remain unchanged from the original release-memory
+anchor and seed the 10% regression gate for subsequent candidates rather than
+claiming a historical release-memory improvement.
+
+The original production pair at `19ed7840` and this retained pair were measured
+in separate sessions, not as an interleaved control/candidate A/B. Across those
+sessions, host-adjusted Wasm time increased by 146/306 ms cold, 68/68 ms
+repeated, and 28/154 ms incremental on P2/P3. The only intervening production
+change was the loader realpath-prefix cache, but the separate-session design
+cannot distinguish a workload effect from machine drift; these rows are the
+current absolute baseline, not evidence that the cache improved TypeScript.
+
+All three series still miss the practical-performance envelope. The small
+fixture points most strongly at fresh-job compiler/module startup: repeated
+non-incremental work is effectively as expensive as cold work, while preserving
+TypeScript's explicit incremental artifact roughly halves Wasm time but leaves
+a much larger host-relative ratio.
+
+## Consolidated TypeScript module loading — 2026-09-23
+
+The retained final [P2](results/2026-09-23-p2-macos-aarch64.json) and
+[P3](results/2026-09-23-p3-macos-aarch64.json) reports measure clean source
+`dd689c8c` with Node 22.14.0, npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and
+disabled optional test caches. Their build and benchmark input hashes match
+across targets, and report validation plus exact currentness pass.
+
+The first controlled step moved CJS `sourceMappingURL` extraction from
+JavaScript to the existing native SWC lexer in TypeScript-feature builds. Its
+intermediate raw reports are summarized rather than retained:
+
+| Workload | P2 baseline → source-map candidate | P3 baseline → source-map candidate |
+|---|---:|---:|
+| cold `tsc --noEmit` | 19.17 → 16.72 s (-12.7%) | 19.22 → 16.90 s (-12.1%) |
+| repeated unchanged checks | 18.95 → 16.83 s (-11.2%) | 19.18 → 17.07 s (-11.0%) |
+| warm incremental checks | 12.43 → 9.99 s (-19.6%) | 12.34 → 10.20 s (-17.4%) |
+| profiled TypeScript API import | 11.67 → 8.07 s (-30.9%) | 11.75 → 8.31 s (-29.3%) |
+
+One-off phase attribution found that JavaScript source-map extraction owned
+2.57–2.83 s while loading the large TypeScript CommonJS source; the native
+lexer reduced that phase to 0.24–0.33 s. Temporary diagnostics were removed
+after selecting the implementation. The source-map candidate cleared both
+experiment gates on both targets: more than one second and more than 10% saved
+in the cold exported CLI workload.
+
+The source-preparation scanner step dispatches CommonJS export parsers only at
+accepted leading bytes and advances the direct-`eval`, import-attribute, and
+template-expression scanners between relevant sentinel bytes. A dedicated
+five-sample comparison measured:
+
+| Workload | P2 source-map → final | P3 source-map → final |
+|---|---:|---:|
+| profiled TypeScript API import | 8.33 → 4.22 s (-49.3%) | 8.49 → 4.22 s (-50.3%) |
+| incremental profiler rerun | 5.43 → 4.22 s (-22.3%) | 5.42 → 4.22 s (-22.2%) |
+
+The final known-format step classifies `.cjs`/`.cts`, `.mts`, explicit package
+types, and default-type `node_modules` files before consulting source syntax.
+Only ambiguous inputs run the ESM-syntax and CommonJS-wrapper lexical scans.
+It preserves the existing cached-TypeScript and `force_module` precedence. A
+second dedicated five-sample comparison reduced the TypeScript API import
+median from 4.22 to 3.47 s on P2 (-17.9%) and from 4.22 to 3.44 s on P3
+(-18.4%). The retained final reports independently record 3.47 s and 3.45 s
+import phases.
+
+The API profiler imports `typescript.js`, not the CLI's `_tsc.js`, so these
+values support module-load attribution rather than a direct cold-CLI
+comparison. Other compiler phases and end-to-end rows vary between local runs;
+they are not used to claim the same percentage for full `tsc` workloads. The
+final components are 492,525 bytes (0.28%) larger on P2 and 488,990 bytes
+(0.28%) larger on P3 than the original controlled candidate baseline.
+
+Focused public-boundary coverage verifies real line-comment directives, marker
+text inside strings and templates, Node's U+2003 separator and U+2028 line
+terminator, an empty last directive, the no-marker fast path, CommonJS source
+preparation, and import attributes. The native path is intentionally
+TypeScript-feature-only because those builds already carry SWC. Non-TypeScript
+and VM builds retain the existing JavaScript scanner; its pre-existing
+regex-literal heuristic gaps remain a proposed deferred follow-up. P2/P3
+TypeScript runtime coverage also verifies `.mts`, `.cts`, ambiguous `.ts`,
+cached CommonJS TypeScript, and explicit CommonJS/module package precedence.
+
 Update this tracker from a dated report only. Stable runtime defects belong in
 focused runtime, node_modules-app, or node-compat tests before an implementation
 fix is proposed.

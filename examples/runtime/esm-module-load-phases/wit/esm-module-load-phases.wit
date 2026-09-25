@@ -1,0 +1,5 @@
+package quickjs:esm-module-load-phases;
+
+world esm-module-load-phases {
+  export measure-case: func(source-bytes: u64, sample: u64) -> string;
+}

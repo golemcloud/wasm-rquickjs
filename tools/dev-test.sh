@@ -3,12 +3,13 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/dev-test.sh <p2|p3> <fast-start|fast-run|standard> <test-target> <filter> [test-r args...]
+Usage: tools/dev-test.sh <p2|p3> <fast-start|fast-run|standard|release> <test-target> <filter> [test-r args...]
 
 Examples:
   tools/dev-test.sh p2 fast-start runtime module_resolution::esm_package_map_edge_cases
   tools/dev-test.sh p2 fast-run runtime module_resolution::esm_
   tools/dev-test.sh p3 standard node_compat es_module__test_esm_pkgname_mjs
+  tools/dev-test.sh p2 release agentic_ts ""
 EOF
 }
 
@@ -41,9 +42,9 @@ case "$target" in
 esac
 
 case "$profile" in
-    fast-start | fast-run | standard) ;;
+    fast-start | fast-run | standard | release) ;;
     *)
-        echo "Unknown profile '$profile'; expected fast-start, fast-run, or standard." >&2
+        echo "Unknown profile '$profile'; expected fast-start, fast-run, standard, or release." >&2
         exit 2
         ;;
 esac
@@ -52,6 +53,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 unset WASM_RQUICKJS_TEST_ARTIFACT_CACHE
+unset WASM_RQUICKJS_TEST_COMPONENT_PROFILE
 unset WASM_RQUICKJS_TEST_DROP_CACHE
 unset WASM_RQUICKJS_TEST_LOCKED_BUILDS
 unset WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT
@@ -62,6 +64,7 @@ unset WASM_RQUICKJS_TEST_WASMTIME_CACHE
 unset CARGO_NET_OFFLINE
 
 features=""
+host_release=false
 test_r_args=()
 plan_only=${WASM_RQUICKJS_DEV_TEST_PLAN_ONLY:-0}
 
@@ -90,7 +93,43 @@ case "$profile" in
         fi
         ;;
     standard) ;;
+    release)
+        export WASM_RQUICKJS_TEST_COMPONENT_PROFILE=release
+        export WASM_RQUICKJS_TEST_LOCKED_BUILDS=1
+        host_release=true
+        ;;
 esac
+
+if [[ "$profile" == release ]]; then
+    release_overrides=()
+    while IFS= read -r variable; do
+        case "$variable" in
+            CARGO_BUILD_RUSTFLAGS | CARGO_ENCODED_RUSTFLAGS | CARGO_HOME | CARGO_PROFILE_RELEASE_* | CARGO_TARGET_*_RUSTFLAGS | RUSTC | RUSTC_WRAPPER | RUSTC_WORKSPACE_WRAPPER | RUSTFLAGS)
+                release_overrides+=("$variable")
+                ;;
+        esac
+    done < <(compgen -e)
+    if ((${#release_overrides[@]})); then
+        echo "The release profile rejects inherited Cargo/Rust optimization overrides: ${release_overrides[*]}" >&2
+        exit 2
+    fi
+
+    cargo_configs=()
+    config_root=$repo_root
+    while [[ "$config_root" != / ]]; do
+        for config_name in config config.toml; do
+            config_path="$config_root/.cargo/$config_name"
+            if [[ -f "$config_path" ]]; then
+                cargo_configs+=("$config_path")
+            fi
+        done
+        config_root=$(dirname "$config_root")
+    done
+    if ((${#cargo_configs[@]})); then
+        echo "The release profile rejects external Cargo configuration: ${cargo_configs[*]}" >&2
+        exit 2
+    fi
+fi
 
 prepare_p2_workspace() {
     local shadow="$repo_root/tmp/p2-dev-workspace"
@@ -149,6 +188,7 @@ prepare_p2_workspace() {
 
 if [[ "$target" == p2 ]]; then
     prepare_p2_workspace
+    export WASM_RQUICKJS_TEST_HOST_LOCKFILE="$repo_root/tmp/p2-dev-workspace/Cargo.lock"
     if [[ -n "$features" ]]; then
         features="use-golem-wasmtime,$features"
     else
@@ -156,6 +196,7 @@ if [[ "$target" == p2 ]]; then
     fi
 else
     export WASM_RQUICKJS_TEST_TARGET=p3
+    export WASM_RQUICKJS_TEST_HOST_LOCKFILE="$repo_root/Cargo.lock"
 fi
 
 if [[ "$target" == p2 ]]; then
@@ -168,7 +209,10 @@ else
     cargo_command=(cargo test --target-dir "$repo_root/target")
 fi
 
-if [[ "$profile" != standard ]]; then
+if [[ "$host_release" == true ]]; then
+    cargo_command+=(--release)
+fi
+if [[ "${WASM_RQUICKJS_TEST_LOCKED_BUILDS:-0}" == 1 ]]; then
     cargo_command+=(--locked)
 fi
 cargo_command+=(--test "$test_target")
@@ -184,6 +228,9 @@ cargo_command+=("$@")
 if [[ "$plan_only" == 1 ]]; then
     printf 'features=%s\n' "$features"
     printf 'artifact_cache=%s\n' "${WASM_RQUICKJS_TEST_ARTIFACT_CACHE:-0}"
+    printf 'component_profile=%s\n' "${WASM_RQUICKJS_TEST_COMPONENT_PROFILE:-dev}"
+    printf 'host_release=%s\n' "$host_release"
+    printf 'host_lockfile=%s\n' "$WASM_RQUICKJS_TEST_HOST_LOCKFILE"
     printf 'locked_builds=%s\n' "${WASM_RQUICKJS_TEST_LOCKED_BUILDS:-0}"
     printf 'precompile_component=%s\n' "${WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT:-0}"
     printf 'prepared_component_cache=%s\n' "${WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE:-0}"

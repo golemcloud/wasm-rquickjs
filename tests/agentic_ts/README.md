@@ -23,6 +23,28 @@ Run both targets from the repository root:
 tests/agentic_ts/run.sh
 ```
 
+The default command intentionally reproduces the historical development-profile
+reports. For production-oriented host/P2/P3 comparisons, compile both the test
+host and generated guest component with their real Cargo release profiles:
+
+```sh
+tests/agentic_ts/run.sh --release
+```
+
+Release mode uses the production `typescript-transform-runtime` component,
+without the profiling-only filesystem counters. It records matched host and
+Wasm series for cold runs with fresh workspaces, unchanged runs in fresh
+processes/jobs, and warmed incremental runs that preserve only their explicit
+`.tsbuildinfo`. The counter-heavy development report remains the attribution
+sidecar for choosing optimizations; do not mix its absolute timings with the
+release envelope.
+
+Host timings start at Node process spawn; Wasm timings start at the exported
+`run-tsc` invocation. Fresh-workspace copying and component instantiation are
+outside both command timings. Release mode clears the host child environment
+and supplies only controlled `HOME` and `PATH` values, matching the guest job's
+environmental isolation.
+
 During profiler development, validate only the shared controlled workload and
 the feature-gated execution-job profile with:
 
@@ -62,14 +84,18 @@ rerunning the workloads:
 tests/agentic_ts/run.sh --check
 ```
 
-Validate selected reports against the current checkout's composite BLAKE3
-input hashes:
+Validate the manifest-designated current pair against composite BLAKE3 input
+hashes recomputed from a temporary pristine worktree at its exact measured
+revision:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
-  tests/agentic_ts/results/2026-09-07-p2-macos-aarch64.json \
-  tests/agentic_ts/results/2026-09-07-p3-macos-aarch64.json
+  tests/agentic_ts/results/2026-09-24-release-p2-macos-aarch64.json \
+  tests/agentic_ts/results/2026-09-24-release-p3-macos-aarch64.json
 ```
+
+The currentness command requires Git and `jq`. The exact measured commit must
+already exist in the local clone; the command does not fetch missing history.
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
 writes raw JSON reports under `tests/agentic_ts/results/`. Timings are
