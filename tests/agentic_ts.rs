@@ -795,6 +795,13 @@ fn validate_release_baseline_report(report: &Value) -> anyhow::Result<()> {
                 );
             }
         }
+        let expected = summarize(samples);
+        for field in ["medianMs", "p95Ms", "throughputPerSecond"] {
+            anyhow::ensure!(
+                series[field] == expected[field],
+                "{label} {field} does not reconcile with its samples"
+            );
+        }
         Ok(())
     }
 
@@ -836,18 +843,29 @@ fn validate_release_baseline_report(report: &Value) -> anyhow::Result<()> {
         )?;
     }
 
-    for (path, label) in [
-        ("/host/incrementalSeed", "host incremental seed"),
-        ("/wasm/incrementalSeed", "Wasm incremental seed"),
+    for (path, label, require_linear_memory) in [
+        ("/host/incrementalSeed", "host incremental seed", false),
+        ("/wasm/incrementalSeed", "Wasm incremental seed", true),
     ] {
         let sample = report
             .pointer(path)
             .ok_or_else(|| anyhow::anyhow!("missing {label}"))?;
         anyhow::ensure!(
             successful_result(&sample["result"])
-                && sample.pointer("/result/value/exitCode") == Some(&json!(0)),
+                && sample.pointer("/result/value/exitCode") == Some(&json!(0))
+                && sample["wallMs"]
+                    .as_f64()
+                    .is_some_and(|duration| duration.is_finite() && duration >= 0.0),
             "{label} failed: {sample:#}"
         );
+        if require_linear_memory {
+            anyhow::ensure!(
+                sample["linearMemoryHighWaterBytes"]
+                    .as_u64()
+                    .is_some_and(|bytes| bytes > 0),
+                "{label} has no Wasm memory observation"
+            );
+        }
     }
 
     anyhow::ensure!(
@@ -885,11 +903,26 @@ fn validate_release_baseline_report(report: &Value) -> anyhow::Result<()> {
             );
         }
     }
+    let reused_instance_high_water = [
+        "/wasm/repeatedUnchangedFreshJobs/samples",
+        "/wasm/incrementalFreshJobs/samples",
+    ]
+    .into_iter()
+    .flat_map(|path| {
+        report
+            .pointer(path)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+    })
+    .chain(std::iter::once(&report["wasm"]["incrementalSeed"]))
+    .filter_map(|sample| sample["linearMemoryHighWaterBytes"].as_u64())
+    .max()
+    .ok_or_else(|| anyhow::anyhow!("release baseline has no reused-instance memory observation"))?;
     anyhow::ensure!(
-        report["memory"]["reusedInstanceLinearMemoryHighWaterBytes"]
-            .as_u64()
-            .is_some_and(|bytes| bytes > 0),
-        "release baseline has no Wasm memory observation"
+        report["memory"]["reusedInstanceLinearMemoryHighWaterBytes"].as_u64()
+            == Some(reused_instance_high_water),
+        "release baseline reused-instance memory high water does not reconcile"
     );
     Ok(())
 }
@@ -921,6 +954,15 @@ fn validate_release_baseline_regression_guards(report: &Value) -> anyhow::Result
         "release validator accepted a missing sample"
     );
 
+    for field in ["medianMs", "p95Ms", "throughputPerSecond"] {
+        let mut false_summary = report.clone();
+        false_summary["host"]["repeatedUnchangedFreshProcesses"][field] = json!(1);
+        anyhow::ensure!(
+            validate_release_baseline_report(&false_summary).is_err(),
+            "release validator accepted an unreconciled {field}"
+        );
+    }
+
     let mut failed_seed = report.clone();
     failed_seed["wasm"]["incrementalSeed"]["result"]["value"]["exitCode"] = json!(1);
     anyhow::ensure!(
@@ -942,6 +984,13 @@ fn validate_release_baseline_regression_guards(report: &Value) -> anyhow::Result
     anyhow::ensure!(
         validate_release_baseline_report(&missing_memory).is_err(),
         "release validator accepted a sample without memory evidence"
+    );
+
+    let mut false_memory_high_water = report.clone();
+    false_memory_high_water["memory"]["reusedInstanceLinearMemoryHighWaterBytes"] = json!(1);
+    anyhow::ensure!(
+        validate_release_baseline_report(&false_memory_high_water).is_err(),
+        "release validator accepted an unreconciled memory high water"
     );
     Ok(())
 }
