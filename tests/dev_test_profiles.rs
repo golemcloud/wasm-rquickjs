@@ -50,9 +50,15 @@ fn remove_node_overrides(command: &mut Command) {
 
 fn plan(target: &str, profile: &str) -> Plan {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let fixture = Utf8TempDir::new().expect("temporary plan fixture should be created");
+    let fixture_tools = fixture.path().join("tools");
+    fs::create_dir_all(&fixture_tools).expect("temporary tools directory should be created");
+    let fixture_script = fixture_tools.join("dev-test.sh");
+    fs::copy(repo_root.join("tools/dev-test.sh"), &fixture_script)
+        .expect("dev-test script should be copied into the isolated fixture");
     let mut command = Command::new("bash");
     command
-        .arg(repo_root.join("tools/dev-test.sh"))
+        .arg(fixture_script)
         .args([target, profile, "runtime", "profile_probe"])
         .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
     if profile == "release" {

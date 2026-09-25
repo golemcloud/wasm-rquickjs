@@ -193,6 +193,37 @@ if (cd "$fixture" && "$selector" push "$previous") >/dev/null 2>&1; then
     exit 1
 fi
 
+main_head=$(git -C "$fixture" rev-parse HEAD)
+git -C "$fixture" switch -qc unrelated-report-source "$base"
+printf 'unrelated report source\n' >"$fixture/unrelated-report-source.txt"
+git -C "$fixture" add unrelated-report-source.txt
+git -C "$fixture" commit -qm unrelated-report-source
+unrelated_report_source=$(git -C "$fixture" rev-parse HEAD)
+git -C "$fixture" switch -q main
+for report in \
+    tests/agentic_ts/results/direct-p2-result.json \
+    tests/agentic_ts/results/direct-p3-result.json \
+    tests/npm_metadata/results/direct-p2-result.json \
+    tests/npm_metadata/results/direct-p3-result.json; do
+    printf '{"environment":{"commitHint":"%s"}}\n' "$unrelated_report_source" \
+        >"$fixture/$report"
+done
+printf '%s %s\n' \
+    "$unrelated_report_source" tests/agentic_ts/results/direct-p2-result.json \
+    "$unrelated_report_source" tests/agentic_ts/results/direct-p3-result.json \
+    >"$fixture/tests/agentic_ts/results/current-reports.txt"
+printf '%s %s\n' \
+    "$unrelated_report_source" tests/npm_metadata/results/direct-p2-result.json \
+    "$unrelated_report_source" tests/npm_metadata/results/direct-p3-result.json \
+    >"$fixture/tests/npm_metadata/results/current-reports.txt"
+if (cd "$fixture" && "$selector" push 0000000000000000000000000000000000000000) \
+    >/dev/null 2>&1; then
+    echo "unrelated current-report source unexpectedly passed" >&2
+    exit 1
+fi
+git -C "$fixture" restore tests/agentic_ts/results tests/npm_metadata/results
+[[ "$(git -C "$fixture" rev-parse HEAD)" == "$main_head" ]]
+
 fake_bin="$fixture/fake-bin"
 mkdir "$fake_bin"
 real_git=$(command -v git)

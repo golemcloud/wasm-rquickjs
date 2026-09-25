@@ -27,6 +27,16 @@ Five-sample release measurements against the original production pair showed:
 | P2 warm-tarball `npm ci` | 2,718.971 ms | 2,272.384 ms | -446.587 ms (-16.4%) |
 | P3 warm-tarball `npm ci` | 2,503.777 ms | 2,360.249 ms | -143.528 ms (-5.7%) |
 
+The original and prefix-cache pairs were collected in separate measurement
+sessions rather than as an interleaved control/candidate A/B, so these changes
+are directional across-session evidence rather than a causal speedup estimate.
+A contemporaneous TypeScript production pair also drifted upward: after host
+time was subtracted, P2/P3 increased by 146/306 ms cold, 68/68 ms repeated,
+and 28/154 ms incremental. The realpath-prefix cache was the only intervening
+production change, but the separate-session design cannot distinguish a
+workload effect from machine drift. The cache's deterministic path-work
+reduction and regression coverage remain valid independently of wall time.
+
 Peak observed linear memory was 55.25 MiB for P2 and 48.25 MiB for P3, or
 +4.7% and +0.3% against the original production anchors. Both remain within
 the 10% memory gate.
@@ -40,8 +50,10 @@ public realpath calls.
 
 The retained reports use five iterations, the pinned Node 22.14.0/npm 10.9.2
 tool tree, one deterministic loopback registry, isolated caches and workspaces,
-fresh component/runtime state, and release builds for both host harness and
-guest component.
+fresh QuickJS execution jobs, and release builds for both host harness and
+guest component. A timed warm-tarball job reuses the component instance that
+ran its untimed seed; its reported linear-memory high water therefore includes
+the seed peak.
 
 | Target / workload | Host median | Wasm median | Goal status |
 | --- | ---: | ---: | --- |

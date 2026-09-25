@@ -710,7 +710,7 @@ fn module_loader_realpath_checks_wizer_before_filesystem_access() {
         .find("crate::internal::is_wizer_active()")
         .expect("loader realpath helper must retain the Wizer filesystem guard");
     let filesystem_access = body
-        .find("canonicalize_guest_path(path)")
+        .find("canonicalize_guest_path_with_cache(")
         .expect("loader realpath helper must canonicalize uncached paths");
     assert!(
         guard < filesystem_access,

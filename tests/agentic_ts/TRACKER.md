@@ -20,13 +20,13 @@
 
 The retained [P2](results/2026-09-24-release-p2-macos-aarch64.json) and
 [P3](results/2026-09-24-release-p3-macos-aarch64.json) reports establish the
-matched production baseline at clean source `968657ac`. Both the host harness
-and generated component use locked Cargo release builds, the component uses the
-production `typescript-transform-runtime` feature, and all optional test caches
-are disabled. Each cell below is a five-sample median. The host and Wasm sides
-run the exact same TypeScript 5.8.2 CLI arguments with fresh processes or
-QuickJS jobs; only the incremental series preserves its independently isolated
-`.tsbuildinfo`.
+current matched production baseline at clean source `968657ac`. Both the host
+harness and generated component use locked Cargo release builds, the component
+uses the production `typescript-transform-runtime` feature, and all optional
+test caches are disabled. Each cell below is a five-sample median. The host and
+Wasm sides run the exact same TypeScript 5.8.2 CLI arguments with fresh
+processes or QuickJS jobs; only the incremental series preserves its
+independently isolated `.tsbuildinfo`.
 
 | Series | P2 host → Wasm | P3 host → Wasm | `8 × host + 1 s` goal |
 |---|---:|---:|---:|
@@ -40,9 +40,17 @@ component preparation/instantiation are excluded from both workload medians.
 Every sample completed successfully without output overflow. P2 and P3 each
 reached a 145.06 MiB reused-instance Wasm linear-memory high-water mark, with
 zero variation in the repeated and incremental terminal QuickJS heap samples.
-This is the first matched production baseline, so its absolute memory values
-seed the 10% regression gate for subsequent candidates rather than claiming a
-historical release-memory improvement.
+Its absolute memory values remain unchanged from the original release-memory
+anchor and seed the 10% regression gate for subsequent candidates rather than
+claiming a historical release-memory improvement.
+
+The original production pair at `19ed7840` and this retained pair were measured
+in separate sessions, not as an interleaved control/candidate A/B. Across those
+sessions, host-adjusted Wasm time increased by 146/306 ms cold, 68/68 ms
+repeated, and 28/154 ms incremental on P2/P3. The only intervening production
+change was the loader realpath-prefix cache, but the separate-session design
+cannot distinguish a workload effect from machine drift; these rows are the
+current absolute baseline, not evidence that the cache improved TypeScript.
 
 All three series still miss the practical-performance envelope. The small
 fixture points most strongly at fresh-job compiler/module startup: repeated

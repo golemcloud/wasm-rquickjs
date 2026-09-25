@@ -25,8 +25,9 @@ common source snapshot, while their matching composite input hashes establish
 that both targets used the same build and benchmark inputs.
 `run.sh --check` validates every historical report and requires each P2/P3 pair
 to share the input hashes without resolving Git history. `run.sh
---check-current` additionally compares selected reports with the current
-checkout. Each `current-reports.txt` entry pairs an exact measured source
+--check-current` additionally compares the manifest-designated reports with
+their exact measured source in a temporary pristine worktree. Each
+`current-reports.txt` entry pairs an exact measured source
 revision with one member of the latest P2/P3 pair. When that pair or manifest
 changes, CI checks it against pristine worktrees at the named revision;
 superseded experiment reports remain schema- and pair-validated without being
@@ -55,6 +56,14 @@ versus 5.621 s. Warm incremental medians are 0.196 s versus 2.729 s and
 miss by 0.534/0.658 s cold, 1.059/0.951 s repeated, and 0.159/0.231 s
 incremental. The reused-instance linear-memory high-water mark remains
 145.06 MiB on both targets, unchanged from the original release-memory anchor.
+
+The original pair at `19ed7840` and this retained pair were measured in
+separate sessions rather than an interleaved A/B. Host-adjusted Wasm time in
+the retained pair is 146/306 ms higher cold, 68/68 ms higher repeated, and
+28/154 ms higher incremental on P2/P3. Although the loader realpath-prefix
+cache is the only intervening production change, the design cannot separate a
+TypeScript workload effect from machine drift. Treat the retained pair as the
+current absolute baseline, not as evidence of a TypeScript cache benefit.
 
 Host timing covers Node process spawn through exit. Wasm timing covers the
 `run-tsc` export invocation through its result. Fresh-workspace preparation and

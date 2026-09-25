@@ -84,13 +84,14 @@ rerunning the workloads:
 tests/agentic_ts/run.sh --check
 ```
 
-Validate selected reports against the current checkout's composite BLAKE3
-input hashes:
+Validate the manifest-designated current pair against composite BLAKE3 input
+hashes recomputed from a temporary pristine worktree at its exact measured
+revision:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
-  tests/agentic_ts/results/2026-09-07-p2-macos-aarch64.json \
-  tests/agentic_ts/results/2026-09-07-p3-macos-aarch64.json
+  tests/agentic_ts/results/2026-09-24-release-p2-macos-aarch64.json \
+  tests/agentic_ts/results/2026-09-24-release-p3-macos-aarch64.json
 ```
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner

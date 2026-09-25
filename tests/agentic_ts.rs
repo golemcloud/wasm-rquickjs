@@ -797,8 +797,15 @@ fn validate_release_baseline_report(report: &Value) -> anyhow::Result<()> {
         }
         let expected = summarize(samples);
         for field in ["medianMs", "p95Ms", "throughputPerSecond"] {
+            let stored = series[field]
+                .as_f64()
+                .ok_or_else(|| anyhow::anyhow!("{label} {field} is not numeric"))?;
+            let recomputed = expected[field]
+                .as_f64()
+                .expect("recomputed release summary field is numeric");
+            let tolerance = f64::EPSILON * recomputed.abs().max(1.0) * 8.0;
             anyhow::ensure!(
-                series[field] == expected[field],
+                stored.is_finite() && (stored - recomputed).abs() <= tolerance,
                 "{label} {field} does not reconcile with its samples"
             );
         }
@@ -962,6 +969,18 @@ fn validate_release_baseline_regression_guards(report: &Value) -> anyhow::Result
             "release validator accepted an unreconciled {field}"
         );
     }
+
+    let mut adjacent_throughput = report.clone();
+    let throughput =
+        adjacent_throughput["host"]["repeatedUnchangedFreshProcesses"]["throughputPerSecond"]
+            .as_f64()
+            .expect("validated report has numeric throughput");
+    adjacent_throughput["host"]["repeatedUnchangedFreshProcesses"]["throughputPerSecond"] =
+        json!(f64::from_bits(throughput.to_bits() + 1));
+    anyhow::ensure!(
+        validate_release_baseline_report(&adjacent_throughput).is_ok(),
+        "release validator rejected a one-ULP throughput round-trip difference"
+    );
 
     let mut failed_seed = report.clone();
     failed_seed["wasm"]["incrementalSeed"]["result"]["value"]["exitCode"] = json!(1);
