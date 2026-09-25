@@ -30,7 +30,11 @@ tests/npm_metadata/run.sh --check-current tests/npm_metadata/results/YYYY-MM-DD-
 No `npm-metadata-v2` report is accepted as current unless both target reports
 match the source input hashes and form one distinct P2/P3 pair. The dated final
 pair and its measured goal status are documented here only after that validation
-passes from a clean source commit.
+passes from a clean source commit. `current-reports.txt` pairs that latest pair
+with its exact measured source revision for CI currentness selection;
+superseded `npm-metadata-v2` pairs remain contract-validated without being
+treated as evidence for a later source tree. Earlier v1 and path-trace JSON
+remain historical evidence outside this v2 currentness contract.
 
 ### 2026-09-24 retained small-fixture measurement
 

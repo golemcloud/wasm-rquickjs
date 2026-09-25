@@ -13,13 +13,46 @@ mkdir -p "$fixture/tests/agentic_ts/results"
 mkdir -p "$fixture/tests/npm_metadata/results"
 printf 'base\n' >"$fixture/build-input.txt"
 git -C "$fixture" add build-input.txt
+git -C "$fixture" commit -qm base-source
+base_source=$(git -C "$fixture" rev-parse HEAD)
+printf '{"environment":{"commitHint":"%s"}}\n' "$base_source" \
+    >"$fixture/tests/agentic_ts/results/base-p2-report.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$base_source" \
+    >"$fixture/tests/agentic_ts/results/base-p3-report.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$base_source" \
+    >"$fixture/tests/npm_metadata/results/base-p2-report.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$base_source" \
+    >"$fixture/tests/npm_metadata/results/base-p3-report.json"
+printf '%s %s\n' "$base_source" tests/agentic_ts/results/base-p2-report.json \
+    "$base_source" tests/agentic_ts/results/base-p3-report.json \
+    >"$fixture/tests/agentic_ts/results/current-reports.txt"
+printf '%s %s\n' "$base_source" tests/npm_metadata/results/base-p2-report.json \
+    "$base_source" tests/npm_metadata/results/base-p3-report.json \
+    >"$fixture/tests/npm_metadata/results/current-reports.txt"
+git -C "$fixture" add tests
 git -C "$fixture" commit -qm base
 base=$(git -C "$fixture" rev-parse HEAD)
 
 git -C "$fixture" switch -qc report-branch
-printf '{}\n' >"$fixture/tests/agentic_ts/results/report.json"
-printf '{}\n' >"$fixture/tests/npm_metadata/results/report.json"
-git -C "$fixture" add tests/agentic_ts/results/report.json tests/npm_metadata/results/report.json
+printf 'report source\n' >"$fixture/report-source.txt"
+git -C "$fixture" add report-source.txt
+git -C "$fixture" commit -qm report-source
+report_source=$(git -C "$fixture" rev-parse HEAD)
+printf '{"environment":{"commitHint":"%s"}}\n' "$report_source" \
+    >"$fixture/tests/agentic_ts/results/report-p2-result.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$report_source" \
+    >"$fixture/tests/agentic_ts/results/report-p3-result.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$report_source" \
+    >"$fixture/tests/npm_metadata/results/report-p2-result.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$report_source" \
+    >"$fixture/tests/npm_metadata/results/report-p3-result.json"
+printf '%s %s\n' "$report_source" tests/agentic_ts/results/report-p2-result.json \
+    "$report_source" tests/agentic_ts/results/report-p3-result.json \
+    >"$fixture/tests/agentic_ts/results/current-reports.txt"
+printf '%s %s\n' "$report_source" tests/npm_metadata/results/report-p2-result.json \
+    "$report_source" tests/npm_metadata/results/report-p3-result.json \
+    >"$fixture/tests/npm_metadata/results/current-reports.txt"
+git -C "$fixture" add tests
 git -C "$fixture" commit -qm report
 report_head=$(git -C "$fixture" rev-parse HEAD)
 
@@ -32,23 +65,36 @@ git -C "$fixture" merge -q --no-ff report-branch -m merge
 assert_plan() {
     local event_name=$1
     local before=$2
-    local expected_source=$3
-    local expected_agentic_report=$4
-    local expected_npm_report=$5
-    local expected_pr_head=${6:-}
+    local expected_event_source=$3
+    local expected_measurement_source=$4
+    local expected_agentic_p2=$5
+    local expected_agentic_p3=$6
+    local expected_npm_p2=$7
+    local expected_npm_p3=$8
+    local expected_pr_head=${9:-}
     local plan
     plan=$(cd "$fixture" && "$selector" "$event_name" "$before" "$expected_pr_head")
-    grep -Fxq "source-ref=$expected_source" <<<"$plan"
-    if [[ -n "$expected_agentic_report" ]]; then
-        grep -Fxq "$expected_agentic_report" <<<"$plan"
-    fi
-    if [[ -n "$expected_npm_report" ]]; then
-        grep -Fxq "$expected_npm_report" <<<"$plan"
-    fi
+    grep -Fxq "source-ref=$expected_event_source" <<<"$plan"
+    grep -Fxq "agentic-source-ref=$expected_measurement_source" <<<"$plan"
+    grep -Fxq "npm-source-ref=$expected_measurement_source" <<<"$plan"
+    for report in "$expected_agentic_p2" "$expected_agentic_p3" \
+        "$expected_npm_p2" "$expected_npm_p3"; do
+        if [[ -n "$report" ]]; then
+            grep -Fxq "$report" <<<"$plan"
+        fi
+    done
 }
 
-assert_plan pull_request '' "$report_head" tests/agentic_ts/results/report.json tests/npm_metadata/results/report.json "$report_head"
-assert_plan push "$main_parent" "$report_head" tests/agentic_ts/results/report.json tests/npm_metadata/results/report.json
+assert_plan pull_request '' "$report_head" "$report_source" \
+    tests/agentic_ts/results/report-p2-result.json \
+    tests/agentic_ts/results/report-p3-result.json \
+    tests/npm_metadata/results/report-p2-result.json \
+    tests/npm_metadata/results/report-p3-result.json "$report_head"
+assert_plan push "$main_parent" "$report_head" "$report_source" \
+    tests/agentic_ts/results/report-p2-result.json \
+    tests/agentic_ts/results/report-p3-result.json \
+    tests/npm_metadata/results/report-p2-result.json \
+    tests/npm_metadata/results/report-p3-result.json
 [[ "$(git -C "$fixture" rev-parse HEAD^2)" == "$report_head" ]]
 if (cd "$fixture" && "$selector" pull_request '' "$base") >/dev/null 2>&1; then
     echo "mismatched pull-request head unexpectedly passed" >&2
@@ -60,21 +106,78 @@ if (cd "$fixture" && "$selector" pull_request '') >/dev/null 2>&1; then
 fi
 
 previous=$(git -C "$fixture" rev-parse HEAD)
-printf '{}\n' >"$fixture/tests/agentic_ts/results/direct.json"
-printf '{}\n' >"$fixture/tests/npm_metadata/results/direct.json"
-git -C "$fixture" add tests/agentic_ts/results/direct.json tests/npm_metadata/results/direct.json
+printf 'direct source\n' >"$fixture/direct-source.txt"
+git -C "$fixture" add direct-source.txt
+git -C "$fixture" commit -qm direct-source
+direct_source=$(git -C "$fixture" rev-parse HEAD)
+printf '{"environment":{"commitHint":"%s"}}\n' "$direct_source" \
+    >"$fixture/tests/agentic_ts/results/direct-p2-result.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$direct_source" \
+    >"$fixture/tests/agentic_ts/results/direct-p3-result.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$direct_source" \
+    >"$fixture/tests/npm_metadata/results/direct-p2-result.json"
+printf '{"environment":{"commitHint":"%s"}}\n' "$direct_source" \
+    >"$fixture/tests/npm_metadata/results/direct-p3-result.json"
+printf '%s %s\n' "$direct_source" tests/agentic_ts/results/direct-p2-result.json \
+    "$direct_source" tests/agentic_ts/results/direct-p3-result.json \
+    >"$fixture/tests/agentic_ts/results/current-reports.txt"
+printf '%s %s\n' "$direct_source" tests/npm_metadata/results/direct-p2-result.json \
+    "$direct_source" tests/npm_metadata/results/direct-p3-result.json \
+    >"$fixture/tests/npm_metadata/results/current-reports.txt"
+git -C "$fixture" add tests
 git -C "$fixture" commit -qm direct-push
 direct_head=$(git -C "$fixture" rev-parse HEAD)
-assert_plan push "$previous" "$direct_head" tests/agentic_ts/results/direct.json tests/npm_metadata/results/direct.json
+assert_plan push "$previous" "$direct_head" "$direct_source" \
+    tests/agentic_ts/results/direct-p2-result.json \
+    tests/agentic_ts/results/direct-p3-result.json \
+    tests/npm_metadata/results/direct-p2-result.json \
+    tests/npm_metadata/results/direct-p3-result.json
 
 zero_plan=$(cd "$fixture" && "$selector" push 0000000000000000000000000000000000000000)
 grep -Fqx "source-ref=$(git -C "$fixture" rev-parse HEAD)" <<<"$zero_plan"
-if grep -Fqx tests/agentic_ts/results/direct.json <<<"$zero_plan"; then
+grep -Fqx "agentic-source-ref=$direct_source" <<<"$zero_plan"
+grep -Fqx "npm-source-ref=$direct_source" <<<"$zero_plan"
+if grep -Fqx tests/agentic_ts/results/direct-p2-result.json <<<"$zero_plan"; then
     echo "zero-before push unexpectedly selected a current report" >&2
     exit 1
 fi
-if grep -Fqx tests/npm_metadata/results/direct.json <<<"$zero_plan"; then
+if grep -Fqx tests/npm_metadata/results/direct-p2-result.json <<<"$zero_plan"; then
     echo "zero-before push unexpectedly selected a current npm report" >&2
+    exit 1
+fi
+
+npm_manifest="$fixture/tests/npm_metadata/results/current-reports.txt"
+printf '{"environment":{"commitHint":"%s"}}\n' "$direct_source" \
+    >"$fixture/tests/npm_metadata/results/other-p3-result.json"
+printf '%s %s\n' "$direct_source" tests/npm_metadata/results/direct-p2-result.json \
+    "$direct_source" tests/npm_metadata/results/other-p3-result.json >"$npm_manifest"
+if (cd "$fixture" && "$selector" push 0000000000000000000000000000000000000000) \
+    >/dev/null 2>&1; then
+    echo "mixed current-report pair unexpectedly passed" >&2
+    exit 1
+fi
+printf '%s %s\n' "$base_source" tests/npm_metadata/results/direct-p2-result.json \
+    "$base_source" tests/npm_metadata/results/direct-p3-result.json >"$npm_manifest"
+if (cd "$fixture" && "$selector" push 0000000000000000000000000000000000000000) \
+    >/dev/null 2>&1; then
+    echo "mismatched current-report source unexpectedly passed" >&2
+    exit 1
+fi
+printf '%s %s\n' "$direct_source" tests/npm_metadata/results/direct-p2-result.json \
+    "$direct_source" tests/npm_metadata/results/direct-p3-result.json >"$npm_manifest"
+
+historical_base=$(git -C "$fixture" rev-parse HEAD)
+printf '{}\n' >"$fixture/tests/agentic_ts/results/historical-p2-result.json"
+printf '{}\n' >"$fixture/tests/npm_metadata/results/historical-p2-result.json"
+git -C "$fixture" add tests/agentic_ts/results/historical-p2-result.json tests/npm_metadata/results/historical-p2-result.json
+git -C "$fixture" commit -qm historical-reports
+historical_plan=$(cd "$fixture" && "$selector" push "$historical_base")
+if grep -Fqx tests/agentic_ts/results/historical-p2-result.json <<<"$historical_plan"; then
+    echo "historical agentic report unexpectedly selected for currentness" >&2
+    exit 1
+fi
+if grep -Fqx tests/npm_metadata/results/historical-p2-result.json <<<"$historical_plan"; then
+    echo "historical npm report unexpectedly selected for currentness" >&2
     exit 1
 fi
 

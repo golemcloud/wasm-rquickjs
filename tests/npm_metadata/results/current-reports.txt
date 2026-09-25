@@ -1,0 +1,2 @@
+831632c61e49eedb69b635f25f75f5bf5c89f6b3 tests/npm_metadata/results/2026-09-24-release-p2-macos-aarch64.json
+831632c61e49eedb69b635f25f75f5bf5c89f6b3 tests/npm_metadata/results/2026-09-24-release-p3-macos-aarch64.json
