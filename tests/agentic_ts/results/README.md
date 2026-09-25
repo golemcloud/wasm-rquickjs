@@ -137,9 +137,18 @@ component increase. It was rejected because omitting source text changes the
 observable `Function.prototype.toString()` result. A source-preserving version
 passed targeted content-invalidation and source-observability checks, but its
 20,164,115-byte serialized artifact raised linear-memory high-water from
-152,109,056 to 172,294,144 bytes (+13.3%), above the 10% budget. GOL-663 tracks
-a compact semantics-preserving design; all prototype code and raw reports were
-removed.
+152,109,056 to 172,294,144 bytes (+13.3%), above the 10% budget.
+
+The GOL-663 follow-up then prototyped a compact source-span representation. It
+preserved `Function.prototype.toString()`, source maps and diagnostics, content
+invalidation, fresh job state, and the memory budget (+2.1% in the P2
+diagnostic), but the benefit was too narrow to retain. Fresh-component cold
+TypeScript did not improve, the corrected repeated result lacked matched P2/P3
+controlled confirmation, and npm recorded zero cache admissions, fills, or
+hits across 50 successful samples. The only promising result was one warmed P2
+incremental diagnostic about 0.24 s faster. GOL-663 was canceled; no external
+fork or PR was created, and all prototype code, local dependency clones, and
+raw diagnostics were removed.
 
 A separate P2 diagnostic ran Binaryen `wasm-opt -O3` over the large embedded
 core module after Wizer, with Binaryen limited to four workers. An immediate
