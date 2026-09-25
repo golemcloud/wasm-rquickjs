@@ -22,12 +22,52 @@ if [ "${1:-}" = "--check-current" ]; then
         echo "usage: tests/npm_metadata/run.sh --check-current <report>..." >&2
         exit 2
     fi
+
+    manifest="$results_dir/current-reports.txt"
+    source_ref=
+    for report in "$@"; do
+        manifest_report=${report#"$repo_root"/}
+        manifest_report=${manifest_report#./}
+        manifest_entry=$(awk -v report="$manifest_report" '$2 == report { print $0 }' "$manifest")
+        if [ -z "$manifest_entry" ] || [ "$(printf '%s\n' "$manifest_entry" | wc -l | tr -d ' ')" -ne 1 ]; then
+            echo "current report is not named exactly once in $manifest: $manifest_report" >&2
+            exit 2
+        fi
+        report_source_ref=${manifest_entry%% *}
+        json_source_ref=$(jq -er '.environment.commitHint' "$report") || {
+            echo "current report has no commit hint: $report" >&2
+            exit 2
+        }
+        if [ "$json_source_ref" != "$report_source_ref" ]; then
+            echo "current report source does not match $manifest: $report" >&2
+            exit 2
+        fi
+        if [ -n "$source_ref" ] && [ "$source_ref" != "$report_source_ref" ]; then
+            echo "current reports name different source revisions" >&2
+            exit 2
+        fi
+        source_ref=$report_source_ref
+    done
+    if ! git -C "$repo_root" cat-file -e "$source_ref^{commit}" 2>/dev/null; then
+        echo "current report source commit is unavailable: $source_ref" >&2
+        exit 2
+    fi
+
+    source_parent=$(mktemp -d "${TMPDIR:-/tmp}/npm-metadata-current.XXXXXX")
+    source_root="$source_parent/source"
+    cleanup_current_source() {
+        git -C "$repo_root" worktree remove --force "$source_root" >/dev/null 2>&1 || true
+        rmdir "$source_parent" >/dev/null 2>&1 || true
+    }
+    trap cleanup_current_source EXIT HUP INT TERM
+    git -C "$repo_root" worktree add --quiet --detach "$source_root" "$source_ref"
+
     reports_to_check=$(printf '%s\n' "$@")
     (
         cd "$repo_root"
         NPM_METADATA_VALIDATE_REPORTS=1 \
         NPM_METADATA_REPORTS_TO_CHECK="$reports_to_check" \
-        NPM_METADATA_SOURCE_ROOT="$repo_root" \
+        NPM_METADATA_SOURCE_ROOT="$source_root" \
         tools/dev-test.sh p2 standard npm_metadata ""
     )
     exit 0

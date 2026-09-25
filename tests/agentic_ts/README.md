@@ -94,6 +94,8 @@ tests/agentic_ts/run.sh --check-current \
   tests/agentic_ts/results/2026-09-24-release-p3-macos-aarch64.json
 ```
 
+The currentness command requires Git and `jq`.
+
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
 writes raw JSON reports under `tests/agentic_ts/results/`. Timings are
 indicative local measurements, not CI thresholds. Run from a clean checkout

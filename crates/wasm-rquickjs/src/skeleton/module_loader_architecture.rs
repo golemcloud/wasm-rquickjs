@@ -706,6 +706,10 @@ fn module_loader_realpath_checks_wizer_before_filesystem_access() {
         .find("pub(super) fn realpath_for_module_resolution")
         .expect("loader realpath helper must exist");
     let body = &FS_RS[start..];
+    let end = body
+        .find("\nfn canonicalize_guest_path(")
+        .expect("loader realpath helper must have a bounded function body");
+    let body = &body[..end];
     let guard = body
         .find("crate::internal::is_wizer_active()")
         .expect("loader realpath helper must retain the Wizer filesystem guard");

@@ -23,9 +23,13 @@ Run the contract without workloads or network access with:
 
 ```sh
 tests/npm_metadata/run.sh --check
-tests/npm_metadata/run.sh --check-current tests/npm_metadata/results/YYYY-MM-DD-release-p2-OS-ARCH.json \
-  tests/npm_metadata/results/YYYY-MM-DD-release-p3-OS-ARCH.json
+tests/npm_metadata/run.sh --check-current \
+  tests/npm_metadata/results/2026-09-24-release-p2-macos-aarch64.json \
+  tests/npm_metadata/results/2026-09-24-release-p3-macos-aarch64.json
 ```
+
+The currentness command requires Git and `jq`; it recomputes source hashes from
+a temporary pristine worktree at the exact revision in `current-reports.txt`.
 
 No `npm-metadata-v2` report is accepted as current unless both target reports
 match the source input hashes and form one distinct P2/P3 pair. The dated final

@@ -123,8 +123,8 @@ validate_manifest() {
         echo "current report source commit is unavailable: $manifest_source_ref" >&2
         exit 1
     fi
-    if ! git merge-base --is-ancestor "$manifest_source_ref" "$event_source_ref"; then
-        echo "current report source is not an ancestor of the event source: $manifest_source_ref" >&2
+    if ! git merge-base --is-ancestor "$manifest_source_ref" HEAD; then
+        echo "current report source is not an ancestor of the checked-out source: $manifest_source_ref" >&2
         exit 1
     fi
     printf '%s\n' "$manifest_source_ref"

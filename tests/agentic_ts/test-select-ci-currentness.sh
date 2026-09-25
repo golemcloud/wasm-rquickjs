@@ -105,6 +105,44 @@ if (cd "$fixture" && "$selector" pull_request '') >/dev/null 2>&1; then
     exit 1
 fi
 
+initial_merge_head=$(git -C "$fixture" rev-parse HEAD)
+git -C "$fixture" switch -qc stale-pr
+printf 'stale pull request change\n' >"$fixture/stale-pr.txt"
+git -C "$fixture" add stale-pr.txt
+git -C "$fixture" commit -qm stale-pr
+stale_pr_head=$(git -C "$fixture" rev-parse HEAD)
+git -C "$fixture" switch -q main
+printf 'new main report source\n' >"$fixture/new-main-report-source.txt"
+git -C "$fixture" add new-main-report-source.txt
+git -C "$fixture" commit -qm new-main-report-source
+new_main_report_source=$(git -C "$fixture" rev-parse HEAD)
+for report in \
+    tests/agentic_ts/results/report-p2-result.json \
+    tests/agentic_ts/results/report-p3-result.json \
+    tests/npm_metadata/results/report-p2-result.json \
+    tests/npm_metadata/results/report-p3-result.json; do
+    printf '{"environment":{"commitHint":"%s"}}\n' "$new_main_report_source" \
+        >"$fixture/$report"
+done
+printf '%s %s\n' \
+    "$new_main_report_source" tests/agentic_ts/results/report-p2-result.json \
+    "$new_main_report_source" tests/agentic_ts/results/report-p3-result.json \
+    >"$fixture/tests/agentic_ts/results/current-reports.txt"
+printf '%s %s\n' \
+    "$new_main_report_source" tests/npm_metadata/results/report-p2-result.json \
+    "$new_main_report_source" tests/npm_metadata/results/report-p3-result.json \
+    >"$fixture/tests/npm_metadata/results/current-reports.txt"
+git -C "$fixture" add tests
+git -C "$fixture" commit -qm new-main-reports
+git -C "$fixture" merge -q --no-ff stale-pr -m stale-pr-merge
+assert_plan pull_request '' "$stale_pr_head" "$new_main_report_source" '' '' '' '' \
+    "$stale_pr_head"
+if git -C "$fixture" merge-base --is-ancestor "$new_main_report_source" "$stale_pr_head"; then
+    echo "concurrent main report source unexpectedly belongs to the stale PR" >&2
+    exit 1
+fi
+git -C "$fixture" reset -q --hard "$initial_merge_head"
+
 previous=$(git -C "$fixture" rev-parse HEAD)
 printf 'direct source\n' >"$fixture/direct-source.txt"
 git -C "$fixture" add direct-source.txt
@@ -216,11 +254,13 @@ printf '%s %s\n' \
     "$unrelated_report_source" tests/npm_metadata/results/direct-p2-result.json \
     "$unrelated_report_source" tests/npm_metadata/results/direct-p3-result.json \
     >"$fixture/tests/npm_metadata/results/current-reports.txt"
-if (cd "$fixture" && "$selector" push 0000000000000000000000000000000000000000) \
-    >/dev/null 2>&1; then
+if unrelated_error=$(cd "$fixture" && \
+    "$selector" push 0000000000000000000000000000000000000000 2>&1); then
     echo "unrelated current-report source unexpectedly passed" >&2
     exit 1
 fi
+grep -Fq "current report source is not an ancestor of the checked-out source" \
+    <<<"$unrelated_error"
 git -C "$fixture" restore tests/agentic_ts/results tests/npm_metadata/results
 [[ "$(git -C "$fixture" rev-parse HEAD)" == "$main_head" ]]
 
