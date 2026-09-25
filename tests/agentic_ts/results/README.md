@@ -62,6 +62,26 @@ and incremental series use fresh host processes and fresh QuickJS jobs; only
 the incremental series preserves its explicitly named `.tsbuildinfo` in a
 separate host or Wasm workspace.
 
+A temporary current-release P2 attribution pass then ran the same production
+component with TypeScript's `--extendedDiagnostics`. Its five-sample repeated
+median was 5.865 seconds end to end. TypeScript accounted for 4.830 seconds:
+1.520 seconds in program construction, 0.450 seconds in binding, and 2.850
+seconds in checking. Loading `_tsc.js`, CLI/configuration work, and diagnostic
+reporting left a 0.780-second inner residual, while the outer execution/export
+envelope was 0.246 seconds. The corresponding host compiler total was 0.400
+seconds; parse, bind, and check were approximately 18.0x, 11.3x, and 11.4x
+slower in the instrumented Wasm run.
+
+The warmed incremental median was 3.082 seconds. With checking skipped by the
+unchanged build state, TypeScript still spent 1.630 seconds constructing the
+program and 0.470 seconds binding it; the inner residual was 0.804 seconds and
+the outer envelope 0.173 seconds. `--extendedDiagnostics` changes absolute
+workload timing and reports at 10-millisecond precision, so these values are
+phase attribution rather than a replacement baseline. They put the largest
+remaining owner in TypeScript JavaScript execution, especially checking and
+parsing/program construction. The temporary harness and raw report were
+removed.
+
 A later generic source-walker experiment at `04fe3cb2` skipped contiguous ASCII
 whitespace before invoking parser visitors. The profiling component improved
 its TypeScript import median by about 33 ms (1.0%), but an immediate production

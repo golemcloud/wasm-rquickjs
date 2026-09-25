@@ -108,6 +108,40 @@ compile cache at roughly 111/151 ms on these fixtures: potentially enough to
 close the small metadata target miss, but not the remaining `npm ci` gap by
 itself. The instrumentation and raw diagnostic report were removed.
 
+## Current-release npm phase attribution
+
+A temporary production-component P2 pass paired five traced and five untraced
+warm-tarball `npm ci` samples. npm's own `--timing --silent` report placed the
+untraced median at 2,389.985 ms versus 279.652 ms on the host. The npm-owned
+timer covered 2,157 ms versus 225 ms on the host. Within it, `command:ci` was
+947 ms versus 104 ms, `reify` was 940 ms versus 97 ms, and `reify:unpack` was
+930 ms versus 93 ms. The inner pre/post-npm residual was 115.973 ms and the
+outer execution/export envelope was 117.739 ms. Both are below the roughly
+194-ms 25%-of-gap screening value and well below the separate roughly 400-ms
+actionable-owner gate for `ci`.
+
+The existing synchronous `module.require` diagnostics channel observed exactly
+1,727 calls per traced sample with zero stack mismatches or unfinished frames.
+The median root CommonJS graph envelope was 1,387.716 ms. Trace-on median wall
+time was 7.8% above the paired control, low enough to use the trace for
+directional package ranking but not as a replacement baseline. Package
+ownership was broad: the largest median additive self charges
+were `sigstore` at 122.3 ms, `semver` at 79.2 ms, and
+`@npmcli/arborist` at 67.3 ms. No package crossed even the 194-ms screening
+value.
+This deprioritizes another package-specific loader change while confirming that
+broad CommonJS module loading and npm's `reify`/`unpack` work are large measured
+envelopes. The trace did not separate startup from command-time lazy loads, and
+the npm timers did not split archive processing from filesystem work.
+
+One follow-up tested the hottest cheap-looking extraction hypothesis. It kept
+public asynchronous `fs.lstat` behavior but delivered native `ENOENT` results
+to the callback without throwing and catching a synchronous JavaScript
+exception first. The adjacent five-sample P2 comparison worsened host-adjusted
+warm-`ci` median overhead from 2,148 to 2,287 ms and widened the tails, so the
+candidate was rejected and reverted. The diagnostic code and raw reports were
+not retained.
+
 ## Deferred Binaryen post-link candidate
 
 A temporary P2 prototype ran Binaryen `wasm-opt -O3` over the large embedded
