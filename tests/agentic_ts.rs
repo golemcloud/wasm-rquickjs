@@ -1,0 +1,1884 @@
+//! Agentic TypeScript compatibility and performance suite.
+//!
+//! Use `tests/agentic_ts/run.sh` for manual measurements. CI runs only the report-contract path.
+
+#![allow(dead_code)]
+
+#[path = "common/mod.rs"]
+mod common;
+
+use anyhow::Context as _;
+use camino::Utf8Path;
+use common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive, test_target};
+use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io::Read as _;
+use std::process::Command;
+use std::time::{Duration, Instant};
+use wasmtime::component::Val;
+
+const SUITE_DIR: &str = "tests/agentic_ts";
+const EXAMPLE_DIR: &str = "examples/runtime/agentic-ts";
+const INPUT_HASH_ALGORITHM: &str = "blake3-composite-v1";
+const ALLOWED_QUICKJS_HEAP_VARIATION_BYTES: u64 = 1_048_576;
+const INVOCATION_DEADLINE_SECONDS: u64 = 900;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    if std::env::var_os("AGENTIC_TS_VALIDATE_REPORTS").is_some() {
+        return validate_checked_reports(Utf8Path::new(SUITE_DIR).join("results"));
+    }
+    verify_toolchain()?;
+    let iterations = std::env::var("AGENTIC_TS_ITERATIONS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(5);
+    anyhow::ensure!(
+        iterations >= 5,
+        "AGENTIC_TS_ITERATIONS must be at least 5 to assess a warmed plateau"
+    );
+
+    let build_started = Instant::now();
+    let feature_combination = FeatureCombination::TypeScriptCompilerProfiling;
+    let compiled =
+        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, feature_combination)
+            .await?;
+    let build_elapsed = build_started.elapsed();
+    let component_size = fs::metadata(compiled.wasm_path())?.len();
+
+    let instantiate_started = Instant::now();
+    let mut instance = TestInstance::new_with_memory_tracking(compiled.wasm_path()).await?;
+    let instantiate_elapsed = instantiate_started.elapsed();
+    prepare_workspace(&instance)?;
+
+    if std::env::var_os("AGENTIC_TS_PROFILE_SMOKE").is_some() {
+        let mut node = Vec::with_capacity(iterations);
+        let mut wasm = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let sample = node_phase_profile()?;
+            validate_phase_profile(&sample, "Node", false)?;
+            node.push(sample);
+            let sample = timed_invoke(&mut instance, "profile-tsc", &[Val::U64(300_000)]).await?;
+            validate_phase_profile(&sample, "Wasm", true)?;
+            wasm.push(sample);
+        }
+        let concurrent = timed_invoke(&mut instance, "run-concurrent", &[]).await?;
+        for sibling in ["compiler", "cpu", "io"] {
+            validate_execution_profile_timing(
+                &concurrent["result"][sibling]["result"]["profile"],
+                &format!("concurrent {sibling}"),
+            )?;
+        }
+        let formatted = serde_json::to_string_pretty(&json!({
+            "target": format!("{:?}", test_target()).to_lowercase(),
+            "node": summarize(&node),
+            "wasm": summarize(&wasm),
+            "concurrent": concurrent,
+        }))?;
+        if let Ok(path) = std::env::var("AGENTIC_TS_PROFILE_SMOKE_REPORT") {
+            fs::write(path, format!("{formatted}\n"))?;
+        }
+        println!("{formatted}");
+        return Ok(());
+    }
+
+    if std::env::var_os("AGENTIC_TS_MODULE_RESOLUTION_SMOKE").is_some() {
+        let emit = timed_invoke(
+            &mut instance,
+            "run-tsc",
+            &[
+                string_list(&[
+                    "--module",
+                    "NodeNext",
+                    "--moduleResolution",
+                    "NodeNext",
+                    "--target",
+                    "ES2022",
+                    "--outDir",
+                    "dist/direct",
+                    "projects/direct.ts",
+                ]),
+                Val::U64(300_000),
+            ],
+        )
+        .await?;
+        anyhow::ensure!(
+            successful_result(&emit["result"]),
+            "failed to emit controlled JavaScript"
+        );
+
+        let mut generated = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let sample = timed_invoke(
+                &mut instance,
+                "run-generated",
+                &[Val::String("./dist/direct/direct.js".to_string())],
+            )
+            .await?;
+            anyhow::ensure!(
+                successful_result(&sample["result"])
+                    && sample.pointer("/result/value/default/answer") == Some(&json!(42))
+                    && sample.pointer("/result/value/default/state") == Some(&json!("ready")),
+                "controlled generated-JavaScript workload failed: {sample:#}"
+            );
+            validate_module_resolution_counters(&sample, false)?;
+            generated.push(sample);
+        }
+
+        let input_hashes = input_hashes()?;
+        let formatted = serde_json::to_string_pretty(&json!({
+            "schema": "module-resolution-smoke-v1",
+            "target": format!("{:?}", test_target()).to_lowercase(),
+            "iterations": iterations,
+            "inputs": {
+                "algorithm": INPUT_HASH_ALGORITHM,
+                "buildHash": input_hashes.build,
+                "benchmarkHash": input_hashes.benchmark,
+            },
+            "component": {
+                "bytes": component_size,
+                "blake3": hash_file(compiled.wasm_path())?,
+                "buildMs": millis(build_elapsed),
+                "prepareAndInstantiateMs": millis(instantiate_elapsed),
+            },
+            "emit": emit,
+            "generatedJavaScript": summarize(&generated),
+        }))?;
+        if let Ok(path) = std::env::var("AGENTIC_TS_MODULE_RESOLUTION_SMOKE_REPORT") {
+            fs::write(path, format!("{formatted}\n"))?;
+        }
+        println!("{formatted}");
+        return Ok(());
+    }
+
+    if std::env::var_os("AGENTIC_TS_CJS_GRAPH_SMOKE").is_some() {
+        prepare_cjs_graph(&instance).context("prepare CommonJS graph")?;
+        let mut without_probe_session = Vec::with_capacity(iterations);
+        let mut with_probe_session = Vec::with_capacity(iterations);
+        for iteration in 0..iterations {
+            let cases = if iteration % 2 == 0 {
+                [(false, "disabled"), (true, "enabled")]
+            } else {
+                [(true, "enabled"), (false, "disabled")]
+            };
+            for (enabled, suffix) in cases {
+                let sample = timed_invoke(
+                    &mut instance,
+                    "run-generated",
+                    &[Val::String(format!("./cjs-graph/measure-{suffix}.cjs"))],
+                )
+                .await
+                .with_context(|| {
+                    format!("CommonJS graph invocation with probe session {suffix}")
+                })?;
+                anyhow::ensure!(
+                    successful_result(&sample["result"])
+                        && sample.pointer("/result/value")
+                            == Some(&json!(
+                                "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
+                            )),
+                    "controlled CommonJS graph failed with probe session {suffix}: {sample:#}"
+                );
+                validate_module_resolution_counters(&sample, enabled)?;
+                if enabled {
+                    with_probe_session.push(sample);
+                } else {
+                    anyhow::ensure!(
+                        profile_counter(
+                            &sample["result"]["profile"]["counters"],
+                            "modules.pathProbe.sessionHits"
+                        ) == 0,
+                        "disabled CommonJS probe session still recorded cache hits: {sample:#}"
+                    );
+                    without_probe_session.push(sample);
+                }
+            }
+        }
+
+        let fixture = Utf8Path::new("tests/node_modules_apps/apps/popular-pure-js");
+        let input_hashes = input_hashes().context("hash CommonJS graph inputs")?;
+        let environment = environment(iterations, feature_combination.label())
+            .context("capture CommonJS graph environment")?;
+        let package_json_hash =
+            hash_file(&fixture.join("package.json")).context("hash CommonJS graph package.json")?;
+        let package_lock_hash = hash_file(&fixture.join("package-lock.json"))
+            .context("hash CommonJS graph package-lock.json")?;
+        let entry_hash =
+            hash_file(&fixture.join("test-05-ajv.cjs")).context("hash CommonJS graph entry")?;
+        let component_hash =
+            hash_file(compiled.wasm_path()).context("hash CommonJS graph component")?;
+        let formatted = serde_json::to_string_pretty(&json!({
+            "schema": "cjs-graph-smoke-v2",
+            "target": format!("{:?}", test_target()).to_lowercase(),
+            "iterations": iterations,
+            "environment": environment,
+            "inputs": {
+                "algorithm": INPUT_HASH_ALGORITHM,
+                "buildHash": input_hashes.build,
+                "benchmarkHash": input_hashes.benchmark,
+            },
+            "fixture": {
+                "packageJsonBlake3": package_json_hash,
+                "packageLockBlake3": package_lock_hash,
+                "entryBlake3": entry_hash,
+            },
+            "component": {
+                "bytes": component_size,
+                "blake3": component_hash,
+                "buildMs": millis(build_elapsed),
+                "prepareAndInstantiateMs": millis(instantiate_elapsed),
+            },
+            "commonJsGraph": {
+                "withoutProbeSession": summarize(&without_probe_session),
+                "withProbeSession": summarize(&with_probe_session),
+            },
+        }))
+        .context("serialize CommonJS graph report")?;
+        if let Ok(path) = std::env::var("AGENTIC_TS_CJS_GRAPH_SMOKE_REPORT") {
+            fs::write(&path, format!("{formatted}\n"))
+                .with_context(|| format!("write CommonJS graph report {path}"))?;
+        }
+        println!("{formatted}");
+        return Ok(());
+    }
+
+    let node_baseline = node_baseline()?;
+    let node_phase_profile = node_phase_profile()?;
+    let cold = timed_invoke(
+        &mut instance,
+        "run-tsc",
+        &[
+            string_list(&["--noEmit", "-p", "projects/core/tsconfig.json"]),
+            Val::U64(300_000),
+        ],
+    )
+    .await?;
+    let wasm_phase_profile =
+        timed_invoke(&mut instance, "profile-tsc", &[Val::U64(300_000)]).await?;
+
+    let mut unchanged = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        unchanged.push(
+            timed_invoke(
+                &mut instance,
+                "run-tsc",
+                &[
+                    string_list(&["-p", "projects/core/tsconfig.check.json"]),
+                    Val::U64(300_000),
+                ],
+            )
+            .await?,
+        );
+    }
+
+    let incremental_cold = timed_invoke(
+        &mut instance,
+        "run-tsc",
+        &[
+            string_list(&[
+                "--noEmit",
+                "--incremental",
+                "--tsBuildInfoFile",
+                ".cache/manual.tsbuildinfo",
+                "-p",
+                "projects/core/tsconfig.json",
+            ]),
+            Val::U64(300_000),
+        ],
+    )
+    .await?;
+    let mut incremental = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        incremental.push(
+            timed_invoke(
+                &mut instance,
+                "run-tsc",
+                &[
+                    string_list(&[
+                        "--noEmit",
+                        "--incremental",
+                        "--tsBuildInfoFile",
+                        ".cache/manual.tsbuildinfo",
+                        "-p",
+                        "projects/core/tsconfig.json",
+                    ]),
+                    Val::U64(300_000),
+                ],
+            )
+            .await?,
+        );
+    }
+
+    let broken_path = instance
+        .temp_dir_path()
+        .join("workspace/projects/core/src/broken.ts");
+    let mut failed_type_checks = Vec::with_capacity(iterations);
+    for attempt in 0..iterations {
+        fs::write(
+            &broken_path,
+            format!("export const broken: number = 'wrong-{attempt}';\n"),
+        )?;
+        failed_type_checks.push(
+            timed_invoke(
+                &mut instance,
+                "run-tsc",
+                &[
+                    string_list(&["--noEmit", "-p", "projects/core/tsconfig.json"]),
+                    Val::U64(300_000),
+                ],
+            )
+            .await?,
+        );
+    }
+    fs::write(&broken_path, "export const fixed: number = 42;\n")?;
+    let failed_recovery = timed_invoke(
+        &mut instance,
+        "run-tsc",
+        &[
+            string_list(&["--noEmit", "-p", "projects/core/tsconfig.json"]),
+            Val::U64(300_000),
+        ],
+    )
+    .await?;
+
+    let project_build = timed_invoke(
+        &mut instance,
+        "run-tsc",
+        &[
+            string_list(&["--build", "tsconfig.json"]),
+            Val::U64(300_000),
+        ],
+    )
+    .await?;
+    let direct_ts = timed_invoke(
+        &mut instance,
+        "run-entry",
+        &[Val::String("./projects/direct.ts".to_string())],
+    )
+    .await?;
+    let emit_direct = timed_invoke(
+        &mut instance,
+        "run-tsc",
+        &[
+            string_list(&[
+                "--module",
+                "NodeNext",
+                "--moduleResolution",
+                "NodeNext",
+                "--target",
+                "ES2022",
+                "--outDir",
+                "dist/direct",
+                "projects/direct.ts",
+            ]),
+            Val::U64(300_000),
+        ],
+    )
+    .await?;
+    let generated_js = timed_invoke(
+        &mut instance,
+        "run-generated",
+        &[Val::String("./dist/direct/direct.js".to_string())],
+    )
+    .await?;
+    let cpu_baseline = timed_invoke(&mut instance, "run-cpu", &[]).await?;
+    let io_baseline = timed_invoke(&mut instance, "run-io", &[]).await?;
+    let concurrent = json!({
+        "cpuBaseline": cpu_baseline,
+        "ioBaseline": io_baseline,
+        "contended": timed_invoke(&mut instance, "run-concurrent", &[]).await?,
+        "interpretation": "all jobs were submitted together; compare sibling completion with isolated baselines to identify overlap or serialization",
+    });
+    let mut timeouts = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        timeouts.push(timed_invoke(&mut instance, "probe-timeout", &[]).await?);
+    }
+    let timeout_recovery = timed_invoke(
+        &mut instance,
+        "run-entry",
+        &[Val::String("./projects/direct.ts".to_string())],
+    )
+    .await?;
+    let mut cancellations = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        cancellations.push(timed_invoke(&mut instance, "probe-cancellation", &[]).await?);
+    }
+    let cancellation_recovery = timed_invoke(
+        &mut instance,
+        "run-entry",
+        &[Val::String("./projects/direct.ts".to_string())],
+    )
+    .await?;
+    let memory_plateau = memory_plateau(
+        &unchanged,
+        &incremental,
+        &failed_type_checks,
+        &timeouts,
+        &cancellations,
+        &[
+            ("coldNoEmit", &cold),
+            ("phaseProfile", &wasm_phase_profile),
+            ("incrementalCold", &incremental_cold),
+            ("invalidRecovery", &failed_recovery),
+            ("projectReferences", &project_build),
+            ("directTypeScript", &direct_ts),
+            ("emitDirect", &emit_direct),
+            ("generatedJavaScript", &generated_js),
+            ("cpuBaseline", &cpu_baseline),
+            ("ioBaseline", &io_baseline),
+            ("concurrent", &concurrent["contended"]),
+            ("timeoutRecovery", &timeout_recovery),
+            ("cancellationRecovery", &cancellation_recovery),
+        ],
+    )?;
+
+    let environment = environment(iterations, feature_combination.label())?;
+    let input_hashes = input_hashes()?;
+    let report = json!({
+        "schemaVersion": 5,
+        "environment": environment,
+        "inputs": {
+            "algorithm": INPUT_HASH_ALGORITHM,
+            "buildHash": input_hashes.build,
+            "benchmarkHash": input_hashes.benchmark,
+        },
+        "target": format!("{:?}", test_target()).to_lowercase(),
+        "component": {
+            "path": compiled.wasm_path().as_str(),
+            "bytes": component_size,
+            "blake3": hash_file(compiled.wasm_path())?,
+            "buildMs": millis(build_elapsed),
+            "prepareAndInstantiateMs": millis(instantiate_elapsed),
+        },
+        "nodeBaseline": node_baseline,
+        "phaseProfiles": {
+            "node": node_phase_profile,
+            "wasm": wasm_phase_profile,
+            "interpretation": "the shared TypeScript API profiler runs a no-emit core-project check; compare phase proportions within a target because instrumentation overhead differs between Node and QuickJS",
+        },
+        "workloads": {
+            "coldNoEmit": cold,
+            "unchangedFreshJobs": summarize(&unchanged),
+            "incrementalCold": incremental_cold,
+            "incrementalFreshJobs": summarize(&incremental),
+            "invalidThenValid": {
+                "failedChecks": summarize(&failed_type_checks),
+                "recovery": failed_recovery,
+            },
+            "projectReferences": project_build,
+            "directTypeScript": direct_ts,
+            "emitDirect": emit_direct,
+            "generatedJavaScript": generated_js,
+            "concurrent": concurrent,
+            "timeouts": {
+                "attempts": summarize(&timeouts),
+                "recovery": timeout_recovery,
+            },
+            "cancellations": {
+                "attempts": summarize(&cancellations),
+                "recovery": cancellation_recovery,
+            },
+            "memoryPlateau": memory_plateau,
+        },
+        "wasmLinearMemoryHighWaterBytes": instance.linear_memory_high_water_bytes(),
+        "notes": [
+            "manual local measurement; no CI threshold",
+            "fresh QuickJS execution job per compiler/run operation",
+            "workspace and .tsbuildinfo persist within the component instance",
+        ],
+    });
+
+    validate_report(&report)?;
+    validate_regression_guards(&report)?;
+    let formatted = serde_json::to_string_pretty(&report)?;
+    if let Ok(path) = std::env::var("AGENTIC_TS_REPORT") {
+        fs::write(path, format!("{formatted}\n"))?;
+    }
+    println!("{formatted}");
+    Ok(())
+}
+
+fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()> {
+    validate_composite_hash_contract()?;
+    validate_report_path_contract()?;
+    let tracker = fs::read_to_string(Utf8Path::new(SUITE_DIR).join("TRACKER.md"))?;
+    let allow_untracked_reports = std::env::var_os("AGENTIC_TS_ALLOW_UNTRACKED_REPORTS").is_some();
+    let mut reports_to_check = reports_to_check()?;
+    let current_input_hashes = if reports_to_check.is_empty() {
+        None
+    } else {
+        Some(input_hashes()?)
+    };
+    let mut reports = BTreeMap::new();
+    let mut cjs_graph_reports = BTreeMap::new();
+    for entry in fs::read_dir(&directory)? {
+        let path = camino::Utf8PathBuf::from_path_buf(entry?.path())
+            .map_err(|path| anyhow::anyhow!("non-UTF-8 report path: {}", path.display()))?;
+        if path.extension() != Some("json") {
+            continue;
+        }
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("report has no filename: {path}"))?
+            .to_string();
+        let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        let is_cjs_graph = report["schema"] == "cjs-graph-smoke-v2";
+        if is_cjs_graph {
+            validate_cjs_graph_report_metadata(&path, &report)?;
+            validate_cjs_graph_report(&report)?;
+            validate_cjs_graph_regression_guards(&report)?;
+        } else {
+            validate_report_metadata(&path, &report)?;
+            validate_report(&report)?;
+            validate_regression_guards(&report)?;
+        }
+        let check_current = reports_to_check.remove(&path);
+        if check_current {
+            validate_current_inputs(&path, &report, current_input_hashes.as_ref().unwrap())?;
+        }
+        anyhow::ensure!(
+            tracker.contains(&filename) || (allow_untracked_reports && check_current),
+            "TRACKER.md does not reference {filename}"
+        );
+        if is_cjs_graph {
+            cjs_graph_reports.insert(filename, report);
+        } else {
+            reports.insert(filename, report);
+        }
+    }
+    anyhow::ensure!(!reports.is_empty(), "no checked-in reports found");
+    anyhow::ensure!(
+        reports_to_check.is_empty(),
+        "reports requested for currentness checking were not found: {reports_to_check:?}"
+    );
+
+    let mut paired = 0;
+    for (filename, p2) in reports
+        .iter()
+        .filter(|(filename, _)| filename.contains("-p2-"))
+    {
+        let p3_filename = filename.replacen("-p2-", "-p3-", 1);
+        let p3 = reports
+            .get(&p3_filename)
+            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        validate_report_pair(filename, &p3_filename, p2, p3)?;
+        let mut duplicate_component = p3.clone();
+        duplicate_component["component"]["blake3"] = p2["component"]["blake3"].clone();
+        anyhow::ensure!(
+            validate_report_pair(filename, &p3_filename, p2, &duplicate_component).is_err(),
+            "paired-report guard accepted an identical P2/P3 component digest"
+        );
+        paired += 2;
+    }
+    anyhow::ensure!(
+        paired == reports.len(),
+        "every checked-in report must belong to a P2/P3 pair"
+    );
+
+    anyhow::ensure!(
+        !cjs_graph_reports.is_empty(),
+        "checked reports must include the GOL-350 CommonJS graph P2/P3 evidence"
+    );
+    let mut paired_cjs_graphs = 0;
+    for (filename, p2) in cjs_graph_reports
+        .iter()
+        .filter(|(filename, _)| filename.contains("-p2-"))
+    {
+        let p3_filename = filename.replacen("-p2-", "-p3-", 1);
+        let p3 = cjs_graph_reports
+            .get(&p3_filename)
+            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        validate_cjs_graph_report_pair(filename, &p3_filename, p2, p3)?;
+        paired_cjs_graphs += 2;
+    }
+    anyhow::ensure!(
+        paired_cjs_graphs == cjs_graph_reports.len(),
+        "every checked-in CommonJS graph report must belong to a P2/P3 pair"
+    );
+    Ok(())
+}
+
+fn validate_report_pair(
+    p2_filename: &str,
+    p3_filename: &str,
+    p2: &Value,
+    p3: &Value,
+) -> anyhow::Result<()> {
+    for field in [
+        "/inputs/algorithm",
+        "/inputs/buildHash",
+        "/inputs/benchmarkHash",
+        "/environment/commitHint",
+        "/environment/dirty",
+        "/environment/iterations",
+        "/environment/node",
+        "/environment/npm",
+        "/environment/typescript",
+        "/environment/componentFeatures",
+        "/environment/rustc",
+        "/environment/cargo",
+    ] {
+        anyhow::ensure!(
+            p2.pointer(field) == p3.pointer(field),
+            "paired reports {p2_filename} and {p3_filename} disagree at {field}"
+        );
+    }
+    anyhow::ensure!(
+        p2.pointer("/component/blake3") != p3.pointer("/component/blake3"),
+        "paired reports {p2_filename} and {p3_filename} use the same component digest"
+    );
+    Ok(())
+}
+
+fn validate_cjs_graph_report_pair(
+    p2_filename: &str,
+    p3_filename: &str,
+    p2: &Value,
+    p3: &Value,
+) -> anyhow::Result<()> {
+    validate_report_pair(p2_filename, p3_filename, p2, p3)?;
+    for field in [
+        "/schema",
+        "/iterations",
+        "/fixture/packageJsonBlake3",
+        "/fixture/packageLockBlake3",
+        "/fixture/entryBlake3",
+    ] {
+        anyhow::ensure!(
+            p2.pointer(field) == p3.pointer(field),
+            "paired CommonJS graph reports {p2_filename} and {p3_filename} disagree at {field}"
+        );
+    }
+    Ok(())
+}
+
+fn validate_cjs_graph_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["schema"] == "cjs-graph-smoke-v2",
+        "{path} uses an unsupported CommonJS graph schema"
+    );
+    anyhow::ensure!(
+        report["environment"]["node"] == "22.14.0"
+            && report["environment"]["npm"] == "10.9.2"
+            && report["environment"]["typescript"] == "5.8.2"
+            && report["environment"]["componentFeatures"] == "typescript-compiler-profiling"
+            && report["environment"]["iterations"] == report["iterations"]
+            && report["iterations"].as_u64().unwrap_or(0) >= 5,
+        "{path} does not use the pinned CommonJS graph settings"
+    );
+    let target = report["target"]
+        .as_str()
+        .filter(|target| matches!(*target, "p2" | "p3"))
+        .ok_or_else(|| anyhow::anyhow!("{path} has no supported target"))?;
+    let os = report["environment"]["os"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no OS"))?;
+    let arch = report["environment"]["arch"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no architecture"))?;
+    let filename = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no filename"))?;
+    anyhow::ensure!(
+        filename.ends_with(&format!("-gol-350-cjs-{target}-{os}-{arch}.json")),
+        "{path} filename does not match its workload, target, and host metadata"
+    );
+    anyhow::ensure!(
+        report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
+            && is_blake3_hash(&report["inputs"]["buildHash"])
+            && is_blake3_hash(&report["inputs"]["benchmarkHash"])
+            && is_blake3_hash(&report["fixture"]["packageJsonBlake3"])
+            && is_blake3_hash(&report["fixture"]["packageLockBlake3"])
+            && is_blake3_hash(&report["fixture"]["entryBlake3"])
+            && is_blake3_hash(&report["component"]["blake3"])
+            && report["environment"]["commitHint"]
+                .as_str()
+                .is_some_and(|commit| !commit.is_empty())
+            && report["environment"]["dirty"] == false,
+        "{path} has incomplete or dirty CommonJS graph provenance"
+    );
+    Ok(())
+}
+
+fn validate_cjs_graph_report(report: &Value) -> anyhow::Result<()> {
+    let iterations = report["iterations"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no iteration count"))?;
+    for (series_name, require_session_hits) in
+        [("withoutProbeSession", false), ("withProbeSession", true)]
+    {
+        let series = &report["commonJsGraph"][series_name];
+        let samples = series["samples"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("CommonJS graph report has no {series_name} samples"))?;
+        anyhow::ensure!(
+            series["iterations"] == iterations && samples.len() as u64 == iterations,
+            "CommonJS graph {series_name} summary does not contain every requested sample"
+        );
+        for sample in samples {
+            anyhow::ensure!(
+                successful_result(&sample["result"])
+                    && sample.pointer("/result/value")
+                        == Some(&json!(
+                            "PASS: ajv compiles and runs schemas from installed CommonJS package graph"
+                        )),
+                "checked CommonJS graph {series_name} sample failed: {sample:#}"
+            );
+            validate_module_resolution_counters(sample, require_session_hits)?;
+            if !require_session_hits {
+                anyhow::ensure!(
+                    profile_counter(
+                        &sample["result"]["profile"]["counters"],
+                        "modules.pathProbe.sessionHits"
+                    ) == 0,
+                    "checked CommonJS graph disabled series recorded session hits"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_cjs_graph_regression_guards(report: &Value) -> anyhow::Result<()> {
+    let mut missing_session_hits = report.clone();
+    missing_session_hits["commonJsGraph"]["withProbeSession"]["samples"][0]["result"]["profile"]
+        ["counters"]["modules.pathProbe.sessionHits"] = json!(0);
+    anyhow::ensure!(
+        validate_cjs_graph_report(&missing_session_hits).is_err(),
+        "CommonJS graph validation accepted a sample without reconciled session hits"
+    );
+
+    let mut failed_sample = report.clone();
+    failed_sample["commonJsGraph"]["withoutProbeSession"]["samples"][0]["result"]["value"] =
+        json!("FAIL");
+    anyhow::ensure!(
+        validate_cjs_graph_report(&failed_sample).is_err(),
+        "CommonJS graph validation accepted a failed workload"
+    );
+    Ok(())
+}
+
+fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["schemaVersion"] == 4 || report["schemaVersion"] == 5,
+        "{path} uses an unsupported schema"
+    );
+    anyhow::ensure!(
+        report["environment"]["node"] == "22.14.0"
+            && report["environment"]["npm"] == "10.9.2"
+            && report["environment"]["typescript"] == "5.8.2"
+            && report["environment"]["iterations"].as_u64().unwrap_or(0) >= 5,
+        "{path} does not use the pinned baseline settings"
+    );
+    if report["schemaVersion"] == 5 {
+        anyhow::ensure!(
+            report["environment"]["componentFeatures"] == "typescript-compiler-profiling",
+            "{path} does not identify the profiling component feature"
+        );
+    }
+    let target = report["target"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no target"))?;
+    let os = report["environment"]["os"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no OS"))?;
+    let arch = report["environment"]["arch"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no architecture"))?;
+    let filename = path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("{path} has no filename"))?;
+    anyhow::ensure!(
+        filename.ends_with(&format!("-{target}-{os}-{arch}.json")),
+        "{path} filename does not match its target and host metadata"
+    );
+    anyhow::ensure!(
+        report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
+            && is_blake3_hash(&report["inputs"]["buildHash"])
+            && is_blake3_hash(&report["inputs"]["benchmarkHash"])
+            && is_blake3_hash(&report["component"]["blake3"])
+            && report["environment"]["commitHint"]
+                .as_str()
+                .is_some_and(|commit| !commit.is_empty())
+            && report["environment"]["rustc"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty())
+            && report["environment"]["cargo"]
+                .as_str()
+                .is_some_and(|version| !version.is_empty()),
+        "{path} has incomplete source fingerprints"
+    );
+    Ok(())
+}
+
+fn reports_to_check() -> anyhow::Result<BTreeSet<camino::Utf8PathBuf>> {
+    let results_directory = Utf8Path::new(SUITE_DIR).join("results");
+    let current_directory = camino::Utf8PathBuf::from_path_buf(std::env::current_dir()?)
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 current directory: {}", path.display()))?;
+    let configured_source_root = camino::Utf8PathBuf::from(
+        std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string()),
+    );
+    let source_root = if configured_source_root == Utf8Path::new(".") {
+        current_directory
+    } else if configured_source_root.is_absolute() {
+        configured_source_root
+    } else {
+        current_directory.join(configured_source_root)
+    };
+    std::env::var("AGENTIC_TS_REPORTS_TO_CHECK")
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| normalize_report_path(line.trim(), &source_root, &results_directory))
+        .collect()
+}
+
+fn normalize_report_path(
+    value: &str,
+    source_root: &Utf8Path,
+    results_directory: &Utf8Path,
+) -> anyhow::Result<camino::Utf8PathBuf> {
+    let path = Utf8Path::new(value);
+    let path = if path.is_absolute() {
+        path.strip_prefix(source_root).map_err(|_| {
+            anyhow::anyhow!("report path to check is outside {source_root}: {value}")
+        })?
+    } else {
+        path
+    };
+    anyhow::ensure!(
+        path.parent() == Some(results_directory)
+            && path.extension() == Some("json")
+            && !path
+                .components()
+                .any(|component| component.as_str() == ".."),
+        "report path to check is outside {results_directory}: {value}"
+    );
+    Ok(path.to_path_buf())
+}
+
+fn validate_report_path_contract() -> anyhow::Result<()> {
+    let root = camino_tempfile::Utf8TempDir::new()?;
+    let results_directory = Utf8Path::new(SUITE_DIR).join("results");
+    let relative = results_directory.join("report.json");
+    anyhow::ensure!(
+        normalize_report_path(relative.as_str(), root.path(), &results_directory)? == relative,
+        "relative report paths are not preserved"
+    );
+    anyhow::ensure!(
+        normalize_report_path(
+            root.path().join(&relative).as_str(),
+            root.path(),
+            &results_directory,
+        )? == relative,
+        "absolute report paths are not normalized"
+    );
+    anyhow::ensure!(
+        normalize_report_path(
+            "tests/agentic_ts/other/report.json",
+            root.path(),
+            &results_directory
+        )
+        .is_err(),
+        "out-of-directory report path was accepted"
+    );
+    Ok(())
+}
+
+fn validate_current_inputs(
+    path: &Utf8Path,
+    report: &Value,
+    current: &InputHashes,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["inputs"]["buildHash"] == current.build,
+        "{path} build inputs are stale: report={}, current={}",
+        report["inputs"]["buildHash"],
+        current.build,
+    );
+    anyhow::ensure!(
+        report["inputs"]["benchmarkHash"] == current.benchmark,
+        "{path} benchmark inputs are stale: report={}, current={}",
+        report["inputs"]["benchmarkHash"],
+        current.benchmark,
+    );
+    Ok(())
+}
+
+fn is_blake3_hash(value: &Value) -> bool {
+    value.as_str().is_some_and(|hash| {
+        hash.len() == 64
+            && hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
+async fn timed_invoke(
+    instance: &mut TestInstance,
+    function: &str,
+    args: &[Val],
+) -> anyhow::Result<Value> {
+    instance.set_epoch_deadline(INVOCATION_DEADLINE_SECONDS);
+    let started = Instant::now();
+    let value = instance.invoke(None, function, args).await?;
+    let elapsed = started.elapsed();
+    let Some(Val::String(encoded)) = value else {
+        anyhow::bail!("{function} did not return a JSON string")
+    };
+    let wall_ms = millis(elapsed);
+    let result = serde_json::from_str::<Value>(&encoded)?;
+    let outer_overhead_ms = result
+        .pointer("/value/toolAndCompilerMs")
+        .or_else(|| result.pointer("/value/phasesMs/measuredTotal"))
+        .and_then(Value::as_f64)
+        .map(|inner_ms| wall_ms - inner_ms);
+    Ok(json!({
+        "wallMs": wall_ms,
+        "outerOverheadMs": outer_overhead_ms,
+        "linearMemoryHighWaterBytes": instance.linear_memory_high_water_bytes(),
+        "result": result,
+    }))
+}
+
+fn summarize(samples: &[Value]) -> Value {
+    let mut durations = samples
+        .iter()
+        .filter_map(|sample| sample["wallMs"].as_f64())
+        .collect::<Vec<_>>();
+    durations.sort_by(f64::total_cmp);
+    let total = durations.iter().sum::<f64>();
+    let p95_index = ((durations.len() as f64 * 0.95).ceil() as usize)
+        .saturating_sub(1)
+        .min(durations.len() - 1);
+    json!({
+        "iterations": durations.len(),
+        "medianMs": durations[durations.len() / 2],
+        "p95Ms": durations[p95_index],
+        "throughputPerSecond": durations.len() as f64 / (total / 1000.0),
+        "samples": samples,
+    })
+}
+
+fn memory_plateau(
+    unchanged: &[Value],
+    incremental: &[Value],
+    failed: &[Value],
+    timeouts: &[Value],
+    cancellations: &[Value],
+    checkpoints: &[(&str, &Value)],
+) -> anyhow::Result<Value> {
+    fn linear_memory_series(samples: &[Value]) -> anyhow::Result<Value> {
+        let values = samples
+            .iter()
+            .map(|sample| {
+                sample["linearMemoryHighWaterBytes"]
+                    .as_u64()
+                    .ok_or_else(|| anyhow::anyhow!("missing linear-memory high-water sample"))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let minimum = values.iter().copied().min().unwrap_or(0);
+        let maximum = values.iter().copied().max().unwrap_or(0);
+        Ok(json!({
+            "samples": values,
+            "minimumBytes": minimum,
+            "maximumBytes": maximum,
+            "growthBytes": maximum - minimum,
+        }))
+    }
+
+    fn quickjs_heap_series(samples: &[Value]) -> anyhow::Result<Value> {
+        fn values_at(samples: &[Value], point: &str) -> anyhow::Result<Vec<u64>> {
+            samples
+                .iter()
+                .map(|sample| {
+                    sample
+                        .pointer(&format!("/result/value/quickJsMemory/{point}/heapUsed"))
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| anyhow::anyhow!("missing QuickJS heap sample at {point}"))
+                })
+                .collect()
+        }
+
+        fn summarize_values(values: Vec<u64>) -> Value {
+            let minimum = values.iter().copied().min().unwrap_or(0);
+            let maximum = values.iter().copied().max().unwrap_or(0);
+            json!({
+                "samples": values,
+                "minimumBytes": minimum,
+                "maximumBytes": maximum,
+                "variationBytes": maximum - minimum,
+            })
+        }
+
+        Ok(json!({
+            "beforeToolLoad": summarize_values(values_at(samples, "beforeToolLoad")?),
+            "afterCompiler": summarize_values(values_at(samples, "afterCompiler")?),
+        }))
+    }
+
+    let checkpoints = checkpoints
+        .iter()
+        .map(|(label, sample)| {
+            Ok(json!({
+                "label": label,
+                "bytes": sample["linearMemoryHighWaterBytes"]
+                    .as_u64()
+                    .ok_or_else(|| anyhow::anyhow!("missing linear-memory checkpoint"))?,
+            }))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    Ok(json!({
+        "wasmLinearMemory": {
+            "unchangedCompilerJobs": linear_memory_series(unchanged)?,
+            "warmedIncrementalCompilerJobs": linear_memory_series(incremental)?,
+            "failedCompilerJobs": linear_memory_series(failed)?,
+            "timedOutJobs": linear_memory_series(timeouts)?,
+            "cancelledJobs": linear_memory_series(cancellations)?,
+            "otherWorkloadCheckpoints": checkpoints,
+            "interpretation": "descriptive instance-wide monotone high-water observations; they show where the reserved peak grows but cannot identify allocations that remain within an earlier peak",
+        },
+        "quickJsHeap": {
+            "allowedVariationBytes": ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
+            "unchangedCompilerJobs": quickjs_heap_series(unchanged)?,
+            "warmedIncrementalCompilerJobs": quickjs_heap_series(incremental)?,
+            "failedCompilerJobs": quickjs_heap_series(failed)?,
+            "interpretation": "before-tool-load samples compare fresh runtimes; after-compiler samples describe heap usage immediately before each runtime is dropped",
+        },
+    }))
+}
+
+struct InputHashes {
+    build: String,
+    benchmark: String,
+}
+
+fn input_hashes() -> anyhow::Result<InputHashes> {
+    let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
+    let source_root = Utf8Path::new(&source_root);
+
+    let mut build_files = input_files(&[
+        "Cargo.toml",
+        "Cargo.lock",
+        ".github/scripts/enable-wasmtime-fork.sh",
+        "crates/golem-context/Cargo.toml",
+        "crates/golem-websocket/Cargo.toml",
+        "crates/wasi-logging/Cargo.toml",
+        "crates/wasm-rquickjs/Cargo.toml",
+        "crates/wasm-rquickjs/skeleton/Cargo.toml_",
+        "crates/wasm-rquickjs/skeleton/Cargo.lock",
+    ]);
+    for directory in [
+        "crates/wasi-logging/src",
+        "crates/wasm-rquickjs/src",
+        "crates/wasm-rquickjs/skeleton/src",
+        EXAMPLE_DIR,
+    ] {
+        collect_input_files(source_root, Utf8Path::new(directory), &mut build_files)
+            .with_context(|| format!("collect build inputs from {directory}"))?;
+    }
+
+    let mut benchmark_files = input_files(&[
+        "tests/agentic_ts.rs",
+        "tests/agentic_ts/package.json",
+        "tests/agentic_ts/package-lock.json",
+        "tests/agentic_ts/profile-typescript.mjs",
+        "tests/agentic_ts/tsconfig.json",
+        "tests/agentic_ts/run.sh",
+        "tools/dev-test.sh",
+    ]);
+    collect_input_files(
+        source_root,
+        Utf8Path::new("tests/agentic_ts/projects"),
+        &mut benchmark_files,
+    )
+    .context("collect TypeScript project benchmark inputs")?;
+    for directory in [
+        "tests/common",
+        "crates/golem-websocket/wit",
+        "crates/golem-websocket/wit-p3",
+    ] {
+        collect_input_files(source_root, Utf8Path::new(directory), &mut benchmark_files)
+            .with_context(|| format!("collect benchmark inputs from {directory}"))?;
+    }
+    for required in [
+        "tests/common/js_subtest_parser.rs",
+        "tests/common/test_server.rs",
+        "crates/golem-websocket/wit/golem-websocket.wit",
+        "crates/golem-websocket/wit-p3/golem-websocket.wit",
+    ] {
+        anyhow::ensure!(
+            benchmark_files.contains(Utf8Path::new(required)),
+            "required benchmark input is not covered: {required}"
+        );
+    }
+
+    Ok(InputHashes {
+        build: composite_hash(source_root, "build", &build_files)
+            .context("hash collected build inputs")?,
+        benchmark: composite_hash(source_root, "benchmark", &benchmark_files)
+            .context("hash collected benchmark inputs")?,
+    })
+}
+
+fn input_files(paths: &[&str]) -> BTreeSet<camino::Utf8PathBuf> {
+    paths
+        .iter()
+        .map(|path| Utf8Path::new(path).to_path_buf())
+        .collect()
+}
+
+fn collect_input_files(
+    source_root: &Utf8Path,
+    directory: &Utf8Path,
+    files: &mut BTreeSet<camino::Utf8PathBuf>,
+) -> anyhow::Result<()> {
+    for entry in fs::read_dir(source_root.join(directory))? {
+        let entry = entry?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|name| anyhow::anyhow!("non-UTF-8 input name: {}", name.to_string_lossy()))?;
+        let path = directory.join(name);
+        let metadata = fs::symlink_metadata(source_root.join(&path))?;
+        anyhow::ensure!(
+            !metadata.file_type().is_symlink(),
+            "input symlinks are unsupported: {path}"
+        );
+        if metadata.is_dir() {
+            collect_input_files(source_root, &path, files)?;
+        } else {
+            anyhow::ensure!(metadata.is_file(), "unsupported input type: {path}");
+            files.insert(path);
+        }
+    }
+    Ok(())
+}
+
+fn composite_hash(
+    source_root: &Utf8Path,
+    domain: &str,
+    files: &BTreeSet<camino::Utf8PathBuf>,
+) -> anyhow::Result<String> {
+    anyhow::ensure!(!files.is_empty(), "{domain} input set is empty");
+    let mut hasher = blake3::Hasher::new();
+    hash_part(&mut hasher, INPUT_HASH_ALGORITHM.as_bytes());
+    hash_part(&mut hasher, domain.as_bytes());
+    for path in files {
+        anyhow::ensure!(
+            path.is_relative()
+                && !path
+                    .components()
+                    .any(|component| component.as_str() == ".."),
+            "input path escapes the source root: {path}"
+        );
+        let metadata = fs::symlink_metadata(source_root.join(path))
+            .with_context(|| format!("read {domain} input metadata for {path}"))?;
+        anyhow::ensure!(
+            metadata.is_file() && !metadata.file_type().is_symlink(),
+            "input is not a regular file: {path}"
+        );
+        let components = path.components().collect::<Vec<_>>();
+        hasher.update(&(components.len() as u64).to_le_bytes());
+        for component in components {
+            hash_part(&mut hasher, component.as_str().as_bytes());
+        }
+        hash_part(
+            &mut hasher,
+            &fs::read(source_root.join(path))
+                .with_context(|| format!("read {domain} input {path}"))?,
+        );
+    }
+    Ok(hasher.finalize().to_hex().to_string())
+}
+
+fn hash_part(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+    hasher.update(&(bytes.len() as u64).to_le_bytes());
+    hasher.update(bytes);
+}
+
+fn hash_file(path: &Utf8Path) -> anyhow::Result<String> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hasher.finalize().to_hex().to_string())
+}
+
+fn validate_composite_hash_contract() -> anyhow::Result<()> {
+    let root = camino_tempfile::Utf8TempDir::new()?;
+    fs::create_dir(root.path().join("inputs"))?;
+    fs::write(root.path().join("inputs/a.txt"), b"alpha")?;
+
+    let mut files = BTreeSet::new();
+    collect_input_files(root.path(), Utf8Path::new("inputs"), &mut files)?;
+    let original = composite_hash(root.path(), "test", &files)?;
+    anyhow::ensure!(
+        original == composite_hash(root.path(), "test", &files)?,
+        "composite input hashes are not deterministic"
+    );
+
+    fs::write(root.path().join("unrelated.txt"), b"ignored")?;
+    anyhow::ensure!(
+        original == composite_hash(root.path(), "test", &files)?,
+        "an out-of-scope file changed the composite hash"
+    );
+
+    fs::write(root.path().join("inputs/a.txt"), b"changed")?;
+    anyhow::ensure!(
+        original != composite_hash(root.path(), "test", &files)?,
+        "an input content change did not change the composite hash"
+    );
+
+    fs::write(root.path().join("inputs/b.txt"), b"beta")?;
+    let mut added_files = BTreeSet::new();
+    collect_input_files(root.path(), Utf8Path::new("inputs"), &mut added_files)?;
+    anyhow::ensure!(
+        files.len() + 1 == added_files.len()
+            && composite_hash(root.path(), "test", &files)?
+                != composite_hash(root.path(), "test", &added_files)?,
+        "an added input file did not change the composite hash"
+    );
+    anyhow::ensure!(
+        composite_hash(root.path(), "test", &added_files)?
+            != composite_hash(root.path(), "different-domain", &added_files)?,
+        "the composite hash does not separate input domains"
+    );
+    Ok(())
+}
+
+fn node_baseline() -> anyhow::Result<Value> {
+    let build_info = camino_tempfile::NamedUtf8TempFile::new()?;
+    let started = Instant::now();
+    let output = Command::new("node")
+        .current_dir(SUITE_DIR)
+        .args([
+            "node_modules/typescript/lib/tsc.js",
+            "--noEmit",
+            "--tsBuildInfoFile",
+            build_info.path().as_str(),
+            "-p",
+            "projects/core/tsconfig.json",
+        ])
+        .output()?;
+    Ok(json!({
+        "wallMs": millis(started.elapsed()),
+        "exitCode": output.status.code(),
+        "stdout": String::from_utf8_lossy(&output.stdout),
+        "stderr": String::from_utf8_lossy(&output.stderr),
+    }))
+}
+
+fn node_phase_profile() -> anyhow::Result<Value> {
+    let script = r#"
+        import { profileTypeScript } from './tests/agentic_ts/profile-typescript.mjs';
+        const value = await profileTypeScript({
+            typescriptPath: './node_modules/typescript/lib/typescript.js',
+            projectPath: './tests/agentic_ts/projects/core/tsconfig.json',
+        });
+        console.log(JSON.stringify(value));
+    "#;
+    let started = Instant::now();
+    let output = Command::new("node")
+        .args(["--input-type=module", "--eval", script])
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "Node phase profile failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    let wall_ms = millis(started.elapsed());
+    Ok(json!({
+        "wallMs": wall_ms,
+        "outerOverheadMs": value["phasesMs"]["measuredTotal"]
+            .as_f64()
+            .map(|inner_ms| wall_ms - inner_ms),
+        "result": { "value": value, "stdout": "", "stderr": "", "overflowed": false },
+    }))
+}
+
+fn prepare_workspace(instance: &TestInstance) -> anyhow::Result<()> {
+    let source = Utf8Path::new(SUITE_DIR);
+    let workspace = instance.temp_dir_path().join("workspace");
+    fs::create_dir_all(&workspace)?;
+    for file in [
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "profile-typescript.mjs",
+    ] {
+        fs::copy(source.join(file), workspace.join(file))?;
+    }
+    for directory in ["node_modules", "projects"] {
+        copy_dir_recursive(
+            source.join(directory).as_std_path(),
+            workspace.join(directory).as_std_path(),
+        )?;
+    }
+    fs::create_dir_all(workspace.join(".home"))?;
+    fs::create_dir_all(workspace.join(".cache"))?;
+    Ok(())
+}
+
+fn prepare_cjs_graph(instance: &TestInstance) -> anyhow::Result<()> {
+    let source = Utf8Path::new("tests/node_modules_apps/apps/popular-pure-js");
+    let destination = instance.temp_dir_path().join("workspace/cjs-graph");
+    copy_dir_recursive(source.as_std_path(), destination.as_std_path())?;
+    let status = Command::new("npm")
+        .args([
+            "ci",
+            "--install-links",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+        ])
+        .current_dir(&destination)
+        .status()?;
+    anyhow::ensure!(
+        status.success(),
+        "npm ci failed for the CommonJS graph smoke"
+    );
+    for (suffix, enabled) in [("disabled", false), ("enabled", true)] {
+        let path = destination.join(format!("measure-{suffix}.cjs"));
+        fs::write(
+            &path,
+            format!(
+                "globalThis.__wasm_rquickjs_set_cjs_module_probe_session_enabled({enabled});\nmodule.exports = require('./test-05-ajv.cjs').run();\n"
+            ),
+        )
+        .with_context(|| format!("write CommonJS graph measurement entry {path}"))?;
+    }
+    Ok(())
+}
+
+fn environment(iterations: usize, component_features: &str) -> anyhow::Result<Value> {
+    let source_root = std::env::var("AGENTIC_TS_SOURCE_ROOT").unwrap_or_else(|_| ".".to_string());
+    let dirty = !command_text(Command::new("git").args([
+        "-C",
+        &source_root,
+        "status",
+        "--porcelain",
+        "--",
+        ".",
+        ":(exclude)tests/agentic_ts/results/*.json",
+    ]))?
+    .is_empty();
+    Ok(json!({
+        "commitHint": command_text(Command::new("git").args(["rev-parse", "HEAD"]))?,
+        "dirty": dirty,
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "rustc": command_text(Command::new("rustc").arg("--version"))?,
+        "cargo": command_text(Command::new("cargo").arg("--version"))?,
+        "node": command_text(Command::new("node").args(["-p", "process.versions.node"]))?,
+        "npm": command_text(Command::new("npm").arg("--version"))?,
+        "typescript": command_text(Command::new("node").args(["-p", "require('./tests/agentic_ts/node_modules/typescript/package.json').version"]))?,
+        "componentFeatures": component_features,
+        "iterations": iterations,
+        "artifactCache": std::env::var("WASM_RQUICKJS_TEST_ARTIFACT_CACHE").ok(),
+        "wasmtimeCache": std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").ok(),
+        "preparedComponentCache": std::env::var("WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE").ok(),
+        "unoptimized": std::env::var("WASM_RQUICKJS_TEST_UNOPTIMIZED").ok(),
+    }))
+}
+
+fn verify_toolchain() -> anyhow::Result<()> {
+    let node = command_text(Command::new("node").args(["-p", "process.versions.node"]))?;
+    let npm = command_text(Command::new("npm").arg("--version"))?;
+    anyhow::ensure!(node == "22.14.0", "requires Node.js 22.14.0; found {node}");
+    anyhow::ensure!(npm == "10.9.2", "requires npm 10.9.2; found {npm}");
+    anyhow::ensure!(
+        Utf8Path::new(SUITE_DIR)
+            .join("node_modules/typescript/lib/tsc.js")
+            .exists(),
+        "run npm ci in {SUITE_DIR} first"
+    );
+    Ok(())
+}
+
+fn validate_report(report: &Value) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["nodeBaseline"]["exitCode"] == 0,
+        "Node baseline failed"
+    );
+    if report["schemaVersion"] == 5 {
+        validate_phase_profile(&report["phaseProfiles"]["node"], "Node", false)?;
+        validate_phase_profile(&report["phaseProfiles"]["wasm"], "Wasm", true)?;
+        for sibling in ["compiler", "cpu", "io"] {
+            validate_execution_profile_timing(
+                &report["workloads"]["concurrent"]["contended"]["result"][sibling]["result"]["profile"],
+                &format!("concurrent {sibling}"),
+            )?;
+        }
+    }
+    for path in [
+        "/workloads/coldNoEmit/result/value/exitCode",
+        "/workloads/incrementalCold/result/value/exitCode",
+        "/workloads/invalidThenValid/recovery/result/value/exitCode",
+        "/workloads/projectReferences/result/value/exitCode",
+        "/workloads/emitDirect/result/value/exitCode",
+    ] {
+        anyhow::ensure!(
+            report.pointer(path) == Some(&json!(0))
+                && successful_result(
+                    report
+                        .pointer(path.trim_end_matches("/value/exitCode"))
+                        .unwrap_or(&Value::Null),
+                ),
+            "failed workload at {path}: {report:#}"
+        );
+    }
+    for group in ["unchangedFreshJobs", "incrementalFreshJobs"] {
+        let samples = report["workloads"][group]["samples"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("missing samples for {group}"))?;
+        anyhow::ensure!(samples.len() >= 5, "{group} needs at least five samples");
+        for sample in samples {
+            anyhow::ensure!(
+                sample.pointer("/result/value/exitCode") == Some(&json!(0))
+                    && successful_result(&sample["result"]),
+                "failed sample in {group}: {sample:#}"
+            );
+        }
+    }
+    let failed_checks = report["workloads"]["invalidThenValid"]["failedChecks"]["samples"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("missing repeated failed type checks"))?;
+    anyhow::ensure!(
+        failed_checks.len() >= 5
+            && failed_checks.iter().all(|sample| {
+                sample.pointer("/result/value/exitCode") == Some(&json!(2))
+                    && sample["result"]["stdout"]
+                        .as_str()
+                        .is_some_and(|stdout| stdout.contains("error TS2322"))
+                    && sample["result"]["overflowed"] == false
+                    && sample["result"].get("runnerError").is_none()
+            }),
+        "a repeated invalid TypeScript check unexpectedly passed or failed incorrectly"
+    );
+    anyhow::ensure!(
+        successful_result(&report["workloads"]["directTypeScript"]["result"])
+            && successful_result(&report["workloads"]["generatedJavaScript"]["result"])
+            && report.pointer("/workloads/directTypeScript/result/value/answer")
+                == Some(&json!(42))
+            && report.pointer("/workloads/generatedJavaScript/result/value/default/answer")
+                == Some(&json!(42)),
+        "direct TypeScript or generated JavaScript result was incorrect"
+    );
+    let cpu_baseline_value = report
+        .pointer("/workloads/concurrent/cpuBaseline/result/value")
+        .and_then(Value::as_u64);
+    let io_baseline_value = report.pointer("/workloads/concurrent/ioBaseline/result/value");
+    anyhow::ensure!(
+        successful_result(&report["workloads"]["concurrent"]["cpuBaseline"]["result"])
+            && successful_result(&report["workloads"]["concurrent"]["ioBaseline"]["result"])
+            && successful_result(
+                &report["workloads"]["concurrent"]["contended"]["result"]["compiler"]["result"]
+            )
+            && successful_result(
+                &report["workloads"]["concurrent"]["contended"]["result"]["cpu"]["result"]
+            )
+            && successful_result(
+                &report["workloads"]["concurrent"]["contended"]["result"]["io"]["result"]
+            )
+            && cpu_baseline_value.is_some()
+            && io_baseline_value
+                .and_then(|value| value["bytes"].as_u64())
+                .is_some_and(|bytes| bytes > 0)
+            && report
+                .pointer("/workloads/concurrent/contended/result/compiler/result/value/exitCode")
+                == Some(&json!(0))
+            && report
+                .pointer("/workloads/concurrent/contended/result/cpu/result/value")
+                .and_then(Value::as_u64)
+                == cpu_baseline_value
+            && report.pointer("/workloads/concurrent/contended/result/io/result/value")
+                == io_baseline_value,
+        "concurrency workload result was incorrect"
+    );
+    validate_termination_series(
+        &report["workloads"]["timeouts"],
+        "timedOut",
+        "execution job timed out",
+    )?;
+    validate_termination_series(
+        &report["workloads"]["cancellations"],
+        "cancelled",
+        "execution job cancelled",
+    )?;
+
+    let memory = &report["workloads"]["memoryPlateau"];
+    anyhow::ensure!(
+        memory["wasmLinearMemory"]["otherWorkloadCheckpoints"]
+            .as_array()
+            .is_some_and(
+                |samples| samples.len() == if report["schemaVersion"] == 5 { 13 } else { 12 }
+            ),
+        "Wasm linear-memory observations do not cover every non-series workload"
+    );
+    anyhow::ensure!(
+        memory["quickJsHeap"]["allowedVariationBytes"] == ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
+        "report changed the QuickJS heap-variation limit"
+    );
+    for group in [
+        "unchangedCompilerJobs",
+        "warmedIncrementalCompilerJobs",
+        "failedCompilerJobs",
+    ] {
+        for point in ["beforeToolLoad", "afterCompiler"] {
+            anyhow::ensure!(
+                memory["quickJsHeap"][group][point]["samples"]
+                    .as_array()
+                    .is_some_and(|samples| samples.len() >= 5)
+                    && memory["quickJsHeap"][group][point]["variationBytes"]
+                        .as_u64()
+                        .unwrap_or(u64::MAX)
+                        <= ALLOWED_QUICKJS_HEAP_VARIATION_BYTES,
+                "fresh-job QuickJS heap samples varied unexpectedly for {group}/{point}"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_phase_profile(
+    profile: &Value,
+    label: &str,
+    require_execution_profile: bool,
+) -> anyhow::Result<()> {
+    let value = &profile["result"]["value"];
+    anyhow::ensure!(
+        successful_result(&profile["result"])
+            && value["exitCode"] == 0
+            && value["graph"]["rootFiles"]
+                .as_u64()
+                .is_some_and(|count| count > 0)
+            && value["graph"]["totalSourceFiles"]
+                .as_u64()
+                .is_some_and(|count| count > 0),
+        "{label} TypeScript phase profile failed"
+    );
+    for phase in [
+        "import",
+        "configRead",
+        "configParse",
+        "programCreate",
+        "diagnostics",
+        "measuredTotal",
+        "unclassified",
+    ] {
+        anyhow::ensure!(
+            value["phasesMs"][phase]
+                .as_f64()
+                .is_some_and(|duration| duration >= 0.0),
+            "{label} TypeScript phase profile has no valid {phase} duration"
+        );
+    }
+    for phase in ["configRead", "configParse", "programCreate", "diagnostics"] {
+        for operation in [
+            "fileExists",
+            "directoryExists",
+            "readFile",
+            "readDirectory",
+            "realpath",
+            "getSourceFile",
+        ] {
+            anyhow::ensure!(
+                value["io"][phase][operation]["calls"].as_u64().is_some(),
+                "{label} TypeScript phase profile has no {phase}/{operation} count"
+            );
+        }
+    }
+    if require_execution_profile {
+        let execution = &profile["result"]["profile"];
+        validate_execution_profile_timing(execution, label)?;
+        anyhow::ensure!(
+            execution["version"] == 1
+                && execution["totalMs"]
+                    .as_f64()
+                    .is_some_and(|duration| duration >= 0.0),
+            "{label} execution profile has no supported version or total"
+        );
+        let counters = &execution["counters"];
+        let counter = |name: &str| counters[name].as_u64().unwrap_or_default();
+        anyhow::ensure!(
+            counter("modules.resolve.calls")
+                == counter("modules.resolve.success")
+                    + counter("modules.resolve.missing")
+                    + counter("modules.resolve.errors")
+                && counter("modules.resolve.calls") > 0,
+            "{label} module-resolution counters are incomplete"
+        );
+        anyhow::ensure!(
+            counter("modules.sourceRead.calls")
+                == counter("modules.sourceRead.success")
+                    + counter("modules.sourceRead.notFound")
+                    + counter("modules.sourceRead.errors")
+                && counter("modules.sourceRead.bytes") > 0,
+            "{label} module-source counters are incomplete"
+        );
+        anyhow::ensure!(
+            counter("modules.fileProbe.calls")
+                == counter("modules.fileProbe.found") + counter("modules.fileProbe.missing")
+                && counter("modules.fileProbe.cacheHits") <= counter("modules.fileProbe.calls"),
+            "{label} module file-probe counters are inconsistent"
+        );
+        let read_calls = counter("filesystem.readFile.calls")
+            + counter("filesystem.readFileWithEncoding.calls")
+            + counter("filesystem.readFileNative.calls")
+            + counter("filesystem.read.calls");
+        let read_bytes = counter("filesystem.readFile.bytes")
+            + counter("filesystem.readFileWithEncoding.bytes")
+            + counter("filesystem.readFileNative.bytes")
+            + counter("filesystem.read.bytes");
+        anyhow::ensure!(
+            read_calls > 0 && read_bytes > 0,
+            "{label} native filesystem counters did not observe compiler reads"
+        );
+    }
+    Ok(())
+}
+
+fn validate_execution_profile_timing(execution: &Value, label: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        execution["version"] == 1
+            && execution["totalMs"]
+                .as_f64()
+                .is_some_and(|duration| duration.is_finite() && duration >= 0.0),
+        "{label} execution profile has no supported version or total"
+    );
+    let mut classified_ms = 0.0;
+    for phase in [
+        "queueDelay",
+        "runtimeCreation",
+        "loaderInitialization",
+        "processConfiguration",
+        "builtinInitialization",
+        "transportWiring",
+        "wrapperPreparation",
+        "initialEvaluation",
+        "userAwait",
+        "resultFormatting",
+        "teardown",
+    ] {
+        let duration = execution["phasesMs"][phase]
+            .as_f64()
+            .filter(|duration| duration.is_finite() && *duration >= 0.0)
+            .ok_or_else(|| anyhow::anyhow!("{label} execution profile has no {phase}"))?;
+        classified_ms += duration;
+    }
+    anyhow::ensure!(
+        classified_ms <= execution["totalMs"].as_f64().unwrap() + 1.0,
+        "{label} execution profile phases exceed its lifecycle total"
+    );
+    Ok(())
+}
+
+fn successful_result(value: &Value) -> bool {
+    value["overflowed"] == false
+        && value.get("runnerError").is_none()
+        && value.get("value").is_some()
+}
+
+fn profile_counter(counters: &Value, name: &str) -> u64 {
+    counters.get(name).and_then(Value::as_u64).unwrap_or(0)
+}
+
+fn validate_module_resolution_counters(
+    sample: &Value,
+    require_session_hits: bool,
+) -> anyhow::Result<()> {
+    let counters = &sample["result"]["profile"]["counters"];
+    anyhow::ensure!(
+        counters.get("modules.pathProbe.systemCalls").is_some(),
+        "module-resolution physical counters are missing: {counters:#}"
+    );
+    let mut logical_calls = 0;
+    let mut local_hits = 0;
+    let mut session_hits = 0;
+
+    for prefix in [
+        "modules.fileProbe",
+        "modules.directoryProbe",
+        "modules.classificationProbe",
+    ] {
+        let calls = profile_counter(counters, &format!("{prefix}.calls"));
+        let found = profile_counter(counters, &format!("{prefix}.found"));
+        let missing = profile_counter(counters, &format!("{prefix}.missing"));
+        anyhow::ensure!(
+            calls == found + missing,
+            "{prefix} logical calls do not match outcomes: {counters:#}"
+        );
+
+        let cache_hits = profile_counter(counters, &format!("{prefix}.cacheHits"));
+        let cache_hits_found = profile_counter(counters, &format!("{prefix}.cacheHitsFound"));
+        let cache_hits_missing = profile_counter(counters, &format!("{prefix}.cacheHitsMissing"));
+        let prefix_session_hits = profile_counter(counters, &format!("{prefix}.sessionCacheHits"));
+        let session_hits_found =
+            profile_counter(counters, &format!("{prefix}.sessionCacheHitsFound"));
+        let session_hits_missing =
+            profile_counter(counters, &format!("{prefix}.sessionCacheHitsMissing"));
+        anyhow::ensure!(
+            cache_hits == cache_hits_found + cache_hits_missing + prefix_session_hits,
+            "{prefix} cache-hit categories do not reconcile: {counters:#}"
+        );
+        anyhow::ensure!(
+            prefix_session_hits == session_hits_found + session_hits_missing,
+            "{prefix} session-hit outcomes do not reconcile: {counters:#}"
+        );
+
+        logical_calls += calls;
+        local_hits += cache_hits_found + cache_hits_missing;
+        session_hits += prefix_session_hits;
+    }
+
+    let path_system_calls = profile_counter(counters, "modules.pathProbe.systemCalls");
+    let path_session_hits = profile_counter(counters, "modules.pathProbe.sessionHits");
+    anyhow::ensure!(
+        logical_calls > 0,
+        "no module-resolution probes were recorded"
+    );
+    anyhow::ensure!(
+        session_hits == path_session_hits,
+        "shared and per-kind session hits do not reconcile: {counters:#}"
+    );
+    anyhow::ensure!(
+        logical_calls == path_system_calls + path_session_hits + local_hits,
+        "logical and physical path probes do not reconcile: {counters:#}"
+    );
+    if require_session_hits {
+        anyhow::ensure!(
+            path_session_hits > 0 && logical_calls > path_system_calls,
+            "CommonJS graph did not exercise session-cache savings: {counters:#}"
+        );
+    }
+    Ok(())
+}
+
+fn validate_termination_series(
+    series: &Value,
+    outcome: &str,
+    expected_message: &str,
+) -> anyhow::Result<()> {
+    let samples = series["attempts"]["samples"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("missing repeated {outcome} samples"))?;
+    anyhow::ensure!(
+        samples.len() >= 5
+            && samples.iter().all(|sample| {
+                sample["result"][outcome] == true
+                    && sample["result"]["message"] == expected_message
+                    && sample["wallMs"]
+                        .as_f64()
+                        .is_some_and(|wall_ms| wall_ms < 1_000.0)
+            }),
+        "repeated {outcome} probe failed"
+    );
+    anyhow::ensure!(
+        successful_result(&series["recovery"]["result"])
+            && series["recovery"].pointer("/result/value/answer") == Some(&json!(42)),
+        "execution capacity was not recovered after repeated {outcome} jobs"
+    );
+    Ok(())
+}
+
+fn validate_regression_guards(report: &Value) -> anyhow::Result<()> {
+    let mut failed_sample = report.clone();
+    failed_sample["workloads"]["unchangedFreshJobs"]["samples"][0]["result"]["value"]["exitCode"] =
+        json!(1);
+    anyhow::ensure!(
+        validate_report(&failed_sample).is_err(),
+        "validation guard accepted a failed repeated workload"
+    );
+
+    let mut false_timeout = report.clone();
+    false_timeout["workloads"]["timeouts"]["attempts"]["samples"][0]["result"]["message"] =
+        json!("unrelated error");
+    anyhow::ensure!(
+        validate_report(&false_timeout).is_err(),
+        "validation guard accepted an unrelated timeout error"
+    );
+    let mut invalid_runner_error = report.clone();
+    invalid_runner_error["workloads"]["invalidThenValid"]["failedChecks"]["samples"][0]["result"] =
+        json!({ "runnerError": { "message": "broken" } });
+    anyhow::ensure!(
+        validate_report(&invalid_runner_error).is_err(),
+        "validation guard accepted a failed invalid-TypeScript workload"
+    );
+    let mut overflowed = report.clone();
+    overflowed["workloads"]["directTypeScript"]["result"]["overflowed"] = json!(true);
+    anyhow::ensure!(
+        validate_report(&overflowed).is_err(),
+        "validation guard accepted an overflowed successful workload"
+    );
+    let mut leaked_heap = report.clone();
+    leaked_heap["workloads"]["memoryPlateau"]["quickJsHeap"]["unchangedCompilerJobs"]["beforeToolLoad"]
+        ["variationBytes"] = json!(u64::MAX);
+    anyhow::ensure!(
+        validate_report(&leaked_heap).is_err(),
+        "validation guard accepted unbounded fresh-job heap variation"
+    );
+    let mut missing_linear_memory_checkpoint = report.clone();
+    missing_linear_memory_checkpoint["workloads"]["memoryPlateau"]["wasmLinearMemory"]["otherWorkloadCheckpoints"] =
+        json!([]);
+    anyhow::ensure!(
+        validate_report(&missing_linear_memory_checkpoint).is_err(),
+        "validation guard accepted incomplete linear-memory observations"
+    );
+    let mut relaxed_quickjs_heap = report.clone();
+    relaxed_quickjs_heap["workloads"]["memoryPlateau"]["quickJsHeap"]["allowedVariationBytes"] =
+        json!(u64::MAX);
+    anyhow::ensure!(
+        validate_report(&relaxed_quickjs_heap).is_err(),
+        "validation guard accepted a report-controlled QuickJS heap limit"
+    );
+    if report["schemaVersion"] == 5 {
+        let mut missing_phase = report.clone();
+        missing_phase["phaseProfiles"]["wasm"]["result"]["value"]["phasesMs"]["programCreate"] =
+            Value::Null;
+        anyhow::ensure!(
+            validate_report(&missing_phase).is_err(),
+            "validation guard accepted an incomplete TypeScript phase profile"
+        );
+        let mut inconsistent_counters = report.clone();
+        inconsistent_counters["phaseProfiles"]["wasm"]["result"]["profile"]["counters"]["modules.resolve.calls"] =
+            json!(u64::MAX);
+        anyhow::ensure!(
+            validate_report(&inconsistent_counters).is_err(),
+            "validation guard accepted inconsistent execution counters"
+        );
+    }
+    Ok(())
+}
+
+fn string_list(values: &[&str]) -> Val {
+    Val::List(
+        values
+            .iter()
+            .map(|value| Val::String((*value).to_string()))
+            .collect(),
+    )
+}
+
+fn command_text(command: &mut Command) -> anyhow::Result<String> {
+    let output = command.output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(String::from_utf8(output.stdout)?.trim().to_string())
+}
+
+fn millis(duration: Duration) -> f64 {
+    duration.as_secs_f64() * 1000.0
+}

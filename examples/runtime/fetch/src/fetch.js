@@ -563,31 +563,37 @@ export async function responseCloneStreamingBody(port) {
 
     console.log(`Original status: ${response.status}`);
 
+    const lockedReader = response.body.getReader();
+    const cloneRejectedWhileLocked = cloneThrows(response);
+    lockedReader.releaseLock();
     const cloned = response.clone();
+    const buffered = response.clone();
 
     console.log(`Cloned status: ${cloned.status}`);
 
-    let clonedBytesData = [];
-    for await (const chunk of cloned.body) {
-        for (const byte of chunk) {
-            clonedBytesData.push(byte);
+    const consume = async (body) => {
+        const data = [];
+        for await (const chunk of body) {
+            for (const byte of chunk) {
+                data.push(byte);
+            }
         }
-    }
+        return new Uint8Array(data);
+    };
 
-    let originalBytesData = [];
-    for await (const chunk of response.body) {
-        for (const byte of chunk) {
-            originalBytesData.push(byte);
-        }
-    }
-
-    const clonedBytes = new Uint8Array(clonedBytesData);
-    const originalBytes = new Uint8Array(originalBytesData);
+    // Clones must tee the native stream: both readers are deliberately active together.
+    const [clonedBytes, originalBytes, bufferedBytes] = await Promise.all([
+        consume(cloned.body),
+        consume(response.body),
+        buffered.arrayBuffer().then(buffer => new Uint8Array(buffer)),
+    ]);
 
     console.log(`Cloned body: ${clonedBytes}`);
     console.log(`Original body: ${originalBytes}`);
 
-    if (Buffer.compare(clonedBytes, originalBytes) === 0) {
+    if (cloneRejectedWhileLocked
+        && Buffer.compare(clonedBytes, originalBytes) === 0
+        && Buffer.compare(originalBytes, bufferedBytes) === 0) {
         console.log("Streaming clone test passed");
     }
 }
@@ -614,10 +620,13 @@ export async function responseCloneReuseBodies(port) {
         const clone1 = response.clone();
         const clone2 = response.clone();
 
-        // Read all three bodies
-        const originalBody = await response.json();
-        const clone1Body = await clone1.json();
-        const clone2Body = await clone2.json();
+        // Start all consumers before awaiting any one of them. The shared native reader must
+        // wake the other clone consumers as buffered chunks become available.
+        const [originalBody, clone1Body, clone2Body] = await Promise.all([
+            response.json(),
+            clone1.json(),
+            clone2.json(),
+        ]);
 
         console.log(`Original id: ${originalBody.id}`);
         console.log(`Clone1 id: ${clone1Body.id}`);
@@ -1114,14 +1123,15 @@ export async function abortResponseBody(port) {
     const textResponse = await fetch(`http://localhost:${port}/todos/0`, {
         signal: textController.signal,
     });
-    textController.abort('body reason must not escape');
+    const textReason = new Error('body abort reason');
+    textController.abort(textReason);
     let textError;
     try {
         await textResponse.text();
     } catch (error) {
         textError = error;
     }
-    if (!(textError instanceof DOMException) || textError.name !== 'AbortError') {
+    if (textError !== textReason) {
         return false;
     }
 
@@ -1129,12 +1139,384 @@ export async function abortResponseBody(port) {
     const streamResponse = await fetch(`http://localhost:${port}/todos/0`, {
         signal: streamController.signal,
     });
-    streamController.abort('stream reason must not escape');
+    const streamReason = new Error('stream abort reason');
+    streamController.abort(streamReason);
     let streamError;
     try {
         await streamResponse.body.getReader().read();
     } catch (error) {
         streamError = error;
     }
-    return streamError instanceof DOMException && streamError.name === 'AbortError';
+    return streamError === streamReason;
+}
+
+function isAbortError(error) {
+    return error instanceof DOMException && error.name === 'AbortError';
+}
+
+let retainedResponseBodyController;
+
+async function finishPendingResponseBodyCase(result) {
+    // Keep the invocation alive long enough for the host fixture to observe that the body was
+    // released by abort/GC, rather than by component teardown after this export returns.
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return result;
+}
+
+export async function abortPendingResponseBody(port, testCase) {
+    const url = `http://localhost:${port}/pending-response-body`;
+
+    if (testCase === 0) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        controller.abort();
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                isAbortError(error) && response.bodyUsed && cloneThrows(response),
+            );
+        }
+    }
+
+    if (testCase === 1) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reason = new Error('custom response body abort reason');
+        const read = response.text();
+        const disturbedImmediately = response.bodyUsed && cloneThrows(response);
+        controller.abort(reason);
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                disturbedImmediately && response.bodyUsed && error === reason,
+            );
+        }
+    }
+
+    if (testCase === 2) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        const pendingRead = reader.read();
+        controller.abort();
+        try {
+            await pendingRead;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(first.done === false
+                && new TextDecoder().decode(first.value) === 'first chunk'
+                && response.bodyUsed
+                && isAbortError(error));
+        }
+    }
+
+    if (testCase === 3) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const clone = response.clone();
+        const read = clone.text();
+        controller.abort();
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                clone.bodyUsed && cloneThrows(clone) && isAbortError(error),
+            );
+        }
+    }
+
+    if (testCase === 4) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const read = response.arrayBuffer();
+        const disturbedImmediately = response.bodyUsed && cloneThrows(response);
+        controller.abort();
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                disturbedImmediately && response.bodyUsed && isAbortError(error),
+            );
+        }
+    }
+
+    if (testCase === 5) {
+        const controller = new AbortController();
+        retainedResponseBodyController = controller;
+        if (retainedResponseBodyController !== controller) return false;
+        let response = await fetch(url, {signal: controller.signal});
+        response = null;
+        gc();
+        await Promise.resolve();
+        gc();
+        return finishPendingResponseBodyCase(true);
+    }
+
+    if (testCase === 6) {
+        const response = await fetch(`http://localhost:${port}/truncated-response-body`);
+        const resolvedAtHead = response.status === 200 && !response.bodyUsed;
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                resolvedAtHead && response.bodyUsed && cloneThrows(response) && error instanceof Error,
+            );
+        }
+    }
+
+    if (testCase === 7) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        controller.abort(null);
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                isAbortError(error) && response.bodyUsed && cloneThrows(response),
+            );
+        }
+    }
+
+    if (testCase === 8) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const read = response.arrayBuffer();
+        const disturbedImmediately = response.bodyUsed && cloneThrows(response);
+        controller.abort(null);
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                disturbedImmediately && response.bodyUsed && isAbortError(error),
+            );
+        }
+    }
+
+    if (testCase === 9) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const clone = response.clone();
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        const pendingRead = reader.read();
+        const pendingClone = clone.text();
+        controller.abort(null);
+        const [readerResult, cloneResult] = await Promise.allSettled([
+            pendingRead,
+            pendingClone,
+        ]);
+        return finishPendingResponseBodyCase(
+            first.done === false
+            && new TextDecoder().decode(first.value) === 'first chunk'
+            && readerResult.status === 'rejected'
+            && isAbortError(readerResult.reason)
+            && cloneResult.status === 'rejected'
+            && isAbortError(cloneResult.reason),
+        );
+    }
+
+    if (testCase === 10) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        const reason = 'idle reader abort';
+        controller.abort(reason);
+        let closedReason;
+        try {
+            await reader.closed;
+            return false;
+        } catch (error) {
+            closedReason = error;
+        }
+        return finishPendingResponseBodyCase(
+            first.done === false && closedReason === reason,
+        );
+    }
+
+    if (testCase === 11) {
+        const response = await fetch(url);
+        const reader = response.body.getReader();
+        const first = await reader.read();
+        await reader.cancel('consumer stopped');
+        return finishPendingResponseBodyCase(first.done === false && response.bodyUsed);
+    }
+
+    if (testCase === 12) {
+        const response = await fetch(`http://localhost:${port}/empty-response-body`);
+        const resolvedAtHead = response.status === 204 && !response.bodyUsed;
+        const text = await response.text();
+        return finishPendingResponseBodyCase(
+            resolvedAtHead && text === '' && response.bodyUsed && cloneThrows(response),
+        );
+    }
+
+    if (testCase === 13) {
+        const response = await fetch(`http://localhost:${port}/clone-response-body`);
+        const canceled = response.clone();
+        let cancelSettled = false;
+        const cancel = canceled.body.cancel('cancel before pull').then(() => {
+            cancelSettled = true;
+        });
+        await Promise.resolve();
+        const pendingUntilSurvivorFinishes = !cancelSettled;
+        const text = await response.text();
+        await cancel;
+        return finishPendingResponseBodyCase(
+            pendingUntilSurvivorFinishes
+            && cancelSettled
+            && text === 'first chunksecond chunk',
+        );
+    }
+
+    if (testCase === 14) {
+        const response = await fetch(`http://localhost:${port}/clone-response-body`);
+        const canceled = response.clone();
+        const reader = canceled.body.getReader();
+        const pendingRead = reader.read();
+        await Promise.resolve();
+        let cancelSettled = false;
+        const cancel = reader.cancel('cancel in-flight clone read').then(() => {
+            cancelSettled = true;
+        });
+        await Promise.resolve();
+        const pendingUntilSurvivorFinishes = !cancelSettled;
+        await pendingRead.catch(() => undefined);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const pendingAfterCanceledReadSettled = !cancelSettled;
+        const text = await response.text();
+        await cancel;
+        return finishPendingResponseBodyCase(
+            pendingUntilSurvivorFinishes
+            && pendingAfterCanceledReadSettled
+            && cancelSettled
+            && text === 'first chunksecond chunk',
+        );
+    }
+
+    if (testCase >= 15 && testCase <= 17) {
+        const controller = new AbortController();
+        const response = await fetch(url, {signal: controller.signal});
+        const reason = testCase === 15 ? false : testCase === 16 ? 0 : '';
+        const read = response.text();
+        controller.abort(reason);
+        try {
+            await read;
+            return false;
+        } catch (error) {
+            return finishPendingResponseBodyCase(
+                isAbortError(error) && response.bodyUsed && cloneThrows(response),
+            );
+        }
+    }
+
+    if (testCase === 18) {
+        const response = await fetch(`http://localhost:${port}/clone-race-response-body`);
+        const canceled = response.clone();
+        const requiresPendingRace =
+            typeof response.nativeResponse.makeOpaqueRedirect === 'function';
+        const hasRecoveryTestHook =
+            typeof canceled.pauseNextBodyReadAfterReadyForTest === 'function';
+        const pauseArmed = hasRecoveryTestHook
+            ? canceled.pauseNextBodyReadAfterReadyForTest()
+            : false;
+        const reader = canceled.body.getReader();
+        let pendingReadSettled = false;
+        const pendingRead = reader.read().finally(() => {
+            pendingReadSettled = true;
+        });
+        await fetch(`http://localhost:${port}/clone-race-release`);
+        await Promise.resolve();
+        if (requiresPendingRace) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        // Preview 3's cancel-safe native read is the race under test. Preview 2 may deliver the
+        // available chunk before this continuation, but must still preserve it for the survivor.
+        const exercisedTargetRace = !requiresPendingRace || !pendingReadSettled;
+        let cancelSettled = false;
+        const cancel = reader.cancel('cancel after bytes became available').then(() => {
+            cancelSettled = true;
+        });
+        await pendingRead.catch(() => undefined);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const pendingAfterCanceledReadSettled = !cancelSettled;
+        const recoveredBytes = hasRecoveryTestHook
+            ? response.takeRecoveredBodyReadBytesForTest()
+            : 0;
+        const text = await response.text();
+        await cancel;
+        const result =
+            (!requiresPendingRace || (hasRecoveryTestHook && pauseArmed))
+            && exercisedTargetRace
+            && pendingAfterCanceledReadSettled
+            && (!requiresPendingRace || recoveredBytes > 0)
+            && text === 'first chunksecond chunk';
+        if (!result) {
+            console.log('clone race diagnostics', JSON.stringify({
+                requiresPendingRace,
+                hasRecoveryTestHook,
+                pauseArmed,
+                exercisedTargetRace,
+                pendingAfterCanceledReadSettled,
+                recoveredBytes,
+                text,
+            }));
+        }
+        return finishPendingResponseBodyCase(result);
+    }
+
+    if (testCase === 19) {
+        const response = await fetch(`http://localhost:${port}/truncated-response-body`);
+        const canceled = response.clone();
+        response.clone(); // Keep a third branch idle while the shared source errors.
+        let cancelSettled = false;
+        const cancel = canceled.body.cancel('cancel before shared body error').then(() => {
+            cancelSettled = true;
+        });
+        await Promise.resolve();
+        const pendingBeforeError = !cancelSettled;
+        try {
+            await response.text();
+            return false;
+        } catch (error) {
+            await cancel;
+            return finishPendingResponseBodyCase(
+                pendingBeforeError && cancelSettled && error instanceof Error,
+            );
+        }
+    }
+
+    if (testCase === 20) {
+        let response = await fetch(url);
+        const survivor = response;
+        let abandoned = response.clone();
+        response = null;
+        abandoned = null;
+        gc();
+        await Promise.resolve();
+        gc();
+        await survivor.body.cancel('cancel after sibling collection');
+        return finishPendingResponseBodyCase(true);
+    }
+
+    return false;
+}
+
+function cloneThrows(response) {
+    try {
+        response.clone();
+        return false;
+    } catch (error) {
+        return error instanceof TypeError;
+    }
 }

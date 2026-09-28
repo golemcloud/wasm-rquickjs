@@ -154,6 +154,23 @@ must not capture their values or immutable aliases during top-level initializati
 Preview 3 is opt-in and evolving; Preview 2 (`--target wasi-p2`) remains the default and stable
 path.
 
+## Experimental component size optimization
+
+`wasm-rquickjs dce --input app.wasm --output app-dce.wasm` runs the pinned
+wasm-eliminator's strict, validated DCE without restricting runtime JS/TS generation.
+It supports both Preview 2 and Preview 3. It does not promise smaller files or a
+smaller WIT import surface, and does not use producer-supplied suppression hints.
+
+`scan-capabilities --js main.js` reports a conservative builtin inventory.
+`inject-js --auto-trim` additionally offers **experimental P2-only closed-world
+specialization**. Use a fresh template before Wizer, account for every embedded
+module and future execution, and retain the original template for reinjection.
+For unrestricted dynamic code, keep the default all-enabled runtime and use
+`dce` instead. These controls are not sandbox permissions.
+
+See [the capability optimizer report](capability-detection.md) for measurements,
+reproduction commands, and limitations.
+
 ## Mappings
 
 ### Exports
@@ -466,9 +483,13 @@ Context propagation works through `Promise.prototype.then/catch/finally` and `se
 </details>
 
 <details>
-<summary><strong><code>node:child_process</code></strong> (stub)</summary>
+<summary><strong><code>node:child_process</code></strong></summary>
 
-Compatibility stubs — all spawn/exec functions throw `ENOSYS` since WASI does not support process creation.
+WASI cannot create host processes. A constrained compatibility adapter runs `process.execPath`
+JavaScript targets inline with isolated argv, environment, and cwd views. It also recognizes npm's
+literal `sh -c` form for plain Node commands and executable Node shebang files. Unsupported shells,
+shell syntax, external executables, and unsupported shebangs fail explicitly with `ENOSYS`; inline
+execution is not a fresh runtime or an operating-system subprocess.
 
 - `ChildProcess`, `exec`, `execFile`, `fork`, `spawn`, `execSync`, `execFileSync`, `spawnSync`
 
@@ -579,6 +600,14 @@ Deprecated error-handling domains (sync-only).
 
 Comprehensive filesystem API built on WASI filesystem.
 
+Symbolic links are persistent WASI filesystem objects, so linked package trees
+remain visible to later fresh execution runtimes. Link targets must be relative:
+Rooted targets cannot be resolved within a WASI preopen, so `symlink` fails with
+`EINVAL` without creating an object when given one. Production Golem and
+macOS/Linux local development support these links. Windows local development
+currently requires Developer Mode or an equivalent symlink privilege; non-link
+filesystem and npm workflows are unaffected.
+
 - **Sync:** `readFileSync`, `writeFileSync`, `appendFileSync`, `openSync`, `closeSync`, `readSync`, `writeSync`, `ftruncateSync`, `fsyncSync`, `fdatasyncSync`, `statSync`, `lstatSync`, `fstatSync`, `statfsSync`, `readdirSync`, `accessSync`, `existsSync`, `realpathSync`, `truncateSync`, `copyFileSync`, `linkSync`, `symlinkSync`, `readlinkSync`, `chmodSync`, `fchmodSync`, `lchmodSync`, `chownSync`, `fchownSync`, `lchownSync`, `utimesSync`, `futimesSync`, `lutimesSync`, `unlinkSync`, `renameSync`, `mkdirSync`, `rmdirSync`, `rmSync`, `mkdtempSync`, `opendirSync`, `readvSync`, `writevSync`, `cpSync`
 - **Async (callback):** `readFile`, `writeFile`, `appendFile`, `open`, `close`, `read`, `write`, `stat`, `lstat`, `fstat`, `statfs`, `ftruncate`, `fsync`, `fdatasync`, `readdir`, `access`, `exists`, `realpath`, `truncate`, `copyFile`, `link`, `symlink`, `readlink`, `chmod`, `fchmod`, `lchmod`, `chown`, `fchown`, `lchown`, `utimes`, `futimes`, `lutimes`, `unlink`, `rename`, `mkdir`, `rmdir`, `rm`, `mkdtemp`, `opendir`, `watch`, `watchFile`, `unwatchFile`, `readv`, `writev`, `cp`, `openAsBlob`
 - **Streams:** `createReadStream`, `createWriteStream`
@@ -616,7 +645,11 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `node:_http_common` — `_checkIsHttpToken`, `_checkInvalidHeaderChar`
 - Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, ordered pipelined responses, server-side 100/102/103 informational responses, per-socket request limits, idle connection cleanup
 
-**Not yet supported:** HTTP Upgrade, client-side 1xx informational events through `wasi:http`, server-side timeout enforcement, `https.createServer()` / HTTPS server, client `lookup` / `autoSelectFamily` options.
+**Not yet supported:** HTTP Upgrade and CONNECT tunnels, client-side 1xx informational events
+through `wasi:http`, server-side timeout enforcement, `https.createServer()` / HTTPS server, client
+`lookup` / `autoSelectFamily` options, and custom per-request `createConnection` transports. Custom
+Agent `createConnection` hooks are ignored with a warning so Agent metadata and scheduling remain
+usable, but they cannot route or isolate traffic; every outbound request still uses `wasi:http`.
 
 </details>
 
@@ -644,8 +677,13 @@ Options accept exactly one of `entry: string` or inline `source: string`, plus `
 inline `source` and defaults to JavaScript. With the generated crate's `typescript-runtime`
 feature enabled, TypeScript entry files are selected by their `.ts`, `.mts`, or `.cts` extension,
 and inline jobs can select `language: "typescript"`.
-Output and completion wake the parent without periodic polling. CPU deadlines start
-after child-runtime initialization and are enforced by the QuickJS interrupt handler. Entry modules run for their side effects; an exported
+Output and completion wake the parent without periodic polling. Timeout budgets start
+after child-runtime initialization. An async wait observes deadlines while jobs yield; for
+non-yielding JavaScript, the QuickJS interrupt handler samples the clock at an adaptive stride
+targeting one check per 10% of `timeoutMs` during steady CPU work. This is a best-effort budget,
+not an exact cutoff or a maximum-overrun guarantee. A job that finishes between checks can
+succeed after its literal deadline; no extra clock check occurs at completion. Entry modules run
+for their side effects; an exported
 `default` function (or `run` function when there is no default function) is invoked and awaited.
 Relative entry paths and imports resolve from `cwd`. Inline `source` is an async function body:
 top-level `await` and `return` are supported, while static `import`/`export` declarations are not.
@@ -657,7 +695,8 @@ With `overflow: "terminate"`, exceeding either stream's bound rejects the job. W
 `overflow: "truncate"`, execution continues, captured output is bounded, and `overflowed` is
 `true` when either stream exceeded the bound.
 Cancellation is cooperative for queued or yielding code and cannot preempt a tight loop already
-running on the same thread; use a positive `timeoutMs` when that guarantee is required. A job that
+running on the same thread; a positive `timeoutMs` is the best-effort escape mechanism for such a
+loop. Cancellation remains a guest-local flag check on every QuickJS interrupt. A job that
 never settles must be cancelled or given a timeout before the enclosing component invocation can
 finish. A runtime accepts at
 most eight active jobs, and child executions cannot recursively create more execution jobs.
@@ -1583,6 +1622,11 @@ There are a few important things to keep in mind when working on the project:
   embedding everything from the `skeleton` directory **including** the `target` directory, resulting in slow compilation
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
+
+- Run `tools/check-skeleton-clippy.sh` to lint the supported Preview 2 and Preview 3 skeleton feature matrix. The helper
+  temporarily symlinks `Cargo.toml` to the checked-in `Cargo.toml_`, directs output to the workspace-root `target/` cache,
+  preserves that cache, and removes the symlink on exit. If a skeleton-local `target/` already exists, continue to use
+  `cleanup-skeleton.sh` before embedding the skeleton.
 
 - Runtime and node compatibility tests support opt-in caches for faster local iteration. Select Node with
   `nvm use 22.14.0`, then use the artifact and Wasmtime caches explicitly:

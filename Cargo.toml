@@ -22,17 +22,17 @@ pkg-fmt = "zip"
 
 [dependencies]
 "wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
-wasm-eliminator = { path = "../../oss/wasm-eliminator/crates/wasm-eliminator" }
+wasm-eliminator = { git = "https://github.com/golemcloud/wasm-eliminator", rev = "ddfeaf3424e438861404363bb3a3d6f610449524" }
 
 anyhow = { workspace = true }
 camino = { workspace = true }
 clap = { version = "4.5.39", features = ["default", "derive"] }
 tokio = { workspace = true, features = ["rt"] }
-wasmparser_encoder = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }
+blake3 = "1"
 bytes = { workspace = true }
 camino-tempfile = { workspace = true }
 chrono = { workspace = true }
@@ -97,6 +97,14 @@ harness = false
 
 [[test]]
 name = "glue_benchmark"
+harness = false
+
+[[test]]
+name = "agentic_ts"
+harness = false
+
+[[test]]
+name = "typescript_transform_latency"
 harness = false
 
 [[test]]

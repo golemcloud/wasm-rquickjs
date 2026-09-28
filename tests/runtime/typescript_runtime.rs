@@ -36,12 +36,9 @@ async fn strip_typescript_types_matches_node_contract(
     };
     let report: serde_json::Value = serde_json::from_str(&json)?;
     assert_eq!(report["stripped"], "const value         = 1;");
-    assert!(
-        report["transformed"]
-            .as_str()
-            .is_some_and(|output| output.contains("MathUtil")
-                && output.contains("sourceMappingURL=data:application/json;base64,")
-                && output.ends_with("//# sourceURL=input.ts"))
+    assert_eq!(
+        report["transformed"],
+        "(function(MathUtil) {\n    MathUtil.add = (a, b)=>a + b;\n})(MathUtil || (MathUtil = {}));\nvar MathUtil;\n\n\n//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbImlucHV0LnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJVQUNZO2FBQ0ssTUFBTSxDQUFDLEdBQVcsSUFBYyxJQUFJO0FBQ25ELEdBRlUsYUFBQSJ9"
     );
     assert_eq!(
         report["sourceMap"],
@@ -64,6 +61,173 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["moduleTs"], 42);
     assert_eq!(report["moduleMts"], 42);
     assert_eq!(report["commonJsCts"], 42);
+    assert_eq!(report["ambiguousAwaitImported"], 42);
+    assert_eq!(report["ambiguousAwaitRequired"], 42);
+    assert_eq!(report["directTransformValue"], 42);
+    assert_eq!(report["directCachedTransformValue"], 42);
+    assert_eq!(report["directFirstLoadTransformCount"], 1);
+    assert_eq!(report["directFirstLoadAnalysisCount"], 0);
+    assert_eq!(report["directCachedTransformCount"], 1);
+    assert_eq!(report["directCachedAnalysisCount"], 0);
+    assert_eq!(report["importedTransformValue"], 42);
+    assert_eq!(report["importedCachedTransformValue"], 42);
+    assert_eq!(report["importedFirstLoadTransformCount"], 1);
+    assert_eq!(report["preparedImportFirstLoadTrace"], "start,end");
+    assert_eq!(report["importedCachedTransformCount"], 1);
+    assert_eq!(report["importedThenRequiredTransformValue"], 42);
+    assert_eq!(report["importedThenRequiredTransformCount"], 1);
+    assert_eq!(report["requiredBeforeImportTransformValue"]["answer"], 42);
+    assert_eq!(report["requiredBeforeImportTransformCount"], 1);
+    assert_eq!(report["requiredBeforeImportAnalysisCount"], 0);
+    assert_eq!(report["requiredThenImportedTransformValue"], 42);
+    assert_eq!(report["requiredThenImportedHasPhantom"], false);
+    assert_eq!(report["requiredThenImportedTransformCount"], 1);
+    assert_eq!(report["requiredThenImportedAnalysisCount"], 1);
+    assert_eq!(
+        report["requiredBeforeImportCacheStatsAfterRequire"]["preparedEntries"].as_u64(),
+        report["requiredBeforeImportCacheStatsBefore"]["preparedEntries"]
+            .as_u64()
+            .map(|value| value + 1)
+    );
+    assert_eq!(
+        report["requiredBeforeImportCacheStatsAfterImport"]["preparedEntries"],
+        report["requiredBeforeImportCacheStatsBefore"]["preparedEntries"]
+    );
+    assert!(
+        report["requiredBeforeImportCacheStatsAfterRequire"]["preparedBytes"]
+            .as_u64()
+            .unwrap()
+            > report["requiredBeforeImportCacheStatsBefore"]["preparedBytes"]
+                .as_u64()
+                .unwrap()
+    );
+    assert_eq!(
+        report["requiredBeforeImportCacheStatsAfterImport"]["preparedBytes"],
+        report["requiredBeforeImportCacheStatsBefore"]["preparedBytes"]
+    );
+    assert_eq!(report["rewriteRequiredValue"]["answer"], 42);
+    assert_eq!(report["rewriteImportedDefault"]["answer"], 42);
+    assert_eq!(
+        report["rewriteImportedKeys"],
+        serde_json::json!(["changed", "default"])
+    );
+    assert_eq!(report["rewriteImportedChangedIsUndefined"], true);
+    assert_eq!(report["rewriteTransformCount"], 2);
+    assert_eq!(report["rewriteAnalysisCount"], 1);
+    assert_eq!(report["requiredReexportValue"]["answer"], 42);
+    assert_eq!(report["requiredReexportTransformCount"], 2);
+    assert_eq!(report["requiredReexportAnalysisCount"], 0);
+    assert_eq!(report["reexportTransformValue"], 42);
+    assert_eq!(report["reexportHasPhantom"], false);
+    assert_eq!(report["reexportFirstLoadTransformCount"], 2);
+    assert_eq!(report["reexportFirstLoadAnalysisCount"], 2);
+    assert_eq!(report["reexportCachedTransformValue"], 42);
+    assert_eq!(report["reexportCachedTransformCount"], 2);
+    assert_eq!(report["reexportChildTransformValue"], 42);
+    assert_eq!(report["reexportChildHasPhantom"], false);
+    assert_eq!(report["reexportChildImportTransformCount"], 2);
+    assert_eq!(report["requiredCycleA"], 1);
+    assert_eq!(report["requiredCycleB"], 2);
+    assert_eq!(report["importedCycleA"], 1);
+    assert_eq!(report["importedCycleB"], 2);
+    assert_eq!(report["cachedCycleA"], 1);
+    assert_eq!(report["cachedCycleB"], 2);
+    assert_eq!(report["cycleTransformCount"], 2);
+    assert_eq!(report["cycleAnalysisCount"], 2);
+    assert_eq!(report["cycleExecutionCounts"], serde_json::json!([1, 1]));
+    assert!(
+        report["preparedSourceCacheStats"]["entries"]
+            .as_u64()
+            .unwrap()
+            <= 32
+    );
+    assert!(
+        report["preparedSourceCacheStats"]["bytes"]
+            .as_u64()
+            .unwrap()
+            <= 1024 * 1024
+    );
+    assert_eq!(report["preparedSourceCacheStats"]["maxEntries"], 32);
+    assert_eq!(report["preparedSourceCacheStats"]["maxBytes"], 1024 * 1024);
+    assert_eq!(report["oversizedRequiredValue"]["answer"], 42);
+    assert_eq!(report["oversizedImportedValue"], 42);
+    assert_eq!(report["oversizedTransformCount"], 2);
+    assert_eq!(report["oversizedAnalysisCount"], 1);
+    assert_eq!(
+        report["oversizedCacheStatsAfterRequire"]["preparedEntries"],
+        report["oversizedCacheStatsBefore"]["preparedEntries"]
+    );
+    assert_eq!(
+        report["oversizedCacheStatsAfterRequire"]["preparedBytes"],
+        report["oversizedCacheStatsBefore"]["preparedBytes"]
+    );
+    assert!(
+        report["oversizedCacheStatsAfterImport"]["entries"]
+            .as_u64()
+            .unwrap()
+            <= report["oversizedCacheStatsAfterImport"]["maxEntries"]
+                .as_u64()
+                .unwrap()
+    );
+    assert!(
+        report["oversizedCacheStatsAfterImport"]["bytes"]
+            .as_u64()
+            .unwrap()
+            <= report["oversizedCacheStatsAfterImport"]["maxBytes"]
+                .as_u64()
+                .unwrap()
+    );
+    assert_eq!(report["cachedChildReexportValue"], 42);
+    assert_eq!(report["cachedChildReexportTransformCount"], 2);
+    assert_eq!(report["esmChildReexportValue"], 42);
+    assert_eq!(report["esmChildReexportTransformCount"], 1);
+    assert_eq!(report["importTypeCommonJsValue"], 42);
+    assert_eq!(report["importTypeCommonJsTransformCount"], 1);
+    assert_eq!(report["typeCommonJsValue"], 42);
+    assert_eq!(report["typeCommonJsTransformCount"], 1);
+    assert_eq!(report["typeOnlyReexportValue"], 42);
+    assert_eq!(report["typeOnlyReexportTransformCount"], 2);
+    assert_eq!(report["typeModuleCtsReexportValue"], 42);
+    assert_eq!(report["typeModuleCtsReexportTransformCount"], 2);
+    assert_eq!(report["lexicalEsmChildReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["lexicalEsmChildReexportTransformCount"], 1);
+    assert_eq!(report["topLevelForAwaitReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["topLevelForAwaitReexportTransformCount"], 1);
+    assert_eq!(report["nestedForAwaitReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["nestedForAwaitReexportTransformCount"], 2);
+    assert_eq!(report["topLevelAwaitUsingReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["topLevelAwaitUsingReexportTransformCount"], 1);
+    assert_eq!(report["nestedAwaitUsingReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["nestedAwaitUsingReexportTransformCount"], 2);
+    assert_eq!(report["declareWrapperReexportValue"], "ANALYSIS_ONLY");
+    assert_eq!(report["declareWrapperReexportTransformCount"], 2);
+    assert_eq!(
+        report["recoverablePrepareError"],
+        "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX"
+    );
+    assert_eq!(report["recoverableCachedAfterFailure"], false);
+    assert_eq!(
+        report["recoverableChildrenAfterFailure"],
+        report["recoverableChildrenBefore"]
+    );
+    assert_eq!(report["recoverablePrepareValue"], 42);
+    assert_eq!(report["recoverableCachedAfterSuccess"], true);
+    assert_eq!(
+        report["recoverableChildrenAfterSuccess"].as_u64(),
+        report["recoverableChildrenBefore"]
+            .as_u64()
+            .map(|value| value + 1)
+    );
+    assert_eq!(report["requiredMtsDefault"], 42);
+    assert_eq!(report["importedMtsDefault"], 42);
+    assert_eq!(report["importedMtsLive"], 1);
+    assert_eq!(report["mtsRequireImportSameNamespace"], false);
+    assert_eq!(report["mtsRequireImportTransformCount"], 2);
+    assert_eq!(report["requiredModuleTsDefault"], 42);
+    assert_eq!(report["importedModuleTsDefault"], 42);
+    assert_eq!(report["importedModuleTsLive"], 1);
+    assert_eq!(report["moduleTsRequireImportSameNamespace"], false);
+    assert_eq!(report["moduleTsRequireImportTransformCount"], 2);
     assert_eq!(report["extensionlessCommonJsTsError"], "MODULE_NOT_FOUND");
     assert_eq!(report["extensionlessEsmError"], "ERR_MODULE_NOT_FOUND");
     assert_eq!(
@@ -104,6 +268,41 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["commonJsEntryRunner"], 42);
     assert_eq!(report["largeInlineRunner"], 42);
     assert!(
+        report["stripRuntimeStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("strip-stack.mts:3:")),
+        "strip mode did not preserve original coordinates: {}",
+        report["stripRuntimeStack"]
+    );
+    assert!(
+        report["stripInlineExecutionStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("__wasm_rquickjs_execution_inline.mjs:2:")),
+        "strip inline execution did not remove its wrapper offset: {}",
+        report["stripInlineExecutionStack"]
+    );
+    assert!(
+        report["plainInlineExecutionStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("__wasm_rquickjs_execution_inline.mjs:2:")),
+        "plain JavaScript inline execution retained its wrapper offset: {}",
+        report["plainInlineExecutionStack"]
+    );
+    assert_eq!(
+        report["errorConstructorMetadata"],
+        serde_json::json!([
+            { "name": "Error", "length": 1 },
+            { "name": "TypeError", "length": 1 },
+            { "name": "RangeError", "length": 1 },
+            { "name": "ReferenceError", "length": 1 },
+            { "name": "SyntaxError", "length": 1 },
+            { "name": "EvalError", "length": 1 },
+            { "name": "URIError", "length": 1 },
+            { "name": "AggregateError", "length": 2 },
+        ])
+    );
+    assert_eq!(report["errorConstructorRelationships"], true);
+    assert!(
         report["unsupported"]
             .as_str()
             .is_some_and(|message| message.contains("TypeScript enum is not supported"))
@@ -126,6 +325,7 @@ async fn typescript_transform_runtime_is_immutable(
     };
     let report: serde_json::Value = serde_json::from_str(&json)?;
     assert_eq!(report["processFeature"], "transform");
+    assert_eq!(report["transformObservability"], "undefined");
     assert_eq!(report["transformedModule"], 1);
     assert_eq!(report["executionEntry"], 1);
     assert_eq!(report["commonJsExecutionEntry"], 42);
@@ -143,5 +343,112 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["commonJsNodeModulesTypeScriptErrorName"], "Error");
     assert_eq!(report["executionInline"], 1);
     assert_eq!(report["largeInlineExecution"], 1);
+    for (field, file, line) in [
+        ("esmRuntimeStack", "stack-esm.mts", 3),
+        ("cjsRuntimeStack", "stack-cjs.cts", 3),
+        ("importedCjsRuntimeStack", "stack-cjs.cts", 3),
+        ("executionEntryStack", "stack-entry.mts", 4),
+        ("typeErrorRuntimeStack", "stack-errors.mts", 4),
+        ("customErrorRuntimeStack", "stack-errors.mts", 7),
+        ("syntaxErrorRuntimeStack", "stack-errors.mts", 19),
+        (
+            "reexportPreparedRuntimeStack",
+            "stack-reexport-child.cts",
+            3,
+        ),
+        (
+            "executionInlineStack",
+            "__wasm_rquickjs_execution_inline.mjs",
+            3,
+        ),
+    ] {
+        let stack = report[field]
+            .as_str()
+            .unwrap_or_else(|| panic!("missing {field}"));
+        assert!(
+            stack.contains(&format!("{file}:{line}:")),
+            "{field} did not map to the original TypeScript location: {stack}"
+        );
+        assert!(
+            !stack.contains("__wasm_rquickjs_builtin/internal/errors"),
+            "{field} leaked Error shim frames: {stack}"
+        );
+    }
+    let rewritten_cjs_stack = report["rewrittenCjsRuntimeStack"]
+        .as_str()
+        .expect("missing rewrittenCjsRuntimeStack");
+    assert!(
+        rewritten_cjs_stack.contains("stack-cjs.cts:4:"),
+        "rewritten CJS map was stale: {rewritten_cjs_stack}"
+    );
+    assert!(
+        rewritten_cjs_stack.contains("stack-caller.cjs:2:"),
+        "mixed JavaScript frame was not preserved: {rewritten_cjs_stack}"
+    );
+    let disabled_stack = report["disabledRuntimeStack"]
+        .as_str()
+        .expect("missing disabledRuntimeStack");
+    assert!(disabled_stack.contains("stack-disabled.mts:"));
+    assert!(
+        !disabled_stack.contains("stack-disabled.mts:3:"),
+        "disabled source-map support unexpectedly remapped the stack: {disabled_stack}"
+    );
+    assert_eq!(report["errorConstructorsStable"], true);
+    assert_eq!(
+        report["cjsSourceMapsReclaimed"], true,
+        "CJS source maps were retained after their modules were reclaimed: retained={}",
+        report["retainedCjsSourceMaps"]
+    );
+    assert_eq!(
+        report["errorConstructorMetadata"],
+        serde_json::json!([
+            { "name": "Error", "length": 1 },
+            { "name": "TypeError", "length": 1 },
+            { "name": "RangeError", "length": 1 },
+            { "name": "ReferenceError", "length": 1 },
+            { "name": "SyntaxError", "length": 1 },
+            { "name": "EvalError", "length": 1 },
+            { "name": "URIError", "length": 1 },
+            { "name": "AggregateError", "length": 2 },
+        ])
+    );
+    assert_eq!(report["errorConstructorRelationships"], true);
+    assert_eq!(report["nonWritablePrepareStack"], "non-writable-prepare");
+    assert_eq!(report["prepareSetterCalls"], 0);
+    assert_eq!(report["nestedPrepareCalls"], 1);
+    assert_eq!(report["nestedPrepareStack"], "nested-prepare");
+    assert!(
+        report["generatedSite"]["fileName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-errors.mts")),
+        "unexpected generated custom prepare call site: {}",
+        report["generatedSite"]
+    );
+    assert_ne!(report["generatedSite"]["lineNumber"], 13);
+    assert!(
+        report["preparedOrigin"]["fileName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-errors.mts"))
+    );
+    assert_eq!(report["preparedOrigin"]["lineNumber"], 13);
+    assert!(
+        report["callSites"]["mapped"]["scriptName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-sites.mts"))
+    );
+    assert_eq!(report["callSites"]["mapped"]["lineNumber"], 5);
+    assert_eq!(report["callSites"]["mapped"]["columnNumber"], 26);
+    assert!(
+        report["callSites"]["generated"]["scriptName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-sites.mts"))
+    );
+    assert_ne!(report["callSites"]["generated"]["lineNumber"], 6);
+    assert!(
+        report["disabledCallSite"]["scriptName"]
+            .as_str()
+            .is_some_and(|file| file.ends_with("stack-disabled-sites.mts"))
+    );
+    assert_ne!(report["disabledCallSite"]["lineNumber"], 4);
     Ok(())
 }

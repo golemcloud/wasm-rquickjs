@@ -50,3 +50,17 @@ export const testSendSnapshotAndCloseOrder = async () => {
     });
     return ws.bufferedAmount === 0;
 };
+
+export const testReceiveCloseReentrancy = async () => {
+    const ws = new WebSocket('ws://localhost:9999/echo');
+    await new Promise((resolve, reject) => {
+        ws.onopen = resolve;
+        ws.onerror = (event) => reject(new Error(event && event.message || 'WebSocket error'));
+    });
+
+    await new Promise((resolve) => {
+        ws.onclose = resolve;
+        ws.close();
+    });
+    return ws.readyState === WebSocket.CLOSED;
+};

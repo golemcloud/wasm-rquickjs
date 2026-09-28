@@ -9,11 +9,12 @@
 //! can lower calls to those helper functions into immutable wasm `i32` globals
 //! initialized to `0` or `1` (see `wasm_rquickjs::inject`). Once a global is
 //! cleared, the corresponding native module is not registered, the wrapper JS is
-//! not loaded, and the global wiring code is skipped. Combined with a downstream
-//! wasm-level dead-code-elimination pass that folds immutable globals and drops
-//! unreferenced WIT imports, this lets a precompiled base image shed the WASI
-//! surface (filesystem, sockets, http, ...) of any builtin that the user app does
-//! not actually use.
+//! not loaded, and the global wiring code is skipped. Downstream strict Wasm DCE
+//! may then remove unreachable code. This is experimental P2 closed-world
+//! specialization, not WIT import minimization or a security boundary. Patch
+//! before Wizer initializes the runtime; a snapshot already contains the old
+//! registrations and cached gate values. Unrestricted generated JS/TS should
+//! retain all gates and use strict DCE alone.
 //!
 //! ## Slot layout
 //!

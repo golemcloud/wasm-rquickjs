@@ -37,6 +37,7 @@ declare module 'module-resolution' {
   export function testRequireEsmErrorHandling(): Promise<boolean>;
   export function testRequireEsmTlaRetry(): Promise<boolean>;
   export function testRequireEsmRejectionTracking(): Promise<boolean>;
+  export function testUnhandledRejectionTurnOrdering(): Promise<boolean>;
   export function testRequireEsmCycleGuards(): Promise<boolean>;
   export function testCjsEsmDefaultSnapshotTiming(): Promise<boolean>;
   export function testEsmSymlinkModuleIdentity(): Promise<boolean>;

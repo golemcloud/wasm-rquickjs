@@ -1,285 +1,250 @@
-# Plan: Per-app builtin trimming for wasm-rquickjs
+# Capability specialization: current implementation and measurements
 
-This plan tracks the remaining work for the runtime capability-gates approach.
-The wasm-rquickjs side prototype is in place: direct per-capability helper gates
-in the skeleton, host-side lowering of those helpers to immutable wasm globals,
-CLI flags on `inject-js`, and an end-to-end integration test.
+## Recommendation: adapt, with two distinct contracts
 
-## 0. Wait for the wasm-level dead-code / import eliminator
+Keep strict WebAssembly DCE as an independent, behavior-preserving size pass.
+Keep capability scanning and P2 gate specialization as experimental tools for
+explicitly closed-world applications. Do not use static application imports to
+restrict a runtime that promises arbitrary later-generated JavaScript/TypeScript.
+Reducing Golem's WIT import surface is not a goal of this work.
 
-**Blocker for actually shipping size + import reductions to users.**
+The demonstrated benefit is **smaller P2 Wizer snapshots for a restricted
+runtime**, not large raw-component reductions. In the pure-JS fixture, specialization
+halved the preinitialized component while changing the non-preinitialized size
+by less than 1%. This does not justify restricting Golem's dynamic runtime.
 
-- The current scheme lowers each capability gate to an immutable `i32` wasm
-  global initialized to `0` or `1`. Without DCE on the produced wasm, disabling
-  a capability skips runtime registration but does not remove its native code,
-  JS source bytes, or the WIT imports it transitively pulls in.
-- A separate tool (already in development by the user) is expected to:
-  - perform component-level dead-code elimination, and
-  - drop unused component model imports based on what is reachable.
-- We need to wait until that tool is usable end-to-end on a patched
-  wasm-rquickjs base image before we start measuring real wins.
-- Action: once the tool exists, run it on a `inject-js --auto-trim`-patched
-  artifact and confirm the eliminator folds `global.get $cap_*` branches and
-  then removes the now-unreachable pieces:
-  - native builtin Rust code for disabled caps is gone,
-  - JS bodies for disabled caps are gone,
-  - WIT imports that are now dead (e.g. `wasi:filesystem` when `Fs` is off) are
-    actually dropped from the final component.
+This local branch merges wasm-rquickjs main at
+[`f684fffb`](https://github.com/golemcloud/wasm-rquickjs/commit/f684fffb)
+into the original capability branch. It pins wasm-eliminator to its inspected
+HEAD, [`ddfeaf3424e438861404363bb3a3d6f610449524`](https://github.com/golemcloud/wasm-eliminator/commit/ddfeaf3424e438861404363bb3a3d6f610449524),
+using the public strict `eliminate` API. It does not use trusted producer hints.
+The six available Amp threads for wasm-eliminator were checked; none showed
+unpublished repository changes. The roadmap thread reported a clean, pushed
+checkout at this HEAD. This is evidence from those threads, not a guarantee about
+other machines. The project is not yet published to crates.io, so the dependency
+is Git-pinned rather than a local path or a fabricated release version.
 
-Until that confirmation lands, everything below is preparation, polish, and
-correctness work, not user-visible size wins.
+## What was stale and what was repaired
 
-## 1. Run the broader binary_inject suite
+Main had 178 commits beyond the common base. The textual merge conflicted only in
+`skeleton/src/builtin/mod.rs`, but a textual merge was insufficient:
 
-- Only the new `test_patch_capability_gates_and_run` was run in isolation.
-- Run the full suite to catch regressions:
-  ```
-  cargo test --release --test binary_inject -- --nocapture
-  ```
-- If any pre-existing test fails because of the gates work, fix or annotate
-  before merging.
+- Ported main's HTTP incoming and V8 registrations, fetch feature guard, and
+  shared HTTP response-body module. Removed a filesystem re-export main deleted.
+- Preserved main's module-loading, TypeScript transformation, and CJS behavior
+  on the all-enabled path. The restricted loader remains an explicit P2 policy.
+- Replaced the missing local wasm-eliminator dependency and removed calls to
+  its obsolete `DceOptions`/`dce_with_options` API.
+- Removed the unified native trampoline's private rquickjs layout casts. Native
+  modules use public `Module::declare_def` APIs. Size/alignment checks did not
+  make those casts safe. Reintroducing a shared trampoline requires a supported
+  rquickjs API, not another guessed layout.
+- Scanner uncertainty now retains all capabilities: parser failures, unknown
+  packages, unresolved imports, indirect eval/Function references, global-object
+  access, and VM imports. Fixed the `node:stream/web` registration mapping.
+- Dependency closure combines curated runtime wiring edges with an audit of the
+  embedded builtin JS sources and their internal helper imports. `node:module`
+  retains the complete catalog; `btoa` retains its DOMException dependency.
+  Explicit includes win over conflicting excludes.
+- Repatching an already-specialized binary to a different policy now fails
+  instead of changing its data slot while leaving lowered gate constants stale.
+- Fixed recursive call-graph memoization in legacy capability-root metadata.
+  That metadata is diagnostic only; strict DCE does not trust it.
 
-## 2. CLI / docs polish for `inject-js`
+The scanner is still a heuristic, not complete JavaScript reachability analysis.
+The caller must supply all embedded modules and account for future code. Passing
+`--trim-unknown` explicitly gives up the conservative uncertainty fallback.
 
-Current behavior of the new flags is intentional but subtle:
+## How to use the two modes
 
-- With **none** of `--auto-trim`, `--include`, `--exclude`: behaves like the
-  old `inject-js` (no patching).
-- With `--auto-trim`: scans the JS entry files and computes the closure.
-- With only `--include` / `--exclude` (no `--auto-trim`): starts from
-  "all enabled" and disables only what was excluded; `--include` is additive
-  on top of that.
+For unrestricted dynamic applications, including the Golem case:
 
-Action items:
+```sh
+wasm-rquickjs inject-js --input template.wasm --output injected.wasm --js app.js
+wasm-rquickjs dce --input injected.wasm --output app.wasm
+```
 
-- Make `--help` text spell this out clearly so users understand:
-  - the default baseline used when `--auto-trim` is absent,
-  - that `--exclude` removes from full,
-  - that `--include` survives `--auto-trim`'s closure.
-- When patching, log not just the count but the **enabled capability names**
-  (or at least the disabled ones) so users can sanity-check what they shipped.
-- Mention the gates story briefly in `README.md` once the DCE tool lands.
+The template must already contain the promised facilities. In particular,
+generated TypeScript requires the opt-in `typescript-runtime` Cargo feature;
+keeping all runtime gates cannot restore code excluded at compile time.
 
-## 3. Add a `inspect-capabilities` (or similar) subcommand
+For a deliberately closed-world P2 application:
 
-Not strictly required, but very useful for debugging/auditing:
+```sh
+wasm-rquickjs scan-capabilities --js app.js
+wasm-rquickjs inject-js --input template.wasm --output app.wasm \
+  --js app.js --auto-trim
+```
 
-- Read the gates slot(s) from a wasm/component file.
-- Verify all slot copies agree (reuse `read_capability_gates_from_bytes`).
-- Print:
-  - the raw `u64`,
-  - the list of enabled capability names,
-  - the list of disabled capability names.
-- Should also handle the "no gates marker" case with a friendly message that
-  this wasm predates capability-gates support.
+Specialization must start from a fresh template **before Wizer initialization**.
+A preinitialized snapshot already contains registrations and cached gate values.
+The CLI does not prove that an input is such a fresh template; this remains a
+caller precondition. Never reuse a restricted template for an unrelated app.
+Complete injection and gate patching before DCE as well: preserving a binary's
+current behavior is not a guarantee that later offline data patching remains
+valid after constant propagation.
 
-## 4. Static-import dependency graph for builtin JS (correctness follow-up)
+No specialization flags means ordinary injection, with all builtins retained.
+Include/exclude flags without auto-trim start from all capabilities. Dependency
+closure may make an exclusion ineffective, which the CLI reports. Neither gates
+nor DCE are a security or host-permission boundary.
 
-Discovered runtime caveat: some builtin JS bodies statically `import` other
-builtins. The most obvious offender is `node:module` (`module.js`) which pulls
-in many builtins, including `node:vm`. If the closure is computed only from the
-manually curated `dependencies()` table in
-[capability_scan.rs](file:///Users/vigoo/projects/golem/wasm-rquickjs/crates/wasm-rquickjs/src/capability_scan.rs),
-trimming the wrong cap leaves a dangling static `import` and the runtime fails
-during built-in wiring with messages like
-`No such built-in module: node:vm`.
+P3 has a separate builtin registry and no capability gate slot. It is not made
+specializable by this merge; its filesystem loader stays enabled. Strict DCE is
+the independently tested optimization path on P3.
 
-Options to consider:
+## Measurements and verification
 
-- Derive an extra graph by scanning `crates/wasm-rquickjs/skeleton/src/builtin/**/*.js`
-  for static `import` specifiers and unioning that into the dependency closure
-  used by `Policy`.
-- Or treat known umbrella caps (start with `Module`) as depending on every cap
-  their JS imports, hard-coded.
-- Or refuse to trim umbrella caps unless every transitively imported cap is
-  also still enabled.
+The `binary_inject` harness builds stripped release components (`opt-level=s`,
+LTO), compares baseline, strict DCE, and P2 specialization followed by strict DCE,
+and executes each artifact in a fresh Wasmtime store. Fixtures cover pure JS,
+base64 including its error path, an aliased WebStreams import, and generated
+TypeScript which dynamically imports `node:path` and returns `answer:42`.
+P3 compares baseline and strict DCE and verifies that gate patching is rejected.
+Byte counts are raw component bytes, not compressed download sizes. These are
+small runtime fixtures, not Golem SDK application-size benchmarks. Baseline means
+ordinary injection into this branch's all-enabled template, not a separate build
+of pristine main. Only the generated-TypeScript fixture enables the compiler
+feature, so its baseline is deliberately larger than the normal-runtime cases.
 
-The mechanism itself is correct; this is about preventing unsafe trim policies.
-Pick whichever is simplest to maintain.
+P2 pure-JS results, all executed successfully:
 
-## 5. Optional: surface the closure expansion in `--auto-trim`
+| Mode | Component bytes |
+| --- | ---: |
+| Ordinary injection | 5,712,656 |
+| Strict DCE | 5,684,212 |
+| Closed-world specialization + strict DCE | 5,679,147 |
+| Strict DCE, then Wizer | 12,600,895 |
+| Closed-world specialization + strict DCE, then Wizer | 6,278,619 |
 
-When `--auto-trim` adds caps purely because of the dependency closure (or, once
-implemented, the static-import graph from step 4), it would help debugging to
-print the difference between:
+Strict DCE saves 28,444 bytes (0.50%); specialization adds only 5,065 bytes of
+non-preinitialized component savings. The specialized Wizer snapshot is
+6,322,276 bytes smaller (50.17%) than the all-enabled snapshot. Both return `pure:WORLD`
+after instantiation. Root imports remain 29 throughout the non-snapshot DCE
+comparisons. Skipping builtin initialization avoids capturing that initialized
+state; it does not imply those builtins' native code and source data disappeared.
+The specialized snapshot is still larger than the non-preinitialized component;
+the 50% saving compares two preinitialized images, not Wizer against no Wizer.
 
-- caps directly used by the JS, and
-- caps added solely because of dependency closure.
+Other executed release-component comparisons:
 
-This makes it obvious why something the user "doesn't use" is still enabled.
+| Target | Fixture | Baseline bytes | Strict DCE bytes | Specialization + DCE bytes |
+| --- | --- | ---: | ---: | ---: |
+| P2 | Base64 + error path | 5,712,714 | 5,684,270 | 5,679,021 |
+| P2 | Aliased WebStreams | 5,712,777 | 5,684,333 | 5,679,084 |
+| P2 | Generated TypeScript | 8,394,909 | 8,328,647 | 8,323,398 |
+| P3 | Pure JS | 5,661,764 | 5,635,198 | Not supported |
+| P3 | Base64 + error path | 5,661,822 | 5,635,256 | Not supported |
+| P3 | Aliased WebStreams | 5,661,885 | 5,635,319 | Not supported |
+| P3 | Generated TypeScript | 8,349,565 | 8,285,496 | Not supported |
 
-## 6. Future: precision improvements to the JS scanner
+Every output returned its expected value, including `answer:42` from generated
+TypeScript on both targets. Strict DCE saves about 0.5% on normal images and
+0.8% on compiler-enabled images. Root imports stay 29 on P2 and 27 on P3.
+All DCE reports have `trusted_assumptions=false`.
 
-Out of scope for the current prototype, but worth noting:
+The base64, WebStreams and dynamic fixtures infer all 53 capabilities under the
+corrected dependency closure. Their P2 "specialization" therefore just lowers
+all-enabled gates to constants: its additional roughly 5 KB saving is not builtin
+removal. The pure-JS case infers zero. These numbers show both the potential
+snapshot benefit and the current conservative policy's limited applicability.
 
-- Better detection of dynamic `require` / `import()` patterns.
-- Optional config to override the scanner's verdict per-app.
-- Possibly a "strict" mode that errors instead of silently keeping all
-  capabilities when the scanner is uncertain.
+The historical 55 MB to 13 MB claim in the old plan is not a comparable stripped
+release measurement and is not used as evidence here. Root import counts are
+diagnostic, not a success criterion. Startup latency, peak memory, production
+Golem app behavior, SDK bundle sizes, and gate-only snapshots without DCE require
+separate measurements. These are Linux x64/Rust 1.98.1 samples; build paths and
+snapshot contents can affect exact byte counts.
 
-These can be revisited once we have real users running with `--auto-trim`.
+Verification completed:
 
-## 7. End-to-end size measurement once the DCE tool exists
+- Scanner unit tests: **56 passed**. Injection/gate unit tests: **22 passed**.
+- P2 injection, Wizer, reinjection and manual-gate smoke checks passed. The
+  corrected P2 matrix passed all four fixtures in all three modes, plus the two
+  pure-JS snapshots. The first matrix attempt had used a compiler-disabled
+  template for TypeScript and failed; the fixture now explicitly enables the
+  compiler, and both its focused rerun and the complete matrix passed.
+- The full P3 `binary_inject` harness passed, including all four baseline/DCE
+  pairs, ordinary Wizer/reinjection checks, and rejection of gate patching.
+- Root Clippy, integration-target Clippy, all ten P2/P3 skeleton Clippy feature
+  lanes, root formatting, skeleton formatting and whitespace checks passed.
+- No full node-compat sweep or actual Golem SDK application benchmark was run.
 
-Tied to step 0. Once the DCE/import-stripper tool is available:
+Reproduction:
 
-- Build a baseline wasm-rquickjs base image (no patching, no DCE).
-- Build the same base image with `inject-js --auto-trim` for the Golem TS
-  template scenario described in the experiment.
-- Run the DCE/import-stripper on that.
-- Compare:
-  - final component size,
-  - WIT imports present in the final component,
-  - cold-start time if measurable.
+```sh
+cargo test -p wasm-rquickjs --lib capability_scan::tests
+cargo test -p wasm-rquickjs --lib inject::tests
+cargo test --test binary_inject
+WASM_RQUICKJS_TEST_TARGET=p3 cargo test --test binary_inject
+cargo clippy --locked -- -Dwarnings
+cargo clippy --locked --test binary_inject -- -Dwarnings
+tools/check-skeleton-clippy.sh
+```
 
-Document the numbers in the README (or a dedicated benchmarks doc).
+For practical host-side DCE speed, the final integration runs used
+`--config 'profile.dev.package.wasm-eliminator.opt-level=3'` and
+`--config 'profile.dev.package.wasm-ir.opt-level=3'` on the Cargo test build.
+These do not change the guest release profile or reuse mutable runtime state.
+Pass `-- capability_dce` to run only the matrix, or `-- dynamic_typescript` for
+the compiler-enabled case. P2 and P3 should run sequentially in one work directory;
+the investigation used isolated scratch directories for concurrent lanes.
 
-## 8. Findings: investigation into making WIT imports actually drop (2026-05)
+## Relationship to Golem PR #3939
 
-This section captures the current state of the joint wasm-eliminator +
-wasm-rquickjs effort and what is still blocking end-to-end import pruning. It
-supersedes the optimistic wording of step 0 above.
+The two systems operate at different layers:
 
-### Status
+- Golem's inspected `cli/golem-cli/src/app/build/command.rs` injects into the SDK
+  image before calling `optimize_component(..., "wizer-initialize")`. This order
+  accommodates a pre-Wizer size pass; it does not make a restrictive policy safe.
+- The TypeScript component plugin analyzes SDK registration and chooses real or
+  empty guest implementations. Effect's build helper probes retained Rollup
+  modules before selecting its implementations. Their output still implements
+  one full guest world with canonical exports.
+- This branch controls QuickJS builtin registration and loaders, then optionally
+  runs Wasm DCE. An SDK agent/tool/middleware capability is not a QuickJS builtin
+  capability. Do not reuse either capability manifest as the other's policy.
+- Rollup should first remove unnecessary SDK implementation code. Strict Wasm
+  DCE can then optimize the resulting component without intentionally reducing
+  the guest world or interpreting missing static JS imports as missing runtime
+  requirements. Keep external host modules and execution support available.
+- Scanning only an injected entry misses embedded Effect modules and generated
+  WIT bridges. Scanning every SDK source instead would defeat Rollup's valid
+  specialization. A future closed-world integration needs an inventory of the
+  retained application modules, embedded modules, and host modules separately.
+- Preserving the JS/TS evaluator alone is insufficient: future generated code
+  also needs builtin registrations, loaders, compiler support and host bridges.
+  Separately, if the SDK package now resolves to a small app-specific wrapper,
+  dynamically importing the full SDK from a new realm is a package-availability
+  issue which this optimizer cannot repair.
 
-- wasm-eliminator (in `../../oss/wasm-eliminator`) is feature-complete for the
-  bits this scenario needs:
-  - constant-prop through immutable globals,
-  - dead-branch elimination on statically-zero `if`/`block` guards,
-  - set-valued IPCP, deeper abstract operand stack,
-  - flat-memory-backed `i32.load` folding,
-  - outer fixed-point over direct-call argument facts,
-  - constant-return direct-call folding,
-  - reachability tracking so dead code does not pollute call-edge liveness or
-    direct-call argument facts,
-  - encoder scrubbing of dead `Call` / `ReturnCall` / `RefFunc` to
-    `unreachable`,
-  - wasmtime-as-a-library test harness validating shrunk binaries.
-- All `cargo test -p wasm-eliminator` is green.
-- wasm-rquickjs already does the producer-side work:
-  - capability gates lowered to immutable wasm globals (already shipped),
-  - custom [`BuiltinNativeLoader`](file:///Users/vigoo/projects/golem/wasm-rquickjs/crates/wasm-rquickjs/skeleton/src/builtin/mod.rs#L743)
-    that replaces the generic `rquickjs::loader::ModuleLoader`. This removes
-    every `ModuleLoader::load_func<X>` monomorphization.
-- On the no-console fixture
-  (`tmp/elim-experiment/example1-no-console-auto-trim.wasm`,
-  `--auto-trim` reports `enabling 0 of 52 capabilities`):
-  - core module size shrinks: `55,667,883 B -> 13,235,054 B`,
-  - `declare_def<D>` monomorphizations: **0 survive** (good),
-  - `load_func<D>` monomorphizations: **0 survive** (good),
-  - but `Module::eval_fn::<D>` monomorphizations: **21 survive**,
-  - component imports: **29 -> 29** (no change),
-  - WIT imports `wasi:logging/logging`, `wasi:filesystem/*`, `wasi:http/*`,
-    `wasi:sockets/*` are still present after DCE.
+## Useful follow-on work
 
-### Root cause
+1. Use measured strict-DCE results to decide whether its build cost pays off.
+   It does not need capability inference or WIT minimization.
+2. Evaluate the measured P2 snapshot benefit on real closed-world apps, together
+   with initialization latency and memory. The public gate-patching API can skip
+   registration without DCE; the CLI currently chains the two. Consider a
+   gate-only CLI path if DCE's small saving is not worth its build-time cost.
+3. If native size wins are insufficient, improve producer reachability through a
+   supported shared-trampoline API in rquickjs. Opaque QuickJS heap function
+   pointers can keep same-signature callbacks alive under sound DCE. Do not
+   restore unsafe casts or old trusted symbol suppression to force a win.
+4. Audit inline Rust wiring dependencies, add broader builtin and filesystem
+   regression coverage, then consider a separately designed P3 gate registry.
+   Splitting tightly coupled initialization helpers (for example DOMException
+   from AbortController/Events) could let simple APIs retain smaller subsets.
+5. Only integrate closed-world specialization into an SDK build when the product
+   explicitly restricts future code. Keep unrestricted Golem builds on the full
+   dynamic runtime and one full guest world.
 
-The 21 surviving `eval_fn<D>` are kept alive by active element segment 0 (the
-big rust-lld-generated table). Some live `call_indirect` site has
-`IndexSet::Any` on type `(i32, i32) -> i32`, so Phase A type-fallback in
-wasm-eliminator keeps every type-2 slot — including all `eval_fn<D>` — alive.
-Each per-D `eval_fn<D>` in turn keeps `D::evaluate` reachable, which keeps the
-native code and host imports for D's builtin alive.
-
-The relevant `call_indirect` is inside the QuickJS C runtime: the dispatch
-loads `module->func` from a `JSModuleDef` allocated on the QuickJS heap and
-calls it indirectly. The function pointer in that field is whatever was passed
-to `JS_NewCModule(ctx, name, Some(callback))`. Today rquickjs calls
-`JS_NewCModule(..., Some(Module::eval_fn::<D>))` once per ModuleDef type `D`,
-so each `D` contributes a distinct callback function pointer.
-
-### What we tried in wasm-eliminator
-
-Earlier in this work we tried a broad Phase G "live source set" approach:
-narrow `IndexSet::Any` to a small set whenever no live `i32.const` /
-`ref.func` / static-data u32 produced any of the missing indices. This was
-**unsound** — it broke tests like
-`a3_same_type_dynamic_index_keeps_all_matching_slots`,
-`b3_parameter_local_falls_back_to_phase_a`,
-`f5_unknown_entry_dispatcher_falls_back_safely`,
-`f6_two_callers_one_unknown_collapses_to_top` — because params, imported
-function returns, imported globals, opaque arithmetic and opaque memory loads
-can all supply call_indirect operands not visible in any constant source set.
-That approach has been reverted and the soundness tests prove the boundary.
-
-### What the oracle says
-
-Asked the wasm-eliminator oracle for a sound, provenance-aware Phase G with a
-realistic chance of solving the QuickJS shape. Verdict:
-
-- The only sound generic direction is **per-call-site tracked-field provenance
-  over abstract objects, with escape-to-Top**. Effort: **XL**.
-- Even with that, the QuickJS dispatch reaches `call_indirect` through
-  `i32.load` of an opaque heap-derived pointer whose abstract-object provenance
-  is lost long before the dispatch site. Realistically, eliminator-only
-  recovery is **unlikely** without producer cooperation (constructor / writer
-  summaries telling the analysis "this allocator returns a fresh object whose
-  field `func_off` is initialized from arg N").
-- The pragmatic alternative is **producer-side**: replace the per-D
-  `Module::eval_fn::<D>` with a single shared trampoline in wasm-rquickjs
-  (M/L effort). Then there is exactly one `eval_fn` in the function table, the
-  type-based Phase A fallback only keeps that one alive, and per-D
-  `declare` / `evaluate` (and their builtin imports) can become dead.
-
-### Producer-side shared trampoline: what blocks the in-tree implementation
-
-Intended design: replace each
-`Module::declare_def::<X::js_native_module, _>(ctx, name)` in
-`BuiltinNativeLoader::load` with a single
-`Module::declare_def::<UnifiedBuiltinModuleDef, _>(ctx, name)` whose
-`declare` / `evaluate` dispatch by direct call based on the module's name. Net
-result: 21 `eval_fn` monomorphizations collapse to 1, and per-D code becomes
-direct-call-only (eliminable when the corresponding capability is gated off).
-
-The unresolved technical issue is identifying the current module from inside
-`UnifiedBuiltinModuleDef::evaluate(ctx, exports)` using only public rquickjs
-API:
-
-- `Module<'js, T>`'s `ptr` and `ctx` fields are **private** (not
-  `pub(crate)`).
-- `Module::from_ptr` and `Module::as_ptr` are `pub(crate)`.
-- `Declarations<'js>(Module<'js, Declared>)` and
-  `Exports<'js>(Module<'js, Declared>)` expose **no public accessor** for the
-  inner module.
-- `Module::name<N>(&self)` is public but requires a `&Module<Declared>`, which
-  we cannot obtain through public APIs from inside `evaluate`.
-
-Workarounds evaluated:
-
-- **`unsafe` transmute of `&Exports` / `&Declarations` to `&Module<Declared>`,
-  then call public `Module::name()`.** Works in practice because both wrappers
-  are single-field tuple structs around `Module`, but `#[repr(Rust)]` layout
-  is not formally guaranteed.
-- **Thread-local set from `BuiltinNativeLoader::load`.** Works for `declare`
-  (synchronous inside `Module::declare_def`). Does **not** work for
-  `evaluate`, which QuickJS may call later from arbitrary module-instantiation
-  contexts.
-- **`ctx.script_or_module_name(0)` inside `evaluate`.** rquickjs itself uses
-  `script_or_module_name(1)` from a JS-callback path. Whether this returns the
-  correct module name when called from inside a `JS_NewCModule` init callback
-  has not been verified.
-- **Bypass `Module::declare_def` and call `qjs::JS_NewCModule` directly.**
-  Blocked: cannot construct `Module<Declared>` from the returned pointer
-  because `Module::from_ptr` is `pub(crate)`.
-- **Const-generic `UnifiedDef<const ID: u32>`.** Still monomorphizes per `ID`
-  — does not reduce the number of `eval_fn` functions.
-
-### Decision needed
-
-One of:
-
-- **A**: ship the transmute-based shared trampoline in wasm-rquickjs (single
-  helper, well-documented, runtime size/align assertion as a guard). Smallest
-  change, gets the trampoline working.
-- **B**: try `ctx.script_or_module_name(0)` first; if it works inside the init
-  callback, no transmute is needed.
-- **C**: upstream a small patch in rquickjs to make `Module::as_ptr` or
-  `Exports::module()` / `Declarations::module()` public. Cleanest long-term,
-  requires a release cycle.
-- **D**: invest in the XL Phase G provenance work in wasm-eliminator. Oracle
-  warns this likely will not even solve QuickJS without producer-side
-  cooperation, so this is high cost for uncertain payoff.
-
-Recommendation: A or B (B preferred if `script_or_module_name(0)` is
-confirmed to work in an init callback), with C as the long-term cleanup.
-
+For unrestricted Golem, the snapshot result instead motivates investigating
+**lazy or per-realm builtin initialization while retaining availability**. Keep
+the complete native/module catalog, loader and compiler in both the outer app
+and future execution realms, but avoid eagerly initializing unused wrappers
+before Wizer. The current single gate mask applies to every QuickJS realm in the
+component, so it cannot express this distinction. This would be a separate
+runtime design, with tests for
+global property descriptors, identities, initialization side effects, dependency
+cycles and fresh execution realms. It is not something PR #3939's SDK capability
+manifest can safely enable in this branch today.

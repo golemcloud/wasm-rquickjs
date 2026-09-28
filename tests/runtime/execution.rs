@@ -2,6 +2,70 @@ use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output}
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 
+#[path = "../../crates/wasm-rquickjs/skeleton/src/builtin/execution_timeout.rs"]
+mod execution_timeout;
+
+#[test]
+fn timeout_sampler_uses_sparse_clock_reads() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut now = started;
+    let mut reads = 0;
+    for _ in 0..200_000 {
+        now += std::time::Duration::from_micros(10);
+        if sampler.expired(|| {
+            reads += 1;
+            now
+        }) {
+            assert!(now >= started + timeout);
+            assert!(reads <= 30, "too many clock reads: {reads}");
+            assert!(sampler.expired(|| panic!("expired sampler read the clock again")));
+            return;
+        }
+    }
+    panic!("continuing CPU work never observed the deadline");
+}
+
+#[test]
+fn timeout_sampler_adapts_to_changed_interrupt_rate() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut now = started;
+    let mut reads = 0;
+    for interrupt in 0..200_000 {
+        now += std::time::Duration::from_micros(if interrupt < 50_000 { 10 } else { 100 });
+        if sampler.expired(|| {
+            reads += 1;
+            now
+        }) {
+            assert!(now >= started + timeout);
+            assert!(reads < 50, "too many clock reads: {reads}");
+            return;
+        }
+    }
+    panic!("continuing CPU work never observed the deadline after rate change");
+}
+
+#[test]
+fn timeout_sampler_does_not_check_at_completion() {
+    let started = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(1);
+    let mut sampler =
+        execution_timeout::ExecutionTimeoutSampler::new(started, started + timeout, timeout);
+    let mut reads = 0;
+    for _ in 0..63 {
+        assert!(!sampler.expired(|| {
+            reads += 1;
+            started + timeout * 2
+        }));
+    }
+    assert_eq!(reads, 0);
+}
+
 #[test_dep(tagged_as = "execution", scope = Cloneable)]
 async fn compiled_execution() -> CompiledTest {
     CompiledTest::new_with_features(
@@ -171,6 +235,127 @@ async fn execution_isolation(
         "/tmp/alias/file.txt"
     );
     assert_eq!(report["pathAliases"]["value"]["renamed"], "before");
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["absoluteError"],
+        "EINVAL"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["absoluteExists"],
+        false
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["existingError"],
+        "EEXIST"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["existingValue"],
+        "preserved"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["missingParentError"],
+        "ENOENT"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["parentFileError"],
+        "ENOTDIR"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["relativeParentFileError"],
+        "ENOTDIR"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["bareDestinationError"],
+        "EINVAL"
+    );
+    assert_eq!(
+        report["persistentSymlinkCreated"]["value"]["bareDestinationExists"],
+        false
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["target"],
+        "target.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["value"],
+        "persistent"
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["realpath"],
+        "/tmp/persistent-link/target.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkRead"]["value"]["isSymbolicLink"],
+        true
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["brokenExists"],
+        false
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["brokenIsSymbolicLink"],
+        true
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["brokenTarget"],
+        "missing.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["cycleError"],
+        "ELOOP"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["cycleDestinationError"],
+        "ELOOP"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["recursiveNames"],
+        serde_json::json!([
+            "linked-target",
+            "linked-target/file.txt",
+            "target",
+            "target/file.txt"
+        ])
+    );
+    for api in ["recursiveCallbackNames", "recursivePromiseNames"] {
+        assert_eq!(
+            report["persistentSymlinkEdges"]["value"][api],
+            serde_json::json!([
+                "linked-target",
+                "linked-target/file.txt",
+                "target",
+                "target/file.txt"
+            ]),
+            "unexpected recursive entries for {api}"
+        );
+    }
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["recursiveWatcherIsFsWatcher"],
+        true
+    );
+    let recursive_watch_events = report["persistentSymlinkEdges"]["value"]["recursiveWatchEvents"]
+        .as_array()
+        .expect("recursive watch events should be an array");
+    assert!(
+        recursive_watch_events
+            .iter()
+            .any(|event| event == &serde_json::json!(["rename", "target/created.txt"])),
+        "recursive watcher should report the real nested path as a rename: {recursive_watch_events:?}"
+    );
+    assert!(
+        recursive_watch_events.iter().all(|event| !event
+            .get(1)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|event| event.starts_with("self/"))),
+        "recursive watcher should not follow the self symlink: {recursive_watch_events:?}"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["movedTarget"],
+        "target.txt"
+    );
+    assert_eq!(
+        report["persistentSymlinkEdges"]["value"]["movedExistsAfterUnlink"],
+        false
+    );
     assert_eq!(report["cancellationError"], "execution job cancelled");
     assert_eq!(
         report["nested"]["value"],

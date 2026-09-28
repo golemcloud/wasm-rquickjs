@@ -1,10 +1,10 @@
 //! Static scan of a JavaScript source to determine the set of skeleton-builtin
 //! "capabilities" it actually uses.
 //!
-//! This is the input side of the Layer-3 plan: the CLI runs this scan, then patches
-//! `__wrjs_cap_<name>` marker functions in the prebuilt wasm so that registration of
-//! unused builtins becomes dead code, which downstream DCE/import-strip tooling can
-//! then eliminate.
+//! This is a diagnostic inventory and an experimental closed-world P2 policy.
+//! The CLI can patch `__wrjs_cap_<name>` marker functions before initialization so
+//! that unused builtin registration becomes dead code for strict Wasm DCE. It is
+//! not a WIT import minimizer or a proof of future JavaScript reachability.
 //!
 //! ## What the scan sees
 //!
@@ -22,19 +22,20 @@
 //! - `vm.runInThisContext` / `vm.runInNewContext` / `vm.compileFunction`.
 //!
 //! When any of these appear, the scanner sets `has_dynamic = true`. The CLI policy
-//! is to keep all capabilities in that case unless the user opts in to aggressive
-//! trimming via configuration / magic comments.
+//! is to keep all capabilities in that case unless the user explicitly opts in to
+//! aggressive trimming with `--trim-unknown`.
 //!
 //! ## What the scan deliberately does not do (yet)
 //!
 //! - **Scope tracking.** A user-defined local named `crypto` will be treated as
 //!   touching `WebCrypto`. This is conservative (we may keep a capability we don't
 //!   need) — never the other way around.
-//! - **Cross-module analysis.** Each source unit is scanned independently. Relative
-//!   imports between user-supplied JS files are not followed; their specifiers will
-//!   surface as warnings of kind `RelativeImport`.
+//! - **Complete JavaScript reachability.** This is a closed-world heuristic, not
+//!   a proof about future generated code. `scan_entry_point` follows relative
+//!   imports; unknown modules and unresolved inputs retain all capabilities.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::OnceLock;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use oxc_allocator::Allocator;
@@ -264,7 +265,7 @@ pub struct ScanResult {
     pub used: BTreeSet<Capability>,
     /// Bare specifiers that did not match any known builtin and that don't look
     /// like WIT-style component imports (e.g. npm packages, ad-hoc modules).
-    /// Recorded for diagnostics; they don't drive trimming.
+    /// Unknown modules force conservative retention unless explicitly overridden.
     pub unknown_specifiers: BTreeSet<String>,
     /// Fully-qualified WIT-style specifiers (`<ns>:<pkg>/<iface>(@<ver>)?`).
     /// These are component-model imports satisfied by the host, not skeleton
@@ -306,6 +307,8 @@ pub enum WarningKind {
     /// A relative/absolute import that could not be resolved on disk during
     /// transitive scanning.
     UnresolvableImport(String),
+    /// The parser could not completely understand this source.
+    ParseError,
 }
 
 /// Scan a single source unit. Recognizes JavaScript and TypeScript files based
@@ -326,6 +329,10 @@ pub fn scan_module(path: &Utf8Path, source: &str) -> ScanResult {
     let parsed = Parser::new(&allocator, source, source_type).parse();
     let mut scanner = Scanner::new(source);
     scanner.visit_program(&parsed.program);
+    if !parsed.errors.is_empty() {
+        scanner.has_dynamic_set();
+        scanner.warn(WarningKind::ParseError, Span::new(0, 0));
+    }
     scanner.into_result()
 }
 
@@ -480,6 +487,9 @@ fn with_appended(p: &Utf8Path, suffix: &str) -> Utf8PathBuf {
 /// specifiers (npm packages, relative paths, etc.).
 fn spec_to_cap(spec: &str) -> Option<Capability> {
     let stripped = spec.strip_prefix("node:").unwrap_or(spec);
+    if stripped == "stream/web" || stripped == "web-streams-polyfill" {
+        return Some(Capability::Webstreams);
+    }
     let head = stripped.split_once('/').map(|x| x.0).unwrap_or(stripped);
     use Capability::*;
     Some(match head {
@@ -645,6 +655,7 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
     match cap {
         AbortController => &[Events],
         Assert => &[Fs, Util],
+        Base64 => &[AbortController],
         Buffer => &[StringDecoder],
         ChildProcess => &[Buffer, Events, Module, Path, Process],
         Console => &[Buffer, Process, Util],
@@ -656,7 +667,9 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         FormDataNode => &[NodeFetch],
         Https => &[NodeHttp],
         Inspector => &[Events],
-        Module => &[Vm],
+        // The CommonJS builtin catalog eagerly imports nearly every builtin.
+        // It also exposes dynamic require; retain the complete environment.
+        Module => ALL_CAPABILITIES,
         Net => &[Buffer, Dns, Events, Fs, Path],
         NodeFetch => &[
             AbortController,
@@ -681,24 +694,134 @@ pub fn dependencies(cap: Capability) -> &'static [Capability] {
         WebCrypto => &[AbortController, Base64, Buffer],
         Zlib => &[Buffer, Stream],
         // Caps with no inter-cap dependencies (only internal/native deps).
-        AsyncHooks | Base64 | Cluster | DiagnosticsChannel | Events | Fs | FsModuleLoader | Gc
-        | Http2 | Intl | Os | Path | PerfHooks | Punycode | Readline | Repl | Sqlite
-        | StructuredClone | V8 | Vm | Websocket | Webstreams | WorkerThreads => &[],
+        AsyncHooks | Cluster | DiagnosticsChannel | Events | Fs | FsModuleLoader | Gc | Http2
+        | Intl | Os | Path | PerfHooks | Punycode | Readline | Repl | Sqlite | StructuredClone
+        | V8 | Vm | Websocket | Webstreams | WorkerThreads => &[],
     }
 }
 
 /// Compute the transitive closure of capabilities under [`dependencies`].
 pub fn closure(seed: &BTreeSet<Capability>) -> BTreeSet<Capability> {
+    let graph = builtin_dependencies();
     let mut out = seed.clone();
     let mut frontier: Vec<Capability> = seed.iter().copied().collect();
     while let Some(c) = frontier.pop() {
-        for &d in dependencies(c) {
+        for &d in dependencies(c)
+            .iter()
+            .chain(graph.get(&c).into_iter().flatten())
+        {
             if out.insert(d) {
                 frontier.push(d);
             }
         }
     }
     out
+}
+
+/// Audit the actual shipped JS, including internal helpers and global uses.
+/// Unknown implementation imports retain everything rather than creating a
+/// dangling import. Keep the curated edges above for Rust wire scripts and
+/// inline JS wrappers that are not standalone files.
+fn builtin_dependencies() -> &'static BTreeMap<Capability, BTreeSet<Capability>> {
+    static GRAPH: OnceLock<BTreeMap<Capability, BTreeSet<Capability>>> = OnceLock::new();
+    static SOURCES: include_dir::Dir<'_> =
+        include_dir::include_dir!("$CARGO_MANIFEST_DIR/skeleton/src/builtin");
+    GRAPH.get_or_init(|| {
+        fn sources(dir: &include_dir::Dir<'_>, out: &mut BTreeMap<String, String>) {
+            for file in dir.files() {
+                if file
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "js")
+                {
+                    out.insert(
+                        file.path().to_string_lossy().replace('\\', "/"),
+                        file.contents_utf8().unwrap().to_owned(),
+                    );
+                }
+            }
+            for child in dir.dirs() {
+                sources(child, out);
+            }
+        }
+        fn owner(stem: &str) -> Option<Capability> {
+            use Capability::*;
+            match stem {
+                "http"
+                | "http_blob"
+                | "http_form_data"
+                | "fetch-blob-4.0.0"
+                | "formdata-polyfill-4.0.10" => Some(NodeFetch),
+                "streams" | "webstreams_wrapper" | "web-streams-polyfill-4.1.0" => Some(Webstreams),
+                "web-crypto" => Some(WebCrypto),
+                "timeout" => Some(Timers),
+                "test" => Some(NodeTest),
+                "formdata_node" => Some(FormDataNode),
+                "base64" | "ieee754" => Some(Buffer),
+                _ => ALL_CAPABILITIES
+                    .iter()
+                    .copied()
+                    .filter(|cap| {
+                        stem == cap.marker_name()
+                            || stem.starts_with(&format!("{}_", cap.marker_name()))
+                    })
+                    .max_by_key(|cap| cap.marker_name().len()),
+            }
+        }
+        let mut files = BTreeMap::new();
+        sources(&SOURCES, &mut files);
+        let mut graph = BTreeMap::new();
+        for &cap in ALL_CAPABILITIES {
+            let mut dependencies = BTreeSet::new();
+            let mut queue: Vec<_> = files
+                .keys()
+                .filter(|file| {
+                    !file.contains('/') && owner(file.trim_end_matches(".js")) == Some(cap)
+                })
+                .cloned()
+                .collect();
+            let mut visited = BTreeSet::new();
+            while let Some(file) = queue.pop() {
+                if !visited.insert(file.clone()) {
+                    continue;
+                }
+                let result = scan_module(Utf8Path::new(&file), &files[&file]);
+                if result.warnings.iter().any(|warning| {
+                    matches!(
+                        warning.kind,
+                        WarningKind::ParseError | WarningKind::RelativeImport(_)
+                    )
+                }) {
+                    dependencies.extend(ALL_CAPABILITIES.iter().copied());
+                }
+                dependencies.extend(result.used);
+                for spec in result.unknown_specifiers {
+                    if let Some(internal) = spec.strip_prefix("__wasm_rquickjs_builtin/") {
+                        let path = match internal {
+                            "internal/webstreams/util" => "internal/webstreams_util.js".to_owned(),
+                            _ => format!("{internal}.js"),
+                        };
+                        if files.contains_key(&path) {
+                            if let Some(cap) = owner(internal) {
+                                dependencies.insert(cap);
+                            }
+                            queue.push(path);
+                        } else if internal == "internal/binding/util_native" {
+                            dependencies.insert(Capability::Util);
+                        } else if let Some(cap) = owner(internal.trim_end_matches("_native")) {
+                            dependencies.insert(cap);
+                        } else {
+                            dependencies.extend(ALL_CAPABILITIES.iter().copied());
+                        }
+                    } else {
+                        dependencies.extend(ALL_CAPABILITIES.iter().copied());
+                    }
+                }
+            }
+            graph.insert(cap, dependencies);
+        }
+        graph
+    })
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -734,14 +857,29 @@ pub struct PolicyOutcome {
 
 /// Apply the policy: `(used or all) ∪ include - exclude` then closure, then report.
 pub fn apply_policy(scan: &ScanResult, policy: &Policy) -> PolicyOutcome {
-    let conservative = scan.has_dynamic && !policy.trim_unknown;
+    let uncertain = scan.has_dynamic
+        || !scan.unknown_specifiers.is_empty()
+        || scan.warnings.iter().any(|warning| {
+            matches!(
+                warning.kind,
+                WarningKind::UnresolvableImport(_)
+                    | WarningKind::RelativeImport(_)
+                    | WarningKind::ParseError
+            )
+        });
+    let conservative = uncertain && !policy.trim_unknown;
     let base: BTreeSet<Capability> = if conservative {
         ALL_CAPABILITIES.iter().copied().collect()
     } else {
         scan.used.clone()
     };
     let merged: BTreeSet<Capability> = base.union(&policy.include).copied().collect();
-    let after_exclude: BTreeSet<Capability> = merged.difference(&policy.exclude).copied().collect();
+    // Includes are explicit requirements; they win over contradictory excludes.
+    let after_exclude: BTreeSet<Capability> = merged
+        .difference(&policy.exclude)
+        .chain(policy.include.iter())
+        .copied()
+        .collect();
     let enabled = closure(&after_exclude);
     let ineffective: BTreeSet<Capability> = policy
         .exclude
@@ -785,12 +923,16 @@ impl<'src> Scanner<'src> {
         }
         if raw.starts_with("file:") {
             self.out.used.insert(Capability::FsModuleLoader);
+            self.has_dynamic_set();
             return;
         }
         // `spec_to_cap` is checked first so `node:fs/promises` resolves to Fs
         // before the WIT-style check would mistakenly catch it on the `/`.
         if let Some(cap) = spec_to_cap(raw) {
             self.out.used.insert(cap);
+            if cap == Capability::Vm {
+                self.has_dynamic_set();
+            }
             return;
         }
         if is_wit_style_specifier(raw) {
@@ -821,7 +963,11 @@ impl<'src> Scanner<'src> {
         let end = (span.end as usize).min(self.source.len());
         let mut s = self.source.get(start..end).unwrap_or("").trim().to_string();
         if s.len() > 80 {
-            s.truncate(77);
+            let mut end = 77;
+            while !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            s.truncate(end);
             s.push_str("...");
         }
         s
@@ -918,6 +1064,14 @@ impl<'a> Visit<'a> for Scanner<'_> {
     // Identifier reads → check global table.
     fn visit_identifier_reference(&mut self, id: &IdentifierReference<'a>) {
         self.record_global(id.name.as_str());
+        // Aliases, indirect eval, Function without `new`, global object
+        // escapes and computed properties all invalidate a closed-world scan.
+        if matches!(
+            id.name.as_str(),
+            "eval" | "Function" | "globalThis" | "global" | "self"
+        ) {
+            self.has_dynamic_set();
+        }
     }
 }
 
@@ -952,6 +1106,45 @@ mod tests {
     fn bare_specifier_alias() {
         let r = scan(r#"import fs from "fs";"#);
         assert!(r.used.contains(&Capability::Fs));
+    }
+
+    #[test]
+    fn uncertain_sources_retain_the_dynamic_environment() {
+        for source in [
+            "globalThis.fetch('https://example.com');",
+            "(0, eval)(code);",
+            "const E = eval; E(code);",
+            "Function(code)();",
+            "import { Effect } from 'effect';",
+            "import { execute } from 'wasm-rquickjs:execution';",
+            "import './unresolved.js';",
+            "export const broken = ;",
+        ] {
+            let outcome = apply_policy(&scan(source), &Policy::default());
+            assert!(outcome.conservative_fallback, "{source}: {outcome:?}");
+            assert_eq!(outcome.enabled.len(), ALL_CAPABILITIES.len());
+        }
+    }
+
+    #[test]
+    fn stream_web_alias_retains_registration() {
+        let outcome = apply_policy(
+            &scan("import { ReadableStream as R } from 'node:stream/web'; new R();"),
+            &Policy::default(),
+        );
+        assert!(outcome.enabled.contains(&Capability::Webstreams));
+    }
+
+    #[test]
+    fn explicit_include_wins_over_exclude() {
+        let policy = Policy {
+            include: [Capability::Sqlite].into(),
+            exclude: [Capability::Sqlite].into(),
+            ..Policy::default()
+        };
+        let outcome = apply_policy(&ScanResult::default(), &policy);
+        assert!(outcome.enabled.contains(&Capability::Sqlite));
+        assert!(outcome.ineffective_excludes.contains(&Capability::Sqlite));
     }
 
     #[test]
@@ -1287,9 +1480,9 @@ mod tests {
     #[test]
     fn policy_no_dynamic_uses_scan_set() {
         let mut scan = ScanResult::default();
-        scan.used.insert(Capability::Fs);
+        scan.used.insert(Capability::Gc);
         let outcome = apply_policy(&scan, &Policy::default());
-        assert!(outcome.enabled.contains(&Capability::Fs));
+        assert!(outcome.enabled.contains(&Capability::Gc));
         assert!(!outcome.conservative_fallback);
         assert!(!outcome.enabled.contains(&Capability::WebCrypto));
     }
@@ -1307,12 +1500,12 @@ mod tests {
     fn policy_trim_unknown_overrides_dynamic_fallback() {
         let mut scan = ScanResult::default();
         scan.has_dynamic = true;
-        scan.used.insert(Capability::Fs);
+        scan.used.insert(Capability::Gc);
         let mut p = Policy::default();
         p.trim_unknown = true;
         let outcome = apply_policy(&scan, &p);
         assert!(!outcome.conservative_fallback);
-        assert!(outcome.enabled.contains(&Capability::Fs));
+        assert!(outcome.enabled.contains(&Capability::Gc));
         // Should not pull in WebCrypto unless something requires it.
         assert!(!outcome.enabled.contains(&Capability::WebCrypto));
     }
@@ -1329,13 +1522,20 @@ mod tests {
     #[test]
     fn policy_exclude_removes_when_safe() {
         let mut scan = ScanResult::default();
-        scan.used.insert(Capability::Fs);
+        scan.used.insert(Capability::Gc);
         scan.used.insert(Capability::Sqlite);
         let mut p = Policy::default();
         p.exclude.insert(Capability::Sqlite);
         let outcome = apply_policy(&scan, &p);
         assert!(!outcome.enabled.contains(&Capability::Sqlite));
         assert!(outcome.ineffective_excludes.is_empty());
+    }
+
+    #[test]
+    fn filesystem_lazy_require_needs_the_builtin_catalog() {
+        let enabled = closure(&[Capability::Fs].into());
+        assert!(enabled.contains(&Capability::Module));
+        assert_eq!(enabled.len(), ALL_CAPABILITIES.len());
     }
 
     #[test]

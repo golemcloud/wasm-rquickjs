@@ -1,0 +1,8 @@
+{
+  "name": "npm-compat-registry-install",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "fixture-registry-dependency": "1.0.0"
+  }
+}

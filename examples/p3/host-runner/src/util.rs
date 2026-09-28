@@ -68,6 +68,62 @@ impl<T, S> PipeConsumer<T, S> {
     }
 }
 
+/// Consumes one stream item and then drops the readable end.
+pub struct PrefixConsumer<T>(Option<oneshot::Sender<T>>);
+
+impl<T> PrefixConsumer<T> {
+    pub fn new(tx: oneshot::Sender<T>) -> Self {
+        Self(Some(tx))
+    }
+}
+
+impl<D, T: Lift + Send + 'static> StreamConsumer<D> for PrefixConsumer<T> {
+    type Item = T;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        store: StoreContextMut<D>,
+        mut source: Source<Self::Item>,
+        _: bool,
+    ) -> Poll<Result<StreamResult>> {
+        let value = &mut None;
+        source.read(store, value)?;
+        let value = value.take().expect("prefix stream write had no item");
+        let _ = self.get_mut().0.take().unwrap().send(value);
+        Poll::Ready(Ok(StreamResult::Dropped))
+    }
+}
+
+/// Applies one round of backpressure and then drops the readable end.
+#[derive(Default)]
+pub struct BackpressureDropConsumer {
+    delayed_once: bool,
+}
+
+impl<D> StreamConsumer<D> for BackpressureDropConsumer {
+    type Item = u8;
+
+    fn poll_consume(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        _: StoreContextMut<D>,
+        _: Source<Self::Item>,
+        finish: bool,
+    ) -> Poll<Result<StreamResult>> {
+        if finish {
+            return Poll::Ready(Ok(StreamResult::Cancelled));
+        }
+        if self.delayed_once {
+            Poll::Ready(Ok(StreamResult::Dropped))
+        } else {
+            self.delayed_once = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
 impl<D, T: Lift + 'static, S: Sink<T, Error: std::error::Error + Send + Sync> + Send + 'static>
     StreamConsumer<D> for PipeConsumer<T, S>
 {

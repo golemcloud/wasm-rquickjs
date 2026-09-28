@@ -95,6 +95,13 @@ pub enum Command {
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
     },
+    /// Strict, behavior-preserving WebAssembly DCE, without restricting dynamic JS/TS.
+    Dce {
+        #[arg(long)]
+        input: Utf8PathBuf,
+        #[arg(long)]
+        output: Utf8PathBuf,
+    },
     /// Scan a JavaScript module and report which skeleton built-ins it appears to use.
     /// This is a research/diagnostic tool for the per-app trimming work.
     ScanCapabilities {
@@ -153,17 +160,18 @@ pub enum Command {
         #[arg(long = "exclude")]
         exclude: Vec<String>,
 
-        /// Scan the JS sources, then patch the capability-gates slot to enable
-        /// only the capabilities the scanner reports as needed (after
-        /// dependency closure). `--include` / `--exclude` further refine the
-        /// scanner's result.
+        /// EXPERIMENTAL P2 closed-world specialization, followed by strict Wasm DCE.
+        /// Requires a fresh template, before Wizer pre-initialization.
+        /// The caller must account for all embedded modules and future code via
+        /// --include. Static JS analysis is not a proof of runtime reachability.
+        /// For unrestricted generated JS/TS, use `dce` instead (all builtins stay available).
         #[arg(long = "auto-trim", default_value_t = false)]
         auto_trim: bool,
 
         /// When set with `--auto-trim`, also trim aggressively even if the JS
         /// contains dynamic patterns (`require(varName)`, `import(expr)`,
         /// `eval`, `new Function`, `vm.run*`). Default behavior is conservative.
-        #[arg(long = "trim-unknown", default_value_t = false)]
+        #[arg(long = "trim-unknown", default_value_t = false, requires = "auto_trim")]
         trim_unknown: bool,
     },
 }

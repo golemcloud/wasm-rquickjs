@@ -27,6 +27,7 @@ import * as timersPromises from 'node:timers/promises';
 import * as consoleMod from 'node:console';
 import * as async_hooks from 'node:async_hooks';
 import * as cluster from 'node:cluster';
+import * as constants from 'node:constants';
 import * as dgram from 'node:dgram';
 import * as diagnostics_channel from 'node:diagnostics_channel';
 import * as dns from 'node:dns';
@@ -60,10 +61,12 @@ import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstr
 import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal/streams/add-abort-signal';
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
+import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
 import {
     transform_typescript as transformTypeScriptNative,
     transform_typescript_module as transformTypeScriptModuleNative,
+    test_observability_enabled as testObservabilityEnabledNative,
 } from '__wasm_rquickjs_builtin/typescript_native';
 
 const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
@@ -134,6 +137,7 @@ const timersPromisesCjs = cjsExport(timersPromises);
 const consoleCjs = cjsExport(consoleMod);
 const asyncHooksCjs = cjsExport(async_hooks);
 const clusterCjs = cjsExport(cluster);
+const constantsCjs = cjsExport(constants);
 const dgramCjs = cjsExport(dgram);
 const diagnosticsChannelCjs = cjsExport(diagnostics_channel);
 const moduleRequireTrace = diagnostics_channel.tracingChannel('module.require');
@@ -247,6 +251,7 @@ Object.defineProperty(builtinModuleMap, 'node:console', {
 });
 registerBuiltin(builtinModuleMap, 'async_hooks', asyncHooksCjs);
 registerBuiltin(builtinModuleMap, 'cluster', clusterCjs);
+registerBuiltin(builtinModuleMap, 'constants', constantsCjs);
 registerBuiltin(builtinModuleMap, 'dgram', dgramCjs);
 registerBuiltin(builtinModuleMap, 'diagnostics_channel', diagnosticsChannelCjs);
 registerBuiltin(builtinModuleMap, 'dns', dnsCjs);
@@ -714,7 +719,10 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin',
     configurable: false,
 });
 
-// Module cache: resolved absolute path -> Module object
+// Runtime-local CommonJS cache: resolved absolute path -> Module object. Like
+// Node's require.cache, it does not stat or hash files after first load. A new
+// QuickJS runtime (including every wasm-rquickjs execution job) starts empty;
+// within one runtime callers must delete the entry to observe an updated file.
 const moduleCache = Object.create(null);
 let moduleExportsInitialized = false;
 
@@ -813,11 +821,10 @@ function getPackageScopeInfo(filename) {
 }
 
 function isPathDirectory(filename) {
-    try {
-        return fsModule.statSync(filename).isDirectory();
-    } catch (_) {
-        return false;
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat !== 'function') {
+        throw new Error('Internal CJS module path classifier is not initialized');
     }
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat(filename) === 1;
 }
 
 function loadAsFile(candidate, skipExact) {
@@ -1201,16 +1208,41 @@ function rustHasExecArgvFlag(flag) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_module_has_exec_argv_flag(flag);
 }
 
-function isExperimentalTransformTypesEnabled() {
-    return rustHasExecArgvFlag('--experimental-transform-types');
+let sourceMapsSupportEnabled = Boolean(
+    (processModule.features && processModule.features.typescript === 'transform') ||
+    (wasmRquickjsModuleGlobalThis.process &&
+        wasmRquickjsModuleGlobalThis.process.features &&
+        wasmRquickjsModuleGlobalThis.process.features.typescript === 'transform')
+);
+const sourceMapsSupportDefault = sourceMapsSupportEnabled;
+
+function configureSourceMapsFromStartupArgs(args) {
+    let enabled = sourceMapsSupportDefault;
+    if (Array.isArray(args)) {
+        for (const value of args) {
+            const arg = String(value);
+            if (arg === '--no-enable-source-maps') enabled = false;
+            else if (arg === '--enable-source-maps' ||
+                arg === '--experimental-transform-types') enabled = true;
+        }
+    }
+    sourceMapsSupportEnabled = enabled;
 }
 
 function isSourceMapsEnabled() {
-    if (rustHasExecArgvFlag('--no-enable-source-maps')) {
-        return false;
-    }
+    return sourceMapsSupportEnabled;
+}
 
-    return rustHasExecArgvFlag('--enable-source-maps') || isExperimentalTransformTypesEnabled();
+// Transform-mode source maps are active before user modules execute. Install
+// their Error hooks here, after node:process has initialized, so constructors
+// do not change identity on the first transformed module load. Strip-only and
+// source-map-disabled runtimes keep their normal Error subclasses.
+if (isSourceMapsEnabled() &&
+    processModule.features &&
+    processModule.features.typescript === 'transform') {
+    const installErrorStackShim =
+        wasmRquickjsModuleGlobalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
+    if (typeof installErrorStackShim === 'function') installErrorStackShim();
 }
 
 function getSimpleSourceMapRegistry() {
@@ -1218,15 +1250,6 @@ function getSimpleSourceMapRegistry() {
     if (!registry || typeof registry !== 'object') {
         registry = Object.create(null);
         globalThis.__wasm_rquickjs_simple_source_maps = registry;
-    }
-    return registry;
-}
-
-function getCjsSourceMapOwnerRegistry() {
-    let registry = globalThis.__wasm_rquickjs_cjs_source_map_owners;
-    if (!registry || typeof registry !== 'object') {
-        registry = Object.create(null);
-        globalThis.__wasm_rquickjs_cjs_source_map_owners = registry;
     }
     return registry;
 }
@@ -1240,6 +1263,18 @@ function getCjsLineOffsetRegistry() {
     return registry;
 }
 
+function getForcedSourceMapLineOffsetRegistry() {
+    let registry = globalThis.__wasm_rquickjs_forced_source_map_line_offsets;
+    if (!registry || typeof registry !== 'object') {
+        registry = Object.create(null);
+        globalThis.__wasm_rquickjs_forced_source_map_line_offsets = registry;
+    }
+    return registry;
+}
+
+// `_evalWithFilename` compiles the CommonJS function wrapper with six lines
+// ahead of the user source. QuickJS reports those wrapper-relative positions
+// to util.getCallSites(), so remove them before querying the source map.
 const cjsLineOffset = 6;
 
 function derefWeakRef(ref) {
@@ -1265,6 +1300,39 @@ function makeWeakRef(value) {
         return new WeakRef(value);
     } catch (err) {
         return undefined;
+    }
+}
+
+const cjsSourceMapSymbol = Symbol('wasm-rquickjs.cjsSourceMap');
+const thrownErrorSourceMapSymbol = Symbol('wasm-rquickjs.thrownErrorSourceMap');
+const weakSourceMapEntrySymbol = Symbol('wasm-rquickjs.weakSourceMapEntry');
+let cjsSourceMapStoresUntilSweep = 32;
+
+function sourceMapFromRegistry(path) {
+    const registry = getSimpleSourceMapRegistry();
+    const entry = registry[path];
+    if (!entry || entry[weakSourceMapEntrySymbol] !== true) return entry;
+    const sourceMap = derefWeakRef(entry.ref);
+    if (sourceMap !== undefined) return sourceMap;
+    delete registry[path];
+    delete getCjsLineOffsetRegistry()[path];
+    delete getForcedSourceMapLineOffsetRegistry()[path];
+    return undefined;
+}
+
+function sweepReleasedSourceMaps() {
+    const registry = getSimpleSourceMapRegistry();
+    for (const path of Object.keys(registry)) sourceMapFromRegistry(path);
+}
+
+function retainSourceMapForThrownError(error, filename) {
+    if (!error || (typeof error !== 'object' && typeof error !== 'function')) return;
+    const sourceMap = sourceMapFromRegistry(filename);
+    if (sourceMap === undefined) return;
+    try {
+        Object.defineProperty(error, thrownErrorSourceMapSymbol, { value: sourceMap });
+    } catch (_) {
+        // Stack remapping remains best-effort for non-extensible thrown values.
     }
 }
 
@@ -1480,6 +1548,8 @@ class SourceMap {
         if (options.lineLengths !== undefined) {
             this.lineLengths = Array.prototype.slice.call(options.lineLengths);
         }
+        this._originalLineOffset = Number(options.originalLineOffset) || 0;
+        this._generatedLineOffset = Number(options.generatedLineOffset) || 0;
         this._decodedMappings = decodeSourceMapPayload(this.payload, options.sourceBasePath);
     }
 
@@ -1491,7 +1561,7 @@ class SourceMap {
     }
 
     findOrigin(lineNumber, columnNumber) {
-        const generatedLine = Number(lineNumber) - 1;
+        const generatedLine = Number(lineNumber) - 1 - this._generatedLineOffset;
         const generatedColumn = Number(columnNumber) - 1;
         if (!Number.isFinite(generatedLine) || !Number.isFinite(generatedColumn)) return {};
         const match = findSourceMapMapping(this._decodedMappings, generatedLine, generatedColumn);
@@ -1499,7 +1569,7 @@ class SourceMap {
         return {
             name: match.name,
             fileName: match.originalSource,
-            lineNumber: match.originalLine + 1,
+            lineNumber: match.originalLine + 1 - this._originalLineOffset,
             columnNumber: match.originalColumn + (generatedColumn - match.generatedColumn) + 1,
         };
     }
@@ -1507,19 +1577,13 @@ class SourceMap {
 
 function findSourceMap(path) {
     path = String(path);
-    const owners = getCjsSourceMapOwnerRegistry();
-    const ownerRef = owners[path];
-    if (ownerRef !== undefined && derefWeakRef(ownerRef) === undefined) {
-        delete owners[path];
-        delete getSimpleSourceMapRegistry()[path];
-        return undefined;
-    }
-    const registry = getSimpleSourceMapRegistry();
-    return registry[path];
+    return sourceMapFromRegistry(path);
 }
 
 function sourceMapLineLengths(source) {
-    return String(source).split(/\r\n|[\n\r\u2028\u2029]/).map(line => line.length);
+    return String(source)
+        .split(/\r\n|[\n\r\u2028\u2029]/)
+        .map(line => line.length);
 }
 
 function decodeInlineSourceMap(url) {
@@ -1535,25 +1599,68 @@ function decodeInlineSourceMap(url) {
     }
 }
 
-function registerSourceMapForCjs(filename, source, moduleObject) {
+function storeSourceMap(filename, source, payload, sourceBasePath, moduleObject, options) {
     const registry = getSimpleSourceMapRegistry();
-    const owners = getCjsSourceMapOwnerRegistry();
+    if (!isSourceMapsEnabled() || payload === null || typeof payload !== 'object') {
+        delete registry[filename];
+        return;
+    }
+    const sourceMap = new SourceMap(payload, {
+        lineLengths: sourceMapLineLengths(source),
+        sourceBasePath,
+        originalLineOffset: options && options.originalLineOffset,
+    });
+    const installErrorStackShim = globalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
+    if (typeof installErrorStackShim === 'function') installErrorStackShim();
+    if (moduleObject) {
+        const sourceMapRef = makeWeakRef(sourceMap);
+        if (sourceMapRef !== undefined) {
+            try {
+                Object.defineProperty(moduleObject, cjsSourceMapSymbol, {
+                    value: sourceMap,
+                    configurable: true,
+                });
+                registry[filename] = {
+                    [weakSourceMapEntrySymbol]: true,
+                    ref: sourceMapRef,
+                };
+            } catch (_) {
+                registry[filename] = sourceMap;
+            }
+        } else {
+            registry[filename] = sourceMap;
+        }
+        cjsSourceMapStoresUntilSweep--;
+        if (cjsSourceMapStoresUntilSweep === 0) {
+            sweepReleasedSourceMaps();
+            cjsSourceMapStoresUntilSweep = 32;
+        }
+    } else {
+        registry[filename] = sourceMap;
+    }
+}
+
+function registerSourceMapPayload(filename, source, sourceMap, moduleObject) {
+    let payload = null;
+    try {
+        payload = typeof sourceMap === 'string' ? JSON.parse(sourceMap) : sourceMap;
+    } catch (_) {
+        payload = null;
+    }
+    storeSourceMap(filename, source, payload, pathModule.dirname(filename), moduleObject);
+}
+
+function registerSourceMapForCjs(filename, source, moduleObject, options = undefined) {
+    const registry = getSimpleSourceMapRegistry();
     if (!isSourceMapsEnabled()) {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
 
     const sourceText = String(source);
-    const directiveRe = /\/\/[#@]\s*sourceMappingURL=([^\r\n]+)|\/\*[#@]\s*sourceMappingURL=([\s\S]*?)\*\//g;
-    let match;
-    let url = null;
-    while ((match = directiveRe.exec(sourceText)) !== null) {
-        url = (match[1] !== undefined ? match[1] : match[2]).trim();
-    }
-    if (url === null) {
+    const url = extractSourceMapURL(sourceText);
+    if (url === undefined) {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
 
@@ -1575,38 +1682,190 @@ function registerSourceMapForCjs(filename, source, moduleObject) {
     }
     if (payload === null) {
         delete registry[filename];
-        delete owners[filename];
         return;
     }
-    registry[filename] = new SourceMap(payload, {
-        lineLengths: sourceMapLineLengths(source),
-        sourceBasePath,
-    });
-    if (moduleObject) {
-        const ownerRef = makeWeakRef(moduleObject);
-        if (ownerRef !== undefined) {
-            owners[filename] = ownerRef;
-        } else {
-            delete owners[filename];
-        }
-    } else {
-        delete owners[filename];
+    storeSourceMap(filename, source, payload, sourceBasePath, moduleObject, options);
+}
+
+function registerSourceMapForTransformedSource(
+    filename,
+    source,
+    alias,
+    lineOffset = 0,
+    originalLineOffset = 0,
+    forceLineOffset = false,
+) {
+    filename = String(filename);
+    registerSourceMapForCjs(filename, String(source), undefined, { originalLineOffset });
+    if (forceLineOffset) {
+        const installErrorStackShim = globalThis.__wasm_rquickjs_install_source_map_error_stack_shim;
+        if (typeof installErrorStackShim === 'function') installErrorStackShim();
+    }
+    const registry = getSimpleSourceMapRegistry();
+    const offsets = getCjsLineOffsetRegistry();
+    const forcedOffsets = getForcedSourceMapLineOffsetRegistry();
+    lineOffset = Number(lineOffset);
+    if (Number.isFinite(lineOffset) && lineOffset > 0) offsets[filename] = lineOffset;
+    else delete offsets[filename];
+    const sourceMap = sourceMapFromRegistry(filename);
+    if (sourceMap !== undefined) {
+        sourceMap._generatedLineOffset = Number.isFinite(lineOffset) ? lineOffset : 0;
+    }
+    if (forceLineOffset) forcedOffsets[filename] = true;
+    else delete forcedOffsets[filename];
+    if (alias !== undefined && alias !== null) {
+        alias = String(alias);
+        if (registry[filename] !== undefined) registry[alias] = registry[filename];
+        else delete registry[alias];
+        if (Number.isFinite(lineOffset) && lineOffset > 0) offsets[alias] = lineOffset;
+        else delete offsets[alias];
+        if (forceLineOffset) forcedOffsets[alias] = true;
+        else delete forcedOffsets[alias];
     }
 }
+
+function remapSourceMappedPosition(
+    scriptName,
+    lineNumber,
+    columnNumber,
+    hasCjsWrapperOffset = false,
+) {
+    scriptName = String(scriptName);
+    lineNumber = Number(lineNumber);
+    columnNumber = Number(columnNumber);
+    if (!Number.isFinite(lineNumber) || !Number.isFinite(columnNumber)) return undefined;
+
+    const sourceMap = sourceMapFromRegistry(scriptName);
+    const lineOffsets = getCjsLineOffsetRegistry();
+    const forcedOffsets = getForcedSourceMapLineOffsetRegistry();
+    const lineOffset = lineOffsets[scriptName];
+    const forcedLineOffset = forcedOffsets[scriptName] === true;
+    if (typeof lineOffset === 'number' && Number.isFinite(lineOffset) && lineOffset > 0 &&
+        (forcedLineOffset || hasCjsWrapperOffset === true)) {
+        if (!sourceMap || !forcedLineOffset) lineNumber -= lineOffset;
+    }
+    if (lineNumber <= 0) return undefined;
+    if (!isSourceMapsEnabled() || !sourceMap || typeof sourceMap.findOrigin !== 'function') {
+        return forcedLineOffset
+            ? { fileName: scriptName, lineNumber, columnNumber }
+            : undefined;
+    }
+
+    const origin = sourceMap.findOrigin(lineNumber, columnNumber);
+    if (!origin || typeof origin.fileName !== 'string' ||
+        !Number.isFinite(origin.lineNumber) || !Number.isFinite(origin.columnNumber)) {
+        return undefined;
+    }
+    return origin;
+}
+
+Object.defineProperties(globalThis, {
+    __wasm_rquickjs_source_maps_enabled: {
+        value: isSourceMapsEnabled,
+        writable: false,
+        configurable: false,
+    },
+    __wasm_rquickjs_register_transformed_source_map: {
+        value: registerSourceMapForTransformedSource,
+        writable: false,
+        configurable: false,
+    },
+    __wasm_rquickjs_remap_source_mapped_position: {
+        value: remapSourceMappedPosition,
+        writable: false,
+        configurable: false,
+    },
+    // The compatibility runner calls this before loading a test file to model
+    // immutable Node startup flags. Product code uses module.setSourceMapsSupport
+    // and cannot toggle behavior by mutating the informational execArgv array.
+    __wasm_rquickjs_configure_source_maps_from_startup_args: {
+        value: configureSourceMapsFromStartupArgs,
+        writable: false,
+        configurable: false,
+    },
+});
 
 function isTypeScriptFilename(filename) {
     return filename.endsWith('.ts') || filename.endsWith('.cts') || filename.endsWith('.mts');
 }
 
-function transpileTypeScriptModule(filename, source, module = undefined) {
+let recordTypeScriptModuleTransform = () => {};
+let recordCommonJsExportAnalysis = () => {};
+if (testObservabilityEnabledNative()) {
+    let typeScriptModuleTransformCount = 0;
+    let commonJsExportAnalysisCount = 0;
+    recordTypeScriptModuleTransform = () => { typeScriptModuleTransformCount += 1; };
+    recordCommonJsExportAnalysis = () => { commonJsExportAnalysisCount += 1; };
+    Object.defineProperties(globalThis, {
+        __wasm_rquickjs_record_typescript_module_transform: {
+            value: recordTypeScriptModuleTransform,
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_get_typescript_module_transform_count: {
+            value: () => typeScriptModuleTransformCount,
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_reset_typescript_module_transform_count: {
+            value: () => { typeScriptModuleTransformCount = 0; },
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_record_commonjs_export_analysis: {
+            value: recordCommonJsExportAnalysis,
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_get_commonjs_export_analysis_count: {
+            value: () => commonJsExportAnalysisCount,
+            writable: false,
+            configurable: false,
+        },
+        __wasm_rquickjs_reset_commonjs_export_analysis_count: {
+            value: () => { commonJsExportAnalysisCount = 0; },
+            writable: false,
+            configurable: false,
+        },
+    });
+}
+
+function transformTypeScriptModuleOutput(filename, source, module = undefined) {
     if (!isTypeScriptFilename(filename)) {
-        return source;
+        return { code: source, sourceMap: null };
     }
     // Rust owns the transform semantics. This adapter only applies CommonJS
     // loader policy; the Rust filesystem loader applies the same service for ESM.
-    return JSON.parse(transformTypeScriptModuleNative(
-        String(source), filename, module
-    )).code;
+    const output = JSON.parse(transformTypeScriptModuleNative(
+        String(source), filename, isSourceMapsEnabled(), module
+    ));
+    recordTypeScriptModuleTransform();
+    return output;
+}
+
+function appendInlineSourceMap(code, sourceMap) {
+    if (!sourceMap) return code;
+    // Keep this wire format in sync with
+    // TypeScriptOutput::into_code_with_inline_source_map. Runtime coverage
+    // decodes maps emitted through both the Rust ESM and JavaScript CJS/public
+    // transformation paths and asserts their original coordinates.
+    const encoded = buffer.Buffer.from(sourceMap, 'utf8').toString('base64');
+    return code + `\n\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
+}
+
+function codeWithInlineSourceMap(output) {
+    return appendInlineSourceMap(output.code, output.sourceMap);
+}
+
+function transpileTypeScriptModule(filename, source, module = undefined) {
+    return codeWithInlineSourceMap(transformTypeScriptModuleOutput(filename, source, module));
+}
+
+function clearPreparedTypeScriptGraph(graph) {
+    // This graph belongs only to the active load transaction. require.cache is
+    // the durable per-runtime owner once a module finishes loading.
+    if (!graph || typeof graph !== 'object') return;
+    for (const filename of Object.keys(graph)) delete graph[filename];
 }
 
 export function stripTypeScriptTypes(code, options = undefined) {
@@ -1640,11 +1899,10 @@ export function stripTypeScriptTypes(code, options = undefined) {
     const transformed = JSON.parse(transformTypeScriptNative(
         code, sourceUrl === undefined ? '' : sourceUrl, mode, sourceMap, undefined
     ));
-    let result = transformed.code;
     if (sourceMap) {
-        const encoded = buffer.Buffer.from(transformed.sourceMap, 'utf8').toString('base64');
-        result += `\n//# sourceMappingURL=data:application/json;base64,${encoded}`;
+        return appendInlineSourceMap(transformed.code, transformed.sourceMap);
     }
+    let result = transformed.code;
     if (sourceUrl !== undefined) {
         result += `\n\n//# sourceURL=${sourceUrl}`;
     }
@@ -1851,6 +2109,14 @@ function fileUrlForPath(filename) {
 }
 
 const cjsEsmDefaultSnapshotSymbol = Symbol('wasm-rquickjs.cjs-esm-default-snapshot');
+const cjsTypeScriptAnalysisCache = new WeakMap();
+const cjsTypeScriptAnalysisCacheQueue = [];
+const cjsTypeScriptAnalysisCacheMaxEntries = 32;
+const cjsTypeScriptAnalysisCacheMaxBytes = 1024 * 1024;
+let cjsTypeScriptAnalysisCacheEntries = 0;
+let cjsTypeScriptAnalysisCacheBytes = 0;
+let cjsTypeScriptPreparedSourceEntries = 0;
+let cjsTypeScriptPreparedSourceBytes = 0;
 const cjsEsmDefaultSnapshotToken = {};
 
 function installCjsEsmDefaultSnapshotSlot(mod) {
@@ -1902,6 +2168,78 @@ function getCjsEsmDefaultSnapshot(cache, filename) {
     return slot ? slot(cjsEsmDefaultSnapshotToken, 'get') : undefined;
 }
 
+function discardCjsTypeScriptAnalysisCacheEntry(mod) {
+    const entry = mod && cjsTypeScriptAnalysisCache.get(mod);
+    if (!entry) return;
+    cjsTypeScriptAnalysisCache.delete(mod);
+    entry.active = false;
+    cjsTypeScriptAnalysisCacheEntries -= 1;
+    cjsTypeScriptAnalysisCacheBytes -= entry.bytes;
+    if (entry.preparedSource !== undefined) {
+        cjsTypeScriptPreparedSourceEntries -= 1;
+        cjsTypeScriptPreparedSourceBytes -= entry.preparedBytes;
+    }
+    entry.mod = undefined;
+    entry.originalSource = undefined;
+    entry.preparedSource = undefined;
+    entry.exportNames = undefined;
+    if (cjsTypeScriptAnalysisCacheQueue.length > cjsTypeScriptAnalysisCacheMaxEntries * 2) {
+        const active = cjsTypeScriptAnalysisCacheQueue.filter((queued) => queued.active);
+        cjsTypeScriptAnalysisCacheQueue.splice(
+            0,
+            cjsTypeScriptAnalysisCacheQueue.length,
+            ...active,
+        );
+    }
+}
+
+function pruneCjsTypeScriptAnalysisCache() {
+    while (cjsTypeScriptAnalysisCacheEntries > cjsTypeScriptAnalysisCacheMaxEntries ||
+           cjsTypeScriptAnalysisCacheBytes > cjsTypeScriptAnalysisCacheMaxBytes) {
+        const entry = cjsTypeScriptAnalysisCacheQueue.shift();
+        if (!entry || !entry.active) continue;
+        discardCjsTypeScriptAnalysisCacheEntry(entry.mod);
+    }
+}
+
+function captureCjsTypeScriptAnalysisCacheEntry(mod, originalSource, preparedSource, exportNames) {
+    if (!mod || (typeof mod !== 'object' && typeof mod !== 'function')) return;
+    discardCjsTypeScriptAnalysisCacheEntry(mod);
+    const names = Array.isArray(exportNames) ? exportNames.slice() : undefined;
+    const preparedBytes = preparedSource === undefined ? 0 : preparedSource.length * 2;
+    const namesBytes = names === undefined
+        ? 0
+        : names.reduce((total, name) => total + String(name).length * 2, 0);
+    const bytes = originalSource.length * 2 + preparedBytes + namesBytes;
+    if (bytes > cjsTypeScriptAnalysisCacheMaxBytes) return;
+    const entry = {
+        mod,
+        originalSource,
+        preparedSource,
+        exportNames: names,
+        bytes,
+        preparedBytes,
+        active: true,
+    };
+    cjsTypeScriptAnalysisCache.set(mod, entry);
+    cjsTypeScriptAnalysisCacheQueue.push(entry);
+    cjsTypeScriptAnalysisCacheEntries += 1;
+    cjsTypeScriptAnalysisCacheBytes += bytes;
+    if (preparedSource !== undefined) {
+        cjsTypeScriptPreparedSourceEntries += 1;
+        cjsTypeScriptPreparedSourceBytes += preparedBytes;
+    }
+    pruneCjsTypeScriptAnalysisCache();
+}
+
+function captureCjsTypeScriptExportNames(mod, names, originalSource) {
+    captureCjsTypeScriptAnalysisCacheEntry(mod, originalSource, undefined, names);
+}
+
+function captureCjsTypeScriptPreparedSource(mod, originalSource, preparedSource) {
+    captureCjsTypeScriptAnalysisCacheEntry(mod, originalSource, preparedSource, undefined);
+}
+
 Object.defineProperty(globalThis, '__wasm_rquickjs_has_cjs_esm_default_snapshot', {
     value: hasCjsEsmDefaultSnapshot,
     writable: false,
@@ -1914,12 +2252,95 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_esm_default_snapshot'
     configurable: false,
 });
 
-function loadCjsEsmFacadeDefault(filename) {
+function getCachedCjsTypeScriptAnalysisEntry(filename, source) {
+    const require = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_create_require(filename);
+    const resolvedFilename = require.resolve(filename);
+    const mod = require.cache[resolvedFilename];
+    const entry = mod && cjsTypeScriptAnalysisCache.get(mod);
+    if (!entry || entry.originalSource !== source) {
+        discardCjsTypeScriptAnalysisCacheEntry(mod);
+        return undefined;
+    }
+    return entry;
+}
+
+function getCachedCjsTypeScriptAnalysis(filename, source) {
+    const entry = getCachedCjsTypeScriptAnalysisEntry(filename, source);
+    return entry === undefined ? undefined : {
+        exportNames: entry.exportNames,
+        preparedSource: entry.preparedSource,
+    };
+}
+
+function setCachedCjsTypeScriptExportNames(filename, names, source) {
+    const require = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_create_require(filename);
+    const resolvedFilename = require.resolve(filename);
+    const mod = require.cache[resolvedFilename];
+    if (mod) {
+        captureCjsTypeScriptExportNames(mod, names, source);
+    }
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_cached_cjs_typescript_analysis', {
+    value: getCachedCjsTypeScriptAnalysis,
+    writable: false,
+    configurable: false,
+});
+Object.defineProperty(globalThis, '__wasm_rquickjs_set_cached_cjs_typescript_export_names', {
+    value: setCachedCjsTypeScriptExportNames,
+    writable: false,
+    configurable: false,
+});
+if (testObservabilityEnabledNative()) {
+    Object.defineProperty(globalThis, '__wasm_rquickjs_get_cjs_typescript_prepared_source_cache_stats', {
+        value: () => ({
+            entries: cjsTypeScriptAnalysisCacheEntries,
+            bytes: cjsTypeScriptAnalysisCacheBytes,
+            preparedEntries: cjsTypeScriptPreparedSourceEntries,
+            preparedBytes: cjsTypeScriptPreparedSourceBytes,
+            maxEntries: cjsTypeScriptAnalysisCacheMaxEntries,
+            maxBytes: cjsTypeScriptAnalysisCacheMaxBytes,
+        }),
+        writable: false,
+        configurable: false,
+    });
+}
+
+function takePreparedCjsTypeScript(meta) {
+    const prepared = meta.__wasm_rquickjs_prepared_cjs_typescript;
+    delete meta.__wasm_rquickjs_prepared_cjs_typescript;
+    return prepared;
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_take_prepared_cjs_typescript', {
+    value: takePreparedCjsTypeScript,
+    writable: false,
+    configurable: false,
+});
+
+function loadCjsEsmFacadeDefault(filename, preparedTypeScriptGraph) {
     const require = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_create_require(filename);
     const resolvedFilename = require.resolve(filename);
     return hasCjsEsmDefaultSnapshot(require.cache, resolvedFilename)
         ? getCjsEsmDefaultSnapshot(require.cache, resolvedFilename)
-        : require(filename);
+        : preparedTypeScriptGraph
+            ? loadPreparedCjsTypeScript(
+                resolvedFilename,
+                preparedTypeScriptGraph,
+                filename,
+            )
+            : require(filename);
+}
+
+function loadPreparedCjsTypeScript(resolvedFilename, graph, traceId) {
+    // An ESM facade has no real CommonJS parent; do not invent a self-parent.
+    return traceModuleRequire(traceId, null, () => {
+        try {
+            return loadFilesystemCommonJs(resolvedFilename, null, graph).exports;
+        } finally {
+            clearPreparedTypeScriptGraph(graph);
+        }
+    });
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_load_cjs_esm_facade_default', {
@@ -2123,7 +2544,13 @@ function wrapForCompile(script, dynamicImportBindings) {
     return activeWrapper[0] + script + activeWrapper[1];
 }
 
-function compileCjs(filename, source) {
+function compileCjs(
+    filename,
+    source,
+    isPreparedTypeScript = false,
+    moduleObject = undefined,
+    sourceMap = undefined,
+) {
     if (source.length > 0 && source.charCodeAt(0) === 0xFEFF) {
         source = source.slice(1);
     }
@@ -2132,7 +2559,13 @@ function compileCjs(filename, source) {
         source = '//' + source;
     }
 
-    source = transpileTypeScriptModule(filename, source, false);
+    if (!isPreparedTypeScript) {
+        const output = transformTypeScriptModuleOutput(filename, source, false);
+        source = output.code;
+        sourceMap = output.sourceMap;
+    }
+    if (sourceMap) registerSourceMapPayload(filename, source, sourceMap, moduleObject);
+    else registerSourceMapForCjs(filename, source, moduleObject);
     source = stripV8OptimizationIntrinsics(source);
     const strippedImportAttributes = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_prepare_cjs_source(
         source,
@@ -2151,6 +2584,29 @@ function compileCjs(filename, source) {
     return _evalWithFilename(wrappedSource, filename);
 }
 
+// Rust owns the probe-session state and cache. This JS depth only prevents a
+// nested require() graph from adding another native callback frame; in normal
+// operation JS depth > 0 corresponds to one active Rust session.
+let cjsModuleProbeExecutionDepth = 0;
+
+function withCjsModuleProbeExecution(callback) {
+    if (cjsModuleProbeExecutionDepth > 0) {
+        cjsModuleProbeExecutionDepth += 1;
+        try {
+            return callback();
+        } finally {
+            cjsModuleProbeExecutionDepth -= 1;
+        }
+    }
+
+    cjsModuleProbeExecutionDepth = 1;
+    try {
+        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_with_cjs_module_probe_session(callback);
+    } finally {
+        cjsModuleProbeExecutionDepth = 0;
+    }
+}
+
 function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire) {
     const previousModuleContext = globalThis.__wasm_rquickjs_current_module;
     globalThis.__wasm_rquickjs_current_module = {
@@ -2160,7 +2616,9 @@ function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, chi
     const previousCjsImportDir = globalThis.__wasm_rquickjs_cjs_import_dir;
     globalThis.__wasm_rquickjs_cjs_import_dir = dirname;
     try {
-        return compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname);
+        return withCjsModuleProbeExecution(
+            () => compiledFn.call(mod.exports, mod.exports, childRequire, mod, filename, dirname),
+        );
     } finally {
         globalThis.__wasm_rquickjs_current_module = previousModuleContext;
         if (previousCjsImportDir !== undefined) {
@@ -2174,14 +2632,13 @@ function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, chi
 function compileModuleInto(mod, source, filename, requireOverride) {
     filename = filename === undefined || filename === null ? mod.filename : filename;
     source = String(source);
-    registerSourceMapForCjs(filename, source, mod);
     const requireParentFilename = filename === '' && mod && typeof mod.filename === 'string'
         ? mod.filename
         : filename;
     const dirname = pathModule.dirname(filename);
     const requireDirname = pathModule.dirname(requireParentFilename);
     const childRequire = requireOverride || makeRequire(requireDirname, mod, requireParentFilename);
-    const compiledFn = compileCjs(filename, source);
+    const compiledFn = compileCjs(filename, source, false, mod);
     return callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
 }
 
@@ -2660,6 +3117,9 @@ function loadCommonJsTransaction(descriptor) {
     const isLoaderSource = descriptor.sourceKind === 'loader';
     const isMainModuleLoad = descriptor.isMainModule === true;
     const canFallbackToEsm = descriptor.allowEsmFallback === true;
+    const preparedTypeScriptGraph = descriptor.preparedTypeScriptGraph;
+    const preparedTypeScript = preparedTypeScriptGraph && preparedTypeScriptGraph[filename];
+    if (preparedTypeScript) delete preparedTypeScriptGraph[filename];
     const cacheKey = descriptor.cacheKey;
     const dirname = pathModule.dirname(filename);
     const pathsBase = isLoaderSource && !pathModule.isAbsolute(filename) ? '/' : dirname;
@@ -2797,14 +3257,40 @@ function loadCommonJsTransaction(descriptor) {
             }
         } else {
             try {
-                source = fsModule.readFileSync(filename, 'utf8');
-                registerSourceMapForCjs(filename, source, mod);
+                source = preparedTypeScript
+                    ? preparedTypeScript.originalSource
+                    : fsModule.readFileSync(filename, 'utf8');
             } catch (err) {
                 discardCjsModuleLoad(cacheKey, parentModule, mod);
                 throw err;
             }
             const dirname = pathModule.dirname(filename);
-            const childRequire = makeRequire(dirname, mod);
+            let compiledSource;
+            let preparedSourceForCache;
+            let typeScriptSourceMap;
+            let typeScriptExportNames;
+            try {
+                if (preparedTypeScript) {
+                    compiledSource = preparedTypeScript.preparedSource;
+                    preparedSourceForCache = compiledSource;
+                } else {
+                    const output = transformTypeScriptModuleOutput(filename, source, false);
+                    compiledSource = output.code;
+                    typeScriptSourceMap = output.sourceMap;
+                    preparedSourceForCache = codeWithInlineSourceMap(output);
+                }
+                typeScriptExportNames = preparedTypeScript && preparedTypeScript.exportNames;
+            } catch (err) {
+                discardCjsModuleLoad(cacheKey, parentModule, mod);
+                throw err;
+            }
+            const childRequire = makeRequire(
+                dirname,
+                mod,
+                undefined,
+                mainModule,
+                preparedTypeScriptGraph,
+            );
             let compiledFn;
             let cjsSyntaxError = null;
             const shouldFallbackToEsm = canFallbackToEsm &&
@@ -2812,7 +3298,13 @@ function loadCommonJsTransaction(descriptor) {
             let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
             try {
-                compiledFn = compileCjs(filename, source);
+                compiledFn = compileCjs(
+                    filename,
+                    compiledSource,
+                    true,
+                    mod,
+                    typeScriptSourceMap,
+                );
             } catch (err) {
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
                 if (err && err.name === 'SyntaxError') {
@@ -2857,9 +3349,24 @@ function loadCommonJsTransaction(descriptor) {
                 try {
                     callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
                 } catch (err) {
+                    retainSourceMapForThrownError(err, filename);
                     discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
+                }
+                if (typeScriptExportNames !== undefined) {
+                    captureCjsTypeScriptExportNames(
+                        mod,
+                        typeScriptExportNames,
+                        source,
+                    );
+                }
+                if (isTypeScriptFilename(filename) && typeScriptExportNames === undefined) {
+                    captureCjsTypeScriptPreparedSource(
+                        mod,
+                        source,
+                        preparedSourceForCache,
+                    );
                 }
                 cjsEsmDefaultSnapshotEligible = true;
             }
@@ -2875,7 +3382,7 @@ function loadCommonJsTransaction(descriptor) {
     return mod;
 }
 
-function loadFilesystemCommonJs(resolvedFilename, parentModule) {
+function loadFilesystemCommonJs(resolvedFilename, parentModule, preparedTypeScriptGraph = undefined) {
     const isMainModule = isMainEntryFilename(resolvedFilename);
     const filename = toCjsCanonicalFilename(resolvedFilename, isMainModule);
     return loadCommonJsTransaction({
@@ -2887,6 +3394,7 @@ function loadFilesystemCommonJs(resolvedFilename, parentModule) {
         sourceUrl: undefined,
         isMainModule,
         allowEsmFallback: true,
+        preparedTypeScriptGraph,
     });
 }
 
@@ -3155,7 +3663,7 @@ function currentRequireMain() {
     return mainModule.filename === '/' ? undefined : mainModule;
 }
 
-function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride) {
+function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph) {
     const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     const parentLookupPaths = parentModule && Array.isArray(parentModule.paths)
         ? parentModule.paths.concat(globalPaths)
@@ -3215,7 +3723,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
             const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
             const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
             if (cached !== null) {
-                const mod = loadFilesystemCommonJs(cached.filename, parentModule || null);
+                const mod = loadFilesystemCommonJs(cached.filename, parentModule || null, preparedTypeScriptGraph);
                 return mod.exports;
             }
             let resolved;
@@ -3225,7 +3733,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
                 throw addRequireStackToModuleNotFound(err, id, parentFilename);
             }
             cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);
-            const mod = loadFilesystemCommonJs(resolved.filename, parentModule || null);
+            const mod = loadFilesystemCommonJs(resolved.filename, parentModule || null, preparedTypeScriptGraph);
             return mod.exports;
         }
 
@@ -3233,7 +3741,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
             const resolution = makeCjsResolutionState();
             const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
             if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
-            const mod = loadFilesystemCommonJs(importsResolved.filename, parentModule || null);
+            const mod = loadFilesystemCommonJs(importsResolved.filename, parentModule || null, preparedTypeScriptGraph);
             return mod.exports;
         }
 
@@ -3241,7 +3749,7 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         const resolution = makeCjsResolutionState();
         const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
         if (nmResolved) {
-            const mod = loadFilesystemCommonJs(nmResolved.filename, parentModule || null);
+            const mod = loadFilesystemCommonJs(nmResolved.filename, parentModule || null, preparedTypeScriptGraph);
             return mod.exports;
         }
 
@@ -4298,6 +4806,7 @@ function setSourceMapsSupport(enabled, options) {
     if (generatedCode !== undefined && typeof generatedCode !== 'boolean') {
         throw new ERR_INVALID_ARG_TYPE('options.generatedCode', 'boolean', generatedCode);
     }
+    sourceMapsSupportEnabled = enabled;
 }
 
 const globalPaths = [];
@@ -4329,14 +4838,10 @@ function _initPaths() {
 _initPaths();
 
 function _stat(filename) {
-    try {
-        const st = fsModule.statSync(filename);
-        if (st.isDirectory()) return 1;
-        if (st.isFile()) return 0;
-        return -2;
-    } catch (e) {
-        return -2;
+    if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat !== 'function') {
+        throw new Error('Internal CJS module path classifier is not initialized');
     }
+    return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_cjs_module_path_stat(filename);
 }
 
 function runMain() {

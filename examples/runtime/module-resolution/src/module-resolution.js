@@ -61,6 +61,10 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_import_meta_resolve_package',
         '__wasm_rquickjs_import_meta_resolve_path',
         '__wasm_rquickjs_loader_default_resolve_package',
+        '__wasm_rquickjs_with_cjs_module_probe_session',
+        '__wasm_rquickjs_get_cjs_module_probe_session_hit_count',
+        '__wasm_rquickjs_reset_cjs_module_probe_session_hit_count',
+        '__wasm_rquickjs_set_cjs_module_probe_session_enabled',
         '__wasm_rquickjs_cjs_resolve_package_exports',
         '__wasm_rquickjs_cjs_resolve_package_fallback',
         '__wasm_rquickjs_package_global_conditions',
@@ -81,6 +85,13 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         }, TypeError, name);
         assert.strictEqual(globalThis[name], original, name);
     }
+    const withProbeSession = globalThis.__wasm_rquickjs_with_cjs_module_probe_session;
+    assert.strictEqual(withProbeSession(() => 42), 42);
+    const probeSessionError = new Error('scoped probe-session error');
+    assert.throws(
+        () => withProbeSession(() => { throw probeSessionError; }),
+        (error) => error === probeSessionError,
+    );
     const originalExecArgv = process.execArgv;
     try {
         process.execArgv = [Symbol('ignored'), { toString: () => '--bridge-flag=value' }];
@@ -442,7 +453,7 @@ export const testEsmPackageMapEdgeCases = async () => {
         fs.mkdirSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir', { recursive: true });
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/subdir/index.mjs', 'export default { directory: true };');
         fs.symlinkSync(
-            '/esm-package-map-edge-app/node_modules/exported-pkg/subdir',
+            'subdir',
             '/esm-package-map-edge-app/node_modules/exported-pkg/linked-subdir',
         );
         fs.writeFileSync('/esm-package-map-edge-app/node_modules/exported-pkg/real.mjs', 'export default { extensionFallback: true };');
@@ -6396,6 +6407,123 @@ export const testCjsPackageJsonParseCache = async () => {
 
         assert.strictEqual(require(`${root}/app.cjs`), true);
 
+        const probeRoot = '/cjs-probe-session-app';
+        const probeRequire = createRequire(`${probeRoot}/entry.cjs`);
+        fs.mkdirSync(`${probeRoot}/node_modules/late-pkg`, { recursive: true });
+        fs.writeFileSync(`${probeRoot}/target.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/nested-target.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/rename-target.js`, 'module.exports = true;');
+        fs.mkdirSync(`${probeRoot}/recursive-target`, { recursive: true });
+        fs.writeFileSync(`${probeRoot}/recursive-target/child.js`, 'module.exports = true;');
+        fs.writeFileSync(`${probeRoot}/nested-child.cjs`, [
+            'const fs = require("fs");',
+            'const Module = require("module");',
+            'fs.unlinkSync("/cjs-probe-session-app/nested-target.js");',
+            'Module._pathCache = Object.create(null);',
+            'module.exports = require.resolve("./nested-target");',
+        ].join('\n'));
+        fs.writeFileSync(`${probeRoot}/session.cjs`, [
+            'const assert = require("assert");',
+            'const fs = require("fs");',
+            'const Module = require("module");',
+            'const originalPathCache = Module._pathCache;',
+            'const originalExecArgv = process.execArgv;',
+            'try {',
+            '  process.execArgv = ["--preserve-symlinks"];',
+            '  Module._pathCache = Object.create(null);',
+            '  const firstTarget = require.resolve("./target");',
+            '  Module._pathCache = Object.create(null);',
+            '  globalThis.__wasm_rquickjs_reset_cjs_module_probe_session_hit_count();',
+            '  assert.strictEqual(require.resolve("./target"), firstTarget);',
+            '  assert.ok(',
+            '    globalThis.__wasm_rquickjs_get_cjs_module_probe_session_hit_count() >= 1,',
+            '    "the repeated positive resolution must use the outer CommonJS probe session",',
+            '  );',
+            '  fs.unlinkSync("/cjs-probe-session-app/target.js");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("./target"), { code: "MODULE_NOT_FOUND" });',
+            '  require.resolve("./nested-target");',
+            '  assert.throws(() => require("./nested-child.cjs"), { code: "MODULE_NOT_FOUND" });',
+            '  assert.throws(() => require.resolve("./late"), { code: "MODULE_NOT_FOUND" });',
+            '  fs.writeFileSync("/cjs-probe-session-app/late.js", "module.exports = true;");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("./late"), "/cjs-probe-session-app/late.js");',
+            '  assert.throws(() => require.resolve("./late-dir"), { code: "MODULE_NOT_FOUND" });',
+            '  fs.mkdirSync("/cjs-probe-session-app/late-dir");',
+            '  fs.writeFileSync("/cjs-probe-session-app/late-dir/index.js", "module.exports = true;");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("./late-dir"), "/cjs-probe-session-app/late-dir/index.js");',
+            '  assert.throws(() => require.resolve("late-pkg"), { code: "MODULE_NOT_FOUND" });',
+            '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/package.json", JSON.stringify({ exports: "./entry.js" }));',
+            '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/entry.js", "module.exports = true;");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.strictEqual(require.resolve("late-pkg"), "/cjs-probe-session-app/node_modules/late-pkg/entry.js");',
+            '  require.resolve("./rename-target");',
+            '  fs.renameSync("/cjs-probe-session-app/rename-target.js", "/cjs-probe-session-app/renamed-target.js");',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("./rename-target"), { code: "MODULE_NOT_FOUND" });',
+            '  assert.strictEqual(require.resolve("./renamed-target"), "/cjs-probe-session-app/renamed-target.js");',
+            '  require.resolve("./recursive-target/child");',
+            '  fs.rmSync("/cjs-probe-session-app/recursive-target", { recursive: true });',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("./recursive-target/child"), { code: "MODULE_NOT_FOUND" });',
+            '} finally {',
+            '  Module._pathCache = originalPathCache;',
+            '  process.execArgv = originalExecArgv;',
+            '}',
+            'module.exports = true;',
+        ].join('\n'));
+        const getProbeSessionHits = globalThis.__wasm_rquickjs_get_cjs_module_probe_session_hit_count;
+        const resetProbeSessionHits = globalThis.__wasm_rquickjs_reset_cjs_module_probe_session_hit_count;
+        assert.strictEqual(typeof getProbeSessionHits, 'function');
+        assert.strictEqual(typeof resetProbeSessionHits, 'function');
+        resetProbeSessionHits();
+        assert.strictEqual(getProbeSessionHits(), 0);
+        assert.strictEqual(probeRequire(`${probeRoot}/session.cjs`), true);
+        assert.ok(getProbeSessionHits() > 0);
+        const moduleBuiltin = probeRequire('module');
+        const originalCwd = process.cwd();
+        try {
+            process.chdir(probeRoot);
+            assert.strictEqual(moduleBuiltin._stat('.'), 1);
+            assert.strictEqual(moduleBuiltin._stat('..'), 1);
+            assert.strictEqual(moduleBuiltin._stat('renamed-target.js'), 0);
+        } finally {
+            process.chdir(originalCwd);
+        }
+        const originalPathCache = moduleBuiltin._pathCache;
+        try {
+            moduleBuiltin._pathCache = Object.create(null);
+            assert.throws(
+                () => probeRequire.resolve('./target'),
+                { code: 'MODULE_NOT_FOUND' },
+                'positive probe observations must be cleared after outer CJS execution',
+            );
+        } finally {
+            moduleBuiltin._pathCache = originalPathCache;
+        }
+
+        fs.writeFileSync(`${probeRoot}/throw-target.js`, 'module.exports = true;');
+        const throwingModule = new moduleBuiltin.Module(`${probeRoot}/thrower.cjs`);
+        assert.throws(
+            () => throwingModule._compile(
+                'require.resolve("./throw-target"); throw new Error("probe-session-throw");',
+                `${probeRoot}/thrower.cjs`,
+            ),
+            /probe-session-throw/,
+        );
+        fs.unlinkSync(`${probeRoot}/throw-target.js`);
+        try {
+            moduleBuiltin._pathCache = Object.create(null);
+            assert.throws(
+                () => probeRequire.resolve('./throw-target'),
+                { code: 'MODULE_NOT_FOUND' },
+                'exceptional CJS execution must clear positive probe observations',
+            );
+        } finally {
+            moduleBuiltin._pathCache = originalPathCache;
+        }
+
         fs.mkdirSync(`${root}/node_modules/cached-esm-pkg`, { recursive: true });
         fs.writeFileSync(`${root}/node_modules/cached-esm-pkg/package.json`, JSON.stringify({
             exports: {
@@ -7247,6 +7375,8 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.strictEqual(new vm.Script('/[//# sourceMappingURL=regex.map]/;').sourceMapURL, undefined);
         assert.strictEqual(new vm.Script('/*\n//# sourceMappingURL=inside-block.map\n*/').sourceMapURL, undefined);
         assert.strictEqual(new vm.Script('1 + 1\n/*# sourceMappingURL=block.map */').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=bad.map trailing').sourceMapURL, undefined);
+        assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=good.map   \t').sourceMapURL, 'good.map');
         assert.strictEqual(new vm.Script('1 + 1\n//# sourceMappingURL=script.map').sourceMapURL, 'script.map');
         assert.strictEqual(new vm.Script('1;\n//# sourceMappingURL=semi.map').sourceMapURL, 'semi.map');
         assert.strictEqual(new vm.Script('1 + 1\n//#\tsourceMappingURL=tab.map').sourceMapURL, 'tab.map');
@@ -8682,6 +8812,246 @@ export const testRequireEsmRejectionTracking = async () => {
     }
 };
 
+export const testUnhandledRejectionTurnOrdering = async () => {
+    const order = [];
+    const unhandled = [];
+    const handled = [];
+    const onUnhandled = (reason, promise) => {
+        unhandled.push({ reason, promise });
+        order.push(`unhandled:${reason.message}`);
+    };
+    const onHandled = (promise) => {
+        handled.push(promise);
+        order.push('rejectionHandled');
+    };
+    process.on('unhandledRejection', onUnhandled);
+    process.on('rejectionHandled', onHandled);
+
+    let onFixpointUnhandled;
+    let onThrowingUnhandled;
+    let onThrowingHandled;
+    let onUncaughtException;
+    let onCancellingUnhandled;
+
+    try {
+        const refTimerCount = globalThis.__wasm_rquickjs_ref_timer_count;
+        assert.strictEqual(typeof refTimerCount, 'function');
+        const timersBefore = refTimerCount();
+
+        const handledInNextTick = Promise.reject(new Error('handled in nextTick'));
+        const handledLate = Promise.reject(new Error('handled late'));
+        const timersAfterRejection = refTimerCount();
+        assert.strictEqual(timersAfterRejection, timersBefore);
+
+        process.nextTick(() => {
+            order.push('nextTick');
+            handledInNextTick.catch(() => {
+                order.push('nextTick catch job');
+            });
+        });
+        Promise.resolve().then(() => order.push('microtask'));
+
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                try {
+                    order.push('first timer');
+                    assert.deepStrictEqual(order, [
+                        'nextTick',
+                        'microtask',
+                        'nextTick catch job',
+                        'unhandled:handled late',
+                        'first timer',
+                    ]);
+                    assert.strictEqual(unhandled.length, 1);
+                    assert.strictEqual(unhandled[0].promise, handledLate);
+                    assert.strictEqual(handled.length, 0);
+
+                    handledLate.catch(() => order.push('late catch job'));
+                    const rejectedInTimer = Promise.reject(new Error('timer rejection'));
+                    process.nextTick(() => order.push('timer nextTick'));
+                    Promise.resolve().then(() => order.push('timer microtask'));
+
+                    setTimeout(() => {
+                        try {
+                            order.push('second timer');
+                            assert.deepStrictEqual(order, [
+                                'nextTick',
+                                'microtask',
+                                'nextTick catch job',
+                                'unhandled:handled late',
+                                'first timer',
+                                'timer nextTick',
+                                'late catch job',
+                                'timer microtask',
+                                'rejectionHandled',
+                                'unhandled:timer rejection',
+                                'second timer',
+                            ]);
+                            assert.deepStrictEqual(handled, [handledLate]);
+                            assert.strictEqual(unhandled.length, 2);
+                            assert.strictEqual(unhandled[1].promise, rejectedInTimer);
+                            rejectedInTimer.catch(() => {});
+                            resolve();
+                        } catch (error) {
+                            reject(error);
+                        }
+                    }, 0);
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+
+        process.removeListener('unhandledRejection', onUnhandled);
+        process.removeListener('rejectionHandled', onHandled);
+
+        const fixpointOrder = [];
+        let listenerChild;
+        let handledFromNextTick;
+        onFixpointUnhandled = (reason) => {
+            fixpointOrder.push(`unhandled:${reason.message}`);
+            if (reason.message === 'listener root') {
+                listenerChild = Promise.reject(new Error('listener child'));
+                handledFromNextTick = Promise.reject(new Error('listener handled'));
+                process.nextTick(() => {
+                    fixpointOrder.push('listener nextTick');
+                    handledFromNextTick.catch(() => fixpointOrder.push('listener catch job'));
+                });
+            }
+        };
+        process.on('unhandledRejection', onFixpointUnhandled);
+        Promise.reject(new Error('listener root'));
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                try {
+                    fixpointOrder.push('listener timer');
+                    assert.deepStrictEqual(fixpointOrder, [
+                        'unhandled:listener root',
+                        'listener nextTick',
+                        'listener catch job',
+                        'unhandled:listener child',
+                        'listener timer',
+                    ]);
+                    listenerChild.catch(() => {});
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+        process.removeListener('unhandledRejection', onFixpointUnhandled);
+
+        const exceptionOrder = [];
+        const unhandledListenerError = new Error('unhandled listener threw');
+        const handledListenerError = new Error('handled listener threw');
+        let lateHandledPromise;
+        onUncaughtException = (error, origin) => {
+            exceptionOrder.push(`uncaught:${error.message}:${origin}`);
+        };
+        onThrowingUnhandled = (reason) => {
+            if (reason.message === 'throwing listener root') {
+                exceptionOrder.push('throwing unhandled');
+                throw unhandledListenerError;
+            }
+        };
+        onThrowingHandled = (promise) => {
+            if (promise === lateHandledPromise) {
+                exceptionOrder.push('throwing handled');
+                throw handledListenerError;
+            }
+        };
+        process.on('uncaughtException', onUncaughtException);
+        process.on('unhandledRejection', onThrowingUnhandled);
+        process.on('rejectionHandled', onThrowingHandled);
+        lateHandledPromise = Promise.reject(new Error('throwing listener root'));
+
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                try {
+                    exceptionOrder.push('exception first timer');
+                    lateHandledPromise.catch(() => exceptionOrder.push('exception catch job'));
+                    setTimeout(() => {
+                        try {
+                            exceptionOrder.push('exception second timer');
+                            assert.deepStrictEqual(exceptionOrder, [
+                                'throwing unhandled',
+                                'uncaught:unhandled listener threw:uncaughtException',
+                                'exception first timer',
+                                'exception catch job',
+                                'throwing handled',
+                                'uncaught:handled listener threw:uncaughtException',
+                                'exception second timer',
+                            ]);
+                            resolve();
+                        } catch (error) {
+                            reject(error);
+                        }
+                    }, 0);
+                } catch (error) {
+                    reject(error);
+                }
+            }, 0);
+        });
+
+        let cancellationCase;
+        onCancellingUnhandled = (reason) => {
+            if (!cancellationCase || reason !== cancellationCase.reason) return;
+            const activeCase = cancellationCase;
+            activeCase.order.push('unhandled');
+            activeCase.cancel(activeCase.handle);
+            setTimeout(() => {
+                try {
+                    activeCase.order.push('later timer');
+                    assert.deepStrictEqual(activeCase.order, ['unhandled', 'later timer']);
+                    activeCase.resolve();
+                } catch (error) {
+                    activeCase.reject(error);
+                }
+            }, 0);
+        };
+        process.on('unhandledRejection', onCancellingUnhandled);
+
+        const assertCurrentTimerCancelled = async (kind, schedule, cancel) => {
+            const reason = new Error(`cancel current ${kind}`);
+            const order = [];
+            let resolveCancellation;
+            let rejectCancellation;
+            const cancellationComplete = new Promise((resolve, reject) => {
+                resolveCancellation = resolve;
+                rejectCancellation = reject;
+            });
+            cancellationCase = {
+                reason,
+                order,
+                cancel,
+                resolve: resolveCancellation,
+                reject: rejectCancellation,
+            };
+            Promise.reject(reason);
+            cancellationCase.handle = schedule(() => {
+                order.push(`cancelled ${kind} ran`);
+                rejectCancellation(new Error(`the ${kind} cleared during its checkpoint ran`));
+            }, 0);
+            await cancellationComplete;
+            cancellationCase = undefined;
+        };
+
+        await assertCurrentTimerCancelled('timeout', setTimeout, clearTimeout);
+        await assertCurrentTimerCancelled('interval', setInterval, clearInterval);
+        process.removeListener('unhandledRejection', onCancellingUnhandled);
+
+        return true;
+    } finally {
+        process.removeListener('unhandledRejection', onUnhandled);
+        process.removeListener('rejectionHandled', onHandled);
+        if (onFixpointUnhandled) process.removeListener('unhandledRejection', onFixpointUnhandled);
+        if (onThrowingUnhandled) process.removeListener('unhandledRejection', onThrowingUnhandled);
+        if (onThrowingHandled) process.removeListener('rejectionHandled', onThrowingHandled);
+        if (onUncaughtException) process.removeListener('uncaughtException', onUncaughtException);
+        if (onCancellingUnhandled) process.removeListener('unhandledRejection', onCancellingUnhandled);
+    }
+};
+
 export const testRequireEsmCycleGuards = async () => {
     try {
         fs.mkdirSync('/require-esm-cycle-app', { recursive: true });
@@ -8983,7 +9353,7 @@ export const testCjsEsmDefaultSnapshotTiming = async () => {
 
         fs.writeFileSync(`${root}/symlink-target.js`, 'module.exports = { value: 1 };');
         try {
-            fs.symlinkSync(`${root}/symlink-target.js`, `${root}/symlink-link.js`);
+            fs.symlinkSync('symlink-target.js', `${root}/symlink-link.js`);
         } catch (error) {
             if (!error || error.code !== 'EEXIST') {
                 throw error;
@@ -9043,8 +9413,8 @@ export const testCjsSymlinkCircularCache = async () => {
 
         fs.mkdirSync(`${moduleA}/node_modules`, { recursive: true });
         fs.mkdirSync(`${moduleB}/node_modules`, { recursive: true });
-        fs.symlinkSync(moduleA, moduleALink);
-        fs.symlinkSync(moduleB, moduleBLink);
+        fs.symlinkSync('../../moduleA', moduleALink);
+        fs.symlinkSync('../../moduleB', moduleBLink);
         fs.writeFileSync(`${root}/index.cjs`, 'module.exports = require("moduleA");');
         fs.writeFileSync(`${moduleA}/index.js`, 'module.exports = { b: require("moduleB") };');
         fs.writeFileSync(`${moduleB}/index.js`, 'module.exports = { a: require("moduleA") };');
@@ -9097,7 +9467,7 @@ export const testEsmSymlinkModuleIdentity = async () => {
         fs.writeFileSync(`${root}/packages/pkg/index.mjs`, 'export const url = import.meta.url; export default [];');
         fs.writeFileSync(`${root}/app/entry.mjs`, "export default await import('pkg');");
         try {
-            fs.symlinkSync(`${root}/packages/pkg`, `${root}/app/node_modules/pkg`, 'dir');
+            fs.symlinkSync('../../packages/pkg', `${root}/app/node_modules/pkg`, 'dir');
         } catch (error) {
             if (!error || error.code !== 'EEXIST') {
                 throw error;
@@ -9122,7 +9492,7 @@ export const testEsmSymlinkModuleIdentity = async () => {
         fs.writeFileSync(`${preserveRoot}/packages/preserve-pkg/child.mjs`, 'export default import.meta.url;');
         fs.writeFileSync(`${preserveRoot}/app/entry.mjs`, "export default await import('preserve-pkg');");
         try {
-            fs.symlinkSync(`${preserveRoot}/packages/preserve-pkg`, `${preserveRoot}/app/node_modules/preserve-pkg`, 'dir');
+            fs.symlinkSync('../../packages/preserve-pkg', `${preserveRoot}/app/node_modules/preserve-pkg`, 'dir');
         } catch (error) {
             if (!error || error.code !== 'EEXIST') {
                 throw error;

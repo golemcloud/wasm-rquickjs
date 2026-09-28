@@ -2681,7 +2681,8 @@ fn p3_streaming_fetch_manual_redirect_returns_opaqueredirect_filtered_response()
 }
 
 #[test]
-fn p3_streaming_fetch_truncated_final_body_rejects_like_buffered_path() -> anyhow::Result<()> {
+fn p3_streaming_fetch_truncated_final_body_resolves_headers_then_rejects_body() -> anyhow::Result<()>
+{
     let port = spawn_test_http_server();
     let temp = Utf8TempDir::new()?;
     write_fixture(
@@ -2738,7 +2739,10 @@ fn p3_streaming_fetch_truncated_final_body_rejects_like_buffered_path() -> anyho
     let wasm_path = build_p3(temp.path(), "p3_fetch_stream_truncated_final_body")?;
     let result = run_p3_string_export(&wasm_path, "run")?;
 
-    assert_eq!(result, "buffered=rejected;streaming=rejected");
+    assert_eq!(
+        result,
+        "buffered=rejected;streaming=resolved:200:body-rejected"
+    );
     Ok(())
 }
 

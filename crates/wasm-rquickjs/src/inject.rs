@@ -4,20 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, anyhow};
 use camino::Utf8Path;
 use wasm_encoder::reencode::{Error, Reencode, ReencodeComponent};
+use wasm_encoder::{Encode, Section};
 
 use crate::capability_scan::{ALL_CAPABILITIES, Capability};
 
-/// Custom section emitted by wasm-rquickjs to describe capability-owned opaque
-/// roots to the generic wasm-eliminator.
-///
-/// The section is a producer-owned conditional reachability contract: a listed
-/// function/resource shim belongs to one capability, and callers may suppress it
-/// only when that capability is disabled. Shared implementation glue is emitted
-/// once per owner capability so it is retained while any owner remains enabled.
-/// This is intentionally not a generic "delete these symbols" override; it
-/// fills in semantic ownership that cannot be recovered safely from QuickJS /
-/// rquickjs callback tables, vtables, WIT resource drops, and component adapter
-/// glue alone.
+/// Legacy experimental ownership metadata. The current CLI deliberately does
+/// NOT turn this into wasm-eliminator producer hints: symbol reachability is not
+/// proof that an opaque callback or resource drop can be suppressed. Strict DCE
+/// treats this as an uninterpreted custom section, not a trusted contract.
 const CAPABILITY_ROOTS_SECTION: &str = "wasm-rquickjs.capability-roots";
 const CAPABILITY_ROOTS_MAGIC: &[u8; 8] = b"WRQJSCAP";
 const CAPABILITY_ROOTS_VERSION: u8 = 1;
@@ -415,20 +409,43 @@ fn find_capability_gates_slots(wasm: &[u8]) -> Vec<usize> {
 /// Bit `i` corresponds to the skeleton's `Capability` variant with discriminant
 /// `i`. Setting a bit enables that capability; clearing it disables the
 /// capability so the skeleton skips its module registration and global wiring.
-/// Combined with a downstream wasm-level dead-code elimination pass, disabled
-/// capabilities also drop their host imports (`wasi:filesystem`, `wasi:sockets`,
-/// etc.).
+/// Strict downstream Wasm DCE may remove unreachable code; it does not guarantee
+/// removal of native callbacks, JS data, or host imports. Patch a fresh template
+/// before Wizer initialization, and account for all future code requirements.
 ///
 /// Returns an error if the capability-gates marker is not present in `wasm`,
 /// which generally means the skeleton was built without the capability-gates
 /// support or the slot has been stripped already.
 pub fn patch_capability_gates_in_bytes(wasm: &[u8], enabled_bits: u64) -> anyhow::Result<Vec<u8>> {
+    // Helper calls become constants, so changing the data slot a second time
+    // cannot change their value. Never silently pretend to re-enable code.
+    const SPECIALIZATION: &str = "wasm-rquickjs.capability-specialization";
+    for payload in wasmparser_encoder::Parser::new(0).parse_all(wasm) {
+        if let Ok(wasmparser_encoder::Payload::CustomSection(section)) = payload
+            && section.name() == SPECIALIZATION
+        {
+            anyhow::ensure!(
+                section.data() == enabled_bits.to_le_bytes(),
+                "Cannot change capabilities of a specialized component; use the original template"
+            );
+            return Ok(wasm.to_vec());
+        }
+    }
     match lower_capability_helpers_to_globals(wasm, enabled_bits) {
         Ok(lowered) if lowered.calls_rewritten > 0 => {
-            return match patch_capability_gates_slots_in_bytes(&lowered.bytes, enabled_bits) {
-                Ok(bytes) => Ok(bytes),
-                Err(_) => Ok(lowered.bytes),
+            let mut bytes =
+                match patch_capability_gates_slots_in_bytes(&lowered.bytes, enabled_bits) {
+                    Ok(bytes) => bytes,
+                    Err(_) => lowered.bytes,
+                };
+            let bits = enabled_bits.to_le_bytes();
+            let section = wasm_encoder::CustomSection {
+                name: Cow::Borrowed(SPECIALIZATION),
+                data: Cow::Borrowed(&bits),
             };
+            bytes.push(section.id());
+            section.encode(&mut bytes);
+            return Ok(bytes);
         }
         Ok(_) | Err(_) => {}
     }
@@ -661,45 +678,28 @@ fn reachable_builtin_capabilities(
     memo: &mut BTreeMap<u32, BTreeSet<Capability>>,
 ) -> BTreeSet<Capability> {
     let mut visiting = BTreeSet::new();
-    reachable_builtin_capabilities_inner(func, names, helper_exports, direct, memo, &mut visiting)
-}
-
-fn reachable_builtin_capabilities_inner(
-    func: u32,
-    names: &BTreeMap<u32, String>,
-    helper_exports: &BTreeMap<u32, Capability>,
-    direct: &BTreeMap<u32, Vec<u32>>,
-    memo: &mut BTreeMap<u32, BTreeSet<Capability>>,
-    visiting: &mut BTreeSet<u32>,
-) -> BTreeSet<Capability> {
-    if let Some(cached) = memo.get(&func) {
-        return cached.clone();
-    }
-    if !visiting.insert(func) {
-        return BTreeSet::new();
-    }
-
+    let mut pending = vec![func];
     let mut caps = BTreeSet::new();
-    if let Some(name) = names.get(&func) {
-        caps.extend(function_name_capabilities(name));
-    }
-    if let Some(cap) = helper_exports.get(&func) {
-        caps.insert(*cap);
-    }
-    if let Some(callees) = direct.get(&func) {
-        for callee in callees {
-            caps.extend(reachable_builtin_capabilities_inner(
-                *callee,
-                names,
-                helper_exports,
-                direct,
-                memo,
-                visiting,
-            ));
+    while let Some(current) = pending.pop() {
+        if !visiting.insert(current) {
+            continue;
+        }
+        if let Some(cached) = memo.get(&current) {
+            caps.extend(cached);
+            continue;
+        }
+        if let Some(name) = names.get(&current) {
+            caps.extend(function_name_capabilities(name));
+        }
+        if let Some(cap) = helper_exports.get(&current) {
+            caps.insert(*cap);
+        }
+        if let Some(callees) = direct.get(&current) {
+            pending.extend(callees);
         }
     }
-
-    visiting.remove(&func);
+    // Only cache the completed root traversal, never partial results inside a
+    // recursive strongly connected component.
     memo.insert(func, caps.clone());
     caps
 }
@@ -1306,6 +1306,22 @@ mod tests {
     }
 
     #[test]
+    fn specialized_component_cannot_silently_change_constant_gates() {
+        let component = build_test_component_with_capability_helper();
+        let patched = patch_capability_gates_in_bytes(&component, 0).unwrap();
+        assert_eq!(
+            patch_capability_gates_in_bytes(&patched, 0).unwrap(),
+            patched
+        );
+        assert!(
+            patch_capability_gates_in_bytes(&patched, u64::MAX)
+                .unwrap_err()
+                .to_string()
+                .contains("original template")
+        );
+    }
+
+    #[test]
     fn test_lower_capability_helper_calls_to_globals() {
         let component = build_test_component_with_capability_helper();
         let lowered = lower_capability_helpers_to_globals(&component, 0).unwrap();
@@ -1569,5 +1585,22 @@ mod tests {
         assert_eq!(all_known.count_ones(), 53);
         // Bits 53..64 must be unused.
         assert_eq!(all_known & !((1u64 << 53) - 1), 0);
+    }
+
+    #[test]
+    fn capability_roots_propagate_through_recursive_call_graphs() {
+        let names = [(0, "crate::builtin::fs::callback".to_owned())].into();
+        let direct = [(0, vec![1]), (1, vec![0])].into();
+        let mut memo = BTreeMap::new();
+
+        assert!(
+            reachable_builtin_capabilities(0, &names, &BTreeMap::new(), &direct, &mut memo)
+                .contains(&Capability::Fs)
+        );
+        assert!(
+            reachable_builtin_capabilities(1, &names, &BTreeMap::new(), &direct, &mut memo)
+                .contains(&Capability::Fs),
+            "every function in a recursive SCC can reach the capability-owned callback"
+        );
     }
 }

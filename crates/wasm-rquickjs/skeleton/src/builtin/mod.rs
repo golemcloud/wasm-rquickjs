@@ -164,6 +164,7 @@ macro_rules! capability_enabled {
 }
 
 mod abort_controller;
+#[cfg(feature = "fetch")]
 mod abort_signal;
 mod assert;
 mod async_hooks;
@@ -182,6 +183,7 @@ pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
+mod shared_response_body;
 
 #[cfg(feature = "fetch")]
 mod http;
@@ -277,13 +279,6 @@ pub(crate) fn realpath_for_module_resolution(
     path: &str,
 ) -> Option<String> {
     fs::realpath_for_module_resolution(ctx, path)
-}
-
-pub(crate) fn realpath_for_module_resolution_with_symlinks(
-    emulated_symlinks: &std::collections::HashMap<String, String>,
-    path: &str,
-) -> Option<String> {
-    fs::realpath_for_module_resolution_with_symlinks(emulated_symlinks, path)
 }
 
 pub fn add_module_resolvers(
@@ -626,6 +621,7 @@ pub fn add_module_resolvers(
     let resolver = if capability_enabled!(NodeHttp) {
         resolver
             .with_module("__wasm_rquickjs_builtin/node_http_native")
+            .with_module("__wasm_rquickjs_builtin/node_http_incoming")
             .with_module("__wasm_rquickjs_builtin/node_http_server")
             .with_module("node:_http_common")
             .with_module("_http_common")
@@ -691,7 +687,10 @@ pub fn add_module_resolvers(
     };
 
     let resolver = if capability_enabled!(V8) {
-        resolver.with_module("node:v8").with_module("v8")
+        resolver
+            .with_module("__wasm_rquickjs_builtin/v8_native")
+            .with_module("node:v8")
+            .with_module("v8")
     } else {
         resolver
     };
@@ -748,107 +747,19 @@ pub fn add_module_resolvers(
     internal::add_to_resolver(resolver)
 }
 
-fn module_from_declarations<'a, 'js>(
-    declarations: &'a rquickjs::module::Declarations<'js>,
-) -> &'a rquickjs::Module<'js, rquickjs::module::Declared> {
-    debug_assert_eq!(
-        std::mem::size_of::<rquickjs::module::Declarations<'js>>(),
-        std::mem::size_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
-    );
-    debug_assert_eq!(
-        std::mem::align_of::<rquickjs::module::Declarations<'js>>(),
-        std::mem::align_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
-    );
-
-    // SAFETY: rquickjs 0.10 declares `Declarations<'js>` as a single-field
-    // tuple wrapper around `Module<'js, Declared>`:
-    //
-    //     pub struct Declarations<'js>(Module<'js, Declared>);
-    //
-    // rquickjs does not expose the wrapped module publicly, but the unified
-    // builtin trampoline needs the current module name to dispatch back to the
-    // original per-builtin `ModuleDef`. Keep this cast isolated and guarded by
-    // the debug size/alignment assertions above.
-    unsafe {
-        &*(declarations as *const rquickjs::module::Declarations<'js>
-            as *const rquickjs::Module<'js, rquickjs::module::Declared>)
-    }
-}
-
-fn module_from_exports<'a, 'js>(
-    exports: &'a rquickjs::module::Exports<'js>,
-) -> &'a rquickjs::Module<'js, rquickjs::module::Declared> {
-    debug_assert_eq!(
-        std::mem::size_of::<rquickjs::module::Exports<'js>>(),
-        std::mem::size_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
-    );
-    debug_assert_eq!(
-        std::mem::align_of::<rquickjs::module::Exports<'js>>(),
-        std::mem::align_of::<rquickjs::Module<'js, rquickjs::module::Declared>>()
-    );
-
-    // SAFETY: Same layout assumption as `module_from_declarations`, for
-    // rquickjs' single-field `Exports<'js>(Module<'js, Declared>)` wrapper.
-    unsafe {
-        &*(exports as *const rquickjs::module::Exports<'js>
-            as *const rquickjs::Module<'js, rquickjs::module::Declared>)
-    }
-}
-
-fn declaration_module_name(
-    declarations: &rquickjs::module::Declarations<'_>,
-) -> rquickjs::Result<String> {
-    module_from_declarations(declarations).name::<String>()
-}
-
-fn export_module_name(exports: &rquickjs::module::Exports<'_>) -> rquickjs::Result<String> {
-    module_from_exports(exports).name::<String>()
-}
-
-struct UnifiedBuiltinNativeModule;
-
 macro_rules! builtin_native_modules {
     ($($(#[$meta:meta])* $cap:ident, $path:literal, $module:path;)*) => {
-        fn is_enabled_native_module_path(path: &str) -> bool {
+        fn load_native_module<'js>(
+            ctx: &rquickjs::Ctx<'js>,
+            path: &str,
+        ) -> rquickjs::Result<rquickjs::Module<'js, rquickjs::module::Declared>> {
             $(
                 $(#[$meta])*
                 if capability_enabled!($cap) && path == $path {
-                    return true;
+                    return rquickjs::Module::declare_def::<$module, _>(ctx.clone(), path);
                 }
             )*
-
-            false
-        }
-
-        impl rquickjs::module::ModuleDef for UnifiedBuiltinNativeModule {
-            fn declare(declarations: &rquickjs::module::Declarations<'_>) -> rquickjs::Result<()> {
-                let name = declaration_module_name(declarations)?;
-
-                $(
-                    $(#[$meta])*
-                    if capability_enabled!($cap) && name == $path {
-                        return <$module as rquickjs::module::ModuleDef>::declare(declarations);
-                    }
-                )*
-
-                Err(rquickjs::Error::new_loading(name))
-            }
-
-            fn evaluate<'js>(
-                ctx: &rquickjs::Ctx<'js>,
-                exports: &rquickjs::module::Exports<'js>,
-            ) -> rquickjs::Result<()> {
-                let name = export_module_name(exports)?;
-
-                $(
-                    $(#[$meta])*
-                    if capability_enabled!($cap) && name == $path {
-                        return <$module as rquickjs::module::ModuleDef>::evaluate(ctx, exports);
-                    }
-                )*
-
-                Err(rquickjs::Error::new_loading(name))
-            }
+            Err(rquickjs::Error::new_loading(path))
         }
     };
 }
@@ -870,6 +781,7 @@ builtin_native_modules! {
     Url, "__wasm_rquickjs_builtin/url_native", url::js_native_module;
     WebCrypto, "__wasm_rquickjs_builtin/web_crypto_native", web_crypto::js_native_module;
     Vm, "__wasm_rquickjs_builtin/vm_native", vm::js_native_module;
+    V8, "__wasm_rquickjs_builtin/v8_native", v8::js_native_module;
     Zlib, "__wasm_rquickjs_builtin/zlib_native", zlib::js_native_module;
     Dgram, "__wasm_rquickjs_builtin/dgram_native", dgram::js_native_module;
     Dns, "__wasm_rquickjs_builtin/dns_native", dns::js_native_module;
@@ -896,12 +808,9 @@ builtin_native_modules! {
 /// alive after wasm-eliminator DCE because the call's index operand is
 /// runtime-dynamic, so all type-matching elem slots stay reachable.
 ///
-/// This loader avoids that retention by using exactly one native module type,
-/// [`UnifiedBuiltinNativeModule`], for every builtin. The QuickJS callback table
-/// therefore contains one rquickjs `eval_fn` instantiation instead of one per
-/// builtin. The unified callback recovers the current module name from
-/// rquickjs' declaration/export wrapper and dispatches through direct,
-/// capability-gated calls to the original per-builtin `ModuleDef`.
+/// Dispatch directly through rquickjs' public API. Its per-module evaluation
+/// callbacks may conservatively survive DCE; do not bypass that retention with
+/// private-layout casts or unproved function-table suppression hints.
 pub struct BuiltinNativeLoader;
 
 impl rquickjs::loader::Loader for BuiltinNativeLoader {
@@ -910,14 +819,7 @@ impl rquickjs::loader::Loader for BuiltinNativeLoader {
         ctx: &rquickjs::Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<rquickjs::Module<'js, rquickjs::module::Declared>> {
-        if is_enabled_native_module_path(path) {
-            return rquickjs::Module::declare_def::<UnifiedBuiltinNativeModule, _>(
-                ctx.clone(),
-                Vec::from(path),
-            );
-        }
-
-        Err(rquickjs::Error::new_loading(path))
+        load_native_module(ctx, path)
     }
 }
 
@@ -1247,6 +1149,10 @@ pub fn module_loader() -> (
 
     let builtin_loader = if capability_enabled!(NodeHttp) {
         builtin_loader
+            .with_module(
+                "__wasm_rquickjs_builtin/node_http_incoming",
+                node_http::HTTP_INCOMING_JS,
+            )
             .with_module(
                 "__wasm_rquickjs_builtin/node_http_server",
                 node_http::NODE_HTTP_SERVER_JS,

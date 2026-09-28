@@ -10,21 +10,34 @@ use anyhow::{Result, anyhow};
 use futures::StreamExt;
 use futures::channel::{mpsc, oneshot};
 use p3_host_runner::util::{OneshotConsumer, OneshotProducer, PipeConsumer, PipeProducer};
-use wasmtime::component::{Component, FutureReader, Linker, StreamReader, bindgen};
+use wasmtime::component::{Accessor, Component, FutureReader, HasSelf, Linker, StreamReader};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
 
-bindgen!({
-    world: "async-values",
-    path: "../async-values/wit",
-});
+mod bindings {
+    use wasmtime::component::bindgen;
+
+    bindgen!({
+        world: "async-values",
+        path: "../async-values/wit",
+        with: {
+            "test:async-values/observer.wrapped-stream": super::WrappedStream,
+        },
+    });
+}
+
+use bindings::{AsyncValues, test};
 
 struct Host {
     wasi: wasmtime_wasi::WasiCtx,
     http: WasiHttpCtx,
     table: ResourceTable,
+}
+
+pub struct WrappedStream {
+    _reader: StreamReader<u8>,
 }
 
 impl wasmtime_wasi::WasiView for Host {
@@ -43,6 +56,35 @@ impl WasiHttpView for Host {
             table: &mut self.table,
             hooks: wasmtime_wasi_http::p3::default_hooks(),
         }
+    }
+}
+
+impl test::async_values::observer::Host for Host {
+    fn cleanup_complete(&mut self) {}
+}
+
+impl test::async_values::observer::HostWithStore for HasSelf<Host> {
+    async fn gate<T: Send>(_: &Accessor<T, Self>, _: u8) {}
+}
+
+impl test::async_values::observer::HostWrappedStream for Host {
+    fn drop(
+        &mut self,
+        rep: wasmtime::component::Resource<WrappedStream>,
+    ) -> std::result::Result<(), wasmtime::Error> {
+        self.table.delete(rep)?;
+        Ok(())
+    }
+}
+
+impl test::async_values::observer::HostWrappedStreamWithStore for HasSelf<Host> {
+    async fn wrap<T: Send>(
+        accessor: &Accessor<T, Self>,
+        reader: StreamReader<u8>,
+    ) -> wasmtime::component::Resource<WrappedStream> {
+        accessor
+            .with(|mut access| access.get().table.push(WrappedStream { _reader: reader }))
+            .expect("failed to store wrapped stream")
     }
 }
 
@@ -83,7 +125,9 @@ fn component_path() -> Result<String> {
     let target_dir = json["target_directory"]
         .as_str()
         .ok_or_else(|| anyhow!("missing target_directory"))?;
-    Ok(format!("{target_dir}/wasm32-wasip2/debug/async_values.wasm"))
+    Ok(format!(
+        "{target_dir}/wasm32-wasip2/debug/async_values.wasm"
+    ))
 }
 
 async fn instantiate() -> Result<(Store<Host>, AsyncValues)> {
@@ -99,6 +143,7 @@ async fn instantiate() -> Result<(Store<Host>, AsyncValues)> {
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    test::async_values::observer::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |host| host)?;
 
     let wasi = WasiCtxBuilder::new().inherit_stdio().build();
     let mut store = Store::new(
@@ -170,7 +215,10 @@ async fn call_take_stream(items: Vec<u8>) -> Result<u32> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let run_future = call_run_future().await?;
-    assert_eq!(run_future, 42, "expected run_future() == 42, got {run_future}");
+    assert_eq!(
+        run_future, 42,
+        "expected run_future() == 42, got {run_future}"
+    );
 
     let run_stream = call_run_stream().await?;
     assert_eq!(

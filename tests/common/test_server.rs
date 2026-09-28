@@ -1,6 +1,8 @@
 use axum::body::Body;
-use axum::extract::{Multipart, Path};
+use axum::extract::Request;
+use axum::extract::{ConnectInfo, Multipart, Path};
 use axum::http::HeaderMap;
+use axum::middleware::Next;
 use axum::response::{AppendHeaders, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -10,7 +12,8 @@ use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc, watch};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::{Mutex, Notify, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
@@ -26,6 +29,43 @@ impl Drop for TestServerHandle {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+fn trace_http_lifecycle(router: Router, port: u16) -> Router {
+    router.layer(axum::middleware::from_fn(
+        move |request: Request, next: Next| async move {
+            // Server-side IDs are intentionally independent from client-side IDs. Passing a
+            // private correlation value over the wire would mutate guest-visible requests.
+            let request_id = super::next_test_server_http_request();
+            let connection = request
+                .extensions()
+                .get::<ConnectInfo<super::TracedTestServerConnection>>()
+                .map(|connection| connection.0.clone());
+            let trace_response_write = request.version() == http::Version::HTTP_11;
+            super::record_test_server_arrival(request_id, port, request.uri());
+            super::record_test_server_connection(request_id, connection.as_ref());
+            let (parts, body) = request.into_parts();
+            let request = Request::from_parts(
+                parts,
+                Body::new(super::traced_test_server_body(
+                    body,
+                    request_id,
+                    "server-request",
+                )),
+            );
+            let response = next.run(request).await;
+            super::record_test_server_response_head(request_id, response.status());
+            let (parts, body) = response.into_parts();
+            axum::response::Response::from_parts(
+                parts,
+                Body::new(super::traced_test_server_response_body(
+                    body,
+                    request_id,
+                    trace_response_write.then_some(connection).flatten(),
+                )),
+            )
+        },
+    ))
 }
 
 pub async fn start_test_server() -> (u16, TestServerHandle) {
@@ -148,8 +188,18 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                 }),
             )
             .route(
+                "/json-echo",
+                post(async move |Json(body): Json<serde_json::Value>| {
+                    // For accepted JSON requests, extraction drains and validates the body before
+                    // this handler builds the response.
+                    Json(body)
+                }),
+            )
+            .route(
                 "/echo-referer",
-                post(async move |headers: HeaderMap| {
+                post(async move |headers: HeaderMap, _body: Bytes| {
+                    // This endpoint tests request-header policy, not early responses. Consume the
+                    // request body before replying so response delivery cannot race body completion.
                     let referer = headers
                         .get("referer")
                         .and_then(|h| h.to_str().ok())
@@ -162,7 +212,9 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
             )
             .route(
                 "/echo-credentials",
-                post(async move |headers: HeaderMap| {
+                post(async move |headers: HeaderMap, _body: Bytes| {
+                    // Like /echo-referer, keep the fixture focused on header semantics by
+                    // consuming the request body before constructing the response.
                     let authorization = headers
                         .get("authorization")
                         .and_then(|h| h.to_str().ok())
@@ -227,8 +279,15 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                         .into_response()
                 }),
             );
+        let router = trace_http_lifecycle(router, host_http_port);
 
-        axum::serve(listener, router).await.unwrap();
+        let listener = super::traced_test_server_listener(listener);
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<super::TracedTestServerConnection>(),
+        )
+        .await
+        .unwrap();
     });
 
     (host_http_port, TestServerHandle::new(handle))
@@ -263,10 +322,136 @@ pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::Unbounde
                 axum::routing::any(async || (StatusCode::FOUND, [("Location", "/slow-response")])),
             )
             .route("/abort-ready", ready);
-        axum::serve(listener, router).await.unwrap();
+        let router = trace_http_lifecycle(router, port);
+        let listener = super::traced_test_server_listener(listener);
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<super::TracedTestServerConnection>(),
+        )
+        .await
+        .unwrap();
     });
 
     (port, TestServerHandle::new(handle), arrived_rx)
+}
+
+/// Lifecycle events emitted by the pending response-body fixture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResponseBodyServerEvent {
+    Connected,
+    HeadSent,
+    Released,
+}
+
+/// Starts an endpoint that sends its response head and one chunk, then leaves the body pending.
+/// Dropping the client-side body closes the raw connection and reports through `released_rx`.
+pub async fn start_response_body_abort_test_server() -> (
+    u16,
+    TestServerHandle,
+    mpsc::UnboundedReceiver<ResponseBodyServerEvent>,
+) {
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (released_tx, released_rx) = mpsc::unbounded_channel();
+    let release_clone_race = Arc::new(Notify::new());
+    let clone_race_bytes_sent = Arc::new(Notify::new());
+
+    let handle = tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let released_tx = released_tx.clone();
+            let release_clone_race = release_clone_race.clone();
+            let clone_race_bytes_sent = clone_race_bytes_sent.clone();
+            tokio::spawn(async move {
+                let mut request = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let read = socket.read(&mut buf).await.unwrap_or(0);
+                    if read == 0 {
+                        return;
+                    }
+                    request.extend_from_slice(&buf[..read]);
+                }
+
+                let clone_race_release = request
+                    .windows(b"/clone-race-release".len())
+                    .any(|window| window == b"/clone-race-release");
+                if clone_race_release {
+                    release_clone_race.notify_one();
+                    clone_race_bytes_sent.notified().await;
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .await
+                        .unwrap();
+                    let _ = socket.shutdown().await;
+                    return;
+                }
+
+                let _ = released_tx.send(ResponseBodyServerEvent::Connected);
+
+                let truncated = request
+                    .windows(b"/truncated-response-body".len())
+                    .any(|window| window == b"/truncated-response-body");
+                let empty = request
+                    .windows(b"/empty-response-body".len())
+                    .any(|window| window == b"/empty-response-body");
+                let clone = request
+                    .windows(b"/clone-response-body".len())
+                    .any(|window| window == b"/clone-response-body");
+                let clone_race = request
+                    .windows(b"/clone-race-response-body".len())
+                    .any(|window| window == b"/clone-race-response-body");
+                if clone || clone_race {
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 23\r\nConnection: close\r\n\r\n",
+                        )
+                        .await
+                        .unwrap();
+                    socket.flush().await.unwrap();
+                    let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
+                    if clone_race {
+                        release_clone_race.notified().await;
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    }
+                    socket.write_all(b"first chunk").await.unwrap();
+                    socket.flush().await.unwrap();
+                    if clone_race {
+                        clone_race_bytes_sent.notify_one();
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    socket.write_all(b"second chunk").await.unwrap();
+                    socket.flush().await.unwrap();
+                    let _ = socket.shutdown().await;
+                    let _ = released_tx.send(ResponseBodyServerEvent::Released);
+                    return;
+                }
+                let response = if truncated {
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial".as_slice()
+                } else if empty {
+                    b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .as_slice()
+                } else {
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\nfirst chunk".as_slice()
+                };
+                socket.write_all(response).await.unwrap();
+                socket.flush().await.unwrap();
+                let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
+
+                if truncated || empty {
+                    let _ = socket.shutdown().await;
+                } else {
+                    while socket.read(&mut buf).await.unwrap_or(0) != 0 {}
+                }
+                let _ = released_tx.send(ResponseBodyServerEvent::Released);
+            });
+        }
+    });
+
+    (port, TestServerHandle::new(handle), released_rx)
 }
 
 #[derive(Debug, Clone, Serialize)]
