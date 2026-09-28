@@ -27,8 +27,7 @@ class Hello {
         return new Hello(`${h1.name} & ${h2.name}`);
     }
 
-    static async identity(value) {
-        await Promise.resolve();
+    static identity(value) {
         return value;
     }
 
@@ -49,13 +48,6 @@ class Hello {
         Object.freeze(value);
         stashedHello = value;
         throw "expected failure";
-    }
-
-    static async stashAndFailAsync(value) {
-        Object.freeze(value);
-        stashedHello = value;
-        await Promise.resolve();
-        throw "expected async failure";
     }
 
     static take() {

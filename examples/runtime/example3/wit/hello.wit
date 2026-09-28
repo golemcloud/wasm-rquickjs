@@ -24,8 +24,6 @@ interface iface {
     stash: static func(value: own<hello>);
     /// Retains a transferred object and returns an expected error
     stash-and-fail: static func(value: own<hello>) -> result<_, string>;
-    /// Retains a transferred object and asynchronously returns an expected error
-    stash-and-fail-async: static func(value: own<hello>) -> result<_, string>;
     /// Returns the object retained by `stash`
     take: static func() -> hello;
     /// Reports the number of live entries in the exported-resource table

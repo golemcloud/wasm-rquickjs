@@ -296,28 +296,6 @@ async fn example3(#[tagged_as("example3")] compiled: &CompiledTest) -> anyhow::R
     );
     test_instance.drop_resource(recovered).await?;
 
-    let failing = construct_hello(&mut test_instance, "recovered after async failure").await?;
-    let (failure, _) = test_instance
-        .invoke_and_capture_output(
-            Some("quickjs:example3/iface"),
-            "[static]hello.stash-and-fail-async",
-            &[Val::Resource(failing)],
-        )
-        .await;
-    assert_eq!(
-        failure?,
-        Some(Val::Result(Err(Some(Box::new(Val::String(
-            "expected async failure".to_string()
-        ))))))
-    );
-    let recovered =
-        invoke_hello_static_resource(&mut test_instance, "[static]hello.take", &[]).await?;
-    assert_eq!(
-        hello_name(&mut test_instance, recovered).await?,
-        "recovered after async failure"
-    );
-    test_instance.drop_resource(recovered).await?;
-
     let baseline =
         invoke_hello_static_u32(&mut test_instance, "[static]hello.resource-count").await?;
     let tracked = construct_hello(&mut test_instance, "tracked").await?;

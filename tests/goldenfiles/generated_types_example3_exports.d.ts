@@ -51,11 +51,6 @@ declare module 'example3' {
        */
       static stashAndFail(value: Hello): Promise<void>;
       /**
-       * Retains a transferred object and asynchronously returns an expected error
-       * @throws string
-       */
-      static stashAndFailAsync(value: Hello): Promise<void>;
-      /**
        * Returns the object retained by `stash`
        */
       static take(): Promise<Hello>;

@@ -35,6 +35,7 @@ mod node_http;
 mod node_modules_apps;
 mod npm_compat;
 mod os;
+mod p2_exported_resource;
 mod path;
 mod pollable;
 mod response_constructor;
@@ -85,6 +86,7 @@ tag_suite!(execution, group6);
 tag_suite!(export_from_inner_package, group6);
 tag_suite!(export_interface_name_collision, group6);
 tag_suite!(example3, group6);
+tag_suite!(p2_exported_resource, group6);
 tag_suite!(sqlite, group6);
 
 tag_suite!(url, group7);
