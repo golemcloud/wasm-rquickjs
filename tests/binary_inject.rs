@@ -5,11 +5,16 @@
 mod common;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use common::TestInstance;
+use common::{TestInstance, TestTarget, rewrite_wit_exports_async, test_target};
 use heck::ToSnakeCase;
 use std::process::Command;
+use wasm_rquickjs::capability_scan::{
+    ALL_CAPABILITIES, Capability, Policy, apply_policy, enabled_bits, scan_module,
+};
 use wasm_rquickjs::{
-    EmbeddingMode, JsModuleSpec, generate_wrapper_crate, inject_js_into_component,
+    EmbeddingMode, JsModuleSpec, generate_wrapper_crate_with_target, inject_js_into_component,
+    patch_capability_gates_slots_in_bytes as patch_capability_gates_in_bytes,
+    read_capability_gates_from_bytes,
 };
 use wasmtime::component::Val;
 
@@ -23,27 +28,39 @@ struct BinarySlotTestBuilder {
 }
 
 impl BinarySlotTestBuilder {
-    fn new(example_name: &str) -> anyhow::Result<Self> {
+    fn new(example_name: &str, typescript: bool) -> anyhow::Result<Self> {
         let example_path = Utf8Path::new("examples/runtime").join(example_name);
         let wrapper_crate_root = Utf8Path::new("tmp")
             .join(format!("{example_name}-binary-inject"))
             .join("normal");
         let shared_target = Utf8Path::new("..").join("..").join("inject-target");
 
+        let wit = if test_target() == TestTarget::P3 {
+            let path = wrapper_crate_root.join("wit-async");
+            rewrite_wit_exports_async(&example_path.join("wit"), &path)?;
+            path
+        } else {
+            example_path.join("wit")
+        };
         eprintln!("Generating wrapper crate with BinarySlot for '{example_name}'...");
-        generate_wrapper_crate(
-            &example_path.join("wit"),
+        generate_wrapper_crate_with_target(
+            &wit,
             &[JsModuleSpec {
                 name: example_name.to_string(),
                 mode: EmbeddingMode::BinarySlot,
             }],
             &wrapper_crate_root,
             None,
+            test_target().generation_target(),
         )?;
 
         eprintln!("Compiling wrapper crate...");
         let status = Command::new("cargo")
             .arg("build")
+            .arg("--release")
+            .arg("--features")
+            .arg(if typescript { "typescript-runtime" } else { "" })
+            .env("CARGO_PROFILE_RELEASE_STRIP", "symbols")
             .arg("--target")
             .arg("wasm32-wasip2")
             .arg("--target-dir")
@@ -55,7 +72,7 @@ impl BinarySlotTestBuilder {
         let wasm_path = Utf8Path::new("tmp")
             .join("inject-target")
             .join("wasm32-wasip2")
-            .join("debug")
+            .join("release")
             .join(format!("{}.wasm", example_name.to_snake_case()));
 
         Ok(Self {
@@ -88,6 +105,16 @@ impl BinarySlotTestBuilder {
 
 #[tokio::main]
 async fn main() {
+    // A focused rerun for the separately compiled TypeScript-enabled image.
+    if std::env::args().any(|arg| arg == "dynamic_typescript") {
+        test_capability_specialization(true).await;
+        return;
+    }
+    if std::env::args().any(|arg| arg == "capability_specialization") {
+        test_capability_specialization(false).await;
+        return;
+    }
+
     // Test 1: inject JS and run without Wizer
     test_inject_and_run().await;
 
@@ -97,13 +124,111 @@ async fn main() {
     // Test 3: re-inject different JS into the same template
     test_reinject_different_js().await;
 
+    test_patch_capability_gates_and_run().await;
+
+    test_capability_specialization(false).await;
+
     eprintln!("\n=== All binary_inject tests passed ===");
+}
+
+/// Compare full and specialized runtime snapshots without any Wasm DCE.
+/// Execute every raw component and Wizer snapshot in a fresh store.
+async fn test_capability_specialization(dynamic_only: bool) {
+    let mut builder = BinarySlotTestBuilder::new("example1", dynamic_only).unwrap();
+    let fixtures = [
+        (
+            "pure",
+            "",
+            "return `pure:${name.toUpperCase()}`;",
+            "pure:WORLD",
+        ),
+        (
+            "base64",
+            "",
+            "let error; try { btoa('♥'); } catch (e) { error = e.name; } return btoa(name) + ':' + error;",
+            "V29ybGQ=:InvalidCharacterError",
+        ),
+        (
+            "stream",
+            "import { ReadableStream as R } from 'node:stream/web';",
+            "const s = new R({start(c) { c.enqueue(name); c.close(); }}); return (await s.getReader().read()).value;",
+            "World",
+        ),
+        (
+            "dynamic-typescript",
+            "import { runJavaScript } from 'wasm-rquickjs:execution';",
+            "const result = await runJavaScript({source: `const n: number = 7; const { basename } = await import('node:path'); console.log(basename('/tmp/answer') + ':' + n * 6);`, language: 'typescript'}); return result.stdout.trim();",
+            "answer:42",
+        ),
+    ];
+    for (name, imports, body, expected) in fixtures {
+        if dynamic_only && name != "dynamic-typescript" {
+            continue;
+        }
+        if !dynamic_only && name == "dynamic-typescript" {
+            builder = BinarySlotTestBuilder::new("example1", true).unwrap();
+        }
+        let source = format!(
+            "{imports}\nexport const something = 1; export async function hello(name) {{ {body} }} export const asyncHello = hello;"
+        );
+        let path = builder.inject(&source).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let policy = apply_policy(
+            &scan_module(Utf8Path::new("fixture.js"), &source),
+            &Policy::default(),
+        );
+        let patched = patch_capability_gates_in_bytes(
+            &original,
+            enabled_bits(policy.enabled.iter().copied()),
+        )
+        .expect("both P2 and P3 expose gates");
+        assert_eq!(original.len(), patched.len(), "only data bytes change");
+        for (mode, bytes) in [("full", &original), ("strict-optimized", &patched)] {
+            let artifact =
+                path.with_file_name(format!("{name}-{mode}{}.wasm", test_target().dir_suffix()));
+            std::fs::write(&artifact, bytes).unwrap();
+            let mut instance = TestInstance::new(&artifact).await.unwrap();
+            let (result, _) = instance
+                .invoke_and_capture_output(None, "hello", &[Val::String("World".into())])
+                .await;
+            match result.unwrap() {
+                Some(Val::String(value)) => assert_eq!(value, expected, "{name}/{mode}"),
+                other => panic!("{name}/{mode}: {other:?}"),
+            }
+            eprintln!(
+                "CAPABILITY_SIZE {:?} {name} {mode} bytes={} inferred={}",
+                test_target(),
+                bytes.len(),
+                policy.enabled.len()
+            );
+            {
+                let snapshot = artifact.with_file_name(format!(
+                    "{name}-{mode}-wizer{}.wasm",
+                    test_target().dir_suffix()
+                ));
+                wasm_rquickjs::optimize_component(&artifact, &snapshot, "wizer-initialize")
+                    .await
+                    .unwrap();
+                let mut instance = TestInstance::new(&snapshot).await.unwrap();
+                let (result, _) = instance
+                    .invoke_and_capture_output(None, "hello", &[Val::String("World".into())])
+                    .await;
+                assert!(matches!(result.unwrap(), Some(Val::String(value)) if value == expected));
+                eprintln!(
+                    "CAPABILITY_SIZE {:?} {name} {mode}-wizer bytes={} inferred={}",
+                    test_target(),
+                    std::fs::metadata(&snapshot).unwrap().len(),
+                    policy.enabled.len()
+                );
+            }
+        }
+    }
 }
 
 async fn test_inject_and_run() {
     eprintln!("\n--- test_inject_and_run ---");
 
-    let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
+    let builder = BinarySlotTestBuilder::new("example1", false).expect("Failed to build template");
 
     let js_source = r#"
 function helloImpl(name) {
@@ -145,7 +270,7 @@ export const asyncHello = asyncHelloImpl;
 async fn test_inject_optimize_and_run() {
     eprintln!("\n--- test_inject_optimize_and_run ---");
 
-    let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
+    let builder = BinarySlotTestBuilder::new("example1", false).expect("Failed to build template");
 
     let js_source = r#"
 function helloImpl(name) {
@@ -190,7 +315,7 @@ export const asyncHello = asyncHelloImpl;
 async fn test_reinject_different_js() {
     eprintln!("\n--- test_reinject_different_js ---");
 
-    let builder = BinarySlotTestBuilder::new("example1").expect("Failed to build template");
+    let builder = BinarySlotTestBuilder::new("example1", false).expect("Failed to build template");
 
     // First injection
     let js1 = r#"
@@ -240,6 +365,128 @@ export async function asyncHello(name) { return `Second async: ${name}`; }
         Some(Val::String(s)) => {
             assert!(s.contains("Second"), "Expected 'Second' in: {s}");
             eprintln!("  ✓ injection 2: {s}");
+        }
+        other => panic!("Unexpected: {other:?}"),
+    }
+}
+
+/// End-to-end smoke test for the per-capability gates slot:
+///
+/// 1. Build a BinarySlot template — its embedded gates default to all-ones.
+/// 2. Read the gates and assert the default is "all enabled".
+/// 3. Patch the slot to disable a few capabilities the example does not use
+///    (Sqlite, Vm, Tls, Dns, Http2). The remaining capabilities stay on so
+///    that `example1` still has everything it needs to run.
+/// 4. Read back the gates from the patched bytes to confirm round-trip.
+/// 5. Inject the JS into the patched wasm and call an exported function to
+///    confirm the patched component still instantiates and runs.
+async fn test_patch_capability_gates_and_run() {
+    eprintln!("\n--- test_patch_capability_gates_and_run ---");
+
+    let builder = BinarySlotTestBuilder::new("example1", false).expect("Failed to build template");
+
+    // Step 1 + 2: read the default gates from the freshly-built template.
+    let template_bytes =
+        std::fs::read(builder.wasm_path.as_std_path()).expect("Failed to read template wasm");
+    let initial = read_capability_gates_from_bytes(&template_bytes)
+        .expect("Failed to read default capability gates from template");
+    assert_eq!(
+        initial,
+        u64::MAX,
+        "freshly-built template should have all-enabled gates",
+    );
+    eprintln!(
+        "  ✓ default gates = {:#018x} (all {} capabilities enabled)",
+        initial,
+        initial.count_ones()
+    );
+
+    // Step 3: choose a subset to disable. example1 just runs basic JS that
+    // returns a string and does no networking, sqlite, vm-eval, etc.
+    //
+    // NOTE: `node:module` statically imports nearly every other builtin so it
+    // can route `require('node:X')` calls. That means flipping off any of the
+    // builtins it imports while keeping `Module` enabled would crash at JS
+    // wiring time (the static imports in module.js would fail to resolve).
+    // Disabling `Module` alongside the other leaves keeps the wiring valid;
+    // example1 never calls `require()`, so dropping the global is safe.
+    let to_disable = [
+        Capability::Module,
+        Capability::Sqlite,
+        Capability::Vm,
+        Capability::Tls,
+        Capability::Http2,
+    ];
+    let kept: Vec<Capability> = ALL_CAPABILITIES
+        .iter()
+        .copied()
+        .filter(|c| !to_disable.contains(c))
+        .collect();
+    let new_bits = enabled_bits(kept.iter().copied());
+
+    let patched_bytes = patch_capability_gates_in_bytes(&template_bytes, new_bits)
+        .expect("patch_capability_gates_in_bytes failed");
+
+    // Step 4: read back and verify each disabled bit is cleared.
+    let read_back =
+        read_capability_gates_from_bytes(&patched_bytes).expect("Failed to read patched gates");
+    assert_eq!(read_back, new_bits, "patched gates must round-trip");
+    for cap in to_disable {
+        assert_eq!(
+            read_back & (1u64 << cap.bit_index()),
+            0,
+            "bit for {} should be cleared",
+            cap.marker_name(),
+        );
+    }
+    eprintln!(
+        "  ✓ patched gates = {:#018x} (disabled {} capabilities)",
+        read_back,
+        to_disable.len()
+    );
+
+    // Persist the patched template so we can drive the standard JS injection
+    // path against it.
+    let patched_template_path = Utf8PathBuf::from(format!(
+        "tmp/{}-binary-inject/{}-gates-patched.wasm",
+        builder.example_name, builder.example_name
+    ));
+    std::fs::write(patched_template_path.as_std_path(), &patched_bytes)
+        .expect("Failed to write patched template");
+
+    // Step 5: inject JS into the patched template and run it.
+    let injected_path = Utf8PathBuf::from(format!(
+        "tmp/{}-binary-inject/{}-gates-patched-injected.wasm",
+        builder.example_name, builder.example_name
+    ));
+    let js_source = r#"
+export const something = 7;
+export async function hello(name) {
+    let missing = false;
+    try { await import('node:sqlite'); } catch { missing = true; }
+    if (!missing) throw new Error('disabled sqlite remained available');
+    return `gates-patched: ${name}`;
+}
+export async function asyncHello(name) { return `gates-patched async: ${name}`; }
+"#;
+    inject_js_into_component(&patched_template_path, &injected_path, &[js_source])
+        .expect("inject_js_into_component failed against patched template");
+
+    let mut instance = TestInstance::new(&injected_path)
+        .await
+        .expect("Failed to create instance from patched+injected wasm");
+
+    let (result, _stdout) = instance
+        .invoke_and_capture_output(None, "hello", &[Val::String("World".into())])
+        .await;
+
+    match result.expect("Function call failed") {
+        Some(Val::String(s)) => {
+            assert!(
+                s.contains("gates-patched"),
+                "Expected 'gates-patched' in output, got: {s}",
+            );
+            eprintln!("  ✓ patched+injected run returned: {s}");
         }
         other => panic!("Unexpected: {other:?}"),
     }

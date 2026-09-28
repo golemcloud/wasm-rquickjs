@@ -11391,32 +11391,6 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
     let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
     let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
-    let file_resolver = FileResolver::default()
-        .with_path("/")
-        .with_pattern("{}.js")
-        .with_pattern("{}.mjs")
-        .with_pattern("{}.json");
-    let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
-
-    let resolver = (
-        (
-            RealmGuardResolver,
-            MockModuleResolver,
-            DataUrlResolver,
-            FileUrlResolver,
-            PrivateBuiltinResolverGuard,
-            LoaderCjsFacadeResolver(loader_cjs_facades.clone()),
-            RegisteredLoaderResolver,
-        ),
-        (
-            builtin_resolver,
-            NodeBuiltinNamespaceGuard,
-            NodeModulesResolver,
-            NodeFileResolver,
-        ),
-        (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
-    );
-
     let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
         crate::JS_EXPORT_MODULE_NAME,
         virtual_builtin_module_source(crate::js_export_module()),
@@ -11428,20 +11402,71 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         );
     }
 
-    let loader = (
-        (
+    let fs_enabled = crate::capabilities::cap_fs_module_loader();
+
+    let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
+
+    if fs_enabled {
+        let file_resolver = FileResolver::default()
+            .with_path("/")
+            .with_pattern("{}.js")
+            .with_pattern("{}.mjs")
+            .with_pattern("{}.json");
+
+        let resolver = (
+            (
+                RealmGuardResolver,
+                MockModuleResolver,
+                DataUrlResolver,
+                FileUrlResolver,
+                PrivateBuiltinResolverGuard,
+                LoaderCjsFacadeResolver(loader_cjs_facades.clone()),
+                RegisteredLoaderResolver,
+            ),
+            (
+                builtin_resolver,
+                NodeBuiltinNamespaceGuard,
+                NodeModulesResolver,
+                NodeFileResolver,
+            ),
+            (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
+        );
+
+        let loader = (
+            (
+                MockModuleLoader,
+                virtual_builtin_loader,
+                crate::modules::module_loader(),
+                crate::builtin::module_loader(),
+                LoaderCjsFacadeLoader(loader_cjs_facades.clone()),
+                DataUrlLoader,
+                StaticRegisteredFileUrlLoader,
+            ),
+            (JsonFileLoader, CjsCompatLoader, ImportMetaLoader),
+        );
+
+        rt.set_loader(resolver, loader).await;
+    } else {
+        let resolver = (
+            (
+                RealmGuardResolver,
+                MockModuleResolver,
+                DataUrlResolver,
+                PrivateBuiltinResolverGuard,
+            ),
+            (builtin_resolver, NodeBuiltinNamespaceGuard),
+            NodeModuleErrorResolver,
+        );
+        let loader = (
             MockModuleLoader,
             virtual_builtin_loader,
             crate::modules::module_loader(),
             crate::builtin::module_loader(),
-            LoaderCjsFacadeLoader(loader_cjs_facades.clone()),
             DataUrlLoader,
-            StaticRegisteredFileUrlLoader,
-        ),
-        (JsonFileLoader, CjsCompatLoader, ImportMetaLoader),
-    );
+        );
 
-    rt.set_loader(resolver, loader).await;
+        rt.set_loader(resolver, loader).await;
+    }
 
     async_with!(ctx => |ctx| {
         let global = ctx.globals();

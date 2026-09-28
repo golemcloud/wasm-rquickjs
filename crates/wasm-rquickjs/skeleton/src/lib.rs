@@ -1,10 +1,7 @@
 // Empty file, to be generated
 
-#[cfg(feature = "p2")]
 mod builtin;
-#[cfg(feature = "p3")]
-#[path = "builtin_p3.rs"]
-mod builtin;
+pub mod capabilities;
 pub mod internal;
 mod modules;
 pub mod wrappers;

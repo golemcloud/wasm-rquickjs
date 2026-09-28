@@ -95,6 +95,33 @@ pub enum Command {
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
     },
+    /// Scan a JavaScript module and report which skeleton built-ins it appears to use.
+    /// This is a research/diagnostic tool for the per-app trimming work.
+    ScanCapabilities {
+        /// Path(s) to JavaScript entry-point files to scan. Each file is scanned
+        /// recursively (relative imports are followed transitively); the union of
+        /// all results is reported.
+        #[arg(long, required = true)]
+        js: Vec<Utf8PathBuf>,
+
+        /// Force-include a capability by its marker name (e.g. `fs`, `node_http`).
+        /// Repeatable.
+        #[arg(long = "include")]
+        include: Vec<String>,
+
+        /// Force-exclude a capability by its marker name (e.g. `vm`, `sqlite`).
+        /// Repeatable. Excludes that conflict with a transitively-required
+        /// capability are reported as ineffective and remain enabled.
+        #[arg(long = "exclude")]
+        exclude: Vec<String>,
+
+        /// When set, trim aggressively even if the JS contains dynamic patterns
+        /// (`require(varName)`, `import(expr)`, `eval`, `new Function`, `vm.run*`).
+        /// Default behavior is conservative: any dynamic pattern → enable
+        /// every known capability.
+        #[arg(long = "trim-unknown", default_value_t = false)]
+        trim_unknown: bool,
+    },
     /// Inject JavaScript source into a compiled WASM component template
     InjectJs {
         /// Path to the template WASM component (compiled with --js-modules name=@slot)
@@ -110,6 +137,40 @@ pub enum Command {
         /// then additional modules in order).
         #[arg(long, required = true)]
         js: Vec<Utf8PathBuf>,
+
+        /// Force-include a capability by its marker name when patching the
+        /// capability-gates slot (e.g. `fs`, `node_http`). Repeatable.
+        ///
+        /// Implies enabling per-capability gate patching: when neither
+        /// `--include`, `--exclude`, nor `--strict-optimized` is set, the gates slot
+        /// is left untouched and every capability stays enabled.
+        #[arg(long = "include")]
+        include: Vec<String>,
+
+        /// Force-exclude a capability by its marker name. Repeatable.
+        /// Excludes that conflict with a transitively-required capability are
+        /// reported as ineffective and remain enabled.
+        #[arg(long = "exclude")]
+        exclude: Vec<String>,
+
+        /// EXPERIMENTAL P2/P3 closed-world runtime specialization, without Wasm DCE.
+        /// Requires a fresh template, before Wizer pre-initialization.
+        /// The caller must account for all embedded modules and future code via
+        /// --include. Static JS analysis is not a proof of runtime reachability.
+        /// Omit this option for unrestricted generated JS/TS. Run optimize afterwards
+        /// to obtain the smaller Wizer snapshot; patching alone does not reduce size.
+        #[arg(
+            long = "strict-optimized",
+            alias = "auto-trim",
+            default_value_t = false
+        )]
+        auto_trim: bool,
+
+        /// When set with `--strict-optimized`, also trim aggressively even if the JS
+        /// contains dynamic patterns (`require(varName)`, `import(expr)`,
+        /// `eval`, `new Function`, `vm.run*`). Default behavior is conservative.
+        #[arg(long = "trim-unknown", default_value_t = false, requires = "auto_trim")]
+        trim_unknown: bool,
     },
 }
 

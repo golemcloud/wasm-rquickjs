@@ -1,10 +1,74 @@
 use crate::cli::{Args, Command};
+use camino::Utf8PathBuf;
 use clap::Parser;
+use wasm_rquickjs::capability_scan::{
+    ALL_CAPABILITIES, Capability, Policy, ScanResult, apply_policy, enabled_bits, scan_entry_point,
+};
 use wasm_rquickjs::{
     EmbeddingMode, JsModuleSpec, generate_dts_with_target, generate_wrapper_crate_with_target,
 };
 
 mod cli;
+
+fn capability_policy(
+    paths: &[Utf8PathBuf],
+    scan_sources: bool,
+    include: &[String],
+    exclude: &[String],
+    trim_unknown: bool,
+) -> anyhow::Result<u64> {
+    let parse = |names: &[String]| {
+        names
+            .iter()
+            .map(|name| {
+                Capability::from_marker_name(name)
+                    .ok_or_else(|| anyhow::anyhow!("Unknown capability: {name}"))
+            })
+            .collect::<anyhow::Result<_>>()
+    };
+    let mut scan = ScanResult::default();
+    if scan_sources {
+        for path in paths {
+            let result = scan_entry_point(path);
+            scan.used.extend(result.used);
+            scan.unknown_specifiers.extend(result.unknown_specifiers);
+            scan.wit_specifiers.extend(result.wit_specifiers);
+            scan.warnings.extend(result.warnings);
+            scan.has_dynamic |= result.has_dynamic;
+        }
+    } else {
+        scan.used.extend(ALL_CAPABILITIES.iter().copied());
+    }
+    let outcome = apply_policy(
+        &scan,
+        &Policy {
+            include: parse(include)?,
+            exclude: parse(exclude)?,
+            trim_unknown,
+        },
+    );
+    eprintln!(
+        "Unknown modules: {:?}; host modules: {:?}",
+        scan.unknown_specifiers, scan.wit_specifiers
+    );
+    for warning in &scan.warnings {
+        eprintln!("{}:{}: {:?}", warning.line, warning.column, warning.kind);
+    }
+    eprintln!("Conservative fallback: {}", outcome.conservative_fallback);
+    eprintln!("Ineffective excludes: {:?}", outcome.ineffective_excludes);
+    eprintln!(
+        "Enabled {}/{} capabilities: {}",
+        outcome.enabled.len(),
+        ALL_CAPABILITIES.len(),
+        outcome
+            .enabled
+            .iter()
+            .map(|cap| cap.marker_name())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(enabled_bits(outcome.enabled))
+}
 
 fn main() {
     let args = Args::parse();
@@ -66,10 +130,25 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Command::ScanCapabilities {
+            js,
+            include,
+            exclude,
+            trim_unknown,
+        } => {
+            if let Err(err) = capability_policy(js, true, include, exclude, *trim_unknown) {
+                eprintln!("Error scanning capabilities: {err:#}");
+                std::process::exit(1);
+            }
+        }
         Command::InjectJs {
             input,
             output,
             js: js_paths,
+            include,
+            exclude,
+            auto_trim,
+            trim_unknown,
         } => {
             let js_sources: Vec<String> = js_paths
                 .iter()
@@ -84,6 +163,21 @@ fn main() {
             if let Err(err) = wasm_rquickjs::inject_js_into_component(input, output, &js_refs) {
                 eprintln!("Error injecting JS: {err:#}");
                 std::process::exit(1);
+            }
+            if *auto_trim || !include.is_empty() || !exclude.is_empty() {
+                let result = (|| -> anyhow::Result<()> {
+                    let bits =
+                        capability_policy(js_paths, *auto_trim, include, exclude, *trim_unknown)?;
+                    let bytes = std::fs::read(output)?;
+                    let patched =
+                        wasm_rquickjs::patch_capability_gates_slots_in_bytes(&bytes, bits)?;
+                    std::fs::write(output, patched)?;
+                    Ok(())
+                })();
+                if let Err(err) = result {
+                    eprintln!("Error specializing component (output remains unoptimized): {err:#}");
+                    std::process::exit(1);
+                }
             }
         }
     };
