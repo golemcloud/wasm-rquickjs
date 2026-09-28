@@ -1,12 +1,12 @@
+#[cfg(feature = "typescript-compiler-profiling")]
+use crate::internal::runtime_services::{ExecutionProfile, ExecutionProfileSnapshot};
 use crate::internal::runtime_services::{
     OwnedJsRuntime, RuntimeOutputSink, RuntimeServices, normalize_absolute_path,
 };
-#[cfg(feature = "typescript-compiler-profiling")]
-use crate::internal::runtime_services::{ExecutionProfile, ExecutionProfileSnapshot};
 
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
-use rquickjs::{CatchResultExt, Ctx, Module, Promise, async_with};
+use rquickjs::{CatchResultExt, Ctx, Function, Module, Promise, Value, async_with};
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -16,6 +16,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::Poll;
 use std::time::{Duration, Instant};
+
+#[path = "execution_timeout.rs"]
+mod execution_timeout;
+use execution_timeout::ExecutionTimeoutSampler;
 
 const MAX_ACTIVE_JOBS: usize = 8;
 const MAX_TIMEOUT_MS: u64 = u64::MAX / 1_000_000;
@@ -162,21 +166,39 @@ fn execution_control_error(job: &ExecutionJob, deadline: Option<Instant>) -> Opt
 }
 
 #[cfg(feature = "typescript-runtime")]
-fn transform_typescript_execution_source(source: String, name: &str) -> Result<String, String> {
+fn transform_typescript_execution_source(
+    source: String,
+    name: &str,
+    source_map: bool,
+) -> Result<String, String> {
     crate::internal::typescript::transform(
         source,
         name,
         crate::internal::typescript::runtime_mode(),
-        false,
+        source_map,
         Some(true),
     )
-    .map(|output| output.code)
+    .map(|output| output.into_code_with_inline_source_map())
     .map_err(|error| error.message)
 }
 
 #[cfg(not(feature = "typescript-runtime"))]
-fn transform_typescript_execution_source(_source: String, _name: &str) -> Result<String, String> {
+fn transform_typescript_execution_source(
+    _source: String,
+    _name: &str,
+    _source_map: bool,
+) -> Result<String, String> {
     Err("TypeScript runtime support is not enabled".to_string())
+}
+
+#[cfg(feature = "typescript-runtime")]
+fn execution_source_maps_enabled(ctx: &Ctx<'_>) -> bool {
+    crate::internal::typescript::source_maps_enabled(ctx)
+}
+
+#[cfg(not(feature = "typescript-runtime"))]
+fn execution_source_maps_enabled(_ctx: &Ctx<'_>) -> bool {
+    false
 }
 
 #[derive(serde::Serialize)]
@@ -355,7 +377,10 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     let profile = {
         let started = Instant::now();
         let profile = Rc::new(ExecutionProfile::new(started));
-        profile.set_duration("queueDelay", started.saturating_duration_since(job.created_at));
+        profile.set_duration(
+            "queueDelay",
+            started.saturating_duration_since(job.created_at),
+        );
         profile
     };
     #[cfg(feature = "typescript-compiler-profiling")]
@@ -462,9 +487,17 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     // The public timeout budget starts when user code begins, after runtime and
     // builtin initialization. The interrupt handler is also needed for tight
     // loops that cannot cooperatively yield to the timer future.
-    let deadline = options
-        .timeout_ms
-        .and_then(|ms| Instant::now().checked_add(Duration::from_millis(ms)));
+    let timeout = options.timeout_ms.and_then(|ms| {
+        let started_at = Instant::now();
+        let duration = Duration::from_millis(ms);
+        started_at
+            .checked_add(duration)
+            .map(|deadline| (started_at, deadline, duration))
+    });
+    let deadline = timeout.map(|(_, deadline, _)| deadline);
+    let mut timeout_sampler = timeout.map(|(started_at, deadline, duration)| {
+        ExecutionTimeoutSampler::new(started_at, deadline, duration)
+    });
     let cancelled = job.cancel.clone();
     let timed_out = job.timed_out.clone();
     runtime
@@ -473,7 +506,9 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             if cancelled.load(Ordering::Relaxed) {
                 return true;
             }
-            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            if timeout_sampler.as_mut().is_some_and(|sampler| {
+                sampler.expired(Instant::now)
+            }) {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
             }
@@ -481,10 +516,11 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         })))
         .await;
 
-    let wrapper_name = cwd.join(if entry.is_some() {
-        "__wasm_rquickjs_execution_entry.mjs"
-    } else {
+    let is_inline = entry.is_none();
+    let wrapper_name = cwd.join(if is_inline {
         "__wasm_rquickjs_execution_inline.mjs"
+    } else {
+        "__wasm_rquickjs_execution_entry.mjs"
     });
     let name = wrapper_name.to_string_lossy().into_owned();
     let mut source = if let Some(entry) = entry {
@@ -500,16 +536,21 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         )
     } else {
         format!(
-            "globalThis.__wasmRquickjsExecutionResult = (async () => __wasmRquickjsSerializeExecutionResult(await (async () => {{ {}\n}})()))();",
+            "globalThis.__wasmRquickjsExecutionResult = (async () => __wasmRquickjsSerializeExecutionResult(await (async () => {{\n{}\n}})()))();",
             options.source.unwrap_or_default()
         )
+    };
+    let source_maps_enabled = if options.language == ExecutionLanguage::Typescript {
+        async_with!(runtime.ctx => |ctx| { execution_source_maps_enabled(&ctx) }).await
+    } else {
+        false
     };
     mark_profile!("wrapperPreparation");
     if options.language == ExecutionLanguage::Typescript {
         if let Some(error) = execution_control_error(&job, deadline) {
             complete_job!(Err(error.to_string()));
         }
-        source = match transform_typescript_execution_source(source, &name) {
+        source = match transform_typescript_execution_source(source, &name, source_maps_enabled) {
             Ok(source) => source,
             Err(error) => {
                 complete_job!(Err(error));
@@ -525,6 +566,32 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     let result = {
         let execution = async {
             async_with!(runtime.ctx => |ctx| {
+                if (options.language == ExecutionLanguage::Typescript || is_inline)
+                    && let Ok(register_source_map) = ctx.globals().get::<_, Function>(
+                        "__wasm_rquickjs_register_transformed_source_map",
+                    )
+                {
+                    let (line_offset, original_line_offset, force_line_offset) =
+                        if options.language == ExecutionLanguage::Typescript && source_maps_enabled {
+                            (0, usize::from(is_inline), false)
+                        } else if is_inline {
+                            (1, 0, true)
+                        } else {
+                            (0, 0, false)
+                        };
+                    register_source_map
+                        .call::<_, ()>((
+                            name.as_str(),
+                            source.as_str(),
+                            Value::new_null(ctx.clone()),
+                            line_offset,
+                            original_line_offset,
+                            force_line_offset,
+                        ))
+                        .map_err(|error| {
+                            format!("failed to register execution source map: {error:?}")
+                        })?;
+                }
                 Module::evaluate(ctx.clone(), name, source).catch(&ctx)
                     .map_err(|e| crate::internal::format_caught_error(e))?.finish::<()>().catch(&ctx)
                     .map_err(|e| crate::internal::format_caught_error(e))?;
