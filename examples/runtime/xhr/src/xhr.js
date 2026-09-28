@@ -260,7 +260,7 @@ export function postWithFormData(port) {
 export function postWithJsonBody(port) {
     console.log('XMLHttpRequest test 12: POST with JSON body');
     
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         
         const jsonData = {
@@ -271,7 +271,28 @@ export function postWithJsonBody(port) {
         xhr.onload = function() {
             console.log(`JSON POST status: ${xhr.status}`);
             console.log(`JSON response: ${xhr.response}`);
+
+            try {
+                const response = JSON.parse(xhr.response);
+                if (
+                    xhr.status !== 200 ||
+                    response.name !== jsonData.name ||
+                    response.value !== jsonData.value
+                ) {
+                    reject(new Error('JSON echo response did not match the request'));
+                    return;
+                }
+            } catch (error) {
+                reject(error);
+                return;
+            }
+
+            console.log('JSON response matched request: true');
             resolve();
+        };
+
+        xhr.onerror = function() {
+            reject(new Error('JSON echo request failed'));
         };
         
         xhr.open('POST', `http://localhost:${port}/json-echo`);

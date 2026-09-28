@@ -1,4 +1,10 @@
 import assert from 'node:assert';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import module, { createRequire } from 'node:module';
+import { inspect } from 'node:util';
+
+const require = createRequire(import.meta.url);
 
 // Test 1: Error.captureStackTrace exists as a function
 export const testCaptureStackTraceExists = () => {
@@ -113,6 +119,173 @@ export const testCallSiteMethods = () => {
         return true;
     } catch (e) {
         console.error('testCallSiteMethods FAIL:', e.message);
+        return false;
+    }
+};
+
+export const testLatePrepareStackTrace = () => {
+    const originalPrepare = Error.prepareStackTrace;
+    try {
+        Error.prepareStackTrace = undefined;
+        const lateTarget = {};
+        Error.captureStackTrace(lateTarget);
+        Error.prepareStackTrace = () => 'late-prepare';
+        assert.strictEqual(lateTarget.stack, 'late-prepare');
+
+        Error.prepareStackTrace = () => 'capture-time-prepare';
+        const removedTarget = {};
+        Error.captureStackTrace(removedTarget);
+        Error.prepareStackTrace = undefined;
+        assert.strictEqual(typeof removedTarget.stack, 'string');
+        assert.notStrictEqual(removedTarget.stack, 'capture-time-prepare');
+        return true;
+    } catch (e) {
+        console.error('testLatePrepareStackTrace FAIL:', e.message);
+        return false;
+    } finally {
+        Error.prepareStackTrace = originalPrepare;
+    }
+};
+
+export const testDefaultErrorStackHeaders = () => {
+    const originalPrepare = Error.prepareStackTrace;
+    try {
+        Error.prepareStackTrace = undefined;
+        assert.match(new Error('base').stack, /^Error: base(?:\n|$)/);
+        assert.match(new TypeError('native').stack, /^TypeError: native(?:\n|$)/);
+        assert.match(new Error().stack, /^Error(?:\n|$)/);
+        class CustomError extends Error {}
+        CustomError.prototype.name = 'CustomError';
+        assert.match(new CustomError('custom').stack, /^CustomError: custom(?:\n|$)/);
+        class EmptyNameError extends Error {}
+        EmptyNameError.prototype.name = '';
+        assert.match(new EmptyNameError('message-only').stack, /^message-only(?:\n|$)/);
+        const originalToString = Error.prototype.toString;
+        Error.prototype.toString = () => 'POISON';
+        const protectedHeader = new Error('protected').stack;
+        Error.prototype.toString = originalToString;
+        assert.match(protectedHeader, /^Error: protected(?:\n|$)/);
+        function captureNamedFrame() {
+            return new Error('named-frame').stack;
+        }
+        assert.match(captureNamedFrame().split('\n')[1], /^\s*at captureNamedFrame \(.+:\d+:\d+\)$/);
+        const originalObjectToString = Object.prototype.toString;
+        let protectedCallSiteStack;
+        try {
+            Object.prototype.toString = () => 'FAKE';
+            protectedCallSiteStack = new Error('protected-call-site').stack;
+        } finally {
+            Object.prototype.toString = originalObjectToString;
+        }
+        assert.doesNotMatch(protectedCallSiteStack, /FAKE/);
+        assert.match(protectedCallSiteStack.split('\n')[1], /^\s*at .+:\d+:\d+/);
+        return true;
+    } catch (e) {
+        console.error('testDefaultErrorStackHeaders FAIL:', e.message);
+        return false;
+    } finally {
+        Error.prepareStackTrace = originalPrepare;
+    }
+};
+
+export const testErrorInspectUsesCurrentName = () => {
+    try {
+        const error = new RangeError('foo');
+        error.name = 404;
+        assert.match(inspect(error), /^404 \[RangeError\]: foo(?:\n|$)/);
+
+        const manualStackError = new RangeError('foo');
+        manualStackError.stack = 'RangeError: foo\n    at manual (x.js:1:2)';
+        manualStackError.name = 404;
+        assert.strictEqual(
+            inspect(manualStackError),
+            'RangeError: foo\n    at manual (x.js:1:2)',
+        );
+        return true;
+    } catch (e) {
+        console.error('testErrorInspectUsesCurrentName FAIL:', e.message);
+        return false;
+    }
+};
+
+export const testAssertionListenerStackFrame = () => {
+    const emitter = new EventEmitter();
+    emitter.on('failure', assert);
+    try {
+        emitter.emit('failure', false);
+    } catch (error) {
+        return String(error.stack).split('\n')[1] || '';
+    }
+    return '';
+};
+
+export const testCjsCallSiteLineOffset = () => {
+    const originalPrepare = Error.prepareStackTrace;
+    const filename = '/v8-call-site-line-offset.cjs';
+    const mapFilename = '/v8-call-site-line-offset.cjs.map';
+    try {
+        module.setSourceMapsSupport(true);
+        Error.prepareStackTrace = (_error, sites) => sites[0];
+        fs.writeFileSync(filename, [
+            'function branch() {',
+            "    throw Error('site');",
+            '}',
+            'branch();',
+            '//# sourceMappingURL=v8-call-site-line-offset.cjs.map',
+        ].join('\n'));
+        fs.writeFileSync(mapFilename, JSON.stringify({
+            version: 3,
+            sources: ['v8-call-site-line-offset.ts'],
+            names: [],
+            mappings: 'AAAA;AACA;AACA;AACA',
+        }));
+        try {
+            require(filename);
+        } catch (error) {
+            return String(error.stack.getLineNumber());
+        }
+        return '';
+    } finally {
+        delete require.cache[filename];
+        Error.prepareStackTrace = originalPrepare;
+    }
+};
+
+export const testPrepareStackTraceDescriptors = () => {
+    try {
+        const customPrepare = () => 'custom-prepare';
+        Error.prepareStackTrace = customPrepare;
+        Object.defineProperty(Error, 'prepareStackTrace', { enumerable: false });
+        assert.strictEqual(Error.prepareStackTrace, customPrepare);
+        assert.strictEqual(new Error('partial-descriptor').stack, 'custom-prepare');
+
+        let getterCalls = 0;
+        Object.defineProperty(Error, 'prepareStackTrace', {
+            get() {
+                getterCalls++;
+                return customPrepare;
+            },
+            configurable: true,
+        });
+        assert.strictEqual(getterCalls, 0);
+        assert.strictEqual(new TypeError('accessor').stack, 'custom-prepare');
+
+        delete Error.prepareStackTrace;
+        assert.match(new Error('deleted').stack, /^Error: deleted(?:\n|$)/);
+
+        Object.defineProperty(Error, 'prepareStackTrace', {
+            value: customPrepare,
+            writable: true,
+            configurable: true,
+        });
+        Object.freeze(Error);
+        const descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+        assert.strictEqual(descriptor.writable, false);
+        assert.strictEqual(descriptor.configurable, false);
+        assert.strictEqual(new Error('frozen').stack, 'custom-prepare');
+        return true;
+    } catch (e) {
+        console.error('testPrepareStackTraceDescriptors FAIL:', e.message);
         return false;
     }
 };

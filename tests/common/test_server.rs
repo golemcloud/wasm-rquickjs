@@ -1,6 +1,8 @@
 use axum::body::Body;
-use axum::extract::{Multipart, Path};
+use axum::extract::Request;
+use axum::extract::{ConnectInfo, Multipart, Path};
 use axum::http::HeaderMap;
+use axum::middleware::Next;
 use axum::response::{AppendHeaders, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -27,6 +29,43 @@ impl Drop for TestServerHandle {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+fn trace_http_lifecycle(router: Router, port: u16) -> Router {
+    router.layer(axum::middleware::from_fn(
+        move |request: Request, next: Next| async move {
+            // Server-side IDs are intentionally independent from client-side IDs. Passing a
+            // private correlation value over the wire would mutate guest-visible requests.
+            let request_id = super::next_test_server_http_request();
+            let connection = request
+                .extensions()
+                .get::<ConnectInfo<super::TracedTestServerConnection>>()
+                .map(|connection| connection.0.clone());
+            let trace_response_write = request.version() == http::Version::HTTP_11;
+            super::record_test_server_arrival(request_id, port, request.uri());
+            super::record_test_server_connection(request_id, connection.as_ref());
+            let (parts, body) = request.into_parts();
+            let request = Request::from_parts(
+                parts,
+                Body::new(super::traced_test_server_body(
+                    body,
+                    request_id,
+                    "server-request",
+                )),
+            );
+            let response = next.run(request).await;
+            super::record_test_server_response_head(request_id, response.status());
+            let (parts, body) = response.into_parts();
+            axum::response::Response::from_parts(
+                parts,
+                Body::new(super::traced_test_server_response_body(
+                    body,
+                    request_id,
+                    trace_response_write.then_some(connection).flatten(),
+                )),
+            )
+        },
+    ))
 }
 
 pub async fn start_test_server() -> (u16, TestServerHandle) {
@@ -149,8 +188,18 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                 }),
             )
             .route(
+                "/json-echo",
+                post(async move |Json(body): Json<serde_json::Value>| {
+                    // For accepted JSON requests, extraction drains and validates the body before
+                    // this handler builds the response.
+                    Json(body)
+                }),
+            )
+            .route(
                 "/echo-referer",
-                post(async move |headers: HeaderMap| {
+                post(async move |headers: HeaderMap, _body: Bytes| {
+                    // This endpoint tests request-header policy, not early responses. Consume the
+                    // request body before replying so response delivery cannot race body completion.
                     let referer = headers
                         .get("referer")
                         .and_then(|h| h.to_str().ok())
@@ -163,7 +212,9 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
             )
             .route(
                 "/echo-credentials",
-                post(async move |headers: HeaderMap| {
+                post(async move |headers: HeaderMap, _body: Bytes| {
+                    // Like /echo-referer, keep the fixture focused on header semantics by
+                    // consuming the request body before constructing the response.
                     let authorization = headers
                         .get("authorization")
                         .and_then(|h| h.to_str().ok())
@@ -228,8 +279,15 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                         .into_response()
                 }),
             );
+        let router = trace_http_lifecycle(router, host_http_port);
 
-        axum::serve(listener, router).await.unwrap();
+        let listener = super::traced_test_server_listener(listener);
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<super::TracedTestServerConnection>(),
+        )
+        .await
+        .unwrap();
     });
 
     (host_http_port, TestServerHandle::new(handle))
@@ -264,7 +322,14 @@ pub async fn start_abort_test_server() -> (u16, TestServerHandle, mpsc::Unbounde
                 axum::routing::any(async || (StatusCode::FOUND, [("Location", "/slow-response")])),
             )
             .route("/abort-ready", ready);
-        axum::serve(listener, router).await.unwrap();
+        let router = trace_http_lifecycle(router, port);
+        let listener = super::traced_test_server_listener(listener);
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<super::TracedTestServerConnection>(),
+        )
+        .await
+        .unwrap();
     });
 
     (port, TestServerHandle::new(handle), arrived_rx)
