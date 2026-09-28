@@ -1406,15 +1406,19 @@ function parseHostPort(u, hostStr, input) {
     let pathnamePrefix = '';
     if (hostStr.startsWith('[')) {
         const bracketEnd = hostStr.indexOf(']');
-        if (bracketEnd !== -1) {
-            isIpv6Host = true;
-            u.hostname = hostStr.slice(1, bracketEnd);
-            const remaining = hostStr.slice(bracketEnd + 1);
-            if (remaining.startsWith(':')) {
-                u.port = remaining.slice(1) || null;
-            }
-        } else {
-            u.hostname = hostStr;
+        if (bracketEnd === -1) {
+            throw makeInvalidUrlError(input);
+        }
+
+        isIpv6Host = true;
+        u.hostname = hostStr.slice(1, bracketEnd).toLowerCase();
+        const remaining = hostStr.slice(bracketEnd + 1);
+        if (remaining === ':') {
+            u.port = null;
+        } else if (/^:\d+$/.test(remaining)) {
+            u.port = remaining.slice(1);
+        } else if (remaining !== '') {
+            throw makeInvalidUrlError(input);
         }
     } else {
         const firstColonIdx = hostStr.indexOf(':');
@@ -1444,14 +1448,14 @@ function parseHostPort(u, hostStr, input) {
     validateHostName(u.hostname, isIpv6Host, input);
 
     if (!isIpv6Host && u.hostname) {
-        const asciiHostname = domainToASCIILegacy(u.hostname);
+        const asciiHostname = domainToASCIILegacy(u.hostname.toWellFormed());
         if (!asciiHostname) {
             throw makeInvalidUrlError(input);
         }
         u.hostname = asciiHostname;
     }
 
-    u.host = u.hostname;
+    u.host = isIpv6Host ? `[${u.hostname}]` : u.hostname;
     if (u.port) {
         u.host += ':' + u.port;
     }
@@ -1543,14 +1547,14 @@ export function domainToASCII(domain) {
     if (arguments.length < 1) {
         throw new ERR_MISSING_ARGS('domain');
     }
-    return domainToASCIINative(`${domain}`);
+    return domainToASCIINative(`${domain}`.toWellFormed());
 }
 
 export function domainToUnicode(domain) {
     if (arguments.length < 1) {
         throw new ERR_MISSING_ARGS('domain');
     }
-    return domainToUnicodeNative(`${domain}`);
+    return domainToUnicodeNative(`${domain}`.toWellFormed());
 }
 
 export default {

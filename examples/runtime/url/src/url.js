@@ -204,10 +204,42 @@ export const test9 = () => {
 export const test10 = () => {
      const url = require('node:url');
 
-     if (url.domainToASCII('ıíd') !== 'xn--d-iga7r') return false;
-     if (url.domainToUnicode('xn--d-iga7r') !== 'ıíd') return false;
+     const domainPairs = [
+         ['ıíd', 'xn--d-iga7r'],
+         ['يٴ', 'xn--mhb8f'],
+         ['www.ϧƽəʐ.com', 'www.xn--cja62apfr6c.com'],
+         ['новини.com', 'xn--b1amarcd.com'],
+         ['名がドメイン.com', 'xn--v8jxj3d1dzdz08w.com'],
+         ['افغانستا.icom.museum', 'xn--mgbaal8b0b9b2b.icom.museum'],
+         ['الجزائر.icom.fake', 'xn--lgbbat1ad8j.icom.fake'],
+         ['भारत.org', 'xn--h2brj9c.org'],
+     ];
+     for (const [domain, ascii] of domainPairs) {
+         if (url.domainToASCII(domain) !== ascii) return false;
+         if (url.domainToUnicode(ascii) !== domain) return false;
+     }
      if (url.domainToASCII('fail⁇fail.com') !== '') return false;
      if (url.domainToUnicode('fail⁇fail.com') !== '') return false;
+     if (url.domainToASCII('') !== '') return false;
+     if (url.domainToUnicode('') !== '') return false;
+     if (url.domainToASCII('.') !== '.') return false;
+     if (url.domainToUnicode('.') !== '.') return false;
+     if (url.domainToASCII('example.com.') !== 'example.com.') return false;
+     if (url.domainToUnicode('example.com.') !== 'example.com.') return false;
+     if (url.domainToASCII('%65xample.com') !== 'example.com') return false;
+     if (url.domainToUnicode('%65xample.com') !== 'example.com') return false;
+     if (url.domainToASCII('[::1]') !== '[::1]') return false;
+     if (url.domainToUnicode('[::1]') !== '[::1]') return false;
+     for (const surrogate of ['\uD800', '\uDC00']) {
+         if (url.domainToASCII(surrogate) !== '') return false;
+         if (url.domainToUnicode(surrogate) !== '') return false;
+         if (url.domainToASCII(`foo${surrogate}`) !== '') return false;
+         if (url.domainToUnicode(`foo${surrogate}`) !== '') return false;
+         if (url.domainToASCII(`${surrogate}.com`) !== '') return false;
+         if (url.domainToUnicode(`${surrogate}.com`) !== '') return false;
+         if (url.domainToASCII(`foo/${surrogate}`) !== 'foo') return false;
+         if (url.domainToUnicode(`foo/${surrogate}`) !== 'foo') return false;
+     }
      if (url.domainToASCII(undefined) !== 'undefined') return false;
      if (url.domainToASCII(null) !== 'null') return false;
      if (url.domainToASCII(123) !== '0.0.0.123') return false;
@@ -240,7 +272,11 @@ export const test10 = () => {
      if (whatwg.origin !== 'https://xn--fa-hia.example:8443') return false;
      if (url.format(whatwg) !== whatwg.href) return false;
      if (url.format(whatwg, { unicode: false }) !== whatwg.href) return false;
+     if (url.format(whatwg, { unicode: 0 }) !== whatwg.href) return false;
+     if (url.format(whatwg, { unicode: '' }) !== whatwg.href) return false;
      if (url.format(whatwg, { unicode: true }) !== 'https://user:pass@faß.example:8443/p?q=1#h') return false;
+     if (url.format(whatwg, { unicode: 1 }) !== 'https://user:pass@faß.example:8443/p?q=1#h') return false;
+     if (url.format(whatwg, { unicode: {} }) !== 'https://user:pass@faß.example:8443/p?q=1#h') return false;
 
      const legacy = url.parse('https://faß.ExAmPlE:8443/p');
      if (legacy.hostname !== 'xn--fa-hia.example') return false;
@@ -262,6 +298,46 @@ export const test10 = () => {
      if (emptyPort.hostname !== 'example.com') return false;
      if (emptyPort.port !== null) return false;
      if (emptyPort.href !== 'http://example.com/') return false;
+
+     const ipv6 = url.parse('http://[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]:80/');
+     if (ipv6.hostname !== 'fedc:ba98:7654:3210:fedc:ba98:7654:3210') return false;
+     if (ipv6.host !== '[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:80') return false;
+     if (ipv6.href !== 'http://[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:80/') return false;
+
+     const dottedIpv6 = url.parse('http://[::192.9.5.5]/');
+     if (dottedIpv6.hostname !== '::192.9.5.5') return false;
+     if (dottedIpv6.host !== '[::192.9.5.5]') return false;
+     if (dottedIpv6.href !== 'http://[::192.9.5.5]/') return false;
+
+     const noncanonicalBracketHost = url.parse('http://[BAD]/');
+     if (noncanonicalBracketHost.hostname !== 'bad') return false;
+     if (noncanonicalBracketHost.host !== '[bad]') return false;
+     if (noncanonicalBracketHost.href !== 'http://[bad]/') return false;
+
+     const bracketedSurrogate = url.parse('http://[::\uD800]/');
+     if (bracketedSurrogate.hostname !== '::\uD800') return false;
+     if (bracketedSurrogate.host !== '[::\uD800]') return false;
+     if (bracketedSurrogate.href !== 'http://[::\uD800]/') return false;
+
+     const emptyIpv6Port = url.parse('http://[::1]:/');
+     if (emptyIpv6Port.hostname !== '::1') return false;
+     if (emptyIpv6Port.port !== null) return false;
+     if (emptyIpv6Port.host !== '[::1]') return false;
+     if (emptyIpv6Port.href !== 'http://[::1]/') return false;
+
+     for (const invalid of [
+         'http://[::1]:abc/path',
+         'http://[::1]extra/path',
+         'http://\uD800.com/',
+         'http://foo\uD800/',
+     ]) {
+         try {
+             url.parse(invalid);
+             return false;
+         } catch (error) {
+             if (error.code !== 'ERR_INVALID_URL') return false;
+         }
+     }
 
      const invalidPort = url.parse('http://faß.example:abc/');
      if (invalidPort.hostname !== 'xn--fa-hia.example') return false;
