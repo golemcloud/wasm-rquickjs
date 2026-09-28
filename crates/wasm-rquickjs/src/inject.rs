@@ -453,7 +453,12 @@ pub fn patch_capability_gates_in_bytes(wasm: &[u8], enabled_bits: u64) -> anyhow
     patch_capability_gates_slots_in_bytes(wasm, enabled_bits)
 }
 
-fn patch_capability_gates_slots_in_bytes(
+/// Patch only the capability data slots, without rewriting instructions or running DCE.
+///
+/// Use a fresh, unspecialized template, before Wizer initialization. Changing
+/// slots after initialization cannot undo registered modules or cached gate values.
+/// The caller must include the needs of every embedded module and any future code.
+pub fn patch_capability_gates_slots_in_bytes(
     wasm: &[u8],
     enabled_bits: u64,
 ) -> anyhow::Result<Vec<u8>> {

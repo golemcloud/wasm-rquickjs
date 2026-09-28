@@ -164,7 +164,7 @@ macro_rules! capability_enabled {
 }
 
 mod abort_controller;
-#[cfg(feature = "fetch")]
+#[cfg(any(feature = "p3", feature = "fetch"))]
 mod abort_signal;
 mod assert;
 mod async_hooks;
@@ -185,15 +185,20 @@ mod fs;
 mod gc;
 mod shared_response_body;
 
-#[cfg(feature = "fetch")]
+#[cfg(any(feature = "p3", feature = "fetch"))]
+#[cfg_attr(feature = "p3", path = "http_p3.rs")]
 mod http;
 
-#[cfg(not(feature = "fetch"))]
+#[cfg(all(feature = "p2", not(feature = "fetch")))]
 mod http_disabled;
-#[cfg(not(feature = "fetch"))]
+#[cfg(all(feature = "p2", not(feature = "fetch")))]
 mod http {
     pub use super::http_disabled::*;
 }
+
+#[cfg(feature = "p3")]
+#[path = "http_body_p3.rs"]
+mod http_body;
 
 mod events;
 mod http2;
@@ -207,12 +212,13 @@ mod module;
 mod net;
 mod socket_helpers;
 
-#[cfg(feature = "node-http")]
+#[cfg(any(feature = "p3", feature = "node-http"))]
+#[cfg_attr(feature = "p3", path = "node_http_p3.rs")]
 mod node_http;
 
-#[cfg(not(feature = "node-http"))]
+#[cfg(all(feature = "p2", not(feature = "node-http")))]
 mod node_http_disabled;
-#[cfg(not(feature = "node-http"))]
+#[cfg(all(feature = "p2", not(feature = "node-http")))]
 mod node_http {
     pub use super::node_http_disabled::*;
 }

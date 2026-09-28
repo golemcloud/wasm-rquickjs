@@ -70,19 +70,6 @@ fn capability_policy(
     Ok(enabled_bits(outcome.enabled))
 }
 
-fn dce(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let result = wasm_eliminator::eliminate(bytes)?;
-    eprintln!(
-        "Strict DCE: {} -> {} bytes; root imports: {} -> {}; trusted assumptions: {}",
-        bytes.len(),
-        result.wasm.len(),
-        result.report.root_imports_before.len(),
-        result.report.root_imports_after.len(),
-        result.report.trusted_assumptions
-    );
-    Ok(result.wasm)
-}
-
 fn main() {
     let args = Args::parse();
     match &args.command {
@@ -143,17 +130,6 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Command::Dce { input, output } => {
-            let result = (|| -> anyhow::Result<()> {
-                let optimized = dce(&std::fs::read(input)?)?;
-                std::fs::write(output, optimized)?;
-                Ok(())
-            })();
-            if let Err(err) = result {
-                eprintln!("Error running strict DCE: {err:#}");
-                std::process::exit(1);
-            }
-        }
         Command::ScanCapabilities {
             js,
             include,
@@ -193,8 +169,9 @@ fn main() {
                     let bits =
                         capability_policy(js_paths, *auto_trim, include, exclude, *trim_unknown)?;
                     let bytes = std::fs::read(output)?;
-                    let patched = wasm_rquickjs::patch_capability_gates_in_bytes(&bytes, bits)?;
-                    std::fs::write(output, dce(&patched)?)?;
+                    let patched =
+                        wasm_rquickjs::patch_capability_gates_slots_in_bytes(&bytes, bits)?;
+                    std::fs::write(output, patched)?;
                     Ok(())
                 })();
                 if let Err(err) = result {

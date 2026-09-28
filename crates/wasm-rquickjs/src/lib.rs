@@ -80,7 +80,8 @@ mod wit;
 pub use inject::{
     CAPABILITY_GATES_END_MAGIC, CAPABILITY_GATES_MAGIC, SLOT_END_MAGIC, SLOT_MAGIC,
     create_marker_file, inject_js_into_component, patch_capability_gates,
-    patch_capability_gates_in_bytes, read_capability_gates_from_bytes,
+    patch_capability_gates_in_bytes, patch_capability_gates_slots_in_bytes,
+    read_capability_gates_from_bytes,
 };
 #[cfg(feature = "optimize")]
 pub use optimize::optimize_component;

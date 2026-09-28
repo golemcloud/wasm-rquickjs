@@ -156,17 +156,19 @@ path.
 
 ## Experimental component size optimization
 
-`wasm-rquickjs dce --input app.wasm --output app-dce.wasm` runs the pinned
-wasm-eliminator's strict, validated DCE without restricting runtime JS/TS generation.
-It supports both Preview 2 and Preview 3. It does not promise smaller files or a
-smaller WIT import surface, and does not use producer-supplied suppression hints.
-
 `scan-capabilities --js main.js` reports a conservative builtin inventory.
-`inject-js --auto-trim` additionally offers **experimental P2-only closed-world
-specialization**. Use a fresh template before Wizer, account for every embedded
+`inject-js --strict-optimized` offers **experimental P2/P3 closed-world
+specialization**, followed separately by `optimize` for Wizer pre-initialization.
+It patches capability data only: there is no wasm-eliminator dependency or Wasm
+DCE pass. Savings come from avoiding unused initialized runtime state in the
+snapshot, not from removing native code or reducing the WIT world.
+
+Use a fresh template before Wizer, account for every embedded
 module and future execution, and retain the original template for reinjection.
-For unrestricted dynamic code, keep the default all-enabled runtime and use
-`dce` instead. These controls are not sandbox permissions.
+For unrestricted dynamic code, omit specialization flags to keep the default
+all-enabled runtime; Wizer works in this mode too. Generated TypeScript also
+requires a template built with `typescript-runtime`. `--auto-trim` remains an
+alias for `--strict-optimized`. These controls are not sandbox permissions.
 
 See [the capability optimizer report](capability-detection.md) for measurements,
 reproduction commands, and limitations.

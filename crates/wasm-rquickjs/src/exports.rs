@@ -70,19 +70,11 @@ pub fn generate_export_impls(
         }
     };
 
-    // In the Preview 3 path the Node.js builtin tree (`builtin/`) is not compiled at all;
-    // `mod builtin` is bound to the minimal `builtin_p3.rs` stub instead, so none of the
-    // P2-only builtin dependencies are pulled in. See `builtin_p3.rs`.
-    let builtin_module = if context.target.is_p3() {
-        quote! {
-            #[path = "builtin_p3.rs"]
-            mod builtin;
-        }
-    } else {
-        quote! {
-            mod builtin;
-            mod capabilities;
-        }
+    // Both targets share registration and capability policy. The builtin tree
+    // selects target-specific HTTP transports with cfg attributes.
+    let builtin_module = quote! {
+        mod builtin;
+        mod capabilities;
     };
 
     let lib_tokens = quote! {

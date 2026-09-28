@@ -22,7 +22,6 @@ pkg-fmt = "zip"
 
 [dependencies]
 "wasm-rquickjs" = { path = "crates/wasm-rquickjs", version = "0.0.0", features = ["optimize"] }
-wasm-eliminator = { git = "https://github.com/golemcloud/wasm-eliminator", rev = "ddfeaf3424e438861404363bb3a3d6f610449524" }
 
 anyhow = { workspace = true }
 camino = { workspace = true }

@@ -95,13 +95,6 @@ pub enum Command {
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
     },
-    /// Strict, behavior-preserving WebAssembly DCE, without restricting dynamic JS/TS.
-    Dce {
-        #[arg(long)]
-        input: Utf8PathBuf,
-        #[arg(long)]
-        output: Utf8PathBuf,
-    },
     /// Scan a JavaScript module and report which skeleton built-ins it appears to use.
     /// This is a research/diagnostic tool for the per-app trimming work.
     ScanCapabilities {
@@ -149,7 +142,7 @@ pub enum Command {
         /// capability-gates slot (e.g. `fs`, `node_http`). Repeatable.
         ///
         /// Implies enabling per-capability gate patching: when neither
-        /// `--include`, `--exclude`, nor `--auto-trim` is set, the gates slot
+        /// `--include`, `--exclude`, nor `--strict-optimized` is set, the gates slot
         /// is left untouched and every capability stays enabled.
         #[arg(long = "include")]
         include: Vec<String>,
@@ -160,15 +153,20 @@ pub enum Command {
         #[arg(long = "exclude")]
         exclude: Vec<String>,
 
-        /// EXPERIMENTAL P2 closed-world specialization, followed by strict Wasm DCE.
+        /// EXPERIMENTAL P2/P3 closed-world runtime specialization, without Wasm DCE.
         /// Requires a fresh template, before Wizer pre-initialization.
         /// The caller must account for all embedded modules and future code via
         /// --include. Static JS analysis is not a proof of runtime reachability.
-        /// For unrestricted generated JS/TS, use `dce` instead (all builtins stay available).
-        #[arg(long = "auto-trim", default_value_t = false)]
+        /// Omit this option for unrestricted generated JS/TS. Run optimize afterwards
+        /// to obtain the smaller Wizer snapshot; patching alone does not reduce size.
+        #[arg(
+            long = "strict-optimized",
+            alias = "auto-trim",
+            default_value_t = false
+        )]
         auto_trim: bool,
 
-        /// When set with `--auto-trim`, also trim aggressively even if the JS
+        /// When set with `--strict-optimized`, also trim aggressively even if the JS
         /// contains dynamic patterns (`require(varName)`, `import(expr)`,
         /// `eval`, `new Function`, `vm.run*`). Default behavior is conservative.
         #[arg(long = "trim-unknown", default_value_t = false, requires = "auto_trim")]

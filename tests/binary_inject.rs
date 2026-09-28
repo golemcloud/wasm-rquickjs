@@ -13,7 +13,8 @@ use wasm_rquickjs::capability_scan::{
 };
 use wasm_rquickjs::{
     EmbeddingMode, JsModuleSpec, generate_wrapper_crate_with_target, inject_js_into_component,
-    patch_capability_gates_in_bytes, read_capability_gates_from_bytes,
+    patch_capability_gates_slots_in_bytes as patch_capability_gates_in_bytes,
+    read_capability_gates_from_bytes,
 };
 use wasmtime::component::Val;
 
@@ -106,11 +107,11 @@ impl BinarySlotTestBuilder {
 async fn main() {
     // A focused rerun for the separately compiled TypeScript-enabled image.
     if std::env::args().any(|arg| arg == "dynamic_typescript") {
-        test_capability_dce(true).await;
+        test_capability_specialization(true).await;
         return;
     }
-    if std::env::args().any(|arg| arg == "capability_dce") {
-        test_capability_dce(false).await;
+    if std::env::args().any(|arg| arg == "capability_specialization") {
+        test_capability_specialization(false).await;
         return;
     }
 
@@ -123,19 +124,16 @@ async fn main() {
     // Test 3: re-inject different JS into the same template
     test_reinject_different_js().await;
 
-    // Only the P2 builtin registry currently exposes capability gates.
-    if test_target() == TestTarget::P2 {
-        test_patch_capability_gates_and_run().await;
-    }
+    test_patch_capability_gates_and_run().await;
 
-    test_capability_dce(false).await;
+    test_capability_specialization(false).await;
 
     eprintln!("\n=== All binary_inject tests passed ===");
 }
 
-/// Real release components, stripped before measurement: compare ordinary DCE
-/// with closed-world specialization, and execute every result in a fresh store.
-async fn test_capability_dce(dynamic_only: bool) {
+/// Compare full and specialized runtime snapshots without any Wasm DCE.
+/// Execute every raw component and Wizer snapshot in a fresh store.
+async fn test_capability_specialization(dynamic_only: bool) {
     let mut builder = BinarySlotTestBuilder::new("example1", dynamic_only).unwrap();
     let fixtures = [
         (
@@ -182,32 +180,13 @@ async fn test_capability_dce(dynamic_only: bool) {
         let patched = patch_capability_gates_in_bytes(
             &original,
             enabled_bits(policy.enabled.iter().copied()),
-        );
-        let mut modes = vec![("baseline", &original), ("strict", &original)];
-        if test_target() == TestTarget::P2 {
-            modes.push(("specialized", patched.as_ref().expect("P2 gates")));
-        } else {
-            assert!(
-                patched.is_err(),
-                "P3 must not claim to support gate specialization"
-            );
-        }
-        for (mode, input) in modes {
-            let bytes = if mode == "baseline" {
-                input.clone()
-            } else {
-                let result = wasm_eliminator::eliminate(input).unwrap();
-                assert!(!result.report.trusted_assumptions);
-                eprintln!(
-                    "DCE imports {name}/{mode}: {} -> {}",
-                    result.report.root_imports_before.len(),
-                    result.report.root_imports_after.len()
-                );
-                result.wasm
-            };
+        )
+        .expect("both P2 and P3 expose gates");
+        assert_eq!(original.len(), patched.len(), "only data bytes change");
+        for (mode, bytes) in [("full", &original), ("strict-optimized", &patched)] {
             let artifact =
                 path.with_file_name(format!("{name}-{mode}{}.wasm", test_target().dir_suffix()));
-            std::fs::write(&artifact, &bytes).unwrap();
+            std::fs::write(&artifact, bytes).unwrap();
             let mut instance = TestInstance::new(&artifact).await.unwrap();
             let (result, _) = instance
                 .invoke_and_capture_output(None, "hello", &[Val::String("World".into())])
@@ -222,8 +201,11 @@ async fn test_capability_dce(dynamic_only: bool) {
                 bytes.len(),
                 policy.enabled.len()
             );
-            if name == "pure" && mode != "baseline" && test_target() == TestTarget::P2 {
-                let snapshot = artifact.with_file_name(format!("pure-{mode}-wizer.wasm"));
+            {
+                let snapshot = artifact.with_file_name(format!(
+                    "{name}-{mode}-wizer{}.wasm",
+                    test_target().dir_suffix()
+                ));
                 wasm_rquickjs::optimize_component(&artifact, &snapshot, "wizer-initialize")
                     .await
                     .unwrap();
@@ -233,7 +215,8 @@ async fn test_capability_dce(dynamic_only: bool) {
                     .await;
                 assert!(matches!(result.unwrap(), Some(Val::String(value)) if value == expected));
                 eprintln!(
-                    "CAPABILITY_SIZE P2 pure {mode}-wizer bytes={} inferred={}",
+                    "CAPABILITY_SIZE {:?} {name} {mode}-wizer bytes={} inferred={}",
+                    test_target(),
                     std::fs::metadata(&snapshot).unwrap().len(),
                     policy.enabled.len()
                 );
@@ -478,7 +461,12 @@ async fn test_patch_capability_gates_and_run() {
     ));
     let js_source = r#"
 export const something = 7;
-export function hello(name) { return `gates-patched: ${name}`; }
+export async function hello(name) {
+    let missing = false;
+    try { await import('node:sqlite'); } catch { missing = true; }
+    if (!missing) throw new Error('disabled sqlite remained available');
+    return `gates-patched: ${name}`;
+}
 export async function asyncHello(name) { return `gates-patched async: ${name}`; }
 "#;
     inject_js_into_component(&patched_template_path, &injected_path, &[js_source])

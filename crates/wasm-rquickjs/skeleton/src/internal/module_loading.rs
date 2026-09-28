@@ -11402,12 +11402,7 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         );
     }
 
-    #[cfg(feature = "p2")]
     let fs_enabled = crate::capabilities::cap_fs_module_loader();
-    // P3 has a separate builtin registry and no capability slot. It supports
-    // strict DCE, not closed-world gate specialization.
-    #[cfg(feature = "p3")]
-    let fs_enabled = true;
 
     let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
 
