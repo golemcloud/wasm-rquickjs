@@ -1020,6 +1020,14 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
     let tracker = fs::read_to_string(Utf8Path::new(SUITE_DIR).join("TRACKER.md"))?;
     let allow_untracked_reports = std::env::var_os("AGENTIC_TS_ALLOW_UNTRACKED_REPORTS").is_some();
     let mut reports_to_check = reports_to_check()?;
+    let mut current_manifest_reports = report_paths_from_env("AGENTIC_TS_CURRENT_REPORTS")?;
+    let current_manifest_source = if current_manifest_reports.is_empty() {
+        None
+    } else {
+        Some(std::env::var("AGENTIC_TS_EXPECTED_SOURCE_REF").context(
+            "AGENTIC_TS_EXPECTED_SOURCE_REF is required with AGENTIC_TS_CURRENT_REPORTS",
+        )?)
+    };
     let current_input_hashes = if reports_to_check.is_empty() {
         None
     } else {
@@ -1054,6 +1062,15 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             validate_report(&report)?;
             validate_regression_guards(&report)?;
         }
+        if current_manifest_reports.remove(&path) {
+            anyhow::ensure!(
+                report["environment"]["commitHint"]
+                    == current_manifest_source
+                        .as_deref()
+                        .expect("manifest source exists"),
+                "{path} source does not match its current-report manifest"
+            );
+        }
         let check_current = reports_to_check.remove(&path);
         if check_current {
             validate_current_inputs(&path, &report, current_input_hashes.as_ref().unwrap())?;
@@ -1074,6 +1091,10 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
     anyhow::ensure!(
         reports_to_check.is_empty(),
         "reports requested for currentness checking were not found: {reports_to_check:?}"
+    );
+    anyhow::ensure!(
+        current_manifest_reports.is_empty(),
+        "current-report manifest entries were not found: {current_manifest_reports:?}"
     );
 
     let mut paired = 0;
@@ -1447,6 +1468,10 @@ fn validate_report_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<(
 }
 
 fn reports_to_check() -> anyhow::Result<BTreeSet<camino::Utf8PathBuf>> {
+    report_paths_from_env("AGENTIC_TS_REPORTS_TO_CHECK")
+}
+
+fn report_paths_from_env(variable: &str) -> anyhow::Result<BTreeSet<camino::Utf8PathBuf>> {
     let results_directory = Utf8Path::new(SUITE_DIR).join("results");
     let current_directory = camino::Utf8PathBuf::from_path_buf(std::env::current_dir()?)
         .map_err(|path| anyhow::anyhow!("non-UTF-8 current directory: {}", path.display()))?;
@@ -1460,7 +1485,7 @@ fn reports_to_check() -> anyhow::Result<BTreeSet<camino::Utf8PathBuf>> {
     } else {
         current_directory.join(configured_source_root)
     };
-    std::env::var("AGENTIC_TS_REPORTS_TO_CHECK")
+    std::env::var(variable)
         .unwrap_or_default()
         .lines()
         .filter(|line| !line.trim().is_empty())

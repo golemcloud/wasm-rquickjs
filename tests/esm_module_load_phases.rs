@@ -51,7 +51,7 @@ const EXCLUSIVE_LOADER_PHASES: &[&str] = &[
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     if std::env::var_os("ESM_MODULE_LOAD_PHASES_MEASURE").is_none() {
-        return validate_checked_reports();
+        return validate_archived_reports();
     }
 
     let build_started = Instant::now();
@@ -207,9 +207,9 @@ fn summarize(samples: &[Value]) -> Value {
     })
 }
 
-fn validate_checked_reports() -> anyhow::Result<()> {
+fn validate_archived_reports() -> anyhow::Result<()> {
     let directory = Utf8Path::new(RESULTS_DIR);
-    anyhow::ensure!(directory.exists(), "checked report directory is missing");
+    anyhow::ensure!(directory.exists(), "archived report directory is missing");
     let mut targets = std::collections::BTreeSet::new();
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
@@ -223,7 +223,7 @@ fn validate_checked_reports() -> anyhow::Result<()> {
     }
     anyhow::ensure!(
         targets == ["p2".to_string(), "p3".to_string()].into_iter().collect(),
-        "checked reports must contain exactly one P2 and one P3 report"
+        "archived reports must contain exactly one P2 and one P3 report"
     );
     Ok(())
 }

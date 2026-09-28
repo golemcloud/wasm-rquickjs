@@ -1,10 +1,12 @@
 # Results
 
-The retained P2/P3 reports contain the final candidate's five raw samples, exact
-base revision and instrumentation identities, component identity, execution
-profile counters, and derived reconciliation. These are descriptive local
-measurements, not CI thresholds. The baseline raw reports are summarized below
-rather than retained sample by sample.
+The retained P2/P3 reports are archival attribution data containing the final
+candidate's five raw samples, recorded base revision and instrumentation hashes,
+component identity, execution profile counters, and derived reconciliation.
+The report check validates schema, samples, and arithmetic only; it does not
+reconstruct the source/patch provenance. These are descriptive local
+measurements, not reproducible CI evidence or thresholds. The baseline raw
+reports are summarized below rather than retained sample by sample.
 
 The baseline capture attributed essentially the entire pre-evaluation interval to
 two repository-owned Rust source scans:
@@ -20,7 +22,7 @@ The evidence rejected QuickJS parsing, linking, evaluation, filesystem resolutio
 and source reads as material owners of this workload.
 
 The final candidate bulk-skips contiguous ASCII whitespace in the two affected
-source scanners. Its retained reports were captured from exact revision
+source scanners. Its retained reports record revision hint
 `7bed8b048cbafc43bc2a300c8d7b48733bf05386`:
 
 | Target | End-to-end median | Pre-evaluation median | CJS-global preflight median | Prologue injection median | End-to-end reduction |

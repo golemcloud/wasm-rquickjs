@@ -64,7 +64,7 @@ The retained final [P2](results/2026-09-23-p2-macos-aarch64.json) and
 [P3](results/2026-09-23-p3-macos-aarch64.json) reports measure clean source
 `dd689c8c` with Node 22.14.0, npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and
 disabled optional test caches. Their build and benchmark input hashes match
-across targets, and report validation plus exact currentness pass.
+across targets, and report validation passes.
 
 The first controlled step moved CJS `sourceMappingURL` extraction from
 JavaScript to the existing native SWC lexer in TypeScript-feature builds. Its

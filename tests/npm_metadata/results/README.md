@@ -28,19 +28,19 @@ tests/npm_metadata/run.sh --check-current \
   tests/npm_metadata/results/2026-09-24-release-p3-macos-aarch64.json
 ```
 
-The currentness command requires Git and `jq`; it recomputes source hashes from
-a temporary pristine worktree at the exact revision in `current-reports.txt`.
-That revision must already exist in the local clone; the command does not fetch
-missing history.
+The shared typed currentness helper parses the manifest, verifies the companion
+pair, and recomputes source hashes from a temporary pristine worktree when the
+recorded source is reachable. After a rebase or squash replaces that commit, it
+uses the checked-out content instead; the recorded input hashes, not commit
+ancestry, decide whether the report remains current.
 
 No `npm-metadata-v2` report is accepted as current unless both target reports
 match the source input hashes and form one distinct P2/P3 pair. The dated final
 pair and its measured goal status are documented here only after that validation
 passes from a clean source commit. `current-reports.txt` pairs that latest pair
-with its exact measured source revision for CI currentness selection;
-superseded `npm-metadata-v2` pairs remain contract-validated without being
-treated as evidence for a later source tree. Earlier v1 and path-trace JSON
-remain historical evidence outside this v2 currentness contract.
+with its measured source hint for CI currentness selection. Only this v2 pair is
+retained as raw npm evidence; older v1 and path-trace results remain summarized
+in the Markdown experiment reports.
 
 ### 2026-09-24 retained small-fixture measurement
 
@@ -106,37 +106,12 @@ baseline. Without `NPM_METADATA_RUN=1`, the test target exits without building
 the component or using the network. Public npmjs.org results must never be used
 as CI timing gates.
 
-## Reproduce the cold path trace
+## Historical trace retention
 
-The dated trace patch is a measurement tool, not a runtime change. It applies
-to the 2026-09-18 baseline revision `9619718a1c444dd490d6075494de91918c712734`,
-not to the current branch head. Create a clean worktree at that revision, use
-the pinned Node/npm installation, and apply it only for the measurement. It
-adds bounded per-job path-frequency counters and emits aggregate counts
-without path strings.
-
-```sh
-git worktree add --detach ../wasm-rquickjs-npm-trace-baseline 9619718a1c444dd490d6075494de91918c712734
-cd ../wasm-rquickjs-npm-trace-baseline
-git apply --check tests/npm_metadata/results/2026-09-18-trace.patch
-git apply tests/npm_metadata/results/2026-09-18-trace.patch
-NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
-  NPM_METADATA_REPORT=/tmp/npm-metadata-trace-p2.json \
-  tools/dev-test.sh p2 standard npm_metadata ''
-NPM_METADATA_RUN=1 NPM_METADATA_TRACE=1 NPM_METADATA_ITERATIONS=3 \
-  NPM_METADATA_REPORT=/tmp/npm-metadata-trace-p3.json \
-  tools/dev-test.sh p3 standard npm_metadata ''
-git apply --reverse tests/npm_metadata/results/2026-09-18-trace.patch
-git diff --exit-code -- crates/wasm-rquickjs/skeleton tests/npm_metadata.rs
-cd -
-git worktree remove ../wasm-rquickjs-npm-trace-baseline
-```
-
-The two reproduction commands write separate `/tmp` files and do not
-overwrite the checked-in observations. Both targets require a local loopback
-listener and one pre-timing fetch of the pinned tarballs. The trace has no warm
-or public-registry rows, and its timings should not be mixed with the original
-baseline.
+The 2026-09-18 baseline and path-trace evidence is retained as reviewed
+aggregates in `2026-09-18-report.md`. Its v1/path-trace JSON and one-off
+instrumentation patch lacked the provenance contract of the v2 release pair,
+so they are intentionally omitted from the code review.
 
 ## Cache experiments
 
@@ -144,9 +119,9 @@ The follow-up [cache experiment report](2026-09-21-cache-experiments.md)
 records independent and combined five-pair measurements for the graph-scoped
 missing `package.json` cache and runtime-scoped positive loader realpath cache.
 It also records the final three-iteration P2/P3 candidate after review split
-the CommonJS and ESM cache domains. Only the final reviewed P2/P3 raw reports
-are retained; the prototype samples remain summarized in the report's
-aggregate tables.
+the CommonJS and ESM cache domains. Candidate and prototype samples remain
+summarized in the report's aggregate tables; only the current v2 release pair
+is retained as raw npm evidence.
 
 The later [release-cache follow-up](2026-09-24-release-cache-followups.md)
 records directory-prefix realpath reuse, the final matched release pair, and

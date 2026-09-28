@@ -59,13 +59,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          # Full history keeps the exact measured source revisions named by
-          # current-report manifests available while merge parents select
-          # newly introduced report artifacts.
+          # Full history makes push and pull-request diff bases available to
+          # the current-report selector. Measured SHAs are optional: retained
+          # input hashes remain authoritative after rebases and squash merges.
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - name: Test agentic TypeScript CI currentness selection
-        run: tests/agentic_ts/test-select-ci-currentness.sh
+      - name: Test performance-report currentness selection
+        run: tools/performance-report-currentness.sh self-test
       - name: Select agentic TypeScript currentness inputs
         id: agentic-ts-currentness
         shell: bash
@@ -73,30 +73,25 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: .github/scripts/select-agentic-ts-currentness.sh "$GITHUB_EVENT_NAME" "$PUSH_BEFORE" "$PR_HEAD" >> "$GITHUB_OUTPUT"
-      - name: Prepare pristine performance-report hash inputs
-        run: |
-          git worktree add --detach "$RUNNER_TEMP/agentic-ts-source" "${{ steps.agentic-ts-currentness.outputs.agentic-source-ref }}"
-          git worktree add --detach "$RUNNER_TEMP/npm-metadata-source" "${{ steps.agentic-ts-currentness.outputs.npm-source-ref }}"
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
       # Validation mode checks supported committed report contracts and the content
-      # hashes of changed reports designated current for each suite, evaluated
-      # at each manifest's exact measured source; manual workloads do not run.
+      # hashes of changed reports designated current for each suite. The shared
+      # helper uses the measured source when reachable and otherwise verifies
+      # content-identical squash/rebase results against the checkout.
       - name: Validate agentic TypeScript reports
         shell: bash
         env:
-          AGENTIC_TS_SOURCE_ROOT: ${{ runner.temp }}/agentic-ts-source
-          AGENTIC_TS_REPORTS_TO_CHECK: ${{ steps.agentic-ts-currentness.outputs.reports-to-check }}
+          PERFORMANCE_REPORTS_TO_CHECK: ${{ steps.agentic-ts-currentness.outputs.reports-to-check }}
         run: |
-          AGENTIC_TS_VALIDATE_REPORTS=1 \
+          tools/performance-report-currentness.sh check agentic-ts -- \
             cargo test --test agentic_ts $CI_WASMTIME_FORK_FEATURES
       - name: Validate npm release reports
         shell: bash
         env:
-          NPM_METADATA_SOURCE_ROOT: ${{ runner.temp }}/npm-metadata-source
-          NPM_METADATA_REPORTS_TO_CHECK: ${{ steps.agentic-ts-currentness.outputs.npm-reports-to-check }}
+          PERFORMANCE_REPORTS_TO_CHECK: ${{ steps.agentic-ts-currentness.outputs.npm-reports-to-check }}
         run: |
-          NPM_METADATA_VALIDATE_REPORTS=1 \
+          tools/performance-report-currentness.sh check npm-metadata -- \
             cargo test --test npm_metadata $CI_WASMTIME_FORK_FEATURES
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json

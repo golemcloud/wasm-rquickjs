@@ -22,19 +22,25 @@ tests/esm_module_load_phases/run.sh p3
 
 The runner creates a detached temporary worktree at the current committed source,
 verifies and applies the retained patch there, records one report, and removes the
-worktree. This keeps the validated transform-latency reports current. Optional
-artifact and Wasmtime caches remain disabled. Validate retained reports without
-executing workloads with:
+worktree. Optional artifact and Wasmtime caches remain disabled. Check the
+archived reports' schema, samples, and arithmetic without executing workloads
+with:
 
 ```sh
 tests/esm_module_load_phases/run.sh --check
 ```
+
+The retained pair is archival attribution data, not reproducible currentness
+evidence. The check deliberately does not resolve `baseRevision`, apply the
+patch, or recompute `patchedFilesHash`; the recorded revision hint and hashes
+document the capture, while production tests validate the accepted scanner
+change.
 
 The 2026-09-21 baseline capture attributed virtually all of the delay to the
 CJS-global preflight scan and module-prologue injection. Each consumed about
 5.2–5.4 seconds for the whitespace-preserving 64-KiB source, while QuickJS
 declaration, filesystem resolution, evaluation, and the unresolved residual were
 sub-millisecond. A narrowed production change now bulk-skips contiguous ASCII
-whitespace in those scanners. The retained exact-revision candidate reports reduce
-the P2/P3 end-to-end medians from 10.66/11.06 seconds to 192/197 milliseconds. See
-the results README for the exact medians and interpretation.
+whitespace in those scanners. The retained archival candidate reports reduce the
+P2/P3 end-to-end medians from 10.66/11.06 seconds to 192/197 milliseconds. See the
+results README for the exact medians and interpretation.

@@ -137,8 +137,6 @@ inside a WASI preopen. Persistent relative symlinks, cache-domain isolation,
 retargeting, and retry behavior are covered by the module-resolution runtime
 test instead.
 
-Retained raw reports: reviewed candidate
-[P2](2026-09-21-loader-caches-final-p2.json) and
-[P3](2026-09-21-loader-caches-final-p3.json). The intermediate prototype
-samples are summarized in the aggregate tables above rather than retained
-sample by sample.
+The v1 candidate and intermediate prototype samples are summarized in the
+aggregate tables above rather than retained sample by sample. Only the current
+v2 release P2/P3 pair remains as checked raw npm evidence.

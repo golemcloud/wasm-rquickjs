@@ -1679,6 +1679,15 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
     let readme = fs::read_to_string(Utf8Path::new(SUITE_DIR).join("results/README.md"))?;
     let allow_untracked = std::env::var_os("NPM_METADATA_ALLOW_UNTRACKED_REPORTS").is_some();
     let mut requested = npm_reports_to_check()?;
+    let mut current_manifest_reports = npm_report_paths_from_env("NPM_METADATA_CURRENT_REPORTS")?;
+    let current_manifest_source =
+        if current_manifest_reports.is_empty() {
+            None
+        } else {
+            Some(std::env::var("NPM_METADATA_EXPECTED_SOURCE_REF").context(
+                "NPM_METADATA_CURRENT_REPORTS requires NPM_METADATA_EXPECTED_SOURCE_REF",
+            )?)
+        };
     let current_inputs = if requested.is_empty() {
         None
     } else {
@@ -1692,12 +1701,20 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
             continue;
         }
         let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
-        if report["schema"] != "npm-metadata-v2" {
-            continue;
-        }
+        ensure!(
+            report["schema"] == "npm-metadata-v2",
+            "{} is not a checked npm-metadata-v2 release report; retain historical aggregates in Markdown instead",
+            path
+        );
         validate_release_metadata(&path, &report)?;
         validate_release_report(&report)?;
         validate_release_regression_guards(&report)?;
+        if current_manifest_reports.remove(&path) {
+            ensure!(
+                report["environment"]["commitHint"].as_str() == current_manifest_source.as_deref(),
+                "{path} commit hint does not match its current-report manifest"
+            );
+        }
         let check_current = requested.remove(&path);
         if check_current {
             let current = current_inputs.as_ref().expect("current inputs exist");
@@ -1718,6 +1735,10 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
     ensure!(
         requested.is_empty(),
         "requested npm release reports were not found: {requested:?}"
+    );
+    ensure!(
+        current_manifest_reports.is_empty(),
+        "current npm release reports were not found: {current_manifest_reports:?}"
     );
     let mut paired = 0;
     for (filename, p2) in reports
@@ -1745,9 +1766,13 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
 }
 
 fn npm_reports_to_check() -> anyhow::Result<BTreeSet<Utf8PathBuf>> {
+    npm_report_paths_from_env("NPM_METADATA_REPORTS_TO_CHECK")
+}
+
+fn npm_report_paths_from_env(variable: &str) -> anyhow::Result<BTreeSet<Utf8PathBuf>> {
     let results_directory = Utf8Path::new(SUITE_DIR).join("results");
     let source_root = npm_source_root()?;
-    std::env::var("NPM_METADATA_REPORTS_TO_CHECK")
+    std::env::var(variable)
         .unwrap_or_default()
         .lines()
         .filter(|line| !line.trim().is_empty())

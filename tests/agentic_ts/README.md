@@ -85,8 +85,9 @@ tests/agentic_ts/run.sh --check
 ```
 
 Validate the manifest-designated current pair against composite BLAKE3 input
-hashes recomputed from a temporary pristine worktree at its exact measured
-revision:
+hashes. The shared typed helper uses a temporary pristine worktree when the
+measured source is reachable and otherwise checks content-identical rebased or
+squashed source directly:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
@@ -94,8 +95,9 @@ tests/agentic_ts/run.sh --check-current \
   tests/agentic_ts/results/2026-09-24-release-p3-macos-aarch64.json
 ```
 
-The currentness command requires Git and `jq`. The exact measured commit must
-already exist in the local clone; the command does not fetch missing history.
+The currentness command requires Git but does not fetch or require commit
+ancestry. A recorded commit is a navigation hint; input hashes are the durable
+currentness identity.
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
 writes raw JSON reports under `tests/agentic_ts/results/`. Timings are

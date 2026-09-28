@@ -26,16 +26,16 @@ that both targets used the same build and benchmark inputs.
 `run.sh --check` validates every historical report and requires each P2/P3 pair
 to share the input hashes without resolving Git history. `run.sh
 --check-current` additionally compares the manifest-designated reports with
-their exact measured source in a temporary pristine worktree. Each
-`current-reports.txt` entry pairs an exact measured source
-revision with one member of the latest P2/P3 pair. When that pair or manifest
-changes, CI checks it against pristine worktrees at the named revision;
-superseded experiment reports remain schema- and pair-validated without being
-relabeled as measurements of a later source tree. Pull-request and ordinary
-merge parents select newly introduced artifacts without mixing in unrelated
-first-parent changes, while ambiguous merge pushes fail closed. With five
-samples, the reported p95 is the observed maximum; it is descriptive evidence
-rather than a stable tail-latency estimate.
+their measured source in a temporary pristine worktree when that commit is
+reachable, or with the checked-out content after a rebase or squash. Each
+`current-reports.txt` entry pairs a measured source hint with one member of the
+latest P2/P3 pair. One shared typed helper owns manifest parsing, pair checks,
+changed-report selection, source lookup, and worktree cleanup. Commit ancestry
+is not part of currentness; the composite input hashes are authoritative.
+Superseded experiment reports remain schema- and pair-validated without being
+relabeled as measurements of a later source tree. With five samples, the
+reported p95 is the observed maximum; it is descriptive evidence rather than a
+stable tail-latency estimate.
 
 ## Production release baseline
 
@@ -46,8 +46,8 @@ harness and generated components are locked Cargo release builds, the component
 uses `typescript-transform-runtime` rather than the profiling feature, and the
 optional artifact, Wasmtime, prepared-component, and unoptimized test settings
 are all disabled. Distinct P2/P3 component hashes, matching build/benchmark
-input hashes, exact currentness, five samples per series, successful results,
-memory evidence, and pair invariants pass validation.
+input hashes, input-hash currentness, five samples per series, successful
+results, memory evidence, and pair invariants pass validation.
 
 Cold medians are 0.530 s host versus 5.773 s P2 and 0.528 s host versus
 5.879 s P3. Repeated unchanged medians are 0.445 s versus 5.617 s and 0.459 s
@@ -201,8 +201,7 @@ The [2026-09-23 P2](2026-09-23-p2-macos-aarch64.json) and
 the consolidated candidate at clean source revision `dd689c8c`. They use the
 pinned Node 22.14.0/npm 10.9.2/TypeScript 5.8.2 fixture, five repeated-job
 samples, Rust 1.98.1, and disabled optional test caches. Their build and
-benchmark input hashes agree across P2/P3; report validation and exact
-currentness pass.
+benchmark input hashes agree across P2/P3, and report validation passes.
 
 The first accepted step moved CJS `sourceMappingURL` extraction to the existing
 native SWC lexer for TypeScript-feature builds. Against the controlled parent
