@@ -7,43 +7,58 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 type Result<T> = std::result::Result<T, String>;
 
+const TEST_BUILD_HASH: &str = "3333333333333333333333333333333333333333333333333333333333333333";
+const TEST_BENCHMARK_HASH: &str =
+    "4444444444444444444444444444444444444444444444444444444444444444";
+
 #[derive(Clone, Copy)]
 struct Suite {
     name: &'static str,
     manifest: &'static str,
+    validator: &'static str,
     report_prefix: &'static str,
     validate_env: &'static str,
     reports_env: &'static str,
     manifest_reports_env: &'static str,
     source_root_env: &'static str,
     expected_source_env: &'static str,
+    expected_build_hash_env: &'static str,
+    expected_benchmark_hash_env: &'static str,
 }
 
 const AGENTIC_TS: Suite = Suite {
     name: "agentic-ts",
     manifest: "tests/agentic_ts/results/current-reports.txt",
+    validator: "tests/agentic_ts.rs",
     report_prefix: "tests/agentic_ts/results/",
     validate_env: "AGENTIC_TS_VALIDATE_REPORTS",
     reports_env: "AGENTIC_TS_REPORTS_TO_CHECK",
     manifest_reports_env: "AGENTIC_TS_CURRENT_REPORTS",
     source_root_env: "AGENTIC_TS_SOURCE_ROOT",
     expected_source_env: "AGENTIC_TS_EXPECTED_SOURCE_REF",
+    expected_build_hash_env: "AGENTIC_TS_EXPECTED_BUILD_HASH",
+    expected_benchmark_hash_env: "AGENTIC_TS_EXPECTED_BENCHMARK_HASH",
 };
 
 const NPM_METADATA: Suite = Suite {
     name: "npm-metadata",
     manifest: "tests/npm_metadata/results/current-reports.txt",
+    validator: "tests/npm_metadata.rs",
     report_prefix: "tests/npm_metadata/results/",
     validate_env: "NPM_METADATA_VALIDATE_REPORTS",
     reports_env: "NPM_METADATA_REPORTS_TO_CHECK",
     manifest_reports_env: "NPM_METADATA_CURRENT_REPORTS",
     source_root_env: "NPM_METADATA_SOURCE_ROOT",
     expected_source_env: "NPM_METADATA_EXPECTED_SOURCE_REF",
+    expected_build_hash_env: "NPM_METADATA_EXPECTED_BUILD_HASH",
+    expected_benchmark_hash_env: "NPM_METADATA_EXPECTED_BENCHMARK_HASH",
 };
 
 #[derive(Clone, Debug)]
 struct Manifest {
-    source_ref: String,
+    source_hint: String,
+    build_hash: String,
+    benchmark_hash: String,
     reports: [String; 2],
 }
 
@@ -111,7 +126,9 @@ fn load_manifest(root: &Path, suite: Suite) -> Result<Manifest> {
     let manifest_path = root.join(suite.manifest);
     let contents = fs::read_to_string(&manifest_path)
         .map_err(|error| format!("failed to read {}: {error}", manifest_path.display()))?;
-    let mut source_ref = None;
+    let mut source_hint = None;
+    let mut build_hash = None;
+    let mut benchmark_hash = None;
     let mut reports = Vec::new();
     for (index, line) in contents.lines().enumerate() {
         if line.trim().is_empty() {
@@ -122,31 +139,33 @@ fn load_manifest(root: &Path, suite: Suite) -> Result<Manifest> {
             ));
         }
         let fields = line.split_whitespace().collect::<Vec<_>>();
-        if fields.len() != 2 || !is_git_sha(fields[0]) {
+        if fields.len() != 4
+            || !is_git_sha(fields[0])
+            || !is_blake3(fields[1])
+            || !is_blake3(fields[2])
+        {
             return Err(format!(
                 "invalid current-report entry in {} at line {}: {line}",
                 suite.manifest,
                 index + 1
             ));
         }
-        validate_report_path(root, suite, fields[1])?;
-        if let Some(expected) = source_ref.as_deref() {
-            if expected != fields[0] {
-                return Err(format!(
-                    "current reports in {} name different source revisions",
-                    suite.manifest
-                ));
-            }
-        } else {
-            source_ref = Some(fields[0].to_string());
-        }
-        if reports.iter().any(|report| report == fields[1]) {
+        validate_report_path(root, suite, fields[3])?;
+        preserve_shared_identity(&mut source_hint, fields[0], "source hints", suite.manifest)?;
+        preserve_shared_identity(&mut build_hash, fields[1], "build hashes", suite.manifest)?;
+        preserve_shared_identity(
+            &mut benchmark_hash,
+            fields[2],
+            "benchmark hashes",
+            suite.manifest,
+        )?;
+        if reports.iter().any(|report| report == fields[3]) {
             return Err(format!(
                 "duplicate current report in {}: {}",
-                suite.manifest, fields[1]
+                suite.manifest, fields[3]
             ));
         }
-        reports.push(fields[1].to_string());
+        reports.push(fields[3].to_string());
     }
     if reports.len() != 2 {
         return Err(format!(
@@ -181,9 +200,29 @@ fn load_manifest(root: &Path, suite: Suite) -> Result<Manifest> {
     }
     reports.sort();
     Ok(Manifest {
-        source_ref: source_ref.expect("two manifest entries have a source"),
+        source_hint: source_hint.expect("two manifest entries have a source hint"),
+        build_hash: build_hash.expect("two manifest entries have a build hash"),
+        benchmark_hash: benchmark_hash.expect("two manifest entries have a benchmark hash"),
         reports: [reports[0].clone(), reports[1].clone()],
     })
+}
+
+fn preserve_shared_identity(
+    expected: &mut Option<String>,
+    value: &str,
+    field: &str,
+    manifest: &str,
+) -> Result<()> {
+    if let Some(expected) = expected.as_deref() {
+        if expected != value {
+            return Err(format!(
+                "current reports in {manifest} name different {field}"
+            ));
+        }
+    } else {
+        *expected = Some(value.to_string());
+    }
+    Ok(())
 }
 
 fn validate_report_path(root: &Path, suite: Suite, report: &str) -> Result<()> {
@@ -206,7 +245,15 @@ fn validate_report_path(root: &Path, suite: Suite, report: &str) -> Result<()> {
 }
 
 fn is_git_sha(value: &str) -> bool {
-    value.len() == 40
+    is_lower_hex(value, 40)
+}
+
+fn is_blake3(value: &str) -> bool {
+    is_lower_hex(value, 64)
+}
+
+fn is_lower_hex(value: &str, length: usize) -> bool {
+    value.len() == length
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
@@ -297,7 +344,9 @@ fn changed_report_paths(root: &Path, base: &str) -> Result<BTreeSet<String>> {
             "tests/agentic_ts/results/*.json",
             "tests/npm_metadata/results/*.json",
             AGENTIC_TS.manifest,
+            AGENTIC_TS.validator,
             NPM_METADATA.manifest,
+            NPM_METADATA.validator,
         ],
     )?;
     Ok(output
@@ -308,7 +357,7 @@ fn changed_report_paths(root: &Path, base: &str) -> Result<BTreeSet<String>> {
 }
 
 fn selected_reports(manifest: &Manifest, suite: Suite, changed: &BTreeSet<String>) -> Vec<String> {
-    if changed.contains(suite.manifest) {
+    if changed.contains(suite.manifest) || changed.contains(suite.validator) {
         return manifest.reports.to_vec();
     }
     manifest
@@ -370,17 +419,19 @@ fn check_with_report_environment(
     let requested = normalize_requested_reports(root, suite, &manifest, requested)?;
 
     let mut prepared = None;
+    let mut provenance_reports = Vec::new();
     let source_root = if requested.is_empty() {
         root.to_path_buf()
-    } else if git_commit_exists(root, &manifest.source_ref) {
-        let worktree = PreparedWorktree::new(root, &manifest.source_ref)?;
+    } else if git_commit_exists(root, &manifest.source_hint) {
+        let worktree = PreparedWorktree::new(root, &manifest.source_hint)?;
         let path = worktree.source.clone();
         prepared = Some(worktree);
+        provenance_reports.clone_from(&requested);
         path
     } else {
         eprintln!(
-            "measured source {} is unavailable; validating recorded input hashes against the checked-out tree",
-            manifest.source_ref
+            "measured source hint {} is unavailable locally; validating durable manifest/report identity without source recomputation",
+            manifest.source_hint
         );
         root.to_path_buf()
     };
@@ -390,10 +441,12 @@ fn check_with_report_environment(
         .args(&command[1..])
         .current_dir(root)
         .env(suite.validate_env, "1")
-        .env(suite.reports_env, requested.join("\n"))
+        .env(suite.reports_env, provenance_reports.join("\n"))
         .env(suite.manifest_reports_env, manifest.reports.join("\n"))
         .env(suite.source_root_env, &source_root)
-        .env(suite.expected_source_env, &manifest.source_ref);
+        .env(suite.expected_source_env, &manifest.source_hint)
+        .env(suite.expected_build_hash_env, &manifest.build_hash)
+        .env(suite.expected_benchmark_hash_env, &manifest.benchmark_hash);
     let status = child.status().map_err(|error| {
         format!(
             "failed to run currentness validation for {}: {error}",
@@ -565,8 +618,14 @@ fn self_test_manifest_contract() -> Result<()> {
 
     let agentic = load_manifest(&root, AGENTIC_TS)?;
     let npm = load_manifest(&root, NPM_METADATA)?;
-    if agentic.source_ref != source || npm.source_ref != source {
-        return Err("manifest source was not preserved".to_string());
+    if agentic.source_hint != source
+        || npm.source_hint != source
+        || agentic.build_hash != TEST_BUILD_HASH
+        || npm.build_hash != TEST_BUILD_HASH
+        || agentic.benchmark_hash != TEST_BENCHMARK_HASH
+        || npm.benchmark_hash != TEST_BENCHMARK_HASH
+    {
+        return Err("manifest identity was not preserved".to_string());
     }
     let changed = BTreeSet::from([agentic.reports[0].clone()]);
     if selected_reports(&agentic, AGENTIC_TS, &changed) != vec![agentic.reports[0].clone()] {
@@ -575,6 +634,10 @@ fn self_test_manifest_contract() -> Result<()> {
     let changed = BTreeSet::from([AGENTIC_TS.manifest.to_string()]);
     if selected_reports(&agentic, AGENTIC_TS, &changed) != agentic.reports {
         return Err("manifest change did not select its P2/P3 pair".to_string());
+    }
+    let changed = BTreeSet::from([AGENTIC_TS.validator.to_string()]);
+    if selected_reports(&agentic, AGENTIC_TS, &changed) != agentic.reports {
+        return Err("validator change did not select its P2/P3 pair".to_string());
     }
     let changed = BTreeSet::from([format!(
         "{}historical-p2-report.json",
@@ -588,7 +651,29 @@ fn self_test_manifest_contract() -> Result<()> {
     fs::write(
         &invalid_manifest,
         format!(
-            "{source} {}current-p2-report.json\n{} {}current-p3-report.json\n",
+            "{source} {}current-p2-report.json\n{source} {}current-p3-report.json\n",
+            NPM_METADATA.report_prefix, NPM_METADATA.report_prefix
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+    if load_manifest(&root, NPM_METADATA).is_ok() {
+        return Err("legacy two-field manifest entries were accepted".to_string());
+    }
+    fs::write(
+        &invalid_manifest,
+        format!(
+            "{source} invalid {TEST_BENCHMARK_HASH} {}current-p2-report.json\n{source} invalid {TEST_BENCHMARK_HASH} {}current-p3-report.json\n",
+            NPM_METADATA.report_prefix, NPM_METADATA.report_prefix
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+    if load_manifest(&root, NPM_METADATA).is_ok() {
+        return Err("invalid manifest hash was accepted".to_string());
+    }
+    fs::write(
+        &invalid_manifest,
+        format!(
+            "{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}current-p2-report.json\n{} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}current-p3-report.json\n",
             NPM_METADATA.report_prefix,
             "2222222222222222222222222222222222222222",
             NPM_METADATA.report_prefix
@@ -596,13 +681,13 @@ fn self_test_manifest_contract() -> Result<()> {
     )
     .map_err(|error| error.to_string())?;
     if load_manifest(&root, NPM_METADATA).is_ok() {
-        return Err("mixed manifest source revisions were accepted".to_string());
+        return Err("mixed manifest source hints were accepted".to_string());
     }
     write_pair(&root, NPM_METADATA, source, "current")?;
     fs::write(
         &invalid_manifest,
         format!(
-            "{source} {}current-p2-report.json\n{source} {}other-p3-report.json\n",
+            "{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}current-p2-report.json\n{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}other-p3-report.json\n",
             NPM_METADATA.report_prefix, NPM_METADATA.report_prefix
         ),
     )
@@ -617,6 +702,34 @@ fn self_test_manifest_contract() -> Result<()> {
     .map_err(|error| error.to_string())?;
     if load_manifest(&root, NPM_METADATA).is_ok() {
         return Err("non-companion manifest pair was accepted".to_string());
+    }
+    write_pair(&root, NPM_METADATA, source, "current")?;
+    fs::write(
+        &invalid_manifest,
+        format!(
+            "{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}current-p2-report.json\n{source} {} {TEST_BENCHMARK_HASH} {}current-p3-report.json\n",
+            NPM_METADATA.report_prefix,
+            "5555555555555555555555555555555555555555555555555555555555555555",
+            NPM_METADATA.report_prefix
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+    if load_manifest(&root, NPM_METADATA).is_ok() {
+        return Err("mixed manifest build hashes were accepted".to_string());
+    }
+    write_pair(&root, NPM_METADATA, source, "current")?;
+    fs::write(
+        &invalid_manifest,
+        format!(
+            "{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}current-p2-report.json\n{source} {TEST_BUILD_HASH} {} {}current-p3-report.json\n",
+            NPM_METADATA.report_prefix,
+            "6666666666666666666666666666666666666666666666666666666666666666",
+            NPM_METADATA.report_prefix
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+    if load_manifest(&root, NPM_METADATA).is_ok() {
+        return Err("mixed manifest benchmark hashes were accepted".to_string());
     }
 
     Ok(())
@@ -633,6 +746,8 @@ fn self_test_git_integration() -> Result<()> {
         .map_err(|error| error.to_string())?;
 
     write_text(root.join("build-input.txt"), "base\n")?;
+    write_text(root.join(AGENTIC_TS.validator), "agentic validator\n")?;
+    write_text(root.join(NPM_METADATA.validator), "npm validator\n")?;
     let base_source = git_commit_all(root, "base source")?;
     write_pair(root, AGENTIC_TS, &base_source, "base")?;
     write_pair(root, NPM_METADATA, &base_source, "base")?;
@@ -694,6 +809,20 @@ fn self_test_git_integration() -> Result<()> {
     )?;
 
     write_text(
+        root.join(AGENTIC_TS.validator),
+        "changed agentic validator\n",
+    )?;
+    let validator_head = git_commit_all(root, "agentic hash definition")?;
+    ensure_plan(
+        create_plan(root, "push", &direct_head, "")?,
+        &CurrentnessPlan {
+            agentic_reports: direct_plan.agentic_reports.clone(),
+            npm_reports: Vec::new(),
+        },
+        "hash-definition change",
+    )?;
+
+    write_text(
         root.join("tests/agentic_ts/results/historical-p2-report.json"),
         "{}\n",
     )?;
@@ -707,7 +836,7 @@ fn self_test_git_integration() -> Result<()> {
         npm_reports: Vec::new(),
     };
     ensure_plan(
-        create_plan(root, "push", &direct_head, "")?,
+        create_plan(root, "push", &validator_head, "")?,
         &empty_plan,
         "historical-report filtering",
     )?;
@@ -740,6 +869,9 @@ fn self_test_git_integration() -> Result<()> {
                  test \"$(git -C \"$AGENTIC_TS_SOURCE_ROOT\" rev-parse HEAD)\" = \"{direct_source}\" && \
                  test \"$AGENTIC_TS_REPORTS_TO_CHECK\" = \"{expected_reports}\" && \
                  test \"$AGENTIC_TS_CURRENT_REPORTS\" = \"{expected_reports}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_SOURCE_REF\" = \"{direct_source}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_BUILD_HASH\" = \"{TEST_BUILD_HASH}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_BENCHMARK_HASH\" = \"{TEST_BENCHMARK_HASH}\" && \
                  test -f \"$AGENTIC_TS_SOURCE_ROOT/direct-source.txt\" && \
                  printf '%s\\n' \"$AGENTIC_TS_SOURCE_ROOT\" > \"{}\"",
                 root.display(),
@@ -760,9 +892,30 @@ fn self_test_git_integration() -> Result<()> {
         return Err("reachable-source worktree was not cleaned up".to_string());
     }
 
+    check_with_report_environment(
+        root,
+        vec![
+            "agentic-ts".to_string(),
+            "--".to_string(),
+            "sh".to_string(),
+            "-c".to_string(),
+            format!(
+                "test \"$AGENTIC_TS_SOURCE_ROOT\" = \"{}\" && \
+                 test -z \"$AGENTIC_TS_REPORTS_TO_CHECK\" && \
+                 test \"$AGENTIC_TS_CURRENT_REPORTS\" = \"{expected_reports}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_SOURCE_REF\" = \"{direct_source}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_BUILD_HASH\" = \"{TEST_BUILD_HASH}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_BENCHMARK_HASH\" = \"{TEST_BENCHMARK_HASH}\"",
+                root.display()
+            ),
+        ],
+        None,
+    )?;
+
     let unavailable_source = "1111111111111111111111111111111111111111";
     write_pair(root, AGENTIC_TS, unavailable_source, "fallback")?;
     let fallback = load_manifest(root, AGENTIC_TS)?;
+    let expected_reports = fallback.reports.join("\n");
     check_with_report_environment(
         root,
         vec![
@@ -774,7 +927,11 @@ fn self_test_git_integration() -> Result<()> {
             "-c".to_string(),
             format!(
                 "test \"$AGENTIC_TS_SOURCE_ROOT\" = \"{}\" && \
-                 test \"$AGENTIC_TS_EXPECTED_SOURCE_REF\" = \"{unavailable_source}\"",
+                 test -z \"$AGENTIC_TS_REPORTS_TO_CHECK\" && \
+                 test \"$AGENTIC_TS_CURRENT_REPORTS\" = \"{expected_reports}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_SOURCE_REF\" = \"{unavailable_source}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_BUILD_HASH\" = \"{TEST_BUILD_HASH}\" && \
+                 test \"$AGENTIC_TS_EXPECTED_BENCHMARK_HASH\" = \"{TEST_BENCHMARK_HASH}\"",
                 root.display()
             ),
         ],
@@ -807,11 +964,16 @@ fn ensure_plan(actual: CurrentnessPlan, expected: &CurrentnessPlan, context: &st
 fn write_pair(root: &Path, suite: Suite, source: &str, stem: &str) -> Result<()> {
     let p2 = format!("{}{stem}-p2-report.json", suite.report_prefix);
     let p3 = format!("{}{stem}-p3-report.json", suite.report_prefix);
-    fs::write(root.join(&p2), "{}\n").map_err(|error| error.to_string())?;
-    fs::write(root.join(&p3), "{}\n").map_err(|error| error.to_string())?;
+    let report = format!(
+        "{{\"environment\":{{\"commitHint\":\"{source}\"}},\"inputs\":{{\"buildHash\":\"{TEST_BUILD_HASH}\",\"benchmarkHash\":\"{TEST_BENCHMARK_HASH}\"}}}}\n"
+    );
+    fs::write(root.join(&p2), &report).map_err(|error| error.to_string())?;
+    fs::write(root.join(&p3), &report).map_err(|error| error.to_string())?;
     fs::write(
         root.join(suite.manifest),
-        format!("{source} {p2}\n{source} {p3}\n"),
+        format!(
+            "{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {p2}\n{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {p3}\n"
+        ),
     )
     .map_err(|error| error.to_string())?;
     Ok(())

@@ -1014,6 +1014,55 @@ fn validate_release_baseline_regression_guards(report: &Value) -> anyhow::Result
     Ok(())
 }
 
+struct CurrentReportIdentity {
+    source_hint: String,
+    build_hash: String,
+    benchmark_hash: String,
+}
+
+fn validate_current_manifest_identity(
+    path: &Utf8Path,
+    report: &Value,
+    identity: &CurrentReportIdentity,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        report["environment"]["commitHint"].as_str() == Some(identity.source_hint.as_str()),
+        "{path} source hint does not match its current-report manifest"
+    );
+    anyhow::ensure!(
+        report["inputs"]["buildHash"].as_str() == Some(identity.build_hash.as_str()),
+        "{path} build hash does not match its current-report manifest"
+    );
+    anyhow::ensure!(
+        report["inputs"]["benchmarkHash"].as_str() == Some(identity.benchmark_hash.as_str()),
+        "{path} benchmark hash does not match its current-report manifest"
+    );
+    Ok(())
+}
+
+fn validate_current_manifest_identity_regression_guards(
+    path: &Utf8Path,
+    report: &Value,
+    identity: &CurrentReportIdentity,
+) -> anyhow::Result<()> {
+    for pointer in [
+        "/environment/commitHint",
+        "/inputs/buildHash",
+        "/inputs/benchmarkHash",
+    ] {
+        let mut mismatched = report.clone();
+        *mismatched
+            .pointer_mut(pointer)
+            .expect("validated report has currentness identity field") =
+            json!("0000000000000000000000000000000000000000000000000000000000000000");
+        anyhow::ensure!(
+            validate_current_manifest_identity(path, &mismatched, identity).is_err(),
+            "current-report manifest identity accepted a mismatched field: {pointer}"
+        );
+    }
+    Ok(())
+}
+
 fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()> {
     validate_composite_hash_contract()?;
     validate_report_path_contract()?;
@@ -1021,12 +1070,24 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
     let allow_untracked_reports = std::env::var_os("AGENTIC_TS_ALLOW_UNTRACKED_REPORTS").is_some();
     let mut reports_to_check = reports_to_check()?;
     let mut current_manifest_reports = report_paths_from_env("AGENTIC_TS_CURRENT_REPORTS")?;
-    let current_manifest_source = if current_manifest_reports.is_empty() {
+    anyhow::ensure!(
+        allow_untracked_reports || !current_manifest_reports.is_empty(),
+        "checked-report validation requires manifest identity; use tests/agentic_ts/run.sh --check"
+    );
+    let current_manifest_identity = if current_manifest_reports.is_empty() {
         None
     } else {
-        Some(std::env::var("AGENTIC_TS_EXPECTED_SOURCE_REF").context(
-            "AGENTIC_TS_EXPECTED_SOURCE_REF is required with AGENTIC_TS_CURRENT_REPORTS",
-        )?)
+        Some(CurrentReportIdentity {
+            source_hint: std::env::var("AGENTIC_TS_EXPECTED_SOURCE_REF").context(
+                "AGENTIC_TS_EXPECTED_SOURCE_REF is required with AGENTIC_TS_CURRENT_REPORTS",
+            )?,
+            build_hash: std::env::var("AGENTIC_TS_EXPECTED_BUILD_HASH").context(
+                "AGENTIC_TS_EXPECTED_BUILD_HASH is required with AGENTIC_TS_CURRENT_REPORTS",
+            )?,
+            benchmark_hash: std::env::var("AGENTIC_TS_EXPECTED_BENCHMARK_HASH").context(
+                "AGENTIC_TS_EXPECTED_BENCHMARK_HASH is required with AGENTIC_TS_CURRENT_REPORTS",
+            )?,
+        })
     };
     let current_input_hashes = if reports_to_check.is_empty() {
         None
@@ -1063,13 +1124,11 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             validate_regression_guards(&report)?;
         }
         if current_manifest_reports.remove(&path) {
-            anyhow::ensure!(
-                report["environment"]["commitHint"]
-                    == current_manifest_source
-                        .as_deref()
-                        .expect("manifest source exists"),
-                "{path} source does not match its current-report manifest"
-            );
+            let identity = current_manifest_identity
+                .as_ref()
+                .expect("manifest identity exists");
+            validate_current_manifest_identity(&path, &report, identity)?;
+            validate_current_manifest_identity_regression_guards(&path, &report, identity)?;
         }
         let check_current = reports_to_check.remove(&path);
         if check_current {

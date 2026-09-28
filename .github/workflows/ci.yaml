@@ -75,10 +75,10 @@ jobs:
         run: .github/scripts/select-agentic-ts-currentness.sh "$GITHUB_EVENT_NAME" "$PUSH_BEFORE" "$PR_HEAD" >> "$GITHUB_OUTPUT"
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
-      # Validation mode checks supported committed report contracts and the content
-      # hashes of changed reports designated current for each suite. The shared
-      # helper uses the measured source when reachable and otherwise verifies
-      # content-identical squash/rebase results against the checkout.
+      # Validation mode always checks the manifest-designated reports against their
+      # recorded source hint and input hashes. For changed current reports, the
+      # shared helper also recomputes those hashes from the measured source when
+      # that commit is available locally; it never substitutes the checkout for it.
       - name: Validate agentic TypeScript reports
         shell: bash
         env:

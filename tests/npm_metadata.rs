@@ -1673,6 +1673,55 @@ fn validate_release_pair(
     Ok(())
 }
 
+struct CurrentNpmReportIdentity {
+    source_hint: String,
+    build_hash: String,
+    benchmark_hash: String,
+}
+
+fn validate_current_npm_manifest_identity(
+    path: &Utf8Path,
+    report: &Value,
+    identity: &CurrentNpmReportIdentity,
+) -> anyhow::Result<()> {
+    ensure!(
+        report["environment"]["commitHint"].as_str() == Some(identity.source_hint.as_str()),
+        "{path} source hint does not match its current-report manifest"
+    );
+    ensure!(
+        report["inputs"]["buildHash"].as_str() == Some(identity.build_hash.as_str()),
+        "{path} build hash does not match its current-report manifest"
+    );
+    ensure!(
+        report["inputs"]["benchmarkHash"].as_str() == Some(identity.benchmark_hash.as_str()),
+        "{path} benchmark hash does not match its current-report manifest"
+    );
+    Ok(())
+}
+
+fn validate_current_npm_manifest_identity_regression_guards(
+    path: &Utf8Path,
+    report: &Value,
+    identity: &CurrentNpmReportIdentity,
+) -> anyhow::Result<()> {
+    for pointer in [
+        "/environment/commitHint",
+        "/inputs/buildHash",
+        "/inputs/benchmarkHash",
+    ] {
+        let mut mismatched = report.clone();
+        *mismatched
+            .pointer_mut(pointer)
+            .expect("validated report has currentness identity field") =
+            json!("0000000000000000000000000000000000000000000000000000000000000000");
+        ensure!(
+            validate_current_npm_manifest_identity(path, &mismatched, identity).is_err(),
+            "current npm report manifest identity accepted a mismatched field: {pointer}"
+        );
+    }
+    Ok(())
+}
+
 fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()> {
     validate_npm_composite_hash_contract()?;
     validate_npm_report_path_contract()?;
@@ -1680,14 +1729,25 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
     let allow_untracked = std::env::var_os("NPM_METADATA_ALLOW_UNTRACKED_REPORTS").is_some();
     let mut requested = npm_reports_to_check()?;
     let mut current_manifest_reports = npm_report_paths_from_env("NPM_METADATA_CURRENT_REPORTS")?;
-    let current_manifest_source =
-        if current_manifest_reports.is_empty() {
-            None
-        } else {
-            Some(std::env::var("NPM_METADATA_EXPECTED_SOURCE_REF").context(
+    ensure!(
+        allow_untracked || !current_manifest_reports.is_empty(),
+        "checked-report validation requires manifest identity; use tests/npm_metadata/run.sh --check"
+    );
+    let current_manifest_identity = if current_manifest_reports.is_empty() {
+        None
+    } else {
+        Some(CurrentNpmReportIdentity {
+            source_hint: std::env::var("NPM_METADATA_EXPECTED_SOURCE_REF").context(
                 "NPM_METADATA_CURRENT_REPORTS requires NPM_METADATA_EXPECTED_SOURCE_REF",
-            )?)
-        };
+            )?,
+            build_hash: std::env::var("NPM_METADATA_EXPECTED_BUILD_HASH").context(
+                "NPM_METADATA_CURRENT_REPORTS requires NPM_METADATA_EXPECTED_BUILD_HASH",
+            )?,
+            benchmark_hash: std::env::var("NPM_METADATA_EXPECTED_BENCHMARK_HASH").context(
+                "NPM_METADATA_CURRENT_REPORTS requires NPM_METADATA_EXPECTED_BENCHMARK_HASH",
+            )?,
+        })
+    };
     let current_inputs = if requested.is_empty() {
         None
     } else {
@@ -1710,10 +1770,11 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
         validate_release_report(&report)?;
         validate_release_regression_guards(&report)?;
         if current_manifest_reports.remove(&path) {
-            ensure!(
-                report["environment"]["commitHint"].as_str() == current_manifest_source.as_deref(),
-                "{path} commit hint does not match its current-report manifest"
-            );
+            let identity = current_manifest_identity
+                .as_ref()
+                .expect("manifest identity exists");
+            validate_current_npm_manifest_identity(&path, &report, identity)?;
+            validate_current_npm_manifest_identity_regression_guards(&path, &report, identity)?;
         }
         let check_current = requested.remove(&path);
         if check_current {

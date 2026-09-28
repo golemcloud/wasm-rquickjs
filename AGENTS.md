@@ -262,7 +262,7 @@ Important rules:
 
 ## Agentic TypeScript Suite
 
-`tests/agentic_ts/` contains the manual compatibility, performance, and memory-observation suite for TypeScript workloads executed through `wasm-rquickjs:execution`. Follow `tests/agentic_ts/README.md` for pinned tooling and measurement commands. Do not run the measurement mode as part of ordinary test sweeps; CI uses `AGENTIC_TS_VALIDATE_REPORTS=1 cargo test --test agentic_ts` to validate checked-in report contracts without executing workloads.
+`tests/agentic_ts/` contains the manual compatibility, performance, and memory-observation suite for TypeScript workloads executed through `wasm-rquickjs:execution`. Follow `tests/agentic_ts/README.md` for pinned tooling and measurement commands. Do not run the measurement mode as part of ordinary test sweeps; use `tests/agentic_ts/run.sh --check` to validate checked-in report contracts and their manifest identity without executing workloads.
 
 ## Built-in Module Architecture
 

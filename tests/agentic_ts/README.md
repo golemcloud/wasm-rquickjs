@@ -84,10 +84,10 @@ rerunning the workloads:
 tests/agentic_ts/run.sh --check
 ```
 
-Validate the manifest-designated current pair against composite BLAKE3 input
-hashes. The shared typed helper uses a temporary pristine worktree when the
-measured source is reachable and otherwise checks content-identical rebased or
-squashed source directly:
+Validate the manifest-designated current pair against its recorded source hint
+and composite BLAKE3 input hashes. The shared typed helper also uses a temporary
+pristine worktree to recompute those hashes when the measured source remains
+available locally:
 
 ```sh
 tests/agentic_ts/run.sh --check-current \
@@ -96,8 +96,15 @@ tests/agentic_ts/run.sh --check-current \
 ```
 
 The currentness command requires Git but does not fetch or require commit
-ancestry. A recorded commit is a navigation hint; input hashes are the durable
-currentness identity.
+ancestry. Each four-field manifest entry records the source hint, build hash,
+benchmark hash, and report path. The source hint is provenance for optional
+exact-source recomputation; the recorded hashes are the durable identity after
+a squash or rebase, and the current checkout is never relabeled as the measured
+source.
+
+Changing which files contribute to either composite hash requires remeasuring
+the current pair. Pull-request validation performs the exact-source
+recomputation while the measured source commit is available locally.
 
 Set `AGENTIC_TS_ITERATIONS` to change the measured iteration count. The runner
 writes raw JSON reports under `tests/agentic_ts/results/`. Timings are

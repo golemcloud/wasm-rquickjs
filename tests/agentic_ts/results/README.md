@@ -25,13 +25,18 @@ common source snapshot, while their matching composite input hashes establish
 that both targets used the same build and benchmark inputs.
 `run.sh --check` validates every historical report and requires each P2/P3 pair
 to share the input hashes without resolving Git history. `run.sh
---check-current` additionally compares the manifest-designated reports with
-their measured source in a temporary pristine worktree when that commit is
-reachable, or with the checked-out content after a rebase or squash. Each
-`current-reports.txt` entry pairs a measured source hint with one member of the
-latest P2/P3 pair. One shared typed helper owns manifest parsing, pair checks,
-changed-report selection, source lookup, and worktree cleanup. Commit ancestry
-is not part of currentness; the composite input hashes are authoritative.
+--check-current` always compares the manifest-designated reports with the source
+hint and composite hashes recorded in the four-field manifest. When the
+measured source is available locally, it additionally recomputes those hashes
+from a temporary pristine worktree. If a squash or rebase makes the hint unavailable,
+the durable manifest/report identity remains validated without substituting the
+checkout as a measured source. One shared typed helper owns manifest parsing,
+pair checks, changed-report selection, source lookup, and worktree cleanup.
+Commit ancestry is not part of currentness; the composite input hashes are
+authoritative.
+Changing the file sets that define either composite hash requires remeasuring
+the current pair; pull-request validation enforces that while the source hint is
+available locally.
 Superseded experiment reports remain schema- and pair-validated without being
 relabeled as measurements of a later source tree. With five samples, the
 reported p95 is the observed maximum; it is descriptive evidence rather than a

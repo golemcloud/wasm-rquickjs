@@ -28,17 +28,22 @@ tests/npm_metadata/run.sh --check-current \
   tests/npm_metadata/results/2026-09-24-release-p3-macos-aarch64.json
 ```
 
-The shared typed currentness helper parses the manifest, verifies the companion
-pair, and recomputes source hashes from a temporary pristine worktree when the
-recorded source is reachable. After a rebase or squash replaces that commit, it
-uses the checked-out content instead; the recorded input hashes, not commit
-ancestry, decide whether the report remains current.
+The shared typed currentness helper parses the four-field manifest, verifies the
+companion pair, and always compares each report with the manifest's source hint,
+build hash, and benchmark hash. When the recorded source is available locally,
+it also recomputes those hashes from a temporary pristine worktree. After a
+rebase or squash replaces that commit, the durable manifest/report identity remains
+validated without substituting the checkout as a measured source.
 
 No `npm-metadata-v2` report is accepted as current unless both target reports
-match the source input hashes and form one distinct P2/P3 pair. The dated final
+match the manifest's recorded input hashes and form one distinct P2/P3 pair.
+When the source hint is available locally, those hashes must also match an exact
+source recomputation. Changing the file sets that define either composite hash
+requires remeasuring the current pair. The dated final
 pair and its measured goal status are documented here only after that validation
-passes from a clean source commit. `current-reports.txt` pairs that latest pair
-with its measured source hint for CI currentness selection. Only this v2 pair is
+passes from a clean source commit. Each `current-reports.txt` entry records the
+measured source hint, build hash, benchmark hash, and report path for CI
+currentness selection. Only this v2 pair is
 retained as raw npm evidence; older v1 and path-trace results remain summarized
 in the Markdown experiment reports.
 
