@@ -506,9 +506,10 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             if cancelled.load(Ordering::Relaxed) {
                 return true;
             }
-            if timeout_sampler.as_mut().is_some_and(|sampler| {
-                sampler.expired(Instant::now)
-            }) {
+            if timeout_sampler
+                .as_mut()
+                .is_some_and(|sampler| sampler.expired(Instant::now))
+            {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
             }

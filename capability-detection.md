@@ -19,8 +19,8 @@ but neither this CLI path nor the new measurements use it.
 
 The branch was locally merged with main at
 [`f684fffb`](https://github.com/golemcloud/wasm-rquickjs/commit/f684fffb).
-Nothing has been pushed. This implements runtime primitives in wasm-rquickjs,
-not a Golem CLI configuration option or an end-to-end Golem SDK integration.
+This implements runtime primitives in wasm-rquickjs, not a Golem CLI configuration
+option or an end-to-end Golem SDK integration.
 
 ## What the branch actually does
 
@@ -193,12 +193,14 @@ The complete P2 and P3 `binary_inject` suites pass, including all four fixtures
 in full and strict mode, before and after Wizer (32 matrix executions), plus
 ordinary injection and reinjection.
 Root/integration Clippy, all ten skeleton feature configurations, root formatting
-and changed-skeleton-file formatting pass. A recursive skeleton rustfmt check
-flags an existing unchanged closure layout in `builtin/execution.rs:509`; it was
-left untouched. Targeted P3 fetch POST/GET, node:http GET and filesystem package-map
-regressions pass. The integration matrix additionally checks that a manually
+and recursive skeleton formatting pass. Pre-PR formatting normalized existing
+layout drift without changing behavior. Targeted P3 fetch POST/GET, node:http GET
+and filesystem package-map regressions pass. The integration matrix additionally checks that a manually
 disabled SQLite module cannot import. The canonical strict flag and old alias
 produce byte-identical injected components.
+
+Final PR checks also pass: all-target workspace build and Clippy, plus Prettier,
+ESLint and TypeScript compilation for `tools/ai-dev-tools`.
 
 Reproduce the focused checks:
 
