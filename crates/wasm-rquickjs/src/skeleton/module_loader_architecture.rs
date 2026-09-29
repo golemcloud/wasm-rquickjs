@@ -9,6 +9,7 @@ const FS_JS: &str = include_str!("../../skeleton/src/builtin/fs.js");
 const PATH_RS: &str = include_str!("../../skeleton/src/builtin/path.rs");
 const WEBSTREAMS_RS: &str = include_str!("../../skeleton/src/builtin/webstreams.rs");
 const VM_RS: &str = include_str!("../../skeleton/src/builtin/vm.rs");
+const URL_RS: &str = include_str!("../../skeleton/src/builtin/url.rs");
 const NODE_HTTP_RS: &str = include_str!("../../skeleton/src/builtin/node_http.rs");
 const BUILTIN_MOD_RS: &str = include_str!("../../skeleton/src/builtin/mod.rs");
 const BUILTIN_P3_RS: &str = include_str!("../../skeleton/src/builtin_p3.rs");
@@ -825,6 +826,7 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
         ("path/posix", PATH_RS, "node:path/posix"),
         ("path/win32", PATH_RS, "node:path/win32"),
         ("vm", VM_RS, "node:vm"),
+        ("url", URL_RS, "node:url"),
         ("_http_common", NODE_HTTP_RS, "node:_http_common"),
         ("_http_agent", NODE_HTTP_RS, "node:_http_agent"),
     ] {
@@ -839,6 +841,7 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
             ".with_module(\"path/posix\", path::PATH_POSIX_BARE_REEXPORT_JS)",
             ".with_module(\"path/win32\", path::PATH_WIN32_BARE_REEXPORT_JS)",
             ".with_module(\"vm\", vm::BARE_REEXPORT_JS)",
+            ".with_module(\"url\", url::REEXPORT_JS)",
             ".with_module(\"_http_common\", node_http::HTTP_COMMON_REEXPORT_JS)",
             ".with_module(\"_http_agent\", node_http::HTTP_AGENT_REEXPORT_JS)",
         ] {

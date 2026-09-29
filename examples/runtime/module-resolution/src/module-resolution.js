@@ -4212,6 +4212,8 @@ export const testSyncBuiltinEsmExports = async () => {
         const timersModule = await import('node:timers');
         const cryptoModule = await import('node:crypto');
         const bareCryptoModule = await import('crypto');
+        const urlModule = await import('node:url');
+        const bareUrlModule = await import('url');
 
         const require = module.createRequire(import.meta.url);
         const os = require('node:os');
@@ -4301,6 +4303,14 @@ export const testSyncBuiltinEsmExports = async () => {
         syncAliasedNamedExport(
             'node:inspector', 'inspector', inspectorModule, bareInspectorModule,
             'url', function replacementInspectorUrl() {},
+        );
+        syncAliasedNamedExport(
+            'node:url', 'url', urlModule, bareUrlModule,
+            'domainToASCII', function replacementDomainToASCII() {},
+        );
+        syncAliasedNamedExport(
+            'node:url', 'url', urlModule, bareUrlModule,
+            'domainToUnicode', function replacementDomainToUnicode() {},
         );
 
         const originalHostnameDescriptor = Object.getOwnPropertyDescriptor(os, 'hostname');
