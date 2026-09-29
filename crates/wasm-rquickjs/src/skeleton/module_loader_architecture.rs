@@ -632,6 +632,33 @@ fn module_loader_architecture() {
             "Rust must not declare JS-owned CJS capability {owner}"
         );
     }
+    for (contract, implementation) in [
+        (
+            "bound require must dispatch through the current module instance hook",
+            "() => parentModule.require(id),",
+        ),
+        (
+            "Module.prototype.require must dispatch through the current static load hook",
+            "() => moduleExports._load(id, this || null, false),",
+        ),
+        (
+            "ordinary filesystem CommonJS must dispatch through the instance compile hook",
+            "mod._compile(compiledSource, filename);",
+        ),
+        (
+            "loader-supplied CommonJS source must keep its private compile path",
+            "compileModuleInto(mod, source, filename, loaderRequire);",
+        ),
+        (
+            "loader-supplied CommonJS source must keep its private nested require path",
+            "const fallbackRequire = makeInternalRequire(",
+        ),
+    ] {
+        assert!(
+            MODULE_JS.contains(implementation),
+            "CommonJS hook architecture changed: {contract}"
+        );
+    }
     assert!(js_tokens.windows(4).any(|window| matches!(window, [JsToken { kind: JsTokenKind::Ident(name), .. }, JsToken { kind: JsTokenKind::Punct(':'), .. }, JsToken { kind: JsTokenKind::Ident(object), .. }, JsToken { kind: JsTokenKind::Punct('.'), .. }] if name == "_pathCache" && object == "Object")), "Module._pathCache must remain JS-owned mutable state");
     for bridge in [
         "__wasm_rquickjs_cjs_resolve_package_exports",

@@ -789,6 +789,12 @@ const _defaultExtHandlers = setFromArray([
     defaultNodeExtensionHandler,
 ]);
 
+const moduleCompileContexts = new WeakMap();
+const moduleRequireOverrides = new WeakMap();
+let activeModuleLoadContext = null;
+let activeModuleLoadParent = null;
+let activeModuleLoadRequest = null;
+
 function cjsPathCacheObject() {
     return moduleExports._pathCache;
 }
@@ -2361,7 +2367,19 @@ function loadPreparedCjsTypeScript(resolvedFilename, graph, traceId) {
     // An ESM facade has no real CommonJS parent; do not invent a self-parent.
     return traceModuleRequire(traceId, null, () => {
         try {
-            return loadFilesystemCommonJs(resolvedFilename, null, graph).exports;
+            return withActiveModuleLoadContext(
+                resolvedFilename,
+                null,
+                createRequireContext(
+                    pathModule.dirname(resolvedFilename),
+                    null,
+                    null,
+                    undefined,
+                    graph,
+                    false,
+                ),
+                () => moduleExports._load(resolvedFilename, null, false),
+            );
         } finally {
             clearPreparedTypeScriptGraph(graph);
         }
@@ -2654,17 +2672,22 @@ function callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, chi
     }
 }
 
-function compileModuleInto(mod, source, filename, requireOverride) {
+function compileModuleInto(mod, source, filename, requireOverride, options = undefined) {
     filename = filename === undefined || filename === null ? mod.filename : filename;
     source = String(source);
+    const isPreparedTypeScript = options && options.isPreparedTypeScript === true;
+    const sourceMap = options && options.sourceMap;
+    const executionSource = options && options.executionSource !== undefined
+        ? options.executionSource
+        : source;
     const requireParentFilename = filename === '' && mod && typeof mod.filename === 'string'
         ? mod.filename
         : filename;
     const dirname = pathModule.dirname(filename);
     const requireDirname = pathModule.dirname(requireParentFilename);
     const childRequire = requireOverride || makeRequire(requireDirname, mod, requireParentFilename);
-    const compiledFn = compileCjs(filename, source, false, mod);
-    return callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
+    const compiledFn = compileCjs(filename, source, isPreparedTypeScript, mod, sourceMap);
+    return callCompiledCjsFunction(mod, compiledFn, executionSource, filename, dirname, childRequire);
 }
 
 function loaderValueTypeName(value) {
@@ -3131,6 +3154,7 @@ function initializeCjsModuleRecord(mod, id, filename, dirname, parentModule, pat
     defineEnumerableWritable(mod, 'children', []);
     defineEnumerableWritable(mod, 'paths', _nodeModulePaths(pathsBase));
     moduleRequireOverrides.delete(mod);
+    moduleCompileContexts.delete(mod);
     installCjsEsmDefaultSnapshotSlot(mod);
     return mod;
 }
@@ -3218,7 +3242,13 @@ function loadCommonJsTransaction(descriptor) {
             discardCjsModuleLoad(cacheKey, parentModule, mod);
             throw err;
         }
-    } else {
+        mod.loaded = true;
+        if (cjsEsmDefaultSnapshotEligible) {
+            captureCjsEsmDefaultSnapshot(mod);
+        }
+        return mod;
+    }
+
     // Check for custom extension handler
     const ext = findLongestRegisteredExtension(filename);
     const handler = requireExtensions[ext];
@@ -3316,21 +3346,26 @@ function loadCommonJsTransaction(descriptor) {
                 mainModule,
                 preparedTypeScriptGraph,
             );
-            let compiledFn;
+            const compileContext = {
+                filename,
+                compiledSource,
+                executionSource: source,
+                sourceMap: typeScriptSourceMap,
+                childRequire,
+                originalCompileCalls: 0,
+                compiledSourceUnchanged: false,
+            };
             let cjsSyntaxError = null;
             const shouldFallbackToEsm = canFallbackToEsm &&
                 !filename.endsWith('.cjs') && !filename.endsWith('.cts') && !isCommonJsPackage;
             let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
+            moduleCompileContexts.set(mod, compileContext);
             try {
-                compiledFn = compileCjs(
-                    filename,
-                    compiledSource,
-                    true,
-                    mod,
-                    typeScriptSourceMap,
-                );
+                mod._compile(compiledSource, filename);
             } catch (err) {
+                const defaultCompileAttempted = compileContext.originalCompileCalls > 0 &&
+                    compileContext.compiledSourceUnchanged;
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
                 if (err && err.name === 'SyntaxError') {
                     normalizeEsmSyntaxError(err);
@@ -3338,7 +3373,7 @@ function loadCommonJsTransaction(descriptor) {
                     markAsSyntaxError(err);
                 }
                 // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (shouldFallbackToEsm && err && err.name === 'SyntaxError') {
+                if (shouldFallbackToEsm && defaultCompileAttempted && err && err.name === 'SyntaxError') {
                     const analysis = rustModuleSourceAnalysis(source);
                     cjsSourceLooksEsm = analysis.looksLikeEsm;
                     cjsWrapperLexicalRedeclaration = analysis.hasCjsWrapperLexicalRedeclaration;
@@ -3346,10 +3381,13 @@ function loadCommonJsTransaction(descriptor) {
                 if (shouldFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
                     cjsSyntaxError = err;
                 } else {
+                    retainSourceMapForThrownError(err, filename);
                     discardCjsModuleLoad(cacheKey, parentModule, mod);
                     maybeSetArrowMessageOnSyntaxError(err, filename, source);
                     throw err;
                 }
+            } finally {
+                moduleCompileContexts.delete(mod);
             }
             if (cjsSyntaxError || cjsWrapperLexicalRedeclaration) {
                 if (rustHasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
@@ -3370,23 +3408,21 @@ function loadCommonJsTransaction(descriptor) {
                     maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
                     throw cjsSyntaxError;
                 }
-            } else if (compiledFn) {
-                try {
-                    callCompiledCjsFunction(mod, compiledFn, source, filename, dirname, childRequire);
-                } catch (err) {
-                    retainSourceMapForThrownError(err, filename);
-                    discardCjsModuleLoad(cacheKey, parentModule, mod);
-                    maybeSetArrowMessageOnSyntaxError(err, filename, source);
-                    throw err;
-                }
-                if (typeScriptExportNames !== undefined) {
+            } else {
+                const usedDefaultCompile = compileContext.originalCompileCalls > 0 &&
+                    compileContext.compiledSourceUnchanged;
+                if (usedDefaultCompile && typeScriptExportNames !== undefined) {
                     captureCjsTypeScriptExportNames(
                         mod,
                         typeScriptExportNames,
                         source,
                     );
                 }
-                if (isTypeScriptFilename(filename) && typeScriptExportNames === undefined) {
+                if (
+                    usedDefaultCompile &&
+                    isTypeScriptFilename(filename) &&
+                    typeScriptExportNames === undefined
+                ) {
                     captureCjsTypeScriptPreparedSource(
                         mod,
                         source,
@@ -3396,8 +3432,6 @@ function loadCommonJsTransaction(descriptor) {
                 cjsEsmDefaultSnapshotEligible = true;
             }
         }
-    }
-
     }
 
     mod.loaded = true;
@@ -3424,7 +3458,7 @@ function loadFilesystemCommonJs(resolvedFilename, parentModule, preparedTypeScri
 }
 
 function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFilename) {
-    const fallbackRequire = makeRequire(parentDir, parentModule, parentFilename);
+    const fallbackRequire = makeInternalRequire(parentDir, parentModule, parentFilename);
     function loaderRequire(id) {
         validateRequireId(id);
         if (typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync === 'function') {
@@ -3454,7 +3488,12 @@ function makeLoaderCommonJsRequire(parentUrl, parentDir, parentModule, parentFil
                     loaded.url &&
                     String(loaded.url).startsWith('file://')
                 ) {
-                    return loadFilesystemCommonJs(loaderCommonJsFilename(loaded.url), parentModule).exports;
+                    const filename = loaderCommonJsFilename(loaded.url);
+                    return traceModuleRequire(
+                        id,
+                        parentFilename,
+                        () => moduleExports._load(filename, parentModule, false),
+                    );
                 }
             }
         }
@@ -3688,101 +3727,147 @@ function currentRequireMain() {
     return mainModule.filename === '/' ? undefined : mainModule;
 }
 
-function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph) {
+function createRequireContext(
+    parentDir,
+    parentModule,
+    parentFilenameOverride,
+    requireMainOverride,
+    preparedTypeScriptGraph,
+    hasRequireMainOverride,
+) {
     const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     const parentLookupPaths = parentModule && Array.isArray(parentModule.paths)
         ? parentModule.paths.concat(globalPaths)
         : null;
-    function localRequire(id) {
-        validateRequireId(id);
+    return {
+        parentDir,
+        parentModule,
+        parentFilename,
+        parentLookupPaths,
+        preparedTypeScriptGraph,
+        requireMain: hasRequireMainOverride ? requireMainOverride : mainModule,
+    };
+}
 
-        return traceModuleRequire(id, parentFilename, () => {
-        // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
-        if ((id === 'zlib' || id === 'node:zlib') && zlib._captureKMaxLength) {
-            zlib._captureKMaxLength();
+function withActiveModuleLoadContext(request, parent, context, load) {
+    const previousContext = activeModuleLoadContext;
+    const previousParent = activeModuleLoadParent;
+    const previousRequest = activeModuleLoadRequest;
+    activeModuleLoadContext = context;
+    activeModuleLoadParent = parent;
+    activeModuleLoadRequest = request;
+    try {
+        return load();
+    } finally {
+        activeModuleLoadContext = previousContext;
+        activeModuleLoadParent = previousParent;
+        activeModuleLoadRequest = previousRequest;
+    }
+}
+
+function loadModuleRequest(id, context, parentModule) {
+    validateRequireId(id);
+    const {
+        parentDir,
+        parentFilename,
+        parentLookupPaths,
+        preparedTypeScriptGraph,
+    } = context;
+
+    // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
+    if ((id === 'zlib' || id === 'node:zlib') && zlib._captureKMaxLength) {
+        zlib._captureKMaxLength();
+    }
+
+    // Check module mock registry
+    const mockEntry = _resolveRequireMock(id);
+    if (mockEntry) {
+        if (mockEntry.cache && mockEntry._cachedCjsReady) {
+            return mockEntry._cachedCjsResult;
         }
-
-        // Check module mock registry
-        const mockEntry = _resolveRequireMock(id);
-        if (mockEntry) {
-            if (mockEntry.cache && mockEntry._cachedCjsReady) {
-                return mockEntry._cachedCjsResult;
-            }
-            const mockResult = _materializeCjsMock(mockEntry);
-            if (mockEntry.cache) {
-                mockEntry._cachedCjsResult = mockResult;
-                mockEntry._cachedCjsReady = true;
-            }
-            return mockResult;
+        const mockResult = _materializeCjsMock(mockEntry);
+        if (mockEntry.cache) {
+            mockEntry._cachedCjsResult = mockResult;
+            mockEntry._cachedCjsReady = true;
         }
+        return mockResult;
+    }
 
-        // node:-prefixed requires always go to builtins, bypassing cache
-        if (id.startsWith('node:')) {
-            const builtin = requireBuiltinModule(id);
-            if (builtin !== undefined) {
-                return builtin;
-            }
-        }
-
-        // Check require.cache before builtins for non-node: specifiers
-        // (allows shadowing builtins via require.cache)
-        const cached = currentModuleCache()[id];
-        if (cached !== undefined) {
-            throwIfRequireEsmGraphCycle(id);
-            if (cached.__wasmRequireEsmInProgress) {
-                const err = new Error('Cannot require() ES Module ' + id + ' in a cycle.');
-                err.code = 'ERR_REQUIRE_CYCLE_MODULE';
-                throw err;
-            }
-            return cached.exports;
-        }
-
-        // Builtin modules
+    // node:-prefixed requires always go to builtins, bypassing cache
+    if (id.startsWith('node:')) {
         const builtin = requireBuiltinModule(id);
         if (builtin !== undefined) {
             return builtin;
         }
-
-        // Relative or absolute file paths
-        if (rustClassifiesPathSpecifier(id)) {
-            const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
-            const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
-            if (cached !== null) {
-                const mod = loadFilesystemCommonJs(cached.filename, parentModule || null, preparedTypeScriptGraph);
-                return mod.exports;
-            }
-            let resolved;
-            try {
-                resolved = resolveFilename(id, parentDir);
-            } catch (err) {
-                throw addRequireStackToModuleNotFound(err, id, parentFilename);
-            }
-            cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);
-            const mod = loadFilesystemCommonJs(resolved.filename, parentModule || null, preparedTypeScriptGraph);
-            return mod.exports;
-        }
-
-        if (id.startsWith('#')) {
-            const resolution = makeCjsResolutionState();
-            const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
-            if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
-            const mod = loadFilesystemCommonJs(importsResolved.filename, parentModule || null, preparedTypeScriptGraph);
-            return mod.exports;
-        }
-
-        // node_modules resolution for bare specifiers
-        const resolution = makeCjsResolutionState();
-        const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
-        if (nmResolved) {
-            const mod = loadFilesystemCommonJs(nmResolved.filename, parentModule || null, preparedTypeScriptGraph);
-            return mod.exports;
-        }
-
-        const err = new Error("Cannot find module '" + id + "'");
-        err.code = 'MODULE_NOT_FOUND';
-        throw err;
-        });
     }
+
+    // Check require.cache before builtins for non-node: specifiers
+    // (allows shadowing builtins via require.cache)
+    const cached = currentModuleCache()[id];
+    if (cached !== undefined) {
+        throwIfRequireEsmGraphCycle(id);
+        if (cached.__wasmRequireEsmInProgress) {
+            const err = new Error('Cannot require() ES Module ' + id + ' in a cycle.');
+            err.code = 'ERR_REQUIRE_CYCLE_MODULE';
+            throw err;
+        }
+        return cached.exports;
+    }
+
+    // Builtin modules
+    const builtin = requireBuiltinModule(id);
+    if (builtin !== undefined) {
+        return builtin;
+    }
+
+    // Relative or absolute file paths
+    if (rustClassifiesPathSpecifier(id)) {
+        const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
+        const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
+        if (cached !== null) {
+            const mod = loadFilesystemCommonJs(cached.filename, parentModule || null, preparedTypeScriptGraph);
+            return mod.exports;
+        }
+        let resolved;
+        try {
+            resolved = resolveFilename(id, parentDir);
+        } catch (err) {
+            throw addRequireStackToModuleNotFound(err, id, parentFilename);
+        }
+        cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);
+        const mod = loadFilesystemCommonJs(resolved.filename, parentModule || null, preparedTypeScriptGraph);
+        return mod.exports;
+    }
+
+    if (id.startsWith('#')) {
+        const resolution = makeCjsResolutionState();
+        const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
+        if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
+        const mod = loadFilesystemCommonJs(importsResolved.filename, parentModule || null, preparedTypeScriptGraph);
+        return mod.exports;
+    }
+
+    // node_modules resolution for bare specifiers
+    const resolution = makeCjsResolutionState();
+    const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
+    if (nmResolved) {
+        const mod = loadFilesystemCommonJs(nmResolved.filename, parentModule || null, preparedTypeScriptGraph);
+        return mod.exports;
+    }
+
+    const err = new Error("Cannot find module '" + id + "'");
+    err.code = 'MODULE_NOT_FOUND';
+    throw err;
+}
+
+function decorateRequire(localRequire, context) {
+    const {
+        parentDir,
+        parentModule,
+        parentFilename,
+        parentLookupPaths,
+        requireMain,
+    } = context;
 
     localRequire.cache = currentModuleCache();
     localRequire.extensions = requireExtensions;
@@ -3800,13 +3885,52 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
     };
 
     Object.defineProperty(localRequire, 'main', {
-        value: arguments.length >= 4 ? requireMainOverride : mainModule,
+        value: requireMain,
         writable: true,
         configurable: true,
         enumerable: true,
     });
 
     return localRequire;
+}
+
+function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph) {
+    const context = createRequireContext(
+        parentDir,
+        parentModule,
+        parentFilenameOverride,
+        requireMainOverride,
+        preparedTypeScriptGraph,
+        arguments.length >= 4,
+    );
+    function localRequire(id) {
+        return withActiveModuleLoadContext(
+            id,
+            parentModule,
+            context,
+            () => parentModule.require(id),
+        );
+    }
+    return decorateRequire(localRequire, context);
+}
+
+function makeInternalRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph) {
+    const context = createRequireContext(
+        parentDir,
+        parentModule,
+        parentFilenameOverride,
+        requireMainOverride,
+        preparedTypeScriptGraph,
+        arguments.length >= 4,
+    );
+    function localRequire(id) {
+        return traceModuleRequire(
+            id,
+            context.parentFilename,
+            () => loadModuleRequest(id, context, context.parentModule),
+        );
+    }
+    return decorateRequire(localRequire, context);
 }
 
 // The global require, rooted at '/'
@@ -3843,16 +3967,11 @@ export let createRequire = function createRequire(filename) {
         filepath = filename;
     }
     const dir = pathModule.dirname(filepath);
-    const syntheticParent = {
-        id: filepath,
-        filename: filepath,
-        path: dir,
-        exports: {},
-        loaded: true,
-        parent: null,
-        children: [],
-        paths: _nodeModulePaths(dir),
-    };
+    const syntheticParent = new Module(filepath);
+    syntheticParent.filename = filepath;
+    syntheticParent.path = dir;
+    syntheticParent.loaded = true;
+    syntheticParent.paths = _nodeModulePaths(dir);
     return makeRequire(dir, syntheticParent, filepath, currentRequireMain());
 };
 
@@ -4904,32 +5023,79 @@ function Module(id, parent) {
     installCjsEsmDefaultSnapshotSlot(this);
 }
 
-const moduleRequireOverrides = new WeakMap();
-
 Module.prototype.require = function require(id) {
     const override = moduleRequireOverrides.get(this);
     if (override) {
         return override(id);
     }
-    const baseDir = this && typeof this.filename === 'string'
-        ? pathModule.dirname(this.filename)
-        : '.';
-    return makeRequire(baseDir, this || null)(id);
+    validateRequireId(id);
+    const parentFilename = this && typeof this.filename === 'string'
+        ? this.filename
+        : null;
+    return traceModuleRequire(
+        id,
+        parentFilename,
+        () => moduleExports._load(id, this || null, false),
+    );
 };
 
 Module.prototype._compile = function _compile(content, filename) {
     if (!(this instanceof Module)) {
         throw new ERR_INVALID_ARG_TYPE('mod', 'Module', this);
     }
-    return compileModuleInto(this, content, arguments.length > 1 ? filename : this.filename);
+    const effectiveFilename = arguments.length > 1 ? filename : this.filename;
+    const context = moduleCompileContexts.get(this);
+    if (context) {
+        const source = String(content);
+        const samePreparedInput = effectiveFilename === context.filename &&
+            source === context.compiledSource;
+        context.originalCompileCalls += 1;
+        if (context.originalCompileCalls === 1) {
+            context.compiledSourceUnchanged = samePreparedInput;
+        } else {
+            context.compiledSourceUnchanged = context.compiledSourceUnchanged && samePreparedInput;
+        }
+        return compileModuleInto(
+            this,
+            source,
+            effectiveFilename,
+            context.childRequire,
+            samePreparedInput
+                ? {
+                    isPreparedTypeScript: true,
+                    sourceMap: context.sourceMap,
+                    executionSource: context.executionSource,
+                }
+                : undefined,
+        );
+    }
+    return compileModuleInto(this, content, effectiveFilename);
 };
 
 function moduleLoad(request, parent, isMain) {
     void isMain;
-    if (parent && typeof parent.filename === 'string') {
-        return makeRequire(pathModule.dirname(parent.filename), parent)(request);
+    let context;
+    if (
+        activeModuleLoadContext &&
+        parent === activeModuleLoadParent &&
+        request === activeModuleLoadRequest
+    ) {
+        context = activeModuleLoadContext;
     }
-    return makeRequire('.', parent || null)(request);
+    if (!context) {
+        const baseDir = parent && typeof parent.filename === 'string'
+            ? pathModule.dirname(parent.filename)
+            : '.';
+        context = createRequireContext(
+            baseDir,
+            parent || null,
+            undefined,
+            undefined,
+            undefined,
+            false,
+        );
+    }
+    return loadModuleRequest(request, context, parent || null);
 }
 
 function moduleResolveFilename(request, parent, isMain, options) {
