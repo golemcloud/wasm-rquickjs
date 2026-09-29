@@ -1,6 +1,8 @@
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
+#[cfg(feature = "net-write-profiling")]
+use std::time::Instant;
 use wasip2::http::outgoing_handler;
 use wasip2::http::types as wasi_http;
 use wasip2::io::streams::{InputStream, OutputStream, StreamError};
@@ -743,19 +745,44 @@ async fn write_all_to_stream<'js>(
     if data.is_empty() {
         return Ok(());
     }
+    #[cfg(feature = "net-write-profiling")]
+    let started_at = Instant::now();
+    #[cfg(feature = "net-write-profiling")]
+    let mut check_write_calls = 0_u64;
+    #[cfg(feature = "net-write-profiling")]
+    let mut capacity_waits = 0_u64;
+    #[cfg(feature = "net-write-profiling")]
+    let mut capacity_wait_ns = 0_u64;
+    #[cfg(feature = "net-write-profiling")]
+    let mut write_calls = 0_u64;
     let mut offset = 0;
     while offset < data.len() {
         let remaining = &data[offset..];
+        #[cfg(feature = "net-write-profiling")]
+        {
+            check_write_calls += 1;
+        }
         match stream.check_write() {
             Ok(0) => {
+                #[cfg(feature = "net-write-profiling")]
+                let wait_started_at = Instant::now();
                 let pollable = stream.subscribe();
                 AsyncPollable::new(pollable).wait_for().await;
+                #[cfg(feature = "net-write-profiling")]
+                {
+                    capacity_waits += 1;
+                    capacity_wait_ns += wait_started_at.elapsed().as_nanos() as u64;
+                }
             }
             Ok(permit) => {
                 let to_write = std::cmp::min(permit as usize, remaining.len());
                 stream
                     .write(&remaining[..to_write])
                     .map_err(|_| Exception::throw_message(ctx, "failed to write request body"))?;
+                #[cfg(feature = "net-write-profiling")]
+                {
+                    write_calls += 1;
+                }
                 offset += to_write;
             }
             Err(_) => {
@@ -769,8 +796,23 @@ async fn write_all_to_stream<'js>(
     stream
         .flush()
         .map_err(|_| Exception::throw_message(ctx, "failed to flush request body"))?;
+    #[cfg(feature = "net-write-profiling")]
+    let flush_wait_started_at = Instant::now();
     let pollable = stream.subscribe();
     AsyncPollable::new(pollable).wait_for().await;
+    #[cfg(feature = "net-write-profiling")]
+    eprintln!(
+        "[node-http-write-profile]{}",
+        serde_json::json!({
+            "bytes": data.len(),
+            "checkWriteCalls": check_write_calls,
+            "capacityWaits": capacity_waits,
+            "capacityWaitNs": capacity_wait_ns,
+            "writeCalls": write_calls,
+            "flushWaitNs": flush_wait_started_at.elapsed().as_nanos() as u64,
+            "elapsedNs": started_at.elapsed().as_nanos() as u64,
+        })
+    );
     Ok(())
 }
 
