@@ -1,0 +1,25 @@
+wasm-rquickjs generated component third-party licenses
+======================================================
+
+This notice covers the standard TypeScript runtime and transform dependency closures named at
+the top of the generated file. It is generated from the locked skeleton dependency graph. It is
+not legal advice and does not cover JavaScript application code added by a component user.
+
+Third-party crates
+------------------
+{{#each crates}}
+* {{{package.name}}} {{{package.version}}} — {{{license}}}{{#if package.repository}} — {{{package.repository}}}{{/if}}
+{{/each}}
+
+License texts
+-------------
+{{#each licenses}}
+--- {{{name}}} ---
+Used by:
+{{#each used_by}}
+* {{{crate.name}}} {{{crate.version}}}
+{{/each}}
+
+{{{text}}}
+
+{{/each}}

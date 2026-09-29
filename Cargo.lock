@@ -3489,6 +3489,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "camino",
+ "camino-tempfile",
  "heck",
  "include_dir",
  "indexmap",

@@ -1,4 +1,4 @@
-use crate::GeneratorContext;
+use crate::{GenerationTarget, GeneratorContext};
 use anyhow::anyhow;
 use camino::Utf8Path;
 #[cfg(feature = "external-skeleton")]
@@ -14,6 +14,25 @@ use toml_edit::{Array, DocumentMut, value};
 /// default and what the generated `src/lib.rs` looks like.
 #[cfg(not(feature = "external-skeleton"))]
 static SKELETON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/skeleton");
+
+const COMPONENT_LICENSES_P2: &[u8] =
+    include_bytes!("../licenses/THIRD_PARTY_COMPONENT_LICENSES_P2.txt");
+const COMPONENT_LICENSES_P3: &[u8] =
+    include_bytes!("../licenses/THIRD_PARTY_COMPONENT_LICENSES_P3.txt");
+
+/// Copies the reviewed dependency attribution for the selected component target.
+///
+/// This file is deliberately a sidecar rather than a custom Wasm section: it does not affect
+/// component bytes, and downstream distributors can combine it with their own application
+/// notices while keeping the audited dependency closure visible.
+pub fn copy_component_licenses(output: &Utf8Path, target: GenerationTarget) -> anyhow::Result<()> {
+    let contents = match target {
+        GenerationTarget::WasiP2 => COMPONENT_LICENSES_P2,
+        GenerationTarget::WasiP3 => COMPONENT_LICENSES_P3,
+    };
+    crate::write_if_changed(output.join("THIRD_PARTY_COMPONENT_LICENSES.txt"), contents)?;
+    Ok(())
+}
 
 #[cfg(feature = "external-skeleton")]
 fn skeleton_root() -> Utf8PathBuf {
@@ -295,7 +314,32 @@ mod module_loader_architecture;
 
 #[cfg(test)]
 mod tests {
-    use super::generated_lock;
+    use super::{
+        COMPONENT_LICENSES_P2, COMPONENT_LICENSES_P3, copy_component_licenses, generated_lock,
+    };
+    use crate::GenerationTarget;
+    use camino_tempfile::Utf8TempDir;
+
+    #[test]
+    fn component_license_notices_name_their_target() {
+        let p2 = std::str::from_utf8(COMPONENT_LICENSES_P2).unwrap();
+        let p3 = std::str::from_utf8(COMPONENT_LICENSES_P3).unwrap();
+        assert!(p2.contains("WASI Preview 2"));
+        assert!(p3.contains("WASI Preview 3"));
+        assert_ne!(p2, p3);
+    }
+
+    #[test]
+    fn copies_the_notice_for_the_selected_target() {
+        let output = Utf8TempDir::new().unwrap();
+        let path = output.path().join("THIRD_PARTY_COMPONENT_LICENSES.txt");
+
+        copy_component_licenses(output.path(), GenerationTarget::WasiP2).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), COMPONENT_LICENSES_P2);
+
+        copy_component_licenses(output.path(), GenerationTarget::WasiP3).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), COMPONENT_LICENSES_P3);
+    }
 
     #[test]
     fn generated_lock_requires_exactly_one_skeleton_package() {
