@@ -10150,6 +10150,73 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         fs.writeFileSync(`${root}/dir-index-reg/index.reg`, 'exports.value = "index.reg";');
         assert.strictEqual(require(`${root}/dir-index-reg`).value, 'index.reg');
 
+        const runMainFile = `${root}/public-run-main.cjs`;
+        fs.writeFileSync(runMainFile, [
+            'module.exports = {',
+            '  id: module.id,',
+            '  parent: module.parent,',
+            '  requireMain: require.main === module,',
+            '  processMain: process.mainModule === module,',
+            '};',
+        ].join('\n'));
+        const originalArgv = process.argv.slice();
+        const originalProcessMainModule = process.mainModule;
+        const originalRunMainPrototypeRequire = Module.prototype.require;
+        const originalRunMainLoad = Module._load;
+        const runMainRecord = Module.require.main;
+        const runMainRecordSnapshot = {
+            id: runMainRecord.id,
+            filename: runMainRecord.filename,
+            path: runMainRecord.path,
+            exports: runMainRecord.exports,
+            loaded: runMainRecord.loaded,
+            parent: runMainRecord.parent,
+            children: runMainRecord.children.slice(),
+            paths: runMainRecord.paths ? runMainRecord.paths.slice() : runMainRecord.paths,
+        };
+        let runMainPrototypeRequireCalls = 0;
+        const runMainLoadCalls = [];
+        try {
+            process.argv[1] = runMainFile;
+            Module.prototype.require = function() {
+                runMainPrototypeRequireCalls++;
+                return originalRunMainPrototypeRequire.apply(this, arguments);
+            };
+            Module._load = function(request, parent, isMain) {
+                runMainLoadCalls.push({
+                    request,
+                    receiverIsModuleConstructor: this === Module,
+                    parent,
+                    isMain,
+                    argumentCount: arguments.length,
+                });
+                return originalRunMainLoad.apply(this, arguments);
+            };
+            Module.runMain();
+            assert.strictEqual(runMainPrototypeRequireCalls, 0);
+            assert.deepStrictEqual(runMainLoadCalls, [{
+                request: runMainFile,
+                receiverIsModuleConstructor: true,
+                parent: null,
+                isMain: true,
+                argumentCount: 3,
+            }]);
+            assert.deepStrictEqual(Module._cache[runMainFile].exports, {
+                id: '.',
+                parent: null,
+                requireMain: true,
+                processMain: true,
+            });
+        } finally {
+            Module.prototype.require = originalRunMainPrototypeRequire;
+            Module._load = originalRunMainLoad;
+            delete Module._cache[runMainFile];
+            Object.assign(runMainRecord, runMainRecordSnapshot);
+            Module.require.main = runMainRecord;
+            process.argv = originalArgv;
+            process.mainModule = originalProcessMainModule;
+        }
+
         return true;
     } catch (error) {
         console.error(error);

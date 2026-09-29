@@ -254,14 +254,24 @@ export async function run() {
         if (filename === '/typescript-transform-runtime/stack-cjs.cts') {
             cjsPublicCompileCalls++;
             cjsPublicCompileContract = cjsPublicCompileContract &&
-                this instanceof module && arguments.length === 3 && format === undefined;
+                this instanceof module &&
+                arguments.length === 3 &&
+                format === 'commonjs-typescript' &&
+                String(content).includes('enum StackShift');
         }
         if (filename === '/typescript-transform-runtime/stack-cjs-import.cts') {
             coldCjsPublicCompileCalls++;
             cjsPublicCompileContract = cjsPublicCompileContract &&
-                this instanceof module && arguments.length === 3 && format === undefined;
+                this instanceof module &&
+                arguments.length === 3 &&
+                format === 'commonjs-typescript' &&
+                String(content).includes('enum StackShift');
+            content = String(content).replace(
+                'cold-import-cjs-typescript-stack',
+                'hook-rewritten-cjs-typescript-stack',
+            );
         }
-        return originalCjsCompile.apply(this, arguments);
+        return originalCjsCompile.call(this, content, filename, format);
     };
     try {
         const cjsStackModule = require('/typescript-transform-runtime/stack-cjs.cts');

@@ -3321,24 +3321,14 @@ function loadCommonJsTransaction(descriptor) {
             }
             const dirname = pathModule.dirname(filename);
             let compiledSource;
-            let preparedSourceForCache;
             let typeScriptSourceMap;
             let typeScriptExportNames;
-            try {
-                if (preparedTypeScript) {
-                    compiledSource = preparedTypeScript.preparedSource;
-                    preparedSourceForCache = compiledSource;
-                } else {
-                    const output = transformTypeScriptModuleOutput(filename, source, false);
-                    compiledSource = output.code;
-                    typeScriptSourceMap = output.sourceMap;
-                    preparedSourceForCache = codeWithInlineSourceMap(output);
-                }
-                typeScriptExportNames = preparedTypeScript && preparedTypeScript.exportNames;
-            } catch (err) {
-                discardCjsModuleLoad(cacheKey, parentModule, mod);
-                throw err;
+            if (preparedTypeScript) {
+                compiledSource = preparedTypeScript.preparedSource;
+            } else if (!isTypeScriptFilename(filename)) {
+                compiledSource = source;
             }
+            typeScriptExportNames = preparedTypeScript && preparedTypeScript.exportNames;
             const childRequire = makeRequire(
                 dirname,
                 mod,
@@ -3348,27 +3338,35 @@ function loadCommonJsTransaction(descriptor) {
             );
             const compileContext = {
                 filename,
+                hookSource: source,
+                compileFormat: undefined,
                 compiledSource,
                 executionSource: source,
                 sourceMap: typeScriptSourceMap,
+                preparedSourceForCache: preparedTypeScript ? compiledSource : undefined,
                 childRequire,
                 originalCompileCalls: 0,
-                compiledSourceUnchanged: false,
+                compileInputUnchanged: false,
             };
             let cjsSyntaxError = null;
             const shouldFallbackToEsm = canFallbackToEsm &&
                 !filename.endsWith('.cjs') && !filename.endsWith('.cts') && !isCommonJsPackage;
-            const compileFormat = filename.endsWith('.cjs') || explicitPackageType === 'commonjs'
-                ? 'commonjs'
-                : undefined;
+            const compileFormat = isTypeScriptFilename(filename)
+                ? (filename.endsWith('.cts') || explicitPackageType === 'commonjs'
+                    ? 'commonjs-typescript'
+                    : 'typescript')
+                : filename.endsWith('.cjs') || explicitPackageType === 'commonjs'
+                    ? 'commonjs'
+                    : undefined;
+            compileContext.compileFormat = compileFormat;
             let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
             moduleCompileContexts.set(mod, compileContext);
             try {
-                mod._compile(compiledSource, filename, compileFormat);
+                mod._compile(source, filename, compileFormat);
             } catch (err) {
                 const defaultCompileAttempted = compileContext.originalCompileCalls > 0 &&
-                    compileContext.compiledSourceUnchanged;
+                    compileContext.compileInputUnchanged;
                 // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
                 if (err && err.name === 'SyntaxError') {
                     normalizeEsmSyntaxError(err);
@@ -3413,7 +3411,7 @@ function loadCommonJsTransaction(descriptor) {
                 }
             } else {
                 const usedDefaultCompile = compileContext.originalCompileCalls > 0 &&
-                    compileContext.compiledSourceUnchanged;
+                    compileContext.compileInputUnchanged;
                 if (usedDefaultCompile && typeScriptExportNames !== undefined) {
                     captureCjsTypeScriptExportNames(
                         mod,
@@ -3429,7 +3427,7 @@ function loadCommonJsTransaction(descriptor) {
                     captureCjsTypeScriptPreparedSource(
                         mod,
                         source,
-                        preparedSourceForCache,
+                        compileContext.preparedSourceForCache,
                     );
                 }
                 cjsEsmDefaultSnapshotEligible = true;
@@ -3444,8 +3442,13 @@ function loadCommonJsTransaction(descriptor) {
     return mod;
 }
 
-function loadFilesystemCommonJs(resolvedFilename, parentModule, preparedTypeScriptGraph = undefined) {
-    const isMainModule = isMainEntryFilename(resolvedFilename);
+function loadFilesystemCommonJs(
+    resolvedFilename,
+    parentModule,
+    preparedTypeScriptGraph = undefined,
+    isMainModuleOverride = false,
+) {
+    const isMainModule = isMainModuleOverride || isMainEntryFilename(resolvedFilename);
     const filename = toCjsCanonicalFilename(resolvedFilename, isMainModule);
     return loadCommonJsTransaction({
         cacheKey: filename,
@@ -3768,7 +3771,7 @@ function withActiveModuleLoadContext(request, parent, context, load) {
     }
 }
 
-function loadModuleRequest(id, context, parentModule) {
+function loadModuleRequest(id, context, parentModule, isMain = false) {
     validateRequireId(id);
     const {
         parentDir,
@@ -3828,7 +3831,12 @@ function loadModuleRequest(id, context, parentModule) {
         const cacheKey = cjsPathCacheKey(id, pathModule.isAbsolute(id) ? [''] : [parentDir]);
         const cached = cjsCachedPathResolution(cjsPathCacheValue(cacheKey));
         if (cached !== null) {
-            const mod = loadFilesystemCommonJs(cached.filename, parentModule || null, preparedTypeScriptGraph);
+            const mod = loadFilesystemCommonJs(
+                cached.filename,
+                parentModule || null,
+                preparedTypeScriptGraph,
+                isMain,
+            );
             return mod.exports;
         }
         let resolved;
@@ -3838,7 +3846,12 @@ function loadModuleRequest(id, context, parentModule) {
             throw addRequireStackToModuleNotFound(err, id, parentFilename);
         }
         cjsSetPathCacheResolvedFilename(cacheKey, resolved.filename);
-        const mod = loadFilesystemCommonJs(resolved.filename, parentModule || null, preparedTypeScriptGraph);
+        const mod = loadFilesystemCommonJs(
+            resolved.filename,
+            parentModule || null,
+            preparedTypeScriptGraph,
+            isMain,
+        );
         return mod.exports;
     }
 
@@ -3846,7 +3859,12 @@ function loadModuleRequest(id, context, parentModule) {
         const resolution = makeCjsResolutionState();
         const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
         if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
-        const mod = loadFilesystemCommonJs(importsResolved.filename, parentModule || null, preparedTypeScriptGraph);
+        const mod = loadFilesystemCommonJs(
+            importsResolved.filename,
+            parentModule || null,
+            preparedTypeScriptGraph,
+            isMain,
+        );
         return mod.exports;
     }
 
@@ -3854,7 +3872,12 @@ function loadModuleRequest(id, context, parentModule) {
     const resolution = makeCjsResolutionState();
     const nmResolved = resolveFromNodeModules(id, parentDir, parentFilename, undefined, parentLookupPaths, resolution);
     if (nmResolved) {
-        const mod = loadFilesystemCommonJs(nmResolved.filename, parentModule || null, preparedTypeScriptGraph);
+        const mod = loadFilesystemCommonJs(
+            nmResolved.filename,
+            parentModule || null,
+            preparedTypeScriptGraph,
+            isMain,
+        );
         return mod.exports;
     }
 
@@ -4994,7 +5017,11 @@ function _stat(filename) {
 function runMain() {
     const mainScript = process.argv[1];
     if (mainScript) {
-        globalRequire(mainScript);
+        return traceModuleRequire(
+            mainScript,
+            null,
+            () => moduleExports._load(mainScript, null, true),
+        );
     }
 }
 
@@ -5046,38 +5073,54 @@ Module.prototype._compile = function _compile(content, filename, format) {
     if (!(this instanceof Module)) {
         throw new ERR_INVALID_ARG_TYPE('mod', 'Module', this);
     }
-    void format;
     const effectiveFilename = arguments.length > 1 ? filename : this.filename;
     const context = moduleCompileContexts.get(this);
     if (context) {
         const source = String(content);
-        const samePreparedInput = effectiveFilename === context.filename &&
-            source === context.compiledSource;
+        const sameCompileInput = effectiveFilename === context.filename &&
+            source === context.hookSource &&
+            format === context.compileFormat;
         context.originalCompileCalls += 1;
         if (context.originalCompileCalls === 1) {
-            context.compiledSourceUnchanged = samePreparedInput;
+            context.compileInputUnchanged = sameCompileInput;
         } else {
-            context.compiledSourceUnchanged = context.compiledSourceUnchanged && samePreparedInput;
+            context.compileInputUnchanged = context.compileInputUnchanged && sameCompileInput;
+        }
+        let compiledSource = source;
+        let compileOptions;
+        if (sameCompileInput && context.compiledSource !== undefined) {
+            compiledSource = context.compiledSource;
+            compileOptions = {
+                isPreparedTypeScript: true,
+                sourceMap: context.sourceMap,
+                executionSource: context.executionSource,
+            };
+        } else if (format === 'commonjs-typescript' || format === 'typescript') {
+            const output = transformTypeScriptModuleOutput(effectiveFilename, source, false);
+            compiledSource = output.code;
+            compileOptions = {
+                isPreparedTypeScript: true,
+                sourceMap: output.sourceMap,
+                executionSource: source,
+            };
+            if (sameCompileInput) {
+                context.compiledSource = compiledSource;
+                context.sourceMap = output.sourceMap;
+                context.preparedSourceForCache = codeWithInlineSourceMap(output);
+            }
         }
         return compileModuleInto(
             this,
-            source,
+            compiledSource,
             effectiveFilename,
             context.childRequire,
-            samePreparedInput
-                ? {
-                    isPreparedTypeScript: true,
-                    sourceMap: context.sourceMap,
-                    executionSource: context.executionSource,
-                }
-                : undefined,
+            compileOptions,
         );
     }
     return compileModuleInto(this, content, effectiveFilename);
 };
 
 function moduleLoad(request, parent, isMain) {
-    void isMain;
     let context;
     if (
         activeModuleLoadContext &&
@@ -5099,7 +5142,7 @@ function moduleLoad(request, parent, isMain) {
             false,
         );
     }
-    return loadModuleRequest(request, context, parent || null);
+    return loadModuleRequest(request, context, parent || null, isMain === true);
 }
 
 function moduleResolveFilename(request, parent, isMain, options) {

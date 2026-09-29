@@ -359,6 +359,12 @@ async fn typescript_transform_runtime_is_immutable(
         report["coldCjsPublicCompileCalls"], 1,
         "a cold ESM import of CommonJS TypeScript must use the public compile hook"
     );
+    assert!(
+        report["coldImportedCjsRuntimeStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("hook-rewritten-cjs-typescript-stack")),
+        "the rewritten TypeScript source was not transformed and executed after the public hook"
+    );
     for (field, file, line) in [
         ("esmRuntimeStack", "stack-esm.mts", 3),
         ("cjsRuntimeStack", "stack-cjs.cts", 3),
