@@ -5094,6 +5094,11 @@ Module.prototype._compile = function _compile(content, filename, format) {
             context.compileInputUnchanged = context.compileInputUnchanged && sameCompileInput;
         }
         context.lastCompileSource = source;
+        if (format === 'module') {
+            this.exports = requireEsmWithCacheGuard(this, effectiveFilename, true, source);
+            context.esmFallbackCompleted = true;
+            return;
+        }
         let compileCompleted = false;
         try {
             let compiledSource = source;
@@ -5137,7 +5142,8 @@ Module.prototype._compile = function _compile(content, filename, format) {
             } else if (err && typeof err.message === 'string' && err.message === 'return not in a function') {
                 markAsSyntaxError(err);
             }
-            if (!context.shouldFallbackToEsm || !err || err.name !== 'SyntaxError') {
+            const detectionDisabledByFormat = format === 'commonjs' || format === 'commonjs-typescript';
+            if (detectionDisabledByFormat || !context.shouldFallbackToEsm || !err || err.name !== 'SyntaxError') {
                 throw err;
             }
             const analysis = rustModuleSourceAnalysis(source);

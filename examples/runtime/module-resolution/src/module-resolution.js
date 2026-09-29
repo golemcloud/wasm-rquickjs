@@ -9784,7 +9784,10 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         fs.writeFileSync(`${hooksRoot}/implicit.js`, 'module.exports = { format: "implicit" };');
         fs.writeFileSync(`${hooksRoot}/pass-through-esm.js`, 'export const value = 7;');
         fs.writeFileSync(`${hooksRoot}/rewritten-esm.js`, 'module.exports = { value: "commonjs" };');
+        fs.writeFileSync(`${hooksRoot}/explicit-commonjs-format.js`, 'export default 10;');
+        fs.writeFileSync(`${hooksRoot}/explicit-module-format.js`, 'module.exports = { value: "commonjs" };');
         fs.writeFileSync(`${hooksRoot}/runtime-syntax.js`, 'JSON.parse("{");');
+        fs.writeFileSync(`${hooksRoot}/runtime-normalization.js`, 'throw new Error("return not in a function");');
         fs.mkdirSync(`${hooksRoot}/explicit-commonjs`, { recursive: true });
         fs.writeFileSync(
             `${hooksRoot}/explicit-commonjs/package.json`,
@@ -9839,6 +9842,7 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         const loadHookCalls = [];
         const compileHookCalls = [];
         const compileHookThrows = [];
+        const runtimeErrorsFromHook = Object.create(null);
         let retryCompileCalls = 0;
         try {
             Module.prototype.require = function(request) {
@@ -9889,9 +9893,20 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 if (filename === `${hooksRoot}/rewritten-esm.js`) {
                     content = 'export default 9;';
                 }
+                if (filename === `${hooksRoot}/explicit-commonjs-format.js`) {
+                    format = 'commonjs';
+                }
+                if (filename === `${hooksRoot}/explicit-module-format.js`) {
+                    content = 'export default 11;';
+                    format = 'module';
+                }
                 try {
                     return originalCompile.call(this, content, filename, format);
                 } catch (error) {
+                    if (filename === `${hooksRoot}/runtime-syntax.js` ||
+                        filename === `${hooksRoot}/runtime-normalization.js`) {
+                        runtimeErrorsFromHook[filename] = error;
+                    }
                     compileHookThrows.push({ filename, name: error && error.name });
                     throw error;
                 }
@@ -9926,12 +9941,41 @@ export const testCjsNodeModuleLoadingCompat = async () => {
             assert.strictEqual(rewrittenEsm.__esModule, true);
             assert.strictEqual(rewrittenEsm.default, 9);
             assert.throws(
-                () => require(`${hooksRoot}/runtime-syntax.js`),
+                () => require(`${hooksRoot}/explicit-commonjs-format.js`),
                 SyntaxError,
+            );
+            const explicitModule = require(`${hooksRoot}/explicit-module-format.js`);
+            assert.strictEqual(explicitModule.__esModule, true);
+            assert.strictEqual(explicitModule.default, 11);
+            let runtimeSyntaxError;
+            try {
+                require(`${hooksRoot}/runtime-syntax.js`);
+            } catch (error) {
+                runtimeSyntaxError = error;
+            }
+            assert(runtimeSyntaxError instanceof SyntaxError);
+            assert.strictEqual(
+                runtimeSyntaxError,
+                runtimeErrorsFromHook[`${hooksRoot}/runtime-syntax.js`],
+            );
+            let runtimeNormalizationError;
+            try {
+                require(`${hooksRoot}/runtime-normalization.js`);
+            } catch (error) {
+                runtimeNormalizationError = error;
+            }
+            assert(runtimeNormalizationError instanceof Error);
+            assert.strictEqual(runtimeNormalizationError.name, 'Error');
+            assert.strictEqual(runtimeNormalizationError.message, 'return not in a function');
+            assert.strictEqual(
+                runtimeNormalizationError,
+                runtimeErrorsFromHook[`${hooksRoot}/runtime-normalization.js`],
             );
             assert.deepStrictEqual(compileHookThrows, [
                 { filename: `${hooksRoot}/non-callable.cjs`, name: 'TypeError' },
+                { filename: `${hooksRoot}/explicit-commonjs-format.js`, name: 'SyntaxError' },
                 { filename: `${hooksRoot}/runtime-syntax.js`, name: 'SyntaxError' },
+                { filename: `${hooksRoot}/runtime-normalization.js`, name: 'Error' },
             ]);
             assert.strictEqual(
                 hooked.module.children.filter((child) => child.filename === `${hooksRoot}/retry.cjs`).length,
