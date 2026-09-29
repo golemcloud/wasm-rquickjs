@@ -4215,12 +4215,42 @@ export const testSyncBuiltinEsmExports = async () => {
         const urlModule = await import('node:url');
         const bareUrlModule = await import('url');
 
+        for (const [canonicalNamespace, bareNamespace] of [
+            [osModule, bareOsModule],
+            [vmModule, bareVmModule],
+            [pathPosixModule, barePathPosixModule],
+            [pathWin32Module, barePathWin32Module],
+            [streamWebModule, bareStreamWebModule],
+            [httpCommonModule, bareHttpCommonModule],
+            [httpAgentModule, bareHttpAgentModule],
+            [inspectorModule, bareInspectorModule],
+            [cryptoModule, bareCryptoModule],
+            [urlModule, bareUrlModule],
+        ]) {
+            assert.strictEqual(bareNamespace, canonicalNamespace);
+        }
+
         const require = module.createRequire(import.meta.url);
+        const esmFirstOs = osModule.default;
+        const esmFirstHostnameDescriptor = Object.getOwnPropertyDescriptor(esmFirstOs, 'hostname');
+        assert(esmFirstHostnameDescriptor && esmFirstHostnameDescriptor.configurable);
+        delete esmFirstOs.hostname;
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(esmFirstOs, 'hostname'), false);
+
         const os = require('node:os');
+        assert.strictEqual(os, esmFirstOs);
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(os, 'hostname'), false);
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, undefined);
+        assert.strictEqual(bareOsModule.hostname, undefined);
         assert.strictEqual(os, require('os'));
         assert.strictEqual(os, osModule.default);
         assert.strictEqual(os, bareOsModule.default);
         assert.strictEqual(osModule.hostname, bareOsModule.hostname);
+        Object.defineProperty(os, 'hostname', esmFirstHostnameDescriptor);
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, esmFirstHostnameDescriptor.value);
+        assert.strictEqual(bareOsModule.hostname, esmFirstHostnameDescriptor.value);
         assert.strictEqual(require('node:crypto'), cryptoModule.default);
         assert.strictEqual(require('crypto'), cryptoModule.default);
         assert.strictEqual(bareCryptoModule.default, cryptoModule.default);

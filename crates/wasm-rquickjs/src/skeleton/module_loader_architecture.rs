@@ -802,14 +802,21 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
         );
     }
     assert!(SYNC_EXPORTS_RS.contains("collect_static_esm_export_names"));
+    assert!(SYNC_EXPORTS_RS.contains("canonical_public_builtin_alias"));
     assert!(SYNC_EXPORTS_RS.contains("static FACADES: OnceLock"));
     assert!(SYNC_EXPORTS_RS.contains("or_insert_with(|| facade_source"));
     assert!(!SYNC_EXPORTS_RS.contains("enum TokenKind"));
     assert!(SYNC_EXPORTS_RS.contains("Object.keys(__wasmRquickjsDefault)"));
+    assert!(SYNC_EXPORTS_RS.contains("in __wasmRquickjsDefault"));
     assert!(MODULE_JS.contains("require_builtin as _requireBuiltin"));
+    assert!(MODULE_JS.contains("typeof registry[name] === 'function'"));
     assert!(MODULE_JS.contains("function loadPublicBuiltin(name)"));
     assert!(MODULE_JS.contains("defineLazyBuiltin(map, name, load)"));
     assert!(MODULE_JS.contains("for (const canonicalName of _syncableBuiltinNames())"));
+    assert!(MODULE_LOADING_RS.contains("struct PublicBuiltinAliasResolver"));
+    assert!(
+        MODULE_LOADING_RS.contains("PublicBuiltinAliasResolver,\n            builtin_resolver")
+    );
     assert!(!MODULE_JS.contains("from 'node:sqlite'"));
     assert!(MODULE_JS.contains("const names = Object.keys(registry);"));
     assert!(!MODULE_JS.contains("registry.fs"));

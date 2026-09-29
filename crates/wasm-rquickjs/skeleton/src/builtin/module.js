@@ -87,7 +87,9 @@ const builtinCjsCache = Object.create(null);
 const builtinCjsLoadInProgress = Object.create(null);
 
 function seedBuiltin(name, namespace) {
-    builtinCjsCache[name] = cjsExport(namespace);
+    builtinCjsCache[name] = namespace && namespace.default !== undefined
+        ? namespace.default
+        : namespace;
 }
 
 seedBuiltin('node:path', pathModule);
@@ -109,7 +111,12 @@ function loadPublicBuiltin(name) {
     }
     builtinCjsLoadInProgress[name] = true;
     try {
-        const value = cjsExport(_requireBuiltin(name));
+        const namespace = _requireBuiltin(name);
+        const registry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        const value = registry && typeof registry[name] === 'function' &&
+            namespace && namespace.default !== undefined
+            ? namespace.default
+            : cjsExport(namespace);
         if (name === 'node:crypto' && value &&
             (typeof value === 'object' || typeof value === 'function')) {
             ['pseudoRandomBytes', 'prng', 'rng'].forEach((exportName) => {

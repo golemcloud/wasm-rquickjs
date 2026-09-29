@@ -183,6 +183,10 @@ mod zlib {
 #[path = "builtin/websocket.rs"]
 mod websocket;
 
+pub(crate) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str> {
+    sync_exports::canonical_public_builtin_alias(name)
+}
+
 pub(crate) fn realpath_for_cjs_module_resolution(
     ctx: &rquickjs::Ctx<'_>,
     path: &str,

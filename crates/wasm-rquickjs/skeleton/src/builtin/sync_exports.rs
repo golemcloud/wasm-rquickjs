@@ -72,6 +72,13 @@ pub(super) fn syncable_builtin_names() -> Vec<String> {
         .collect()
 }
 
+pub(super) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str> {
+    SYNCABLE_BUILTIN_NAMES.iter().copied().find(|canonical| {
+        !matches!(*canonical, "node:sqlite" | "node:test")
+            && canonical.strip_prefix("node:") == Some(name)
+    })
+}
+
 fn implementation_name(name: &str) -> String {
     format!("{IMPLEMENTATION_PREFIX}{name}")
 }
@@ -86,6 +93,18 @@ fn facade_source(name: &str, implementation: &str, exports_source: &str) -> Vec<
     let mut source = format!(
         "import __wasmRquickjsDefault, * as __wasmRquickjsNamespace from {implementation:?};\n"
     );
+    source.push_str(
+        "if (typeof __wasmRquickjsDefault === 'function' ||\n\
+    (typeof __wasmRquickjsDefault === 'object' && __wasmRquickjsDefault !== null)) {\n",
+    );
+    for export_name in &export_names {
+        writeln!(
+            source,
+            "  if (!({export_name:?} in __wasmRquickjsDefault)) __wasmRquickjsDefault[{export_name:?}] = __wasmRquickjsNamespace[{export_name:?}];"
+        )
+        .unwrap();
+    }
+    source.push_str("}\n");
     for (index, export_name) in export_names.iter().enumerate() {
         writeln!(
             source,

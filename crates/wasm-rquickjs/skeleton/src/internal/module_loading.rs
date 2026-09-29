@@ -416,6 +416,21 @@ impl Resolver for DataUrlResolver {
     }
 }
 
+struct PublicBuiltinAliasResolver;
+
+impl Resolver for PublicBuiltinAliasResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        crate::builtin::canonical_public_builtin_alias(name)
+            .map(str::to_string)
+            .ok_or_else(|| Error::new_resolving(base, name))
+    }
+}
+
 struct PrivateBuiltinResolverGuard;
 
 impl PrivateBuiltinResolverGuard {
@@ -11819,6 +11834,7 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             RegisteredLoaderResolver,
         ),
         (
+            PublicBuiltinAliasResolver,
             builtin_resolver,
             NodeBuiltinNamespaceGuard,
             NodeModulesResolver,

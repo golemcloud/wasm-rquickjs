@@ -104,6 +104,10 @@ mod zlib {
 
 use sync_exports::SyncableBuiltinLoaderExt;
 
+pub(crate) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str> {
+    sync_exports::canonical_public_builtin_alias(name)
+}
+
 #[cfg(feature = "sqlite")]
 mod sqlite;
 
