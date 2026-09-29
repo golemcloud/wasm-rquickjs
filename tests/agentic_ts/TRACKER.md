@@ -60,11 +60,11 @@ a much larger host-relative ratio.
 
 ## Consolidated TypeScript module loading — 2026-09-23
 
-The retained final [P2](results/2026-09-23-p2-macos-aarch64.json) and
-[P3](results/2026-09-23-p3-macos-aarch64.json) reports measure clean source
-`dd689c8c` with Node 22.14.0, npm 10.9.2, TypeScript 5.8.2, Rust 1.98.1, and
-disabled optional test caches. Their build and benchmark input hashes match
-across targets, and report validation passes.
+The final P2/P3 pair measured clean source
+`dd689c8c9b12791a79b86c7020266a4b096edfa9` with Node 22.14.0, npm 10.9.2,
+TypeScript 5.8.2, Rust 1.98.1, and disabled optional test caches. The aggregate
+results remain here; the superseded raw pair is not retained beside the current
+production release evidence.
 
 The first controlled step moved CJS `sourceMappingURL` extraction from
 JavaScript to the existing native SWC lexer in TypeScript-feature builds. Its
@@ -100,8 +100,7 @@ Only ambiguous inputs run the ESM-syntax and CommonJS-wrapper lexical scans.
 It preserves the existing cached-TypeScript and `force_module` precedence. A
 second dedicated five-sample comparison reduced the TypeScript API import
 median from 4.22 to 3.47 s on P2 (-17.9%) and from 4.22 to 3.44 s on P3
-(-18.4%). The retained final reports independently record 3.47 s and 3.45 s
-import phases.
+(-18.4%). The final capture recorded 3.47 s and 3.45 s import phases.
 
 The API profiler imports `typescript.js`, not the CLI's `_tsc.js`, so these
 values support module-load attribution rather than a direct cold-CLI

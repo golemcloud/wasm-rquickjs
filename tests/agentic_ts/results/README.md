@@ -201,12 +201,12 @@ remain outside the repository.
 
 ## Consolidated TypeScript module-loading candidate
 
-The [2026-09-23 P2](2026-09-23-p2-macos-aarch64.json) and
-[P3](2026-09-23-p3-macos-aarch64.json) reports are the retained final pair for
-the consolidated candidate at clean source revision `dd689c8c`. They use the
-pinned Node 22.14.0/npm 10.9.2/TypeScript 5.8.2 fixture, five repeated-job
-samples, Rust 1.98.1, and disabled optional test caches. Their build and
-benchmark input hashes agree across P2/P3, and report validation passes.
+The final P2/P3 pair for the consolidated candidate was measured at clean
+source revision `dd689c8c9b12791a79b86c7020266a4b096edfa9` with the pinned
+Node 22.14.0/npm 10.9.2/TypeScript 5.8.2 fixture, five repeated-job samples,
+Rust 1.98.1, and disabled optional test caches. Its aggregate results are
+retained below; the superseded raw pair is not kept alongside the current
+production release evidence.
 
 The first accepted step moved CJS `sourceMappingURL` extraction to the existing
 native SWC lexer for TypeScript-feature builds. Against the controlled parent
@@ -229,8 +229,8 @@ The final known-format step classifies fixed extensions and package policies
 before consulting source syntax, so only ambiguous inputs run the ESM-syntax
 and CommonJS-wrapper lexical scans. Its dedicated five-sample comparison
 reduced the TypeScript API import median from 4.22 to 3.47 s on P2 (-17.9%) and
-from 4.22 to 3.44 s on P3 (-18.4%). The retained final reports independently
-record 3.47 s and 3.45 s import phases. The profiler imports `typescript.js`,
+from 4.22 to 3.44 s on P3 (-18.4%). The final capture recorded 3.47 s and
+3.45 s import phases. The profiler imports `typescript.js`,
 not the CLI's `_tsc.js`, so these values support module-load attribution and
 are not direct cold-CLI timings. Other compiler phases and end-to-end rows vary
 between local runs and are not used to claim the same percentage for full

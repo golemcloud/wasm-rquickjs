@@ -1,46 +1,35 @@
 # ESM module-load phase attribution
 
-This manual experiment attributes the roughly 11-second strip-mode prepared-ESM
-latency reproduced by `tests/typescript_transform_latency`. It runs five serial
-64-KiB samples for P2 and P3. Every sample creates a fresh execution-job QuickJS
-runtime and a unique `.mjs` path; only the compiled component instance is reused
-within a target report.
+The 2026-09-21 manual experiment attributed the roughly 11-second strip-mode
+prepared-ESM latency reproduced by `tests/typescript_transform_latency`. It ran
+five serial 64-KiB samples for P2 and P3. Every sample used a fresh execution-job
+QuickJS runtime and a unique `.mjs` path; only the compiled component instance
+was reused within one target.
 
-The checked-in instrumentation patch is deliberately not applied to production
-source. It records exclusive loader subphases and the surrounding resolver time in
-the existing private execution profile. Same-runtime JavaScript timestamps locate
-evaluation within the import promise. The remaining pre-evaluation interval is
-reported as a residual containing unresolved resolver-chain dispatch, QuickJS
-linking, and promise scheduling; it is not called an exact link timer.
+Private instrumentation at revision
+`7bed8b048cbafc43bc2a300c8d7b48733bf05386` measured exclusive loader
+subphases and the surrounding resolver time. Same-runtime JavaScript timestamps
+located evaluation within the import promise. The residual contains unresolved
+resolver-chain dispatch, QuickJS linking, and promise scheduling; it is not an
+exact link timer. The temporary instrumentation, runner, and raw archival pair
+were removed after review because their meaningful aggregate evidence is
+retained here and production tests cover the accepted scanner change.
 
-Run one target at a time from the repository root:
+| Target | Baseline end-to-end | Baseline pre-evaluation | CJS-global preflight | Prologue injection | QuickJS declaration | Residual |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| P2 | 10,657.94 ms | 10,478.13 ms | 5,235.03 ms | 5,225.32 ms | 0.22 ms | 0.25 ms |
+| P3 | 11,058.54 ms | 10,867.23 ms | 5,433.22 ms | 5,436.13 ms | 0.27 ms | 0.47 ms |
 
-```sh
-tests/esm_module_load_phases/run.sh p2
-tests/esm_module_load_phases/run.sh p3
-```
+The two repository-owned source scans account for essentially the whole
+pre-evaluation interval; filesystem resolution, QuickJS declaration and
+evaluation were not material owners. The accepted change bulk-skips contiguous
+ASCII whitespace in those scanners:
 
-The runner creates a detached temporary worktree at the current committed source,
-verifies and applies the retained patch there, records one report, and removes the
-worktree. Optional artifact and Wasmtime caches remain disabled. Check the
-archived reports' schema, samples, and arithmetic without executing workloads
-with:
+| Target | Candidate end-to-end | Pre-evaluation | CJS-global preflight | Prologue injection | Reduction |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| P2 | 192.28 ms | 14.84 ms | 0.43 ms | 0.57 ms | 98.20% |
+| P3 | 197.36 ms | 15.33 ms | 0.44 ms | 0.57 ms | 98.22% |
 
-```sh
-tests/esm_module_load_phases/run.sh --check
-```
-
-The retained pair is archival attribution data, not reproducible currentness
-evidence. The check deliberately does not resolve `baseRevision`, apply the
-patch, or recompute `patchedFilesHash`; the recorded revision hint and hashes
-document the capture, while production tests validate the accepted scanner
-change.
-
-The 2026-09-21 baseline capture attributed virtually all of the delay to the
-CJS-global preflight scan and module-prologue injection. Each consumed about
-5.2–5.4 seconds for the whitespace-preserving 64-KiB source, while QuickJS
-declaration, filesystem resolution, evaluation, and the unresolved residual were
-sub-millisecond. A narrowed production change now bulk-skips contiguous ASCII
-whitespace in those scanners. The retained archival candidate reports reduce the
-P2/P3 end-to-end medians from 10.66/11.06 seconds to 192/197 milliseconds. See the
-results README for the exact medians and interpretation.
+Every measured candidate sample returned 42 and reconciled its counters and
+timings. The broader TypeScript latency matrix and focused module-loader tests
+provide the retained end-to-end and semantic coverage.
