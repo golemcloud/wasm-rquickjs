@@ -10,6 +10,59 @@ pub mod native_module {
     use rquickjs::{Ctx, Exception, JsLifetime, Value};
     use url::Url;
 
+    fn parse_node_domain(domain: &str) -> Option<url::Host<String>> {
+        let domain: String = domain
+            .chars()
+            .filter(|character| !matches!(character, '\t' | '\n' | '\r'))
+            .take_while(|character| !matches!(character, '/' | '?' | '#' | '\\'))
+            .collect();
+        if domain.is_empty() || domain.contains('@') {
+            return None;
+        }
+        url::Host::parse(&domain).ok()
+    }
+
+    #[rquickjs::function]
+    #[qjs(rename = "domainToASCII")]
+    pub fn domain_to_ascii(domain: String) -> String {
+        parse_node_domain(&domain)
+            .map(|host| host.to_string())
+            .unwrap_or_default()
+    }
+
+    #[rquickjs::function]
+    #[qjs(rename = "domainToUnicode")]
+    pub fn domain_to_unicode(domain: String) -> String {
+        match parse_node_domain(&domain) {
+            Some(url::Host::Domain(domain)) => url::quirks::domain_to_unicode(&domain),
+            Some(host) => host.to_string(),
+            None => String::new(),
+        }
+    }
+
+    #[rquickjs::function]
+    #[qjs(rename = "domainToASCIILegacy")]
+    pub fn domain_to_ascii_legacy(domain: String) -> String {
+        const SENTINEL: &str = ".invalid";
+
+        let (domain, trailing_dot) = match domain.strip_suffix('.') {
+            Some(domain) => (domain, "."),
+            None => (domain.as_str(), ""),
+        };
+        if domain.is_empty() {
+            return trailing_dot.to_string();
+        }
+
+        let input = format!("{domain}{SENTINEL}");
+        match url::Host::parse(&input) {
+            Ok(url::Host::Domain(domain)) => domain
+                .strip_suffix(SENTINEL)
+                .map(|domain| format!("{domain}{trailing_dot}"))
+                .unwrap_or_default(),
+            _ => String::new(),
+        }
+    }
+
     #[derive(JsLifetime, Trace)]
     #[rquickjs::class(rename = "URL")]
     pub struct JsUrl {
@@ -171,7 +224,7 @@ pub mod native_module {
 
         #[qjs(get, enumerable, rename = "origin")]
         pub fn get_origin(&self) -> String {
-            self.url.origin().unicode_serialization()
+            self.url.origin().ascii_serialization()
         }
 
         /// The password property of the URL interface is a string containing the password component of the URL.

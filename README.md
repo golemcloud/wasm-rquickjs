@@ -897,6 +897,7 @@ Partial compatibility API to unblock modules that inspect tracing state.
 
 - `URL`, `URLSearchParams`
 - `parse`, `resolve`, `format` (legacy API)
+- `domainToASCII`, `domainToUnicode`
 - `fileURLToPath`, `pathToFileURL`, `urlToHttpOptions`
 
 </details>

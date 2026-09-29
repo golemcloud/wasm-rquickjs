@@ -10,4 +10,5 @@ world url {
   export test7: func() -> bool;
   export test8: func() -> bool;
   export test9: func() -> bool;
+  export test10: func() -> bool;
 }

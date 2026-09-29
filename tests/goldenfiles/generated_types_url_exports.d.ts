@@ -8,4 +8,5 @@ declare module 'url' {
   export function test7(): Promise<boolean>;
   export function test8(): Promise<boolean>;
   export function test9(): Promise<boolean>;
+  export function test10(): Promise<boolean>;
 }

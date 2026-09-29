@@ -1,4 +1,9 @@
-import { URL } from '__wasm_rquickjs_builtin/url_native';
+import {
+    URL,
+    domainToASCII as domainToASCIINative,
+    domainToASCIILegacy,
+    domainToUnicode as domainToUnicodeNative,
+} from '__wasm_rquickjs_builtin/url_native';
 import * as querystring from 'node:querystring';
 import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 
@@ -913,6 +918,7 @@ export function format(urlObject, options) {
         const auth = opts.auth !== undefined ? opts.auth : true;
         const fragment = opts.fragment !== undefined ? opts.fragment : true;
         const search = opts.search !== undefined ? opts.search : true;
+        const unicode = opts.unicode !== undefined ? opts.unicode : false;
 
         let result = urlObject.protocol;
 
@@ -925,7 +931,14 @@ export function format(urlObject, options) {
                 }
                 result += '@';
             }
-            result += urlObject.host;
+            let host = urlObject.host;
+            if (unicode && urlObject.hostname && !urlObject.hostname.startsWith('[')) {
+                host = domainToUnicodeNative(urlObject.hostname);
+                if (urlObject.port) {
+                    host += ':' + urlObject.port;
+                }
+            }
+            result += host;
         } else if (urlObject.protocol === 'file:') {
             result += '//';
         }
@@ -1319,6 +1332,12 @@ function legacyParse(urlString, parseState) {
         rest = rest.slice(protoMatch[1].length);
     }
 
+    const parseLegacyHost = (hostPart) => {
+        const result = parseHostPort(u, hostPart, urlString);
+        shouldWarnInvalidHost = result.shouldWarnInvalidHost || shouldWarnInvalidHost;
+        rest = result.pathnamePrefix + rest;
+    };
+
     if (rest.startsWith('//')) {
         u.slashes = true;
         rest = rest.slice(2);
@@ -1333,10 +1352,9 @@ function legacyParse(urlString, parseState) {
         const atIdx = authHost.lastIndexOf('@');
         if (atIdx !== -1) {
             u.auth = decodeURIComponent(authHost.slice(0, atIdx));
-            const hostPart = authHost.slice(atIdx + 1);
-            shouldWarnInvalidHost = parseHostPort(u, hostPart, urlString) || shouldWarnInvalidHost;
+            parseLegacyHost(authHost.slice(atIdx + 1));
         } else {
-            shouldWarnInvalidHost = parseHostPort(u, authHost, urlString) || shouldWarnInvalidHost;
+            parseLegacyHost(authHost);
         }
     } else if (u.protocol && !isSlashedProtocol(u.protocol) && !HOSTLESS_PROTOCOLS[u.protocol]) {
         let pathStart = rest.indexOf('/');
@@ -1350,10 +1368,9 @@ function legacyParse(urlString, parseState) {
         const atIdx = authHost.lastIndexOf('@');
         if (atIdx !== -1) {
             u.auth = decodeURIComponent(authHost.slice(0, atIdx));
-            const hostPart = authHost.slice(atIdx + 1);
-            shouldWarnInvalidHost = parseHostPort(u, hostPart, urlString) || shouldWarnInvalidHost;
+            parseLegacyHost(authHost.slice(atIdx + 1));
         } else {
-            shouldWarnInvalidHost = parseHostPort(u, authHost, urlString) || shouldWarnInvalidHost;
+            parseLegacyHost(authHost);
         }
     }
 
@@ -1381,32 +1398,46 @@ function parseHostPort(u, hostStr, input) {
     if (!hostStr) {
         u.host = '';
         u.hostname = '';
-        return false;
+        return { shouldWarnInvalidHost: false, pathnamePrefix: '' };
     }
 
     let isIpv6Host = false;
     let shouldWarnInvalidHost = false;
+    let pathnamePrefix = '';
     if (hostStr.startsWith('[')) {
         const bracketEnd = hostStr.indexOf(']');
-        if (bracketEnd !== -1) {
-            isIpv6Host = true;
-            u.hostname = hostStr.slice(1, bracketEnd);
-            const remaining = hostStr.slice(bracketEnd + 1);
-            if (remaining.startsWith(':')) {
-                u.port = remaining.slice(1) || null;
-            }
-        } else {
-            u.hostname = hostStr;
+        if (bracketEnd === -1) {
+            throw makeInvalidUrlError(input);
+        }
+
+        isIpv6Host = true;
+        u.hostname = hostStr.slice(1, bracketEnd).toLowerCase();
+        const remaining = hostStr.slice(bracketEnd + 1);
+        if (remaining === ':') {
+            u.port = null;
+        } else if (/^:\d+$/.test(remaining)) {
+            u.port = remaining.slice(1);
+        } else if (remaining !== '') {
+            throw makeInvalidUrlError(input);
         }
     } else {
-        const colonIdx = hostStr.lastIndexOf(':');
-        if (colonIdx !== -1) {
-            const maybPort = hostStr.slice(colonIdx + 1);
+        const firstColonIdx = hostStr.indexOf(':');
+        const lastColonIdx = hostStr.lastIndexOf(':');
+        if (firstColonIdx !== -1) {
+            const maybPort = hostStr.slice(lastColonIdx + 1);
             if (/^\d+$/.test(maybPort)) {
-                u.hostname = hostStr.slice(0, colonIdx);
+                u.hostname = hostStr.slice(0, firstColonIdx);
                 u.port = maybPort;
+                const invalidPortPrefix = hostStr.slice(firstColonIdx, lastColonIdx);
+                if (invalidPortPrefix) {
+                    pathnamePrefix = '/' + invalidPortPrefix;
+                    shouldWarnInvalidHost = true;
+                }
+            } else if (maybPort === '' && firstColonIdx === lastColonIdx) {
+                u.hostname = hostStr.slice(0, firstColonIdx);
             } else {
-                u.hostname = hostStr;
+                u.hostname = hostStr.slice(0, firstColonIdx);
+                pathnamePrefix = '/' + hostStr.slice(firstColonIdx);
                 shouldWarnInvalidHost = true;
             }
         } else {
@@ -1416,12 +1447,20 @@ function parseHostPort(u, hostStr, input) {
 
     validateHostName(u.hostname, isIpv6Host, input);
 
-    u.host = u.hostname;
+    if (!isIpv6Host && u.hostname) {
+        const asciiHostname = domainToASCIILegacy(u.hostname.toWellFormed());
+        if (!asciiHostname) {
+            throw makeInvalidUrlError(input);
+        }
+        u.hostname = asciiHostname;
+    }
+
+    u.host = isIpv6Host ? `[${u.hostname}]` : u.hostname;
     if (u.port) {
         u.host += ':' + u.port;
     }
 
-    return shouldWarnInvalidHost;
+    return { shouldWarnInvalidHost, pathnamePrefix };
 }
 
 export function parse(urlString, parseQueryString, slashesDenoteHost) {
@@ -1459,11 +1498,13 @@ export function parse(urlString, parseQueryString, slashesDenoteHost) {
             rest = rest.slice(2);
             const pathStart = rest.indexOf('/');
             if (pathStart === -1) {
-                shouldWarnInvalidHost = parseHostPort(u, rest, urlString) || shouldWarnInvalidHost;
-                rest = '';
+                const result = parseHostPort(u, rest, urlString);
+                shouldWarnInvalidHost = result.shouldWarnInvalidHost || shouldWarnInvalidHost;
+                rest = result.pathnamePrefix;
             } else {
-                shouldWarnInvalidHost = parseHostPort(u, rest.slice(0, pathStart), urlString) || shouldWarnInvalidHost;
-                rest = rest.slice(pathStart);
+                const result = parseHostPort(u, rest.slice(0, pathStart), urlString);
+                shouldWarnInvalidHost = result.shouldWarnInvalidHost || shouldWarnInvalidHost;
+                rest = result.pathnamePrefix + rest.slice(pathStart);
             }
         }
 
@@ -1503,11 +1544,17 @@ export function resolveObject(source, relative) {
 }
 
 export function domainToASCII(domain) {
-    return domain;
+    if (arguments.length < 1) {
+        throw new ERR_MISSING_ARGS('domain');
+    }
+    return domainToASCIINative(`${domain}`.toWellFormed());
 }
 
 export function domainToUnicode(domain) {
-    return domain;
+    if (arguments.length < 1) {
+        throw new ERR_MISSING_ARGS('domain');
+    }
+    return domainToUnicodeNative(`${domain}`.toWellFormed());
 }
 
 export default {

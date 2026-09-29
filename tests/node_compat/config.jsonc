@@ -267,6 +267,8 @@
     },
     "parallel/test-url-urltooptions.js": {},
     "parallel/test-url-format-whatwg.js": {
+      "category": "known-gap",
+      "reason": "all assertions are gated by common.hasIntl; URL-only IDNA formatting is covered by focused runtime tests while the broader Intl API remains unavailable",
       "split": true,
       "subtests": {
         "test_00_should_format": {},
@@ -277,16 +279,26 @@
       }
     },
     "parallel/test-url-format-invalid-input.js": {},
-    "parallel/test-url-domain-ascii-unicode.js": {},
-    "parallel/test-url-format.js": {},
+    "parallel/test-url-domain-ascii-unicode.js": {
+      "category": "known-gap",
+      "reason": "the entire vendored test is gated by common.hasIntl; the same public IDNA matrix is covered by focused runtime tests"
+    },
+    "parallel/test-url-format.js": {
+      "category": "known-gap",
+      "reason": "the vendored test is entirely gated by common.hasIntl; supported legacy URL formatting is covered by focused runtime tests"
+    },
     "parallel/test-url-parse-format.js": {
+      "category": "known-gap",
+      "reason": "both vendored subtests are gated by common.hasIntl; supported legacy URL parsing is covered by focused runtime tests",
       "split": true,
       "subtests": {
         "test_00_should_parse_and_format": {},
         "test_01_parse_result_should_equal_new_url_url": {}
       }
     },
-    "parallel/test-url-parse-invalid-input.js": {},
+    "parallel/test-url-parse-invalid-input.js": {
+      "reason": "the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests"
+    },
     "parallel/test-url-parse-query.js": {},
     "parallel/test-url-relative.js": {},
 

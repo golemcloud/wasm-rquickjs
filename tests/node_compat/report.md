@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3180/4388 (72.5%)
+**Primary compatibility (CI-enforced):** 3171/4388 (72.3%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3180 | 72.5% | 55.3% | 46.3% |
-| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3171 | 72.3% | 55.1% | 46.1% |
+| 🧩 known gap | 1217 | 27.7% | 21.2% | 17.7% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3180/5750 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3171/5750 (55.1%)**.
 
 ## Inventory by Module
 
@@ -80,7 +80,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | tls | 207 | 4 | 7 | 185 | 0 | 0 | 11 | 36.4% | 2.0% |
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
-| url | 29 | 28 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
+| url | 29 | 19 | 9 | 0 | 0 | 0 | 1 | 67.9% | 67.9% |
 | util | 174 | 87 | 10 | 0 | 0 | 0 | 77 | 89.7% | 89.7% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
@@ -576,8 +576,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-tls-socket-allow-half-open-option.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-tls-translate-peer-certificate.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-url-fileurltopath.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
-| `test-url-format-whatwg.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-url-parse-format.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-url-format-whatwg.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
+| `test-url-parse-format.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-url-pathtofileurl.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-callbackify.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-deprecate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1208)
+### known gap (1217)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -721,6 +721,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: performance.timerify function entries are not implemented | 6 | `parallel/test-performance-function.js#block_00_block_00`, `parallel/test-performance-function.js#block_01_block_01`, `parallel/test-performance-function.js#block_02_block_02`, ... (+3) |
 | the test's meaningful body requires rooted symlink targets; common.canCreateSymLink skips it under the supported relative-only WASI boundary | 6 | `parallel/test-fs-options-immutable.js#block_00_block_00`, `parallel/test-fs-options-immutable.js#block_01_block_01`, `parallel/test-fs-options-immutable.js#block_02_block_02`, ... (+3) |
 | IPv6 sockets are not available in this runtime (common.hasIPv6=false) | 5 | `parallel/test-dgram-ipv6only.js`, `parallel/test-dgram-udp6-link-local-address.js`, `parallel/test-dgram-udp6-send-default-host.js`, ... (+2) |
+| all assertions are gated by common.hasIntl; URL-only IDNA formatting is covered by focused runtime tests while the broader Intl API remains unavailable | 5 | `parallel/test-url-format-whatwg.js#test_00_should_format`, `parallel/test-url-format-whatwg.js#test_01_handle_invalid_arguments`, `parallel/test-url-format-whatwg.js#test_02_any_falsy_value_other_than_undefined_will_be_treated_as_fals`, ... (+2) |
 | inherited: buffer.transcode and ICU transcoding are not implemented | 5 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+2) |
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
 | node:readline createInterface/async iterator API is not implemented | 5 | `parallel/test-readline-async-iterators-backpressure.js`, `parallel/test-readline-async-iterators-destroy.js`, `parallel/test-readline-async-iterators.js`, ... (+2) |
@@ -777,6 +778,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | WASM child emulation does not support Node.js --test CLI reporter execution | 2 | `parallel/test-runner-error-reporter.js#test_00_all_tests_failures_reported_without_fail_fast_flag`, `parallel/test-runner-error-reporter.js#test_01_fail_fast_stops_test_execution_after_first_failure` |
 | async_hooks createHook callback validation is incomplete | 2 | `parallel/test-async-hooks-constructor.js`, `parallel/test-async-wrap-constructor.js` |
 | async_hooks executionAsyncResource propagation is incomplete under node:http server/client callbacks | 2 | `parallel/test-async-hooks-execution-async-resource-await.js`, `parallel/test-async-hooks-execution-async-resource.js` |
+| both vendored subtests are gated by common.hasIntl; supported legacy URL parsing is covered by focused runtime tests | 2 | `parallel/test-url-parse-format.js#test_00_should_parse_and_format`, `parallel/test-url-parse-format.js#test_01_parse_result_should_equal_new_url_url` |
 | child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs | 2 | `parallel/test-cli-syntax-piped-bad.js`, `parallel/test-cli-syntax-piped-good.js` |
 | child_process execPath emulation does not implement --trace-require-module warning output | 2 | `es-module/test-require-module-warning.js`, `es-module/test-require-node-modules-warning.js` |
 | child_process.spawn emulation does not support --interactive REPL sessions | 2 | `parallel/test-repl-array-prototype-tempering.js`, `sequential/test-repl-timeout-throw.js` |
@@ -1283,7 +1285,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream/web compression constructor error codes are not Node-compatible yet | 1 | `parallel/test-whatwg-webstreams-compression.js` |
 | subtle.digest unsupported-algorithm error semantics do not match Node | 1 | `parallel/test-webcrypto-digest.js` |
 | the client never observes a reused keep-alive socket, so the corked-response reuse loop does not terminate | 1 | `parallel/test-http-outgoing-end-cork.js` |
+| the entire vendored test is gated by common.hasIntl; the same public IDNA matrix is covered by focused runtime tests | 1 | `parallel/test-url-domain-ascii-unicode.js` |
 | the rooted symlink target used by this subtest cannot be resolved inside a WASI preopen | 1 | `parallel/test-fs-promises.js#block_01_block_01` |
+| the vendored test is entirely gated by common.hasIntl; supported legacy URL formatting is covered by focused runtime tests | 1 | `parallel/test-url-format.js` |
 | the vendored test requires rooted symlink targets; relative realpath and symlink chains are covered by runtime tests | 1 | `parallel/test-fs-realpath.js` |
 | timeout option does not reliably emit request timeout before close | 1 | `parallel/test-http-client-timeout-option.js` |
 | timers/promises scheduler constructor and error-code semantics are not fully Node-compatible | 1 | `parallel/test-timers-promises-scheduler.js` |
