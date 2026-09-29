@@ -2687,6 +2687,9 @@ function compileModuleInto(mod, source, filename, requireOverride, options = und
     const requireDirname = pathModule.dirname(requireParentFilename);
     const childRequire = requireOverride || makeRequire(requireDirname, mod, requireParentFilename);
     const compiledFn = compileCjs(filename, source, isPreparedTypeScript, mod, sourceMap);
+    if (options && typeof options.onCompiled === 'function') {
+        options.onCompiled();
+    }
     return callCompiledCjsFunction(mod, compiledFn, executionSource, filename, dirname, childRequire);
 }
 
@@ -3075,9 +3078,49 @@ function unmarkRequireEsmForcedModule(resolvedFilename) {
     delete registry[nodeUrl.pathToFileURL(resolvedFilename).href];
 }
 
-function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule) {
+function markRequireEsmSourceOverride(resolvedFilename, source) {
+    let registry = globalThis.__wasm_rquickjs_require_esm_source_override;
+    if (!registry || typeof registry !== 'object') {
+        registry = Object.create(null);
+        Object.defineProperty(globalThis, '__wasm_rquickjs_require_esm_source_override', {
+            value: registry,
+            writable: true,
+            configurable: true,
+            enumerable: false,
+        });
+    }
+    const keys = [resolvedFilename, nodeUrl.pathToFileURL(resolvedFilename).href];
+    const previous = [];
+    for (const key of keys) {
+        previous.push({
+            key,
+            present: Object.hasOwn(registry, key),
+            value: registry[key],
+        });
+        registry[key] = source;
+    }
+    return previous;
+}
+
+function unmarkRequireEsmSourceOverride(previous) {
+    if (!previous) return;
+    const registry = globalThis.__wasm_rquickjs_require_esm_source_override;
+    if (!registry || typeof registry !== 'object') return;
+    for (const entry of previous) {
+        if (entry.present) {
+            registry[entry.key] = entry.value;
+        } else {
+            delete registry[entry.key];
+        }
+    }
+}
+
+function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOverride) {
     throwIfRequireEsmGraphCycle(resolvedFilename);
     const markedGraph = markRequireEsmGraph(resolvedFilename);
+    const previousSourceOverride = sourceOverride === undefined
+        ? undefined
+        : markRequireEsmSourceOverride(resolvedFilename, sourceOverride);
     Object.defineProperty(mod, '__wasmRequireEsmInProgress', {
         value: true,
         writable: true,
@@ -3093,6 +3136,7 @@ function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule) {
         return wrapEsmNamespace(namespace);
     } finally {
         if (forceModule) unmarkRequireEsmForcedModule(resolvedFilename);
+        unmarkRequireEsmSourceOverride(previousSourceOverride);
         unmarkRequireEsmGraph(markedGraph);
         delete mod.__wasmRequireEsmInProgress;
     }
@@ -3336,6 +3380,8 @@ function loadCommonJsTransaction(descriptor) {
                 mainModule,
                 preparedTypeScriptGraph,
             );
+            const shouldFallbackToEsm = canFallbackToEsm &&
+                !filename.endsWith('.cjs') && !filename.endsWith('.cts') && !isCommonJsPackage;
             const compileContext = {
                 filename,
                 hookSource: source,
@@ -3347,10 +3393,10 @@ function loadCommonJsTransaction(descriptor) {
                 childRequire,
                 originalCompileCalls: 0,
                 compileInputUnchanged: false,
+                shouldFallbackToEsm,
+                esmFallbackCompleted: false,
+                lastCompileSource: source,
             };
-            let cjsSyntaxError = null;
-            const shouldFallbackToEsm = canFallbackToEsm &&
-                !filename.endsWith('.cjs') && !filename.endsWith('.cts') && !isCommonJsPackage;
             const compileFormat = isTypeScriptFilename(filename)
                 ? (filename.endsWith('.cts') || explicitPackageType === 'commonjs'
                     ? 'commonjs-typescript'
@@ -3359,57 +3405,18 @@ function loadCommonJsTransaction(descriptor) {
                     ? 'commonjs'
                     : undefined;
             compileContext.compileFormat = compileFormat;
-            let cjsWrapperLexicalRedeclaration = false;
-            let cjsSourceLooksEsm = false;
             moduleCompileContexts.set(mod, compileContext);
             try {
                 mod._compile(source, filename, compileFormat);
             } catch (err) {
-                const defaultCompileAttempted = compileContext.originalCompileCalls > 0 &&
-                    compileContext.compileInputUnchanged;
-                // Normalize QuickJS SyntaxError messages for ESM keywords in CJS context
-                if (err && err.name === 'SyntaxError') {
-                    normalizeEsmSyntaxError(err);
-                } else if (err && typeof err.message === 'string' && err.message === 'return not in a function') {
-                    markAsSyntaxError(err);
-                }
-                // For .js files (not .cjs), detect ESM syntax and fall back to ESM loading
-                if (shouldFallbackToEsm && defaultCompileAttempted && err && err.name === 'SyntaxError') {
-                    const analysis = rustModuleSourceAnalysis(source);
-                    cjsSourceLooksEsm = analysis.looksLikeEsm;
-                    cjsWrapperLexicalRedeclaration = analysis.hasCjsWrapperLexicalRedeclaration;
-                }
-                if (shouldFallbackToEsm && err && err.name === 'SyntaxError' && (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration)) {
-                    cjsSyntaxError = err;
-                } else {
-                    retainSourceMapForThrownError(err, filename);
-                    discardCjsModuleLoad(cacheKey, parentModule, mod);
-                    maybeSetArrowMessageOnSyntaxError(err, filename, source);
-                    throw err;
-                }
+                retainSourceMapForThrownError(err, filename);
+                discardCjsModuleLoad(cacheKey, parentModule, mod);
+                maybeSetArrowMessageOnSyntaxError(err, filename, compileContext.lastCompileSource);
+                throw err;
             } finally {
                 moduleCompileContexts.delete(mod);
             }
-            if (cjsSyntaxError || cjsWrapperLexicalRedeclaration) {
-                if (rustHasExecArgvFlag('--no-experimental-require-module') && cjsSyntaxError) {
-                    discardCjsModuleLoad(cacheKey, parentModule, mod);
-                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
-                    throw cjsSyntaxError;
-                }
-                // SyntaxError in a .js file — try loading as ESM (entry point detection)
-                try {
-                    mod.exports = requireEsmWithCacheGuard(mod, filename, true);
-                } catch (esmErr) {
-                    discardCjsModuleLoad(cacheKey, parentModule, mod);
-                    if (cjsSourceLooksEsm || cjsWrapperLexicalRedeclaration) {
-                        normalizeEsmSyntaxError(esmErr);
-                        throw esmErr;
-                    }
-                    // ESM loading also failed — throw the original CJS SyntaxError
-                    maybeSetArrowMessageOnSyntaxError(cjsSyntaxError, filename, source);
-                    throw cjsSyntaxError;
-                }
-            } else {
+            if (!compileContext.esmFallbackCompleted) {
                 const usedDefaultCompile = compileContext.originalCompileCalls > 0 &&
                     compileContext.compileInputUnchanged;
                 if (usedDefaultCompile && typeScriptExportNames !== undefined) {
@@ -5086,36 +5093,69 @@ Module.prototype._compile = function _compile(content, filename, format) {
         } else {
             context.compileInputUnchanged = context.compileInputUnchanged && sameCompileInput;
         }
-        let compiledSource = source;
-        let compileOptions;
-        if (sameCompileInput && context.compiledSource !== undefined) {
-            compiledSource = context.compiledSource;
-            compileOptions = {
-                isPreparedTypeScript: true,
-                sourceMap: context.sourceMap,
-                executionSource: context.executionSource,
+        context.lastCompileSource = source;
+        let compileCompleted = false;
+        try {
+            let compiledSource = source;
+            let compileOptions;
+            if (sameCompileInput && context.compiledSource !== undefined) {
+                compiledSource = context.compiledSource;
+                compileOptions = {
+                    isPreparedTypeScript: true,
+                    sourceMap: context.sourceMap,
+                    executionSource: context.executionSource,
+                };
+            } else if (format === 'commonjs-typescript' || format === 'typescript') {
+                const output = transformTypeScriptModuleOutput(effectiveFilename, source, false);
+                compiledSource = output.code;
+                compileOptions = {
+                    isPreparedTypeScript: true,
+                    sourceMap: output.sourceMap,
+                    executionSource: source,
+                };
+                if (sameCompileInput) {
+                    context.compiledSource = compiledSource;
+                    context.sourceMap = output.sourceMap;
+                    context.preparedSourceForCache = codeWithInlineSourceMap(output);
+                }
+            }
+            compileOptions = compileOptions || {};
+            compileOptions.onCompiled = () => {
+                compileCompleted = true;
             };
-        } else if (format === 'commonjs-typescript' || format === 'typescript') {
-            const output = transformTypeScriptModuleOutput(effectiveFilename, source, false);
-            compiledSource = output.code;
-            compileOptions = {
-                isPreparedTypeScript: true,
-                sourceMap: output.sourceMap,
-                executionSource: source,
-            };
-            if (sameCompileInput) {
-                context.compiledSource = compiledSource;
-                context.sourceMap = output.sourceMap;
-                context.preparedSourceForCache = codeWithInlineSourceMap(output);
+            return compileModuleInto(
+                this,
+                compiledSource,
+                effectiveFilename,
+                context.childRequire,
+                compileOptions,
+            );
+        } catch (err) {
+            if (compileCompleted) throw err;
+            if (err && err.name === 'SyntaxError') {
+                normalizeEsmSyntaxError(err);
+            } else if (err && typeof err.message === 'string' && err.message === 'return not in a function') {
+                markAsSyntaxError(err);
+            }
+            if (!context.shouldFallbackToEsm || !err || err.name !== 'SyntaxError') {
+                throw err;
+            }
+            const analysis = rustModuleSourceAnalysis(source);
+            if (!analysis.looksLikeEsm && !analysis.hasCjsWrapperLexicalRedeclaration) {
+                throw err;
+            }
+            if (rustHasExecArgvFlag('--no-experimental-require-module')) {
+                throw err;
+            }
+            try {
+                this.exports = requireEsmWithCacheGuard(this, effectiveFilename, true, source);
+                context.esmFallbackCompleted = true;
+                return;
+            } catch (esmErr) {
+                normalizeEsmSyntaxError(esmErr);
+                throw esmErr;
             }
         }
-        return compileModuleInto(
-            this,
-            compiledSource,
-            effectiveFilename,
-            context.childRequire,
-            compileOptions,
-        );
     }
     return compileModuleInto(this, content, effectiveFilename);
 };

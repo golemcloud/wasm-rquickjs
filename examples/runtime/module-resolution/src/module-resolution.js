@@ -9782,6 +9782,9 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         fs.mkdirSync(hooksRoot, { recursive: true });
         fs.writeFileSync(`${hooksRoot}/child.cjs`, 'module.exports = { value: "original" };');
         fs.writeFileSync(`${hooksRoot}/implicit.js`, 'module.exports = { format: "implicit" };');
+        fs.writeFileSync(`${hooksRoot}/pass-through-esm.js`, 'export const value = 7;');
+        fs.writeFileSync(`${hooksRoot}/rewritten-esm.js`, 'module.exports = { value: "commonjs" };');
+        fs.writeFileSync(`${hooksRoot}/runtime-syntax.js`, 'JSON.parse("{");');
         fs.mkdirSync(`${hooksRoot}/explicit-commonjs`, { recursive: true });
         fs.writeFileSync(
             `${hooksRoot}/explicit-commonjs/package.json`,
@@ -9835,6 +9838,7 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         const requireHookCalls = [];
         const loadHookCalls = [];
         const compileHookCalls = [];
+        const compileHookThrows = [];
         let retryCompileCalls = 0;
         try {
             Module.prototype.require = function(request) {
@@ -9882,7 +9886,15 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 if (filename === `${hooksRoot}/child.cjs`) {
                     content = String(content).replace('"original"', '"instrumented"');
                 }
-                return originalCompile.call(this, content, filename, format);
+                if (filename === `${hooksRoot}/rewritten-esm.js`) {
+                    content = 'export default 9;';
+                }
+                try {
+                    return originalCompile.call(this, content, filename, format);
+                } catch (error) {
+                    compileHookThrows.push({ filename, name: error && error.name });
+                    throw error;
+                }
             };
             require.extensions['.hook'] = function(mod, filename) {
                 mod._compile(fs.readFileSync(filename, 'utf8'), filename);
@@ -9909,6 +9921,18 @@ export const testCjsNodeModuleLoadingCompat = async () => {
             assert.strictEqual(retryCompileCalls, 2);
             assert.deepStrictEqual(hooked.cycle, { phase: 'a-done', seen: 'a-start' });
             assert.deepStrictEqual(hooked.custom, { custom: true });
+            assert.strictEqual(require(`${hooksRoot}/pass-through-esm.js`).value, 7);
+            const rewrittenEsm = require(`${hooksRoot}/rewritten-esm.js`);
+            assert.strictEqual(rewrittenEsm.__esModule, true);
+            assert.strictEqual(rewrittenEsm.default, 9);
+            assert.throws(
+                () => require(`${hooksRoot}/runtime-syntax.js`),
+                SyntaxError,
+            );
+            assert.deepStrictEqual(compileHookThrows, [
+                { filename: `${hooksRoot}/non-callable.cjs`, name: 'TypeError' },
+                { filename: `${hooksRoot}/runtime-syntax.js`, name: 'SyntaxError' },
+            ]);
             assert.strictEqual(
                 hooked.module.children.filter((child) => child.filename === `${hooksRoot}/retry.cjs`).length,
                 1,
