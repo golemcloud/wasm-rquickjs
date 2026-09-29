@@ -27,6 +27,10 @@
 
 use std::fmt::Write;
 
+#[path = "builtin/sync_exports.rs"]
+mod sync_exports;
+use sync_exports::SyncableBuiltinLoaderExt;
+
 #[path = "builtin/abort_controller.rs"]
 mod abort_controller;
 #[path = "builtin/abort_signal.rs"]
@@ -365,7 +369,7 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/websocket_native")
         .with_module("__wasm_rquickjs_builtin/websocket");
 
-    internal::add_to_resolver(resolver)
+    internal::add_to_resolver(sync_exports::add_implementation_resolvers(resolver))
 }
 
 /// Returns loaders for builtin native modules, builtin JavaScript modules and
@@ -477,96 +481,104 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/webstreams_wrapper",
             webstreams::WEBSTREAMS_WRAPPER_JS,
         )
-        .with_module("node:stream/web", webstreams::REEXPORT_JS)
-        .with_module("stream/web", webstreams::REEXPORT_JS)
+        .with_syncable_module_exports(
+            "node:stream/web",
+            webstreams::REEXPORT_JS,
+            webstreams::WEBSTREAMS_WRAPPER_JS,
+        )
+        .with_module("stream/web", webstreams::BARE_REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
         .with_module("formdata-node", formdata_node::FORMDATA_NODE_JS)
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
         .with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
-        .with_module("node:util", util::UTIL_JS)
-        .with_module("node:util/types", util::UTIL_TYPES_JS)
+        .with_syncable_module("node:util", util::UTIL_JS)
+        .with_syncable_module("node:util/types", util::UTIL_TYPES_JS)
         .with_module("util", util::BARE_UTIL_REEXPORT_JS)
-        .with_module("util/types", util::UTIL_TYPES_JS)
+        .with_module("util/types", util::BARE_UTIL_TYPES_REEXPORT_JS)
         .with_module("base64-js", base64::BASE64_JS)
         .with_module("ieee754", ieee754::IEEE754_JS)
-        .with_module("node:buffer", buffer::BUFFER_JS)
+        .with_syncable_module("node:buffer", buffer::BUFFER_JS)
         .with_module("buffer", buffer::REEXPORT_JS)
-        .with_module("node:fs", fs::FS_JS)
+        .with_syncable_module("node:fs", fs::FS_JS)
         .with_module("fs", fs::REEXPORT_JS)
-        .with_module("node:fs/promises", fs::FS_PROMISES_JS)
+        .with_syncable_module("node:fs/promises", fs::FS_PROMISES_JS)
         .with_module("fs/promises", fs::REEXPORT_PROMISES_JS)
         .with_module("internal/fs/promises", fs::REEXPORT_PROMISES_JS)
-        .with_module("node:os", os::OS_JS)
+        .with_syncable_module("node:os", os::OS_JS)
         .with_module("os", os::REEXPORT_JS)
-        .with_module("node:assert", assert::ASSERT_JS)
+        .with_syncable_module("node:assert", assert::ASSERT_JS)
         .with_module("assert", assert::REEXPORT_JS)
-        .with_module("node:assert/strict", assert::ASSERT_STRICT_JS)
+        .with_syncable_module("node:assert/strict", assert::ASSERT_STRICT_JS)
         .with_module("assert/strict", assert::REEXPORT_STRICT_JS)
-        .with_module("node:querystring", querystring::QUERYSTRING_JS)
+        .with_syncable_module("node:querystring", querystring::QUERYSTRING_JS)
         .with_module("querystring", querystring::REEXPORT_JS)
-        .with_module("node:child_process", child_process::CHILD_PROCESS_JS)
+        .with_syncable_module("node:child_process", child_process::CHILD_PROCESS_JS)
         .with_module("child_process", child_process::REEXPORT_JS)
-        .with_module("node:test", node_test::TEST_JS)
-        .with_module("node:module", module::MODULE_JS)
+        .with_syncable_module("node:test", node_test::TEST_JS)
+        .with_syncable_module("node:module", module::MODULE_JS)
         .with_module("module", module::REEXPORT_JS)
-        .with_module("node:process", process::PROCESS_JS)
+        .with_syncable_module("node:process", process::PROCESS_JS)
         .with_module("process", process::REEXPORT_JS)
-        .with_module("node:path", path::PATH_JS)
+        .with_syncable_module("node:path", path::PATH_JS)
         .with_module("path", path::REEXPORT_JS)
-        .with_module("node:path/posix", path::PATH_POSIX_REEXPORT_JS)
-        .with_module("path/posix", path::PATH_POSIX_REEXPORT_JS)
-        .with_module("node:path/win32", path::PATH_WIN32_REEXPORT_JS)
-        .with_module("path/win32", path::PATH_WIN32_REEXPORT_JS)
-        .with_module("node:punycode", punycode::PUNYCODE_JS)
+        .with_syncable_module("node:path/posix", path::PATH_POSIX_REEXPORT_JS)
+        .with_module("path/posix", path::PATH_POSIX_BARE_REEXPORT_JS)
+        .with_syncable_module("node:path/win32", path::PATH_WIN32_REEXPORT_JS)
+        .with_module("path/win32", path::PATH_WIN32_BARE_REEXPORT_JS)
+        .with_syncable_module("node:punycode", punycode::PUNYCODE_JS)
         .with_module("punycode", punycode::REEXPORT_JS)
         .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
-        .with_module("node:url", url::URL_JS)
+        .with_syncable_module("node:url", url::URL_JS)
         .with_module("url", url::REEXPORT_JS)
-        .with_module("node:events", events::EVENTS_JS)
+        .with_syncable_module("node:events", events::EVENTS_JS)
         .with_module("events", events::REEXPORT_JS)
-        .with_module("node:stream", stream::STREAM_JS)
+        .with_syncable_module("node:stream", stream::STREAM_JS)
         .with_module("stream", stream::REEXPORT_JS)
-        .with_module("node:stream/promises", stream::STREAM_PROMISES_JS)
+        .with_syncable_module("node:stream/promises", stream::STREAM_PROMISES_JS)
         .with_module("stream/promises", stream::REEXPORT_PROMISES_JS)
-        .with_module("node:stream/consumers", stream::STREAM_CONSUMERS_JS)
+        .with_syncable_module("node:stream/consumers", stream::STREAM_CONSUMERS_JS)
         .with_module("stream/consumers", stream::REEXPORT_CONSUMERS_JS)
-        .with_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
+        .with_syncable_module("node:string_decoder", string_decoder::STRING_DECODER_JS)
         .with_module("string_decoder", string_decoder::REEXPORT_JS)
-        .with_module("node:timers", timers::TIMERS_JS)
+        .with_syncable_module("node:timers", timers::TIMERS_JS)
         .with_module("timers", timers::REEXPORT_JS)
-        .with_module("node:timers/promises", timers::TIMERS_PROMISES_JS)
+        .with_syncable_module("node:timers/promises", timers::TIMERS_PROMISES_JS)
         .with_module("timers/promises", timers::REEXPORT_PROMISES_JS)
         .with_module(
             "__wasm_rquickjs_builtin/web_crypto",
             web_crypto::WEB_CRYPTO_JS,
         )
-        .with_module("node:crypto", web_crypto::REEXPORT_JS)
-        .with_module("crypto", web_crypto::REEXPORT_JS)
+        .with_syncable_module_exports(
+            "node:crypto",
+            web_crypto::REEXPORT_JS,
+            web_crypto::NODE_CRYPTO_EXPORTS_JS,
+        )
+        .with_module("crypto", web_crypto::BARE_REEXPORT_JS)
         .with_module("__wasm_rquickjs_builtin/vm", vm::VM_JS)
-        .with_module("node:vm", vm::REEXPORT_JS)
-        .with_module("vm", vm::REEXPORT_JS)
+        .with_syncable_module_exports("node:vm", vm::REEXPORT_JS, vm::VM_JS)
+        .with_module("vm", vm::BARE_REEXPORT_JS)
         .with_module(
             "__wasm_rquickjs_builtin/structured_clone",
             structured_clone::STRUCTURED_CLONE_JS,
         )
-        .with_module("node:async_hooks", async_hooks::ASYNC_HOOKS_JS)
+        .with_syncable_module("node:async_hooks", async_hooks::ASYNC_HOOKS_JS)
         .with_module("async_hooks", async_hooks::REEXPORT_JS)
-        .with_module("node:cluster", cluster::CLUSTER_JS)
+        .with_syncable_module("node:cluster", cluster::CLUSTER_JS)
         .with_module("cluster", cluster::REEXPORT_JS)
-        .with_module("node:constants", constants::CONSTANTS_JS)
+        .with_syncable_module("node:constants", constants::CONSTANTS_JS)
         .with_module("constants", constants::REEXPORT_JS)
-        .with_module("node:dgram", dgram::DGRAM_JS)
+        .with_syncable_module("node:dgram", dgram::DGRAM_JS)
         .with_module("dgram", dgram::REEXPORT_JS)
-        .with_module(
+        .with_syncable_module(
             "node:diagnostics_channel",
             diagnostics_channel::DIAGNOSTICS_CHANNEL_JS,
         )
         .with_module("diagnostics_channel", diagnostics_channel::REEXPORT_JS)
-        .with_module("node:dns", dns::DNS_JS)
+        .with_syncable_module("node:dns", dns::DNS_JS)
         .with_module("dns", dns::REEXPORT_JS)
-        .with_module("node:dns/promises", dns::DNS_PROMISES_JS)
+        .with_syncable_module("node:dns/promises", dns::DNS_PROMISES_JS)
         .with_module("dns/promises", dns::REEXPORT_PROMISES_JS)
-        .with_module("node:domain", domain::DOMAIN_JS)
+        .with_syncable_module("node:domain", domain::DOMAIN_JS)
         .with_module("domain", domain::REEXPORT_JS)
         .with_module(
             "__wasm_rquickjs_builtin/node_http_incoming",
@@ -576,43 +588,43 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/node_http_server",
             node_http::NODE_HTTP_SERVER_JS,
         )
-        .with_module("node:_http_common", node_http::HTTP_COMMON_JS)
-        .with_module("_http_common", node_http::HTTP_COMMON_JS)
-        .with_module("node:_http_agent", node_http::HTTP_AGENT_JS)
-        .with_module("_http_agent", node_http::HTTP_AGENT_JS)
-        .with_module("node:http", node_http::NODE_HTTP_JS)
+        .with_syncable_module("node:_http_common", node_http::HTTP_COMMON_JS)
+        .with_module("_http_common", node_http::HTTP_COMMON_REEXPORT_JS)
+        .with_syncable_module("node:_http_agent", node_http::HTTP_AGENT_JS)
+        .with_module("_http_agent", node_http::HTTP_AGENT_REEXPORT_JS)
+        .with_syncable_module("node:http", node_http::NODE_HTTP_JS)
         .with_module("http", node_http::REEXPORT_JS)
-        .with_module("node:http2", http2::HTTP2_JS)
+        .with_syncable_module("node:http2", http2::HTTP2_JS)
         .with_module("http2", http2::REEXPORT_JS)
-        .with_module("node:https", https::HTTPS_JS)
+        .with_syncable_module("node:https", https::HTTPS_JS)
         .with_module("https", https::REEXPORT_JS)
-        .with_module("node:inspector", inspector::INSPECTOR_JS)
+        .with_syncable_module("node:inspector", inspector::INSPECTOR_JS)
         .with_module("inspector", inspector::REEXPORT_JS)
-        .with_module("node:net", net::NET_JS)
+        .with_syncable_module("node:net", net::NET_JS)
         .with_module("net", net::REEXPORT_JS)
-        .with_module("node:perf_hooks", perf_hooks::PERF_HOOKS_JS)
+        .with_syncable_module("node:perf_hooks", perf_hooks::PERF_HOOKS_JS)
         .with_module("perf_hooks", perf_hooks::REEXPORT_JS)
-        .with_module("node:readline", readline::READLINE_JS)
+        .with_syncable_module("node:readline", readline::READLINE_JS)
         .with_module("readline", readline::REEXPORT_JS)
-        .with_module("node:readline/promises", readline::READLINE_PROMISES_JS)
+        .with_syncable_module("node:readline/promises", readline::READLINE_PROMISES_JS)
         .with_module("readline/promises", readline::REEXPORT_PROMISES_JS)
-        .with_module("node:repl", repl::REPL_JS)
+        .with_syncable_module("node:repl", repl::REPL_JS)
         .with_module("repl", repl::REEXPORT_JS)
-        .with_module("node:console", console::CONSOLE_JS)
+        .with_syncable_module("node:console", console::CONSOLE_JS)
         .with_module("console", console::REEXPORT_JS)
-        .with_module("node:trace_events", trace_events::TRACE_EVENTS_JS)
+        .with_syncable_module("node:trace_events", trace_events::TRACE_EVENTS_JS)
         .with_module("trace_events", trace_events::REEXPORT_JS)
-        .with_module("node:tls", tls::TLS_JS)
+        .with_syncable_module("node:tls", tls::TLS_JS)
         .with_module("tls", tls::REEXPORT_JS)
-        .with_module("node:tty", tty::TTY_JS)
+        .with_syncable_module("node:tty", tty::TTY_JS)
         .with_module("tty", tty::REEXPORT_JS)
-        .with_module("node:v8", v8::V8_JS)
+        .with_syncable_module("node:v8", v8::V8_JS)
         .with_module("v8", v8::REEXPORT_JS)
-        .with_module("node:worker_threads", worker_threads::WORKER_THREADS_JS)
+        .with_syncable_module("node:worker_threads", worker_threads::WORKER_THREADS_JS)
         .with_module("worker_threads", worker_threads::REEXPORT_JS)
-        .with_module("node:zlib", zlib::ZLIB_JS)
+        .with_syncable_module("node:zlib", zlib::ZLIB_JS)
         .with_module("zlib", zlib::REEXPORT_JS)
-        .with_module("node:sqlite", sqlite::SQLITE_JS);
+        .with_syncable_module("node:sqlite", sqlite::SQLITE_JS);
 
     let builtin_loader =
         builtin_loader.with_module("wasm-rquickjs:execution", execution::EXECUTION_JS);

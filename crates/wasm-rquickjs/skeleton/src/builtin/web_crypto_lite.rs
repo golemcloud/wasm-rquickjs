@@ -171,6 +171,10 @@ export const constants = {};
 export default { createHash, createHmac, createCipheriv, createDecipheriv, createSign, createVerify, createDiffieHellman, createDiffieHellmanGroup, createECDH, getDiffieHellman, pbkdf2, pbkdf2Sync, scrypt, scryptSync, hkdf, hkdfSync, randomBytes, randomInt, randomFillSync, randomFill, randomUUID, generateKey, generateKeySync, generateKeyPair, generateKeyPairSync, getHashes, getCiphers, getCurves, timingSafeEqual, constants };
 "#;
 
+pub const NODE_CRYPTO_EXPORTS_JS: &str = REEXPORT_JS;
+pub const BARE_REEXPORT_JS: &str =
+    r#"export * from 'node:crypto'; export { default } from 'node:crypto';"#;
+
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_web_crypto from '__wasm_rquickjs_builtin/web_crypto';
         globalThis.crypto = __wasm_rquickjs_web_crypto;

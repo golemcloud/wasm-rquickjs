@@ -822,3 +822,7 @@ pub const HTTP_INCOMING_JS: &str = include_str!("node_http_incoming.js");
 pub const HTTP_COMMON_JS: &str = include_str!("node_http_common.js");
 pub const HTTP_AGENT_JS: &str = include_str!("node_http_agent.js");
 pub const REEXPORT_JS: &str = r#"export * from 'node:http'; export { default } from 'node:http';"#;
+pub const HTTP_COMMON_REEXPORT_JS: &str =
+    r#"export * from 'node:_http_common'; export { default } from 'node:_http_common';"#;
+pub const HTTP_AGENT_REEXPORT_JS: &str =
+    r#"export * from 'node:_http_agent'; export { default } from 'node:_http_agent';"#;

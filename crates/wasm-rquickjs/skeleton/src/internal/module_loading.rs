@@ -2933,6 +2933,82 @@ fn collect_cjs_global_binding_names_in_variable_declaration(
     names
 }
 
+fn collect_binding_names_in_variable_declaration(
+    source: &str,
+    start: usize,
+    end: usize,
+) -> Vec<String> {
+    let bytes = source.as_bytes();
+    let mut names = Vec::new();
+    let mut position = start;
+    let mut in_binding = true;
+    let mut paren = 0usize;
+    let mut brace = 0usize;
+    let mut bracket = 0usize;
+    while position < end && position < bytes.len() {
+        if in_binding
+            && bytes[position] == b'['
+            && let Some(close) = find_matching_bracket(source, position)
+            && close < end
+            && bytes.get(skip_ws_comments(source, close + 1)) == Some(&b':')
+        {
+            position = close + 1;
+            continue;
+        }
+        match bytes[position] {
+            b'\'' | b'"' | b'`' => {
+                position = skip_string_or_template(source, position);
+                continue;
+            }
+            b'/' if position + 1 < bytes.len() && bytes[position + 1] == b'/' => {
+                position += 2;
+                while position < end
+                    && position < bytes.len()
+                    && !matches!(bytes[position], b'\n' | b'\r')
+                {
+                    position += 1;
+                }
+                continue;
+            }
+            b'/' if position + 1 < bytes.len() && bytes[position + 1] == b'*' => {
+                position += 2;
+                while position + 1 < end
+                    && position + 1 < bytes.len()
+                    && !(bytes[position] == b'*' && bytes[position + 1] == b'/')
+                {
+                    position += 1;
+                }
+                position = (position + 2).min(end).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, position) => {
+                position = skip_regex_literal(source, position);
+                continue;
+            }
+            b'(' => paren += 1,
+            b')' => paren = paren.saturating_sub(1),
+            b'{' => brace += 1,
+            b'}' => brace = brace.saturating_sub(1),
+            b'[' => bracket += 1,
+            b']' => bracket = bracket.saturating_sub(1),
+            b'=' if paren == 0 && brace == 0 && bracket == 0 => in_binding = false,
+            b',' if paren == 0 && brace == 0 && bracket == 0 => in_binding = true,
+            _ => {}
+        }
+
+        if in_binding
+            && let Some((name, name_end)) = read_ident(source, position)
+            && cjs_global_identifier_is_binding_name(source, position, name_end)
+        {
+            add_unique(&mut names, name);
+            position = name_end;
+            continue;
+        }
+        position = next_char_boundary(source, position);
+    }
+    names
+}
+
 fn cjs_global_identifier_is_binding_name(source: &str, pos: usize, name_end: usize) -> bool {
     if object_pattern_property_key_without_binding(source, name_end) {
         return false;
@@ -10791,6 +10867,120 @@ fn collect_static_module_edges(source: &str) -> Vec<StaticModuleEdge> {
     edges
 }
 
+fn collect_named_export_clause(
+    source: &str,
+    open: usize,
+    names: &mut Vec<String>,
+) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let close = find_matching_brace(source, open)?;
+    let mut cursor = open + 1;
+    while cursor < close {
+        cursor = skip_ws_comments(source, cursor);
+        if cursor >= close {
+            break;
+        }
+        let (local, next) = if matches!(bytes[cursor], b'\'' | b'"') {
+            read_js_string(source, cursor)?
+        } else {
+            read_ident(source, cursor)?
+        };
+        cursor = skip_ws_comments(source, next);
+        let exported = if let Some(as_end) = parse_ident_name(source, cursor, "as") {
+            cursor = skip_ws_comments(source, as_end);
+            let (exported, next) = if matches!(bytes[cursor], b'\'' | b'"') {
+                read_js_string(source, cursor)?
+            } else {
+                read_ident(source, cursor)?
+            };
+            cursor = next;
+            exported
+        } else {
+            local
+        };
+        if exported != "default" {
+            add_unique(names, exported);
+        }
+        cursor = skip_ws_comments(source, cursor);
+        if cursor < close && bytes[cursor] == b',' {
+            cursor += 1;
+        }
+    }
+    Some(close + 1)
+}
+
+pub(crate) fn collect_static_esm_export_names(source: &str) -> Vec<String> {
+    let bytes = source.as_bytes();
+    let mut names = Vec::new();
+    let _ = scan_code_positions(source, true, |position, _| {
+        let Some(export_end) = parse_free_ident_name(source, position, "export") else {
+            return ControlFlow::Continue(None);
+        };
+        let mut cursor = skip_ws_comments(source, export_end);
+        if parse_ident_name(source, cursor, "default").is_some() {
+            return ControlFlow::Continue(Some(cursor));
+        }
+        if bytes.get(cursor) == Some(&b'{') {
+            let Some(end) = collect_named_export_clause(source, cursor, &mut names) else {
+                return ControlFlow::Break(());
+            };
+            return ControlFlow::Continue(Some(end));
+        }
+        if bytes.get(cursor) == Some(&b'*') {
+            cursor = skip_ws_comments(source, cursor + 1);
+            if let Some(as_end) = parse_ident_name(source, cursor, "as") {
+                cursor = skip_ws_comments(source, as_end);
+                if let Some((name, end)) = read_ident(source, cursor) {
+                    add_unique(&mut names, name);
+                    return ControlFlow::Continue(Some(end));
+                }
+            }
+            return ControlFlow::Continue(Some(cursor));
+        }
+        if let Some(async_end) = parse_ident_name(source, cursor, "async") {
+            cursor = skip_ws_comments(source, async_end);
+        }
+        if let Some(keyword_end) = parse_variable_declaration_keyword(source, cursor)
+            && let Some(start) = parse_variable_declaration_binding_start(source, keyword_end)
+        {
+            if bytes.get(start) == Some(&b'{') {
+                let Some(close) = find_matching_brace(source, start) else {
+                    return ControlFlow::Break(());
+                };
+                for name in collect_binding_names_in_variable_declaration(source, start, close + 1)
+                {
+                    add_unique(&mut names, name);
+                }
+                return ControlFlow::Continue(Some(close + 1));
+            }
+            if let Some((name, end)) = read_ident(source, start) {
+                add_unique(&mut names, name);
+                return ControlFlow::Continue(Some(end));
+            }
+        }
+        if let Some(function_end) = parse_ident_name(source, cursor, "function") {
+            let mut name_start = skip_ws_comments(source, function_end);
+            if bytes.get(name_start) == Some(&b'*') {
+                name_start = skip_ws_comments(source, name_start + 1);
+            }
+            if let Some((name, _)) = read_ident(source, name_start) {
+                add_unique(&mut names, name);
+            }
+            return ControlFlow::Continue(Some(name_start));
+        }
+        if let Some(class_end) = parse_ident_name(source, cursor, "class") {
+            let name_start = skip_ws_comments(source, class_end);
+            if let Some((name, _)) = read_ident(source, name_start) {
+                add_unique(&mut names, name);
+            }
+            return ControlFlow::Continue(Some(name_start));
+        }
+        ControlFlow::Continue(Some(cursor))
+    });
+    names.sort();
+    names
+}
+
 fn collect_literal_call_specifiers(source: &str, names: &[String]) -> Vec<String> {
     let mut specifiers = Vec::new();
     let _ = scan_code_positions(source, true, |i, _| {
@@ -12237,6 +12427,34 @@ impl Loader for JsonFileLoader {
 #[cfg(test)]
 mod cjs_export_analyzer_tests {
     use super::*;
+
+    #[test]
+    fn collects_static_esm_exports_for_builtin_facades() {
+        let source = r#"
+            const hidden = "export const fake = 1";
+            export const first = 1;
+            export const { destructured, property: renamed } = value;
+            export async function* second() {}
+            export class Third {}
+            const local = 4;
+            export { local, local as alias, local as default };
+            export * as namespace from 'other';
+            export default { first };
+        "#;
+        assert_eq!(
+            collect_static_esm_export_names(source),
+            [
+                "Third",
+                "alias",
+                "destructured",
+                "first",
+                "local",
+                "namespace",
+                "renamed",
+                "second",
+            ]
+        );
+    }
 
     #[test]
     fn cjs_compat_format_policy_preserves_fixed_format_precedence() {

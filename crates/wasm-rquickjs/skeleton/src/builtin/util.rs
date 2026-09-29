@@ -4,6 +4,8 @@ pub const UTIL_JS: &str = include_str!("util.js");
 // Re-export for aliases
 pub const BARE_UTIL_REEXPORT_JS: &str =
     r#"export * from 'node:util'; export { default } from 'node:util';"#;
+pub const BARE_UTIL_TYPES_REEXPORT_JS: &str =
+    r#"export * from 'node:util/types'; export { default } from 'node:util/types';"#;
 pub const UTIL_TYPES_JS: &str = r#"
 import { types as _types } from 'node:util';
 

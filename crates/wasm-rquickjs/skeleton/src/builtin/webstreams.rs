@@ -7,7 +7,10 @@ pub const WEBSTREAMS_WRAPPER_JS: &str = include_str!("webstreams.js");
 // Re-export for aliases
 pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/webstreams_wrapper';
 import * as _all from '__wasm_rquickjs_builtin/webstreams_wrapper';
-export default _all;"#;
+export default { ..._all };"#;
+
+pub const BARE_REEXPORT_JS: &str =
+    r#"export * from 'node:stream/web'; export { default } from 'node:stream/web';"#;
 
 // JS code wiring the web streams module into the global context
 pub const WIRE_JS: &str = r#"

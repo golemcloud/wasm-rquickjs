@@ -4175,11 +4175,194 @@ export const testLoaderModuleSourceValidation = async () => {
 export const testSyncBuiltinEsmExports = async () => {
     try {
         const module = await import('node:module');
+        const syncRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        assert(syncRegistry);
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
+            false,
+        );
+        module.syncBuiltinESMExports();
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
+            false,
+        );
+
         const fsModule = await import('node:fs');
         const eventsModule = await import('node:events');
         const processModule = await import('node:process');
         const utilModule = await import('node:util');
         const vmModule = await import('node:vm');
+        const bareVmModule = await import('vm');
+        const osModule = await import('node:os');
+        const bareOsModule = await import('os');
+        const pathModule = await import('node:path');
+        const pathPosixModule = await import('node:path/posix');
+        const barePathPosixModule = await import('path/posix');
+        const pathWin32Module = await import('node:path/win32');
+        const barePathWin32Module = await import('path/win32');
+        const streamWebModule = await import('node:stream/web');
+        const bareStreamWebModule = await import('stream/web');
+        const httpCommonModule = await import('node:_http_common');
+        const bareHttpCommonModule = await import('_http_common');
+        const httpAgentModule = await import('node:_http_agent');
+        const bareHttpAgentModule = await import('_http_agent');
+        const inspectorModule = await import('node:inspector');
+        const bareInspectorModule = await import('inspector');
+        const bufferModule = await import('node:buffer');
+        const timersModule = await import('node:timers');
+        const cryptoModule = await import('node:crypto');
+        const bareCryptoModule = await import('crypto');
+
+        const require = module.createRequire(import.meta.url);
+        const os = require('node:os');
+        assert.strictEqual(os, require('os'));
+        assert.strictEqual(os, osModule.default);
+        assert.strictEqual(os, bareOsModule.default);
+        assert.strictEqual(osModule.hostname, bareOsModule.hostname);
+        assert.strictEqual(require('node:crypto'), cryptoModule.default);
+        assert.strictEqual(require('crypto'), cryptoModule.default);
+        assert.strictEqual(bareCryptoModule.default, cryptoModule.default);
+        require('node:sqlite');
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
+            true,
+        );
+
+        const syncNamedExport = (specifier, namespace, name, replacement) => {
+            const commonJs = require(specifier);
+            const originalDescriptor = Object.getOwnPropertyDescriptor(commonJs, name);
+            assert(originalDescriptor && originalDescriptor.configurable);
+            commonJs[name] = replacement;
+            module.syncBuiltinESMExports();
+            assert.strictEqual(namespace[name], replacement);
+            Object.defineProperty(commonJs, name, originalDescriptor);
+            module.syncBuiltinESMExports();
+            assert.strictEqual(namespace[name], originalDescriptor.value);
+        };
+
+        syncNamedExport('node:path', pathModule, 'join', function replacementJoin() {});
+        syncNamedExport('node:buffer', bufferModule, 'SlowBuffer', function replacementSlowBuffer() {});
+        syncNamedExport('node:timers', timersModule, 'enroll', function replacementEnroll() {});
+        syncNamedExport('node:util', utilModule, 'promisify', function replacementPromisify() {});
+        syncNamedExport('node:crypto', cryptoModule, 'randomUUID', function replacementRandomUUID() {});
+
+        const syncAliasedNamedExport = (
+            canonicalSpecifier,
+            bareSpecifier,
+            canonicalNamespace,
+            bareNamespace,
+            name,
+            replacement,
+        ) => {
+            const commonJs = require(canonicalSpecifier);
+            assert.strictEqual(require(bareSpecifier), commonJs);
+            assert.strictEqual(canonicalNamespace.default, commonJs);
+            assert.strictEqual(bareNamespace.default, commonJs);
+            const originalDescriptor = Object.getOwnPropertyDescriptor(commonJs, name);
+            assert(originalDescriptor && originalDescriptor.configurable);
+            Object.defineProperty(commonJs, name, {
+                value: replacement,
+                writable: true,
+                configurable: true,
+                enumerable: originalDescriptor.enumerable,
+            });
+            module.syncBuiltinESMExports();
+            assert.strictEqual(canonicalNamespace[name], replacement);
+            assert.strictEqual(bareNamespace[name], replacement);
+            Object.defineProperty(commonJs, name, originalDescriptor);
+            module.syncBuiltinESMExports();
+            assert.strictEqual(canonicalNamespace[name], commonJs[name]);
+            assert.strictEqual(bareNamespace[name], commonJs[name]);
+        };
+
+        syncAliasedNamedExport(
+            'node:vm', 'vm', vmModule, bareVmModule, 'Script', function replacementScript() {},
+        );
+        syncAliasedNamedExport(
+            'node:stream/web', 'stream/web', streamWebModule, bareStreamWebModule,
+            'ReadableStream', function replacementReadableStream() {},
+        );
+        syncAliasedNamedExport(
+            'node:path/posix', 'path/posix', pathPosixModule, barePathPosixModule,
+            'resolve', function replacementPosixResolve() {},
+        );
+        syncAliasedNamedExport(
+            'node:path/win32', 'path/win32', pathWin32Module, barePathWin32Module,
+            'resolve', function replacementWin32Resolve() {},
+        );
+        syncAliasedNamedExport(
+            'node:_http_common', '_http_common', httpCommonModule, bareHttpCommonModule,
+            'HTTPParser', function replacementHTTPParser() {},
+        );
+        syncAliasedNamedExport(
+            'node:_http_agent', '_http_agent', httpAgentModule, bareHttpAgentModule,
+            'Agent', function replacementAgent() {},
+        );
+        syncAliasedNamedExport(
+            'node:inspector', 'inspector', inspectorModule, bareInspectorModule,
+            'url', function replacementInspectorUrl() {},
+        );
+
+        const originalHostnameDescriptor = Object.getOwnPropertyDescriptor(os, 'hostname');
+        let hostnameGetterReads = 0;
+        const getterHostname = function getterHostname() {};
+        Object.defineProperty(os, 'hostname', {
+            configurable: true,
+            enumerable: originalHostnameDescriptor.enumerable,
+            get() {
+                hostnameGetterReads++;
+                return getterHostname;
+            },
+        });
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, getterHostname);
+        assert.strictEqual(bareOsModule.hostname, getterHostname);
+        assert.strictEqual(hostnameGetterReads, 1);
+
+        const originalOsPrototype = Object.getPrototypeOf(os);
+        const inheritedHostname = function inheritedHostname() {};
+        const inheritedOsPrototype = Object.create(originalOsPrototype);
+        inheritedOsPrototype.hostname = inheritedHostname;
+        delete os.hostname;
+        Object.setPrototypeOf(os, inheritedOsPrototype);
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, undefined);
+        assert.strictEqual(bareOsModule.hostname, undefined);
+        Object.setPrototypeOf(os, originalOsPrototype);
+        Object.defineProperty(os, 'hostname', originalHostnameDescriptor);
+
+        const orderedGetterNames = Object.keys(os).filter((name) => {
+            const descriptor = Object.getOwnPropertyDescriptor(os, name);
+            return name in osModule && descriptor && descriptor.configurable &&
+                Object.prototype.hasOwnProperty.call(descriptor, 'value');
+        }).slice(0, 2);
+        assert.strictEqual(orderedGetterNames.length, 2);
+        const orderedGetterDescriptors = orderedGetterNames.map(
+            (name) => Object.getOwnPropertyDescriptor(os, name),
+        );
+        const getterReadOrder = [];
+        orderedGetterNames.forEach((name, index) => {
+            Object.defineProperty(os, name, {
+                configurable: true,
+                enumerable: orderedGetterDescriptors[index].enumerable,
+                get() {
+                    getterReadOrder.push(name);
+                    return orderedGetterDescriptors[index].value;
+                },
+            });
+        });
+        module.syncBuiltinESMExports();
+        assert.deepStrictEqual(getterReadOrder, orderedGetterNames);
+        orderedGetterNames.forEach((name, index) => {
+            Object.defineProperty(os, name, orderedGetterDescriptors[index]);
+        });
+
+        os.__wasmRquickjsNewExport = true;
+        module.syncBuiltinESMExports();
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, originalHostnameDescriptor.value);
+        assert.strictEqual('__wasmRquickjsNewExport' in osModule, false);
+        delete os.__wasmRquickjsNewExport;
 
         const fs = fsModule.default;
         assert.strictEqual(processModule.report, processModule.default.report);
@@ -4314,14 +4497,19 @@ export const testSyncBuiltinEsmExports = async () => {
         moduleDefault.createRequire = originalCreateRequire;
         originalSyncBuiltinESMExports();
 
-        try {
-            await import('__wasm_rquickjs_builtin/vm_native');
-            throw new Error('private builtin import should not resolve from user modules');
-        } catch (error) {
-            assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND');
+        for (const privateBuiltin of [
+            '__wasm_rquickjs_builtin/vm_native',
+            '__wasm_rquickjs_builtin/sync-implementation/node:os',
+        ]) {
+            try {
+                await import(privateBuiltin);
+                throw new Error('private builtin import should not resolve from user modules');
+            } catch (error) {
+                assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND');
+            }
+            assert.throws(() => import.meta.resolve(privateBuiltin), { code: 'ERR_MODULE_NOT_FOUND' });
+            assert.throws(() => module.createRequire(import.meta.url)(privateBuiltin), { code: 'MODULE_NOT_FOUND' });
         }
-        assert.throws(() => import.meta.resolve('__wasm_rquickjs_builtin/vm_native'), { code: 'ERR_MODULE_NOT_FOUND' });
-        assert.throws(() => module.createRequire(import.meta.url)('__wasm_rquickjs_builtin/vm_native'), { code: 'MODULE_NOT_FOUND' });
 
         async function expectPrivateBuiltinRejected(label, promise) {
             try {
