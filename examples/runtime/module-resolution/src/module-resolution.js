@@ -10192,7 +10192,7 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 });
                 return originalRunMainLoad.apply(this, arguments);
             };
-            Module.runMain();
+            assert.strictEqual(Module.runMain(), undefined);
             assert.strictEqual(runMainPrototypeRequireCalls, 0);
             assert.deepStrictEqual(runMainLoadCalls, [{
                 request: runMainFile,

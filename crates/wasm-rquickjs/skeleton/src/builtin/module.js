@@ -5017,7 +5017,7 @@ function _stat(filename) {
 function runMain() {
     const mainScript = process.argv[1];
     if (mainScript) {
-        return traceModuleRequire(
+        traceModuleRequire(
             mainScript,
             null,
             () => moduleExports._load(mainScript, null, true),
