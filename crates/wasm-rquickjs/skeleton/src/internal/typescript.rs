@@ -5,6 +5,7 @@ use base64ct::Encoding;
 use rquickjs::{Ctx, Function as JsFunction};
 use swc_common::{
     FileName, GLOBALS, Globals, SourceMap,
+    comments::{CommentKind, SingleThreadedComments},
     errors::{HANDLER, Handler},
     sync::Lrc,
 };
@@ -12,7 +13,7 @@ use swc_ecma_ast::{
     ArrowExpr, AwaitExpr, Decl, EsVersion, ForOfStmt, Function, MetaPropExpr, MetaPropKind,
     ModuleDecl, ModuleItem, ObjectPatProp, Pat, Stmt, UsingDecl, VarDeclKind,
 };
-use swc_ecma_parser::{Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
+use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 use swc_ecma_visit::{Visit, VisitWith};
 use swc_ts_fast_strip::{ErrorCode, Mode, Options, operate};
 
@@ -39,6 +40,69 @@ pub(crate) fn source_maps_enabled(ctx: &Ctx<'_>) -> bool {
         .ok()
         .and_then(|is_enabled| is_enabled.call::<_, bool>(()).ok())
         .unwrap_or(false)
+}
+
+pub(crate) fn extract_source_map_url(source: String) -> Option<String> {
+    if !source.contains("sourceMappingURL=") {
+        return None;
+    }
+
+    let source_map: Lrc<SourceMap> = Default::default();
+    let source_file = source_map.new_source_file(FileName::Anon.into(), source);
+    let comments = SingleThreadedComments::default();
+    let lexer = Lexer::new(
+        Syntax::Es(EsSyntax::default()),
+        EsVersion::EsNext,
+        StringInput::from(&*source_file),
+        Some(&comments),
+    );
+    for _ in lexer {}
+
+    let (leading, trailing) = comments.borrow_all();
+    leading
+        .values()
+        .chain(trailing.values())
+        .flatten()
+        .filter(|comment| comment.kind == CommentKind::Line)
+        .filter_map(|comment| {
+            source_map_url_from_comment(comment.text.as_ref()).map(|url| (comment.span.lo.0, url))
+        })
+        .max_by_key(|(position, _)| *position)
+        .map(|(_, url)| url)
+}
+
+fn source_map_url_from_comment(comment: &str) -> Option<String> {
+    let mut chars = comment.chars();
+    if !matches!(chars.next(), Some('#' | '@')) {
+        return None;
+    }
+    if !matches!(chars.next(), Some(separator) if is_ecmascript_whitespace(separator)) {
+        return None;
+    }
+    let rest = chars.as_str();
+    let value = rest.strip_prefix("sourceMappingURL=")?;
+    let value_end = value
+        .find(is_ecmascript_whitespace_or_line_terminator)
+        .unwrap_or(value.len());
+    if !value[value_end..]
+        .chars()
+        .all(is_ecmascript_whitespace_or_line_terminator)
+    {
+        return None;
+    }
+    Some(value[..value_end].to_string())
+}
+
+fn is_ecmascript_whitespace(value: char) -> bool {
+    matches!(
+        value,
+        '\u{0009}' | '\u{000b}' | '\u{000c}' | '\u{0020}' | '\u{00a0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
+    )
+}
+
+fn is_ecmascript_whitespace_or_line_terminator(value: char) -> bool {
+    is_ecmascript_whitespace(value) || matches!(value, '\n' | '\r' | '\u{2028}' | '\u{2029}')
 }
 
 pub(crate) fn source_uses_esm_format(source: &str, filename: &str) -> Result<bool, ()> {
@@ -355,7 +419,52 @@ fn typescript_error_code(code: ErrorCode) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{TypeScriptMode, source_uses_esm_format, transform};
+    use super::{TypeScriptMode, extract_source_map_url, source_uses_esm_format, transform};
+
+    #[test]
+    fn source_map_url_comes_from_the_last_line_comment() {
+        assert_eq!(
+            extract_source_map_url(
+                "const ignored = '//# sourceMappingURL=string.map';\n//# sourceMappingURL=first.map\n//# sourceMappingURL=last.map"
+                    .to_string()
+            ),
+            Some("last.map".to_string())
+        );
+        assert_eq!(
+            extract_source_map_url(
+                "const value = `//# sourceMappingURL=template.map`;".to_string()
+            ),
+            None
+        );
+        assert_eq!(
+            extract_source_map_url("//#\u{2003}sourceMappingURL=unicode.map".to_string()),
+            Some("unicode.map".to_string())
+        );
+        assert_eq!(
+            extract_source_map_url("//#\u{0085}sourceMappingURL=nel.map".to_string()),
+            None
+        );
+        assert_eq!(
+            extract_source_map_url("//# sourceMappingURL=valid.map\u{feff}".to_string()),
+            Some("valid.map".to_string())
+        );
+        assert_eq!(
+            extract_source_map_url("//# sourceMappingURL=invalid.map\u{0085}".to_string()),
+            Some("invalid.map\u{0085}".to_string())
+        );
+        assert_eq!(
+            extract_source_map_url(
+                "//# sourceMappingURL=valid.map\n//# sourceMappingURL=".to_string()
+            ),
+            Some(String::new())
+        );
+        assert_eq!(
+            extract_source_map_url(
+                "//# sourceMappingURL=\n//# sourceMappingURL=valid.map".to_string()
+            ),
+            Some("valid.map".to_string())
+        );
+    }
 
     #[test]
     fn module_format_uses_typescript_ast_semantics() {

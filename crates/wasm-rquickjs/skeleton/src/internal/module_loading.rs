@@ -1256,12 +1256,14 @@ fn process_import_attrs(
             continue;
         }
 
-        if let Some(ch) = source[i..].chars().next() {
-            result.push(ch);
-            i += ch.len_utf8();
-        } else {
-            break;
-        }
+        let start = i;
+        let next = next_char_boundary(source, i);
+        i = bytes[next..]
+            .iter()
+            .position(|byte| matches!(byte, b'i' | b'\'' | b'"' | b'`' | b'/'))
+            .map(|offset| next + offset)
+            .unwrap_or(len);
+        result.push_str(&source[start..i]);
     }
 
     ProcessedStaticImportAttrs {
@@ -2184,6 +2186,10 @@ fn collect_declared_cjs_globals_in_esm(source: &str) -> Vec<String> {
     let mut i = 0usize;
     let mut declared = Vec::<String>::new();
     while i < bytes.len() {
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
@@ -2241,6 +2247,10 @@ fn find_bare_cjs_global_in_esm_among(
             scopes.pop();
         }
 
+        if bytes[i].is_ascii_whitespace() {
+            i = skip_ascii_whitespace(source, i);
+            continue;
+        }
         if let Some(next) = skip_esm_cjs_global_scanner_span(source, i) {
             i = next;
             continue;
@@ -3338,8 +3348,12 @@ impl Loader for StaticRegisteredFileUrlLoader {
             return Err(Error::new_loading(path));
         };
         let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
-        let source_path = crate::builtin::realpath_for_module_resolution(ctx, &fs_path)
-            .unwrap_or_else(|| fs_path.clone());
+        let source_path = if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
+            fs_path.clone()
+        } else {
+            crate::builtin::realpath_for_esm_module_resolution(ctx, &fs_path)
+                .unwrap_or_else(|_| fs_path.clone())
+        };
         declare_esm_file_module(
             ctx,
             path,
@@ -3654,8 +3668,8 @@ impl NodeFileResolver {
         if preserve_symlinks {
             return normalized.to_string();
         }
-        crate::builtin::realpath_for_module_resolution(ctx, normalized)
-            .unwrap_or_else(|| normalized.to_string())
+        crate::builtin::realpath_for_esm_module_resolution(ctx, normalized)
+            .unwrap_or_else(|_| normalized.to_string())
     }
 
     fn module_resolution_is_file(ctx: &Ctx<'_>, normalized: &str) -> bool {
@@ -4116,8 +4130,11 @@ enum ModulePathClassification {
 struct CjsModuleProbeSessionState {
     depth: usize,
     entries: HashMap<String, ModulePathClassification>,
+    missing_package_json: HashSet<String>,
     #[cfg(feature = "test-observability")]
     hit_count: u64,
+    #[cfg(feature = "test-observability")]
+    missing_package_json_hit_count: u64,
     #[cfg(feature = "test-observability")]
     bypass_cache: bool,
 }
@@ -4141,9 +4158,11 @@ impl CjsModuleProbeSessionState {
 /// outer main-module compile. This runtime also brackets an outer `createRequire()`
 /// graph so real ESM-to-CJS package workloads benefit, but deliberately invalidates
 /// observations after filesystem mutations instead of exposing Node's stale result.
-/// Missing observations are never retained, and sibling QuickJS runtimes never share
-/// this RuntimeServices-owned state. Rust depth keeps the private runner reentrant;
-/// the normal JS adapter crosses the bridge only at its own outermost depth.
+/// Missing path classifications are never retained. Missing package metadata is retained only
+/// for the same outer graph and cleared after filesystem mutations, so packages created by the
+/// running program become visible. Sibling QuickJS runtimes never share this RuntimeServices-owned
+/// state. Rust depth keeps the private runner reentrant; the normal JS adapter crosses the bridge
+/// only at its own outermost depth.
 #[derive(Clone, Default)]
 pub(crate) struct CjsModuleProbeSession(Rc<RefCell<CjsModuleProbeSessionState>>);
 
@@ -4153,14 +4172,19 @@ struct ModulePathProbe {
 }
 
 impl CjsModuleProbeSession {
-    pub(crate) fn invalidate(&self) {
-        self.0.borrow_mut().entries.clear();
+    pub(crate) fn invalidate(&self) -> usize {
+        let mut state = self.0.borrow_mut();
+        state.entries.clear();
+        let missing_package_json = state.missing_package_json.len();
+        state.missing_package_json.clear();
+        missing_package_json
     }
 
     fn begin(&self) {
         let mut state = self.0.borrow_mut();
         if state.depth == 0 {
             state.entries.clear();
+            state.missing_package_json.clear();
         }
         state.depth = state.depth.saturating_add(1);
     }
@@ -4169,12 +4193,37 @@ impl CjsModuleProbeSession {
         let mut state = self.0.borrow_mut();
         if state.depth == 0 {
             state.entries.clear();
+            state.missing_package_json.clear();
             return;
         }
         state.depth -= 1;
         if state.depth == 0 {
             state.entries.clear();
+            state.missing_package_json.clear();
         }
+    }
+
+    fn missing_package_json_cached(&self, normalized: &str) -> bool {
+        #[cfg(feature = "test-observability")]
+        let mut state = self.0.borrow_mut();
+        #[cfg(not(feature = "test-observability"))]
+        let state = self.0.borrow();
+        let enabled = state.depth > 0 && state.cache_enabled();
+        let hit = enabled && state.missing_package_json.contains(normalized);
+        #[cfg(feature = "test-observability")]
+        if hit {
+            state.missing_package_json_hit_count =
+                state.missing_package_json_hit_count.saturating_add(1);
+        }
+        hit
+    }
+
+    fn remember_missing_package_json(&self, normalized: String) -> bool {
+        let mut state = self.0.borrow_mut();
+        if state.depth == 0 || !state.cache_enabled() {
+            return false;
+        }
+        state.missing_package_json.insert(normalized)
     }
 
     fn probe(&self, normalized: &str) -> ModulePathProbe {
@@ -4226,7 +4275,14 @@ impl CjsModuleProbeSession {
 
     #[cfg(feature = "test-observability")]
     fn reset_hit_count(&self) {
-        self.0.borrow_mut().hit_count = 0;
+        let mut state = self.0.borrow_mut();
+        state.hit_count = 0;
+        state.missing_package_json_hit_count = 0;
+    }
+
+    #[cfg(feature = "test-observability")]
+    fn missing_package_json_hit_count(&self) -> u64 {
+        self.0.borrow().missing_package_json_hit_count
     }
 
     #[cfg(feature = "test-observability")]
@@ -4234,6 +4290,7 @@ impl CjsModuleProbeSession {
         let mut state = self.0.borrow_mut();
         state.bypass_cache = !enabled;
         state.entries.clear();
+        state.missing_package_json.clear();
     }
 }
 
@@ -4377,11 +4434,72 @@ fn reset_cjs_module_probe_session_hit_count(ctx: Ctx<'_>) {
 }
 
 #[cfg(feature = "test-observability")]
+fn cjs_missing_package_json_cache_hit_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .cjs_module_probe_session
+        .missing_package_json_hit_count()
+}
+
+#[cfg(feature = "test-observability")]
 fn set_cjs_module_probe_session_enabled(ctx: Ctx<'_>, enabled: bool) {
     ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized")
         .cjs_module_probe_session
         .set_enabled(enabled);
+}
+
+#[cfg(feature = "test-observability")]
+fn loader_realpath_cache_hit_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_cache_hit_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_cache_hit_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_cache_hit_count();
+}
+
+#[cfg(feature = "test-observability")]
+fn loader_realpath_system_call_count(ctx: Ctx<'_>) -> u64 {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_system_call_count()
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_system_call_count(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_system_call_count();
+}
+
+#[cfg(feature = "test-observability")]
+fn loader_realpath_segment_counts(ctx: Ctx<'_>) -> rquickjs::Result<Object<'_>> {
+    let counts = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .loader_realpath_segment_counts();
+    let result = Object::new(ctx)?;
+    result.set("calls", counts.0)?;
+    result.set("prefixCacheHits", counts.1)?;
+    result.set("systemCalls", counts.2)?;
+    Ok(result)
+}
+
+#[cfg(feature = "test-observability")]
+fn reset_loader_realpath_segment_counts(ctx: Ctx<'_>) {
+    ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized")
+        .reset_loader_realpath_segment_counts();
+}
+
+#[cfg(feature = "test-observability")]
+fn test_esm_canonical_filename(ctx: Ctx<'_>, path: String) -> Option<String> {
+    crate::builtin::realpath_for_esm_module_resolution(&ctx, &path).ok()
 }
 
 struct NodePackageWarning {
@@ -4774,12 +4892,26 @@ impl NodeModulesResolver {
         resolution: &NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
+        #[cfg(feature = "typescript-compiler-profiling")]
+        if let Some(profile) = &resolution.profile {
+            profile.increment("modules.packageJson.calls");
+        }
         if let Some(cached) = resolution.package_json_cache.get(&cache_key) {
             #[cfg(feature = "typescript-compiler-profiling")]
             if let Some(profile) = &resolution.profile {
                 profile.increment("modules.packageJson.cacheHits");
             }
             return Ok(Some(cached));
+        }
+        if resolution
+            .probe_session
+            .missing_package_json_cached(&cache_key)
+        {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            if let Some(profile) = &resolution.profile {
+                profile.increment("modules.packageJson.negativeCacheHits");
+            }
+            return Ok(None);
         }
         match std::fs::read_to_string(pkg_path) {
             Ok(pkg_content) => {
@@ -4799,14 +4931,24 @@ impl NodeModulesResolver {
                     .insert(cache_key, package.clone());
                 Ok(Some(package))
             }
-            Err(_error) => {
+            Err(error) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
                 if let Some(profile) = &resolution.profile {
-                    profile.increment(if _error.kind() == std::io::ErrorKind::NotFound {
+                    profile.increment(if error.kind() == std::io::ErrorKind::NotFound {
                         "modules.packageJson.notFound"
                     } else {
                         "modules.packageJson.errors"
                     });
+                }
+                if error.kind() == std::io::ErrorKind::NotFound
+                    && resolution
+                        .probe_session
+                        .remember_missing_package_json(cache_key)
+                {
+                    #[cfg(feature = "typescript-compiler-profiling")]
+                    if let Some(profile) = &resolution.profile {
+                        profile.increment("modules.packageJson.negativeCacheEntries");
+                    }
                 }
                 Ok(None)
             }
@@ -6926,6 +7068,33 @@ impl Resolver for NodeModulesResolver {
 /// This enables ESM modules to import CJS packages from `node_modules`.
 struct CjsCompatLoader;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CjsCompatFormatPolicy {
+    CommonJs,
+    Esm,
+    DetectFromSource,
+}
+
+fn cjs_compat_format_policy(
+    has_cached_cjs_typescript: bool,
+    fs_path: &str,
+    is_cjs_ext: bool,
+    is_module_package_js: bool,
+    is_commonjs_package_js: bool,
+) -> CjsCompatFormatPolicy {
+    if has_cached_cjs_typescript || fs_path.ends_with(".cts") || is_cjs_ext {
+        CjsCompatFormatPolicy::CommonJs
+    } else if fs_path.ends_with(".mts") {
+        CjsCompatFormatPolicy::Esm
+    } else if is_commonjs_package_js {
+        CjsCompatFormatPolicy::CommonJs
+    } else if is_module_package_js {
+        CjsCompatFormatPolicy::Esm
+    } else {
+        CjsCompatFormatPolicy::DetectFromSource
+    }
+}
+
 #[cfg(feature = "typescript-runtime")]
 fn is_typescript_module_path(path: &str) -> bool {
     matches!(
@@ -7098,6 +7267,14 @@ fn is_free_ident_start(source: &[u8], pos: usize) -> bool {
 
 fn skip_ws_comments(source: &str, pos: usize) -> usize {
     skip_ws_comments_impl::<false>(source, pos).0
+}
+
+fn skip_ascii_whitespace(source: &str, mut pos: usize) -> usize {
+    let bytes = source.as_bytes();
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    pos
 }
 
 fn skip_ws_comments_with_line_terminator(source: &str, pos: usize) -> (usize, bool) {
@@ -8951,18 +9128,24 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     let mut analysis = CjsExportAnalysis::default();
     let mut require_bindings = HashMap::<String, String>::new();
     let statement_starts = statement_starts(source);
-    let _ = scan_code_positions_with_brace_depth(source, true, |i, _, brace_depth| {
-        if let Some((name, next)) = parse_export_member(source, i) {
+    let _ = scan_code_positions_with_brace_depth(source, true, |i, current, brace_depth| {
+        let starts_export_target = matches!(current, b'e' | b'm');
+        if starts_export_target
+            && let Some((name, next)) = parse_export_member(source, i)
+        {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
             return ControlFlow::Continue(Some(next));
         }
-        if let Some((name, next)) = parse_define_property_export(source, i) {
+        if current == b'O'
+            && let Some((name, next)) = parse_define_property_export(source, i)
+        {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
             return ControlFlow::Continue(Some(next));
         }
         if brace_depth == 0
+            && matches!(current, b'c' | b'l' | b'v')
             && statement_starts.get(i).copied().unwrap_or(false)
             && let Some((binding, specifier, next)) = parse_require_binding(source, i)
         {
@@ -8970,19 +9153,25 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
             return ControlFlow::Continue(Some(next));
         }
         if brace_depth == 0
+            && is_ident_start(current)
             && let Some((specifier, next)) = parse_export_star_reexport(source, i)
         {
             analysis.is_cjs = true;
             add_unique(&mut analysis.reexports, specifier);
             return ControlFlow::Continue(Some(next));
         }
-        if let Some((specifier, next)) = parse_module_exports_reexport(source, i) {
+        if current == b'm'
+            && let Some((specifier, next)) = parse_module_exports_reexport(source, i)
+        {
             analysis.is_cjs = true;
             analysis.reexports.clear();
             add_unique(&mut analysis.reexports, specifier);
             return ControlFlow::Continue(Some(next));
         }
-        if let Some((exports, reexports, next)) = parse_module_exports_object_literal(source, i) {
+        if current == b'm'
+            && let Some((exports, reexports, next)) =
+                parse_module_exports_object_literal(source, i)
+        {
             analysis.is_cjs = true;
             analysis.reexports.clear();
             for name in exports {
@@ -8993,11 +9182,14 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
             }
             return ControlFlow::Continue(Some(next));
         }
-        if let Some(next) = parse_module_exports_assignment(source, i) {
+        if current == b'm'
+            && let Some(next) = parse_module_exports_assignment(source, i)
+        {
             analysis.is_cjs = true;
             return ControlFlow::Continue(Some(next));
         }
         if brace_depth == 0
+            && current == b'O'
             && statement_starts.get(i).copied().unwrap_or(false)
             && let Some((specifier, next)) =
                 parse_object_keys_reexport(source, i, &require_bindings)
@@ -9093,7 +9285,8 @@ fn is_cjs_analysis_source_path(path: &str) -> bool {
 }
 
 fn canonical_cjs_analysis_path(ctx: &Ctx<'_>, path: &str) -> String {
-    crate::builtin::realpath_for_module_resolution(ctx, path).unwrap_or_else(|| path.to_string())
+    crate::builtin::realpath_for_cjs_module_resolution(ctx, path)
+        .unwrap_or_else(|_| path.to_string())
 }
 
 #[derive(Clone)]
@@ -9640,19 +9833,26 @@ impl Loader for CjsCompatLoader {
         let url = path_to_file_url(path);
         let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
 
-        let cjs_url = url.clone();
-        let has_esm_syntax = force_module
-            || raw_typescript_looks_esm
-            || (!is_typescript
-                && (source_looks_like_esm(&source)
-                    || has_cjs_wrapper_lexical_redeclaration(&source)));
         // .cjs files are always CommonJS; JS-like files outside a module package
         // remain CommonJS unless syntax detection finds ESM.
-        let is_cjs = has_cached_cjs_typescript
-            || fs_path.ends_with(".cts")
-            || is_cjs_ext
-            || (!fs_path.ends_with(".mts")
-                && (is_commonjs_package_js || (!is_module_package_js && !has_esm_syntax)));
+        let is_cjs = match cjs_compat_format_policy(
+            has_cached_cjs_typescript,
+            fs_path,
+            is_cjs_ext,
+            is_module_package_js,
+            is_commonjs_package_js,
+        ) {
+            CjsCompatFormatPolicy::CommonJs => true,
+            CjsCompatFormatPolicy::Esm => false,
+            CjsCompatFormatPolicy::DetectFromSource => {
+                let has_esm_syntax = force_module
+                    || raw_typescript_looks_esm
+                    || (!is_typescript
+                        && (source_looks_like_esm(&source)
+                            || has_cjs_wrapper_lexical_redeclaration(&source)));
+                !has_esm_syntax
+            }
+        };
         if !is_cjs {
             let preflight_mode = if fs_path.ends_with(".js") && is_module_package_js {
                 EsmFilePreflightMode::PackageTypeModuleJs
@@ -9668,6 +9868,7 @@ impl Loader for CjsCompatLoader {
                 preflight_mode,
             );
         }
+        let cjs_url = url;
 
         let cjs_conditions = NodeModulesResolver::conditions_from_global(
             ctx,
@@ -10057,8 +10258,12 @@ fn module_filesystem_path(path: &str) -> &str {
 
 fn module_source_filesystem_path(ctx: &Ctx<'_>, path: &str) -> String {
     let fs_path = module_filesystem_path(path);
-    crate::builtin::realpath_for_module_resolution(ctx, fs_path)
-        .unwrap_or_else(|| fs_path.to_string())
+    if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
+        fs_path.to_string()
+    } else {
+        crate::builtin::realpath_for_esm_module_resolution(ctx, fs_path)
+            .unwrap_or_else(|_| fs_path.to_string())
+    }
 }
 
 fn read_module_source_or_throw<'js>(
@@ -10726,6 +10931,16 @@ fn rewrite_cjs_direct_eval(
             i = next;
             continue;
         }
+        if bytes[i] != b'e' {
+            let Some(next) = bytes[i + 1..]
+                .iter()
+                .position(|byte| matches!(byte, b'e' | b'\'' | b'"' | b'`' | b'/'))
+            else {
+                break;
+            };
+            i += next + 1;
+            continue;
+        }
         let Some(eval_end) = parse_ident_name(source, i, "eval") else {
             i = next_char_boundary(source, i);
             continue;
@@ -10825,7 +11040,12 @@ fn rewrite_cjs_template_expressions(
                 i = next;
                 continue;
             }
-            i = next_char_boundary(source, i);
+            let next = next_char_boundary(source, i);
+            i = bytes[next..]
+                .iter()
+                .position(|byte| matches!(byte, b'\'' | b'"' | b'`' | b'/'))
+                .map(|offset| next + offset)
+                .unwrap_or(bytes.len());
             continue;
         }
         i += 1;
@@ -11532,6 +11752,18 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         )
         .expect("Failed to initialize CJS source preparer");
 
+        #[cfg(feature = "typescript-runtime")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_extract_source_map_url",
+            Function::new(
+                ctx.clone(),
+                super::typescript::extract_source_map_url,
+            )
+            .expect("Failed to create source map URL extractor"),
+        )
+        .expect("Failed to initialize source map URL extractor");
+
         set_non_replaceable_global(
             &global,
             "__wasm_rquickjs_module_has_exec_argv_flag",
@@ -11625,11 +11857,83 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         #[cfg(feature = "test-observability")]
         set_non_replaceable_global(
             &global,
+            "__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count",
+            Function::new(ctx.clone(), cjs_missing_package_json_cache_hit_count)
+                .expect("Failed to create CJS missing package metadata hit counter"),
+        )
+        .expect("Failed to initialize CJS missing package metadata hit counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
             "__wasm_rquickjs_set_cjs_module_probe_session_enabled",
             Function::new(ctx.clone(), set_cjs_module_probe_session_enabled)
                 .expect("Failed to create CJS module probe-session test control"),
         )
         .expect("Failed to initialize CJS module probe-session test control");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_cache_hit_count",
+            Function::new(ctx.clone(), loader_realpath_cache_hit_count)
+                .expect("Failed to create loader realpath cache hit counter"),
+        )
+        .expect("Failed to initialize loader realpath cache hit counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_cache_hit_count",
+            Function::new(ctx.clone(), reset_loader_realpath_cache_hit_count)
+                .expect("Failed to create loader realpath cache hit counter reset"),
+        )
+        .expect("Failed to initialize loader realpath cache hit counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_system_call_count",
+            Function::new(ctx.clone(), loader_realpath_system_call_count)
+                .expect("Failed to create loader realpath system-call counter"),
+        )
+        .expect("Failed to initialize loader realpath system-call counter");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_system_call_count",
+            Function::new(ctx.clone(), reset_loader_realpath_system_call_count)
+                .expect("Failed to create loader realpath system-call counter reset"),
+        )
+        .expect("Failed to initialize loader realpath system-call counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_get_loader_realpath_segment_counts",
+            Function::new(ctx.clone(), loader_realpath_segment_counts)
+                .expect("Failed to create loader realpath segment counters"),
+        )
+        .expect("Failed to initialize loader realpath segment counters");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_reset_loader_realpath_segment_counts",
+            Function::new(ctx.clone(), reset_loader_realpath_segment_counts)
+                .expect("Failed to create loader realpath segment counter reset"),
+        )
+        .expect("Failed to initialize loader realpath segment counter reset");
+
+        #[cfg(feature = "test-observability")]
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_test_esm_canonical_filename",
+            Function::new(ctx.clone(), test_esm_canonical_filename)
+                .expect("Failed to create ESM canonical filename test helper"),
+        )
+        .expect("Failed to initialize ESM canonical filename test helper");
 
         set_non_replaceable_global(
             &global,
@@ -11691,6 +11995,9 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
 }
 
 fn rewrite_import_meta_main(source: &str, replacement: &str) -> String {
+    if !source.contains("import") {
+        return source.to_string();
+    }
     let mut spans = Vec::new();
     let _ = scan_code_positions(source, true, |i, _| {
         if let Some(end) = parse_import_meta_main_span(source, i) {
@@ -11930,6 +12237,38 @@ impl Loader for JsonFileLoader {
 #[cfg(test)]
 mod cjs_export_analyzer_tests {
     use super::*;
+
+    #[test]
+    fn cjs_compat_format_policy_preserves_fixed_format_precedence() {
+        assert_eq!(
+            cjs_compat_format_policy(true, "/app/value.mts", false, true, false),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.cts", false, true, false),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.cjs", true, true, false),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.mts", false, false, true),
+            CjsCompatFormatPolicy::Esm
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.js", false, false, true),
+            CjsCompatFormatPolicy::CommonJs
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.js", false, true, false),
+            CjsCompatFormatPolicy::Esm
+        );
+        assert_eq!(
+            cjs_compat_format_policy(false, "/app/value.js", false, false, false),
+            CjsCompatFormatPolicy::DetectFromSource
+        );
+    }
 
     #[test]
     fn data_url_separator_uses_first_comma() {
@@ -12548,6 +12887,19 @@ import "./dep.js" withあ;
             "function* module() { yield 1; } export default module;",
             None,
         );
+    }
+
+    #[test]
+    fn dense_whitespace_keeps_esm_scanner_results() {
+        let padding = " \n\t\r".repeat(16_384);
+        let source = format!("{padding}export default 42;");
+
+        assert_cjs_global(&source, None);
+        assert!(collect_declared_cjs_globals_in_esm(&source).is_empty());
+        assert_eq!(rewrite_import_meta_main(&source, "false"), source);
+
+        let with_require = format!("{padding}export default require;");
+        assert_cjs_global(&with_require, Some("require"));
     }
 
     #[test]

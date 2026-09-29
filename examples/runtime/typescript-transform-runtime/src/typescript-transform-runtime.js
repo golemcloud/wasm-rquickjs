@@ -279,6 +279,41 @@ export async function run() {
         `const target = require('./stack-cjs.cts');
          module.exports = function callTypeScript() { target.failCjs(); };`,
     );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/source-map-comments.cjs',
+        `const stringMarker = '//# sourceMappingURL=ignored-string.map';
+         const templateMarker = \`//# sourceMappingURL=ignored-template.map\`;
+         module.exports = stringMarker.length + templateMarker.length;
+         // ordinary comment\u2028//#\u2003sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbIm5hdGl2ZS1leHRyYWN0b3Itb3JpZ2luYWwuanMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IiJ9`,
+    );
+    require('/typescript-transform-runtime/source-map-comments.cjs');
+    const nativeSourceMapCommentFound =
+        module.findSourceMap('/typescript-transform-runtime/source-map-comments.cjs') !== undefined;
+    fs.writeFileSync(
+        '/typescript-transform-runtime/source-map-fake-comments.cjs',
+        `const stringMarker = '//# sourceMappingURL=ignored-string.map';
+         const templateMarker = \`//# sourceMappingURL=ignored-template.map\`;
+         module.exports = stringMarker.length + templateMarker.length;`,
+    );
+    require('/typescript-transform-runtime/source-map-fake-comments.cjs');
+    const nativeSourceMapFakeCommentsIgnored =
+        module.findSourceMap('/typescript-transform-runtime/source-map-fake-comments.cjs') === undefined;
+    fs.writeFileSync(
+        '/typescript-transform-runtime/source-map-no-marker.cjs',
+        'module.exports = 42;',
+    );
+    require('/typescript-transform-runtime/source-map-no-marker.cjs');
+    const nativeSourceMapNoMarkerIgnored =
+        module.findSourceMap('/typescript-transform-runtime/source-map-no-marker.cjs') === undefined;
+    fs.writeFileSync(
+        '/typescript-transform-runtime/source-map-empty-last.cjs',
+        `module.exports = 42;
+         //# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbIm5hdGl2ZS1leHRyYWN0b3Itb3JpZ2luYWwuanMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IiJ9
+         //# sourceMappingURL=`,
+    );
+    require('/typescript-transform-runtime/source-map-empty-last.cjs');
+    const nativeSourceMapEmptyLastClears =
+        module.findSourceMap('/typescript-transform-runtime/source-map-empty-last.cjs') === undefined;
     let rewrittenCjsRuntimeStack;
     try {
         require('/typescript-transform-runtime/stack-caller.cjs')();
@@ -411,6 +446,10 @@ export async function run() {
         callSites,
         disabledCallSite,
         reexportPreparedRuntimeStack,
+        nativeSourceMapCommentFound,
+        nativeSourceMapFakeCommentsIgnored,
+        nativeSourceMapNoMarkerIgnored,
+        nativeSourceMapEmptyLastClears,
         cjsSourceMapsReclaimed,
         retainedCjsSourceMaps,
     });

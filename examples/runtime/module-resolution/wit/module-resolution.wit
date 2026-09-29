@@ -23,6 +23,7 @@ world module-resolution {
   export test-loader-module-source-validation: func() -> bool;
   export test-package-custom-conditions: func() -> bool;
   export test-cjs-package-json-parse-cache: func() -> bool;
+  export test-cjs-loader-realpath-cache: func() -> bool;
   export test-sync-builtin-esm-exports: func() -> bool;
   export test-esm-resolution-error-urls: func() -> bool;
   export test-cjs-direct-named-exports: func() -> bool;

@@ -14,12 +14,57 @@ struct Plan {
     command_args: Vec<String>,
 }
 
+fn remove_release_overrides(command: &mut Command) {
+    for (name, _) in std::env::vars() {
+        if matches!(
+            name.as_str(),
+            "CARGO_BUILD_RUSTFLAGS"
+                | "CARGO_ENCODED_RUSTFLAGS"
+                | "CARGO_HOME"
+                | "RUSTC"
+                | "RUSTC_WRAPPER"
+                | "RUSTC_WORKSPACE_WRAPPER"
+                | "RUSTFLAGS"
+        ) || name.starts_with("CARGO_PROFILE_RELEASE_")
+            || (name.starts_with("CARGO_TARGET_") && name.ends_with("_RUSTFLAGS"))
+        {
+            command.env_remove(name);
+        }
+    }
+}
+
+fn remove_node_overrides(command: &mut Command) {
+    for name in [
+        "NODE_COMPILE_CACHE",
+        "NODE_DEBUG",
+        "NODE_DEBUG_NATIVE",
+        "NODE_ENV",
+        "NODE_INSPECT_RESUME_ON_START",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_PENDING_DEPRECATION",
+    ] {
+        command.env_remove(name);
+    }
+}
+
 fn plan(target: &str, profile: &str) -> Plan {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let output = Command::new("bash")
-        .arg(repo_root.join("tools/dev-test.sh"))
+    let fixture = Utf8TempDir::new().expect("temporary plan fixture should be created");
+    let fixture_tools = fixture.path().join("tools");
+    fs::create_dir_all(&fixture_tools).expect("temporary tools directory should be created");
+    let fixture_script = fixture_tools.join("dev-test.sh");
+    fs::copy(repo_root.join("tools/dev-test.sh"), &fixture_script)
+        .expect("dev-test script should be copied into the isolated fixture");
+    let mut command = Command::new("bash");
+    command
+        .arg(fixture_script)
         .args([target, profile, "runtime", "profile_probe"])
-        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1")
+        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+    if profile == "release" {
+        remove_release_overrides(&mut command);
+    }
+    let output = command
         .output()
         .expect("dev-test profile planning should run");
 
@@ -84,6 +129,8 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
         };
         assert_eq!(feature_list(&standard), expected_standard_features);
         assert_eq!(value(&standard, "artifact_cache"), "0");
+        assert_eq!(value(&standard, "component_profile"), "dev");
+        assert_eq!(value(&standard, "host_release"), "false");
         assert_eq!(value(&standard, "locked_builds"), "0");
         assert_eq!(value(&standard, "precompile_component"), "0");
         assert_eq!(value(&standard, "prepared_component_cache"), "0");
@@ -92,6 +139,22 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
         assert!(!standard.command_args.iter().any(|arg| arg == "--locked"));
         assert!(
             !standard
+                .command_args
+                .iter()
+                .any(|arg| arg == "--test-threads")
+        );
+
+        let release = plan(target, "release");
+        assert_eq!(feature_list(&release), expected_standard_features);
+        assert_eq!(value(&release, "artifact_cache"), "0");
+        assert_eq!(value(&release, "component_profile"), "release");
+        assert_eq!(value(&release, "host_release"), "true");
+        assert_eq!(value(&release, "locked_builds"), "1");
+        assert_eq!(value(&release, "unoptimized"), "0");
+        assert!(release.command_args.iter().any(|arg| arg == "--release"));
+        assert!(release.command_args.iter().any(|arg| arg == "--locked"));
+        assert!(
+            !release
                 .command_args
                 .iter()
                 .any(|arg| arg == "--test-threads")
@@ -127,6 +190,177 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
                 .any(|args| args == ["--test-threads", "8"])
         );
     }
+}
+
+#[test]
+fn release_profile_rejects_inherited_compiler_overrides() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (variable, value) in [
+        ("CARGO_PROFILE_RELEASE_OPT_LEVEL", "0"),
+        ("RUSTFLAGS", "-Copt-level=0"),
+    ] {
+        let mut command = Command::new("bash");
+        command
+            .arg(repo_root.join("tools/dev-test.sh"))
+            .args(["p3", "release", "agentic_ts", ""])
+            .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+        remove_release_overrides(&mut command);
+        let output = command
+            .env(variable, value)
+            .output()
+            .expect("release profile planning should run");
+
+        assert!(
+            !output.status.success(),
+            "{variable} was unexpectedly accepted"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(variable) && stderr.contains("rejects inherited"),
+            "unexpected rejection for {variable}: {stderr}"
+        );
+    }
+
+    let cargo_home = Utf8TempDir::new().expect("temporary Cargo home should be created");
+    fs::write(
+        cargo_home.path().join("config.toml"),
+        "[profile.release]\nopt-level = 0\n",
+    )
+    .expect("temporary Cargo config should be written");
+    let mut command = Command::new("bash");
+    command
+        .arg(repo_root.join("tools/dev-test.sh"))
+        .args(["p3", "release", "agentic_ts", ""])
+        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+    remove_release_overrides(&mut command);
+    let output = command
+        .env("CARGO_HOME", cargo_home.path())
+        .output()
+        .expect("release profile planning should run");
+    assert!(
+        !output.status.success(),
+        "redirected CARGO_HOME was accepted"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("CARGO_HOME"),
+        "redirected Cargo config rejection did not identify CARGO_HOME"
+    );
+
+    let mut command = Command::new("bash");
+    command
+        .arg(repo_root.join("tools/dev-test.sh"))
+        .args(["p3", "release", "agentic_ts", ""])
+        .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
+    remove_release_overrides(&mut command);
+    let output = command
+        .env("RUSTC", "/tmp/not-the-pinned-rustc")
+        .output()
+        .expect("release profile planning should run");
+    assert!(!output.status.success(), "alternate RUSTC was accepted");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("RUSTC"),
+        "alternate compiler rejection did not identify RUSTC"
+    );
+}
+
+#[test]
+fn agentic_ts_release_runner_rejects_node_environment_overrides() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (variable, value) in [
+        ("NODE_OPTIONS", "--trace-warnings"),
+        ("NODE_COMPILE_CACHE", "/tmp/node-compile-cache"),
+        ("NODE_ENV", "production"),
+    ] {
+        let mut command = Command::new("sh");
+        command
+            .arg(repo_root.join("tests/agentic_ts/run.sh"))
+            .arg("--release")
+            .current_dir(repo_root);
+        remove_node_overrides(&mut command);
+        let output = command
+            .env(variable, value)
+            .output()
+            .expect("release runner guard should execute");
+
+        assert!(
+            !output.status.success(),
+            "{variable} was unexpectedly accepted"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(variable) && stderr.contains("rejects inherited Node"),
+            "unexpected rejection for {variable}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn agentic_ts_runner_uses_one_date_for_the_report_pair() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let runner = fs::read_to_string(repo_root.join("tests/agentic_ts/run.sh"))
+        .expect("agentic TypeScript runner should be readable");
+
+    assert_eq!(
+        runner.matches("measurement_date=$(date +%Y-%m-%d)").count(),
+        1,
+        "the report-pair date should be captured exactly once"
+    );
+    assert!(
+        runner.contains(
+            "report=\"$results_dir/${measurement_date}${report_label}-$target-$platform-$arch.json\""
+        ),
+        "both report paths should use the captured measurement date"
+    );
+}
+
+#[test]
+fn npm_metadata_release_runner_rejects_node_environment_overrides() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for (variable, value) in [
+        ("NODE_OPTIONS", "--trace-warnings"),
+        ("NODE_COMPILE_CACHE", "/tmp/node-compile-cache"),
+        ("NODE_ENV", "production"),
+    ] {
+        let mut command = Command::new("sh");
+        command
+            .arg(repo_root.join("tests/npm_metadata/run.sh"))
+            .arg("--release")
+            .current_dir(repo_root);
+        remove_node_overrides(&mut command);
+        let output = command
+            .env(variable, value)
+            .output()
+            .expect("release runner guard should execute");
+
+        assert!(
+            !output.status.success(),
+            "{variable} was unexpectedly accepted"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(variable) && stderr.contains("rejects inherited Node"),
+            "unexpected rejection for {variable}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn npm_metadata_runner_uses_one_date_for_the_report_pair() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let runner = fs::read_to_string(repo_root.join("tests/npm_metadata/run.sh"))
+        .expect("npm metadata runner should be readable");
+
+    assert_eq!(
+        runner.matches("measurement_date=$(date +%Y-%m-%d)").count(),
+        1,
+        "the report-pair date should be captured exactly once"
+    );
+    assert!(
+        runner.contains(
+            "report=\"$results_dir/${measurement_date}-release-$target-$platform-$arch.json\""
+        ),
+        "both report paths should use the captured measurement date"
+    );
 }
 
 #[test]

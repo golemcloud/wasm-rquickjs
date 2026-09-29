@@ -6410,6 +6410,8 @@ export const testCjsPackageJsonParseCache = async () => {
         const probeRoot = '/cjs-probe-session-app';
         const probeRequire = createRequire(`${probeRoot}/entry.cjs`);
         fs.mkdirSync(`${probeRoot}/node_modules/late-pkg`, { recursive: true });
+        fs.mkdirSync(`${probeRoot}/node_modules/invalid-pkg`, { recursive: true });
+        fs.writeFileSync(`${probeRoot}/node_modules/invalid-pkg/package.json`, '{ invalid json');
         fs.writeFileSync(`${probeRoot}/target.js`, 'module.exports = true;');
         fs.writeFileSync(`${probeRoot}/nested-target.js`, 'module.exports = true;');
         fs.writeFileSync(`${probeRoot}/rename-target.js`, 'module.exports = true;');
@@ -6454,6 +6456,16 @@ export const testCjsPackageJsonParseCache = async () => {
             '  Module._pathCache = Object.create(null);',
             '  assert.strictEqual(require.resolve("./late-dir"), "/cjs-probe-session-app/late-dir/index.js");',
             '  assert.throws(() => require.resolve("late-pkg"), { code: "MODULE_NOT_FOUND" });',
+            '  Module._pathCache = Object.create(null);',
+            '  const missingPackageHitsBefore = globalThis.__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count();',
+            '  assert.throws(() => require.resolve("late-pkg"), { code: "MODULE_NOT_FOUND" });',
+            '  assert.ok(',
+            '    globalThis.__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count() > missingPackageHitsBefore,',
+            '    "the repeated missing package metadata lookup must use the outer CommonJS session",',
+            '  );',
+            '  assert.throws(() => require.resolve("invalid-pkg"), { code: "ERR_INVALID_PACKAGE_CONFIG" });',
+            '  Module._pathCache = Object.create(null);',
+            '  assert.throws(() => require.resolve("invalid-pkg"), { code: "ERR_INVALID_PACKAGE_CONFIG" });',
             '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/package.json", JSON.stringify({ exports: "./entry.js" }));',
             '  fs.writeFileSync("/cjs-probe-session-app/node_modules/late-pkg/entry.js", "module.exports = true;");',
             '  Module._pathCache = Object.create(null);',
@@ -6474,8 +6486,10 @@ export const testCjsPackageJsonParseCache = async () => {
             'module.exports = true;',
         ].join('\n'));
         const getProbeSessionHits = globalThis.__wasm_rquickjs_get_cjs_module_probe_session_hit_count;
+        const getMissingPackageHits = globalThis.__wasm_rquickjs_get_cjs_missing_package_json_cache_hit_count;
         const resetProbeSessionHits = globalThis.__wasm_rquickjs_reset_cjs_module_probe_session_hit_count;
         assert.strictEqual(typeof getProbeSessionHits, 'function');
+        assert.strictEqual(typeof getMissingPackageHits, 'function');
         assert.strictEqual(typeof resetProbeSessionHits, 'function');
         resetProbeSessionHits();
         assert.strictEqual(getProbeSessionHits(), 0);
@@ -6545,6 +6559,157 @@ export const testCjsPackageJsonParseCache = async () => {
             first: { cached: true },
             second: { cached: true },
         });
+        return true;
+    } catch (error) {
+        console.error(error);
+        throw error;
+    }
+};
+
+export const testCjsLoaderRealpathCache = async () => {
+    try {
+        const root = '/cjs-loader-realpath-cache-app';
+        const link = `${root}/link.js`;
+        const firstTarget = `${root}/first.js`;
+        const secondTarget = `${root}/second.js`;
+        const lateTarget = `${root}/late.js`;
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(firstTarget, 'module.exports = "first";');
+        fs.writeFileSync(secondTarget, 'module.exports = "second";');
+        fs.symlinkSync('first.js', link);
+
+        const require = createRequire(`${root}/entry.cjs`);
+        const Module = require('node:module');
+        const originalPathCache = Module._pathCache;
+        const originalExecArgv = process.execArgv.slice();
+        const originalCwd = process.cwd();
+        const getHits = globalThis.__wasm_rquickjs_get_loader_realpath_cache_hit_count;
+        const resetHits = globalThis.__wasm_rquickjs_reset_loader_realpath_cache_hit_count;
+        const getSystemCalls = globalThis.__wasm_rquickjs_get_loader_realpath_system_call_count;
+        const resetSystemCalls = globalThis.__wasm_rquickjs_reset_loader_realpath_system_call_count;
+        const getSegmentCounts = globalThis.__wasm_rquickjs_get_loader_realpath_segment_counts;
+        const resetSegmentCounts = globalThis.__wasm_rquickjs_reset_loader_realpath_segment_counts;
+        const canonicalizeCjs = globalThis.__wasm_rquickjs_test_cjs_canonical_filename;
+        const canonicalizeEsm = globalThis.__wasm_rquickjs_test_esm_canonical_filename;
+        assert.strictEqual(typeof getHits, 'function');
+        assert.strictEqual(typeof resetHits, 'function');
+        assert.strictEqual(typeof getSystemCalls, 'function');
+        assert.strictEqual(typeof resetSystemCalls, 'function');
+        assert.strictEqual(typeof getSegmentCounts, 'function');
+        assert.strictEqual(typeof resetSegmentCounts, 'function');
+        assert.strictEqual(typeof canonicalizeCjs, 'function');
+        assert.strictEqual(typeof canonicalizeEsm, 'function');
+        try {
+            const prefixRoot = `${root}/prefix-cache/shared`;
+            fs.mkdirSync(prefixRoot, { recursive: true });
+            for (const name of ['cjs-first.js', 'cjs-second.js', 'esm-first.mjs', 'esm-second.mjs']) {
+                fs.writeFileSync(`${prefixRoot}/${name}`, '');
+            }
+
+            resetSegmentCounts();
+            assert.strictEqual(canonicalizeCjs(`${prefixRoot}/cjs-first.js`), `${prefixRoot}/cjs-first.js`);
+            const cjsFirst = getSegmentCounts();
+            assert.ok(cjsFirst.calls > 1, 'a fresh runtime must inspect the first path prefixes');
+            assert.strictEqual(cjsFirst.prefixCacheHits, 0, 'the first unique CJS path must not inherit prefix state');
+            assert.strictEqual(cjsFirst.calls, cjsFirst.prefixCacheHits + cjsFirst.systemCalls);
+
+            assert.strictEqual(canonicalizeCjs(`${prefixRoot}/cjs-second.js`), `${prefixRoot}/cjs-second.js`);
+            const cjsSecond = getSegmentCounts();
+            const cjsSecondSystemCalls = cjsSecond.systemCalls - cjsFirst.systemCalls;
+            assert.ok(cjsSecond.prefixCacheHits > cjsFirst.prefixCacheHits, 'a sibling CJS path must reuse confirmed prefixes');
+            assert.ok(cjsSecondSystemCalls < cjsFirst.systemCalls, 'prefix reuse must reduce segment metadata calls');
+            assert.strictEqual(cjsSecond.calls, cjsSecond.prefixCacheHits + cjsSecond.systemCalls);
+
+            resetSegmentCounts();
+            assert.strictEqual(canonicalizeEsm(`${prefixRoot}/esm-first.mjs`), `${prefixRoot}/esm-first.mjs`);
+            const esmFirst = getSegmentCounts();
+            assert.ok(esmFirst.calls > 1);
+            assert.strictEqual(esmFirst.prefixCacheHits, 0, 'ESM must not reuse CJS prefix entries');
+            assert.strictEqual(esmFirst.calls, esmFirst.prefixCacheHits + esmFirst.systemCalls);
+
+            assert.strictEqual(canonicalizeEsm(`${prefixRoot}/esm-second.mjs`), `${prefixRoot}/esm-second.mjs`);
+            const esmSecond = getSegmentCounts();
+            const esmSecondSystemCalls = esmSecond.systemCalls - esmFirst.systemCalls;
+            assert.ok(esmSecond.prefixCacheHits > esmFirst.prefixCacheHits, 'a sibling ESM path must reuse confirmed prefixes');
+            assert.ok(esmSecondSystemCalls < esmFirst.systemCalls, 'ESM prefix reuse must reduce segment metadata calls');
+            assert.strictEqual(esmSecond.calls, esmSecond.prefixCacheHits + esmSecond.systemCalls);
+
+            Module._pathCache = Object.create(null);
+            resetHits();
+            assert.strictEqual(require.resolve(link), firstTarget);
+            fs.unlinkSync(link);
+            fs.symlinkSync('second.js', link);
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(link), firstTarget);
+            assert.ok(getHits() > 0, 'the repeated loader realpath must use the runtime cache');
+            assert.strictEqual(fs.realpathSync.native(link), secondTarget);
+
+            process.execArgv.push('--preserve-symlinks');
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(link), link);
+            process.execArgv.pop();
+
+            resetSystemCalls();
+            assert.throws(
+                () => canonicalizeCjs(lateTarget),
+                error => error && error.code === 'ENOENT' && error.syscall === 'realpath' && error.path === lateTarget,
+            );
+            assert.strictEqual(getSystemCalls(), 1, 'a failed CJS canonicalization must use one physical realpath');
+            fs.writeFileSync(lateTarget, 'module.exports = "late";');
+            assert.strictEqual(canonicalizeCjs(lateTarget), lateTarget);
+            assert.strictEqual(getSystemCalls(), 2, 'failed CJS canonicalizations must remain retryable');
+
+            const relativeRoot = '/loader-realpath-relative-input';
+            fs.mkdirSync(relativeRoot, { recursive: true });
+            fs.writeFileSync(`${relativeRoot}/target.js`, 'module.exports = true;');
+            process.chdir(relativeRoot);
+            assert.strictEqual(
+                canonicalizeCjs('./nested/../target.js'),
+                `${relativeRoot}/target.js`,
+                'relative loader paths must resolve against process.cwd() before cache lookup',
+            );
+            process.chdir(originalCwd);
+
+            const esmThenCjsRoot = '/loader-realpath-esm-then-cjs';
+            fs.mkdirSync(esmThenCjsRoot, { recursive: true });
+            fs.writeFileSync(`${esmThenCjsRoot}/first.mjs`, 'export default "first";');
+            fs.writeFileSync(`${esmThenCjsRoot}/second.mjs`, 'export default "second";');
+            fs.symlinkSync('first.mjs', `${esmThenCjsRoot}/link.mjs`);
+            assert.strictEqual((await import(`${esmThenCjsRoot}/link.mjs?esm-first`)).default, 'first');
+            fs.unlinkSync(`${esmThenCjsRoot}/link.mjs`);
+            fs.symlinkSync('second.mjs', `${esmThenCjsRoot}/link.mjs`);
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(`${esmThenCjsRoot}/link.mjs`), `${esmThenCjsRoot}/second.mjs`);
+
+            const cjsThenEsmRoot = '/loader-realpath-cjs-then-esm';
+            fs.mkdirSync(cjsThenEsmRoot, { recursive: true });
+            fs.writeFileSync(`${cjsThenEsmRoot}/first.mjs`, 'export default "first";');
+            fs.writeFileSync(`${cjsThenEsmRoot}/second.mjs`, 'export default "second";');
+            fs.symlinkSync('first.mjs', `${cjsThenEsmRoot}/link.mjs`);
+            Module._pathCache = Object.create(null);
+            assert.strictEqual(require.resolve(`${cjsThenEsmRoot}/link.mjs`), `${cjsThenEsmRoot}/first.mjs`);
+            fs.unlinkSync(`${cjsThenEsmRoot}/link.mjs`);
+            fs.symlinkSync('second.mjs', `${cjsThenEsmRoot}/link.mjs`);
+            assert.strictEqual((await import(`${cjsThenEsmRoot}/link.mjs?esm-second`)).default, 'second');
+
+            const preserveEsmRoot = '/loader-realpath-preserve-esm';
+            fs.mkdirSync(preserveEsmRoot, { recursive: true });
+            fs.writeFileSync(`${preserveEsmRoot}/first.mjs`, 'export default "first";');
+            fs.writeFileSync(`${preserveEsmRoot}/second.mjs`, 'export default "second";');
+            fs.symlinkSync('first.mjs', `${preserveEsmRoot}/link.mjs`);
+            process.execArgv.push('--preserve-symlinks');
+            assert.strictEqual((await import(`${preserveEsmRoot}/link.mjs?preserved-first`)).default, 'first');
+            fs.unlinkSync(`${preserveEsmRoot}/link.mjs`);
+            fs.symlinkSync('second.mjs', `${preserveEsmRoot}/link.mjs`);
+            assert.strictEqual((await import(`${preserveEsmRoot}/link.mjs?preserved-second`)).default, 'second');
+        } finally {
+            process.chdir(originalCwd);
+            Module._pathCache = originalPathCache;
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) {
+                process.execArgv.push(arg);
+            }
+        }
         return true;
     } catch (error) {
         console.error(error);

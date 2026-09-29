@@ -2,6 +2,7 @@ import * as pathModule from 'node:path';
 import * as pathPosix from 'node:path/posix';
 import * as pathWin32 from 'node:path/win32';
 import * as fsModule from 'node:fs';
+import * as fsNative from '__wasm_rquickjs_builtin/fs_native';
 import * as util from 'node:util';
 import * as buffer from 'node:buffer';
 import * as os from 'node:os';
@@ -53,6 +54,7 @@ import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
+import { createSystemError as createFsSystemError } from '__wasm_rquickjs_builtin/internal/fs/shared';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
 import * as internalUtil from '__wasm_rquickjs_builtin/internal/util';
@@ -736,7 +738,20 @@ function shouldPreserveSymlinks(isMainModuleLoad) {
 
 function toCjsCanonicalFilename(filename, isMainModuleLoad) {
     if (shouldPreserveSymlinks(isMainModuleLoad)) return filename;
-    return fsModule.realpathSync.native(filename);
+    // Node resolves against process.cwd() before consulting its loader realpath
+    // cache. Keep the native bridge limited to absolute, normalized guest paths.
+    const normalized = pathModule.resolve(filename);
+    const outcome = fsNative.fs_loader_realpath(normalized);
+    if (outcome.error) throw createFsSystemError(outcome.error);
+    return outcome.result;
+}
+
+if (testObservabilityEnabledNative()) {
+    Object.defineProperty(globalThis, '__wasm_rquickjs_test_cjs_canonical_filename', {
+        value: filename => toCjsCanonicalFilename(filename, false),
+        writable: false,
+        configurable: false,
+    });
 }
 
 function tryReadFile(filename) {
@@ -1658,8 +1673,18 @@ function registerSourceMapForCjs(filename, source, moduleObject, options = undef
     }
 
     const sourceText = String(source);
-    const url = extractSourceMapURL(sourceText);
-    if (url === undefined) {
+    if (sourceText.indexOf('sourceMappingURL=') === -1) {
+        delete registry[filename];
+        return;
+    }
+    // TypeScript builds already carry SWC, so they use its lexer for exact
+    // directive detection. Other builds retain the JS scanner rather than
+    // shipping the TypeScript parser solely for source-map registration.
+    const nativeExtractor = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_extract_source_map_url;
+    const url = typeof nativeExtractor === 'function'
+        ? nativeExtractor(sourceText)
+        : extractSourceMapURL(sourceText);
+    if (url === undefined || url === null || url === '') {
         delete registry[filename];
         return;
     }
