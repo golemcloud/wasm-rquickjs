@@ -417,17 +417,7 @@ fn generate_guest_impl(
                         )
                     })?;
 
-                    let already_registered = resource.contains_key(crate::internal::RESOURCE_ID_KEY)?;
-                    let resource_id: usize = if already_registered {
-                        // This resource instance is already registered in the resource table
-                        resource.get(crate::internal::RESOURCE_ID_KEY)?
-                    } else {
-                        // This is a new resource instance, we need to store it in the resource table
-                        let resource_table: rquickjs::Object = ctx.globals().get(crate::internal::RESOURCE_TABLE_NAME)?;
-                        let resource_id = crate::internal::get_free_resource_id();
-                        resource_table.set(resource_id.to_string(), resource)?;
-                        resource_id
-                    };
+                    let resource_id = crate::internal::acquire_js_resource(ctx, resource)?;
 
                     Ok(#owned_wrapper::new(#resource_name_ident { resource_id }))
                 }
@@ -686,14 +676,19 @@ fn generate_exported_resource_function_impl(
         .iter()
         .zip(rust_fn.export_parameters.clone())
         .zip(rust_fn.import_parameters.clone())
-        .map(|((param, export_param), import_param)| {
+        .enumerate()
+        .map(|(index, ((param, export_param), import_param))| {
             let param_name = &param.name;
             let param_type = &param.ty;
-            if matches!(
+            let is_method = matches!(
                 function.kind,
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_)
-            ) && type_borrows_resource(context, param_type, resource_type_id)?
-            {
+            );
+            if is_method && index == 0 {
+                anyhow::ensure!(
+                    type_borrows_resource(context, param_type, resource_type_id)?,
+                    "Exported resource method receiver must be its first parameter"
+                );
                 Ok(ProcessedParameter {
                     ident: Ident::new(param_name, Span::call_site()),
                     wrapped_type: None,

@@ -6,6 +6,7 @@
 // `async func` method (`incrementAsync`) returns a Promise.
 const constructorRejection = new Error('constructor checkpoint');
 let constructorCheckpointCount = 0;
+let stashedCounter;
 process.on('unhandledRejection', (reason) => {
   if (reason === constructorRejection) constructorCheckpointCount += 1;
 });
@@ -25,6 +26,10 @@ class Counter {
     return this.value;
   }
 
+  addOther(other) {
+    return this.value + other.value;
+  }
+
   static staticZero() {
     return 0;
   }
@@ -33,11 +38,57 @@ class Counter {
     return constructorCheckpointCount;
   }
 
-  async incrementAsync(by) {
+  static identity(value) {
+    return value;
+  }
+
+  static async identityAsync(value) {
+    await Promise.resolve();
+    return value;
+  }
+
+  static alias(value) {
+    return value;
+  }
+
+  static duplicate(value) {
+    return [value, value];
+  }
+
+  static stash(value) {
+    Object.freeze(value);
+    stashedCounter = value;
+  }
+
+  static stashAndFail(value) {
+    Object.freeze(value);
+    stashedCounter = value;
+    throw "expected failure";
+  }
+
+  static async stashAndFailAsync(value) {
+    Object.freeze(value);
+    stashedCounter = value;
+    await Promise.resolve();
+    throw "expected async failure";
+  }
+
+  static take() {
+    const value = stashedCounter;
+    stashedCounter = undefined;
+    return value;
+  }
+
+  static resourceCount() {
+    return Object.keys(globalThis.__wasm_rquickjs_resources).length;
+  }
+
+  async incrementAsync(by, other) {
+    const otherValue = other.value;
     // A genuine async step to prove the async method path awaits the JS Promise.
     await Promise.resolve();
     this.value += by;
-    return this.value;
+    return this.value + otherValue;
   }
 }
 

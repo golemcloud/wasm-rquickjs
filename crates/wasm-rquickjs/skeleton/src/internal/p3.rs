@@ -18,7 +18,6 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::atomic::AtomicUsize;
 use std::task::{Context as TaskContext, Poll};
 use wit_bindgen_p3::rt::async_support::{
     FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
@@ -39,9 +38,9 @@ pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 /// here so the host-facing resource handle (which only carries the numeric id) can be mapped back
 /// to the JS object. Mirrors the Preview 2 path (`internal/p2.rs`).
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
-/// Property name written onto an exported resource's JS instance to remember its resource id.
-/// Mirrors the Preview 2 path (`internal/p2.rs`).
-pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
+/// WeakMap from exported JavaScript resource objects to their current native resource ids.
+/// Keeping identity outside the resource object allows frozen and sealed instances.
+pub const RESOURCE_ID_MAP_NAME: &str = "__wasm_rquickjs_resource_ids";
 
 /// All Rust-side runtime state for the component. A single instance lives in
 /// `STATE` and is shared across all (possibly concurrent) exported calls.
@@ -50,8 +49,6 @@ pub struct JsState {
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
-    /// Monotonic id allocator for exported resource instances (starts at 1; 0 is never used).
-    pub last_resource_id: AtomicUsize,
     /// Ids of exported resource instances whose host handle has been dropped. Populated
     /// synchronously from the resource's `Drop` (which cannot `.await`) and drained at the start
     /// of the next JS entry point, where the corresponding entry is removed from the JS resource
@@ -80,7 +77,6 @@ impl JsState {
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
             variant_case_tag_cache: RefCell::new(HashMap::new()),
-            last_resource_id: AtomicUsize::new(1),
             pending_resource_drops: RefCell::new(Vec::new()),
             writer_lease: RuntimeWriterLease::new(),
         }
@@ -99,6 +95,13 @@ impl JsState {
             ctx.globals()
                 .set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()).expect("Failed to create the resource table object"))
                 .expect("Failed to initialize the exported resource table");
+            ctx.globals()
+                .set(
+                    RESOURCE_ID_MAP_NAME,
+                    ctx.eval::<Object, _>("new WeakMap()")
+                        .expect("Failed to create resource ID map"),
+                )
+                .expect("Failed to initialize the exported resource ID map");
 
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
@@ -1016,12 +1019,13 @@ pub async fn wizer_initialize() {
     WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Allocates the next monotonic exported-resource id. Ids start at 1 and are never reused, so a
-/// queued drop can never delete a newer instance that happens to share a recycled id.
-pub fn get_free_resource_id() -> usize {
-    get_js_state()
-        .last_resource_id
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {
+    super::runtime_services::acquire_exported_resource(
+        ctx,
+        resource,
+        RESOURCE_TABLE_NAME,
+        RESOURCE_ID_MAP_NAME,
+    )
 }
 
 /// Records that an exported resource instance's host handle has been dropped. Called from the
@@ -1048,13 +1052,14 @@ fn drain_pending_resource_drops(ctx: &Ctx<'_>) {
         std::mem::take(&mut *pending)
     };
 
-    let resource_table: Object = ctx
-        .globals()
-        .get(RESOURCE_TABLE_NAME)
-        .expect("Failed to get the resource table");
     for id in ids {
-        // Idempotent: a stale / already-removed id simply has no entry to delete.
-        let _ = resource_table.remove(id.to_string());
+        super::runtime_services::release_exported_resource(
+            ctx,
+            id,
+            RESOURCE_TABLE_NAME,
+            RESOURCE_ID_MAP_NAME,
+        )
+        .unwrap_or_else(|e| panic!("Failed to release resource {id}: {e:?}"));
     }
 }
 
@@ -1110,16 +1115,10 @@ where
                 if js_state.writer_lease.writer_generation() != writer_generation {
                     (0, true)
                 } else {
-                    let resource_id = get_free_resource_id();
-                    resource.set(RESOURCE_ID_KEY, resource_id).expect("Failed to set resource ID");
-                    let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME).expect("Failed to get the resource table");
-                    resource_table.set(resource_id.to_string(), resource.clone()).expect("Failed to store resource instance");
+                    let resource_id = acquire_js_resource(&ctx, resource)
+                        .expect("Failed to register resource instance");
                     let created_writer =
                         js_state.writer_lease.writer_generation() != writer_generation;
-                    if created_writer {
-                        let _ = resource_table.remove(resource_id.to_string());
-                        let _ = resource.remove(RESOURCE_ID_KEY);
-                    }
                     (resource_id, created_writer)
                 }
             }
@@ -1129,14 +1128,13 @@ where
         let created_writer =
             created_writer || js_state.writer_lease.writer_generation() != writer_generation;
         if created_writer && resource_id != 0 {
-            let resource_table: Object = ctx
-                .globals()
-                .get(RESOURCE_TABLE_NAME)
-                .expect("Failed to get the resource table");
-            if let Ok(resource) = resource_table.get::<_, Object>(resource_id.to_string()) {
-                let _ = resource.remove(RESOURCE_ID_KEY);
-            }
-            let _ = resource_table.remove(resource_id.to_string());
+            super::runtime_services::release_exported_resource(
+                &ctx,
+                resource_id,
+                RESOURCE_TABLE_NAME,
+                RESOURCE_ID_MAP_NAME,
+            )
+            .expect("Failed to release invalid synchronous constructor resource");
         }
         (resource_id, created_writer)
     })

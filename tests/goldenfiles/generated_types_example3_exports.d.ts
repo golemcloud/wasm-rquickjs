@@ -18,6 +18,10 @@ declare module 'example3' {
        */
       getName(): Promise<string>;
       /**
+       * Compares this instance with another borrowed instance
+       */
+      compareWith(other: Hello): Promise<number>;
+      /**
        * Example of a static method
        */
       static compare(h1: Hello, h2: Hello): Promise<number>;
@@ -25,6 +29,35 @@ declare module 'example3' {
        * Example of a static method taking owned handles
        */
       static merge(h1: Hello, h2: Hello): Promise<Hello>;
+      /**
+       * Transfers an owned handle through JavaScript without changing its identity
+       */
+      static identity(value: Hello): Promise<Hello>;
+      /**
+       * Creates another owned handle for the same JavaScript object
+       */
+      static alias(value: Hello): Promise<Hello>;
+      /**
+       * Creates two owned handles for the same JavaScript object
+       */
+      static duplicate(value: Hello): Promise<[Hello, Hello]>;
+      /**
+       * Retains a transferred object in JavaScript after its final host handle is dropped
+       */
+      static stash(value: Hello): Promise<void>;
+      /**
+       * Retains a transferred object and returns an expected error
+       * @throws string
+       */
+      static stashAndFail(value: Hello): Promise<void>;
+      /**
+       * Returns the object retained by `stash`
+       */
+      static take(): Promise<Hello>;
+      /**
+       * Reports the number of live entries in the exported-resource table
+       */
+      static resourceCount(): Promise<number>;
     }
     export class HelloWithStaticCreate {
       static create(name: string): Promise<HelloWithStaticCreate>;
@@ -32,5 +65,6 @@ declare module 'example3' {
       static compare(h1: Hello, h2: Hello): Promise<number>;
       static merge(h1: Hello, h2: Hello): Promise<Hello>;
     }
+    export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
   }
 }

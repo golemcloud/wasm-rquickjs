@@ -8,7 +8,6 @@ use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::atomic::AtomicUsize;
 use wstd::runtime::block_on;
 
 use super::runtime_services::{
@@ -17,7 +16,7 @@ use super::runtime_services::{
 };
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
-pub const RESOURCE_ID_KEY: &str = "__wasm_rquickjs_resource_id";
+pub const RESOURCE_ID_MAP_NAME: &str = "__wasm_rquickjs_resource_ids";
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 pub struct JsState {
@@ -25,7 +24,6 @@ pub struct JsState {
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
-    pub last_resource_id: AtomicUsize,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
     pub gc_pending: std::sync::atomic::AtomicBool,
@@ -69,18 +67,23 @@ impl JsState {
 
             global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                 .expect("Failed to initialize resource table");
+            global
+                .set(
+                    RESOURCE_ID_MAP_NAME,
+                    ctx.eval::<Object, _>("new WeakMap()")
+                        .expect("Failed to create resource ID map"),
+                )
+                .expect("Failed to initialize resource ID map");
         })
         .await;
 
         let (resource_drop_queue_tx, resource_drop_queue_rx) = futures::channel::mpsc::unbounded();
 
-        let last_resource_id = AtomicUsize::new(1);
         Self {
             rt,
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
             variant_case_tag_cache: RefCell::new(HashMap::new()),
-            last_resource_id,
             resource_drop_queue_tx,
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
             gc_pending: std::sync::atomic::AtomicBool::new(false),
@@ -597,16 +600,8 @@ where
                 panic! ("Error during call of constructor {path}: {e:?}", path= resource_path.join("."));
             }
             Ok(resource) => {
-                let resource_id = get_free_resource_id();
-                resource.set(RESOURCE_ID_KEY, resource_id)
-                    .expect("Failed to set resource ID");
-                let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
-                    .expect("Failed to get the resource table");
-                resource_table
-                    .set(resource_id.to_string(), resource)
-                    .expect("Failed to store resource instance");
-
-                resource_id
+                acquire_js_resource(&ctx, resource)
+                    .expect("Failed to register resource instance")
             }
         }
     }).await;
@@ -614,10 +609,13 @@ where
     result
 }
 
-pub fn get_free_resource_id() -> usize {
-    get_js_state()
-        .last_resource_id
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {
+    super::runtime_services::acquire_exported_resource(
+        ctx,
+        resource,
+        RESOURCE_TABLE_NAME,
+        RESOURCE_ID_MAP_NAME,
+    )
 }
 
 pub async fn call_js_resource_method<A, R>(
@@ -778,11 +776,13 @@ async fn drop_js_resource(resource_id: usize) {
     let js_state = get_js_state();
 
     async_with!(js_state.ctx => |ctx| {
-        let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
-            .expect("Failed to get the resource table");
-        if let Err(e) = resource_table.remove(resource_id.to_string()) {
-            panic!("Failed to delete resource {resource_id}: {e:?}");
-        }
+        super::runtime_services::release_exported_resource(
+            &ctx,
+            resource_id,
+            RESOURCE_TABLE_NAME,
+            RESOURCE_ID_MAP_NAME,
+        )
+        .unwrap_or_else(|e| panic!("Failed to release resource {resource_id}: {e:?}"));
     })
     .await;
     js_state.rt.idle().await;

@@ -8,10 +8,26 @@ interface iface {
     constructor(name: string);
     /// Gets the name passed to the constructor
     get-name: func() -> string;
+    /// Compares this instance with another borrowed instance
+    compare-with: func(other: borrow<hello>) -> s32;
     /// Example of a static method
     compare: static func(h1: borrow<hello>, h2: borrow<hello>) -> s32;
     /// Example of a static method taking owned handles
     merge: static func(h1: own<hello>, h2: own<hello>) -> hello;
+    /// Transfers an owned handle through JavaScript without changing its identity
+    identity: static func(value: own<hello>) -> hello;
+    /// Creates another owned handle for the same JavaScript object
+    alias: static func(value: borrow<hello>) -> hello;
+    /// Creates two owned handles for the same JavaScript object
+    duplicate: static func(value: borrow<hello>) -> tuple<hello, hello>;
+    /// Retains a transferred object in JavaScript after its final host handle is dropped
+    stash: static func(value: own<hello>);
+    /// Retains a transferred object and returns an expected error
+    stash-and-fail: static func(value: own<hello>) -> result<_, string>;
+    /// Returns the object retained by `stash`
+    take: static func() -> hello;
+    /// Reports the number of live entries in the exported-resource table
+    resource-count: static func() -> u32;
   }
 
   resource hello-with-static-create {

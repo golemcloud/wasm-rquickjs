@@ -1,3 +1,5 @@
+let stashedHello;
+
 class Hello {
     constructor(name) {
         this.name = name;
@@ -5,6 +7,10 @@ class Hello {
 
     async getName() {
         return this.name;
+    }
+
+    compareWith(other) {
+        return Hello.compare(this, other);
     }
 
     static compare(h1, h2) {
@@ -19,6 +25,39 @@ class Hello {
 
     static merge(h1, h2) {
         return new Hello(`${h1.name} & ${h2.name}`);
+    }
+
+    static identity(value) {
+        return value;
+    }
+
+    static alias(value) {
+        return value;
+    }
+
+    static duplicate(value) {
+        return [value, value];
+    }
+
+    static stash(value) {
+        Object.freeze(value);
+        stashedHello = value;
+    }
+
+    static stashAndFail(value) {
+        Object.freeze(value);
+        stashedHello = value;
+        throw "expected failure";
+    }
+
+    static take() {
+        const value = stashedHello;
+        stashedHello = undefined;
+        return value;
+    }
+
+    static resourceCount() {
+        return Object.keys(globalThis.__wasm_rquickjs_resources).length;
     }
 }
 

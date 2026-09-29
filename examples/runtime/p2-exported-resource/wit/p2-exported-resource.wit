@@ -1,0 +1,16 @@
+package quickjs:p2-exported-resource;
+
+interface api {
+  resource counter {
+    constructor(value: u32);
+    get: func() -> u32;
+    identity: static func(value: own<counter>) -> counter;
+    stash-and-fail: static func(value: own<counter>) -> result<_, string>;
+    take: static func() -> counter;
+    resource-count: static func() -> u32;
+  }
+}
+
+world p2-exported-resource {
+  export api;
+}

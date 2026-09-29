@@ -145,11 +145,12 @@ fn add_wasi_logging_stub(linker: &mut Linker<Host>) -> Result<()> {
 }
 
 /// Constructs the exported `counter`, exercises every method shape, drops it, and returns the
-/// six observed values: the checkpoint count after each construction, followed by
-/// `increment(5)`, `get()`, `staticZero()`, and `incrementAsync(100)`.
+/// seven observed values: the checkpoint count after each construction, followed by
+/// `increment(5)`, `get()`, `addOther(self)`, `staticZero()`, and
+/// `incrementAsync(100, self)`.
 async fn drive_exported_counter(
     component_path: &Utf8Path,
-) -> Result<(u32, u32, u32, u32, u32, u32)> {
+) -> Result<(u32, u32, u32, u32, u32, u32, u32)> {
     let engine = engine()?;
     let component = Component::from_file(&engine, component_path)?;
     let linker = base_linker(&engine)?;
@@ -165,6 +166,7 @@ async fn drive_exported_counter(
     let instance;
     let after_increment;
     let value;
+    let added_self;
     let zero;
     let first_checkpoint_count;
     {
@@ -174,12 +176,122 @@ async fn drive_exported_counter(
         first_checkpoint_count = counter.call_checkpoint_count(&mut store).await?;
         after_increment = counter.call_increment(&mut store, instance, 5).await?;
         value = counter.call_get(&mut store, instance).await?;
+        added_self = counter
+            .call_add_other(&mut store, instance, instance)
+            .await?;
         zero = counter.call_static_zero(&mut store).await?;
     }
 
     // Drop the guest resource handle (the generated guest `Drop` enqueues the JS-side removal,
     // drained at the next JS entry point).
     instance.resource_drop_async(&mut store).await?;
+
+    {
+        let api = bindings.test_exported_res_api();
+        let counter = api.counter();
+
+        let original = counter.call_constructor(&mut store, 20).await?;
+        let identity = counter.call_identity(&mut store, original).await?;
+        assert_eq!(counter.call_get(&mut store, identity).await?, 20);
+        identity.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 30).await?;
+        let alias = counter.call_alias(&mut store, original).await?;
+        original.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, alias).await?, 30);
+        alias.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 40).await?;
+        let alias = counter.call_alias(&mut store, original).await?;
+        alias.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, original).await?, 40);
+        original.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 45).await?;
+        let (first, second) = counter.call_duplicate(&mut store, original).await?;
+        original.resource_drop_async(&mut store).await?;
+        first.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, second).await?, 45);
+        second.resource_drop_async(&mut store).await?;
+
+        let original = counter.call_constructor(&mut store, 46).await?;
+        let (first, second) = counter.call_duplicate(&mut store, original).await?;
+        original.resource_drop_async(&mut store).await?;
+        second.resource_drop_async(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, first).await?, 46);
+        first.resource_drop_async(&mut store).await?;
+
+        let stashed = counter.call_constructor(&mut store, 50).await?;
+        counter.call_stash(&mut store, stashed).await?;
+        let recovered = counter.call_take(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, recovered).await?, 50);
+        recovered.resource_drop_async(&mut store).await?;
+
+        let failing = counter.call_constructor(&mut store, 60).await?;
+        assert_eq!(
+            counter.call_stash_and_fail(&mut store, failing).await?,
+            Err("expected failure".to_string())
+        );
+        let recovered = counter.call_take(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, recovered).await?, 60);
+        recovered.resource_drop_async(&mut store).await?;
+
+        let baseline = counter.call_resource_count(&mut store).await?;
+        let tracked = counter.call_constructor(&mut store, 70).await?;
+        assert_eq!(counter.call_resource_count(&mut store).await?, baseline + 1);
+        tracked.resource_drop_async(&mut store).await?;
+        assert_eq!(
+            counter.call_resource_count(&mut store).await?,
+            baseline,
+            "the final host drop must remove the resource table entry"
+        );
+    }
+
+    let async_identity_source = {
+        let api = bindings.test_exported_res_api();
+        api.counter().call_constructor(&mut store, 25).await?
+    };
+    let identity_bindings = &bindings;
+    let async_identity = store
+        .run_concurrent(async move |accessor| -> Result<_> {
+            identity_bindings
+                .test_exported_res_api()
+                .counter()
+                .call_identity_async(accessor, async_identity_source)
+                .await
+        })
+        .await??;
+    {
+        let api = bindings.test_exported_res_api();
+        assert_eq!(
+            api.counter().call_get(&mut store, async_identity).await?,
+            25
+        );
+    }
+    async_identity.resource_drop_async(&mut store).await?;
+
+    let async_failure_source = {
+        let api = bindings.test_exported_res_api();
+        api.counter().call_constructor(&mut store, 80).await?
+    };
+    let failure_bindings = &bindings;
+    let async_failure = store
+        .run_concurrent(async move |accessor| -> Result<_> {
+            failure_bindings
+                .test_exported_res_api()
+                .counter()
+                .call_stash_and_fail_async(accessor, async_failure_source)
+                .await
+        })
+        .await??;
+    assert_eq!(async_failure, Err("expected async failure".to_string()));
+    {
+        let api = bindings.test_exported_res_api();
+        let counter = api.counter();
+        let recovered = counter.call_take(&mut store).await?;
+        assert_eq!(counter.call_get(&mut store, recovered).await?, 80);
+        recovered.resource_drop_async(&mut store).await?;
+    }
 
     let async_instance;
     let second_checkpoint_count;
@@ -195,7 +307,7 @@ async fn drive_exported_counter(
             let api = bindings.test_exported_res_api();
             let counter = api.counter();
             counter
-                .call_increment_async(accessor, async_instance, 100)
+                .call_increment_async(accessor, async_instance, 100, async_instance)
                 .await
         })
         .await??;
@@ -204,6 +316,7 @@ async fn drive_exported_counter(
     Ok((
         after_increment,
         value,
+        added_self,
         zero,
         after_async,
         first_checkpoint_count,
@@ -300,18 +413,26 @@ fn p3_exported_resource_roundtrip() {
     let (
         after_increment,
         value,
+        added_self,
         zero,
         after_async,
         first_checkpoint_count,
         second_checkpoint_count,
     ) = block_on_with_timeout(120, drive_exported_counter(&wasm));
 
-    // JS: new Counter(10); increment(5) -> 15; get() -> 15; staticZero() -> 0;
-    //     new Counter(15).incrementAsync(100) -> 115.
+    // JS: new Counter(10); increment(5) -> 15; get() -> 15; addOther(self) -> 30;
+    //     staticZero() -> 0;
+    //     new Counter(15).incrementAsync(100, self) -> 130.
     assert_eq!(after_increment, 15, "increment(5) should return 15");
     assert_eq!(value, 15, "get() should return 15");
+    assert_eq!(added_self, 30, "addOther(self) should return 30");
     assert_eq!(zero, 0, "staticZero() should return 0");
-    assert_eq!(after_async, 115, "incrementAsync(100) should return 115");
+    assert_eq!(
+        after_async, 130,
+        "incrementAsync(100, self) should return 130"
+    );
     assert_eq!(first_checkpoint_count, 1);
-    assert_eq!(second_checkpoint_count, 2);
+    // The lifecycle matrix constructs twelve counters before the second checkpoint read; every
+    // constructor intentionally queues one rejection observed by the shared handler.
+    assert_eq!(second_checkpoint_count, 12);
 }
