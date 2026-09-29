@@ -3358,11 +3358,14 @@ function loadCommonJsTransaction(descriptor) {
             let cjsSyntaxError = null;
             const shouldFallbackToEsm = canFallbackToEsm &&
                 !filename.endsWith('.cjs') && !filename.endsWith('.cts') && !isCommonJsPackage;
+            const compileFormat = filename.endsWith('.cjs') || explicitPackageType === 'commonjs'
+                ? 'commonjs'
+                : undefined;
             let cjsWrapperLexicalRedeclaration = false;
             let cjsSourceLooksEsm = false;
             moduleCompileContexts.set(mod, compileContext);
             try {
-                mod._compile(compiledSource, filename);
+                mod._compile(compiledSource, filename, compileFormat);
             } catch (err) {
                 const defaultCompileAttempted = compileContext.originalCompileCalls > 0 &&
                     compileContext.compiledSourceUnchanged;
@@ -5039,10 +5042,11 @@ Module.prototype.require = function require(id) {
     );
 };
 
-Module.prototype._compile = function _compile(content, filename) {
+Module.prototype._compile = function _compile(content, filename, format) {
     if (!(this instanceof Module)) {
         throw new ERR_INVALID_ARG_TYPE('mod', 'Module', this);
     }
+    void format;
     const effectiveFilename = arguments.length > 1 ? filename : this.filename;
     const context = moduleCompileContexts.get(this);
     if (context) {

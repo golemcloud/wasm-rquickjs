@@ -236,6 +236,7 @@ export async function run() {
          };`,
     );
     let cjsPublicCompileCalls = 0;
+    let cjsPublicCompileContract = true;
     let coldCjsPublicLoadCalls = 0;
     let coldCjsPublicCompileCalls = 0;
     let cjsRuntimeStack;
@@ -249,14 +250,18 @@ export async function run() {
         }
         return originalCjsLoad.apply(this, arguments);
     };
-    module.prototype._compile = function publicCjsCompile(content, filename) {
+    module.prototype._compile = function publicCjsCompile(content, filename, format) {
         if (filename === '/typescript-transform-runtime/stack-cjs.cts') {
             cjsPublicCompileCalls++;
+            cjsPublicCompileContract = cjsPublicCompileContract &&
+                this instanceof module && arguments.length === 3 && format === undefined;
         }
         if (filename === '/typescript-transform-runtime/stack-cjs-import.cts') {
             coldCjsPublicCompileCalls++;
+            cjsPublicCompileContract = cjsPublicCompileContract &&
+                this instanceof module && arguments.length === 3 && format === undefined;
         }
-        return originalCjsCompile.call(this, content, filename);
+        return originalCjsCompile.apply(this, arguments);
     };
     try {
         const cjsStackModule = require('/typescript-transform-runtime/stack-cjs.cts');
@@ -460,6 +465,7 @@ export async function run() {
         largeInlineExecution: largeInlineExecution.value,
         esmRuntimeStack,
         cjsPublicCompileCalls,
+        cjsPublicCompileContract,
         coldCjsPublicLoadCalls,
         coldCjsPublicCompileCalls,
         cjsRuntimeStack,

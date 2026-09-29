@@ -348,6 +348,10 @@ async fn typescript_transform_runtime_is_immutable(
         "the public CommonJS compile hook must observe TypeScript exactly once"
     );
     assert_eq!(
+        report["cjsPublicCompileContract"], true,
+        "the public CommonJS compile hook must receive Node-compatible receiver and arguments"
+    );
+    assert_eq!(
         report["coldCjsPublicLoadCalls"], 1,
         "a cold ESM import of CommonJS TypeScript must use the public load hook"
     );

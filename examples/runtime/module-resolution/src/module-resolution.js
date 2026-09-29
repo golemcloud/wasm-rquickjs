@@ -9781,6 +9781,16 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         const hooksRoot = `${root}/public-hooks`;
         fs.mkdirSync(hooksRoot, { recursive: true });
         fs.writeFileSync(`${hooksRoot}/child.cjs`, 'module.exports = { value: "original" };');
+        fs.writeFileSync(`${hooksRoot}/implicit.js`, 'module.exports = { format: "implicit" };');
+        fs.mkdirSync(`${hooksRoot}/explicit-commonjs`, { recursive: true });
+        fs.writeFileSync(
+            `${hooksRoot}/explicit-commonjs/package.json`,
+            JSON.stringify({ type: 'commonjs' }),
+        );
+        fs.writeFileSync(
+            `${hooksRoot}/explicit-commonjs/entry.js`,
+            'module.exports = { format: "commonjs" };',
+        );
         fs.writeFileSync(`${hooksRoot}/instance.cjs`, 'module.exports = { instance: true };');
         fs.writeFileSync(
             `${hooksRoot}/non-callable.cjs`,
@@ -9805,6 +9815,8 @@ export const testCjsNodeModuleLoadingCompat = async () => {
             '};',
             'exports.child = require("./child.cjs");',
             'exports.childAgain = require("./child.cjs");',
+            'exports.implicit = require("./implicit.js");',
+            'exports.explicitCommonJs = require("./explicit-commonjs/entry.js");',
             'exports.instance = require("./instance.cjs");',
             'exports.virtual = require("virtual:public-hook");',
             'try { require("virtual:public-hook-error"); } catch (error) { exports.virtualError = error.message; }',
@@ -9822,6 +9834,7 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         const hookEvents = [];
         const requireHookCalls = [];
         const loadHookCalls = [];
+        const compileHookCalls = [];
         let retryCompileCalls = 0;
         try {
             Module.prototype.require = function(request) {
@@ -9852,9 +9865,16 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 if (request === 'virtual:public-hook-error') throw new Error('public hook load error');
                 return originalLoad.apply(this, arguments);
             };
-            Module.prototype._compile = function(content, filename) {
+            Module.prototype._compile = function(content, filename, format) {
                 if (typeof filename === 'string' && filename.startsWith(hooksRoot)) {
                     hookEvents.push(`compile:${filename}`);
+                    compileHookCalls.push({
+                        filename,
+                        receiver: this,
+                        receiverIsModule: this instanceof Module,
+                        format,
+                        argumentCount: arguments.length,
+                    });
                 }
                 if (filename === `${hooksRoot}/retry.cjs` && retryCompileCalls++ === 0) {
                     throw new Error('public hook compile error');
@@ -9862,7 +9882,7 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 if (filename === `${hooksRoot}/child.cjs`) {
                     content = String(content).replace('"original"', '"instrumented"');
                 }
-                return originalCompile.call(this, content, filename);
+                return originalCompile.call(this, content, filename, format);
             };
             require.extensions['.hook'] = function(mod, filename) {
                 mod._compile(fs.readFileSync(filename, 'utf8'), filename);
@@ -9874,6 +9894,8 @@ export const testCjsNodeModuleLoadingCompat = async () => {
             const hooked = require(`${hooksRoot}/entry.cjs`);
             assert.deepStrictEqual(hooked.child, { value: 'instrumented' });
             assert.strictEqual(hooked.child, hooked.childAgain);
+            assert.deepStrictEqual(hooked.implicit, { format: 'implicit' });
+            assert.deepStrictEqual(hooked.explicitCommonJs, { format: 'commonjs' });
             assert.deepStrictEqual(hooked.instance, { instance: true });
             assert.strictEqual(globalThis.__cjsInstanceRequireCalls, 1);
             assert.throws(
@@ -9935,6 +9957,25 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 call.parentIsModule &&
                 call.isMain === false &&
                 call.argumentCount === 3));
+            assert(compileHookCalls
+                .filter((call) => call.filename.endsWith('.cjs'))
+                .every((call) =>
+                    call.receiverIsModule &&
+                    call.receiver.filename === call.filename &&
+                    call.format === 'commonjs' &&
+                    call.argumentCount === 3));
+            const customCompileCall = compileHookCalls.find((call) => call.filename === `${hooksRoot}/custom.hook`);
+            assert.strictEqual(customCompileCall.receiverIsModule, true);
+            assert.strictEqual(customCompileCall.receiver.filename, customCompileCall.filename);
+            assert.strictEqual(customCompileCall.format, undefined);
+            assert.strictEqual(customCompileCall.argumentCount, 2);
+            const implicitCompileCall = compileHookCalls.find((call) => call.filename === `${hooksRoot}/implicit.js`);
+            assert.strictEqual(implicitCompileCall.format, undefined);
+            assert.strictEqual(implicitCompileCall.argumentCount, 3);
+            const explicitCommonJsCompileCall = compileHookCalls.find((call) =>
+                call.filename === `${hooksRoot}/explicit-commonjs/entry.js`);
+            assert.strictEqual(explicitCommonJsCompileCall.format, 'commonjs');
+            assert.strictEqual(explicitCommonJsCompileCall.argumentCount, 3);
             const entryRequireCall = requireHookCalls.find((call) => call.request === `${hooksRoot}/entry.cjs`);
             const entryLoadCall = loadHookCalls.find((call) => call.request === `${hooksRoot}/entry.cjs`);
             assert.strictEqual(entryRequireCall.receiver.filename, `${root}/entry.cjs`);

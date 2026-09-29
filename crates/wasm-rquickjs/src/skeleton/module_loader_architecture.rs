@@ -643,7 +643,7 @@ fn module_loader_architecture() {
         ),
         (
             "ordinary filesystem CommonJS must dispatch through the instance compile hook",
-            "mod._compile(compiledSource, filename);",
+            "mod._compile(compiledSource, filename, compileFormat);",
         ),
         (
             "loader-supplied CommonJS source must keep its private compile path",
