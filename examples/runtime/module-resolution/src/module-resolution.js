@@ -9820,17 +9820,33 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         const originalCompile = Module.prototype._compile;
         const originalHookExtension = require.extensions['.hook'];
         const hookEvents = [];
+        const requireHookCalls = [];
+        const loadHookCalls = [];
         let retryCompileCalls = 0;
         try {
             Module.prototype.require = function(request) {
                 if (typeof request === 'string' && (request.includes('public-hooks') || request.startsWith('./') || request.startsWith('virtual:public-hook'))) {
                     hookEvents.push(`require:${request}`);
+                    requireHookCalls.push({
+                        request,
+                        receiver: this,
+                        receiverIsModule: this instanceof Module,
+                        argumentCount: arguments.length,
+                    });
                 }
                 return originalPrototypeRequire.apply(this, arguments);
             };
-            Module._load = function(request) {
+            Module._load = function(request, parent, isMain) {
                 if (typeof request === 'string' && (request.includes('public-hooks') || request.startsWith('./') || request.startsWith('virtual:public-hook'))) {
                     hookEvents.push(`load:${request}`);
+                    loadHookCalls.push({
+                        request,
+                        receiverIsModuleConstructor: this === Module,
+                        parent,
+                        parentIsModule: parent instanceof Module,
+                        isMain,
+                        argumentCount: arguments.length,
+                    });
                 }
                 if (request === 'virtual:public-hook') return { intercepted: true };
                 if (request === 'virtual:public-hook-error') throw new Error('public hook load error');
@@ -9913,6 +9929,22 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 `require:${hooksRoot}/child.cjs`,
                 `load:${hooksRoot}/child.cjs`,
             ]);
+            assert(requireHookCalls.every((call) => call.receiverIsModule && call.argumentCount === 1));
+            assert(loadHookCalls.every((call) =>
+                call.receiverIsModuleConstructor &&
+                call.parentIsModule &&
+                call.isMain === false &&
+                call.argumentCount === 3));
+            const entryRequireCall = requireHookCalls.find((call) => call.request === `${hooksRoot}/entry.cjs`);
+            const entryLoadCall = loadHookCalls.find((call) => call.request === `${hooksRoot}/entry.cjs`);
+            assert.strictEqual(entryRequireCall.receiver.filename, `${root}/entry.cjs`);
+            assert.strictEqual(entryLoadCall.parent, entryRequireCall.receiver);
+            assert(requireHookCalls
+                .filter((call) => call.request === './child.cjs')
+                .every((call) => call.receiver === hooked.module));
+            assert(loadHookCalls
+                .filter((call) => call.request === './child.cjs')
+                .every((call) => call.parent === hooked.module));
         } finally {
             Module.prototype.require = originalPrototypeRequire;
             Module._load = originalLoad;
