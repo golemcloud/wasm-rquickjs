@@ -620,9 +620,13 @@ export async function httpResponsePostCloseWrites() {
 function runHttpActiveDrainScenario() {
     return new Promise((resolve) => {
         const requestCount = 8;
+        const body = Buffer.alloc(4096, 'b');
         let settled = false;
         let socket;
         let requestsSeen = 0;
+        let bodyBytes = 0;
+        let bodyCompleted = false;
+        let requestSocketPausedAfterWrite = true;
         let laterRequestBeforeDrain = false;
         let falseWrites = 0;
         let drainCount = 0;
@@ -637,7 +641,7 @@ function runHttpActiveDrainScenario() {
         let noBodyNeedDrain = true;
         const chunk = Buffer.alloc(8 * 1024, 'a');
         let activeDrained = false;
-        const sendRemainingRequests = () => {
+        const sendBodyAndRemainingRequests = () => {
             let requests =
                 'HEAD /head HTTP/1.1\r\nHost: localhost\r\n\r\n';
             for (let index = 2; index < requestCount; index++) {
@@ -649,8 +653,7 @@ function runHttpActiveDrainScenario() {
                         : '') +
                     '\r\n';
             }
-            socket.write(requests);
-            setTimeout(() => socket.resume(), 25);
+            socket.write(Buffer.concat([body.subarray(1), Buffer.from(requests)]));
         };
         const server = http.createServer((req, res) => {
             const index = requestsSeen++;
@@ -672,11 +675,19 @@ function runHttpActiveDrainScenario() {
                 return;
             }
 
+            req.on('data', (data) => {
+                bodyBytes += data.length;
+            });
+            req.on('end', () => {
+                bodyCompleted = bodyBytes === body.length;
+                setImmediate(() => socket.resume());
+            });
             for (let writes = 0; writes < 32; writes++) {
                 if (!res.write(chunk)) {
                     falseWrites++;
                     lengthAtFalse = res.writableLength;
                     highWaterMark = res.writableHighWaterMark;
+                    requestSocketPausedAfterWrite = req.socket.isPaused();
                     res.once('drain', () => {
                         activeDrained = true;
                         drainCount++;
@@ -684,7 +695,7 @@ function runHttpActiveDrainScenario() {
                         needDrainAtDrain = res.writableNeedDrain;
                         res.end();
                     });
-                    setImmediate(sendRemainingRequests);
+                    setImmediate(sendBodyAndRemainingRequests);
                     return;
                 }
             }
@@ -705,6 +716,9 @@ function runHttpActiveDrainScenario() {
                     drainCount,
                     finishCount,
                     requestsSeen,
+                    bodyBytes,
+                    bodyCompleted,
+                    requestSocketPausedAfterWrite,
                     laterRequestBeforeDrain,
                     lengthAtFalse,
                     lengthAtDrain,
@@ -720,6 +734,9 @@ function runHttpActiveDrainScenario() {
                     drainCount === 1 &&
                     finishCount === requestCount &&
                     requestsSeen === requestCount &&
+                    bodyBytes === body.length &&
+                    bodyCompleted &&
+                    !requestSocketPausedAfterWrite &&
                     !laterRequestBeforeDrain &&
                     lengthAtFalse >= highWaterMark &&
                     !needDrainAtDrain &&
@@ -738,8 +755,10 @@ function runHttpActiveDrainScenario() {
             socket.on('connect', () => {
                 socket.pause();
                 socket.write(
-                    'GET /active HTTP/1.1\r\n' +
-                    'Host: localhost\r\n\r\n'
+                    'POST /active HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    `Content-Length: ${body.length}\r\n\r\n` +
+                    body.subarray(0, 1).toString('latin1')
                 );
             });
             socket.on('data', () => {});
@@ -764,6 +783,7 @@ function runHttpBlockedDrainAndBodyScenario() {
         let bodyCompletedBeforeRelease = false;
         let requestsBeforeFirstRelease = 0;
         let blockedWriteResult = true;
+        let requestSocketPausedAfterWrite = true;
         let blockedDrainCount = 0;
         let endedBlockedWriteResult = true;
         let endedBlockedDrainCount = 0;
@@ -806,6 +826,8 @@ function runHttpBlockedDrainAndBodyScenario() {
                 blockedWriteResult = res.write(payload, () => {
                     callbackOrder.push(index);
                 });
+                requestSocketPausedAfterWrite = req.socket.isPaused();
+                setImmediate(() => socket.write(body.subarray(1)));
                 return;
             }
 
@@ -840,6 +862,7 @@ function runHttpBlockedDrainAndBodyScenario() {
                     bodyCompletedBeforeRelease,
                     requestsBeforeFirstRelease,
                     blockedWriteResult,
+                    requestSocketPausedAfterWrite,
                     blockedDrainCount,
                     endedBlockedWriteResult,
                     endedBlockedDrainCount,
@@ -853,6 +876,7 @@ function runHttpBlockedDrainAndBodyScenario() {
                     requestsBeforeFirstRelease >= 2 &&
                     requestsBeforeFirstRelease <= 3 &&
                     !blockedWriteResult &&
+                    !requestSocketPausedAfterWrite &&
                     blockedDrainCount === 1 &&
                     !endedBlockedWriteResult &&
                     endedBlockedDrainCount === 0 &&
@@ -872,7 +896,7 @@ function runHttpBlockedDrainAndBodyScenario() {
                 socket.write(
                     'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
                     `POST /body HTTP/1.1\r\nHost: localhost\r\nContent-Length: ${body.length}\r\n\r\n` +
-                    body.toString('latin1')
+                    body.subarray(0, 1).toString('latin1')
                 );
             });
             socket.on('data', () => {});
@@ -892,7 +916,7 @@ function runHttpPausedAbortScenario() {
         let writeCallbackErrors = 0;
         let responseCloseCount = 0;
 
-        const server = http.createServer((_req, res) => {
+        const server = http.createServer((req, res) => {
             const index = requestsSeen++;
             res.on('error', () => {});
             res.on('close', () => {
@@ -905,8 +929,9 @@ function runHttpPausedAbortScenario() {
             secondWriteResult = res.write(payload, (error) => {
                 if (error) writeCallbackErrors++;
             });
+            const responseSocket = req.socket;
             res.end();
-            setImmediate(() => res.socket.destroy());
+            setImmediate(() => responseSocket.destroy());
         });
         server.on('error', () => finish(false));
 

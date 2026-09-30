@@ -229,6 +229,7 @@ function ServerResponse(req, options) {
     this.sendDate = true;
     this.headersSent = false;
     this.finished = false;
+    this._finishEmitted = false;
     this._writableEnded = false;
     this._headers = {};
     this._headerNames = {};
@@ -337,7 +338,7 @@ Object.defineProperty(ServerResponse.prototype, 'writableHighWaterMark', {
 
 Object.defineProperty(ServerResponse.prototype, 'writableLength', {
     get() {
-        const activeLength = this.socket && !this._outputBlocked && !this.finished
+        const activeLength = this.socket && !this._outputBlocked && !this._finishEmitted
             ? this.socket.writableLength || 0
             : 0;
         return this._outputSize + activeLength;
@@ -1001,6 +1002,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
             this.emit('error', error);
             return;
         }
+        this._finishEmitted = true;
         this.emit('finish');
     };
 
@@ -1175,7 +1177,8 @@ function createConnectionParser(server, socket) {
         if (state.detached || state.closing || socket.destroyed) return;
         const highWaterMark = socket.writableHighWaterMark ||
             DEFAULT_WRITABLE_HIGH_WATER_MARK;
-        if (!state.inputPaused &&
+        const atHeaderBoundary = state.state === IDLE || state.state === HEADERS;
+        if (!state.inputPaused && atHeaderBoundary &&
             (socket.writableNeedDrain || state.queuedOutputBytes >= highWaterMark)) {
             state.inputPaused = true;
             socket.pause();
@@ -1642,7 +1645,6 @@ function createConnectionParser(server, socket) {
                     } else {
                         server.emit('request', req, res);
                     }
-                    updateInputBackpressure();
                     if (requestHasNoBody) {
                         // Emit EOF after request handlers had a chance to attach `end` listeners.
                         Promise.resolve().then(function () {
