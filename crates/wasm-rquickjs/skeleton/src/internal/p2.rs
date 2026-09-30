@@ -265,6 +265,35 @@ async fn drain_and_idle(js_state: &JsState) {
     }
 }
 
+/// Resolves the internal `process._awaitRuntimeIdle()` promise from a task owned by the component
+/// executor rather than rquickjs's scheduler. Keeping the waiter outside that scheduler lets the
+/// existing idle boundary wait for every other referenced task without counting the waiter itself.
+pub(crate) fn spawn_runtime_idle_waiter(
+    resolve: Persistent<Function<'static>>,
+    reject: Persistent<Function<'static>>,
+) {
+    wstd::runtime::spawn(async move {
+        let js_state = get_js_state();
+        drain_and_idle(js_state).await;
+        async_with!(js_state.ctx => |ctx| {
+            let resolve = resolve
+                .restore(&ctx)
+                .expect("failed to restore runtime-idle resolve function");
+            let reject = reject
+                .restore(&ctx)
+                .expect("failed to restore runtime-idle reject function");
+            drop(reject);
+            resolve
+                .call::<_, ()>(((),))
+                .expect("failed to resolve runtime-idle promise");
+            run_process_turn_checkpoint(&ctx)
+                .expect("failed to run process checkpoint after runtime-idle wait");
+        })
+        .await;
+    })
+    .detach();
+}
+
 static mut STATE: Option<JsState> = None;
 static mut INIT_PHASE: InitPhase = InitPhase::Uninitialized;
 
