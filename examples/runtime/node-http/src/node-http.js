@@ -398,6 +398,160 @@ export function httpResponseLifecycle() {
         typeCode === 'ERR_INVALID_ARG_TYPE';
 }
 
+export async function httpResponsePostCloseWrites() {
+    const beforeClose = await new Promise((resolve) => {
+        let settled = false;
+        let writeCallbackCount = 0;
+        let writeCallbackError;
+        let callbackBeforeClose = false;
+        let finishCount = 0;
+        let closeCount = 0;
+        let destroyedAtClose = false;
+        const server = http.createServer((_req, res) => {
+            res.on('error', () => finish(false));
+            res.on('finish', () => {
+                finishCount++;
+            });
+            res.on('close', () => {
+                closeCount++;
+                destroyedAtClose = res.destroyed;
+                setImmediate(() => {
+                    finish(
+                        writeCallbackCount === 1 &&
+                        writeCallbackError == null &&
+                        callbackBeforeClose &&
+                        finishCount === 1 &&
+                        closeCount === 1 &&
+                        destroyedAtClose
+                    );
+                });
+            });
+            res.write('before-close', (error) => {
+                writeCallbackCount++;
+                writeCallbackError = error;
+                callbackBeforeClose = closeCount === 0;
+            });
+            res.end();
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            server.closeAllConnections();
+            server.close();
+            resolve(result);
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET / HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Connection: close\r\n\r\n'
+                );
+            });
+            socket.on('data', () => {});
+            socket.on('error', () => finish(false));
+        });
+    });
+
+    if (!beforeClose) return false;
+
+    return new Promise((resolve) => {
+        let settled = false;
+        let firstCloseCount = 0;
+        let secondCloseCount = 0;
+        let finishCount = 0;
+        let responseErrorCount = 0;
+        let queuedCallbackCount = 0;
+        let postCloseCallbackCount = 0;
+        let postCloseCallbackCode;
+        let postCloseCallbackWasAsync = false;
+        let postCloseReturn;
+        let postCloseValidationCode;
+        let firstDestroyedAtClose = false;
+        let secondDestroyedAtClose = false;
+        const server = http.createServer((req, res) => {
+            res.on('error', () => {
+                responseErrorCount++;
+            });
+            res.on('finish', () => {
+                finishCount++;
+            });
+
+            if (req.url === '/first') {
+                res.on('close', () => {
+                    firstCloseCount++;
+                    firstDestroyedAtClose = res.destroyed;
+                });
+                setTimeout(() => res.destroy(), 25);
+                return;
+            }
+
+            res.write('queued-during-close', () => {
+                queuedCallbackCount++;
+            });
+            res.on('close', () => {
+                secondCloseCount++;
+                secondDestroyedAtClose = res.destroyed;
+                try {
+                    res.write(null);
+                } catch (error) {
+                    postCloseValidationCode = error.code;
+                }
+                let synchronous = true;
+                postCloseReturn = res.write('after-close', (error) => {
+                    postCloseCallbackCount++;
+                    postCloseCallbackCode = error && error.code;
+                    postCloseCallbackWasAsync = !synchronous;
+                });
+                synchronous = false;
+
+                setImmediate(() => {
+                    finish(
+                        firstCloseCount === 1 &&
+                        secondCloseCount === 1 &&
+                        finishCount === 0 &&
+                        responseErrorCount === 0 &&
+                        queuedCallbackCount === 0 &&
+                        postCloseReturn === false &&
+                        postCloseValidationCode === 'ERR_STREAM_NULL_VALUES' &&
+                        postCloseCallbackCount === 1 &&
+                        postCloseCallbackCode === 'ERR_STREAM_DESTROYED' &&
+                        postCloseCallbackWasAsync &&
+                        firstDestroyedAtClose &&
+                        secondDestroyedAtClose
+                    );
+                });
+            });
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            server.closeAllConnections();
+            server.close();
+            resolve(result);
+        };
+        const timeout = setTimeout(() => finish(false), 2000);
+
+        server.listen(0, () => {
+            const socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                );
+            });
+            socket.on('error', () => {});
+        });
+    });
+}
+
 export async function httpPipelinedResponseOrder() {
     return new Promise((resolve) => {
         let settled = false;
