@@ -782,25 +782,6 @@ let errorMonitor = EventEmitter.errorMonitor;
 let captureRejections = EventEmitter.captureRejections;
 export let defaultMaxListeners = EventEmitter.defaultMaxListeners;
 
-const _syncBuiltinESMExportsRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports ||
-    Object.defineProperty(globalThis, '__wasm_rquickjs_sync_builtin_esm_exports', {
-        value: Object.create(null),
-        configurable: true,
-    }).__wasm_rquickjs_sync_builtin_esm_exports;
-
-_syncBuiltinESMExportsRegistry.events = function syncEventsBuiltinESMExports() {
-    EventEmitter = _default.EventEmitter;
-    once = _default.once;
-    on = _default.on;
-    getEventListeners = _default.getEventListeners;
-    getMaxListeners = _default.getMaxListeners;
-    setMaxListeners = _default.setMaxListeners;
-    addAbortListener = _default.addAbortListener;
-    errorMonitor = _default.errorMonitor;
-    captureRejections = _default.captureRejections;
-    defaultMaxListeners = _default.defaultMaxListeners;
-};
-
 export {
     EventEmitter,
     Event,

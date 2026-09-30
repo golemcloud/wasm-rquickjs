@@ -52,6 +52,37 @@ pub mod native_module {
     pub fn require_esm<'js>(ctx: Ctx<'js>, filename: String) -> rquickjs::Result<Value<'js>> {
         super::require_esm_impl(ctx, &filename)
     }
+
+    /// Load a public builtin on demand and return its namespace object.
+    #[rquickjs::function]
+    pub fn require_builtin<'js>(ctx: Ctx<'js>, specifier: String) -> rquickjs::Result<Value<'js>> {
+        if !specifier.starts_with("node:") {
+            return Err(rquickjs::Error::Unknown);
+        }
+        super::require_module_namespace_impl(ctx, &specifier, &specifier, "require-builtin")
+    }
+
+    /// Return the canonical public builtin inventory used by the generated
+    /// synchronization facades.
+    #[rquickjs::function]
+    pub fn syncable_builtin_names() -> Vec<String> {
+        super::syncable_builtin_names_impl()
+    }
+
+    /// Return the subset synchronized by node:module. Node excludes builtins
+    /// that can only be loaded with the node: scheme.
+    #[rquickjs::function]
+    pub fn schemeless_syncable_builtin_names() -> Vec<String> {
+        super::schemeless_syncable_builtin_names_impl()
+    }
+}
+
+fn syncable_builtin_names_impl() -> Vec<String> {
+    super::sync_exports::syncable_builtin_names()
+}
+
+fn schemeless_syncable_builtin_names_impl() -> Vec<String> {
+    super::sync_exports::schemeless_syncable_builtin_names()
 }
 
 fn eval_in_new_context_impl<'js>(
@@ -152,14 +183,6 @@ fn require_esm_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
     filename: &str,
 ) -> rquickjs::Result<rquickjs::Value<'js>> {
-    use std::ffi::CString;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp_key_str = format!("__wasm_rquickjs_require_esm_{}", id);
-    let wrapper_name = format!("<require-esm-{}>", id);
-
     // Build a file:// URL for the target module so it goes through
     // the FileUrlResolver → ImportMetaLoader chain.
     let file_url = if filename.starts_with("file://") {
@@ -167,9 +190,25 @@ fn require_esm_impl<'js>(
     } else {
         path_to_file_url(filename)
     };
+    require_module_namespace_impl(ctx, filename, &file_url, "require-esm")
+}
 
-    // Escape the URL for use inside a JS string literal
-    let escaped_url = file_url
+fn require_module_namespace_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    identity: &str,
+    specifier: &str,
+    wrapper_kind: &str,
+) -> rquickjs::Result<rquickjs::Value<'js>> {
+    use std::ffi::CString;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp_key_str = format!("__wasm_rquickjs_require_esm_{}", id);
+    let wrapper_name = format!("<{wrapper_kind}-{id}>");
+
+    // Escape the specifier for use inside a JS string literal.
+    let escaped_specifier = specifier
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n");
@@ -178,18 +217,18 @@ fn require_esm_impl<'js>(
     // in a global variable. After evaluation, we read and clean up the global.
     let code = format!(
         "import * as __ns from \"{}\"; globalThis.{} = __ns;\n",
-        escaped_url, temp_key_str
+        escaped_specifier, temp_key_str
     );
     let src = CString::new(code.as_str()).map_err(|_| rquickjs::Error::Unknown)?;
     let fname = CString::new(wrapper_name.as_str()).map_err(|_| rquickjs::Error::Unknown)?;
 
     let globals = ctx.globals();
 
-    if cached_async_esm_module(&globals, filename, &file_url) {
-        return throw_require_async_module(ctx, &globals, filename);
+    if cached_async_esm_module(&globals, identity, specifier) {
+        return throw_require_async_module(ctx, &globals, identity);
     }
 
-    enter_require_esm(&ctx, &globals, filename, &file_url)?;
+    enter_require_esm(&ctx, &globals, identity, specifier)?;
 
     let compiled_module = unsafe {
         qjs::JS_Eval(
@@ -202,23 +241,23 @@ fn require_esm_impl<'js>(
     };
 
     if unsafe { qjs::JS_IsException(compiled_module) } {
-        leave_require_esm(&globals, filename, &file_url)?;
+        leave_require_esm(&globals, identity, specifier)?;
         return Err(rquickjs::Error::Exception);
     }
 
-    if cached_async_esm_module(&globals, filename, &file_url) {
+    if cached_async_esm_module(&globals, identity, specifier) {
         unsafe {
             qjs::JS_FreeValue(ctx.as_raw().as_ptr(), compiled_module);
         }
-        leave_require_esm(&globals, filename, &file_url)?;
-        return throw_require_async_module(ctx, &globals, filename);
+        leave_require_esm(&globals, identity, specifier)?;
+        return throw_require_async_module(ctx, &globals, identity);
     }
 
     let rejection_scope = begin_require_esm_rejection_scope(&ctx);
     let eval_result = unsafe { qjs::JS_EvalFunction(ctx.as_raw().as_ptr(), compiled_module) };
     if unsafe { qjs::JS_IsException(eval_result) } {
         end_require_esm_rejection_scope(&ctx, rejection_scope);
-        leave_require_esm(&globals, filename, &file_url)?;
+        leave_require_esm(&globals, identity, specifier)?;
         return Err(rquickjs::Error::Exception);
     }
 
@@ -235,7 +274,7 @@ fn require_esm_impl<'js>(
                 let _ = promise.result::<Value<'js>>();
                 let rejected = ctx.catch();
                 ignore_require_esm_rejection(&ctx, eval_value, rejected.clone(), rejection_scope);
-                leave_require_esm(&globals, filename, &file_url)?;
+                leave_require_esm(&globals, identity, specifier)?;
                 return Err(ctx.throw(rejected));
             }
             PromiseState::Resolved => {
@@ -248,11 +287,11 @@ fn require_esm_impl<'js>(
         false
     };
 
-    leave_require_esm(&globals, filename, &file_url)?;
+    leave_require_esm(&globals, identity, specifier)?;
 
     if pending_tla {
-        mark_async_esm_module(&ctx, &globals, filename, &file_url)?;
-        return throw_require_async_module(ctx, &globals, filename);
+        mark_async_esm_module(&ctx, &globals, identity, specifier)?;
+        return throw_require_async_module(ctx, &globals, identity);
     }
 
     // Read the namespace from globalThis and clean up
@@ -265,8 +304,8 @@ fn require_esm_impl<'js>(
         // Module didn't store the namespace — likely has top-level await (TLA)
         // and the module evaluation Promise hasn't resolved synchronously.
         // Throw ERR_REQUIRE_ASYNC_MODULE matching Node.js behavior.
-        mark_async_esm_module(&ctx, &globals, filename, &file_url)?;
-        throw_require_async_module(ctx, &globals, filename)
+        mark_async_esm_module(&ctx, &globals, identity, specifier)?;
+        throw_require_async_module(ctx, &globals, identity)
     } else {
         Ok(ns)
     }

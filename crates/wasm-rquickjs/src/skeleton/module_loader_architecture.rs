@@ -4,6 +4,11 @@ use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use quote::ToTokens;
 
 const MODULE_JS: &str = include_str!("../../skeleton/src/builtin/module.js");
+const EVENTS_JS: &str = include_str!("../../skeleton/src/builtin/events.js");
+const FS_JS: &str = include_str!("../../skeleton/src/builtin/fs.js");
+const BUILTIN_MOD_RS: &str = include_str!("../../skeleton/src/builtin/mod.rs");
+const BUILTIN_P3_RS: &str = include_str!("../../skeleton/src/builtin_p3.rs");
+const SYNC_EXPORTS_RS: &str = include_str!("../../skeleton/src/builtin/sync_exports.rs");
 const MODULE_LOADING_RS: &str = include_str!("../../skeleton/src/internal/module_loading.rs");
 const RUNTIME_SERVICES_RS: &str = include_str!("../../skeleton/src/internal/runtime_services.rs");
 const FS_RS: &str = include_str!("../../skeleton/src/builtin/fs.rs");
@@ -737,6 +742,105 @@ fn module_loader_architecture() {
         );
     }
     assert_no_import_meta_mutation(&js_tokens);
+}
+
+#[test]
+fn builtin_esm_sync_uses_one_generated_public_facade_path() {
+    fn quoted_node_specifiers(source: &str) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        let mut remaining = source;
+        while let Some(start) = remaining.find("\"node:") {
+            let value = &remaining[start + 1..];
+            let end = value
+                .find('"')
+                .expect("node: string literal must terminate");
+            names.insert(value[..end].to_string());
+            remaining = &value[end + 1..];
+        }
+        names
+    }
+
+    fn syncable_inventory() -> BTreeSet<String> {
+        let start = SYNC_EXPORTS_RS
+            .find("const SYNCABLE_BUILTIN_NAMES")
+            .expect("syncable builtin inventory must exist");
+        let inventory = &SYNC_EXPORTS_RS[start..];
+        let end = inventory
+            .find("];\n")
+            .expect("syncable builtin inventory must terminate");
+        quoted_node_specifiers(&inventory[..end])
+    }
+
+    fn registered_syncable_builtins(source: &str) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        for marker in [".with_syncable_module(", ".with_syncable_module_exports("] {
+            let mut remaining = source;
+            while let Some(call) = remaining.find(marker) {
+                remaining = &remaining[call + marker.len()..];
+                let quote = remaining
+                    .find('"')
+                    .expect("syncable builtin registration must have a string name");
+                let value = &remaining[quote + 1..];
+                let end = value
+                    .find('"')
+                    .expect("syncable builtin registration name must terminate");
+                names.insert(value[..end].to_string());
+                remaining = &value[end + 1..];
+            }
+        }
+        names
+    }
+
+    let inventory = syncable_inventory();
+    assert_eq!(inventory.len(), 55, "syncable builtin inventory changed");
+    for (target, registry) in [("p2", BUILTIN_MOD_RS), ("p3", BUILTIN_P3_RS)] {
+        assert_eq!(
+            registered_syncable_builtins(registry),
+            inventory,
+            "{target} syncable registrations must exactly match the canonical inventory"
+        );
+        assert!(
+            registry.contains("sync_exports::add_implementation_resolvers(resolver)"),
+            "{target} must resolve the generated builtin implementations"
+        );
+    }
+    assert!(SYNC_EXPORTS_RS.contains("collect_static_esm_export_names"));
+    assert!(SYNC_EXPORTS_RS.contains("canonical_public_builtin_alias"));
+    assert!(SYNC_EXPORTS_RS.contains("static FACADES: OnceLock"));
+    assert!(SYNC_EXPORTS_RS.contains("or_insert_with(|| facade_source"));
+    assert!(!SYNC_EXPORTS_RS.contains("enum TokenKind"));
+    assert!(SYNC_EXPORTS_RS.contains("Object.keys(__wasmRquickjsDefault)"));
+    assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsHasOwn(__wasmRquickjsDefault"));
+    assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsSync(__wasmRquickjsDefault)"));
+    assert!(SYNC_EXPORTS_RS.contains("schemeless_syncable_builtin_names"));
+    assert!(SYNC_EXPORTS_RS.contains("implementation_import"));
+    assert!(MODULE_JS.contains("require_builtin as _requireBuiltin"));
+    assert!(MODULE_JS.contains("typeof registry[name] === 'function'"));
+    assert!(MODULE_JS.contains("function loadPublicBuiltin(name)"));
+    assert!(MODULE_JS.contains("defineLazyBuiltin(map, name, load)"));
+    assert!(MODULE_JS.contains("for (const canonicalName of _syncableBuiltinNames())"));
+    assert!(MODULE_JS.contains("const names = _schemelessSyncableBuiltinNames();"));
+    assert!(MODULE_JS.contains("name === 'sqlite' || name === 'test'"));
+    assert!(MODULE_LOADING_RS.contains("struct PublicBuiltinAliasResolver"));
+    assert!(
+        MODULE_LOADING_RS.contains("PublicBuiltinAliasResolver,\n            builtin_resolver")
+    );
+    assert!(!MODULE_JS.contains("from 'node:sqlite'"));
+    assert!(!MODULE_JS.contains("registry.fs"));
+    assert!(!MODULE_JS.contains("registry.events"));
+    assert!(BUILTIN_MOD_RS.contains("console::PUBLIC_IMPLEMENTATION_JS"));
+    assert!(BUILTIN_P3_RS.contains("console::PUBLIC_IMPLEMENTATION_JS"));
+    for (name, source) in [("fs", FS_JS), ("events", EVENTS_JS)] {
+        assert!(
+            !source.contains("__wasm_rquickjs_sync_builtin_esm_exports"),
+            "{name} must not retain a module-specific sync hook"
+        );
+    }
+
+    assert!(
+        MODULE_LOADING_RS.contains("syncable_builtin_implementation_import(base, name)"),
+        "private builtins must resolve their dependencies directly to avoid facade cycles"
+    );
 }
 
 #[test]

@@ -1,56 +1,11 @@
 import * as pathModule from 'node:path';
-import * as pathPosix from 'node:path/posix';
-import * as pathWin32 from 'node:path/win32';
 import * as fsModule from 'node:fs';
 import * as fsNative from '__wasm_rquickjs_builtin/fs_native';
 import * as util from 'node:util';
 import * as buffer from 'node:buffer';
-import * as os from 'node:os';
-import * as events from 'node:events';
-import * as stream from 'node:stream';
-import * as streamPromises from 'node:stream/promises';
-import * as streamConsumers from 'node:stream/consumers';
-import * as streamWeb from 'node:stream/web';
-import * as crypto from 'node:crypto';
-import * as child_process from 'node:child_process';
-import * as string_decoder from 'node:string_decoder';
 import * as processModule from 'node:process';
-import * as assert from 'node:assert';
-import * as assertStrict from 'node:assert/strict';
-import * as fsPromises from 'node:fs/promises';
-import * as nodeTest from 'node:test';
-import * as querystring from 'node:querystring';
-import * as punycode from 'node:punycode';
 import * as nodeUrl from 'node:url';
-import * as vm from 'node:vm';
-import * as timers from 'node:timers';
-import * as timersPromises from 'node:timers/promises';
-import * as consoleMod from 'node:console';
-import * as async_hooks from 'node:async_hooks';
-import * as cluster from 'node:cluster';
-import * as constants from 'node:constants';
-import * as dgram from 'node:dgram';
 import * as diagnostics_channel from 'node:diagnostics_channel';
-import * as dns from 'node:dns';
-import * as dnsPromises from 'node:dns/promises';
-import * as domain from 'node:domain';
-import * as httpCommon from 'node:_http_common';
-import * as httpAgent from 'node:_http_agent';
-import * as http from 'node:http';
-import * as http2 from 'node:http2';
-import * as https from 'node:https';
-import * as net from 'node:net';
-import * as perf_hooks from 'node:perf_hooks';
-import * as readline from 'node:readline';
-import * as readlinePromises from 'node:readline/promises';
-import * as repl from 'node:repl';
-import * as trace_events from 'node:trace_events';
-import * as tls from 'node:tls';
-import * as tty from 'node:tty';
-import * as v8 from 'node:v8';
-import * as worker_threads from 'node:worker_threads';
-import * as zlib from 'node:zlib';
-import * as sqlite from 'node:sqlite';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
@@ -64,7 +19,13 @@ import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
-import { eval_with_filename as _evalWithFilename, require_esm as _requireEsm } from '__wasm_rquickjs_builtin/vm_native';
+import {
+    eval_with_filename as _evalWithFilename,
+    require_builtin as _requireBuiltin,
+    require_esm as _requireEsm,
+    schemeless_syncable_builtin_names as _schemelessSyncableBuiltinNames,
+    syncable_builtin_names as _syncableBuiltinNames,
+} from '__wasm_rquickjs_builtin/vm_native';
 import {
     transform_typescript as transformTypeScriptNative,
     transform_typescript_module as transformTypeScriptModuleNative,
@@ -110,60 +71,8 @@ function cjsExport(ns) {
     return def;
 }
 
-// Precompute cjsExport results once per namespace to avoid redundant calls
-const pathCjs = cjsExport(pathModule);
-const pathPosixCjs = cjsExport(pathPosix);
-const pathWin32Cjs = cjsExport(pathWin32);
-const fsCjs = cjsExport(fsModule);
-const fsPromisesCjs = cjsExport(fsPromises);
-const utilCjs = cjsExport(util);
-const bufferCjs = cjsExport(buffer);
-const osCjs = cjsExport(os);
-const eventsCjs = cjsExport(events);
-const streamCjs = cjsExport(stream);
-const streamPromisesCjs = cjsExport(streamPromises);
-const streamConsumersCjs = cjsExport(streamConsumers);
-const streamWebCjs = cjsExport(streamWeb);
-const childProcessCjs = cjsExport(child_process);
-const stringDecoderCjs = cjsExport(string_decoder);
-const processCjs = cjsExport(processModule);
-const assertCjs = cjsExport(assert);
-const assertStrictCjs = cjsExport(assertStrict);
-const nodeTestCjs = cjsExport(nodeTest);
-const querystringCjs = cjsExport(querystring);
-const punycodeCjs = cjsExport(punycode);
-const nodeUrlCjs = cjsExport(nodeUrl);
-const vmCjs = cjsExport(vm);
-const timersCjs = cjsExport(timers);
-const timersPromisesCjs = cjsExport(timersPromises);
-const consoleCjs = cjsExport(consoleMod);
-const asyncHooksCjs = cjsExport(async_hooks);
-const clusterCjs = cjsExport(cluster);
-const constantsCjs = cjsExport(constants);
-const dgramCjs = cjsExport(dgram);
-const diagnosticsChannelCjs = cjsExport(diagnostics_channel);
 const moduleRequireTrace = diagnostics_channel.tracingChannel('module.require');
 const moduleImportTrace = diagnostics_channel.tracingChannel('module.import');
-const dnsCjs = cjsExport(dns);
-const dnsPromisesCjs = cjsExport(dnsPromises);
-const domainCjs = cjsExport(domain);
-const httpCommonCjs = cjsExport(httpCommon);
-const httpAgentCjs = cjsExport(httpAgent);
-const httpCjs = cjsExport(http);
-const http2Cjs = cjsExport(http2);
-const httpsCjs = cjsExport(https);
-const netCjs = cjsExport(net);
-const perfHooksCjs = cjsExport(perf_hooks);
-const readlineCjs = cjsExport(readline);
-const readlinePromisesCjs = cjsExport(readlinePromises);
-const replCjs = cjsExport(repl);
-const traceEventsCjs = cjsExport(trace_events);
-const tlsCjs = cjsExport(tls);
-const ttyCjs = cjsExport(tty);
-const v8Cjs = cjsExport(v8);
-const workerThreadsCjs = cjsExport(worker_threads);
-const zlibCjs = cjsExport(zlib);
-const sqliteCjs = cjsExport(sqlite);
 const internalHttpCjs = cjsExport(internalHttp);
 const internalFsUtilsCjs = cjsExport(internalFsUtils);
 const internalUrlCjs = cjsExport(internalUrl);
@@ -175,71 +84,109 @@ const internalStreamsAddAbortSignalCjs = cjsExport(internalStreamsAddAbortSignal
 const internalStreamsStateCjs = cjsExport(internalStreamsState);
 const internalTestBindingCjs = cjsExport(internalTestBinding);
 
-const utilTypes = (utilCjs && utilCjs.types) || {};
+const builtinCjsCache = Object.create(null);
+const builtinCjsLoadInProgress = Object.create(null);
 
-const cryptoCjs = (() => {
-    const out = {};
-    const keys = Object.keys(crypto);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        out[key] = crypto[key];
+function seedBuiltin(name, namespace) {
+    builtinCjsCache[name] = namespace && namespace.default !== undefined
+        ? namespace.default
+        : namespace;
+}
+
+seedBuiltin('node:path', pathModule);
+seedBuiltin('node:fs', fsModule);
+seedBuiltin('node:util', util);
+seedBuiltin('node:buffer', buffer);
+seedBuiltin('node:process', processModule);
+seedBuiltin('node:url', nodeUrl);
+seedBuiltin('node:diagnostics_channel', diagnostics_channel);
+
+function loadPublicBuiltin(name) {
+    if (objectPrototypeHasOwnProperty(builtinCjsCache, name)) {
+        return builtinCjsCache[name];
     }
-
-    ['pseudoRandomBytes', 'prng', 'rng'].forEach((name) => {
-        if (Object.prototype.hasOwnProperty.call(out, name)) {
-            Object.defineProperty(out, name, {
-                value: out[name],
-                writable: true,
-                configurable: true,
-                enumerable: false,
+    if (builtinCjsLoadInProgress[name]) {
+        const error = new Error('Cannot require() ES Module ' + name + ' in a cycle.');
+        error.code = 'ERR_REQUIRE_CYCLE_MODULE';
+        throw error;
+    }
+    builtinCjsLoadInProgress[name] = true;
+    try {
+        const namespace = _requireBuiltin(name);
+        const registry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        const value = registry && typeof registry[name] === 'function' &&
+            namespace && namespace.default !== undefined
+            ? namespace.default
+            : cjsExport(namespace);
+        if (name === 'node:crypto' && value &&
+            (typeof value === 'object' || typeof value === 'function')) {
+            ['pseudoRandomBytes', 'prng', 'rng'].forEach((exportName) => {
+                if (objectPrototypeHasOwnProperty(value, exportName)) {
+                    objectDefineProperty(value, exportName, {
+                        value: value[exportName],
+                        writable: true,
+                        configurable: true,
+                        enumerable: false,
+                    });
+                }
             });
         }
+        builtinCjsCache[name] = value;
+        return value;
+    } finally {
+        delete builtinCjsLoadInProgress[name];
+    }
+}
+
+function defineLazyBuiltin(map, name, load) {
+    Object.defineProperty(map, name, {
+        get: load,
+        configurable: true,
+        enumerable: true,
     });
+}
 
-    return out;
-})();
+// Register the builtin inventory without evaluating its modules. CommonJS
+// require() resolves the canonical node: facade only when callers first use it.
+function registerBuiltin(map, name, canonicalName) {
+    const canonical = canonicalName || 'node:' + name;
+    const load = () => loadPublicBuiltin(canonical);
+    defineLazyBuiltin(map, name, load);
+    defineLazyBuiltin(map, 'node:' + name, load);
+}
 
-// Build the builtin module map with both bare and node:-prefixed keys.
-// Helper to register a module under both 'name' and 'node:name'.
-function registerBuiltin(map, name, value) {
-    map[name] = value;
-    map['node:' + name] = value;
+function registerDerivedBuiltin(map, name, canonicalName, property) {
+    const load = () => {
+        const builtin = loadPublicBuiltin(canonicalName);
+        return builtin && builtin[property];
+    };
+    defineLazyBuiltin(map, name, load);
+    defineLazyBuiltin(map, 'node:' + name, load);
 }
 
 const builtinModuleMap = {};
-registerBuiltin(builtinModuleMap, 'path', pathCjs);
-registerBuiltin(builtinModuleMap, 'path/posix', pathPosixCjs);
-registerBuiltin(builtinModuleMap, 'path/win32', pathWin32Cjs);
-registerBuiltin(builtinModuleMap, 'fs', fsCjs);
-registerBuiltin(builtinModuleMap, 'fs/promises', fsPromisesCjs);
-builtinModuleMap['internal/fs/promises'] = fsPromisesCjs;
-registerBuiltin(builtinModuleMap, 'util', utilCjs);
-registerBuiltin(builtinModuleMap, 'sys', utilCjs);
-registerBuiltin(builtinModuleMap, 'buffer', bufferCjs);
-registerBuiltin(builtinModuleMap, 'os', osCjs);
-registerBuiltin(builtinModuleMap, 'events', eventsCjs);
-registerBuiltin(builtinModuleMap, 'stream', streamCjs);
-registerBuiltin(builtinModuleMap, 'stream/promises', streamPromisesCjs);
-registerBuiltin(builtinModuleMap, 'stream/consumers', streamConsumersCjs);
-registerBuiltin(builtinModuleMap, 'stream/web', streamWebCjs);
-registerBuiltin(builtinModuleMap, 'crypto', cryptoCjs);
-registerBuiltin(builtinModuleMap, 'child_process', childProcessCjs);
-registerBuiltin(builtinModuleMap, 'string_decoder', stringDecoderCjs);
-registerBuiltin(builtinModuleMap, 'process', processCjs);
-registerBuiltin(builtinModuleMap, 'assert', assertCjs);
-registerBuiltin(builtinModuleMap, 'assert/strict', assertStrictCjs);
-registerBuiltin(builtinModuleMap, 'test', nodeTestCjs);
-registerBuiltin(builtinModuleMap, 'querystring', querystringCjs);
-registerBuiltin(builtinModuleMap, 'punycode', punycodeCjs);
-registerBuiltin(builtinModuleMap, 'url', nodeUrlCjs);
-registerBuiltin(builtinModuleMap, 'vm', vmCjs);
-registerBuiltin(builtinModuleMap, 'timers', timersCjs);
-registerBuiltin(builtinModuleMap, 'timers/promises', timersPromisesCjs);
+
+// The Rust synchronization inventory is the source of truth for canonical
+// public builtins. Register lazy CommonJS access from that same inventory so a
+// newly syncable builtin cannot be omitted from node:module.
+for (const canonicalName of _syncableBuiltinNames()) {
+    const name = canonicalName.slice(5);
+    if (name === 'module' || name === 'console') continue;
+    if (name === 'sqlite' || name === 'test') {
+        defineLazyBuiltin(builtinModuleMap, canonicalName, () => loadPublicBuiltin(canonicalName));
+    } else {
+        registerBuiltin(builtinModuleMap, name, canonicalName);
+    }
+}
+
+defineLazyBuiltin(builtinModuleMap, 'internal/fs/promises', () => loadPublicBuiltin('node:fs/promises'));
+registerBuiltin(builtinModuleMap, 'sys', 'node:util');
 Object.defineProperty(builtinModuleMap, 'console', {
     get() {
+        const consoleBuiltin = loadPublicBuiltin('node:console');
         const c = globalThis.console;
-        if (c && consoleMod.Console) c.Console = consoleMod.Console;
-        return c || consoleCjs;
+        if (c && consoleBuiltin.Console) c.Console = consoleBuiltin.Console;
+        return c || consoleBuiltin;
     },
     configurable: true,
     enumerable: true,
@@ -251,37 +198,11 @@ Object.defineProperty(builtinModuleMap, 'node:console', {
     configurable: true,
     enumerable: true,
 });
-registerBuiltin(builtinModuleMap, 'async_hooks', asyncHooksCjs);
-registerBuiltin(builtinModuleMap, 'cluster', clusterCjs);
-registerBuiltin(builtinModuleMap, 'constants', constantsCjs);
-registerBuiltin(builtinModuleMap, 'dgram', dgramCjs);
-registerBuiltin(builtinModuleMap, 'diagnostics_channel', diagnosticsChannelCjs);
-registerBuiltin(builtinModuleMap, 'dns', dnsCjs);
-registerBuiltin(builtinModuleMap, 'dns/promises', dnsPromisesCjs);
-registerBuiltin(builtinModuleMap, 'domain', domainCjs);
-registerBuiltin(builtinModuleMap, '_http_common', httpCommonCjs);
-registerBuiltin(builtinModuleMap, '_http_agent', httpAgentCjs);
-registerBuiltin(builtinModuleMap, 'http', httpCjs);
-registerBuiltin(builtinModuleMap, 'http2', http2Cjs);
-registerBuiltin(builtinModuleMap, 'https', httpsCjs);
-registerBuiltin(builtinModuleMap, 'net', netCjs);
-registerBuiltin(builtinModuleMap, 'perf_hooks', perfHooksCjs);
-registerBuiltin(builtinModuleMap, 'readline', readlineCjs);
-registerBuiltin(builtinModuleMap, 'readline/promises', readlinePromisesCjs);
-registerBuiltin(builtinModuleMap, 'repl', replCjs);
-registerBuiltin(builtinModuleMap, 'tls', tlsCjs);
-registerBuiltin(builtinModuleMap, 'trace_events', traceEventsCjs);
-registerBuiltin(builtinModuleMap, 'tty', ttyCjs);
-registerBuiltin(builtinModuleMap, 'v8', v8Cjs);
-registerBuiltin(builtinModuleMap, 'worker_threads', workerThreadsCjs);
-registerBuiltin(builtinModuleMap, 'zlib', zlibCjs);
-builtinModuleMap['node:sqlite'] = sqliteCjs;
-registerBuiltin(builtinModuleMap, 'util/types', utilTypes);
-registerBuiltin(builtinModuleMap, '_stream_readable', streamCjs && streamCjs.Readable);
-registerBuiltin(builtinModuleMap, '_stream_writable', streamCjs && streamCjs.Writable);
-registerBuiltin(builtinModuleMap, '_stream_duplex', streamCjs && streamCjs.Duplex);
-registerBuiltin(builtinModuleMap, '_stream_transform', streamCjs && streamCjs.Transform);
-registerBuiltin(builtinModuleMap, '_stream_passthrough', streamCjs && streamCjs.PassThrough);
+registerDerivedBuiltin(builtinModuleMap, '_stream_readable', 'node:stream', 'Readable');
+registerDerivedBuiltin(builtinModuleMap, '_stream_writable', 'node:stream', 'Writable');
+registerDerivedBuiltin(builtinModuleMap, '_stream_duplex', 'node:stream', 'Duplex');
+registerDerivedBuiltin(builtinModuleMap, '_stream_transform', 'node:stream', 'Transform');
+registerDerivedBuiltin(builtinModuleMap, '_stream_passthrough', 'node:stream', 'PassThrough');
 builtinModuleMap['internal/http'] = internalHttpCjs;
 builtinModuleMap['internal/fs/utils'] = internalFsUtilsCjs;
 builtinModuleMap['internal/url'] = internalUrlCjs;
@@ -3787,9 +3708,13 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
         preparedTypeScriptGraph,
     } = context;
 
-    // Capture buffer.kMaxLength for zlib on first require (matches Node.js CJS capture-at-require semantics)
-    if ((id === 'zlib' || id === 'node:zlib') && zlib._captureKMaxLength) {
-        zlib._captureKMaxLength();
+    // Capture buffer.kMaxLength for zlib on first require, even when a module
+    // mock will satisfy the request. This matches Node's CJS require timing.
+    if (id === 'zlib' || id === 'node:zlib') {
+        const zlibBuiltin = loadPublicBuiltin('node:zlib');
+        if (zlibBuiltin && zlibBuiltin._captureKMaxLength) {
+            zlibBuiltin._captureKMaxLength();
+        }
     }
 
     // Check module mock registry
@@ -4166,9 +4091,10 @@ export let findPackageJSON = function findPackageJSON(specifier, base) {
 
 export let builtinModules = builtinModuleNames;
 
-export let isBuiltinModule = function isBuiltinModule(id) {
+let isBuiltinModule = function isBuiltinModule(id) {
     return isBuiltin(id);
 };
+export { isBuiltinModule as isBuiltin };
 
 export let register = function register(specifier, parentURL, options) {
     const url = String(specifier);
@@ -5035,15 +4961,14 @@ function runMain() {
 export let syncBuiltinESMExports = function() {
     const registry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
     if (!registry) return;
-    if (typeof registry.fs === 'function') registry.fs();
-    if (typeof registry.events === 'function') registry.events();
-    require = moduleExports.require;
-    createRequire = moduleExports.createRequire;
-    findPackageJSON = moduleExports.findPackageJSON;
-    builtinModules = moduleExports.builtinModules;
-    isBuiltinModule = moduleExports.isBuiltin;
-    register = moduleExports.register;
-    syncBuiltinESMExports = moduleExports.syncBuiltinESMExports;
+    const names = _schemelessSyncableBuiltinNames();
+    for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        const sync = registry[name];
+        if (typeof sync === 'function' && objectPrototypeHasOwnProperty(builtinModuleMap, name)) {
+            sync(builtinModuleMap[name]);
+        }
+    }
 };
 
 function Module(id, parent) {
