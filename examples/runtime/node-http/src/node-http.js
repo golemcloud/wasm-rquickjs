@@ -617,6 +617,228 @@ export async function httpResponsePostCloseWrites() {
     });
 }
 
+function runHttpActiveDrainScenario() {
+    return new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let falseWrites = 0;
+        let drainCount = 0;
+        let finishCount = 0;
+        let lengthAtFalse = 0;
+        let lengthAtDrain = -1;
+        let highWaterMark = 0;
+        const chunk = Buffer.alloc(8 * 1024, 'a');
+        const server = http.createServer((_req, res) => {
+            res.on('error', () => finish(false));
+            res.on('finish', () => {
+                finishCount++;
+            });
+            for (let writes = 0; writes < 32; writes++) {
+                if (!res.write(chunk)) {
+                    falseWrites++;
+                    lengthAtFalse = res.writableLength;
+                    highWaterMark = res.writableHighWaterMark;
+                    res.once('drain', () => {
+                        drainCount++;
+                        lengthAtDrain = res.writableLength;
+                        res.end();
+                    });
+                    return;
+                }
+            }
+            finish(false);
+        });
+        server.on('error', () => finish(false));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(
+                result &&
+                falseWrites === 1 &&
+                drainCount === 1 &&
+                finishCount === 1 &&
+                lengthAtFalse >= highWaterMark &&
+                lengthAtDrain < highWaterMark
+            ));
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.pause();
+                socket.write(
+                    'GET / HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Connection: close\r\n\r\n'
+                );
+                setTimeout(() => socket.resume(), 25);
+            });
+            socket.on('data', () => {});
+            socket.on('end', () => setImmediate(() => finish(true)));
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpPipelineBackpressure() {
+    const activeDrain = await runHttpActiveDrainScenario();
+    if (!activeDrain) return false;
+
+    const profile = await runHttpPipelineBackpressureScenario(false);
+    return validateHttpPipelineBackpressureProfile(profile);
+}
+
+function validateHttpPipelineBackpressureProfile(profile) {
+    return profile.ok &&
+        profile.admittedBeforeRelease >= 2 &&
+        profile.admittedBeforeRelease < profile.requestCount &&
+        !profile.blockedFinishedBeforeRelease &&
+        profile.blockedDrainCount === 0 &&
+        profile.finishCount === profile.requestCount &&
+        profile.callbackCount === profile.requestCount &&
+        profile.ordered &&
+        profile.highWaterMark > 0 &&
+        profile.queuedBytesBeforeRelease > profile.highWaterMark &&
+        profile.queuedBytesBeforeRelease <=
+            profile.highWaterMark + profile.payloadBytes + 1024;
+}
+
+function runHttpPipelineBackpressureScenario(captureWriteProfile, requestCount = 32) {
+    return new Promise((resolve) => {
+        const payload = Buffer.alloc(20 * 1024, 'p');
+        const responses = [];
+        const finishOrder = [];
+        const callbackOrder = [];
+        let settled = false;
+        let socket;
+        let firstResponse;
+        let admittedBeforeRelease = 0;
+        let queuedBytesBeforeRelease = 0;
+        let blockedFinishedBeforeRelease = false;
+        let blockedDrainCount = 0;
+        let highWaterMark = 0;
+        const startedAt = Date.now();
+        const memoryBefore = process.memoryUsage();
+        let heapUsedHighWater = memoryBefore.heapUsed;
+
+        const sampleHeap = () => {
+            heapUsedHighWater = Math.max(
+                heapUsedHighWater,
+                process.memoryUsage().heapUsed
+            );
+        };
+
+        const server = http.createServer((_req, res) => {
+            sampleHeap();
+            const index = responses.length;
+            responses.push(res);
+            res.setHeader('Content-Length', payload.length);
+            res.on('finish', () => {
+                finishOrder.push(index);
+                if (finishOrder.length === requestCount) {
+                    setImmediate(() => finish(true));
+                }
+            });
+            res.on('drain', () => {
+                if (index !== 0) blockedDrainCount++;
+            });
+            res.on('error', () => finish(false));
+
+            if (index === 0) {
+                firstResponse = res;
+                setImmediate(() => {
+                    admittedBeforeRelease = responses.length;
+                    blockedFinishedBeforeRelease = finishOrder.length !== 0;
+                    highWaterMark = responses[1] && responses[1].writableHighWaterMark;
+                    queuedBytesBeforeRelease = responses
+                        .slice(1)
+                        .reduce((total, response) => total + response.writableLength, 0);
+                    firstResponse.write(payload, () => callbackOrder.push(0));
+                    firstResponse.end();
+                });
+                return;
+            }
+
+            res.write(payload, () => callbackOrder.push(index));
+            res.end();
+            sampleHeap();
+        });
+        server.on('error', () => finish(false));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            sampleHeap();
+            const memoryAfter = process.memoryUsage();
+            let writeProfile = null;
+            const handle = firstResponse && firstResponse.socket && firstResponse.socket._handle;
+            if (captureWriteProfile && handle && typeof handle.get_write_profile === 'function') {
+                writeProfile = handle.get_write_profile();
+            }
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => {
+                const ordered = finishOrder.every((value, index) => value === index) &&
+                    callbackOrder.every((value, index) => value === index);
+                resolve({
+                    ok: result,
+                    requestCount,
+                    payloadBytes: payload.length,
+                    admittedBeforeRelease,
+                    queuedBytesBeforeRelease,
+                    blockedFinishedBeforeRelease,
+                    blockedDrainCount,
+                    finishCount: finishOrder.length,
+                    callbackCount: callbackOrder.length,
+                    ordered,
+                    highWaterMark,
+                    wallMs: Date.now() - startedAt,
+                    memory: {
+                        before: memoryBefore,
+                        after: memoryAfter,
+                        heapUsedHighWater,
+                    },
+                    writeProfile,
+                });
+            });
+        };
+        const timeout = setTimeout(() => finish(false), 10000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                let requests = '';
+                for (let index = 0; index < requestCount; index++) {
+                    requests +=
+                        `GET /${index} HTTP/1.1\r\n` +
+                        'Host: localhost\r\n' +
+                        '\r\n';
+                }
+                socket.write(requests);
+            });
+            socket.on('data', () => {});
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpPipelineBackpressureProfile() {
+    const activeDrain = await runHttpActiveDrainScenario();
+    if (!activeDrain) {
+        return JSON.stringify({ valid: false, activeDrain: false });
+    }
+    const profile = await runHttpPipelineBackpressureScenario(true, 256);
+    profile.activeDrain = true;
+    profile.valid = validateHttpPipelineBackpressureProfile(profile);
+    return JSON.stringify(profile);
+}
+
 export async function httpPipelinedResponseOrder() {
     return new Promise((resolve) => {
         let settled = false;

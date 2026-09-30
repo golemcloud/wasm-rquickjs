@@ -830,6 +830,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | --trace-exit stack diagnostics are incomplete in execPath emulation | 1 | `parallel/test-trace-exit-stack-limit.js` |
 | --trace-exit warning behavior across process/worker variants is incomplete | 1 | `parallel/test-trace-exit.js` |
 | --trace-sync-io diagnostics are not implemented in execPath emulation | 1 | `parallel/test-sync-io-option.js` |
+| 10k pipelined 16 KiB responses transfer 160 MiB and do not complete within the node-compat timeout; reduced P2/P3 profiling verifies bounded admission and queued output | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | Agent free-socket bookkeeping and destroyed-socket reuse handling is incomplete | 1 | `parallel/test-http-agent-destroyed-socket.js` |
 | Agent keep-alive queue/socket bookkeeping across concurrent requests is not Node-compatible | 1 | `parallel/test-http-keep-alive.js` |
 | Agent queued-request abort cleanup is incomplete | 1 | `parallel/test-http-abort-queued.js` |
@@ -1025,6 +1026,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process stdio pipe lifecycle/destroy semantics are incomplete | 1 | `parallel/test-stdio-undestroy.js` |
 | child_process.exec does not expose live stderr/stdout streams on ChildProcess | 1 | `parallel/test-stdout-close-catch.js` |
 | child_process.exec shell pipeline/stdin-stdout behavior is incomplete in WASM child emulation | 1 | `parallel/test-stream-pipeline-process.js` |
+| child_process.spawn(process.execPath) is synchronously emulated in-process, so the flood producer blocks the parent server event loop and exits with EPIPE before a connection is accepted | 1 | `parallel/test-http-pipeline-flood.js` |
 | child_process.spawnSync(process.execPath, ...) inline runner has cwd/module-resolution mismatches for relative test scripts | 1 | `parallel/test-http-debug.js` |
 | clientError does not expose Node-compatible parse error details (missing code HPE_INVALID_TRANSFER_ENCODING) | 1 | `parallel/test-http-invalid-te.js` |
 | codeGeneration.wasm enforcement is incomplete and WebAssembly is unavailable in the context | 1 | `parallel/test-vm-codegen.js#block_02_block_02` |
@@ -1134,7 +1136,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | isolated P2/P3 runs take about 91-97 seconds; although a per-entry timeout is configurable, enabling this case would add excessive CI wall time, and transport profiling attributes most of the delay outside the socket path | 1 | `sequential/test-pipe.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
-| large raw pipelined request load (10k) exhausts current WASM/runtime resources | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
 | moveMessagePortToContext cross-context object/prototype semantics are incomplete | 1 | `parallel/test-worker-message-port-move.js` |
@@ -1245,7 +1246,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | server parser accepts malformed chunk framing smuggling payloads instead of rejecting with 400/clientError | 1 | `parallel/test-http-dummy-characters-smuggling.js#block_01_block_01` |
 | server parser does not emit Node-compatible clientError (HPE_INVALID_EOF_STATE) on truncated headers | 1 | `parallel/test-http-parser-finish-error.js` |
 | server-side Upgrade event/error propagation is incomplete | 1 | `parallel/test-http-upgrade-server2.js` |
-| server-side pipelining lacks bounded queued-output accounting and a working write()/drain parser pause-resume contract (GOL-398) | 1 | `parallel/test-http-pipeline-flood.js` |
 | server.closeAllConnections() does not close active and idle HTTP sockets with Node-compatible behavior | 1 | `parallel/test-http-server-close-all.js` |
 | server.closeIdleConnections() while waiting for a response does not fire expected callbacks | 1 | `parallel/test-http-server-close-idle-wait-response.js` |
 | server.headersTimeout 408 behavior for delayed header start is incomplete | 1 | `parallel/test-http-server-headers-timeout-delayed-headers.js` |

@@ -10,6 +10,8 @@ world node-http {
   export http-abort-isolation: func() -> bool;
   export http-response-lifecycle: func() -> bool;
   export http-response-post-close-writes: func() -> bool;
+  export http-pipeline-backpressure: func() -> bool;
+  export http-pipeline-backpressure-profile: func() -> string;
   export http-pipelined-response-order: func() -> bool;
   export http-half-open-pipelined-requests: func() -> bool;
   export http-pipelined-close-lifecycle: func() -> bool;
