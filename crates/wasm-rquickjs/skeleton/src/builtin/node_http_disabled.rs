@@ -18,8 +18,3 @@ import { Agent } from 'node:http';
 export { Agent };
 export default Agent;
 "#;
-
-pub const HTTP_COMMON_REEXPORT_JS: &str =
-    r#"export * from 'node:_http_common'; export { default } from 'node:_http_common';"#;
-pub const HTTP_AGENT_REEXPORT_JS: &str =
-    r#"export * from 'node:_http_agent'; export { default } from 'node:_http_agent';"#;

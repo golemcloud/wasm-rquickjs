@@ -6176,9 +6176,6 @@ for (const name of Object.keys(_crypto)) _default[name] = _crypto[name];
 export * from '__wasm_rquickjs_builtin/web_crypto';
 export default _default;
 "#;
-pub const BARE_REEXPORT_JS: &str =
-    r#"export * from 'node:crypto'; export { default } from 'node:crypto';"#;
-
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"
         import { webcrypto as __wasm_rquickjs_webcrypto, randomBytes as __wasm_rquickjs_random_bytes } from '__wasm_rquickjs_builtin/web_crypto';

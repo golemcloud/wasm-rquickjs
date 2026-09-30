@@ -9,9 +9,6 @@ pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/webstrea
 import * as _all from '__wasm_rquickjs_builtin/webstreams_wrapper';
 export default { ..._all };"#;
 
-pub const BARE_REEXPORT_JS: &str =
-    r#"export * from 'node:stream/web'; export { default } from 'node:stream/web';"#;
-
 // JS code wiring the web streams module into the global context
 pub const WIRE_JS: &str = r#"
         import {

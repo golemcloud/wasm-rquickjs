@@ -23,6 +23,7 @@ import {
     eval_with_filename as _evalWithFilename,
     require_builtin as _requireBuiltin,
     require_esm as _requireEsm,
+    schemeless_syncable_builtin_names as _schemelessSyncableBuiltinNames,
     syncable_builtin_names as _syncableBuiltinNames,
 } from '__wasm_rquickjs_builtin/vm_native';
 import {
@@ -171,7 +172,7 @@ const builtinModuleMap = {};
 for (const canonicalName of _syncableBuiltinNames()) {
     const name = canonicalName.slice(5);
     if (name === 'module' || name === 'console') continue;
-    if (name === 'sqlite') {
+    if (name === 'sqlite' || name === 'test') {
         defineLazyBuiltin(builtinModuleMap, canonicalName, () => loadPublicBuiltin(canonicalName));
     } else {
         registerBuiltin(builtinModuleMap, name, canonicalName);
@@ -626,12 +627,7 @@ function builtinModuleForSpecifier(id) {
 
 function requireBuiltinModule(id) {
     const builtin = builtinModuleForSpecifier(id);
-    if (builtin !== undefined) {
-        if ((id === 'zlib' || id === 'node:zlib') && builtin._captureKMaxLength) {
-            builtin._captureKMaxLength();
-        }
-        return builtin;
-    }
+    if (builtin !== undefined) return builtin;
     if (typeof id === 'string' && id.startsWith('node:')) {
         const err = new Error('No such built-in module: ' + id);
         err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
@@ -3705,6 +3701,15 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
         preparedTypeScriptGraph,
     } = context;
 
+    // Capture buffer.kMaxLength for zlib on first require, even when a module
+    // mock will satisfy the request. This matches Node's CJS require timing.
+    if (id === 'zlib' || id === 'node:zlib') {
+        const zlibBuiltin = loadPublicBuiltin('node:zlib');
+        if (zlibBuiltin && zlibBuiltin._captureKMaxLength) {
+            zlibBuiltin._captureKMaxLength();
+        }
+    }
+
     // Check module mock registry
     const mockEntry = _resolveRequireMock(id);
     if (mockEntry) {
@@ -4079,9 +4084,10 @@ export let findPackageJSON = function findPackageJSON(specifier, base) {
 
 export let builtinModules = builtinModuleNames;
 
-export let isBuiltinModule = function isBuiltinModule(id) {
+let isBuiltinModule = function isBuiltinModule(id) {
     return isBuiltin(id);
 };
+export { isBuiltinModule as isBuiltin };
 
 export let register = function register(specifier, parentURL, options) {
     const url = String(specifier);
@@ -4948,7 +4954,7 @@ function runMain() {
 export let syncBuiltinESMExports = function() {
     const registry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
     if (!registry) return;
-    const names = Object.keys(registry);
+    const names = _schemelessSyncableBuiltinNames();
     for (let i = 0; i < names.length; i++) {
         const name = names[i];
         const sync = registry[name];

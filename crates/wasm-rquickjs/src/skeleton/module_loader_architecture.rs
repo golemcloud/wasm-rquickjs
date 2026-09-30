@@ -6,11 +6,6 @@ use quote::ToTokens;
 const MODULE_JS: &str = include_str!("../../skeleton/src/builtin/module.js");
 const EVENTS_JS: &str = include_str!("../../skeleton/src/builtin/events.js");
 const FS_JS: &str = include_str!("../../skeleton/src/builtin/fs.js");
-const PATH_RS: &str = include_str!("../../skeleton/src/builtin/path.rs");
-const WEBSTREAMS_RS: &str = include_str!("../../skeleton/src/builtin/webstreams.rs");
-const VM_RS: &str = include_str!("../../skeleton/src/builtin/vm.rs");
-const URL_RS: &str = include_str!("../../skeleton/src/builtin/url.rs");
-const NODE_HTTP_RS: &str = include_str!("../../skeleton/src/builtin/node_http.rs");
 const BUILTIN_MOD_RS: &str = include_str!("../../skeleton/src/builtin/mod.rs");
 const BUILTIN_P3_RS: &str = include_str!("../../skeleton/src/builtin_p3.rs");
 const SYNC_EXPORTS_RS: &str = include_str!("../../skeleton/src/builtin/sync_exports.rs");
@@ -807,20 +802,26 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
     assert!(SYNC_EXPORTS_RS.contains("or_insert_with(|| facade_source"));
     assert!(!SYNC_EXPORTS_RS.contains("enum TokenKind"));
     assert!(SYNC_EXPORTS_RS.contains("Object.keys(__wasmRquickjsDefault)"));
-    assert!(SYNC_EXPORTS_RS.contains("in __wasmRquickjsDefault"));
+    assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsHasOwn(__wasmRquickjsDefault"));
+    assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsSync(__wasmRquickjsDefault)"));
+    assert!(SYNC_EXPORTS_RS.contains("schemeless_syncable_builtin_names"));
+    assert!(SYNC_EXPORTS_RS.contains("implementation_import"));
     assert!(MODULE_JS.contains("require_builtin as _requireBuiltin"));
     assert!(MODULE_JS.contains("typeof registry[name] === 'function'"));
     assert!(MODULE_JS.contains("function loadPublicBuiltin(name)"));
     assert!(MODULE_JS.contains("defineLazyBuiltin(map, name, load)"));
     assert!(MODULE_JS.contains("for (const canonicalName of _syncableBuiltinNames())"));
+    assert!(MODULE_JS.contains("const names = _schemelessSyncableBuiltinNames();"));
+    assert!(MODULE_JS.contains("name === 'sqlite' || name === 'test'"));
     assert!(MODULE_LOADING_RS.contains("struct PublicBuiltinAliasResolver"));
     assert!(
         MODULE_LOADING_RS.contains("PublicBuiltinAliasResolver,\n            builtin_resolver")
     );
     assert!(!MODULE_JS.contains("from 'node:sqlite'"));
-    assert!(MODULE_JS.contains("const names = Object.keys(registry);"));
     assert!(!MODULE_JS.contains("registry.fs"));
     assert!(!MODULE_JS.contains("registry.events"));
+    assert!(BUILTIN_MOD_RS.contains("console::PUBLIC_IMPLEMENTATION_JS"));
+    assert!(BUILTIN_P3_RS.contains("console::PUBLIC_IMPLEMENTATION_JS"));
     for (name, source) in [("fs", FS_JS), ("events", EVENTS_JS)] {
         assert!(
             !source.contains("__wasm_rquickjs_sync_builtin_esm_exports"),
@@ -828,36 +829,10 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
         );
     }
 
-    for (name, source, canonical) in [
-        ("stream/web", WEBSTREAMS_RS, "node:stream/web"),
-        ("path/posix", PATH_RS, "node:path/posix"),
-        ("path/win32", PATH_RS, "node:path/win32"),
-        ("vm", VM_RS, "node:vm"),
-        ("url", URL_RS, "node:url"),
-        ("_http_common", NODE_HTTP_RS, "node:_http_common"),
-        ("_http_agent", NODE_HTTP_RS, "node:_http_agent"),
-    ] {
-        assert!(
-            source.contains(&format!("from '{canonical}'")),
-            "{name} must re-export the canonical syncable facade"
-        );
-    }
-    for (target, registry) in [("p2", BUILTIN_MOD_RS), ("p3", BUILTIN_P3_RS)] {
-        for registration in [
-            ".with_module(\"stream/web\", webstreams::BARE_REEXPORT_JS)",
-            ".with_module(\"path/posix\", path::PATH_POSIX_BARE_REEXPORT_JS)",
-            ".with_module(\"path/win32\", path::PATH_WIN32_BARE_REEXPORT_JS)",
-            ".with_module(\"vm\", vm::BARE_REEXPORT_JS)",
-            ".with_module(\"url\", url::REEXPORT_JS)",
-            ".with_module(\"_http_common\", node_http::HTTP_COMMON_REEXPORT_JS)",
-            ".with_module(\"_http_agent\", node_http::HTTP_AGENT_REEXPORT_JS)",
-        ] {
-            assert!(
-                registry.contains(registration),
-                "{target} must register canonical bare alias {registration}"
-            );
-        }
-    }
+    assert!(
+        MODULE_LOADING_RS.contains("syncable_builtin_implementation_import(base, name)"),
+        "private builtins must resolve their dependencies directly to avoid facade cycles"
+    );
 }
 
 #[test]

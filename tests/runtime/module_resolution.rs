@@ -1,4 +1,5 @@
 use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output};
+use anyhow::Context;
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
@@ -416,6 +417,86 @@ async fn sync_builtin_esm_exports(
     let r = r?;
     println!("Output:\n{}", output);
     assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn every_syncable_builtin_can_be_imported_first(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    const SPECIFIERS: &[&str] = &[
+        "node:_http_agent",
+        "node:_http_common",
+        "node:assert",
+        "node:assert/strict",
+        "node:async_hooks",
+        "node:buffer",
+        "node:child_process",
+        "node:cluster",
+        "node:console",
+        "node:constants",
+        "node:crypto",
+        "node:dgram",
+        "node:diagnostics_channel",
+        "node:dns",
+        "node:dns/promises",
+        "node:domain",
+        "node:events",
+        "node:fs",
+        "node:fs/promises",
+        "node:http",
+        "node:http2",
+        "node:https",
+        "node:inspector",
+        "node:module",
+        "node:net",
+        "node:os",
+        "node:path",
+        "node:path/posix",
+        "node:path/win32",
+        "node:perf_hooks",
+        "node:process",
+        "node:punycode",
+        "node:querystring",
+        "node:readline",
+        "node:readline/promises",
+        "node:repl",
+        "node:sqlite",
+        "node:stream",
+        "node:stream/consumers",
+        "node:stream/promises",
+        "node:stream/web",
+        "node:string_decoder",
+        "node:test",
+        "node:timers",
+        "node:timers/promises",
+        "node:tls",
+        "node:trace_events",
+        "node:tty",
+        "node:url",
+        "node:util",
+        "node:util/types",
+        "node:v8",
+        "node:vm",
+        "node:worker_threads",
+        "node:zlib",
+    ];
+
+    for specifier in SPECIFIERS {
+        let (result, output) = invoke_and_capture_output(
+            compiled_test.wasm_path(),
+            None,
+            "test-builtin-first-import",
+            &[Val::String((*specifier).to_string())],
+        )
+        .await;
+        let result = result.with_context(|| format!("failed first import of {specifier}"))?;
+        assert_eq!(
+            result,
+            Some(Val::Bool(true)),
+            "unexpected result for first import of {specifier}; output:\n{output}"
+        );
+    }
     Ok(())
 }
 

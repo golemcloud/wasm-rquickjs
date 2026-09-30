@@ -30,8 +30,3 @@ export {
 };
 export default win32;
 "#;
-
-pub const PATH_POSIX_BARE_REEXPORT_JS: &str =
-    r#"export * from 'node:path/posix'; export { default } from 'node:path/posix';"#;
-pub const PATH_WIN32_BARE_REEXPORT_JS: &str =
-    r#"export * from 'node:path/win32'; export { default } from 'node:path/win32';"#;

@@ -55,10 +55,7 @@ pub mod native_module {
 
     /// Load a public builtin on demand and return its namespace object.
     #[rquickjs::function]
-    pub fn require_builtin<'js>(
-        ctx: Ctx<'js>,
-        specifier: String,
-    ) -> rquickjs::Result<Value<'js>> {
+    pub fn require_builtin<'js>(ctx: Ctx<'js>, specifier: String) -> rquickjs::Result<Value<'js>> {
         if !specifier.starts_with("node:") {
             return Err(rquickjs::Error::Unknown);
         }
@@ -71,10 +68,21 @@ pub mod native_module {
     pub fn syncable_builtin_names() -> Vec<String> {
         super::syncable_builtin_names_impl()
     }
+
+    /// Return the subset synchronized by node:module. Node excludes builtins
+    /// that can only be loaded with the node: scheme.
+    #[rquickjs::function]
+    pub fn schemeless_syncable_builtin_names() -> Vec<String> {
+        super::schemeless_syncable_builtin_names_impl()
+    }
 }
 
 fn syncable_builtin_names_impl() -> Vec<String> {
     super::sync_exports::syncable_builtin_names()
+}
+
+fn schemeless_syncable_builtin_names_impl() -> Vec<String> {
+    super::sync_exports::schemeless_syncable_builtin_names()
 }
 
 fn eval_in_new_context_impl<'js>(
@@ -527,5 +535,3 @@ pub const VM_JS: &str = include_str!("vm.js");
 
 // Re-export for aliases
 pub const REEXPORT_JS: &str = r#"export * from '__wasm_rquickjs_builtin/vm'; export { default } from '__wasm_rquickjs_builtin/vm';"#;
-pub const BARE_REEXPORT_JS: &str =
-    r#"export * from 'node:vm'; export { default } from 'node:vm';"#;

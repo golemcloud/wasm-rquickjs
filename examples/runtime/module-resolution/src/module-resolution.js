@@ -4212,6 +4212,7 @@ export const testSyncBuiltinEsmExports = async () => {
         const timersModule = await import('node:timers');
         const cryptoModule = await import('node:crypto');
         const bareCryptoModule = await import('crypto');
+        const consoleModule = await import('node:console');
         const urlModule = await import('node:url');
         const bareUrlModule = await import('url');
 
@@ -4231,6 +4232,22 @@ export const testSyncBuiltinEsmExports = async () => {
         }
 
         const require = module.createRequire(import.meta.url);
+        assert.strictEqual(consoleModule.default, globalThis.console);
+        assert.strictEqual(require('node:console'), globalThis.console);
+        assert.strictEqual(require('console'), globalThis.console);
+        const originalConsoleLog = globalThis.console.log;
+        const replacementConsoleLog = function replacementConsoleLog() {};
+        globalThis.console.log = replacementConsoleLog;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(consoleModule.log, replacementConsoleLog);
+        globalThis.console.log = originalConsoleLog;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(consoleModule.log, originalConsoleLog);
+
+        assert.strictEqual(module.isBuiltin('test'), false);
+        assert.strictEqual(module.isBuiltin('node:test'), true);
+        assert.throws(() => require('test'), { code: 'MODULE_NOT_FOUND' });
+
         const esmFirstOs = osModule.default;
         const esmFirstHostnameDescriptor = Object.getOwnPropertyDescriptor(esmFirstOs, 'hostname');
         assert(esmFirstHostnameDescriptor && esmFirstHostnameDescriptor.configurable);
@@ -4254,11 +4271,24 @@ export const testSyncBuiltinEsmExports = async () => {
         assert.strictEqual(require('node:crypto'), cryptoModule.default);
         assert.strictEqual(require('crypto'), cryptoModule.default);
         assert.strictEqual(bareCryptoModule.default, cryptoModule.default);
-        require('node:sqlite');
+        const sqliteModule = await import('node:sqlite');
+        const sqlite = require('node:sqlite');
         assert.strictEqual(
             Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
             true,
         );
+        assert.throws(() => require('sqlite'), { code: 'MODULE_NOT_FOUND' });
+        const originalSqliteConstants = sqlite.constants;
+        const replacementSqliteConstants = {};
+        sqlite.constants = replacementSqliteConstants;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(sqliteModule.constants, originalSqliteConstants);
+        sqlite.constants = originalSqliteConstants;
+
+        const osSyncDescriptor = Object.getOwnPropertyDescriptor(syncRegistry, 'node:os');
+        assert(osSyncDescriptor);
+        assert.strictEqual(osSyncDescriptor.writable, false);
+        assert.strictEqual(osSyncDescriptor.configurable, false);
 
         const syncNamedExport = (specifier, namespace, name, replacement) => {
             const commonJs = require(specifier);
@@ -4591,6 +4621,19 @@ export const testSyncBuiltinEsmExports = async () => {
         return true;
     } catch (error) {
         console.error(error);
+        throw error;
+    }
+};
+
+export const testBuiltinFirstImport = async (specifier) => {
+    try {
+        const namespace = await import(specifier);
+        const module = await import('node:module');
+        const require = module.createRequire(import.meta.url);
+        assert.strictEqual(require(specifier), namespace.default);
+        return true;
+    } catch (error) {
+        console.error(`builtin-first-import ${specifier}:`, error);
         throw error;
     }
 };

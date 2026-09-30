@@ -187,6 +187,10 @@ pub(crate) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str>
     sync_exports::canonical_public_builtin_alias(name)
 }
 
+pub(crate) fn syncable_builtin_implementation_import(base: &str, name: &str) -> Option<String> {
+    sync_exports::implementation_import(base, name)
+}
+
 pub(crate) fn realpath_for_cjs_module_resolution(
     ctx: &rquickjs::Ctx<'_>,
     path: &str,
@@ -490,7 +494,7 @@ pub fn module_loader() -> (
             webstreams::REEXPORT_JS,
             webstreams::WEBSTREAMS_WRAPPER_JS,
         )
-        .with_module("stream/web", webstreams::BARE_REEXPORT_JS)
+        .with_module("stream/web", webstreams::REEXPORT_JS)
         .with_module("web-streams-polyfill", webstreams::REEXPORT_JS)
         .with_module("formdata-node", formdata_node::FORMDATA_NODE_JS)
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
@@ -498,7 +502,7 @@ pub fn module_loader() -> (
         .with_syncable_module("node:util", util::UTIL_JS)
         .with_syncable_module("node:util/types", util::UTIL_TYPES_JS)
         .with_module("util", util::BARE_UTIL_REEXPORT_JS)
-        .with_module("util/types", util::BARE_UTIL_TYPES_REEXPORT_JS)
+        .with_module("util/types", util::UTIL_TYPES_JS)
         .with_module("base64-js", base64::BASE64_JS)
         .with_module("ieee754", ieee754::IEEE754_JS)
         .with_syncable_module("node:buffer", buffer::BUFFER_JS)
@@ -526,9 +530,9 @@ pub fn module_loader() -> (
         .with_syncable_module("node:path", path::PATH_JS)
         .with_module("path", path::REEXPORT_JS)
         .with_syncable_module("node:path/posix", path::PATH_POSIX_REEXPORT_JS)
-        .with_module("path/posix", path::PATH_POSIX_BARE_REEXPORT_JS)
+        .with_module("path/posix", path::PATH_POSIX_REEXPORT_JS)
         .with_syncable_module("node:path/win32", path::PATH_WIN32_REEXPORT_JS)
-        .with_module("path/win32", path::PATH_WIN32_BARE_REEXPORT_JS)
+        .with_module("path/win32", path::PATH_WIN32_REEXPORT_JS)
         .with_syncable_module("node:punycode", punycode::PUNYCODE_JS)
         .with_module("punycode", punycode::REEXPORT_JS)
         .with_module("__wasm_rquickjs_builtin/url", url::URL_JS)
@@ -557,10 +561,10 @@ pub fn module_loader() -> (
             web_crypto::REEXPORT_JS,
             web_crypto::NODE_CRYPTO_EXPORTS_JS,
         )
-        .with_module("crypto", web_crypto::BARE_REEXPORT_JS)
+        .with_module("crypto", web_crypto::REEXPORT_JS)
         .with_module("__wasm_rquickjs_builtin/vm", vm::VM_JS)
         .with_syncable_module_exports("node:vm", vm::REEXPORT_JS, vm::VM_JS)
-        .with_module("vm", vm::BARE_REEXPORT_JS)
+        .with_module("vm", vm::REEXPORT_JS)
         .with_module(
             "__wasm_rquickjs_builtin/structured_clone",
             structured_clone::STRUCTURED_CLONE_JS,
@@ -593,9 +597,9 @@ pub fn module_loader() -> (
             node_http::NODE_HTTP_SERVER_JS,
         )
         .with_syncable_module("node:_http_common", node_http::HTTP_COMMON_JS)
-        .with_module("_http_common", node_http::HTTP_COMMON_REEXPORT_JS)
+        .with_module("_http_common", node_http::HTTP_COMMON_JS)
         .with_syncable_module("node:_http_agent", node_http::HTTP_AGENT_JS)
-        .with_module("_http_agent", node_http::HTTP_AGENT_REEXPORT_JS)
+        .with_module("_http_agent", node_http::HTTP_AGENT_JS)
         .with_syncable_module("node:http", node_http::NODE_HTTP_JS)
         .with_module("http", node_http::REEXPORT_JS)
         .with_syncable_module("node:http2", http2::HTTP2_JS)
@@ -614,7 +618,11 @@ pub fn module_loader() -> (
         .with_module("readline/promises", readline::REEXPORT_PROMISES_JS)
         .with_syncable_module("node:repl", repl::REPL_JS)
         .with_module("repl", repl::REEXPORT_JS)
-        .with_syncable_module("node:console", console::CONSOLE_JS)
+        .with_syncable_module_exports(
+            "node:console",
+            console::PUBLIC_IMPLEMENTATION_JS,
+            console::CONSOLE_JS,
+        )
         .with_module("console", console::REEXPORT_JS)
         .with_syncable_module("node:trace_events", trace_events::TRACE_EVENTS_JS)
         .with_module("trace_events", trace_events::REEXPORT_JS)
