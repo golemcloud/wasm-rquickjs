@@ -61,11 +61,13 @@ Usage: wasm-rquickjs generate-wrapper-crate --js <JS> --wit <WIT> --output <OUTP
 The output directory is going to contain a self-contained Rust crate that can be compiled into a WASM component using
 `cargo build --target wasm32-wasip2`.
 
-Every generated crate also contains `THIRD_PARTY_COMPONENT_LICENSES.txt`, selected for its P2 or
-P3 dependency closure. Distributors must ship that notice with the compiled component and append
-any attribution required by their own JavaScript and Rust dependencies. The retained notices are
-generated from the locked standard `normal` / `normal-p3` TypeScript transform profiles; custom
-feature combinations must be audited separately. Maintainers can regenerate and verify them with
+Every generated crate also contains a target-specific `THIRD_PARTY_COMPONENT_LICENSES.txt` for the
+locked Cargo dependency union of the standard `normal` / `normal-p3` TypeScript runtime and
+transform profiles. It is deliberately a superset for crates that enable fewer features.
+Distributors must ship that notice with the compiled component and separately audit application
+code, custom feature combinations, repository-owned bundled JavaScript, toolchain and WASI sysroot
+components, vendored native sources, and upstream `NOTICE` obligations. Maintainers can regenerate
+and verify the retained notices with
 `tools/check-component-licenses.sh --write` and `--check`, respectively, using the pinned
 `cargo-about` version named by the script.
 

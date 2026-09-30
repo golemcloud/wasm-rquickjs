@@ -651,6 +651,10 @@ fn module_loader_architecture() {
             "mod._compile(source, filename, compileFormat);",
         ),
         (
+            "the default compile hook must own ESM fallback for the content it receives",
+            "this.exports = requireEsmWithCacheGuard(this, effectiveFilename, true, source);",
+        ),
+        (
             "the main entry must dispatch directly through the static load hook",
             "() => moduleExports._load(mainScript, null, true),",
         ),
@@ -668,6 +672,10 @@ fn module_loader_architecture() {
             "CommonJS hook architecture changed: {contract}"
         );
     }
+    assert!(
+        MODULE_LOADING_RS.contains("__wasm_rquickjs_require_esm_source_override"),
+        "the ESM loader must consume the temporary source supplied by the public compile hook"
+    );
     assert!(js_tokens.windows(4).any(|window| matches!(window, [JsToken { kind: JsTokenKind::Ident(name), .. }, JsToken { kind: JsTokenKind::Punct(':'), .. }, JsToken { kind: JsTokenKind::Ident(object), .. }, JsToken { kind: JsTokenKind::Punct('.'), .. }] if name == "_pathCache" && object == "Object")), "Module._pathCache must remain JS-owned mutable state");
     for bridge in [
         "__wasm_rquickjs_cjs_resolve_package_exports",

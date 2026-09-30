@@ -73,8 +73,10 @@ fn skeleton_cargo_toml() -> anyhow::Result<Cow<'static, str>> {
 ///
 /// Changes applied to the skeleton toml file:
 /// - Changing the package name to `crate_name` (which is the name of the chosen WIT world).
-/// - For the Preview 3 target, replacing the default feature set with `["p3"]` so the crate
-///   compiles the async runtime spine instead of the Preview 2 path.
+/// - Removing skeleton-only publication and license metadata; the generated crate embeds
+///   user-owned JavaScript, so its package policy must be chosen by that user.
+/// - For the Preview 3 target, replacing the default feature set with `["p3", "normal-p3"]` so
+///   the crate compiles the async runtime spine and standard capability tier.
 pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
     // Loading the skeleton Cargo.toml file
     let cargo_toml = skeleton_cargo_toml()?;
@@ -97,8 +99,16 @@ pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()>
 
 /// Changes the crate's package name to the selected WIT world's name
 fn change_package_name(context: &GeneratorContext, doc: &mut DocumentMut) {
-    let crate_name = &context.world_name;
+    set_generated_package_metadata(&context.world_name, doc);
+}
+
+fn set_generated_package_metadata(crate_name: &str, doc: &mut DocumentMut) {
     doc["package"]["name"] = value(crate_name);
+    let package = doc["package"]
+        .as_table_mut()
+        .expect("validated Cargo manifest package must be a table");
+    package.remove("license");
+    package.remove("publish");
 }
 
 /// Replaces `[features] default` with `["p3", "normal-p3"]` for the Preview 3 target.
@@ -316,6 +326,7 @@ mod module_loader_architecture;
 mod tests {
     use super::{
         COMPONENT_LICENSES_P2, COMPONENT_LICENSES_P3, copy_component_licenses, generated_lock,
+        set_generated_package_metadata,
     };
     use crate::GenerationTarget;
     use camino_tempfile::Utf8TempDir;
@@ -327,6 +338,27 @@ mod tests {
         assert!(p2.contains("WASI Preview 2"));
         assert!(p3.contains("WASI Preview 3"));
         assert_ne!(p2, p3);
+        assert!(!p2.contains("<year>"));
+        assert!(!p3.contains("<year>"));
+        assert!(!p2.contains("GB18030_2022_OVERRIDE_PUA"));
+        assert!(!p3.contains("GB18030_2022_OVERRIDE_PUA"));
+    }
+
+    #[test]
+    fn generated_package_does_not_inherit_skeleton_only_metadata() {
+        let mut manifest =
+            "[package]\nname = \"rquickjs-component\"\nlicense = \"Apache-2.0\"\npublish = false\n"
+                .parse::<toml_edit::DocumentMut>()
+                .unwrap();
+
+        set_generated_package_metadata("generated-world", &mut manifest);
+
+        assert_eq!(
+            manifest["package"]["name"].as_str(),
+            Some("generated-world")
+        );
+        assert!(manifest["package"].get("license").is_none());
+        assert!(manifest["package"].get("publish").is_none());
     }
 
     #[test]
