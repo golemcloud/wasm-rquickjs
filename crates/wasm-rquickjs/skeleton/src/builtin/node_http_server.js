@@ -37,6 +37,7 @@ const IDLE = 3;
 
 const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
+const DEFAULT_WRITABLE_HIGH_WATER_MARK = 64 * 1024;
 
 // ===== Header helpers =====
 
@@ -260,7 +261,6 @@ function ServerResponse(req, options) {
     this._outputAborted = false;
     this._outputBlocked = false;
     this._needDrain = false;
-    this._drainScheduled = false;
     this._onPendingOutput = () => {};
 
     // strictContentLength enforcement
@@ -328,15 +328,25 @@ Object.defineProperty(ServerResponse.prototype, 'writableObjectMode', {
 });
 
 Object.defineProperty(ServerResponse.prototype, 'writableHighWaterMark', {
-    get() { return this.socket ? this.socket.writableHighWaterMark : 16 * 1024; },
+    get() {
+        return this.socket
+            ? this.socket.writableHighWaterMark
+            : DEFAULT_WRITABLE_HIGH_WATER_MARK;
+    },
 });
 
 Object.defineProperty(ServerResponse.prototype, 'writableLength', {
     get() {
-        const activeLength = this.socket && !this._outputBlocked
+        const activeLength = this.socket && !this._outputBlocked && !this.finished
             ? this.socket.writableLength || 0
             : 0;
         return this._outputSize + activeLength;
+    },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'writableNeedDrain', {
+    get() {
+        return !this._destroyed && !this.finished && this._needDrain;
     },
 });
 
@@ -784,20 +794,14 @@ ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(erro
 };
 
 ServerResponse.prototype._maybeEmitDrain = function _maybeEmitDrain() {
-    if (!this._needDrain || this._drainScheduled || this._outputBlocked ||
+    if (!this._needDrain || this._outputBlocked ||
         this._writableEnded || this._destroyed || this._closed ||
         this._outputSize >= this.writableHighWaterMark ||
         (this.socket && this.socket.writableNeedDrain)) {
         return;
     }
     this._needDrain = false;
-    this._drainScheduled = true;
-    process.nextTick(() => {
-        this._drainScheduled = false;
-        if (!this._writableEnded && !this._destroyed && !this._closed) {
-            this.emit('drain');
-        }
-    });
+    this.emit('drain');
 };
 
 ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
@@ -863,10 +867,8 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         if (this._rejectNonStandardBodyWrites) {
             throw new ERR_HTTP_BODY_NOT_ALLOWED();
         }
-        const outputResult = this._writeOutput(Buffer.alloc(0), cb);
-        result = outputResult && result;
-        if (!result) this._needDrain = true;
-        return result;
+        this._writeOutput(Buffer.alloc(0), cb);
+        return true;
     }
 
     if (typeof chunk === 'string') {
@@ -1171,14 +1173,17 @@ function createConnectionParser(server, socket) {
 
     function updateInputBackpressure() {
         if (state.detached || state.closing || socket.destroyed) return;
-        const highWaterMark = socket.writableHighWaterMark || 16 * 1024;
-        const shouldPause = state.queuedOutputBytes > highWaterMark;
-        if (!state.inputPaused && shouldPause) {
+        const highWaterMark = socket.writableHighWaterMark ||
+            DEFAULT_WRITABLE_HIGH_WATER_MARK;
+        if (!state.inputPaused &&
+            (socket.writableNeedDrain || state.queuedOutputBytes >= highWaterMark)) {
             state.inputPaused = true;
             socket.pause();
             return;
         }
-        if (state.inputPaused && !shouldPause) {
+        if (state.inputPaused &&
+            !socket.writableNeedDrain &&
+            state.queuedOutputBytes <= highWaterMark) {
             state.inputPaused = false;
             parseLoop();
             if (!state.inputPaused && !state.detached && !state.closing) {
@@ -1409,9 +1414,9 @@ function createConnectionParser(server, socket) {
             while (progress) {
                 progress = false;
 
-                if (state.inputPaused &&
-                    (state.state === IDLE || state.state === HEADERS)) {
-                    break;
+                if (state.state === IDLE || state.state === HEADERS) {
+                    updateInputBackpressure();
+                    if (state.inputPaused) break;
                 }
 
                 if (state.state === IDLE || state.state === HEADERS) {
@@ -1637,6 +1642,7 @@ function createConnectionParser(server, socket) {
                     } else {
                         server.emit('request', req, res);
                     }
+                    updateInputBackpressure();
                     if (requestHasNoBody) {
                         // Emit EOF after request handlers had a chance to attach `end` listeners.
                         Promise.resolve().then(function () {

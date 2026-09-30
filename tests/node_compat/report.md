@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3173/4388 (72.3%)
+**Primary compatibility (CI-enforced):** 3175/4388 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3173 | 72.3% | 55.2% | 46.2% |
-| 🧩 known gap | 1215 | 27.7% | 21.1% | 17.7% |
+| ✅ passing (runnable) | 3175 | 72.4% | 55.2% | 46.2% |
+| 🧩 known gap | 1213 | 27.6% | 21.1% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3173/5750 (55.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3175/5750 (55.2%)**.
 
 ## Inventory by Module
 
@@ -52,7 +52,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 234 | 281 | 301 | 2 | 0 | 80 | 45.4% | 28.6% |
+| http | 898 | 236 | 279 | 301 | 2 | 0 | 80 | 45.8% | 28.9% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 122 | 32 | 7 | 1 | 0 | 12 | 79.2% | 75.3% |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1215)
+### known gap (1213)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -830,7 +830,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | --trace-exit stack diagnostics are incomplete in execPath emulation | 1 | `parallel/test-trace-exit-stack-limit.js` |
 | --trace-exit warning behavior across process/worker variants is incomplete | 1 | `parallel/test-trace-exit.js` |
 | --trace-sync-io diagnostics are not implemented in execPath emulation | 1 | `parallel/test-sync-io-option.js` |
-| 10k pipelined 16 KiB responses transfer 160 MiB and do not complete within the node-compat timeout; reduced P2/P3 profiling verifies bounded admission and queued output | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
+| 10k pipelined 16 KiB responses transfer 160 MiB and do not complete within the node-compat timeout | 1 | `parallel/test-http-pipeline-requests-connection-leak.js` |
 | Agent free-socket bookkeeping and destroyed-socket reuse handling is incomplete | 1 | `parallel/test-http-agent-destroyed-socket.js` |
 | Agent keep-alive queue/socket bookkeeping across concurrent requests is not Node-compatible | 1 | `parallel/test-http-keep-alive.js` |
 | Agent queued-request abort cleanup is incomplete | 1 | `parallel/test-http-abort-queued.js` |
@@ -886,7 +886,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP parser does not emit Node-compatible HPE_INVALID_TRANSFER_ENCODING clientError semantics | 1 | `parallel/test-http-server-reject-chunked-with-content-length.js` |
 | HTTP parser handling for blank request headers and 400 response framing is incomplete | 1 | `parallel/test-http-blank-header.js` |
 | HTTP parser/clientError path does not reject duplicate Content-Length with HPE_UNEXPECTED_CONTENT_LENGTH | 1 | `parallel/test-http-double-content-length.js` |
-| HTTP request piping with constrained agent sockets can stall queued requests | 1 | `parallel/test-http-pipe-fs.js` |
 | HTTP request streaming/pipe backpressure behavior is not fully Node-compatible | 1 | `parallel/test-pipe-file-to-http.js` |
 | HTTP response serialization/header ordering differs from Node for first-chunk single-byte encodings | 1 | `parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js` |
 | HTTP server close/reopen ECONNREFUSED sequencing is not Node-compatible | 1 | `sequential/test-http-econnrefused.js` |
@@ -1205,7 +1204,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | req.setTimeout() handling for actively consumed request bodies is not Node-compatible | 1 | `parallel/test-http-server-consumed-timeout.js` |
 | request drain captureRejections path hangs when request is never finalized with end() under wasi:http | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_01_block_01` |
 | request header population/normalization (for example Accept) is incomplete | 1 | `parallel/test-http.js` |
-| request/response pause-resume flow control does not complete with Node-compatible behavior | 1 | `parallel/test-http-pause.js` |
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
 | requires V8 hidden-class constructor-name recovery after the prototype constructor is detached | 1 | `parallel/test-util-inspect.js#block_73_manipulate_the_prototype_in_weird_ways` |
