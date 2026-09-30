@@ -778,13 +778,17 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._writableEnded) {
         const error = new ERR_STREAM_WRITE_AFTER_END();
-        process.nextTick(() => {
-            if (typeof cb === 'function') {
-                cb(error);
-            } else {
-                this.emit('error', error);
-            }
-        });
+        const callback = typeof cb === 'function' ? cb : () => {};
+        if (this._destroyed) {
+            process.nextTick(() => callback(error));
+        } else {
+            process.nextTick(() => {
+                callback(error);
+                if (!this._destroyed) {
+                    this.emit('error', error);
+                }
+            });
+        }
         return false;
     }
 

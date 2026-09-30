@@ -399,6 +399,68 @@ export function httpResponseLifecycle() {
 }
 
 export async function httpResponsePostCloseWrites() {
+    const detachedRequest = {
+        method: 'GET',
+        httpVersionMajor: 1,
+        httpVersionMinor: 1,
+        socket: null,
+    };
+    const afterEnd = new http.ServerResponse(detachedRequest);
+    const afterEndEvents = [];
+    let afterEndReturn;
+    let afterEndCallbackWasAsync = false;
+    let afterEndSynchronous = true;
+    afterEnd.on('error', (error) => {
+        afterEndEvents.push('error:' + error.code);
+    });
+    afterEnd.end();
+    afterEndReturn = afterEnd.write('after-end', (error) => {
+        afterEndEvents.push('callback:' + error.code);
+        afterEndCallbackWasAsync = !afterEndSynchronous;
+    });
+    afterEndSynchronous = false;
+    await new Promise((resolve) => setImmediate(resolve));
+    if (
+        afterEndReturn !== false ||
+        !afterEndCallbackWasAsync ||
+        afterEndEvents.join(',') !==
+            'callback:ERR_STREAM_WRITE_AFTER_END,error:ERR_STREAM_WRITE_AFTER_END'
+    ) {
+        return false;
+    }
+
+    const destroyedBeforeDelivery = new http.ServerResponse(detachedRequest);
+    let destroyedCallbackCount = 0;
+    let destroyedCallbackCode;
+    let destroyedCallbackWasAsync = false;
+    let destroyedErrorCount = 0;
+    let destroyedSynchronous = true;
+    destroyedBeforeDelivery.on('error', () => {
+        destroyedErrorCount++;
+    });
+    destroyedBeforeDelivery.end();
+    const destroyedWriteReturn = destroyedBeforeDelivery.write(
+        'destroyed-before-delivery',
+        (error) => {
+            destroyedCallbackCount++;
+            destroyedCallbackCode = error && error.code;
+            destroyedCallbackWasAsync = !destroyedSynchronous;
+        }
+    );
+    destroyedBeforeDelivery.destroy();
+    destroyedSynchronous = false;
+    await new Promise((resolve) => setImmediate(resolve));
+    if (
+        destroyedWriteReturn !== false ||
+        !destroyedBeforeDelivery.destroyed ||
+        destroyedCallbackCount !== 1 ||
+        destroyedCallbackCode !== 'ERR_STREAM_WRITE_AFTER_END' ||
+        !destroyedCallbackWasAsync ||
+        destroyedErrorCount !== 0
+    ) {
+        return false;
+    }
+
     const beforeClose = await new Promise((resolve) => {
         let settled = false;
         let writeCallbackCount = 0;
@@ -407,6 +469,7 @@ export async function httpResponsePostCloseWrites() {
         let finishCount = 0;
         let closeCount = 0;
         let destroyedAtClose = false;
+        let afterCloseWriteReturn;
         const server = http.createServer((_req, res) => {
             res.on('error', () => finish(false));
             res.on('finish', () => {
@@ -415,6 +478,7 @@ export async function httpResponsePostCloseWrites() {
             res.on('close', () => {
                 closeCount++;
                 destroyedAtClose = res.destroyed;
+                afterCloseWriteReturn = res.write('after-finish-and-close');
                 setImmediate(() => {
                     finish(
                         writeCallbackCount === 1 &&
@@ -422,7 +486,8 @@ export async function httpResponsePostCloseWrites() {
                         callbackBeforeClose &&
                         finishCount === 1 &&
                         closeCount === 1 &&
-                        destroyedAtClose
+                        destroyedAtClose &&
+                        afterCloseWriteReturn === false
                     );
                 });
             });
