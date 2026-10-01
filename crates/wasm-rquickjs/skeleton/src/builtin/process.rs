@@ -134,10 +134,11 @@ pub mod native_module {
         }
 
         let (promise, resolve, reject) = Promise::new(&ctx)?;
-        services.termination.add_idle_waiter();
+        let registration = services.termination.register_idle_waiter();
         crate::internal::spawn_runtime_idle_waiter(
             Persistent::save(&ctx, resolve),
             Persistent::save(&ctx, reject),
+            registration,
         );
         Ok(promise)
     }

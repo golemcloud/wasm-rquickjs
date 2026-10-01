@@ -855,36 +855,100 @@ impl TimerServices {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct RuntimeTermination {
+    inner: Rc<RuntimeTerminationState>,
+}
+
+#[derive(Default)]
+struct RuntimeTerminationState {
     requested: Cell<bool>,
     error: RefCell<Option<String>>,
     idle_waiters: Cell<usize>,
 }
 
+pub(crate) struct RuntimeIdleWaiterRegistration {
+    termination: RuntimeTermination,
+}
+
+impl Drop for RuntimeIdleWaiterRegistration {
+    fn drop(&mut self) {
+        self.termination.remove_idle_waiter();
+    }
+}
+
+pub(crate) enum RuntimeIdlePoll {
+    Idle,
+    Pending,
+    Terminated,
+}
+
 impl RuntimeTermination {
     pub(crate) fn request(&self, error: Option<String>) -> bool {
-        if !self.requested.replace(true) {
-            *self.error.borrow_mut() = error;
+        if !self.inner.requested.replace(true) {
+            *self.inner.error.borrow_mut() = error;
         }
-        self.idle_waiters.get() > 0
+        self.inner.idle_waiters.get() > 0
     }
 
     pub(crate) fn is_requested(&self) -> bool {
-        self.requested.get()
+        self.inner.requested.get()
     }
 
     pub(crate) fn error(&self) -> Option<String> {
-        self.error.borrow().clone()
+        self.inner.error.borrow().clone()
     }
 
-    pub(crate) fn add_idle_waiter(&self) {
-        self.idle_waiters
-            .set(self.idle_waiters.get().saturating_add(1));
+    pub(crate) fn register_idle_waiter(&self) -> RuntimeIdleWaiterRegistration {
+        self.inner.idle_waiters.set(
+            self.inner
+                .idle_waiters
+                .get()
+                .checked_add(1)
+                .expect("runtime idle waiter count overflow"),
+        );
+        RuntimeIdleWaiterRegistration {
+            termination: self.clone(),
+        }
     }
 
-    pub(crate) fn remove_idle_waiter(&self) {
-        self.idle_waiters
-            .set(self.idle_waiters.get().saturating_sub(1));
+    /// Advances QuickJS one scheduler/job turn at a time, checking termination between turns.
+    /// `AsyncRuntime::idle` cannot be interrupted by a host task, so using it here could wait
+    /// forever on unrelated host work. JavaScript callback wrappers separately suppress queued
+    /// Promise and microtask callbacks once termination has been requested.
+    pub(crate) async fn poll_runtime_idle(&self, runtime: &AsyncRuntime) -> RuntimeIdlePoll {
+        loop {
+            if self.is_requested() {
+                return RuntimeIdlePoll::Terminated;
+            }
+            if !runtime.is_job_pending().await {
+                return RuntimeIdlePoll::Idle;
+            }
+
+            // Match AsyncRuntime::idle's behavior: a failed queued job is consumed and the
+            // remaining runtime work continues to drain.
+            let made_progress = runtime.execute_pending_job().await.unwrap_or(true);
+
+            if self.is_requested() {
+                return RuntimeIdlePoll::Terminated;
+            }
+            if !made_progress {
+                return if runtime.is_job_pending().await {
+                    RuntimeIdlePoll::Pending
+                } else {
+                    RuntimeIdlePoll::Idle
+                };
+            }
+        }
+    }
+
+    fn remove_idle_waiter(&self) {
+        self.inner.idle_waiters.set(
+            self.inner
+                .idle_waiters
+                .get()
+                .checked_sub(1)
+                .expect("runtime idle waiter count underflow"),
+        );
     }
 }

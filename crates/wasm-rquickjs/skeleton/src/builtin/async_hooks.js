@@ -202,7 +202,10 @@ function _restoreContext(snapshot, fn, thisArg, args) {
 // Returns non-function values unchanged (e.g. undefined/null handlers in .then).
 function _wrapCallback(snapshot, cb) {
     if (typeof cb !== 'function') return cb;
-    return function(...a) { return _restoreContext(snapshot, cb, this, a); };
+    return function(...a) {
+        if (globalThis.__wasm_rquickjs_shouldSkipCallbackAfterExit?.(cb)) return undefined;
+        return _restoreContext(snapshot, cb, this, a);
+    };
 }
 
 const _originalThen = Promise.prototype.then;
@@ -223,7 +226,10 @@ Promise.prototype.catch = function(onRejected) {
 Promise.prototype.finally = function(onFinally) {
     const snapshot = _captureContext();
     const wrapped = typeof onFinally === 'function'
-        ? function() { return _restoreContext(snapshot, onFinally, this, []); }
+        ? function() {
+            if (globalThis.__wasm_rquickjs_shouldSkipCallbackAfterExit?.(onFinally)) return undefined;
+            return _restoreContext(snapshot, onFinally, this, []);
+        }
         : onFinally;
     return _originalFinally.call(this, wrapped);
 };

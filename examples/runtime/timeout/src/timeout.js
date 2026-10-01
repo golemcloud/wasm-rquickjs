@@ -79,12 +79,29 @@ export async function awaitRuntimeIdleError() {
 
 export async function awaitRuntimeIdleExit() {
     setTimeout(() => {
+        Promise.resolve().then(() => {
+            console.log("unexpected promise callback after exit");
+        });
+        queueMicrotask(() => {
+            console.log("unexpected microtask callback after exit");
+        });
         process.exit(7);
     }, 10);
     setTimeout(() => {
         console.log("unexpected callback after exit");
     }, 20);
     await process._awaitRuntimeIdle();
+    return process.exitCode;
+}
+
+export async function awaitRuntimeIdleExitWithPendingFetch(port) {
+    let pendingRequest;
+    setTimeout(() => {
+        pendingRequest = fetch(`http://localhost:${port}/slow-response`).catch(() => {});
+        process.exit(9);
+    }, 25);
+    await process._awaitRuntimeIdle();
+    void pendingRequest;
     return process.exitCode;
 }
 

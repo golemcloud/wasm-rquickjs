@@ -73,6 +73,29 @@ const _env = get_env();
 let _exitCode = 0;
 var _exiting = false;
 
+const _functionToString = Function.prototype.toString;
+// QuickJS uses native callbacks to settle awaited exports. Those must remain runnable so the
+// structured result can be returned, while user JavaScript callbacks stop after process.exit().
+Object.defineProperty(globalThis, '__wasm_rquickjs_shouldSkipCallbackAfterExit', {
+    value: function(callback) {
+        if (!_exiting || typeof callback !== 'function') return false;
+        return _functionToString.call(callback).indexOf('[native code]') === -1;
+    },
+    writable: false,
+    enumerable: false,
+    configurable: false,
+});
+
+if (typeof globalThis.queueMicrotask === 'function') {
+    const _originalQueueMicrotask = globalThis.queueMicrotask;
+    globalThis.queueMicrotask = function queueMicrotask(callback) {
+        if (typeof callback !== 'function') return _originalQueueMicrotask(callback);
+        return _originalQueueMicrotask(function() {
+            if (!globalThis.__wasm_rquickjs_shouldSkipCallbackAfterExit(callback)) callback();
+        });
+    };
+}
+
 export var argv = _argv;
 Object.defineProperty(process, 'argv', {
     get: function() { return argv; },

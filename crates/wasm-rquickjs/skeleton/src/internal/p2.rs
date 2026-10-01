@@ -11,8 +11,8 @@ use std::future::Future;
 use wstd::runtime::block_on;
 
 use super::runtime_services::{
-    OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
-    run_process_turn_checkpoint,
+    OwnedJsRuntime, RuntimeIdlePoll, RuntimeServices, initialize_builtin_wiring,
+    initialize_dispose_symbols, run_process_turn_checkpoint,
 };
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
@@ -272,7 +272,22 @@ async fn drain_and_idle(js_state: &JsState) {
             })
             .await;
         }
-        js_state.rt.idle().await;
+        let termination = async_with!(js_state.ctx => |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .termination
+                .clone()
+        })
+        .await;
+        loop {
+            match termination.poll_runtime_idle(&js_state.rt).await {
+                RuntimeIdlePoll::Idle => break,
+                RuntimeIdlePoll::Terminated => return,
+                RuntimeIdlePoll::Pending => {
+                    wstd::task::sleep(wstd::time::Duration::from_millis(1)).await;
+                }
+            }
+        }
     }
 }
 
@@ -282,6 +297,7 @@ async fn drain_and_idle(js_state: &JsState) {
 pub(crate) fn spawn_runtime_idle_waiter(
     resolve: Persistent<Function<'static>>,
     reject: Persistent<Function<'static>>,
+    registration: super::runtime_services::RuntimeIdleWaiterRegistration,
 ) {
     wstd::runtime::spawn(async move {
         let js_state = get_js_state();
@@ -296,8 +312,9 @@ pub(crate) fn spawn_runtime_idle_waiter(
             let services = ctx
                 .userdata::<RuntimeServices>()
                 .expect("runtime services not initialized");
-            services.termination.remove_idle_waiter();
-            if let Some(error) = services.termination.error() {
+            let error = services.termination.error();
+            drop(registration);
+            if let Some(error) = error {
                 drop(resolve);
                 reject
                     .call::<_, ()>((error,))

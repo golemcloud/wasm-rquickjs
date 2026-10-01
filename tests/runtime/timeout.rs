@@ -1,5 +1,7 @@
+use crate::common::test_server::start_abort_test_server;
 use crate::common::{
-    CompiledTest, invoke_and_capture_output, invoke_and_capture_output_with_stderr,
+    CompiledTest, TestTarget, invoke_and_capture_output, invoke_and_capture_output_with_stderr,
+    test_target,
 };
 use camino::Utf8Path;
 use indoc::indoc;
@@ -177,6 +179,34 @@ async fn runtime_idle_wait_preserves_exit_code_and_cancels_timers(
     let result = result?;
 
     assert_eq!(result, Some(wasmtime::component::Val::S32(7)));
+    assert_eq!(stdout, "");
+    assert_eq!(stderr, "");
+    Ok(())
+}
+
+#[test]
+async fn runtime_idle_wait_termination_cancels_pending_non_timer_work(
+    #[tagged_as("timeout")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    if test_target() != TestTarget::P3 {
+        return Ok(());
+    }
+
+    let (port, _server, _arrivals) = start_abort_test_server().await;
+    let args = [wasmtime::component::Val::U16(port)];
+    let invocation = invoke_and_capture_output_with_stderr(
+        compiled.wasm_path(),
+        None,
+        "await-runtime-idle-exit-with-pending-fetch",
+        &args,
+    );
+    let (result, stdout, stderr) =
+        tokio::time::timeout(std::time::Duration::from_secs(15), invocation)
+            .await
+            .expect("runtime termination did not interrupt pending fetch work");
+    let result = result?;
+
+    assert_eq!(result, Some(wasmtime::component::Val::S32(9)));
     assert_eq!(stdout, "");
     assert_eq!(stderr, "");
     Ok(())
