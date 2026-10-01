@@ -655,6 +655,17 @@ fn spawn_drive_guard(rt: &AsyncRuntime) -> DriveGuard {
 async fn drain_and_idle(js_state: &JsState) {
     let mut drove_runtime = false;
     loop {
+        let termination_requested = async_with!(js_state.ctx => |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .termination
+                .is_requested()
+        })
+        .await;
+        if termination_requested {
+            return;
+        }
+
         let checkpoint_did_work = run_turn_checkpoint(js_state).await;
         if drove_runtime && !checkpoint_did_work {
             return;
@@ -720,10 +731,21 @@ pub(crate) fn spawn_runtime_idle_waiter(
             let reject = reject
                 .restore(&ctx)
                 .expect("failed to restore runtime-idle reject function");
-            drop(reject);
-            resolve
-                .call::<_, ()>(((),))
-                .expect("failed to resolve runtime-idle promise");
+            let services = ctx
+                .userdata::<RuntimeServices>()
+                .expect("runtime services not initialized");
+            services.termination.remove_idle_waiter();
+            if let Some(error) = services.termination.error() {
+                drop(resolve);
+                reject
+                    .call::<_, ()>((error,))
+                    .expect("failed to reject runtime-idle promise");
+            } else {
+                drop(reject);
+                resolve
+                    .call::<_, ()>(((),))
+                    .expect("failed to resolve runtime-idle promise");
+            }
             run_process_turn_checkpoint(&ctx)
                 .expect("failed to run process checkpoint after runtime-idle wait");
         })

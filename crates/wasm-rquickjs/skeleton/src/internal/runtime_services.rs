@@ -87,6 +87,7 @@ impl ExecutionProfile {
 /// the main component runtime.
 pub(crate) struct RuntimeServices {
     pub(crate) timers: TimerServices,
+    pub(crate) termination: RuntimeTermination,
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub(crate) package_json_cache: super::module_loading::PackageJsonCache,
     pub(crate) cjs_module_probe_session: super::module_loading::CjsModuleProbeSession,
@@ -117,6 +118,7 @@ impl Default for RuntimeServices {
     fn default() -> Self {
         Self {
             timers: TimerServices::default(),
+            termination: RuntimeTermination::default(),
             node_package_deprecation_warnings: RefCell::default(),
             package_json_cache: Default::default(),
             cjs_module_probe_session: Default::default(),
@@ -829,6 +831,13 @@ pub(crate) struct TimerServices {
 }
 
 impl TimerServices {
+    pub(crate) fn abort_all(&self) {
+        for (_, handle) in self.abort_handles.borrow_mut().drain() {
+            handle.abort();
+        }
+        self.unrefed_timers.borrow_mut().clear();
+    }
+
     pub(crate) fn abort_unrefed(&self) {
         let unrefed = self.unrefed_timers.borrow().clone();
         let mut abort_handles = self.abort_handles.borrow_mut();
@@ -843,5 +852,39 @@ impl TimerServices {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.abort_handles.borrow().is_empty() && self.unrefed_timers.borrow().is_empty()
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct RuntimeTermination {
+    requested: Cell<bool>,
+    error: RefCell<Option<String>>,
+    idle_waiters: Cell<usize>,
+}
+
+impl RuntimeTermination {
+    pub(crate) fn request(&self, error: Option<String>) -> bool {
+        if !self.requested.replace(true) {
+            *self.error.borrow_mut() = error;
+        }
+        self.idle_waiters.get() > 0
+    }
+
+    pub(crate) fn is_requested(&self) -> bool {
+        self.requested.get()
+    }
+
+    pub(crate) fn error(&self) -> Option<String> {
+        self.error.borrow().clone()
+    }
+
+    pub(crate) fn add_idle_waiter(&self) {
+        self.idle_waiters
+            .set(self.idle_waiters.get().saturating_add(1));
+    }
+
+    pub(crate) fn remove_idle_waiter(&self) {
+        self.idle_waiters
+            .set(self.idle_waiters.get().saturating_sub(1));
     }
 }

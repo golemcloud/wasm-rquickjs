@@ -9,7 +9,8 @@ import {
     memory_usage as _native_memory_usage,
     has_typescript_runtime,
     typescript_runtime_mode,
-    await_runtime_idle
+    await_runtime_idle,
+    terminate_runtime
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
@@ -576,6 +577,11 @@ const __nextTickQueue = [];
 let __nextTickWakeupScheduled = false;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
+    if (err && err.__isProcessExit === true) {
+        terminate_runtime(null);
+        return;
+    }
+
     if (domain && typeof domain.emit === 'function') {
         if (err != null && (typeof err === 'object' || typeof err === 'function')) {
             err.domain = domain;
@@ -595,7 +601,12 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
         return;
     }
 
-    if (typeof console !== 'undefined') {
+    process.exitCode = process.exitCode || 1;
+    _exiting = true;
+    __nextTickQueue.length = 0;
+    const diagnostic = err && typeof err.stack === 'string' ? err.stack : String(err);
+    const capturedByIdleWaiter = terminate_runtime(diagnostic);
+    if (!capturedByIdleWaiter && typeof console !== 'undefined') {
         console.error(err);
     }
 }
@@ -943,6 +954,8 @@ process.exit = function exit(code) {
         _exiting = true;
         process.emit('exit', process.exitCode || 0);
     }
+    __nextTickQueue.length = 0;
+    terminate_runtime(null);
     throw new ProcessExitError(process.exitCode || 0);
 };
 

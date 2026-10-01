@@ -61,3 +61,42 @@ export async function awaitRuntimeIdle() {
     await process._awaitRuntimeIdle();
     console.log("after idle");
 }
+
+export async function awaitRuntimeIdleError() {
+    setTimeout(() => {
+        throw new Error("delayed failure");
+    }, 10);
+    setTimeout(() => {
+        console.log("unexpected callback after failure");
+    }, 20);
+    try {
+        await process._awaitRuntimeIdle();
+        return "unexpected resolution";
+    } catch (error) {
+        return String(error);
+    }
+}
+
+export async function awaitRuntimeIdleExit() {
+    setTimeout(() => {
+        process.exit(7);
+    }, 10);
+    setTimeout(() => {
+        console.log("unexpected callback after exit");
+    }, 20);
+    await process._awaitRuntimeIdle();
+    return process.exitCode;
+}
+
+export async function awaitRuntimeIdleHandledError() {
+    process.once("uncaughtException", (error) => {
+        console.log(`handled: ${error.message}`);
+    });
+    setTimeout(() => {
+        throw new Error("recoverable failure");
+    }, 10);
+    setTimeout(() => {
+        console.log("after handled failure");
+    }, 20);
+    await process._awaitRuntimeIdle();
+}

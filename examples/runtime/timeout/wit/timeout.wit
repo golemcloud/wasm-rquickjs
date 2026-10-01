@@ -5,4 +5,7 @@ world timeout {
   export parallel: func();
   export use-next-tick: func();
   export await-runtime-idle: func();
+    export await-runtime-idle-error: func() -> string;
+    export await-runtime-idle-exit: func() -> s32;
+    export await-runtime-idle-handled-error: func();
 }

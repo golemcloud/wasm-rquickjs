@@ -1,4 +1,6 @@
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{
+    CompiledTest, invoke_and_capture_output, invoke_and_capture_output_with_stderr,
+};
 use camino::Utf8Path;
 use indoc::indoc;
 use test_r::{test, test_dep};
@@ -133,5 +135,70 @@ async fn runtime_idle_wait_uses_export_liveness_boundary(
         )
     );
 
+    Ok(())
+}
+
+#[test]
+async fn runtime_idle_wait_rejects_after_uncaught_timer_error(
+    #[tagged_as("timeout")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, stdout, stderr) = invoke_and_capture_output_with_stderr(
+        compiled.wasm_path(),
+        None,
+        "await-runtime-idle-error",
+        &[],
+    )
+    .await;
+    let result = result?;
+
+    let Some(wasmtime::component::Val::String(diagnostic)) = result else {
+        anyhow::bail!("expected a string diagnostic, got {result:?}");
+    };
+    assert!(
+        diagnostic.starts_with("Error: delayed failure"),
+        "unexpected diagnostic: {diagnostic}"
+    );
+    assert_eq!(stdout, "");
+    assert_eq!(stderr, "");
+    Ok(())
+}
+
+#[test]
+async fn runtime_idle_wait_preserves_exit_code_and_cancels_timers(
+    #[tagged_as("timeout")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, stdout, stderr) = invoke_and_capture_output_with_stderr(
+        compiled.wasm_path(),
+        None,
+        "await-runtime-idle-exit",
+        &[],
+    )
+    .await;
+    let result = result?;
+
+    assert_eq!(result, Some(wasmtime::component::Val::S32(7)));
+    assert_eq!(stdout, "");
+    assert_eq!(stderr, "");
+    Ok(())
+}
+
+#[test]
+async fn runtime_idle_wait_continues_after_handled_timer_error(
+    #[tagged_as("timeout")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, stdout, stderr) = invoke_and_capture_output_with_stderr(
+        compiled.wasm_path(),
+        None,
+        "await-runtime-idle-handled-error",
+        &[],
+    )
+    .await;
+    result?;
+
+    assert_eq!(
+        stdout,
+        "handled: recoverable failure\nafter handled failure\n"
+    );
+    assert_eq!(stderr, "");
     Ok(())
 }

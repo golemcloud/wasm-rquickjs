@@ -106,6 +106,18 @@ pub mod native_module {
         }
     }
 
+    /// Stops pending runtime work. If `error` is present, an active runtime-idle wait rejects
+    /// with that diagnostic; an explicit process exit resolves normally after cancellation.
+    #[rquickjs::function]
+    pub fn terminate_runtime(ctx: Ctx<'_>, error: Option<String>) -> bool {
+        let services = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized");
+        let has_idle_waiter = services.termination.request(error);
+        services.timers.abort_all();
+        has_idle_waiter
+    }
+
     /// Returns a promise that resolves once every referenced task scheduled by the current
     /// component runtime has reached quiescence. Unlike a timer-based approximation, the wait is
     /// driven by the same runtime boundary used after an exported function returns.
@@ -122,6 +134,7 @@ pub mod native_module {
         }
 
         let (promise, resolve, reject) = Promise::new(&ctx)?;
+        services.termination.add_idle_waiter();
         crate::internal::spawn_runtime_idle_waiter(
             Persistent::save(&ctx, resolve),
             Persistent::save(&ctx, reject),

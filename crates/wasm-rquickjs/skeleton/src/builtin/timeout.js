@@ -118,7 +118,8 @@ function scheduleTimeout(callback, time, args, isInterval) {
             }
         } finally {
             // Support converting setTimeout to interval via _repeat
-            if (!this._destroyed && this._id === currentId && !isInterval && this._repeat > 0) {
+            if (!this._destroyed && this._id === currentId && !isInterval && this._repeat > 0 &&
+                !(typeof process !== 'undefined' && process._exiting)) {
                 const nextId = timeoutNative.schedule(this._bound, this._repeat, false, args);
                 this._id = nextId;
                 if (!this._refed) {
