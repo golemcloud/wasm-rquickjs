@@ -36,3 +36,6 @@ wasmparser_encoder = { workspace = true }
 wit-bindgen-core = { workspace = true }
 wit-encoder = { workspace = true }
 wit-parser = { workspace = true }
+
+[dev-dependencies]
+camino-tempfile = { workspace = true }
