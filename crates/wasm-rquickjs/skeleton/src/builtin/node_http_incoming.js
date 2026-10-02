@@ -4,7 +4,31 @@ export function initializeIncomingMessage(message, socket) {
     message.connection = socket;
     message.client = socket;
     message.trailers = {};
-    message.trailersDistinct = {};
+    Object.defineProperties(message, {
+        _trailersDistinct: {
+            configurable: true,
+            writable: true,
+            value: undefined,
+        },
+        _pendingTrailersDistinct: {
+            configurable: true,
+            writable: true,
+            value: {},
+        },
+    });
+    Object.defineProperty(message, 'trailersDistinct', {
+        configurable: true,
+        enumerable: true,
+        get() {
+            if (this._trailersDistinct === undefined) {
+                this._trailersDistinct = this._pendingTrailersDistinct;
+            }
+            return this._trailersDistinct;
+        },
+        set(value) {
+            this._pendingTrailersDistinct = value;
+        },
+    });
     message.rawTrailers = [];
     message.aborted = false;
     message._consuming = false;
