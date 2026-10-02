@@ -4594,7 +4594,7 @@
       }
     },
     "parallel/test-http-outgoing-end-cork.js": { "category": "known-gap", "reason": "the client never observes a reused keep-alive socket, so the corked-response reuse loop does not terminate" },
-    "parallel/test-http-outgoing-end-multiple.js": { "category": "known-gap", "reason": "ServerResponse.end() repeated-call error/callback behavior is not Node-compatible" },
+    "parallel/test-http-outgoing-end-multiple.js": {},
     "parallel/test-http-outgoing-end-types.js": {},
     "parallel/test-http-outgoing-finish-writable.js": {},
     "parallel/test-http-outgoing-finish.js": {},
