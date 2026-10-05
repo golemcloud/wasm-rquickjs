@@ -1,3 +1,4 @@
+import assert from 'assert';
 import {Readable, PassThrough} from 'stream';
 import {text, json, buffer, arrayBuffer} from 'stream/consumers';
 
@@ -180,6 +181,33 @@ export async function testWritableToWeb() {
 
 // Duplex.fromWeb: convert a Web ReadableStream/WritableStream pair to Node.js Duplex
 export async function testDuplexFromWeb() {
+    const FakeDuplex = class Duplex extends Readable {};
+    const controller = new AbortController();
+    const fakeDuplex = new FakeDuplex({
+        readableObjectMode: true,
+        signal: controller.signal,
+    });
+    assert.strictEqual(fakeDuplex.readableObjectMode, false);
+    controller.abort();
+    assert.strictEqual(fakeDuplex.destroyed, true);
+    assert.strictEqual(fakeDuplex.errored?.name, 'AbortError');
+
+    const duplexNameDescriptor = Object.getOwnPropertyDescriptor(Duplex, 'name');
+    try {
+        Object.defineProperty(Duplex, 'name', {
+            ...duplexNameDescriptor,
+            value: 'RenamedDuplex',
+        });
+        const renamedDuplex = new Duplex({
+            readableObjectMode: true,
+            writableObjectMode: true,
+        });
+        assert.strictEqual(renamedDuplex.readableObjectMode, true);
+        assert.strictEqual(renamedDuplex.writableObjectMode, true);
+    } finally {
+        Object.defineProperty(Duplex, 'name', duplexNameDescriptor);
+    }
+
     const written = [];
     const { readable, writable } = new TransformStream({
         transform(chunk, controller) {

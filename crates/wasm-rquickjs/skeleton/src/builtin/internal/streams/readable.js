@@ -25,7 +25,7 @@ import BufferList from "__wasm_rquickjs_builtin/internal/streams/buffer_list";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import { nextTick } from "node:process";
-import { isDestroyed, isReadable } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDestroyed, isReadable, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 
 let debug = debuglog("stream", (fn) => {
@@ -38,39 +38,13 @@ const nop = () => { };
 
 const { errorOrDestroy } = destroyImpl;
 
-// Detect Duplex without depending on node:stream's public initialization.
-// Writable imports this helper so both sides use the same circularity-safe check.
-function isDuplexStream(maybeDuplex) {
-    const isReadable = Readable.prototype.isPrototypeOf(maybeDuplex);
-
-    let prototype = maybeDuplex;
-    while (prototype?.constructor && prototype.constructor.name !== "Object") {
-        if (prototype.constructor.name === "Duplex") {
-            return isReadable;
-        }
-        prototype = Object.getPrototypeOf(prototype);
-    }
-
-    return false;
-}
-
-function uint8ArrayToBuffer(chunk) {
-    return Buffer.from(
-        chunk.buffer,
-        chunk.byteOffset,
-        chunk.byteLength,
-    );
-}
-
 function ReadableState(options, stream, isDuplex) {
     // Duplex streams are both readable and writable, but share
     // the same options object.
     // However, some cases require setting options to different
     // values for the readable and the writable sides of the duplex stream.
     // These options can be provided separately as readableXXX and writableXXX.
-    if (typeof isDuplex !== "boolean") {
-        isDuplex = isDuplexStream(stream);
-    }
+    isDuplex = isDuplex === true;
 
     // Object stream flag. Used to make read(n) ignore n and to
     // make all the buffer merging and length checks go away.
@@ -170,7 +144,7 @@ function ReadableState(options, stream, isDuplex) {
 }
 
 
-function Readable(options) {
+function Readable(options, isDuplex = false) {
     if (!(this instanceof Readable)) {
         return new Readable(options);
     }
@@ -186,10 +160,6 @@ function Readable(options) {
         this._events.readable = undefined;
         this._eventsCount = 0;
     }
-
-    // Checking for a Stream.Duplex instance is faster here instead of inside
-    // the ReadableState constructor, at least with V8 6.5.
-    const isDuplex = isDuplexStream(this);
 
     this._readableState = new ReadableState(options, this, isDuplex);
 
@@ -2594,4 +2564,4 @@ Readable.toWeb = function(streamReadable, options) {
 };
 
 export default Readable;
-export { fromList as _fromList, isDuplexStream, readableFrom as from, ReadableState, wrap, newStreamReadableFromReadableStream as fromWeb, newReadableStreamFromStreamReadable as toWeb };
+export { fromList as _fromList, readableFrom as from, ReadableState, wrap, newStreamReadableFromReadableStream as fromWeb, newReadableStreamFromStreamReadable as toWeb };

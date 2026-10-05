@@ -51,8 +51,8 @@ function Duplex(options) {
         this._eventsCount = 0;
     }
 
-    Readable.call(this, options);
-    Writable.call(this, options);
+    Readable.call(this, options, true);
+    Writable.call(this, options, true);
     this.allowHalfOpen = true;
 
     if (options) {

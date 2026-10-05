@@ -437,8 +437,12 @@ impl Resolver for PublicBuiltinAliasResolver {
 }
 
 /// Resolves generated component modules before schemeless builtin aliases while
-/// keeping private builtin dependencies on their canonical implementations.
+/// keeping the `node:` and private namespaces owned by the runtime.
 struct EmbeddedModuleResolver;
+
+pub(crate) fn is_reserved_embedded_module_name(name: &str) -> bool {
+    name.starts_with("node:") || PrivateBuiltinResolverGuard::is_private_builtin(name)
+}
 
 impl Resolver for EmbeddedModuleResolver {
     fn resolve<'js>(
@@ -448,6 +452,7 @@ impl Resolver for EmbeddedModuleResolver {
         name: &str,
     ) -> rquickjs::Result<String> {
         if !PrivateBuiltinResolverGuard::is_private_builtin(base)
+            && !is_reserved_embedded_module_name(name)
             && (name == crate::JS_EXPORT_MODULE_NAME
                 || crate::JS_ADDITIONAL_MODULES
                     .iter()
@@ -468,11 +473,11 @@ impl PrivateBuiltinResolverGuard {
     }
 
     fn is_user_referrer(base: &str) -> bool {
-        base == crate::JS_EXPORT_MODULE_NAME
+        (base == crate::JS_EXPORT_MODULE_NAME && !is_reserved_embedded_module_name(base))
             || base == "<input>"
             || crate::JS_ADDITIONAL_MODULES
                 .iter()
-                .any(|(name, _)| base == *name)
+                .any(|(name, _)| base == *name && !is_reserved_embedded_module_name(name))
             || base.starts_with("data:")
             || base.starts_with("file:")
             || base.starts_with('/')
@@ -11902,11 +11907,17 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
     );
 
-    let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
-        crate::JS_EXPORT_MODULE_NAME,
-        virtual_builtin_module_source(crate::js_export_module()),
-    );
+    let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default();
+    if !is_reserved_embedded_module_name(crate::JS_EXPORT_MODULE_NAME) {
+        virtual_builtin_loader = virtual_builtin_loader.with_module(
+            crate::JS_EXPORT_MODULE_NAME,
+            virtual_builtin_module_source(crate::js_export_module()),
+        );
+    }
     for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
+        if is_reserved_embedded_module_name(name) {
+            continue;
+        }
         virtual_builtin_loader = virtual_builtin_loader.with_module(
             name.to_string(),
             virtual_builtin_module_source(&(get_module)()),

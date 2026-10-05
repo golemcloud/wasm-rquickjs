@@ -811,9 +811,7 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
     assert!(!SYNC_EXPORTS_RS.contains("enum TokenKind"));
     assert!(SYNC_EXPORTS_RS.contains("Object.keys(__wasmRquickjsDefault)"));
     assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsHasOwn(__wasmRquickjsDefault"));
-    assert!(
-        !SYNC_EXPORTS_RS.contains("source.push_str(\"__wasmRquickjsSync(__wasmRquickjsDefault)")
-    );
+    assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsSync(__wasmRquickjsDefault)"));
     assert!(SYNC_EXPORTS_RS.contains("schemeless_syncable_builtin_names"));
     assert!(SYNC_EXPORTS_RS.contains("implementation_import"));
     assert!(MODULE_JS.contains("require_builtin as _requireBuiltin"));

@@ -2,6 +2,7 @@ use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output}
 use anyhow::Context;
 use camino::Utf8Path;
 use test_r::{test, test_dep};
+use wasm_rquickjs::{EmbeddingMode, JsModuleSpec};
 use wasmtime::component::Val;
 
 #[test_dep(tagged_as = "module_resolution", scope = Cloneable)]
@@ -10,6 +11,46 @@ async fn compiled_module_resolution() -> CompiledTest {
     CompiledTest::new_with_features(path, true, FeatureCombination::InternalTestExecution)
         .await
         .expect("Failed to compile module_resolution")
+}
+
+#[test_dep(tagged_as = "module_name_collisions", scope = Cloneable)]
+async fn compiled_module_name_collisions() -> CompiledTest {
+    let path = Utf8Path::new("examples/runtime/module-name-collisions");
+    let additional_modules = [
+        JsModuleSpec {
+            name: "crypto".to_string(),
+            mode: EmbeddingMode::EmbedFile(path.join("src/application-crypto.js")),
+        },
+        JsModuleSpec {
+            name: "node:crypto".to_string(),
+            mode: EmbeddingMode::EmbedFile(path.join("src/reserved-node-crypto.js")),
+        },
+    ];
+    CompiledTest::new_with_features_and_additional_modules(
+        path,
+        true,
+        FeatureCombination::InternalTestExecution,
+        &additional_modules,
+    )
+    .await
+    .expect("Failed to compile module name collisions")
+}
+
+#[test]
+async fn generated_module_name_collisions_preserve_node_namespace(
+    #[tagged_as("module_name_collisions")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-module-name-collisions",
+        &[],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{output}");
+    assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
 }
 
 #[test]
@@ -497,6 +538,23 @@ async fn every_syncable_builtin_can_be_imported_first(
             "unexpected result for first import of {specifier}; output:\n{output}"
         );
     }
+    Ok(())
+}
+
+#[test]
+async fn first_builtin_import_snapshots_commonjs_mutations(
+    #[tagged_as("module_resolution")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-builtin-first-import",
+        &[Val::String("node:console".to_string())],
+    )
+    .await;
+    let r = r?;
+    println!("Output:\n{output}");
+    assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
 

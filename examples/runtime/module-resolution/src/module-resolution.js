@@ -4627,7 +4627,40 @@ export const testSyncBuiltinEsmExports = async () => {
 
 export const testBuiltinFirstImport = async (specifier) => {
     try {
-        const namespace = await import(specifier);
+        let namespace;
+        if (specifier === 'node:console') {
+            const consoleObject = globalThis.console;
+            const logDescriptor = Object.getOwnPropertyDescriptor(consoleObject, 'log');
+            const warnDescriptor = Object.getOwnPropertyDescriptor(consoleObject, 'warn');
+            const replacementLog = function replacementLog() {};
+            const replacementWarn = function replacementWarn() {};
+            let warnReads = 0;
+            Object.defineProperty(consoleObject, 'log', {
+                value: replacementLog,
+                writable: true,
+                configurable: true,
+                enumerable: logDescriptor.enumerable,
+            });
+            Object.defineProperty(consoleObject, 'warn', {
+                get() {
+                    warnReads += 1;
+                    return replacementWarn;
+                },
+                configurable: true,
+                enumerable: warnDescriptor.enumerable,
+            });
+            try {
+                namespace = await import(specifier);
+                assert.strictEqual(namespace.log, replacementLog);
+                assert.strictEqual(namespace.warn, replacementWarn);
+                assert.strictEqual(warnReads, 1);
+            } finally {
+                Object.defineProperty(consoleObject, 'log', logDescriptor);
+                Object.defineProperty(consoleObject, 'warn', warnDescriptor);
+            }
+        } else {
+            namespace = await import(specifier);
+        }
         if (specifier === 'node:crypto') {
             const digest = namespace.createHash('sha256')
                 .update('first builtin import')
