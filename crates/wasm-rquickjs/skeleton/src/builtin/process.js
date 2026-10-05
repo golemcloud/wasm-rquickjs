@@ -935,7 +935,7 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     });
 };
 
-function runExit(code) {
+function exit(code) {
     if (code !== undefined) {
         process.exitCode = code;
     }
@@ -946,9 +946,9 @@ function runExit(code) {
     throw new ProcessExitError(process.exitCode || 0);
 }
 
-process.exit = runExit;
+process.exit = exit;
 Object.defineProperty(process, '_runExit', {
-    value: runExit,
+    value: exit,
     writable: false,
     configurable: false,
     enumerable: false,
