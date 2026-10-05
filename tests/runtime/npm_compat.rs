@@ -301,7 +301,17 @@ async fn npm_required_runtime_primitives(
             "exitListener": 9,
             "caughtExit": 2,
             "caughtExitListener": 9,
+            "caughtExitThenThrow": 2,
+            "exitListenerThrows": 7,
             "fresh": 0,
+        }),
+        "{report:#}"
+    );
+    assert_eq!(
+        report["value"]["childExitDiagnostics"],
+        serde_json::json!({
+            "suppressesPostExitError": true,
+            "reportsExitListenerError": true,
         }),
         "{report:#}"
     );
@@ -1462,6 +1472,13 @@ async fn npm_exec_runs_persistent_local_bin(
         failed_report["stdout"], "npm-exec:ok\n",
         "{failed_report:#}"
     );
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("workspace/npm-exec-after-exit")
+            .exists(),
+        "npm exec continued after process.exit: {failed_report:#}"
+    );
     fs::remove_file(&result_file)?;
 
     let execution = instance
@@ -1537,6 +1554,13 @@ async fn npx_runs_persistent_local_bin(
     assert_eq!(
         failed_report["stdout"], "npm-exec:ok\n",
         "{failed_report:#}"
+    );
+    assert!(
+        !instance
+            .temp_dir_path()
+            .join("workspace/npm-exec-after-exit")
+            .exists(),
+        "npx continued after process.exit: {failed_report:#}"
     );
     let result_file = instance
         .temp_dir_path()

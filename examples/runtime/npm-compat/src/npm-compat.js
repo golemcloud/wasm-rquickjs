@@ -338,6 +338,14 @@ export async function probePrimitives() {
                 process.execPath,
                 ['-e', 'process.on("exit", () => { process.exitCode = 9; }); try { process.exit(7); } catch {}'],
             );
+            const caughtExitThenThrow = spawnSync(
+                process.execPath,
+                ['-e', 'try { process.exit(2); } catch {} throw new Error("later");'],
+            );
+            const exitListenerThrows = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { throw new Error("exit-listener"); }); process.exit(7)'],
+            );
             const freshExitCode = spawnSync(
                 process.execPath,
                 ['-e', 'process.stdout.write("fresh")'],
@@ -480,7 +488,13 @@ export async function probePrimitives() {
                     exitListener: exitListenerCode.status,
                     caughtExit: caughtExitCode.status,
                     caughtExitListener: caughtExitListenerCode.status,
+                    caughtExitThenThrow: caughtExitThenThrow.status,
+                    exitListenerThrows: exitListenerThrows.status,
                     fresh: freshExitCode.status,
+                },
+                childExitDiagnostics: {
+                    suppressesPostExitError: caughtExitThenThrow.stderr.toString() === '',
+                    reportsExitListenerError: exitListenerThrows.stderr.toString().includes('Error: exit-listener'),
                 },
                 execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>
                     failure.callbackError && failure.callbackError.code === 'ENOSYS' &&

@@ -703,12 +703,14 @@ function runInline(command, args, options) {
     const oldStderrWrite = process.stderr && process.stderr.write;
     const oldEmitWarning = process.emitWarning;
     const oldExit = process.exit;
+    const runExit = process._runExit;
     const runtimeRequire = moduleExports.require;
     const oldModuleCache = moduleExports._cache;
     const oldRuntimeRequireCache = runtimeRequire.cache;
     const oldPathCache = moduleExports._pathCache;
     const oldModuleWrapper = moduleExports.wrapper;
     let firstExitCode = null;
+    let firstExitError = null;
     const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
     const hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
@@ -750,10 +752,13 @@ function runInline(command, args, options) {
 
         process.exit = function exit(code) {
             try {
-                return oldExit.call(this, code);
+                return runExit.call(this, code);
             } catch (err) {
-                if (firstExitCode === null && err && err.__isProcessExit) {
-                    firstExitCode = Number(err.code || 0);
+                if (firstExitCode === null && process._exiting) {
+                    firstExitCode = Number(process.exitCode || 0);
+                    if (!err || !err.__isProcessExit) {
+                        firstExitError = err;
+                    }
                 }
                 throw err;
             }
@@ -1019,8 +1024,13 @@ function runInline(command, args, options) {
             status = Number(process.exitCode || 0);
         }
     } catch (err) {
-        if (err && err.__isProcessExit) {
-            status = firstExitCode ?? Number(err.code || 0);
+        if (firstExitCode !== null) {
+            status = firstExitCode;
+            if (err === firstExitError) {
+                capturedStderr += formatErrorForStderr(err);
+            }
+        } else if (err && err.__isProcessExit) {
+            status = Number(err.code || 0);
         } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
             status = 9;
             capturedStderr += String(command) + ': ' + err.message + '\n';
