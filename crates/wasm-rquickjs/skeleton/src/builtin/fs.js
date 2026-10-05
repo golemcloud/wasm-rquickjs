@@ -25,6 +25,7 @@ import {
 } from '__wasm_rquickjs_builtin/internal/fs/shared';
 
 const kIoMaxLength = 2 ** 31 - 1;
+const setUint8Array = Function.prototype.call.bind(Uint8Array.prototype.set);
 
 let _Buffer = null;
 function getBuffer() {
@@ -1105,8 +1106,12 @@ export let readSync = function readSync(fd, buffer, offsetOrOptions, length, pos
 
     const src = result.buffer;
     const bytesRead = result.bytesRead;
-    for (let i = 0; i < bytesRead; i++) {
-        buffer[offset + i] = src[i];
+    if (buffer instanceof Uint8Array) {
+        setUint8Array(buffer, src, offset);
+    } else {
+        for (let i = 0; i < bytesRead; i++) {
+            buffer[offset + i] = src[i];
+        }
     }
     return bytesRead;
 };

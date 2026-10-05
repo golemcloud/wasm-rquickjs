@@ -1,8 +1,52 @@
-import {closeSync, mkdir, mkdirSync, openSync, readFile, readFileSync, rename, renameSync, unlink, unlinkSync, writeFile, writeFileSync} from "node:fs";
+import {closeSync, mkdir, mkdirSync, openSync, readFile, readFileSync, readSync, rename, renameSync, unlink, unlinkSync, writeFile, writeFileSync} from "node:fs";
 import {cwd, argv, env} from "node:process";
 import {env as env2} from "process"; // validating that node:process is also registered as 'process'
 import * as fsPromises from "node:fs/promises";
 import {Buffer} from "node:buffer";
+
+export const testReadSyncBulkCopy = () => {
+    const path = '/test/read-sync-bulk-copy.bin';
+    const source = Buffer.alloc(131103);
+    for (let i = 0; i < source.length; i++) source[i] = i % 251;
+    writeFileSync(path, source);
+    const fd = openSync(path, 'r');
+    try {
+        for (const target of [Buffer.alloc(80, 0x55).subarray(5, 60),
+            new Uint8Array(new ArrayBuffer(80), 5, 55).fill(0x55)]) {
+            if (readSync(fd, target, 3, 21, 17) !== 21) throw new Error('read count');
+            for (let i = 0; i < target.length; i++) {
+                const expected = i >= 3 && i < 24 ? source[17 + i - 3] : 0x55;
+                if (target[i] !== expected) throw new Error('offset or sentinel mismatch');
+            }
+            target.fill(0x55);
+            if (readSync(fd, target, 2, 30, source.length - 7) !== 7) throw new Error('partial read count');
+            for (let i = 0; i < target.length; i++) {
+                const expected = i >= 2 && i < 9 ? source[source.length - 7 + i - 2] : 0x55;
+                if (target[i] !== expected) throw new Error('partial read overwrite');
+            }
+            if (readSync(fd, target, 0, 0, 0) !== 0) throw new Error('zero read');
+            if (readSync(fd, target, 0, 20, source.length) !== 0) throw new Error('EOF');
+        }
+        const result = Buffer.alloc(source.length);
+        for (let offset = 0; offset < result.length; offset += 65536) {
+            const count = Math.min(65536, result.length - offset);
+            if (readSync(fd, result, offset, count, offset) !== count) throw new Error('chunk read');
+        }
+        if (!result.equals(source)) throw new Error('chunk data mismatch');
+        const originalSet = Uint8Array.prototype.set;
+        try {
+            Uint8Array.prototype.set = () => { throw new Error('overridden set called'); };
+            const target = Buffer.alloc(21);
+            target.set = () => { throw new Error('overridden instance set called'); };
+            if (readSync(fd, target, 0, 21, 17) !== 21 || !target.equals(source.subarray(17, 38))) throw new Error('overridden set read');
+        } finally {
+            Uint8Array.prototype.set = originalSet;
+        }
+        return true;
+    } finally {
+        closeSync(fd);
+    }
+};
 
 export const run = () => {
     console.log("Current working directory:", cwd());
