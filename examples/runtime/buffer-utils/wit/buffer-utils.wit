@@ -4,4 +4,5 @@ world buffer-utils {
   export test-is-ascii: func() -> bool;
   export test-is-utf8: func() -> bool;
   export test-utf8-encoding: func() -> bool;
+  export test-utf8-trailing-surrogates: func() -> bool;
 }

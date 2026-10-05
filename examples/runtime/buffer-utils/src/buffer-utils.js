@@ -25,6 +25,30 @@ export function testUtf8Encoding() {
   return true;
 }
 
+export function testUtf8TrailingSurrogates() {
+  for (const [unit, expected] of [
+    ['\ud800', 'efbfbd'], ['\ud800\ud801', 'efbfbdefbfbd'],
+    ['a\ud800\ud801', '61efbfbdefbfbd'], ['\ud800😀\ud801', 'efbfbdf09f9880efbfbd'],
+  ]) {
+    for (const count of [1, 2, 9000]) {
+      const text = unit.repeat(count);
+      const hex = expected.repeat(count);
+      if (Buffer.from(text).toString('hex') !== hex) throw new Error('missing trailing replacement');
+      if (Buffer.byteLength(text) !== hex.length / 2) throw new Error('surrogate byte length');
+    }
+  }
+  // UTF-8 writes must never emit a partial replacement character.
+  for (const size of [1, 2, 3, 4, 5, 6, 7]) {
+    const target = Buffer.alloc(size, 0x55);
+    const written = target.write('\ud800\ud801', 0, size, 'utf8');
+    const expected = Math.min(2, Math.floor(size / 3)) * 3;
+    if (written !== expected) throw new Error('bounded surrogate write length');
+    if (target.subarray(0, written).toString('hex') !== 'efbfbd'.repeat(expected / 3)) throw new Error('bounded surrogate write bytes');
+    if (target.subarray(written).some(byte => byte !== 0x55)) throw new Error('partial replacement write');
+  }
+  return true;
+}
+
 export function testIsAscii() {
   // Pure ASCII
   if (!isAscii(Buffer.from('hello'))) return false;

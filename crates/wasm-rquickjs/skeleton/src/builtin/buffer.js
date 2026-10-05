@@ -2349,6 +2349,9 @@ function utf8ToBytes (string, units) {
         }
     }
 
+    // A run of leading surrogates can leave the final one pending.
+    if (leadSurrogate && (units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
+
     return bytes
 }
 
