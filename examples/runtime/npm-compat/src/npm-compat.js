@@ -330,6 +330,14 @@ export async function probePrimitives() {
                 process.execPath,
                 ['-e', 'process.on("exit", () => { process.exitCode = 9; }); process.exit(7)'],
             );
+            const caughtExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'try { process.exit(2); } catch { process.exit(1); }'],
+            );
+            const caughtExitListenerCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { process.exitCode = 9; }); try { process.exit(7); } catch {}'],
+            );
             const freshExitCode = spawnSync(
                 process.execPath,
                 ['-e', 'process.stdout.write("fresh")'],
@@ -470,6 +478,8 @@ export async function probePrimitives() {
                     beforeExit: beforeExitCode.status,
                     omittedExplicit: omittedExplicitExitCode.status,
                     exitListener: exitListenerCode.status,
+                    caughtExit: caughtExitCode.status,
+                    caughtExitListener: caughtExitListenerCode.status,
                     fresh: freshExitCode.status,
                 },
                 execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>

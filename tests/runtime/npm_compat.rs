@@ -299,6 +299,8 @@ async fn npm_required_runtime_primitives(
             "beforeExit": 9,
             "omittedExplicit": 7,
             "exitListener": 9,
+            "caughtExit": 2,
+            "caughtExitListener": 9,
             "fresh": 0,
         }),
         "{report:#}"

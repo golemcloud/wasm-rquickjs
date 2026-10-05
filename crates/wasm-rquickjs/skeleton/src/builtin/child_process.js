@@ -708,6 +708,7 @@ function runInline(command, args, options) {
     const oldRuntimeRequireCache = runtimeRequire.cache;
     const oldPathCache = moduleExports._pathCache;
     const oldModuleWrapper = moduleExports.wrapper;
+    let firstExitCode = null;
     const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
     const hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
@@ -746,6 +747,17 @@ function runInline(command, args, options) {
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
         globalThis.__wasm_rquickjs_sync_callbacks = true;
+
+        process.exit = function exit(code) {
+            try {
+                return oldExit.call(this, code);
+            } catch (err) {
+                if (firstExitCode === null && err && err.__isProcessExit) {
+                    firstExitCode = Number(err.code || 0);
+                }
+                throw err;
+            }
+        };
 
         if (hasFipsStartupFlag(execArgv)) {
             throw new Error(FIPS_STARTUP_ERROR);
@@ -1000,13 +1012,15 @@ function runInline(command, args, options) {
                 runtimeRequire(scriptPath);
             }
         }
-        if (typeof process._runExitHandlers === 'function') {
+        if (firstExitCode !== null) {
+            status = firstExitCode;
+        } else if (typeof process._runExitHandlers === 'function') {
             process._runExitHandlers();
             status = Number(process.exitCode || 0);
         }
     } catch (err) {
         if (err && err.__isProcessExit) {
-            status = Number(err.code || 0);
+            status = firstExitCode ?? Number(err.code || 0);
         } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
             status = 9;
             capturedStderr += String(command) + ': ' + err.message + '\n';
